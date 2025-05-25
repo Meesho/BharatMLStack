@@ -1,0 +1,19 @@
+syntax = "proto3";
+package p2p;
+option go_package = "../p2p";
+
+message Empty {}
+
+message ClusterTopology {
+  map<uint32, string> ring_topology = 1;
+  map<string, PodData> cluster_members = 2;
+}
+
+message PodData {
+  string node_ip = 1;
+  string pod_ip = 2;
+}
+
+service P2PCacheService {
+    rpc GetClusterConfigs(Empty) returns (ClusterTopology) {};
+}
