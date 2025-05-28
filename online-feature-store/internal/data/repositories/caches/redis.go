@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Meesho/online-feature-store/internal/config"
-	"github.com/Meesho/online-feature-store/pkg/infra"
-	"github.com/Meesho/online-feature-store/pkg/metric"
-	"github.com/Meesho/online-feature-store/pkg/proto/retrieve"
+	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/infra"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 )

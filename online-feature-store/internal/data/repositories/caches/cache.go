@@ -3,7 +3,7 @@ package caches
 import (
 	"strings"
 
-	"github.com/Meesho/online-feature-store/pkg/proto/retrieve"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
 )
 
 const (

@@ -3,10 +3,10 @@ package caches
 import (
 	"fmt"
 
-	"github.com/Meesho/online-feature-store/internal/config"
-	"github.com/Meesho/online-feature-store/pkg/infra"
-	"github.com/Meesho/online-feature-store/pkg/p2pcache"
-	"github.com/Meesho/online-feature-store/pkg/proto/retrieve"
+	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/infra"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
 )
 
 type P2PCache struct {
