@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Meesho/orion/pkg/etcd"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/etcd"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )

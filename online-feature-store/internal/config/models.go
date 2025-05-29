@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/Meesho/orion/internal/config/enums"
+	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config/enums"
 )
 
 type _version int
