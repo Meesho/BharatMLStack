@@ -1924,7 +1924,7 @@ func TestSerializeForInMemoryBool(t *testing.T) {
 					for j, valStr := range values {
 						expected := !((pos+j)%2 == 0)
 						var boolVal bool
-						if valStr == "true" {
+						if valStr == "1" {
 							boolVal = true
 						} else {
 							boolVal = false
