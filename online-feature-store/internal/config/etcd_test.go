@@ -19,6 +19,7 @@ func TestParseToNormalizedEntities(t *testing.T) {
 			name: "successful parsing",
 			entities: map[string]Entity{
 				"user": {
+					Label: "user",
 					Keys: map[string]Key{
 						"0": {EntityLabel: "user_id", ColumnLabel: "id", Sequence: 0},
 					},
@@ -88,6 +89,10 @@ func TestParseToNormalizedEntities(t *testing.T) {
 			name: "invalid version number",
 			entities: map[string]Entity{
 				"user": {
+					Label: "user",
+					Keys: map[string]Key{
+						"0": {EntityLabel: "user_id", ColumnLabel: "id", Sequence: 0},
+					},
 					FeatureGroups: map[string]FeatureGroup{
 						"demographics": {
 							Features: map[string]FeatureSchema{
@@ -103,6 +108,7 @@ func TestParseToNormalizedEntities(t *testing.T) {
 			name: "multiple keys parsing",
 			entities: map[string]Entity{
 				"query_x_catalog": {
+					Label: "query_x_catalog",
 					Keys: map[string]Key{
 						"query_id":   {EntityLabel: "query_id", ColumnLabel: "qid", Sequence: 0},
 						"catalog_id": {EntityLabel: "catalog_id", ColumnLabel: "cid", Sequence: 1},

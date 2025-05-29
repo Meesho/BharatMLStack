@@ -2,6 +2,7 @@ package feature
 
 import (
 	"fmt"
+	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config/enums"
 	"testing"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
@@ -41,7 +42,8 @@ func TestPreProcessFGs(t *testing.T) {
 					Label: "user",
 					FeatureGroups: map[string]config.FeatureGroup{
 						"user_profile": {
-							Id: 1,
+							Id:       1,
+							DataType: enums.DataTypeInt32,
 						},
 					},
 				}, nil)
@@ -62,7 +64,8 @@ func TestPreProcessFGs(t *testing.T) {
 
 				// Mock GetFeatureGroup
 				m.On("GetFeatureGroup", "user", "user_profile").Return(&config.FeatureGroup{
-					Id: 1,
+					Id:       1,
+					DataType: enums.DataTypeInt32,
 				}, nil)
 			},
 			validateResult: func(t *testing.T, rd *RetrieveData) {
@@ -126,10 +129,12 @@ func TestPreProcessFGs(t *testing.T) {
 					Label: "user",
 					FeatureGroups: map[string]config.FeatureGroup{
 						"user_profile": {
-							Id: 1,
+							Id:       1,
+							DataType: enums.DataTypeInt32,
 						},
 						"user_preferences": {
-							Id: 2,
+							Id:       2,
+							DataType: enums.DataTypeInt32,
 						},
 					},
 				}, nil)
@@ -159,11 +164,13 @@ func TestPreProcessFGs(t *testing.T) {
 
 				// Mock GetFeatureGroup for both groups
 				m.On("GetFeatureGroup", "user", "user_profile").Return(&config.FeatureGroup{
-					Id: 1,
+					Id:       1,
+					DataType: enums.DataTypeInt32,
 				}, nil)
 
 				m.On("GetFeatureGroup", "user", "user_preferences").Return(&config.FeatureGroup{
-					Id: 2,
+					Id:       2,
+					DataType: enums.DataTypeInt32,
 				}, nil)
 			},
 			validateResult: func(t *testing.T, rd *RetrieveData) {
