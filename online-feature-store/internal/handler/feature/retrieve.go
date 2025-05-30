@@ -672,11 +672,11 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			continue
 		}
 		if ddb.Expired {
-			metric.Count("orion.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel, "validity", "expired"})
+			metric.Count("online.feature.store.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel, "validity", "expired"})
 		} else if ddb.NegativeCache {
-			metric.Count("orion.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel, "validity", "negative_cache"})
+			metric.Count("online.feature.store.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel, "validity", "negative_cache"})
 		} else {
-			metric.Count("orion.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel, "validity", "valid"})
+			metric.Count("online.feature.store.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel, "validity", "valid"})
 		}
 		data.ReqFGIdToFeatureLabels[fgId].FastIterator(func(featureLabel string, meta interface{}) {
 			featureLabelWithQuantType := data.ReqFGIdToFeatureLabelWithQuantType[fgId]

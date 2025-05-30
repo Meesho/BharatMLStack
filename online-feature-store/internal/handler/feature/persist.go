@@ -254,7 +254,7 @@ func (p *PersistHandler) processBatchesForRedis(store stores.Store, storeId, ent
 			defer func() {
 				if r := recover(); r != nil {
 					log.Error().Msgf("Panic recovered: %v", r)
-					metric.Count("orion.store.panic.count", 1, []string{"storeId:" + storeId, "method:batch_persist"})
+					metric.Count("online.feature.store.store.panic.count", 1, []string{"storeId:" + storeId, "method:batch_persist"})
 					errChan <- fmt.Errorf("panic recovered in batch %d: %v", start, r)
 				}
 			}()
@@ -296,7 +296,7 @@ func (p *PersistHandler) processRowsForScylla(wg *sync.WaitGroup, store stores.S
 			defer func() {
 				if r := recover(); r != nil {
 					log.Error().Msgf("Panic recovered: %v", r)
-					metric.Count("orion.store.panic.count", 1, []string{"storeId:" + storeId, "method:persist"})
+					metric.Count("online.feature.store.store.panic.count", 1, []string{"storeId:" + storeId, "method:persist"})
 					errChan <- fmt.Errorf("panic recovered: %v", r)
 				}
 			}()

@@ -17,8 +17,8 @@ import (
 
 const (
 	AuthToken       = "AUTH_TOKEN"
-	callerIdHeader  = "orion-caller-id"
-	AuthTokenHeader = "orion-auth-token"
+	callerIdHeader  = "online-feature-store-caller-id"
+	AuthTokenHeader = "online-feature-store-auth-token"
 )
 
 func ServerInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
