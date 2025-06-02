@@ -30,6 +30,6 @@ modules:
     - consumer:
         kafka: true
 notify_channel: mlp-deployments
-repo_name: online-feature-store
+repo_name: BharatMLStack-internal
 skip_sonar: true
 team: ml-platform
