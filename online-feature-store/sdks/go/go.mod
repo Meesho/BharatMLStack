@@ -3,7 +3,7 @@ module github.com/Meesho/BharatMLStack/online-feature-store/sdks/go
 go 1.22.8
 
 require (
-	github.com/Meesho/BharatMLStack/online-feature-store v1.0.0
+	github.com/Meesho/BharatMLStack/online-feature-store v0.0.1-beta
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/grpc v1.71.1
