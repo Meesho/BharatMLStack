@@ -29,7 +29,7 @@ pip install online-feature-store-py-client==0.1.1
 ### Basic Usage
 
 ```python
-from orion_py_client import OnlineFeatureStorePyClient
+from online_feature_store_py_client import OnlineFeatureStorePyClient
 
 # Initialize the client
 client = OnlineFeatureStorePyClient(
@@ -55,7 +55,7 @@ client = OnlineFeatureStorePyClient(
 3. Delta folder stored in Cloud Storage (AWS/GCS/ADLS)
 
 
-Refer to the [examples](https://github.com/Meesho/orion/tree/main/examples/notebook) for detailed example of how to configure a job and push the feature values
+Refer to the [examples](https://github.com/Meesho/BharatMLStack/tree/main/online-feature-store/examples/notebook) for detailed example of how to configure a job and push the feature values
 
 Followng is a simple flow / outline of the steps involved in above example
 

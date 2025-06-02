@@ -1,6 +1,6 @@
 job_config = {
-    "features_metadata_source_url": "http://host/api/v1/orion/get-source-mapping",  # endpoint to get metadata of features
-    "features_output_cloud_storage_path": "gs://orion_features_push_prd/features_push_output",
+    "features_metadata_source_url": "http://host/api/v1/online-feature-store/get-source-mapping",  # endpoint to get metadata of features
+    "features_output_cloud_storage_path": "gs://online_feature_store_features_push_prd/features_push_output",
     "features_write_to_cloud_storage": True,  # Optional. Default: False. If True, the features merged from different offline sources will be written to "features_output_cloud_storage_path"
     
     "kafka_config": {
