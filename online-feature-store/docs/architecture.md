@@ -1,12 +1,12 @@
-# BharatMLStack's Online-feature-store – Production Architecture
+# BharatMLStack's Online Feature Store – Production Architecture
 
 ## Overview
 
-BharatMLStack's Online-feature-store is a scalable, low-latency, and production-grade feature store that caters to both online machine learning workloads. The architecture is designed with **maintainability, scalability, and ease of integration** in mind. A core philosophy behind BharatMLStack's Online-feature-store is **not reinventing the wheel** — instead, it integrates seamlessly with existing infrastructure like Delta Lake, object stores, and data warehouses.
+BharatMLStack's Online Feature Store is a scalable, low-latency, production-grade feature store that serves both batch and online machine-learning workloads. The architecture is designed with **maintainability, scalability, and ease of integration** in mind. A core philosophy behind the Online Feature Store is **not reinventing the wheel** — instead, it integrates seamlessly with existing infrastructure such as Delta Lake, object stores, and data warehouses.
 
 The system is optimized for both **Data Scientists and ML Engineers (MLEs)** by exposing intuitive SDKs and providing a consistent feature interface across batch and real-time use cases.
 
-![BharatMLStack's Online-feature-store Architecture](../assets/production-architecture.png)
+![BharatMLStack's Online Feature Store Architecture](../assets/production-architecture.png)
 
 ---
 
@@ -17,12 +17,12 @@ Most companies doing machine learning already store features in one of the follo
 - **BigQuery**, **Redshift**, or
 - via existing offline feature store abstractions.
 
-Online-feature-store supports both of the following ingestion paths:
+The Online Feature Store supports two primary ingestion paths:
 
 ### Ingestion from Existing Offline Sources
 - `example/notebook` (a Spark-based utility) can be configured to **pull features** from pre-registered tables, files, or views.
 - These features are pushed to **Kafka** (both managed and unmanaged topics supported), where the consumer layer will handle their eventual online ingestion.
-- BharatMLStack's Online-feature-store supports ingestion from external batch sources such as:
+- BharatMLStack's Online Feature Store supports ingestion from external batch sources such as:
   - **Delta Lake**
   - **Amazon S3**
   - **Google Cloud Storage**
@@ -31,15 +31,15 @@ Online-feature-store supports both of the following ingestion paths:
 
 ### Ingestion from Custom or New Feature Pipelines
 - When no offline store abstraction exists or when building fresh pipelines, `python-sdk` can be directly injected into feature engineering jobs.
-- These jobs (e.g. Spark pipelines) push features into Kafka after registering them with Online-feature-store.
+- These jobs (e.g., Spark pipelines) push features into Kafka after registering them with the Online Feature Store.
 
-This dual path has allows us to adopt BharatMLStack's Online-feature-store **without re-architecting existing pipelines**.
+This dual path allows teams to adopt the Online Feature Store **without re‑architecting existing pipelines**.
 
 ---
 
 ## Kafka Layer (Streaming Ingestion)
 
-Kafka is used as a **buffered queue system** between feature producers and the Online-feature-store Consumer, which writes to the online store. This ensures:
+Kafka acts as a **buffered queue** between feature producers and the Online Feature Store consumer, which writes to the online store. This ensures:
 - Decoupling between job execution and online database write speeds
 - Fine-grained control over ingestion rate and storage load
 - Ability to **scale consumers independently** from job producers
@@ -59,7 +59,7 @@ Horizon is the backend engine that powers **TruffleBox**, the UI control plane f
 - Generating proto schemas that power the gRPC API
 - Storing operational config in **ETCD**
 
-While TruffleBox UI and it's backend Horizon has its own operating manual, its core utility lies in enabling **feature discovery**, **cataloging**, and configuration — all from a no-code UI. It ensures that the BharatMLStack's ecosystem remains schema-consistent and easily operable across teams.
+While the TruffleBox UI and its Horizon backend have their own operating manuals, their core utility lies in enabling **feature discovery**, **cataloging**, and configuration — all from a no-code UI. This ensures that BharatMLStack's ecosystem remains schema-consistent and easy to operate across teams.
 
 ---
 
@@ -79,7 +79,7 @@ It supports writing to multiple storage backends:
 
 ### Schema Versioning & Store Routing
 
-A critical part of Online-Feature-Store Consumer's design is its ability to:
+A critical part of the Online Feature Store Consumer's design is its ability to:
 - **Identify the right schema version** at runtime based on feature metadata
 - Use Horizon-generated mappings to **route feature data to correct store IDs**
 - Serialize feature data into internally optimized layouts such as **PSDBBlocks** — an internal block-structured format for efficient reads/writes and compression
@@ -97,7 +97,7 @@ This separation of concerns ensures the platform remains stable even during load
 
 ---
 
-## 5. Online Feature Store gRPC API Server
+## Online Feature Store gRPC API Server
 
 The **Online-Feature-Store gRPC API Server** exposes a unified and extensible interface for **real-time feature retrieval** and **high-consistency ingestion**. It serves as the primary point of interaction between ML applications and the feature store during inference and write-time operations.
 
@@ -117,11 +117,6 @@ The gRPC server is designed for **high concurrency and low latency**, with sever
 - Features are cached in an **in-memory LRU cache** to avoid repetitive reads from backends like Scylla or Redis.
 - Cached responses are tied to entity key + feature group + version identifiers.
 - Cache entries are **non-compressed** to allow faster reads.
-
-#### 💾 Topology-Aware SSD Caching *(Planned)*
-- A future extension introduces **topology-aware SSD-backed caches** for intermediate durability while keeping memory pressure low.
-- This layer will store features in **CSDBBlocks** (compressed format), enabling fast ssd reads without overwhelming network or RAM.
-- It will leverage NUMA-awareness and block-level caching for optimal performance.
 
 #### 📦 CSDBBlocks (Cache-Storage Data Blocks)
 - Feature values are serialized into **CSDBBlocks**, a structured, binary format optimized for:
@@ -150,12 +145,12 @@ The gRPC server is designed for **high concurrency and low latency**, with sever
 
 ---
 
-## 7. Monitoring & Observability
+## Monitoring & Observability
 
-**Observability is a first-class concern** in Online-feature-store's architecture, enabling platform teams and MLEs to operate with confidence, debug with clarity, and scale with awareness.
+**Observability is a first-class concern** in the Online Feature Store's architecture, enabling platform teams and MLEs to operate with confidence, debug with clarity, and scale with awareness.
 
 ### Current Monitoring Stack
-- **Prometheus** scrapes detailed metrics from all Online-feature-store components including:
+- **Prometheus** scrapes detailed metrics from all Online Feature Store components including:
   - Kafka consumer lag
   - Ingestion and persist rates
   - Feature request latency (p99, p99.9, etc.)
@@ -173,23 +168,10 @@ The gRPC server is designed for **high concurrency and low latency**, with sever
 
 These dashboards are actively used by both **platform SREs** and **ML engineers** to debug issues, validate assumptions, and monitor ongoing experiments.
 
-### Upcoming Capabilities
-- **Feature Monitoring & Drift Detection** *(Planned)*:
-  - Statistical monitoring of feature distributions (mean, stddev, cardinality, missing value rates)
-  - Detection of concept drift and silent training-serving skew
-  - Visualizations for drift timelines and automatic alerts for high-impact features
 
-- **Alerting & Controls via TruffleBox**:
-  - Upcoming TruffleBox integrations will allow users to:
-    - Enable per-feature drift detection
-    - Set alerting thresholds (e.g., feature null rate > 5%)
-    - Subscribe to real-time alerts on Slack, PagerDuty, or email
-    - Monitor model-feature dependency graphs for impact analysis
----
+## SDKs
 
-## 8. SDKs
-
-Online-feature-store exposes SDKs for easy integration:
+The Online Feature Store exposes SDKs for easy integration:
 - `sdks/python`:
     - Used in Spark jobs
     - Powers `example/notebook`
@@ -226,9 +208,6 @@ Both SDKs are well-documented, versioned, and compatible with TruffleBox-configu
 
 - 📊 **Comprehensive Observability**  
   Integrated with Prometheus and Grafana, offering deep visibility into ingestion health, request latencies, feature usage patterns, and system performance.
-
-- 📉 **Future-Ready Feature Drift Monitoring**  
-  Built-in support (planned) for monitoring feature statistics, detecting drift, and surfacing alerts — configurable directly from TruffleBox.
 
 - 🧪 **Developer-Centric SDKs**  
   Python and Go SDKs offer intuitive APIs for registration, ingestion, and retrieval — designed for Data Scientists, ML Engineers, and backend developers.
