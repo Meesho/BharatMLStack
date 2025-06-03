@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "online_feature_store_py_client"
+version = "0.1.1"
+authors = [
+  { name="Jaya Kommuru", email="jaya.kommuru@meesho.com"}
+]
+
+description = "Python Client for Online Feature Store to push/produce Model Features and get features' metadata"
+license = { text = "Apache-2.0" }
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+  "protobuf>=4.24.1"
+]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/online_feature_store_py_client"]
+
+[project.urls]
+"Homepage" = "https://github.com/Meesho/BharatMLStack"
+"Bug Tracker" = "https://github.com/Meesho/BharatMLStack/issues"
+"Source" = "https://github.com/Meesho/BharatMLStack/tree/main/online-feature-store"
