@@ -39,10 +39,10 @@ docker run -d  --network "onfs-network" \
   \
   -e ETCD_WATCHER_ENABLED=true \
   -e ETCD_SERVER=etcd:2379 \
-  -e ORION_APP_NAME=orion \
+  -e ONFS_APP_NAME=onfs \
   \
   -e SCYLLA_1_CONTACT_POINTS=scylla \
-  -e SCYLLA_1_KEYSPACE=orion \
+  -e SCYLLA_1_KEYSPACE=onfs \
   -e SCYLLA_1_NUM_CONNS=1 \
   -e SCYLLA_1_PORT=9042 \
   -e SCYLLA_1_TIMEOUT_IN_MS=300000 \

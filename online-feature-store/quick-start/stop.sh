@@ -3,7 +3,7 @@
 set -e
 
 WORKSPACE_DIR="workspace"
-NETWORK_NAME="orion-network"
+NETWORK_NAME="onfs-network"
 PURGE=false
 
 # Parse flags
@@ -22,7 +22,7 @@ else
 fi
 
 # Stop and optionally delete containers
-for container in orion-grpc-api-server horizon trufflebox; do
+for container in onfs-grpc-api-server horizon trufflebox; do
   if docker ps -q -f name="$container" > /dev/null; then
     echo "🛑 Stopping container: $container"
     docker stop "$container" > /dev/null || true

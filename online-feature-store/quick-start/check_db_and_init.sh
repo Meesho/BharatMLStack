@@ -23,7 +23,7 @@ wait_for_port "Redis" localhost 6379
 wait_for_port "etcd" localhost 2379
 
 echo "Waiting for Scylla CQL to be ready..."
-until docker run --rm --network orion-network meeshotech/cqlsh:0.1 scylla 9042 -e "SELECT now() FROM system.local"; do
+until docker run --rm --network onfs-network meeshotech/cqlsh:0.1 scylla 9042 -e "SELECT now() FROM system.local"; do
     echo "Waiting for CQL service..."
     sleep 5
 done

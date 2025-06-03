@@ -1,4 +1,4 @@
-# Orion Code of Conduct
+# BharatMLStack Code of Conduct
 
 ## Our Pledge
 
@@ -34,7 +34,7 @@ Project maintainers have the right and responsibility to remove, edit, or reject
 
 ## Scope
 
-This Code of Conduct applies within all community spaces, including our Discord server, GitHub repositories, documentation, and any other official Orion channels. It also applies when an individual is officially representing the community in public spaces.
+This Code of Conduct applies within all community spaces, including our Discord server, GitHub repositories, documentation, and any other official BharatMLStack channels. It also applies when an individual is officially representing the community in public spaces.
 
 ## Enforcement
 
@@ -84,7 +84,7 @@ Community Impact Guidelines were inspired by [Mozilla's code of conduct enforcem
 
 ## Community Values
 
-Beyond the specific guidelines above, the Orion community values:
+Beyond the specific guidelines above, the BharatMLStack community values:
 
 ### Collaboration Over Competition
 We believe in working together to build better tools for everyone. While we may have different perspectives or approaches, our shared goal is to create a high-quality feature store that serves the needs of the ML community.
@@ -102,4 +102,4 @@ We believe in transparent decision-making and open discussion. We document our p
 
 ## Join Our Community
 
-We invite all contributors, users, and interested parties to join our [Discord community](https://discord.gg/474wHtfm), where we can collaborate, learn from each other, and build Orion together within the spirit of this Code of Conduct.
+We invite all contributors, users, and interested parties to join our [Discord community](https://discord.gg/474wHtfm), where we can collaborate, learn from each other, and build BharatMLStack together within the spirit of this Code of Conduct.

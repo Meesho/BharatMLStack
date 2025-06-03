@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/logov2.webp" alt="Orion" width="500"/>
+  <img src="assets/logov2.webp" alt="Online-feature-store" width="500"/>
 </p>
 
 ----
 # BharatMLStack's Online Feature Store: A Hyper-Scalable Feature Store for Real-Time ML
 
 ![Static Badge](https://img.shields.io/badge/oss_lifecycle-active-green) 
-![ci status](https://github.com/Meesho/orion/actions/workflows/ci.yml/badge.svg)
+![ci status](https://github.com/Meesho/BharatMLStack/online-feature-store/actions/workflows/ci.yml/badge.svg)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/474wHtfm)
 [![Roadmap](https://img.shields.io/badge/Project-Roadmap-blue?style=flat&logo=github)](./roadmap/roadmap_2025_2026.md)
 
@@ -42,8 +42,8 @@ The quickest way to get started with Online-feature-store is to use the quick st
 
 ```bash
 # Clone the repository
-git clone https://github.com/Meesho/orion.git
-cd orion/quick-start
+git clone https://github.com/Meesho/BharatMLStack.git
+cd BharatMLStack/online-feature-store/quick-start
 
 # Start Online-feature-store and all dependencies
 ./start.sh

@@ -15,8 +15,8 @@ Online Feature Store is a high-performance, scalable, and production-grade featu
 - [Feature Generation](./architecture.md#feature-generation)
 - [Kafka Streaming Ingestion](./architecture.md#kafka-layer-streaming-ingestion)
 - [Horizon Control Plane](./architecture.md#horizon-configuration--control-plane)
-- [Online Feature Store Consumer](./architecture.md#orion-consumer)
-- [Online Feature Store gRPC API Server](./architecture.md#5-orion-grpc-api-server)
+- [Online Feature Store Consumer](./architecture.md#online-feature-store-consumer)
+- [Online Feature Store gRPC API Server](./architecture.md#5-online-feature-store-grpc-api-server)
 - [Monitoring & Observability](./architecture.md#7-monitoring--observability)
 - [SDKs](./architecture.md#8-sdks)
 

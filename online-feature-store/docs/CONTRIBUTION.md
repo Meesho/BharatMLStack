@@ -1,10 +1,10 @@
-# Contributing to Orion
+# Contributing to BharatMLStack
 
-Thank you for your interest in contributing to Orion! This document provides guidelines and instructions for contributing to the project. By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md) and the terms of our [Business Source License](../LICENSE.md).
+Thank you for your interest in contributing to BharatMLStack! This document provides guidelines and instructions for contributing to the project. By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md) and the terms of our [Business Source License](../LICENSE.md).
 
 ## 📊 Table of Contents
 
-- [Contributing to Orion](#contributing-to-orion)
+- [Contributing to BharatMLStack](#contributing-to-BharatMLStack)
   - [📊 Table of Contents](#-table-of-contents)
   - [🌐 Join the Community](#-join-the-community)
   - [🧩 Types of Contributions](#-types-of-contributions)
@@ -27,7 +27,7 @@ Thank you for your interest in contributing to Orion! This document provides gui
 
 ## 🌐 Join the Community
 
-The best way to connect with the Orion community is through our [Discord server](https://discord.gg/474wHtfm). Here, you can:
+The best way to connect with the BharatMLStack community is through our [Discord server](https://discord.gg/474wHtfm). Here, you can:
 
 - Ask questions about usage or development
 - Discuss feature ideas and roadmap items
@@ -61,18 +61,18 @@ We welcome various types of contributions:
 ### Setting Up Your Development Environment
 
 1. **Fork the Repository**
-   - Visit the [Orion GitHub repository](https://github.com/Meesho/orion)
+   - Visit the [BharatMLStack GitHub repository](https://github.com/Meesho/BharatMLStack)
    - Click the "Fork" button to create your own copy of the repository
 
 2. **Clone Your Fork**
    ```bash
-   git clone https://github.com/Meesho/orion.git
-   cd orion
+   git clone https://github.com/Meesho/BharatMLStack.git
+   cd BharatMLStack
    ```
 
 3. **Add the Upstream Remote**
    ```bash
-   git remote add upstream https://github.com/Meesho/orion.git
+   git remote add upstream https://github.com/Meesho/BharatMLStack.git
    ```
 
 4. **Install Dependencies**
@@ -81,7 +81,7 @@ We welcome various types of contributions:
 
 5. **Run the Local Environment**
    ```bash
-   cd quick-start
+   cd <service>/quick-start
    ./start.sh
    ```
 
@@ -89,7 +89,7 @@ We welcome various types of contributions:
 
 1. **Create a Feature Branch**
    ```bash
-   git checkout -b feature/your-feature-name
+   git checkout -b feature/<service>-your-feature-name
    ```
 
 2. **Make Your Changes**
@@ -125,7 +125,7 @@ We welcome various types of contributions:
 
 6. **Push Your Changes**
    ```bash
-   git push origin feature/your-feature-name
+   git push origin feature/<service>-your-feature-name
    ```
 
 ## 📝 Contribution Guidelines
@@ -156,7 +156,7 @@ We welcome various types of contributions:
 
 ## 💻 Code Style
 
-Orion follows these code style guidelines:
+Golang services follows these code style guidelines:
 
 1. **Go Code**
    - Follow the [Go Code Review Comments](https://github.com/golang/go/wiki/CodeReviewComments)
@@ -189,7 +189,7 @@ All contributions should maintain or improve test coverage:
 
 ## 📖 Documentation
 
-Documentation is crucial for Orion's usability:
+Documentation is crucial for BharatMLStack's usability:
 
 1. **Code Documentation**
    - Document all exported functions, types, and constants
@@ -236,7 +236,7 @@ Documentation is crucial for Orion's usability:
 
 ## 🎉 Recognition
 
-We value all contributions to Orion! Contributors will be recognized in the following ways:
+We value all contributions to BharatMLStack! Contributors will be recognized in the following ways:
 
 - Listed in GitHub contributors
 - Mentioned in release notes for significant contributions
@@ -244,16 +244,16 @@ We value all contributions to Orion! Contributors will be recognized in the foll
 
 ## 📜 Licensing
 
-By contributing to Orion, you agree that your contributions will be licensed under the project's [Business Source License 1.1](../LICENSE.md). This license allows for open source development while providing some commercial protections for the project. Key points to understand:
+By contributing to BharatMLStack, you agree that your contributions will be licensed under the project's [Business Source License 1.1](../LICENSE.md). This license allows for open source development while providing some commercial protections for the project. Key points to understand:
 
 - All contributions become part of the licensed work
 - The license will automatically convert to Apache License 2.0 after the change date (3 years from publication)
-- The license includes restrictions on using Orion as a competing service
+- The license includes restrictions on using BharatMLStack as a competing service
 
 Please review the full license before contributing to understand how your work may be used.
 
 ---
 
-Thank you for contributing to Orion! Your efforts help make this project better for everyone.
+Thank you for contributing to BharatMLStack! Your efforts help make this project better for everyone.
 
 Join our [Discord community](https://discord.gg/474wHtfm) for discussions, questions, and collaborative development.

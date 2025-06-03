@@ -1,6 +1,6 @@
-# Orion Quick Start Guide
+# Online Feature Store Quick Start Guide
 
-A quick way to get the Orion platform up and running locally for development and testing.
+A quick way to get the Online Feature Store platform up and running locally for development and testing.
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@ BharatMLStack's Online Feature Store consists of several interconnected services
 - **etcd**: Distributed key-value store for configuration
 - **Horizon**: Backend API service (runs on port 8082)
 - **Trufflebox**: Frontend UI (runs on port 3000)
-- **Online-feature-store gRPC API Server**: gRPC interface for Orion services (runs on port 8089)
+- **Online-feature-store gRPC API Server**: gRPC interface for Online Feature Store services (runs on port 8089)
 
 ## Quick Start
 
@@ -36,12 +36,12 @@ This will:
 2. Create a workspace directory
 3. Start all Docker services via docker-compose
 4. Initialize databases with required schemas
-5. Launch Horizon, Trufflebox, and Orion gRPC API server
+5. Launch Horizon, Trufflebox, and Online Feature Store gRPC API server
 
 Once complete, you can access:
 - Trufflebox UI: http://localhost:3000
 - Horizon API: http://localhost:8082
-- Orion gRPC API Server: http://localhost:8089
+- Online Feature Store gRPC API Server: http://localhost:8089
 
 ### Stopping the System
 
@@ -77,7 +77,7 @@ To stop and completely purge all containers, volumes, and workspace:
 - **ScyllaDB**:
   - Host: localhost
   - Port: 9042
-  - Keyspace: orion
+  - Keyspace: onfs
 
 - **Redis**:
   - Host: localhost
@@ -94,7 +94,7 @@ To stop and completely purge all containers, volumes, and workspace:
 # View logs for specific containers
 docker logs -f horizon
 docker logs -f trufflebox
-docker logs -f orion-grpc-api-server
+docker logs -f onfs-grpc-api-server
 ```
 
 ### Common Issues
@@ -103,8 +103,8 @@ docker logs -f orion-grpc-api-server
 
 2. **Docker network issues**: If containers can't communicate, try restarting Docker or recreating the network:
    ```bash
-   docker network rm orion-network
-   docker network create orion-network
+   docker network rm onfs-network
+   docker network create onfs-network
    ```
 
 3. **Database connectivity**: If services can't connect to databases, ensure the databases are running:

@@ -53,9 +53,9 @@ run_trufflebox() {
   (cd "$WORKSPACE_DIR" && ./boot_trufflebox.sh)
 }
 
-run_orion_grpc_server() {
-  echo "🚀 Booting Orion gRPC API server..."
-  (cd "$WORKSPACE_DIR" && ./boot_orion_grpc_server.sh)
+run_onfs_grpc_server() {
+  echo "🚀 Booting Online Feature Store gRPC API server..."
+  (cd "$WORKSPACE_DIR" && ./boot_onfs_grpc_server.sh)
 }
 
 echo "🚀 Starting setup..."
@@ -65,6 +65,6 @@ start_docker_services
 run_check_and_init
 run_horizon
 run_trufflebox
-run_orion_grpc_server
+run_onfs_grpc_server
 
 echo "🎉 All done in ./$WORKSPACE_DIR — you're ready to go!"
