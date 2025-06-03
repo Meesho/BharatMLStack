@@ -36,3 +36,5 @@ require (
 	google.golang.org/protobuf v1.36.5 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/Meesho/BharatMLStack/online-feature-store v0.0.0-beta => github.com/Meesho/BharatMLStack-internal/online-feature-store v0.0.0-beta
