@@ -1,0 +1,84 @@
+form {
+  margin: auto auto; // Center the form
+  padding: 2rem;
+  width: 100%;
+  background-color: #ffffff; // White background for the form
+  border-radius: 8px; // Rounded corners for the form
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); // Subtle shadow for depth
+
+  h5 {
+    // margin-top: 1.5rem; // Space above the headings
+    color: #450839; // Changed from #446e9b to deep purple
+    text-align: left; // Left align the headings
+    font-size: 1rem; // Larger font size for headings
+  }
+
+}
+
+/* Custom style for the TextField component */
+.custom-textfield {
+  /* Center the text */
+  text-align: center !important;
+
+  /* Input styling */
+  & .MuiInputBase-root {
+    color: #000; /* Default text color */
+    background-color: white; /* Default background */
+    border-radius: 5px;
+
+    /* Error background color */
+    background: #ffffff; /* Default background */
+    // Dynamic background for error states can be handled in the component itself
+
+    /* Input border styling */
+    & .MuiOutlinedInput-notchedOutline {
+      border-color: #E7E9EB; /* Default border color */
+      border-width: 1px;
+    }
+
+    /* Focused state for the input */
+    &.Mui-focused {
+      & .MuiOutlinedInput-notchedOutline {
+        border-color: #4F4F4F; /* Focused border color */
+        border-width: 2px;
+      }
+    }
+
+    /* Hover state for the input */
+    &:hover:not(.Mui-focused) {
+      & .MuiOutlinedInput-notchedOutline {
+        border-color: #E7E9EB; /* Default border color on hover */
+        border-width: 2px; /* Increased border width on hover */
+      }
+    }
+
+    /* Disabled input styling */
+    & .MuiInputBase-input.Mui-disabled {
+      WebkitTextFillColor: #000000; /* Text color in disabled state */
+    }
+  }
+
+  /* Label styling */
+  & .MuiInputLabel-outlined {
+    color: #4F4F4F; /* Default label color */
+    font-size: 15px;
+
+    /* Focused label styling */
+    &.Mui-focused {
+      color: #4F4F4F; /* Color on focus */
+      font-size: 15px; /* Label font size */
+    }
+
+  }
+
+  /* Error state handling */
+  &.Mui-error {
+    & .MuiOutlinedInput-notchedOutline {
+      border-color: red !important; /* Red border for error state */
+    }
+
+    & .MuiInputLabel-outlined {
+      color: red !important; /* Red label color for error state */
+    }
+  }
+}

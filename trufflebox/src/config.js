@@ -1,0 +1,4 @@
+
+const env = window.env || {};
+
+export const REACT_APP_HORIZON_BASE_URL = env.REACT_APP_HORIZON_BASE_URL || "http://localhost:8082";
