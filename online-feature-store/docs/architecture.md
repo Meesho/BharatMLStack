@@ -204,7 +204,7 @@ Both SDKs are well-documented, versioned, and compatible with TruffleBox-configu
 ## Key Highlights
 
 - 🔁 **Hybrid Ingestion Support**  
-  Seamlessly ingests both batch (offline) and real-time (streaming) features using `bharatmlstack-porter` and `bharatmlstack-py-sdk`.
+  Seamlessly ingests both batch (offline) and real-time (streaming) features using `examples/notebook` and `sdks/python`.
 
 - 🧠 **Smart Configuration Control via Horizon**  
   Centralized control plane (backed by ETCD) with TruffleBox UI for managing schemas, TTLs, store mappings, feature metadata, and default values.

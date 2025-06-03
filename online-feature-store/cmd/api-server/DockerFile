@@ -21,7 +21,7 @@ RUN go mod download
 COPY . .
 
 # Build from your main package
-RUN go build -o online-feature-store-grpc-api-server ./cmd/api-server/main.go
+RUN go build -o -grpc-api-server ./cmd/api-server/main.go
 
 # Final image using distroless (only works if all assets are statically linked)
 FROM gcr.io/distroless/base-debian12:nonroot
