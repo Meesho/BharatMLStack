@@ -3,10 +3,8 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import { loadEnv } from './loadEnv.js';
-async function bootstrap() {
-  await loadEnv();  // load env.js first
 
+async function bootstrap() {
   const root = ReactDOM.createRoot(document.getElementById('root'));
   root.render(
     <React.StrictMode>
