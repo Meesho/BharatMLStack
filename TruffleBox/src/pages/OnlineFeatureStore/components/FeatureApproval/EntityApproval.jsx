@@ -44,8 +44,6 @@ const EntityApproval = () => {
     if (!entity) return getInitialEntityData();
     
     var data = JSON.parse(entity.Payload)
-    console.log("Entity Data:", entity.RequestId);
-    console.log("Original Data:", data);
     return {
       "request-id": entity.RequestId || "",
       "entity-label": data["entity-label"] || "",

@@ -84,7 +84,6 @@ const FeatureGroupDiscovery = ({ entityId, onFeatureGroupClick }) => {
   }, [fetchFeatureGroups]);
 
   const handleFeatureGroupClick = useCallback((featureGroup) => {
-    console.log('Selected Feature Group:', featureGroup);
     setSelectedFeatureGroup(featureGroup);
     onFeatureGroupClick(featureGroup);
   }, [onFeatureGroupClick]);

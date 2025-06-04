@@ -41,7 +41,6 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
         localStorage.removeItem('authToken');
         localStorage.removeItem('user');
-        console.log('Logged out successfully');
       } else {
         setUser(null);
         localStorage.removeItem('authToken');

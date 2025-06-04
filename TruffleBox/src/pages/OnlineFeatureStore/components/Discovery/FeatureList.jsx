@@ -155,8 +155,6 @@ const FeatureList = ({
             'vector-length': feature['vector-lengths'].toString(),
           }))
         };
-        
-        console.log('Edit features payload:', payload);
       
       await axios.post(
         `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/edit-features`, 
