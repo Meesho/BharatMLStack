@@ -1,0 +1,20 @@
+form {
+  margin: auto auto; // Center the form
+  padding: 2rem;
+  width: 100%;
+  background-color: #ffffff; // White background for the form
+  border-radius: 8px; // Rounded corners for the form
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); // Subtle shadow for depth
+
+  h5 {
+    // margin-top: 1.5rem; // Space above the headings
+    color: #450839; /* Changed from #446e9b */
+    text-align: left; // Left align the headings
+    font-size: 1rem; // Larger font size for headings
+  }
+
+}
+.custom-modal-width {
+  max-width: 600px !important;
+  width: 500px;
+}
