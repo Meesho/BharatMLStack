@@ -125,7 +125,7 @@ We welcome various types of contributions:
 
 6. **Push Your Changes**
    ```bash
-   git push origin feature/<service>-your-feature-name
+   git push origin feat/<service>-your-feature-name
    ```
 
 ## 📝 Contribution Guidelines

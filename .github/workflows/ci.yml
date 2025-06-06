@@ -1,0 +1,179 @@
+name: CI Build and Test
+
+on:
+  pull_request:
+    branches: [master, develop]
+  push:
+    branches: [master, develop]
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+env:
+  REGISTRY: ghcr.io
+  
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      horizon-changed: ${{ steps.changes.outputs.horizon }}
+      trufflebox-ui-changed: ${{ steps.changes.outputs.trufflebox-ui }}
+      online-feature-store-changed: ${{ steps.changes.outputs.online-feature-store }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            horizon:
+              - 'horizon/**'
+            trufflebox-ui:
+              - 'trufflebox-ui/**'
+            online-feature-store:
+              - 'online-feature-store/**'
+
+  build-horizon:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.horizon-changed == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./horizon
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: horizon/go.mod
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-horizon-${{ hashFiles('horizon/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-horizon-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Build application
+        run: go build -v ./...
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run staticcheck
+        uses: dominikh/staticcheck-action@v1.3.0
+        with:
+          working-directory: horizon
+
+  build-trufflebox-ui:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.trufflebox-ui-changed == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./trufflebox-ui
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: trufflebox-ui/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Run linter
+        run: npm run lint --if-present
+
+      - name: Run tests
+        run: npm test --if-present --passWithNoTests
+
+      - name: Build application
+        run: npm run build --if-present
+
+      - name: Test Docker build
+        run: |
+          docker build -t trufflebox-ui:test -f DockerFile .
+
+  build-online-feature-store:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.online-feature-store-changed == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./online-feature-store
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: online-feature-store/go.mod
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-ofs-${{ hashFiles('online-feature-store/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-ofs-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Build API server
+        run: go build -v ./cmd/api-server
+
+      - name: Build consumer
+        run: go build -v ./cmd/consumer
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run staticcheck
+        uses: dominikh/staticcheck-action@v1.3.0
+        with:
+          working-directory: online-feature-store
+
+  summary:
+    needs: [build-horizon, build-trufflebox-ui, build-online-feature-store]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Summary
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Horizon | ${{ needs.build-horizon.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trufflebox UI | ${{ needs.build-trufflebox-ui.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Online Feature Store | ${{ needs.build-online-feature-store.result }} |" >> $GITHUB_STEP_SUMMARY 
