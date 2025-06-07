@@ -52,7 +52,7 @@ This directory contains automated workflows for the BharatMLStack project. The w
 
 1. **Fork or clone** this repository
 2. **Update repository references** in the README files:
-   - Replace `YOUR_USERNAME` in badge URLs with your GitHub username
+   - Replace `Meesho` in badge URLs with your GitHub username
    - Update the repository name if different
 
 ### 2. GitHub Token Permissions

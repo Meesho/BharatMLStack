@@ -1,4 +1,4 @@
-![Build Status](https://github.com/YOUR_USERNAME/BharatMLStack/workflows/CI%20Build%20and%20Test/badge.svg) ![Build](https://img.shields.io/badge/build-unknown-lightgrey) ![Version](https://img.shields.io/badge/version-unknown-lightgrey)
+![Build Status](https://github.com/Meesho/BharatMLStack/workflows/CI%20Build%20and%20Test/badge.svg) ![Build](https://img.shields.io/badge/build-unknown-lightgrey) ![Version](https://img.shields.io/badge/version-unknown-lightgrey)
 
 # Horizon
 

@@ -1,6 +1,6 @@
 # BharatMLStack
 
-![CI Build and Test](https://github.com/YOUR_USERNAME/BharatMLStack/workflows/CI%20Build%20and%20Test/badge.svg)
+![CI Build and Test](https://github.com/Meesho/BharatMLStack/workflows/CI%20Build%20and%20Test/badge.svg)
 
 A comprehensive ML infrastructure stack with feature store, model serving, and UI components.
 
