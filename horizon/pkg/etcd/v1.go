@@ -573,7 +573,7 @@ func (v *V1) getOriginalPrefix(originalPath, prefix string) string {
 	var commonSegments []string
 	for i, segment := range originalSegments {
 		modifiedOriginalSeg := strings.ReplaceAll(segment, "-", "")
-		if i < len(prefixSegments) && strings.ToLower(modifiedOriginalSeg) == strings.ToLower(prefixSegments[i]) {
+		if i < len(prefixSegments) && strings.EqualFold(modifiedOriginalSeg, prefixSegments[i]) {
 			commonSegments = append(commonSegments, segment)
 		} else {
 			break
