@@ -112,6 +112,9 @@ func deserializePSDBForLayout1(data []byte) (*DeserializedPSDB, error) {
 		}
 		compressedData = data[PSDBLayout1LengthBytes:]
 		originalData, err = dec.Decode(compressedData)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &DeserializedPSDB{
 		FeatureSchemaVersion: featureSchemaVersion,
