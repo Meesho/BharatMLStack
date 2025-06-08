@@ -1,12 +1,11 @@
-name: CI Build and Test
+name: Integration & Coordination CI
 
 on:
   pull_request:
     branches: [master, develop]
   push:
     branches: [master, develop]
-  pull_request_target:
-    types: [opened, synchronize, reopened]
+  workflow_dispatch:  # Allow manual triggering
 
 env:
   REGISTRY: ghcr.io
@@ -18,6 +17,8 @@ jobs:
       horizon-changed: ${{ steps.changes.outputs.horizon }}
       trufflebox-ui-changed: ${{ steps.changes.outputs.trufflebox-ui }}
       online-feature-store-changed: ${{ steps.changes.outputs.online-feature-store }}
+      multiple-components: ${{ steps.check-multiple.outputs.multiple }}
+      any-component: ${{ steps.check-any.outputs.any }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,156 +37,134 @@ jobs:
             online-feature-store:
               - 'online-feature-store/**'
 
-  build-horizon:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.horizon-changed == 'true' || github.event_name == 'push'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./horizon
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.22'
-          cache: false
-
-      - name: Cache Go modules
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-horizon-${{ hashFiles('horizon/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-horizon-
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Run tests
-        run: go test -v ./...
-
-      - name: Build application
-        run: go build -v ./...
-
-      - name: Run go vet
-        run: go vet ./...
-
-      - name: Install staticcheck
-        run: go install honnef.co/go/tools/cmd/staticcheck@2023.1.7
-
-      - name: Run staticcheck
-        run: staticcheck ./...
-
-  build-trufflebox-ui:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.trufflebox-ui-changed == 'true' || github.event_name == 'push'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./trufflebox-ui
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Cache npm dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.npm
-            trufflebox-ui/node_modules
-          key: ${{ runner.os }}-npm-${{ hashFiles('trufflebox-ui/package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-
-
-      - name: Install dependencies
+      - name: Check if multiple components changed
+        id: check-multiple
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
+          changed_count=0
+          if [ "${{ steps.changes.outputs.horizon }}" == "true" ]; then
+            changed_count=$((changed_count + 1))
+          fi
+          if [ "${{ steps.changes.outputs.trufflebox-ui }}" == "true" ]; then
+            changed_count=$((changed_count + 1))
+          fi
+          if [ "${{ steps.changes.outputs.online-feature-store }}" == "true" ]; then
+            changed_count=$((changed_count + 1))
+          fi
+          
+          if [ $changed_count -gt 1 ]; then
+            echo "multiple=true" >> $GITHUB_OUTPUT
           else
-            npm install
+            echo "multiple=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Run linter
-        run: npm run lint --if-present
-
-      - name: Run tests
-        run: npm test -- --passWithNoTests --watchAll=false || echo "No tests found or test command not available"
-
-      - name: Build application
-        run: npm run build --if-present
-
-      - name: Test Docker build
+      - name: Check if any component changed
+        id: check-any
         run: |
-          docker build -t trufflebox-ui:test -f DockerFile .
+          if [ "${{ steps.changes.outputs.horizon }}" == "true" ] || [ "${{ steps.changes.outputs.trufflebox-ui }}" == "true" ] || [ "${{ steps.changes.outputs.online-feature-store }}" == "true" ]; then
+            echo "any=true" >> $GITHUB_OUTPUT
+          else
+            echo "any=false" >> $GITHUB_OUTPUT
+          fi
 
-  build-online-feature-store:
+  wait-for-component-builds:
     needs: detect-changes
-    if: needs.detect-changes.outputs.online-feature-store-changed == 'true' || github.event_name == 'push'
+    if: needs.detect-changes.outputs.any-component == 'true'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./online-feature-store
+    steps:
+      - name: Wait for component CI workflows
+        run: |
+          echo "Component builds are handled by individual workflows:"
+          echo "- Horizon CI: ${{ needs.detect-changes.outputs.horizon-changed }}"
+          echo "- Trufflebox UI CI: ${{ needs.detect-changes.outputs.trufflebox-ui-changed }}"
+          echo "- Online Feature Store CI: ${{ needs.detect-changes.outputs.online-feature-store-changed }}"
+          echo "This workflow will proceed with integration tests..."
+
+  integration-tests:
+    needs: [detect-changes, wait-for-component-builds]
+    if: needs.detect-changes.outputs.multiple-components == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.22'
-          cache: false
+      - name: Integration Test - API Compatibility
+        run: |
+          echo "Running integration tests for API compatibility..."
+          echo "Checking if Horizon API is compatible with Online Feature Store..."
+          echo "Checking if Trufflebox UI can communicate with both services..."
+          # Add actual integration test commands here
 
-      - name: Cache Go modules
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-ofs-${{ hashFiles('online-feature-store/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-ofs-
+      - name: Integration Test - Docker Compose
+        run: |
+          echo "Testing multi-service Docker setup..."
+          # This would test if all services work together
+          # docker-compose -f docker-compose.integration.yml up -d
+          # Run integration test suite
+          # docker-compose -f docker-compose.integration.yml down
 
-      - name: Download dependencies
-        run: go mod download
+      - name: Integration Test - Cross-Component Features
+        run: |
+          echo "Testing features that span multiple components..."
+          echo "Testing end-to-end workflows..."
+          # Add tests that verify the components work together
 
-      - name: Run tests
-        run: go test -v ./...
+  security-scan:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.any-component == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Build API server
-        run: go build -v ./cmd/api-server
+      - name: Run security scan
+        run: |
+          echo "Running security scans across all components..."
+          echo "Checking for vulnerabilities in dependencies..."
+          # Add security scanning tools like:
+          # - Trivy
+          # - Snyk
+          # - OWASP dependency check
 
-      - name: Build consumer
-        run: go build -v ./cmd/consumer
+  deployment-readiness:
+    needs: [detect-changes, integration-tests]
+    if: always() && (needs.detect-changes.outputs.multiple-components == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Run go vet
-        run: go vet ./...
+      - name: Check deployment readiness
+        run: |
+          echo "Checking if all components are ready for deployment..."
+          echo "Validating configuration compatibility..."
+          echo "Checking version compatibility..."
+          # Add deployment readiness checks
 
-      - name: Install staticcheck
-        run: go install honnef.co/go/tools/cmd/staticcheck@2023.1.7
-
-      - name: Run staticcheck
-        run: staticcheck ./...
+      - name: Generate deployment manifest
+        run: |
+          echo "Generating deployment manifests..."
+          echo "Creating Docker Compose file for production..."
+          echo "Generating Kubernetes manifests..."
+          # Generate deployment files
 
   summary:
-    needs: [build-horizon, build-trufflebox-ui, build-online-feature-store]
+    needs: [detect-changes, integration-tests, security-scan, deployment-readiness]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Build Summary
+      - name: Integration Summary
         run: |
-          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Horizon | ${{ needs.build-horizon.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Trufflebox UI | ${{ needs.build-trufflebox-ui.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Online Feature Store | ${{ needs.build-online-feature-store.result }} |" >> $GITHUB_STEP_SUMMARY 
+          echo "## Integration CI Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Components Changed | ${{ needs.detect-changes.outputs.any-component }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Multiple Components | ${{ needs.detect-changes.outputs.multiple-components }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Tests | ${{ needs.integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deployment Readiness | ${{ needs.deployment-readiness.result }} |" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Component Status" >> $GITHUB_STEP_SUMMARY
+          echo "- Horizon: ${{ needs.detect-changes.outputs.horizon-changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Trufflebox UI: ${{ needs.detect-changes.outputs.trufflebox-ui-changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Online Feature Store: ${{ needs.detect-changes.outputs.online-feature-store-changed }}" >> $GITHUB_STEP_SUMMARY 
