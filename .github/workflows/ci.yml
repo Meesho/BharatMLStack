@@ -96,7 +96,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
 
       - name: Cache npm dependencies
         uses: actions/cache@v3
@@ -104,7 +103,7 @@ jobs:
           path: |
             ~/.npm
             trufflebox-ui/node_modules
-          key: ${{ runner.os }}-npm-${{ hashFiles('trufflebox-ui/package-lock.json') }}
+          key: ${{ runner.os }}-npm-${{ hashFiles('trufflebox-ui/package.json') }}
           restore-keys: |
             ${{ runner.os }}-npm-
 
