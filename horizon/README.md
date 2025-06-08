@@ -16,7 +16,7 @@ Model serving and inference service built with Go. Provides high-performance mod
 
 ### Prerequisites
 
-- Go 1.19 or later
+- Go 1.22 or later
 - Docker (optional, for containerization)
 
 ### Getting Started
