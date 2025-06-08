@@ -1,7 +1,8 @@
-package gosdk
+package onfs
 
 import (
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -16,7 +17,7 @@ var (
 )
 
 // InitClient initialises the client for the given version
-func InitClient(version int, conf *Config) Client {
+func InitClient(version int, conf *Config, timing func(name string, value time.Duration, tags []string), count func(name string, value int64, tags []string)) Client {
 	mut.Lock()
 	defer mut.Unlock()
 	if registry[version] != nil {
@@ -24,7 +25,7 @@ func InitClient(version int, conf *Config) Client {
 	}
 	switch version {
 	case Version1:
-		registry[version] = NewClientV1(conf)
+		registry[version] = NewClientV1(conf, timing, count)
 	}
 	return registry[version]
 }

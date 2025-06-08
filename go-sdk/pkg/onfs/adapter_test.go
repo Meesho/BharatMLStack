@@ -1,12 +1,12 @@
-package gosdk
+package onfs
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/persist"
-	pb "github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
+	"github.com/Meesho/BharatMLStack/go-sdk/pkg/proto/onfs/persist"
+	pb "github.com/Meesho/BharatMLStack/go-sdk/pkg/proto/onfs/retrieve"
 )
 
 func TestConvertToQueriesProto(t *testing.T) {

@@ -1,6 +1,6 @@
-package gosdk
+package onfs
 
-import "github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
+import "github.com/Meesho/BharatMLStack/go-sdk/pkg/proto/onfs/retrieve"
 
 type Config struct {
 	Host        string

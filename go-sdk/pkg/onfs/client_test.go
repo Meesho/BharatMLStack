@@ -1,12 +1,12 @@
-package gosdk
+package onfs
 
 import (
 	"context"
 	"errors"
 	"testing"
 
-	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/persist"
-	pb "github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
+	"github.com/Meesho/BharatMLStack/go-sdk/pkg/proto/onfs/persist"
+	pb "github.com/Meesho/BharatMLStack/go-sdk/pkg/proto/onfs/retrieve"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"
@@ -88,7 +88,7 @@ func TestNewClientV1(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NewClientV1(tt.config)
+			got := NewClientV1(tt.config, nil, nil)
 			assert.Equal(t, tt.want.batchSize, got.batchSize)
 			assert.Equal(t, tt.want.callerId, got.callerId)
 			assert.Equal(t, tt.want.callerToken, got.callerToken)

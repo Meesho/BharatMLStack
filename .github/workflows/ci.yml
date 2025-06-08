@@ -17,6 +17,7 @@ jobs:
       horizon-changed: ${{ steps.changes.outputs.horizon }}
       trufflebox-ui-changed: ${{ steps.changes.outputs.trufflebox-ui }}
       online-feature-store-changed: ${{ steps.changes.outputs.online-feature-store }}
+      go-sdk-changed: ${{ steps.changes.outputs.go-sdk }}
       multiple-components: ${{ steps.check-multiple.outputs.multiple }}
       any-component: ${{ steps.check-any.outputs.any }}
     steps:
@@ -36,6 +37,8 @@ jobs:
               - 'trufflebox-ui/**'
             online-feature-store:
               - 'online-feature-store/**'
+            go-sdk:
+              - 'go-sdk/**'
 
       - name: Check if multiple components changed
         id: check-multiple
@@ -50,6 +53,9 @@ jobs:
           if [ "${{ steps.changes.outputs.online-feature-store }}" == "true" ]; then
             changed_count=$((changed_count + 1))
           fi
+          if [ "${{ steps.changes.outputs.go-sdk }}" == "true" ]; then
+            changed_count=$((changed_count + 1))
+          fi
           
           if [ $changed_count -gt 1 ]; then
             echo "multiple=true" >> $GITHUB_OUTPUT
@@ -60,7 +66,7 @@ jobs:
       - name: Check if any component changed
         id: check-any
         run: |
-          if [ "${{ steps.changes.outputs.horizon }}" == "true" ] || [ "${{ steps.changes.outputs.trufflebox-ui }}" == "true" ] || [ "${{ steps.changes.outputs.online-feature-store }}" == "true" ]; then
+          if [ "${{ steps.changes.outputs.horizon }}" == "true" ] || [ "${{ steps.changes.outputs.trufflebox-ui }}" == "true" ] || [ "${{ steps.changes.outputs.online-feature-store }}" == "true" ] || [ "${{ steps.changes.outputs.go-sdk }}" == "true" ]; then
             echo "any=true" >> $GITHUB_OUTPUT
           else
             echo "any=false" >> $GITHUB_OUTPUT
@@ -77,6 +83,7 @@ jobs:
           echo "- Horizon CI: ${{ needs.detect-changes.outputs.horizon-changed }}"
           echo "- Trufflebox UI CI: ${{ needs.detect-changes.outputs.trufflebox-ui-changed }}"
           echo "- Online Feature Store CI: ${{ needs.detect-changes.outputs.online-feature-store-changed }}"
+          echo "- Go SDK CI: ${{ needs.detect-changes.outputs.go-sdk-changed }}"
           echo "This workflow will proceed with integration tests..."
 
   integration-tests:
@@ -92,6 +99,7 @@ jobs:
           echo "Running integration tests for API compatibility..."
           echo "Checking if Horizon API is compatible with Online Feature Store..."
           echo "Checking if Trufflebox UI can communicate with both services..."
+          echo "Testing Go SDK compatibility with backend services..."
           # Add actual integration test commands here
 
       - name: Integration Test - Docker Compose
@@ -167,4 +175,5 @@ jobs:
           echo "### Component Status" >> $GITHUB_STEP_SUMMARY
           echo "- Horizon: ${{ needs.detect-changes.outputs.horizon-changed }}" >> $GITHUB_STEP_SUMMARY
           echo "- Trufflebox UI: ${{ needs.detect-changes.outputs.trufflebox-ui-changed }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Online Feature Store: ${{ needs.detect-changes.outputs.online-feature-store-changed }}" >> $GITHUB_STEP_SUMMARY 
+          echo "- Online Feature Store: ${{ needs.detect-changes.outputs.online-feature-store-changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Go SDK: ${{ needs.detect-changes.outputs.go-sdk-changed }}" >> $GITHUB_STEP_SUMMARY 

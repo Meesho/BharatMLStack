@@ -1,18 +1,18 @@
-package gosdk
+package onfs
 
 import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
+	"strconv"
+	"time"
+
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/status"
-	"strconv"
-	"time"
 )
 
 const (
@@ -23,14 +23,23 @@ type GRPCClient struct {
 	Conn                *grpc.ClientConn
 	DeadLine            int64
 	externalServiceName string
+	timing              func(name string, value time.Duration, tags []string)
+	count               func(name string, value int64, tags []string)
 }
 
-func NewConnFromConfig(config *Config, externalServiceName string) *GRPCClient {
+func NewConnFromConfig(
+	config *Config,
+	externalServiceName string,
+	timing func(name string, value time.Duration, tags []string),
+	count func(name string, value int64, tags []string),
+) *GRPCClient {
 	conn, err := getGRPCConnections(*config)
 	if err != nil {
 		log.Panic().Msgf("error while GRPC connection initialization. %s", err)
 	}
 	conn.externalServiceName = externalServiceName
+	conn.timing = timing
+	conn.count = count
 	return conn
 }
 
@@ -65,30 +74,34 @@ func (c *GRPCClient) Invoke(ctx context.Context, method string, args any, reply 
 			code = uint32(e.Code())
 		}
 	}
-	latency := time.Now().Sub(startTime)
+	latency := time.Since(startTime)
 	latencyTags := BuildExternalGRPCServiceLatencyTags(c.externalServiceName, method, int(code))
 	countTags := BuildExternalGRPCServiceCountTags(c.externalServiceName, method, int(code))
-	metric.Timing(metric.ExternalApiRequestLatency, latency, latencyTags)
-	metric.Incr(metric.ExternalApiRequestCount, countTags)
+	if c.timing != nil {
+		c.timing("onfs.grpc.invoke.latency", latency, latencyTags)
+	}
+	if c.count != nil {
+		c.count("onfs.grpc.invoke.count", 1, countTags)
+	}
 	return err
 }
 
 func BuildExternalGRPCServiceLatencyTags(service, method string, statusCode int) []string {
-	return metric.BuildTag(
-		metric.NewTag(metric.TagCommunicationProtocol, metric.TagValueCommunicationProtocolGrpc),
-		metric.NewTag(metric.TagExternalService, service),
-		metric.NewTag(metric.TagMethod, method),
-		metric.NewTag(metric.TagGrpcStatusCode, strconv.Itoa(statusCode)),
-	)
+	return []string{
+		"communication_protocol:grpc",
+		"external_service:" + service,
+		"method:" + method,
+		"grpc_status_code:" + strconv.Itoa(statusCode),
+	}
 }
 
 func BuildExternalGRPCServiceCountTags(service, method string, statusCode int) []string {
-	return metric.BuildTag(
-		metric.NewTag(metric.TagCommunicationProtocol, metric.TagValueCommunicationProtocolGrpc),
-		metric.NewTag(metric.TagExternalService, service),
-		metric.NewTag(metric.TagMethod, method),
-		metric.NewTag(metric.TagGrpcStatusCode, strconv.Itoa(statusCode)),
-	)
+	return []string{
+		"communication_protocol:grpc",
+		"external_service:" + service,
+		"method:" + method,
+		"grpc_status_code:" + strconv.Itoa(statusCode),
+	}
 }
 func (c *GRPCClient) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 	return nil, errors.New("NewStream is not implemented")

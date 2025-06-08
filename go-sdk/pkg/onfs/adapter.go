@@ -1,10 +1,10 @@
-package gosdk
+package onfs
 
 import (
 	"errors"
 
-	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/persist"
-	pb "github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
+	"github.com/Meesho/BharatMLStack/go-sdk/pkg/proto/onfs/persist"
+	pb "github.com/Meesho/BharatMLStack/go-sdk/pkg/proto/onfs/retrieve"
 )
 
 type IAdapter interface {

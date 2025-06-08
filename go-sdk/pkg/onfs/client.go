@@ -1,15 +1,16 @@
-package gosdk
+package onfs
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/persist"
-	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
-	"github.com/rs/zerolog/log"
-	"google.golang.org/grpc/metadata"
 	"sync"
 	"time"
+
+	"github.com/Meesho/BharatMLStack/go-sdk/pkg/proto/onfs/persist"
+	"github.com/Meesho/BharatMLStack/go-sdk/pkg/proto/onfs/retrieve"
+	"github.com/rs/zerolog/log"
+	"google.golang.org/grpc/metadata"
 )
 
 const (
@@ -44,7 +45,7 @@ type clientConfig struct {
 }
 
 // NewClientV1 creates a new instance of the online-feature-store client (v1)
-func NewClientV1(config *Config) *ClientV1 {
+func NewClientV1(config *Config, timing func(name string, value time.Duration, tags []string), count func(name string, value int64, tags []string)) *ClientV1 {
 	validateConfig(config)
 
 	batchSize := defaultBatchSize
@@ -52,7 +53,7 @@ func NewClientV1(config *Config) *ClientV1 {
 		batchSize = config.BatchSize
 	}
 
-	conn := NewConnFromConfig(config, "online-feature-store")
+	conn := NewConnFromConfig(config, "online-feature-store", timing, count)
 
 	return &ClientV1{
 		v1Client: &clientConfig{
@@ -104,6 +105,10 @@ func (c *ClientV1) RetrieveDecodedFeatures(ctx context.Context, request *Query) 
 }
 
 func (c *ClientV1) PersistFeatures(ctx context.Context, request *PersistFeaturesRequest) (response *PersistFeaturesResponse, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	// Convert request to proto format using adapter
 	protoRequest := c.adapter.ConvertToPersistRequest(request)
 	if protoRequest == nil {
@@ -335,18 +340,18 @@ func (c *ClientV1) contactDecodedServer(
 
 func validateConfig(config *Config) {
 	if config == nil {
-		log.Panic().Msg("Configuration is nil. Please provide a valid config.")
+		panic("Configuration is nil. Please provide a valid config.")
 	}
 	if len(config.Host) == 0 {
-		log.Panic().Msg("Configuration error: Host is empty. Please provide a valid host.")
+		panic("Configuration error: Host is empty. Please provide a valid host.")
 	}
 	if len(config.Port) == 0 {
-		log.Panic().Msg("Configuration error: Port is empty. Please provide a valid port.")
+		panic("Configuration error: Port is empty. Please provide a valid port.")
 	}
 	if len(config.CallerId) == 0 {
-		log.Panic().Msg("Configuration error: Caller ID is empty. Please provide a valid caller ID.")
+		panic("Configuration error: Caller ID is empty. Please provide a valid caller ID.")
 	}
 	if len(config.CallerToken) == 0 {
-		log.Panic().Msg("Configuration error: Caller token is empty. Please provide a valid caller token.")
+		panic("Configuration error: Caller token is empty. Please provide a valid caller token.")
 	}
 }
