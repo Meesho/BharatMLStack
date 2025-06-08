@@ -88,8 +88,9 @@ func (c *ClientV1) RetrieveFeatures(ctx context.Context, request *Query) (*Resul
 
 // RetrieveDecodedFeatures retrieves decoded features from online-feature-store service
 func (c *ClientV1) RetrieveDecodedFeatures(ctx context.Context, request *Query) (*DecodedResult, error) {
+	var backgroundContext context.Context
 	if ctx == nil {
-		ctx = context.Background()
+		backgroundContext = context.Background()
 	}
 
 	requests, err := c.adapter.ConvertToQueriesProto(request, c.batchSize)
@@ -97,7 +98,7 @@ func (c *ClientV1) RetrieveDecodedFeatures(ctx context.Context, request *Query) 
 		return nil, fmt.Errorf("failed to convert query: %w", err)
 	}
 
-	decodedResult := c.fetchDecodedResponseFromServer(request, requests)
+	decodedResult := c.fetchDecodedResponseFromServer(backgroundContext, request, requests)
 	if decodedResult == nil {
 		return nil, errors.New("error on retrieving decoded features from online-feature-store")
 	}
@@ -247,11 +248,11 @@ func (c *ClientV1) contactPersistServer(ctx context.Context, request *persist.Qu
 	return response, nil
 }
 
-func (c *ClientV1) fetchDecodedResponseFromServer(request *Query, requests []*retrieve.Query) *DecodedResult {
+func (c *ClientV1) fetchDecodedResponseFromServer(ctx context.Context, request *Query, requests []*retrieve.Query) *DecodedResult {
 	responseChan := make(chan *DecodedResponse, len(requests))
 	defer close(responseChan)
 	for _, req := range requests {
-		go c.contactDecodedServer(req, responseChan)
+		go c.contactDecodedServer(ctx, req, responseChan)
 	}
 
 	decodedResult := c.handleDecodedResponsesFromChannel(request.EntityLabel, responseChan, len(requests))
@@ -259,7 +260,7 @@ func (c *ClientV1) fetchDecodedResponseFromServer(request *Query, requests []*re
 	return decodedResult
 }
 
-func (c *ClientV1) handleDecodedResponsesFromChannel(label string, responseChan chan *DecodedResponse, batch int) *DecodedResult {
+func (c *ClientV1) handleDecodedResponsesFromChannel(_ string, responseChan chan *DecodedResponse, batch int) *DecodedResult {
 	result := &DecodedResult{
 		KeysSchema:     make([]string, 0),
 		FeatureSchemas: make([]FeatureSchema, 0),
@@ -288,6 +289,7 @@ func (c *ClientV1) handleDecodedResponsesFromChannel(label string, responseChan 
 }
 
 func (c *ClientV1) contactDecodedServer(
+	ctx context.Context,
 	request *retrieve.Query,
 	responseChan chan *DecodedResponse,
 ) {
@@ -299,20 +301,24 @@ func (c *ClientV1) contactDecodedServer(
 			}
 		}
 	}()
-	//set deadline
-	timeout := time.Duration(c.v1Client.deadline) * time.Millisecond
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	var ctxWithTimeout context.Context
+	var cancel context.CancelFunc
+	if _, ok := ctx.Deadline(); !ok {
+		ctxWithTimeout, cancel = c.withTimeout(ctx)
+		defer cancel()
+	} else {
+		ctxWithTimeout = ctx
+	}
 
 	//set metadata
-	md := metadata.New(map[string]string{
-		headerCallerID:    c.callerId,
-		headerCallerToken: c.callerToken,
-	})
-	ctx = metadata.NewOutgoingContext(ctx, md)
+	finalCtx := c.withAuthMetadata(ctxWithTimeout)
 
 	//Contact server
-	response, err := c.v1Client.client.RetrieveDecodedResult(ctx, request)
+	response, err := c.v1Client.client.RetrieveDecodedResult(finalCtx, request)
 
 	//Dispatch response
 	if err != nil {
