@@ -52,7 +52,8 @@ class OnlineFeatureStorePyClient:
         def process_partition(iterator):
             """Convert each partition of Spark DataFrame into Protobuf serialized messages."""
 
-            from .proto.persist.persist_pb2 import (
+            # Import protobuf files from bharatml_commons
+            from bharatml_commons.proto.persist.persist_pb2 import (
                 Query,
                 FeatureGroupSchema,
                 Data,
