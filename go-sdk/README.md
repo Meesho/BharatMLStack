@@ -203,44 +203,6 @@ go test -v ./pkg/onfs
 go test -race ./...
 ```
 
-## Package Structure
-
-```
-go-sdk/
-├── pkg/
-│   ├── onfs/                    # Online Feature Store client package
-│   │   ├── client.go           # Main client implementation (ClientV1)
-│   │   ├── models.go           # Data structures and types
-│   │   ├── adapter.go          # Protocol buffer conversion logic
-│   │   ├── grpc.go             # gRPC connection management
-│   │   ├── init.go             # Client initialization and registry
-│   │   ├── client_test.go      # Client unit tests
-│   │   └── adapter_test.go     # Adapter unit tests
-│   └── proto/                   # Protocol buffer definitions
-│       └── onfs/
-│           ├── persist/         # Feature persistence proto definitions
-│           └── retrieve/        # Feature retrieval proto definitions
-├── go.mod                       # Go module definition
-└── go.sum                       # Go module checksums
-```
-
-### Key Components
-
-- **Client Interface**: Defines `RetrieveFeatures`, `RetrieveDecodedFeatures`, and `PersistFeatures` methods
-- **ClientV1**: Main implementation with gRPC communication, batching, and error handling
-- **Config**: Configuration structure for connection and authentication settings
-- **Models**: Type-safe Go structures for queries, results, and feature data
-- **Adapter**: Converts between Go types and protocol buffer messages
-- **GRPC Client**: Manages connections, timeouts, and metrics collection
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for your changes
-5. Ensure all tests pass
-6. Submit a pull request
 
 ## License
 
