@@ -16,7 +16,8 @@ readme = "README.md"
 requires-python = ">=3.7"
 dependencies = [
   "bharatml_commons>=0.1.0",
-  "pyspark>=3.0.0"
+  "pyspark>=3.0.0",
+  "numpy>=1.19.0"
 ]
 
 classifiers = [
