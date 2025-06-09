@@ -54,7 +54,7 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
+            type=sha,prefix={{branch}}-,format=short
 
       - name: Build and push Docker image
         id: build
@@ -66,14 +66,21 @@ jobs:
             --platform ${{ env.PLATFORMS }} \
             -f cmd/horizon/Dockerfile"
           
-          # Add tags
-          for tag in ${{ steps.meta.outputs.tags }}; do
-            BUILD_CMD+=" -t $tag"
+          # Add tags - properly quote and handle each tag
+          IFS=$'\n' read -rd '' -a tag_array <<< "${{ steps.meta.outputs.tags }}" || true
+          for tag in "${tag_array[@]}"; do
+            if [[ -n "$tag" ]]; then
+              BUILD_CMD+=" -t \"$tag\""
+            fi
           done
           
-          # Add labels
-          BUILD_CMD+=" --label 'org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}'"
-          BUILD_CMD+=" --label 'org.opencontainers.image.revision=${{ github.sha }}'"
+          # Add labels from metadata
+          IFS=$'\n' read -rd '' -a label_array <<< "${{ steps.meta.outputs.labels }}" || true
+          for label in "${label_array[@]}"; do
+            if [[ -n "$label" ]]; then
+              BUILD_CMD+=" --label \"$label\""
+            fi
+          done
           
           # Push if not a PR
           if [ "${{ github.event_name }}" != "pull_request" ]; then
@@ -125,7 +132,7 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
+            type=sha,prefix={{branch}}-,format=short
 
       - name: Build and push Docker image
         id: build
@@ -136,12 +143,21 @@ jobs:
             --platform ${{ env.PLATFORMS }} \
             -f cmd/api-server/DockerFile"
           
-          for tag in ${{ steps.meta.outputs.tags }}; do
-            BUILD_CMD+=" -t $tag"
+          # Add tags - properly quote and handle each tag
+          IFS=$'\n' read -rd '' -a tag_array <<< "${{ steps.meta.outputs.tags }}" || true
+          for tag in "${tag_array[@]}"; do
+            if [[ -n "$tag" ]]; then
+              BUILD_CMD+=" -t \"$tag\""
+            fi
           done
           
-          BUILD_CMD+=" --label 'org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}'"
-          BUILD_CMD+=" --label 'org.opencontainers.image.revision=${{ github.sha }}'"
+          # Add labels from metadata
+          IFS=$'\n' read -rd '' -a label_array <<< "${{ steps.meta.outputs.labels }}" || true
+          for label in "${label_array[@]}"; do
+            if [[ -n "$label" ]]; then
+              BUILD_CMD+=" --label \"$label\""
+            fi
+          done
           
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             BUILD_CMD+=" --push"
@@ -192,7 +208,7 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
+            type=sha,prefix={{branch}}-,format=short
 
       - name: Build and push Docker image
         id: build
@@ -203,12 +219,21 @@ jobs:
             --platform ${{ env.PLATFORMS }} \
             -f cmd/consumer/DockerFile"
           
-          for tag in ${{ steps.meta.outputs.tags }}; do
-            BUILD_CMD+=" -t $tag"
+          # Add tags - properly quote and handle each tag
+          IFS=$'\n' read -rd '' -a tag_array <<< "${{ steps.meta.outputs.tags }}" || true
+          for tag in "${tag_array[@]}"; do
+            if [[ -n "$tag" ]]; then
+              BUILD_CMD+=" -t \"$tag\""
+            fi
           done
           
-          BUILD_CMD+=" --label 'org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}'"
-          BUILD_CMD+=" --label 'org.opencontainers.image.revision=${{ github.sha }}'"
+          # Add labels from metadata
+          IFS=$'\n' read -rd '' -a label_array <<< "${{ steps.meta.outputs.labels }}" || true
+          for label in "${label_array[@]}"; do
+            if [[ -n "$label" ]]; then
+              BUILD_CMD+=" --label \"$label\""
+            fi
+          done
           
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             BUILD_CMD+=" --push"
@@ -259,7 +284,7 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
+            type=sha,prefix={{branch}}-,format=short
 
       - name: Build and push Docker image
         id: build
@@ -270,12 +295,21 @@ jobs:
             --platform ${{ env.PLATFORMS }} \
             -f DockerFile"
           
-          for tag in ${{ steps.meta.outputs.tags }}; do
-            BUILD_CMD+=" -t $tag"
+          # Add tags - properly quote and handle each tag
+          IFS=$'\n' read -rd '' -a tag_array <<< "${{ steps.meta.outputs.tags }}" || true
+          for tag in "${tag_array[@]}"; do
+            if [[ -n "$tag" ]]; then
+              BUILD_CMD+=" -t \"$tag\""
+            fi
           done
           
-          BUILD_CMD+=" --label 'org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}'"
-          BUILD_CMD+=" --label 'org.opencontainers.image.revision=${{ github.sha }}'"
+          # Add labels from metadata
+          IFS=$'\n' read -rd '' -a label_array <<< "${{ steps.meta.outputs.labels }}" || true
+          for label in "${label_array[@]}"; do
+            if [[ -n "$label" ]]; then
+              BUILD_CMD+=" --label \"$label\""
+            fi
+          done
           
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             BUILD_CMD+=" --push"
