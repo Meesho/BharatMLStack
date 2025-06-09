@@ -22,7 +22,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
@@ -84,9 +84,9 @@ jobs:
         run: |
           # Update bharatml_commons version
           python -c "
-          import tomllib, tomli_w
+          import tomli, tomli_w
           with open('py-sdk/bharatml_commons/pyproject.toml', 'rb') as f:
-              data = tomllib.load(f)
+              data = tomli.load(f)
           data['project']['version'] = '${{ steps.versions.outputs.bharatml_version }}'
           with open('py-sdk/bharatml_commons/pyproject.toml', 'wb') as f:
               tomli_w.dump(data, f)
@@ -94,9 +94,9 @@ jobs:
           
           # Update spark_feature_push_client version
           python -c "
-          import tomllib, tomli_w
+          import tomli, tomli_w
           with open('py-sdk/spark_feature_push_client/pyproject.toml', 'rb') as f:
-              data = tomllib.load(f)
+              data = tomli.load(f)
           data['project']['version'] = '${{ steps.versions.outputs.spark_version }}'
           with open('py-sdk/spark_feature_push_client/pyproject.toml', 'wb') as f:
               tomli_w.dump(data, f)
@@ -104,9 +104,9 @@ jobs:
           
           # Update grpc_feature_client version
           python -c "
-          import tomllib, tomli_w
+          import tomli, tomli_w
           with open('py-sdk/grpc_feature_client/pyproject.toml', 'rb') as f:
-              data = tomllib.load(f)
+              data = tomli.load(f)
           data['project']['version'] = '${{ steps.versions.outputs.grpc_version }}'
           with open('py-sdk/grpc_feature_client/pyproject.toml', 'wb') as f:
               tomli_w.dump(data, f)

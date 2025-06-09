@@ -36,7 +36,7 @@ BharatMLStack/
 2. **Pre-release** (`develop`):
    - Go SDK: Adds beta suffix → `go-sdk/v0.1.0-beta.abc1234`
    - Python packages: Adds beta suffix → `0.1.0b20250609130000.abc1234`
-   - Docker images: Tagged with branch and SHA → `ghcr.io/meesho/horizon:develop`, `ghcr.io/meesho/horizon:abc1234`
+   - Docker images: Uses version-beta format → `ghcr.io/meesho/horizon:v0.1.20-beta`
 
 ### Manual Version Updates
 
@@ -125,10 +125,17 @@ docker pull ghcr.io/meesho/trufflebox-ui:latest
 - `ghcr.io/meesho/trufflebox-ui` (from `trufflebox-ui/VERSION`)
 
 **Tag Strategy:**
-- **Version tag**: `v0.1.20` (from VERSION file)
-- **Latest tag**: `latest` (only on master branch)
-- **Branch tag**: `master`, `develop`
-- **SHA tag**: `abc1234` (short commit hash)
+
+**Master Branch (Stable Release):**
+- **Version tag**: `v0.1.20` (exact VERSION file content)
+- **Latest tag**: `latest`
+- **Branch tag**: `master`
+
+**Develop Branch (Beta Release):**
+- **Beta version tag**: `v0.1.20-beta` (VERSION file + `-beta` suffix)
+
+**Pull Requests:**
+- **PR tag**: `pr-123` (for validation only, not pushed)
 
 ## ⚡ Quick Commands
 
@@ -146,4 +153,23 @@ echo "$NEW_VERSION" > py-sdk/grpc_feature_client/VERSION
 echo "$NEW_VERSION" > horizon/VERSION
 echo "$NEW_VERSION" > online-feature-store/VERSION
 echo "$NEW_VERSION" > trufflebox-ui/VERSION
+```
+
+## 🏷️ Example Docker Tags After Merge
+
+**After merge to `master` (horizon/VERSION = `v0.1.20`):**
+```bash
+ghcr.io/meesho/horizon:v0.1.20    # Exact version from VERSION file
+ghcr.io/meesho/horizon:latest     # Latest stable version
+ghcr.io/meesho/horizon:master     # Master branch tag
+```
+
+**After merge to `develop` (horizon/VERSION = `v0.1.20`):**
+```bash
+ghcr.io/meesho/horizon:v0.1.20-beta    # Version + beta suffix
+```
+
+**During Pull Request:**
+```bash
+ghcr.io/meesho/horizon:pr-123     # PR number (built but not pushed)
 ``` 

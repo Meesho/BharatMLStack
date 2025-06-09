@@ -41,8 +41,16 @@ jobs:
         run: |
           if [ -f "horizon/VERSION" ]; then
             VERSION=$(cat horizon/VERSION | tr -d '\n' | tr -d ' ')
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-            echo "Using version from VERSION file: $VERSION"
+            
+            # For develop branch, add -beta suffix
+            if [ "${{ github.ref }}" = "refs/heads/develop" ]; then
+              BETA_VERSION="${VERSION}-beta"
+              echo "version=$BETA_VERSION" >> $GITHUB_OUTPUT
+              echo "Using beta version: $BETA_VERSION"
+            else
+              echo "version=$VERSION" >> $GITHUB_OUTPUT
+              echo "Using version from VERSION file: $VERSION"
+            fi
           else
             echo "version=latest" >> $GITHUB_OUTPUT
             echo "VERSION file not found, using 'latest'"
@@ -62,11 +70,10 @@ jobs:
         with:
           images: ${{ env.IMAGE_PREFIX }}/horizon
           tags: |
-            type=ref,event=branch
+            type=ref,event=branch,enable={{is_default_branch}}
             type=ref,event=pr
             type=raw,value=${{ steps.version.outputs.version }}
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,format=short
 
       - name: Build and push Docker image
         id: build
@@ -131,8 +138,16 @@ jobs:
         run: |
           if [ -f "online-feature-store/VERSION" ]; then
             VERSION=$(cat online-feature-store/VERSION | tr -d '\n' | tr -d ' ')
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-            echo "Using version from VERSION file: $VERSION"
+            
+            # For develop branch, add -beta suffix
+            if [ "${{ github.ref }}" = "refs/heads/develop" ]; then
+              BETA_VERSION="${VERSION}-beta"
+              echo "version=$BETA_VERSION" >> $GITHUB_OUTPUT
+              echo "Using beta version: $BETA_VERSION"
+            else
+              echo "version=$VERSION" >> $GITHUB_OUTPUT
+              echo "Using version from VERSION file: $VERSION"
+            fi
           else
             echo "version=latest" >> $GITHUB_OUTPUT
             echo "VERSION file not found, using 'latest'"
@@ -152,11 +167,10 @@ jobs:
         with:
           images: ${{ env.IMAGE_PREFIX }}/onfs-api-server
           tags: |
-            type=ref,event=branch
+            type=ref,event=branch,enable={{is_default_branch}}
             type=ref,event=pr
             type=raw,value=${{ steps.version.outputs.version }}
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,format=short
 
       - name: Build and push Docker image
         id: build
@@ -220,8 +234,16 @@ jobs:
         run: |
           if [ -f "online-feature-store/VERSION" ]; then
             VERSION=$(cat online-feature-store/VERSION | tr -d '\n' | tr -d ' ')
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-            echo "Using version from VERSION file: $VERSION"
+            
+            # For develop branch, add -beta suffix
+            if [ "${{ github.ref }}" = "refs/heads/develop" ]; then
+              BETA_VERSION="${VERSION}-beta"
+              echo "version=$BETA_VERSION" >> $GITHUB_OUTPUT
+              echo "Using beta version: $BETA_VERSION"
+            else
+              echo "version=$VERSION" >> $GITHUB_OUTPUT
+              echo "Using version from VERSION file: $VERSION"
+            fi
           else
             echo "version=latest" >> $GITHUB_OUTPUT
             echo "VERSION file not found, using 'latest'"
@@ -241,11 +263,10 @@ jobs:
         with:
           images: ${{ env.IMAGE_PREFIX }}/onfs-consumer
           tags: |
-            type=ref,event=branch
+            type=ref,event=branch,enable={{is_default_branch}}
             type=ref,event=pr
             type=raw,value=${{ steps.version.outputs.version }}
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,format=short
 
       - name: Build and push Docker image
         id: build
@@ -309,8 +330,16 @@ jobs:
         run: |
           if [ -f "trufflebox-ui/VERSION" ]; then
             VERSION=$(cat trufflebox-ui/VERSION | tr -d '\n' | tr -d ' ')
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-            echo "Using version from VERSION file: $VERSION"
+            
+            # For develop branch, add -beta suffix
+            if [ "${{ github.ref }}" = "refs/heads/develop" ]; then
+              BETA_VERSION="${VERSION}-beta"
+              echo "version=$BETA_VERSION" >> $GITHUB_OUTPUT
+              echo "Using beta version: $BETA_VERSION"
+            else
+              echo "version=$VERSION" >> $GITHUB_OUTPUT
+              echo "Using version from VERSION file: $VERSION"
+            fi
           else
             echo "version=latest" >> $GITHUB_OUTPUT
             echo "VERSION file not found, using 'latest'"
@@ -330,11 +359,10 @@ jobs:
         with:
           images: ${{ env.IMAGE_PREFIX }}/trufflebox-ui
           tags: |
-            type=ref,event=branch
+            type=ref,event=branch,enable={{is_default_branch}}
             type=ref,event=pr
             type=raw,value=${{ steps.version.outputs.version }}
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,format=short
 
       - name: Build and push Docker image
         id: build
