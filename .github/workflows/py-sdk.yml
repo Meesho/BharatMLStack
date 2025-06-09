@@ -1,0 +1,269 @@
+name: Python SDK CI
+
+on:
+  pull_request:
+    branches: [master, develop]
+    paths: ['py-sdk/**']
+  push:
+    branches: [master, develop]
+    paths: ['py-sdk/**']
+
+jobs:
+  build-bharatml-commons:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+    defaults:
+      run:
+        working-directory: ./py-sdk/bharatml_commons
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-bharatml-commons-${{ matrix.python-version }}-${{ hashFiles('py-sdk/bharatml_commons/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-bharatml-commons-${{ matrix.python-version }}-
+            ${{ runner.os }}-bharatml-commons-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build pytest flake8 black isort mypy
+
+      - name: Install package in development mode
+        run: pip install -e .
+
+      - name: Check code formatting with black
+        run: black --check --diff . || echo "Black formatting issues found"
+
+      - name: Check import sorting with isort
+        run: isort --check-only --diff . || echo "Import sorting issues found"
+
+      - name: Lint with flake8
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+
+      - name: Type checking with mypy
+        run: mypy . --ignore-missing-imports || echo "Type checking issues found"
+
+      - name: Run tests
+        run: |
+          if [ -d "tests" ]; then
+            pytest tests/ -v
+          else
+            echo "No tests directory found, skipping tests"
+          fi
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package metadata
+        run: |
+          pip install twine
+          twine check dist/*
+
+      - name: Test package installation
+        run: |
+          pip install dist/*.whl
+          python -c "import bharatml_commons; print('bharatml_commons imported successfully')"
+
+  build-spark-feature-push-client:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+    defaults:
+      run:
+        working-directory: ./py-sdk/spark_feature_push_client
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-spark-feature-push-${{ matrix.python-version }}-${{ hashFiles('py-sdk/spark_feature_push_client/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-spark-feature-push-${{ matrix.python-version }}-
+            ${{ runner.os }}-spark-feature-push-
+
+      - name: Install bharatml_commons dependency
+        run: |
+          python -m pip install --upgrade pip
+          pip install build pytest flake8 black isort mypy
+          pip install -e ../bharatml_commons
+
+      - name: Install package in development mode
+        run: pip install -e .
+
+      - name: Check code formatting with black
+        run: black --check --diff . || echo "Black formatting issues found"
+
+      - name: Check import sorting with isort
+        run: isort --check-only --diff . || echo "Import sorting issues found"
+
+      - name: Lint with flake8
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+
+      - name: Type checking with mypy
+        run: mypy . --ignore-missing-imports || echo "Type checking issues found"
+
+      - name: Run tests
+        run: |
+          if [ -d "tests" ]; then
+            pytest tests/ -v
+          else
+            echo "No tests directory found, skipping tests"
+          fi
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package metadata
+        run: |
+          pip install twine
+          twine check dist/*
+
+      - name: Test package installation
+        run: |
+          pip install dist/*.whl
+          python -c "import spark_feature_push_client; print('spark_feature_push_client imported successfully')"
+
+  build-grpc-feature-client:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+    defaults:
+      run:
+        working-directory: ./py-sdk/grpc_feature_client
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-grpc-feature-${{ matrix.python-version }}-${{ hashFiles('py-sdk/grpc_feature_client/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-grpc-feature-${{ matrix.python-version }}-
+            ${{ runner.os }}-grpc-feature-
+
+      - name: Install bharatml_commons dependency
+        run: |
+          python -m pip install --upgrade pip
+          pip install build pytest flake8 black isort mypy
+          pip install -e ../bharatml_commons
+
+      - name: Install package in development mode
+        run: pip install -e .
+
+      - name: Check code formatting with black
+        run: black --check --diff . || echo "Black formatting issues found"
+
+      - name: Check import sorting with isort
+        run: isort --check-only --diff . || echo "Import sorting issues found"
+
+      - name: Lint with flake8
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+
+      - name: Type checking with mypy
+        run: mypy . --ignore-missing-imports || echo "Type checking issues found"
+
+      - name: Run tests
+        run: |
+          if [ -d "tests" ]; then
+            pytest tests/ -v
+          else
+            echo "No tests directory found, skipping tests"
+          fi
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package metadata
+        run: |
+          pip install twine
+          twine check dist/*
+
+      - name: Test package installation
+        run: |
+          pip install dist/*.whl
+          python -c "import grpc_feature_client; print('grpc_feature_client imported successfully')"
+
+  test-integration:
+    runs-on: ubuntu-latest
+    needs: [build-bharatml-commons, build-spark-feature-push-client, build-grpc-feature-client]
+    defaults:
+      run:
+        working-directory: ./py-sdk
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install all packages
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e bharatml_commons/
+          pip install -e spark_feature_push_client/
+          pip install -e grpc_feature_client/
+
+      - name: Test imports and basic functionality
+        run: |
+          python -c "
+          # Test bharatml_commons
+          from bharatml_commons import FeatureMetadataClient
+          from bharatml_commons.column_utils import clean_column_name
+          print('✓ bharatml_commons imports successfully')
+          
+          # Test spark_feature_push_client
+          from spark_feature_push_client import OnlineFeatureStorePyClient
+          print('✓ spark_feature_push_client imports successfully')
+          
+          # Test grpc_feature_client
+          from grpc_feature_client import GRPCFeatureClient, GRPCClientConfig
+          print('✓ grpc_feature_client imports successfully')
+          
+          print('✓ All packages work together')
+          "
+
+      - name: Test utility functions
+        run: |
+          python -c "
+          from bharatml_commons.column_utils import clean_column_name
+          result = clean_column_name('test@feature#1')
+          assert result == 'test_feature_1', f'Expected test_feature_1, got {result}'
+          print('✓ Utility functions work correctly')
+          " 

@@ -147,7 +147,7 @@ func (csdb *CacheStorageDataBlock) GetDeserializedPSDBForFGIds(fgIds ds.Set[int]
 		return nil, nil
 	}
 	fgIds.KeyIterator(func(fgId int) bool {
-		offLen, _ := fgOffLenMap[fgId]
+		offLen := fgOffLenMap[fgId]
 		startOffSet, endOffSet := system.UnpackUint64InUint32(offLen)
 		if startOffSet == endOffSet {
 			fgIdToDDB[fgId] = NegativeCacheDeserializePSDB()
@@ -202,11 +202,11 @@ func handleForPSDBLayout1(fgId int, ddb *DeserializedPSDB, buffer *bytes.Buffer,
 	system.ByteOrder.PutUint16(fgSerializedData[2:4], uint16(fgDataLen))
 	if compressed {
 		copied := copy(fgSerializedData[csdbPrefixLen:], ddb.Header)
-		copied = copy(fgSerializedData[csdbPrefixLen+copied:], ddb.CompressedData)
+		copy(fgSerializedData[csdbPrefixLen+copied:], ddb.CompressedData)
 	} else {
 		clearCompressionBits(ddb.Header)
 		copied := copy(fgSerializedData[csdbPrefixLen:], ddb.Header)
-		copied = copy(fgSerializedData[csdbPrefixLen+copied:], ddb.OriginalData)
+		copy(fgSerializedData[csdbPrefixLen+copied:], ddb.OriginalData)
 	}
 	_, err := buffer.Write(fgSerializedData)
 	return err

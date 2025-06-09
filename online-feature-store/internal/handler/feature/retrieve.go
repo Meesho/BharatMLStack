@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Meesho/BharatMLStack/online-feature-store/internal/quantization"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/Meesho/BharatMLStack/online-feature-store/internal/quantization"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/blocks"
@@ -793,6 +794,9 @@ func (h *RetrieveHandler) persistToCache(entityLabel string, retrieveData *Retri
 			if err == nil {
 				// Store the serialized data in the cache
 				err = cache.SetV2(entityLabel, key.Cols, serializedData)
+				if err != nil {
+					log.Error().Err(err).Msgf("Failed to set cache for key %s", keyStr)
+				}
 				continue
 			}
 		}
