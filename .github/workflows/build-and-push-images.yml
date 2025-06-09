@@ -54,7 +54,7 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-,format=short
+            type=sha,format=short
 
       - name: Build and push Docker image
         id: build
@@ -132,7 +132,7 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-,format=short
+            type=sha,format=short
 
       - name: Build and push Docker image
         id: build
@@ -208,7 +208,7 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-,format=short
+            type=sha,format=short
 
       - name: Build and push Docker image
         id: build
@@ -284,7 +284,7 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-,format=short
+            type=sha,format=short
 
       - name: Build and push Docker image
         id: build
