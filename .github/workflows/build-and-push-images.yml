@@ -159,6 +159,7 @@ jobs:
             fi
           done
           
+          # Push if not a PR
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             BUILD_CMD+=" --push"
           fi
@@ -235,6 +236,7 @@ jobs:
             fi
           done
           
+          # Push if not a PR
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             BUILD_CMD+=" --push"
           fi
@@ -311,6 +313,7 @@ jobs:
             fi
           done
           
+          # Push if not a PR
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             BUILD_CMD+=" --push"
           fi
