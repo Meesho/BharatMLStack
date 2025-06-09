@@ -31,7 +31,7 @@ classifiers = [
 "Source" = "https://github.com/Meesho/BharatMLStack/tree/main/py-sdk/bharatml_commons"
 
 [tool.hatch.build.targets.wheel]
-packages = ["."]
+packages = ["bharatml_commons"]
 
 [project.optional-dependencies]
 dev = ["pytest>=6.0", "black", "isort", "mypy", "flake8"]

@@ -32,7 +32,7 @@ classifiers = [
 "Source" = "https://github.com/Meesho/BharatMLStack/tree/main/py-sdk/grpc_feature_client"
 
 [tool.hatch.build.targets.wheel]
-packages = ["."]
+packages = ["grpc_feature_client"]
 
 [project.optional-dependencies]
 dev = ["pytest>=6.0", "black", "isort", "mypy", "flake8"]
