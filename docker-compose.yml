@@ -1,0 +1,210 @@
+version: '3.8'
+
+services:
+  # Infrastructure Services
+  scylla:
+    image: scylladb/scylla:6.2
+    container_name: scylla
+    ports:
+      - "9042:9042"
+    volumes:
+      - scylla-data:/var/lib/scylla
+    command: --smp 1 --memory 512M
+    networks:
+      - bharatml-network
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe cluster'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  mysql:
+    image: mysql:8
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: testdb
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - bharatml-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--requirepass", ""]
+    networks:
+      - bharatml-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.12
+    container_name: etcd
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_ADVERTISE_CLIENT_URLS=http://0.0.0.0:2379
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    networks:
+      - bharatml-network
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # BharatML Stack Services
+  onfs-api-server:
+    image: ghcr.io/meesho/onfs-api-server:latest
+    container_name: onfs-api-server
+    ports:
+      - "8089:8089"
+    environment:
+      - SCYLLA_HOSTS=scylla:9042
+      - MYSQL_HOST=mysql:3306
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=testdb
+      - REDIS_HOST=redis:6379
+      - ETCD_ENDPOINTS=etcd:2379
+    networks:
+      - bharatml-network
+    depends_on:
+      scylla:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      etcd:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8089/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  onfs-consumer:
+    image: ghcr.io/meesho/onfs-consumer:latest
+    container_name: onfs-consumer
+    ports:
+      - "8080:8080"
+    environment:
+      - SCYLLA_HOSTS=scylla:9042
+      - MYSQL_HOST=mysql:3306
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=testdb
+      - REDIS_HOST=redis:6379
+      - ETCD_ENDPOINTS=etcd:2379
+      - KAFKA_BROKERS=localhost:9092  # Update with your Kafka brokers
+    networks:
+      - bharatml-network
+    depends_on:
+      scylla:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      etcd:
+        condition: service_healthy
+      onfs-api-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  horizon:
+    image: ghcr.io/meesho/horizon:latest
+    container_name: horizon
+    ports:
+      - "8082:8082"
+    environment:
+      - PORT=8082
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=user
+      - DB_PASSWORD=password
+      - DB_NAME=testdb
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:80
+      - FEATURE_STORE_URL=http://onfs-api-server:8089
+      - REDIS_HOST=redis:6379
+    networks:
+      - bharatml-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      onfs-api-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  trufflebox-ui:
+    image: ghcr.io/meesho/trufflebox-ui:latest
+    container_name: trufflebox-ui
+    ports:
+      - "80:80"
+    environment:
+      - REACT_APP_API_BASE_URL=http://localhost:8082/api/v1
+      - REACT_APP_WEBSOCKET_URL=ws://localhost:8082/ws
+    networks:
+      - bharatml-network
+    depends_on:
+      horizon:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Optional: Management Tools
+  etcd-workbench:
+    image: tzfun/etcd-workbench:latest
+    container_name: etcd-workbench
+    ports:
+      - "8081:8002"
+    networks:
+      - bharatml-network
+    depends_on:
+      - etcd
+
+volumes:
+  scylla-data:
+    driver: local
+  mysql-data:
+    driver: local
+
+networks:
+  bharatml-network:
+    name: bharatml-network
+    driver: bridge 

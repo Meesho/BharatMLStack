@@ -1,0 +1,315 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches: [master, develop]
+    tags: ['v*']
+  pull_request:
+    branches: [master, develop]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+  PLATFORMS: linux/amd64,linux/arm64
+
+jobs:
+  build-horizon:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up buildx builder
+        run: |
+          # Create buildx builder if it doesn't exist (following release.sh pattern)
+          if ! docker buildx inspect multiarch-builder &>/dev/null; then
+            echo "🔧 Creating buildx builder 'multiarch-builder'..."
+            docker buildx create --name multiarch-builder --use
+            docker buildx inspect --bootstrap
+          else
+            docker buildx use multiarch-builder
+          fi
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/horizon
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push Docker image
+        id: build
+        run: |
+          cd horizon
+          
+          # Build command following release.sh pattern
+          BUILD_CMD="docker buildx build \
+            --platform ${{ env.PLATFORMS }} \
+            -f cmd/horizon/Dockerfile"
+          
+          # Add tags
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            BUILD_CMD+=" -t $tag"
+          done
+          
+          # Add labels
+          BUILD_CMD+=" --label 'org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}'"
+          BUILD_CMD+=" --label 'org.opencontainers.image.revision=${{ github.sha }}'"
+          
+          # Push if not a PR
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            BUILD_CMD+=" --push"
+          fi
+          
+          BUILD_CMD+=" ."
+          
+          echo "Running: $BUILD_CMD"
+          eval $BUILD_CMD
+
+  build-onfs-api-server:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up buildx builder
+        run: |
+          if ! docker buildx inspect multiarch-builder &>/dev/null; then
+            echo "🔧 Creating buildx builder 'multiarch-builder'..."
+            docker buildx create --name multiarch-builder --use
+            docker buildx inspect --bootstrap
+          else
+            docker buildx use multiarch-builder
+          fi
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/onfs-api-server
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push Docker image
+        id: build
+        run: |
+          cd online-feature-store
+          
+          BUILD_CMD="docker buildx build \
+            --platform ${{ env.PLATFORMS }} \
+            -f cmd/api-server/DockerFile"
+          
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            BUILD_CMD+=" -t $tag"
+          done
+          
+          BUILD_CMD+=" --label 'org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}'"
+          BUILD_CMD+=" --label 'org.opencontainers.image.revision=${{ github.sha }}'"
+          
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            BUILD_CMD+=" --push"
+          fi
+          
+          BUILD_CMD+=" ."
+          
+          echo "Running: $BUILD_CMD"
+          eval $BUILD_CMD
+
+  build-onfs-consumer:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up buildx builder
+        run: |
+          if ! docker buildx inspect multiarch-builder &>/dev/null; then
+            echo "🔧 Creating buildx builder 'multiarch-builder'..."
+            docker buildx create --name multiarch-builder --use
+            docker buildx inspect --bootstrap
+          else
+            docker buildx use multiarch-builder
+          fi
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/onfs-consumer
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push Docker image
+        id: build
+        run: |
+          cd online-feature-store
+          
+          BUILD_CMD="docker buildx build \
+            --platform ${{ env.PLATFORMS }} \
+            -f cmd/consumer/DockerFile"
+          
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            BUILD_CMD+=" -t $tag"
+          done
+          
+          BUILD_CMD+=" --label 'org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}'"
+          BUILD_CMD+=" --label 'org.opencontainers.image.revision=${{ github.sha }}'"
+          
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            BUILD_CMD+=" --push"
+          fi
+          
+          BUILD_CMD+=" ."
+          
+          echo "Running: $BUILD_CMD"
+          eval $BUILD_CMD
+
+  build-trufflebox-ui:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up buildx builder
+        run: |
+          if ! docker buildx inspect multiarch-builder &>/dev/null; then
+            echo "🔧 Creating buildx builder 'multiarch-builder'..."
+            docker buildx create --name multiarch-builder --use
+            docker buildx inspect --bootstrap
+          else
+            docker buildx use multiarch-builder
+          fi
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/trufflebox-ui
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push Docker image
+        id: build
+        run: |
+          cd trufflebox-ui
+          
+          BUILD_CMD="docker buildx build \
+            --platform ${{ env.PLATFORMS }} \
+            -f DockerFile"
+          
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            BUILD_CMD+=" -t $tag"
+          done
+          
+          BUILD_CMD+=" --label 'org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}'"
+          BUILD_CMD+=" --label 'org.opencontainers.image.revision=${{ github.sha }}'"
+          
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            BUILD_CMD+=" --push"
+          fi
+          
+          BUILD_CMD+=" ."
+          
+          echo "Running: $BUILD_CMD"
+          eval $BUILD_CMD
+
+  generate-summary:
+    runs-on: ubuntu-latest
+    needs: [build-horizon, build-onfs-api-server, build-onfs-consumer, build-trufflebox-ui]
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Generate build summary
+        run: |
+          echo "## 🚀 Docker Images Built Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Images pushed to GitHub Container Registry:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Image | Platforms |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------|-----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Horizon** | \`${{ needs.build-horizon.outputs.image }}\` | \`${{ env.PLATFORMS }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **ONFS API Server** | \`${{ needs.build-onfs-api-server.outputs.image }}\` | \`${{ env.PLATFORMS }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **ONFS Consumer** | \`${{ needs.build-onfs-consumer.outputs.image }}\` | \`${{ env.PLATFORMS }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **TruffleBox UI** | \`${{ needs.build-trufflebox-ui.outputs.image }}\` | \`${{ env.PLATFORMS }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Usage Instructions:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "# Pull images" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ needs.build-horizon.outputs.image }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ needs.build-onfs-api-server.outputs.image }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ needs.build-onfs-consumer.outputs.image }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ needs.build-trufflebox-ui.outputs.image }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY 
