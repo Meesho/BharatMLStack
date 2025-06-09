@@ -12,6 +12,7 @@ BharatMLStack/
 │   ├── spark_feature_push_client/VERSION      # spark-feature-push-client package version
 │   └── grpc_feature_client/VERSION            # grpc-feature-client package version
 ├── horizon/VERSION                             # Horizon service version
+├── online-feature-store/VERSION               # Online Feature Store services version
 └── trufflebox-ui/VERSION                       # TruffleBox UI version
 ```
 
@@ -30,10 +31,12 @@ BharatMLStack/
 1. **Stable Release** (`master`):
    - Go SDK: Uses exact version from `go-sdk/VERSION` → `go-sdk/v0.1.0`
    - Python packages: Uses version without 'v' → `0.1.0`
+   - Docker images: Tagged with VERSION file content → `ghcr.io/meesho/horizon:v0.1.20`
 
 2. **Pre-release** (`develop`):
    - Go SDK: Adds beta suffix → `go-sdk/v0.1.0-beta.abc1234`
    - Python packages: Adds beta suffix → `0.1.0b20250609130000.abc1234`
+   - Docker images: Tagged with branch and SHA → `ghcr.io/meesho/horizon:develop`, `ghcr.io/meesho/horizon:abc1234`
 
 ### Manual Version Updates
 
@@ -48,6 +51,11 @@ To release a new version:
    echo "v0.2.0" > py-sdk/bharatml_commons/VERSION
    echo "v0.2.0" > py-sdk/spark_feature_push_client/VERSION
    echo "v0.2.0" > py-sdk/grpc_feature_client/VERSION
+   
+   # For Docker services
+   echo "v0.2.0" > horizon/VERSION
+   echo "v0.2.0" > online-feature-store/VERSION
+   echo "v0.2.0" > trufflebox-ui/VERSION
    ```
 
 2. **Commit and push to trigger release**:
@@ -78,6 +86,21 @@ pip install --index-url https://meesho.github.io/BharatMLStack/pypi/simple/ spar
 pip install --index-url https://meesho.github.io/BharatMLStack/pypi/simple/ grpc-feature-client==0.1.0
 ```
 
+### Docker Images
+```bash
+# Pull from GitHub Container Registry
+docker pull ghcr.io/meesho/horizon:v0.1.20
+docker pull ghcr.io/meesho/onfs-api-server:v0.1.0
+docker pull ghcr.io/meesho/onfs-consumer:v0.1.0
+docker pull ghcr.io/meesho/trufflebox-ui:v0.1.6
+
+# Or pull latest versions
+docker pull ghcr.io/meesho/horizon:latest
+docker pull ghcr.io/meesho/onfs-api-server:latest
+docker pull ghcr.io/meesho/onfs-consumer:latest
+docker pull ghcr.io/meesho/trufflebox-ui:latest
+```
+
 ## 🔄 Workflow Triggers
 
 - **Go SDK Release**: `.github/workflows/go-sdk-release.yml`
@@ -87,6 +110,25 @@ pip install --index-url https://meesho.github.io/BharatMLStack/pypi/simple/ grpc
 - **Python SDK Publish**: `.github/workflows/py-sdk-publish.yml`
   - Triggers on: Push to `master`/`develop` with changes in `py-sdk/`
   - Reads: `py-sdk/*/VERSION` files
+
+- **Docker Image Build**: `.github/workflows/build-and-push-images.yml`
+  - Triggers on: Push to `master`/`develop` or version tags
+  - Reads: `horizon/VERSION`, `online-feature-store/VERSION`, `trufflebox-ui/VERSION`
+  - Publishes to: GitHub Container Registry (`ghcr.io/meesho/*`)
+
+## 🐳 Docker Image Tags
+
+**Published Images:**
+- `ghcr.io/meesho/horizon` (from `horizon/VERSION`)
+- `ghcr.io/meesho/onfs-api-server` (from `online-feature-store/VERSION`)
+- `ghcr.io/meesho/onfs-consumer` (from `online-feature-store/VERSION`)  
+- `ghcr.io/meesho/trufflebox-ui` (from `trufflebox-ui/VERSION`)
+
+**Tag Strategy:**
+- **Version tag**: `v0.1.20` (from VERSION file)
+- **Latest tag**: `latest` (only on master branch)
+- **Branch tag**: `master`, `develop`
+- **SHA tag**: `abc1234` (short commit hash)
 
 ## ⚡ Quick Commands
 
@@ -99,4 +141,9 @@ NEW_VERSION="v0.2.0"
 echo "$NEW_VERSION" > py-sdk/bharatml_commons/VERSION
 echo "$NEW_VERSION" > py-sdk/spark_feature_push_client/VERSION  
 echo "$NEW_VERSION" > py-sdk/grpc_feature_client/VERSION
+
+# Update all Docker service versions at once
+echo "$NEW_VERSION" > horizon/VERSION
+echo "$NEW_VERSION" > online-feature-store/VERSION
+echo "$NEW_VERSION" > trufflebox-ui/VERSION
 ``` 

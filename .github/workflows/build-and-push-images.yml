@@ -36,6 +36,18 @@ jobs:
             docker buildx use multiarch-builder
           fi
 
+      - name: Read version from VERSION file
+        id: version
+        run: |
+          if [ -f "horizon/VERSION" ]; then
+            VERSION=$(cat horizon/VERSION | tr -d '\n' | tr -d ' ')
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Using version from VERSION file: $VERSION"
+          else
+            echo "version=latest" >> $GITHUB_OUTPUT
+            echo "VERSION file not found, using 'latest'"
+          fi
+
       - name: Log in to Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -52,8 +64,8 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
 
       - name: Build and push Docker image
@@ -114,6 +126,18 @@ jobs:
             docker buildx use multiarch-builder
           fi
 
+      - name: Read version from VERSION file
+        id: version
+        run: |
+          if [ -f "online-feature-store/VERSION" ]; then
+            VERSION=$(cat online-feature-store/VERSION | tr -d '\n' | tr -d ' ')
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Using version from VERSION file: $VERSION"
+          else
+            echo "version=latest" >> $GITHUB_OUTPUT
+            echo "VERSION file not found, using 'latest'"
+          fi
+
       - name: Log in to Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -130,8 +154,8 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
 
       - name: Build and push Docker image
@@ -191,6 +215,18 @@ jobs:
             docker buildx use multiarch-builder
           fi
 
+      - name: Read version from VERSION file
+        id: version
+        run: |
+          if [ -f "online-feature-store/VERSION" ]; then
+            VERSION=$(cat online-feature-store/VERSION | tr -d '\n' | tr -d ' ')
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Using version from VERSION file: $VERSION"
+          else
+            echo "version=latest" >> $GITHUB_OUTPUT
+            echo "VERSION file not found, using 'latest'"
+          fi
+
       - name: Log in to Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -207,8 +243,8 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
 
       - name: Build and push Docker image
@@ -268,6 +304,18 @@ jobs:
             docker buildx use multiarch-builder
           fi
 
+      - name: Read version from VERSION file
+        id: version
+        run: |
+          if [ -f "trufflebox-ui/VERSION" ]; then
+            VERSION=$(cat trufflebox-ui/VERSION | tr -d '\n' | tr -d ' ')
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Using version from VERSION file: $VERSION"
+          else
+            echo "version=latest" >> $GITHUB_OUTPUT
+            echo "VERSION file not found, using 'latest'"
+          fi
+
       - name: Log in to Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -284,8 +332,8 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
 
       - name: Build and push Docker image
