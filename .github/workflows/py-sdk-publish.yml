@@ -56,15 +56,11 @@ jobs:
           SPARK_VERSION=${SPARK_VERSION#v}
           GRPC_VERSION=${GRPC_VERSION#v}
           
-          # Add pre-release suffix for develop branch
+          # Add beta suffix for develop branch
           if [ "${{ github.ref }}" = "refs/heads/develop" ]; then
-            TIMESTAMP=$(date +%Y%m%d%H%M%S)
-            SHORT_SHA=$(git rev-parse --short HEAD)
-            SUFFIX="b${TIMESTAMP}.${SHORT_SHA}"
-            
-            BHARATML_VERSION="${BHARATML_VERSION}${SUFFIX}"
-            SPARK_VERSION="${SPARK_VERSION}${SUFFIX}"
-            GRPC_VERSION="${GRPC_VERSION}${SUFFIX}"
+            BHARATML_VERSION="${BHARATML_VERSION}-beta"
+            SPARK_VERSION="${SPARK_VERSION}-beta"
+            GRPC_VERSION="${GRPC_VERSION}-beta"
           fi
           
           echo "bharatml_version=$BHARATML_VERSION" >> $GITHUB_OUTPUT
