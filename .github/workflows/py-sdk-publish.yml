@@ -118,8 +118,8 @@ jobs:
 
       - name: Install bharatml_commons and build spark_feature_push_client
         run: |
-          # Step 1: Install bharatml_commons dependency  
-          pip install -e ../bharatml_commons
+          # Step 1: Install bharatml_commons dependency (from repo root)
+          pip install -e py-sdk/bharatml_commons
 
           # Step 2: Build spark_feature_push_client
           cd py-sdk/spark_feature_push_client
@@ -130,6 +130,9 @@ jobs:
 
       - name: Build grpc_feature_client
         run: |
+          # Ensure bharatml_commons is installed (should already be from previous step)
+          pip install -e py-sdk/bharatml_commons
+          
           cd py-sdk/grpc_feature_client
           # Clean any existing build artifacts
           rm -rf dist/ build/ *.egg-info/
