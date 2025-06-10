@@ -118,7 +118,10 @@ jobs:
 
       - name: Install bharatml_commons and build spark_feature_push_client
         run: |
-          pip install py-sdk/bharatml_commons/dist/*.whl
+          # Step 1: Install bharatml_commons dependency  
+          pip install -e ../bharatml_commons
+
+          # Step 2: Build spark_feature_push_client
           cd py-sdk/spark_feature_push_client
           # Clean any existing build artifacts
           rm -rf dist/ build/ *.egg-info/
