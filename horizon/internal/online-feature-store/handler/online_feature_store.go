@@ -542,7 +542,20 @@ func (o *OnlineFeatureStore) DeleteFeatures(request *DeleteFeaturesRequest) (uin
 		return 0, err
 	}
 
-	featureMetaMap := fg.Features[fg.ActiveVersion].FeatureMeta
+	if fg == nil || fg.Features == nil {
+		return 0, fmt.Errorf("feature group not found or has no features")
+	}
+
+	activeVersion := fg.ActiveVersion
+	if _, exists := fg.Features[activeVersion]; !exists {
+		return 0, fmt.Errorf("active version %s not found in feature group", activeVersion)
+	}
+
+	featureMetaMap := fg.Features[activeVersion].FeatureMeta
+	if featureMetaMap == nil {
+		return 0, fmt.Errorf("feature meta map is nil for active version %s", activeVersion)
+	}
+
 	existingLabelSet := make(map[string]struct{})
 	for key := range featureMetaMap {
 		existingLabelSet[key] = struct{}{}
@@ -556,6 +569,7 @@ func (o *OnlineFeatureStore) DeleteFeatures(request *DeleteFeaturesRequest) (uin
 	}
 
 	if len(missingFeatures) > 0 {
+		log.Error().Msgf("features not found in the active version schema: %s", strings.Join(missingFeatures, ", "))
 		return 0, fmt.Errorf("features not found in the active version schema: %s", strings.Join(missingFeatures, ", "))
 	}
 
@@ -687,7 +701,20 @@ func (o *OnlineFeatureStore) ProcessDeleteFeatures(request *ProcessDeleteFeature
 			return err
 		}
 
-		featureMetaMap := fg.Features[fg.ActiveVersion].FeatureMeta
+		if fg == nil || fg.Features == nil {
+			return fmt.Errorf("feature group not found or has no features")
+		}
+
+		activeVersion := fg.ActiveVersion
+		if _, exists := fg.Features[activeVersion]; !exists {
+			return fmt.Errorf("active version %s not found in feature group", activeVersion)
+		}
+
+		featureMetaMap := fg.Features[activeVersion].FeatureMeta
+		if featureMetaMap == nil {
+			return fmt.Errorf("feature meta map is nil for active version %s", activeVersion)
+		}
+
 		existingLabelSet := make(map[string]struct{})
 		for key := range featureMetaMap {
 			existingLabelSet[key] = struct{}{}
@@ -701,6 +728,7 @@ func (o *OnlineFeatureStore) ProcessDeleteFeatures(request *ProcessDeleteFeature
 		}
 
 		if len(missingFeatures) > 0 {
+			log.Error().Msgf("features not found in the active version schema: %s", strings.Join(missingFeatures, ", "))
 			return fmt.Errorf("features not found in the active version schema: %s", strings.Join(missingFeatures, ", "))
 		}
 

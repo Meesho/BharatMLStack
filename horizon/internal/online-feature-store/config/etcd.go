@@ -687,21 +687,27 @@ func (e *Etcd) DeleteFeatures(entityLabel, fgLabel string, featureLabels []strin
 	paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/features/%s/default-values", e.appName, entityLabel, fgLabel, newVersion)] = strings.Join(updatedDefaultValues, ",")
 	paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/active-version", e.appName, entityLabel, fgLabel)] = newVersion
 
-	var deletionErrors []error
+	var sourcePaths []string
 	for _, featureLabel := range featureLabels {
 		key := entityLabel + Delimitter + fgLabel + Delimitter + featureLabel
 		sourcePath := fmt.Sprintf("/config/%s/source/%s", e.appName, key)
-		if err := e.instance.Delete(sourcePath); err != nil {
-			deletionErrors = append(deletionErrors, fmt.Errorf("failed to delete source mapping for feature %s: %w", featureLabel, err))
+		sourcePaths = append(sourcePaths, sourcePath)
+	}
+
+	if err := e.instance.DeleteValues(sourcePaths); err != nil {
+		return fmt.Errorf("failed to delete source mappings for features in feature group '%s' of entity '%s': %w", fgLabel, entityLabel, err)
+	}
+
+	// Verify all paths were deleted
+	for _, sourcePath := range sourcePaths {
+		exists, _ := e.instance.IsNodeExist(sourcePath)
+		if exists {
+			return fmt.Errorf("source mapping still exists at path: %s", sourcePath)
 		}
 	}
 
 	if err := e.instance.SetValues(paths); err != nil {
 		return fmt.Errorf("failed to update feature group: %w", err)
-	}
-
-	if len(deletionErrors) > 0 {
-		return fmt.Errorf("encountered errors while deleting source mappings: %v", deletionErrors)
 	}
 
 	return nil
