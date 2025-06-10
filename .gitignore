@@ -2,3 +2,4 @@
 trufflehog/
 trufflebox/node_modules/
 .DS_Store
+dist/
