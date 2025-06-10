@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bharatml_commons"
-version = "0.1.0"
+version = "0.1.2"
 authors = [
   { name="Jaya Kommuru", email="jaya.kommuru@meesho.com"},
   { name="BharatML Stack Team", email="bharatml@meesho.com"}

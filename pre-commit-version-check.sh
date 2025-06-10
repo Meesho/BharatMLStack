@@ -155,6 +155,19 @@ update_version_file() {
     fi
     
     echo -e "${GREEN}   ✅ Updated $version_file to $new_version${NC}"
+    
+    # Also update pyproject.toml if it exists (for Python packages)
+    local pyproject_file="$dir/pyproject.toml"
+    if [ -f "$pyproject_file" ]; then
+        # Use sed to update the version line in pyproject.toml
+        # Handle both single and double quotes
+        if sed -i '' "s/^version = [\"'].*[\"']/version = \"$new_version\"/" "$pyproject_file" 2>/dev/null; then
+            echo -e "${GREEN}   ✅ Updated $pyproject_file to $new_version${NC}"
+        else
+            echo -e "${YELLOW}   ⚠️  Could not update $pyproject_file automatically${NC}"
+            echo -e "${YELLOW}      Please manually update the version to $new_version${NC}"
+        fi
+    fi
 }
 
 # Main logic
@@ -217,6 +230,12 @@ if [ ${#version_updates[@]} -gt 0 ]; then
             # Stage the VERSION file
             git add "$dir/VERSION"
             echo -e "${GREEN}   ✅ Staged $dir/VERSION${NC}"
+            
+            # Also stage pyproject.toml if it exists
+            if [ -f "$dir/pyproject.toml" ]; then
+                git add "$dir/pyproject.toml"
+                echo -e "${GREEN}   ✅ Staged $dir/pyproject.toml${NC}"
+            fi
         done
         
         echo -e "\n${GREEN}🎉 All version updates completed and staged!${NC}"
