@@ -54,10 +54,9 @@ jobs:
           
           CURRENT_VERSION=$(cat VERSION | tr -d '\n' | tr -d ' ')
           
-          # For develop branch, add pre-release suffix
+          # For develop branch, add beta suffix
           if [ "${{ github.ref }}" = "refs/heads/develop" ]; then
-            SHORT_SHA=$(git rev-parse --short HEAD)
-            NEW_VERSION="${CURRENT_VERSION}-beta.${SHORT_SHA}"
+            NEW_VERSION="${CURRENT_VERSION}-beta"
           else
             NEW_VERSION="$CURRENT_VERSION"
           fi
