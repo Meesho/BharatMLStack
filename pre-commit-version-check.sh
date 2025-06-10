@@ -13,6 +13,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Global variable for function communication
+INCREMENT_TYPE=""
+
 # Directories with VERSION files (relative to repo root)
 VERSION_DIRS=(
     "py-sdk/bharatml_commons"
@@ -93,6 +96,7 @@ has_changes() {
 prompt_version_increment() {
     local dir="$1"
     local current_version="$2"
+    echo "Prompting for version increment"
     
     echo -e "\n${YELLOW}📂 Directory: ${dir}${NC}"
     echo -e "${BLUE}   Current version: ${current_version}${NC}"
@@ -106,23 +110,23 @@ prompt_version_increment() {
         echo "   [s] Skip (no version change)"
         echo -n "   Choice [1/2/3/s]: "
         
-        read -r choice
+        read -r choice </dev/tty
         
         case "$choice" in
             1|major)
-                echo "major"
+                INCREMENT_TYPE="major"
                 return 0
                 ;;
             2|minor)
-                echo "minor"
+                INCREMENT_TYPE="minor"
                 return 0
                 ;;
             3|patch)
-                echo "patch"
+                INCREMENT_TYPE="patch"
                 return 0
                 ;;
             s|skip)
-                echo "skip"
+                INCREMENT_TYPE="skip"
                 return 0
                 ;;
             *)
@@ -151,6 +155,19 @@ update_version_file() {
     fi
     
     echo -e "${GREEN}   ✅ Updated $version_file to $new_version${NC}"
+    
+    # Also update pyproject.toml if it exists (for Python packages)
+    local pyproject_file="$dir/pyproject.toml"
+    if [ -f "$pyproject_file" ]; then
+        # Use sed to update the version line in pyproject.toml
+        # Handle both single and double quotes
+        if sed -i '' "s/^version = [\"'].*[\"']/version = \"$new_version\"/" "$pyproject_file" 2>/dev/null; then
+            echo -e "${GREEN}   ✅ Updated $pyproject_file to $new_version${NC}"
+        else
+            echo -e "${YELLOW}   ⚠️  Could not update $pyproject_file automatically${NC}"
+            echo -e "${YELLOW}      Please manually update the version to $new_version${NC}"
+        fi
+    fi
 }
 
 # Main logic
@@ -159,16 +176,21 @@ version_updates=()
 
 # Check each versioned directory for changes
 for dir in "${VERSION_DIRS[@]}"; do
+    echo "Checking $dir"
     if [ -d "$dir" ] && has_changes "$dir"; then
         changed_dirs+=("$dir")
         current_version=$(get_current_version "$dir")
+        echo "Current version: $current_version"
         
-        increment_type=$(prompt_version_increment "$dir" "$current_version")
+        # Call the function and get result via global variable
+        prompt_version_increment "$dir" "$current_version"
+        increment_type="$INCREMENT_TYPE"
+        echo "Increment type: $increment_type"
         
         if [ "$increment_type" != "skip" ]; then
             new_version=$(increment_version "$current_version" "$increment_type")
             version_updates+=("$dir:$new_version")
-            
+            echo "Version updates: $version_updates"
             echo -e "${BLUE}   New version will be: $new_version${NC}"
         else
             echo -e "${YELLOW}   Skipping version update for $dir${NC}"
@@ -194,7 +216,7 @@ if [ ${#version_updates[@]} -gt 0 ]; then
     done
     
     echo -n -e "\n${YELLOW}Proceed with these version updates? [y/N]: ${NC}"
-    read -r confirm
+    read -r confirm </dev/tty
     
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
         # Apply updates
@@ -208,6 +230,12 @@ if [ ${#version_updates[@]} -gt 0 ]; then
             # Stage the VERSION file
             git add "$dir/VERSION"
             echo -e "${GREEN}   ✅ Staged $dir/VERSION${NC}"
+            
+            # Also stage pyproject.toml if it exists
+            if [ -f "$dir/pyproject.toml" ]; then
+                git add "$dir/pyproject.toml"
+                echo -e "${GREEN}   ✅ Staged $dir/pyproject.toml${NC}"
+            fi
         done
         
         echo -e "\n${GREEN}🎉 All version updates completed and staged!${NC}"
