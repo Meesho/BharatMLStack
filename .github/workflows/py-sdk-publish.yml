@@ -1,4 +1,4 @@
-name: Python SDK Publish to GitHub Registry
+name: Python SDK Publish to PyPI
 
 on:
   push:
@@ -9,9 +9,7 @@ jobs:
   build-and-publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      packages: write
-      pages: write
+      contents: read
       id-token: write
     steps:
       - name: Checkout code
@@ -27,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install build
+          pip install build twine
 
       - name: Determine versions
         id: versions
@@ -52,7 +50,6 @@ jobs:
           echo "bharatml_version=$BHARATML_VERSION" >> $GITHUB_OUTPUT
           echo "spark_version=$SPARK_VERSION" >> $GITHUB_OUTPUT
           echo "grpc_version=$GRPC_VERSION" >> $GITHUB_OUTPUT
-          echo "release_tag=py-sdk-$(date +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
           
           echo "bharatml-commons version: $BHARATML_VERSION"
           echo "spark-feature-push-client version: $SPARK_VERSION"
@@ -99,39 +96,28 @@ jobs:
           print('✓ All packages imported successfully')
           "
 
-      - name: Create GitHub Release
+      - name: Publish to TestPyPI (develop branch)
+        if: github.ref == 'refs/heads/develop'
         run: |
-          gh release create ${{ steps.versions.outputs.release_tag }} \
-            dist/*.whl \
-            dist/*.tar.gz \
-            --title "Python SDK Release - ${{ github.ref_name }}" \
-            --notes "## Python SDK Packages
-
-          ### Versions:
-          - **bharatml-commons**: \`${{ steps.versions.outputs.bharatml_version }}\`
-          - **spark-feature-push-client**: \`${{ steps.versions.outputs.spark_version }}\`
-          - **grpc-feature-client**: \`${{ steps.versions.outputs.grpc_version }}\`
-
-          ### Installation:
-          \`\`\`bash
-          # Download wheel files from this release
-          pip install bharatml_commons-${{ steps.versions.outputs.bharatml_version }}-py3-none-any.whl
-          pip install spark_feature_push_client-${{ steps.versions.outputs.spark_version }}-py3-none-any.whl  
-          pip install grpc_feature_client-${{ steps.versions.outputs.grpc_version }}-py3-none-any.whl
-          \`\`\`
-
-          ### Changes:
-          - Latest updates from ${{ github.ref_name }} branch" \
-            ${{ github.ref == 'refs/heads/develop' && '--prerelease' || '' }}
+          twine upload --repository testpypi dist/*
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+
+      - name: Publish to PyPI (master branch)
+        if: github.ref == 'refs/heads/master'
+        run: |
+          twine upload dist/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Generate summary
         run: |
           echo "## 🐍 Python SDK Published Successfully" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Release Tag:** ${{ steps.versions.outputs.release_tag }}" >> $GITHUB_STEP_SUMMARY
           echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Published to:** ${{ github.ref == 'refs/heads/develop' && 'TestPyPI' || 'PyPI' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📦 Package Versions:" >> $GITHUB_STEP_SUMMARY
           echo "- **bharatml-commons**: \`${{ steps.versions.outputs.bharatml_version }}\`" >> $GITHUB_STEP_SUMMARY
@@ -139,11 +125,27 @@ jobs:
           echo "- **grpc-feature-client**: \`${{ steps.versions.outputs.grpc_version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔗 Links:" >> $GITHUB_STEP_SUMMARY
-          echo "- **Release Page**: https://github.com/Meesho/BharatMLStack/releases/tag/${{ steps.versions.outputs.release_tag }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.ref }}" = "refs/heads/develop" ]; then
+            echo "- **TestPyPI bharatml-commons**: https://test.pypi.org/project/bharatml-commons/" >> $GITHUB_STEP_SUMMARY
+            echo "- **TestPyPI spark-feature-push-client**: https://test.pypi.org/project/spark-feature-push-client/" >> $GITHUB_STEP_SUMMARY
+            echo "- **TestPyPI grpc-feature-client**: https://test.pypi.org/project/grpc-feature-client/" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **PyPI bharatml-commons**: https://pypi.org/project/bharatml-commons/" >> $GITHUB_STEP_SUMMARY
+            echo "- **PyPI spark-feature-push-client**: https://pypi.org/project/spark-feature-push-client/" >> $GITHUB_STEP_SUMMARY
+            echo "- **PyPI grpc-feature-client**: https://pypi.org/project/grpc-feature-client/" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📋 Quick Installation:" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Installation:" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "# Download from release and install" >> $GITHUB_STEP_SUMMARY
-          echo "wget https://github.com/Meesho/BharatMLStack/releases/download/${{ steps.versions.outputs.release_tag }}/*.whl" >> $GITHUB_STEP_SUMMARY
-          echo "pip install *.whl --find-links ." >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.ref }}" = "refs/heads/develop" ]; then
+            echo "# Install from TestPyPI" >> $GITHUB_STEP_SUMMARY
+            echo "pip install --index-url https://test.pypi.org/simple/ bharatml-commons==${{ steps.versions.outputs.bharatml_version }}" >> $GITHUB_STEP_SUMMARY
+            echo "pip install --index-url https://test.pypi.org/simple/ spark-feature-push-client==${{ steps.versions.outputs.spark_version }}" >> $GITHUB_STEP_SUMMARY
+            echo "pip install --index-url https://test.pypi.org/simple/ grpc-feature-client==${{ steps.versions.outputs.grpc_version }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "# Install from PyPI" >> $GITHUB_STEP_SUMMARY
+            echo "pip install bharatml-commons==${{ steps.versions.outputs.bharatml_version }}" >> $GITHUB_STEP_SUMMARY
+            echo "pip install spark-feature-push-client==${{ steps.versions.outputs.spark_version }}" >> $GITHUB_STEP_SUMMARY
+            echo "pip install grpc-feature-client==${{ steps.versions.outputs.grpc_version }}" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY 
