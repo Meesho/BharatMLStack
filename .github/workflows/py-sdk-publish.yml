@@ -111,6 +111,8 @@ jobs:
       - name: Build bharatml_commons
         run: |
           cd py-sdk/bharatml_commons
+          # Clean any existing build artifacts
+          rm -rf dist/ build/ *.egg-info/
           python -m build
           cp dist/* ../../dist/
 
@@ -118,12 +120,16 @@ jobs:
         run: |
           pip install py-sdk/bharatml_commons/dist/*.whl
           cd py-sdk/spark_feature_push_client
+          # Clean any existing build artifacts
+          rm -rf dist/ build/ *.egg-info/
           python -m build
           cp dist/* ../../dist/
 
       - name: Build grpc_feature_client
         run: |
           cd py-sdk/grpc_feature_client
+          # Clean any existing build artifacts
+          rm -rf dist/ build/ *.egg-info/
           python -m build
           cp dist/* ../../dist/
 

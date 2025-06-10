@@ -66,7 +66,10 @@ jobs:
           fi
 
       - name: Build package
-        run: python -m build
+        run: |
+          # Clean any existing build artifacts
+          rm -rf dist/ build/ *.egg-info/
+          python -m build
 
       - name: Check package metadata
         run: |
@@ -136,7 +139,10 @@ jobs:
           fi
 
       - name: Build package
-        run: python -m build
+        run: |
+          # Clean any existing build artifacts
+          rm -rf dist/ build/ *.egg-info/
+          python -m build
 
       - name: Check package metadata
         run: |
@@ -206,7 +212,10 @@ jobs:
           fi
 
       - name: Build package
-        run: python -m build
+        run: |
+          # Clean any existing build artifacts
+          rm -rf dist/ build/ *.egg-info/
+          python -m build
 
       - name: Check package metadata
         run: |
