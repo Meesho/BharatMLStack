@@ -162,6 +162,7 @@ const EntityApproval = () => {
         excludeColumns={['FeatureGroupLabel']}
         onRowAction={handleEntityOpen} 
         loading={isLoading} 
+        flowType="approval"
       />
       
       <Modal show={showModal} onHide={handleClose} size="lg" centered>

@@ -221,7 +221,7 @@ const StoreRegistry = () => {
             onClick: handleOpen,
             variant: "contained",
             color: "#522b4a",
-            hoverColor: "#2c3e50"
+            hoverColor: "#613a5c"
           }
         ]}
       />
