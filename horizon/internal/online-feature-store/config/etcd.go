@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -581,6 +582,128 @@ func (e *Etcd) EditFeatures(entityLabel, fgLabel string, featureLabels, defaultV
 		paths[fmt.Sprintf("/config/%s/source/%s", e.appName, key)] = value
 	}
 	e.instance.SetValues(paths)
+	return nil
+}
+
+func splitDefaultValues(defaultValues string, dataType enums.DataType) []string {
+	if dataType.IsVector() {
+		values := strings.Split(defaultValues, ",")
+		var currentValue strings.Builder
+		var result []string
+
+		for _, v := range values {
+			v = strings.TrimSpace(v)
+			if strings.HasPrefix(v, "[") {
+				if currentValue.Len() > 0 {
+					result = append(result, currentValue.String())
+					currentValue.Reset()
+				}
+				currentValue.WriteString(v)
+			} else if strings.HasSuffix(v, "]") {
+				currentValue.WriteString("," + v)
+				result = append(result, currentValue.String())
+				currentValue.Reset()
+			} else if currentValue.Len() > 0 {
+				currentValue.WriteString("," + v)
+			} else {
+				result = append(result, v)
+			}
+		}
+		if currentValue.Len() > 0 {
+			result = append(result, currentValue.String())
+		}
+		return result
+	}
+
+	return strings.Split(defaultValues, ",")
+}
+
+func (e *Etcd) DeleteFeatures(entityLabel, fgLabel string, featureLabels []string) error {
+	entityExists, _ := e.instance.IsNodeExist(fmt.Sprintf("/config/%s/entities/%s", e.appName, entityLabel))
+	if !entityExists {
+		return fmt.Errorf("entity %s not found", entityLabel)
+	}
+	fgExists, _ := e.instance.IsNodeExist(fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s", e.appName, entityLabel, fgLabel))
+	if !fgExists {
+		return fmt.Errorf("feature group %s not found", fgLabel)
+	}
+
+	fg, err := e.GetFeatureGroup(entityLabel, fgLabel)
+	if err != nil {
+		return err
+	}
+
+	currentActiveVersion := fg.ActiveVersion
+	existingLabels := fg.Features[currentActiveVersion].Labels
+	existingLabelsSlice := strings.Split(existingLabels, ",")
+	existingLabelsSet := make(map[string]struct{}, len(existingLabelsSlice))
+	for _, label := range existingLabelsSlice {
+		existingLabelsSet[label] = struct{}{}
+	}
+
+	for _, label := range featureLabels {
+		if _, exists := existingLabelsSet[label]; !exists {
+			return fmt.Errorf("feature label '%s' does not exist in the active version of feature group", label)
+		}
+	}
+
+	featureMetaMap := fg.Features[currentActiveVersion].FeatureMeta
+	existingDefaultValues := fg.Features[currentActiveVersion].DefaultValues
+
+	existingDefaultValuesSlice := splitDefaultValues(existingDefaultValues, fg.DataType)
+
+	// Remove the features to be deleted
+	var updatedLabels []string
+	var updatedDefaultValues []string
+	updatedFeatureMetaMap := make(map[string]FeatureMeta)
+
+	for i, label := range existingLabelsSlice {
+		if !slices.Contains(featureLabels, label) {
+			updatedLabels = append(updatedLabels, label)
+			if i < len(existingDefaultValuesSlice) {
+				updatedDefaultValues = append(updatedDefaultValues, existingDefaultValuesSlice[i])
+			}
+			if meta, exists := featureMetaMap[label]; exists {
+				meta.Sequence = len(updatedLabels) - 1
+				updatedFeatureMetaMap[label] = meta
+			}
+		}
+	}
+
+	currentVersion, err := strconv.Atoi(currentActiveVersion)
+	if err != nil {
+		return fmt.Errorf("invalid version format: %s", currentActiveVersion)
+	}
+	newVersion := strconv.Itoa(currentVersion + 1)
+
+	featureMetaJson, err := json.Marshal(updatedFeatureMetaMap)
+	if err != nil {
+		return err
+	}
+
+	paths := make(map[string]interface{})
+	paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/features/%s/feature-meta", e.appName, entityLabel, fgLabel, newVersion)] = string(featureMetaJson)
+	paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/features/%s/labels", e.appName, entityLabel, fgLabel, newVersion)] = strings.Join(updatedLabels, ",")
+	paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/features/%s/default-values", e.appName, entityLabel, fgLabel, newVersion)] = strings.Join(updatedDefaultValues, ",")
+	paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/active-version", e.appName, entityLabel, fgLabel)] = newVersion
+
+	var deletionErrors []error
+	for _, featureLabel := range featureLabels {
+		key := entityLabel + Delimitter + fgLabel + Delimitter + featureLabel
+		sourcePath := fmt.Sprintf("/config/%s/source/%s", e.appName, key)
+		if err := e.instance.Delete(sourcePath); err != nil {
+			deletionErrors = append(deletionErrors, fmt.Errorf("failed to delete source mapping for feature %s: %w", featureLabel, err))
+		}
+	}
+
+	if err := e.instance.SetValues(paths); err != nil {
+		return fmt.Errorf("failed to update feature group: %w", err)
+	}
+
+	if len(deletionErrors) > 0 {
+		return fmt.Errorf("encountered errors while deleting source mappings: %v", deletionErrors)
+	}
+
 	return nil
 }
 
