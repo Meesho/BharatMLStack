@@ -27,7 +27,7 @@ func Init() {
 			model.GET("/get-config", controller.NewConfigController().GetConfig)
 			model.GET("/get-store", controller.NewConfigController().GetStores)
 			model.GET("/get-jobs", controller.NewConfigController().GetJobs)
-			model.GET("/get-feature-groups", controller.NewConfigController().GetFeatureGroupLabels)
+			model.GET("/get-feature-groups", controller.NewConfigController().GetFeatureGroup)
 			model.GET("/retrieve-entities", controller.NewConfigController().RetrieveEntities)
 			model.GET("/retrieve-feature-groups", controller.NewConfigController().RetrieveFeatureGroups)
 

@@ -24,7 +24,7 @@ type Config interface {
 	GetJobs(ctx *gin.Context)
 	GetStores(ctx *gin.Context)
 	GetConfig(ctx *gin.Context)
-	GetFeatureGroupLabels(ctx *gin.Context)
+	GetFeatureGroup(ctx *gin.Context)
 	AddFeatures(ctx *gin.Context)
 	RetrieveEntities(ctx *gin.Context)
 	RetrieveFeatureGroups(ctx *gin.Context)
@@ -248,21 +248,29 @@ func (v *V1) GetConfig(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, configs)
 }
 
-func (v *V1) GetFeatureGroupLabels(ctx *gin.Context) {
+func (v *V1) GetFeatureGroup(ctx *gin.Context) {
 	entityLabel := ctx.DefaultQuery("entityLabel", "")
 	if entityLabel == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "EntityLabel is required"})
 		return
 	}
 
-	featureGroupLabels, err := v.Config.GetFeatureGroupLabelsForEntity(entityLabel)
+	featureGroups, err := v.Config.RetrieveFeatureGroups(entityLabel)
 	if err != nil {
 		ctx.Error(err)
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, featureGroupLabels)
+	var response []handler.FeatureGroupResponse
+	for _, fg := range *featureGroups {
+		response = append(response, handler.FeatureGroupResponse{
+			Label:    fg.FeatureGroupLabel,
+			DataType: fg.DataType,
+		})
+	}
+
+	ctx.JSON(http.StatusOK, response)
 }
 
 func (v *V1) AddFeatures(ctx *gin.Context) {
