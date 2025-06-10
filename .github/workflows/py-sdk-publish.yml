@@ -27,31 +27,17 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install build twine tomli tomli-w
+          pip install build
 
-      - name: Determine versions and build all packages
+      - name: Determine versions
         id: versions
         run: |
-          # Read versions from VERSION files
-          if [ ! -f "py-sdk/bharatml_commons/VERSION" ]; then
-            echo "ERROR: VERSION file not found in py-sdk/bharatml_commons/"
-            exit 1
-          fi
-          if [ ! -f "py-sdk/spark_feature_push_client/VERSION" ]; then
-            echo "ERROR: VERSION file not found in py-sdk/spark_feature_push_client/"
-            exit 1
-          fi
-          if [ ! -f "py-sdk/grpc_feature_client/VERSION" ]; then
-            echo "ERROR: VERSION file not found in py-sdk/grpc_feature_client/"
-            exit 1
-          fi
-          
           # Read base versions from VERSION files
           BHARATML_VERSION=$(cat py-sdk/bharatml_commons/VERSION | tr -d '\n' | tr -d ' ')
           SPARK_VERSION=$(cat py-sdk/spark_feature_push_client/VERSION | tr -d '\n' | tr -d ' ')
           GRPC_VERSION=$(cat py-sdk/grpc_feature_client/VERSION | tr -d '\n' | tr -d ' ')
           
-          # Strip 'v' prefix if present (Python packages don't use 'v' prefix)
+          # Strip 'v' prefix if present
           BHARATML_VERSION=${BHARATML_VERSION#v}
           SPARK_VERSION=${SPARK_VERSION#v}
           GRPC_VERSION=${GRPC_VERSION#v}
@@ -71,79 +57,40 @@ jobs:
           echo "bharatml-commons version: $BHARATML_VERSION"
           echo "spark-feature-push-client version: $SPARK_VERSION"
           echo "grpc-feature-client version: $GRPC_VERSION"
-          
+
+      - name: Build all packages
+        run: |
           # Create consolidated dist directory
-          mkdir -p dist/
-
-      - name: Update versions for develop branch
-        if: github.ref == 'refs/heads/develop'
-        run: |
-          # Update bharatml_commons version
-          python -c "
-          import tomli, tomli_w
-          with open('py-sdk/bharatml_commons/pyproject.toml', 'rb') as f:
-              data = tomli.load(f)
-          data['project']['version'] = '${{ steps.versions.outputs.bharatml_version }}'
-          with open('py-sdk/bharatml_commons/pyproject.toml', 'wb') as f:
-              tomli_w.dump(data, f)
-          "
+          mkdir -p dist
+          rm -rf dist/*
           
-          # Update spark_feature_push_client version
-          python -c "
-          import tomli, tomli_w
-          with open('py-sdk/spark_feature_push_client/pyproject.toml', 'rb') as f:
-              data = tomli.load(f)
-          data['project']['version'] = '${{ steps.versions.outputs.spark_version }}'
-          with open('py-sdk/spark_feature_push_client/pyproject.toml', 'wb') as f:
-              tomli_w.dump(data, f)
-          "
-          
-          # Update grpc_feature_client version
-          python -c "
-          import tomli, tomli_w
-          with open('py-sdk/grpc_feature_client/pyproject.toml', 'rb') as f:
-              data = tomli.load(f)
-          data['project']['version'] = '${{ steps.versions.outputs.grpc_version }}'
-          with open('py-sdk/grpc_feature_client/pyproject.toml', 'wb') as f:
-              tomli_w.dump(data, f)
-          "
-
-      - name: Build bharatml_commons
-        run: |
+          # Build bharatml_commons
           cd py-sdk/bharatml_commons
-          # Clean any existing build artifacts
           rm -rf dist/ build/ *.egg-info/
           python -m build
           cp dist/* ../../dist/
-
-      - name: Install bharatml_commons and build spark_feature_push_client
-        run: |
-          # Step 1: Install bharatml_commons dependency (from repo root)
-          pip install -e py-sdk/bharatml_commons
-
-          # Step 2: Build spark_feature_push_client
-          cd py-sdk/spark_feature_push_client
-          # Clean any existing build artifacts
-          rm -rf dist/ build/ *.egg-info/
-          python -m build
-          cp dist/* ../../dist/
-
-      - name: Build grpc_feature_client
-        run: |
-          # Ensure bharatml_commons is installed (should already be from previous step)
-          pip install -e py-sdk/bharatml_commons
+          cd ../..
           
-          cd py-sdk/grpc_feature_client
-          # Clean any existing build artifacts
+          # Build spark_feature_push_client  
+          cd py-sdk/spark_feature_push_client
           rm -rf dist/ build/ *.egg-info/
           python -m build
           cp dist/* ../../dist/
+          cd ../..
+          
+          # Build grpc_feature_client
+          cd py-sdk/grpc_feature_client
+          rm -rf dist/ build/ *.egg-info/
+          python -m build
+          cp dist/* ../../dist/
+          cd ../..
+          
+          echo "📦 Built packages:"
+          ls -la dist/
 
       - name: Test package installations
         run: |
-          pip install dist/bharatml_commons*.whl --force-reinstall
-          pip install dist/spark_feature_push_client*.whl --force-reinstall
-          pip install dist/grpc_feature_client*.whl --force-reinstall
+          pip install dist/*.whl --force-reinstall --find-links dist/
           
           python -c "
           import bharatml_commons
@@ -153,153 +100,31 @@ jobs:
           "
 
       - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
+        run: |
+          gh release create ${{ steps.versions.outputs.release_tag }} \
+            dist/*.whl \
+            dist/*.tar.gz \
+            --title "Python SDK Release - ${{ github.ref_name }}" \
+            --notes "## Python SDK Packages
+
+          ### Versions:
+          - **bharatml-commons**: \`${{ steps.versions.outputs.bharatml_version }}\`
+          - **spark-feature-push-client**: \`${{ steps.versions.outputs.spark_version }}\`
+          - **grpc-feature-client**: \`${{ steps.versions.outputs.grpc_version }}\`
+
+          ### Installation:
+          \`\`\`bash
+          # Download wheel files from this release
+          pip install bharatml_commons-${{ steps.versions.outputs.bharatml_version }}-py3-none-any.whl
+          pip install spark_feature_push_client-${{ steps.versions.outputs.spark_version }}-py3-none-any.whl  
+          pip install grpc_feature_client-${{ steps.versions.outputs.grpc_version }}-py3-none-any.whl
+          \`\`\`
+
+          ### Changes:
+          - Latest updates from ${{ github.ref_name }} branch" \
+            ${{ github.ref == 'refs/heads/develop' && '--prerelease' || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.versions.outputs.release_tag }}
-          release_name: "Python SDK Release - ${{ github.ref_name }} (${{ steps.versions.outputs.release_tag }})"
-          body: |
-            ## Python SDK Packages
-            
-            ### Versions:
-            - **bharatml-commons**: `${{ steps.versions.outputs.bharatml_version }}`
-            - **spark-feature-push-client**: `${{ steps.versions.outputs.spark_version }}`
-            - **grpc-feature-client**: `${{ steps.versions.outputs.grpc_version }}`
-            
-            ### Installation:
-            ```bash
-            # Download and install manually:
-            wget https://github.com/Meesho/BharatMLStack/releases/download/${{ steps.versions.outputs.release_tag }}/bharatml_commons-${{ steps.versions.outputs.bharatml_version }}-py3-none-any.whl
-            pip install bharatml_commons-${{ steps.versions.outputs.bharatml_version }}-py3-none-any.whl
-            
-            # Or use our package index:
-            pip install --index-url https://meesho.github.io/BharatMLStack/pypi/simple/ bharatml-commons
-            ```
-            
-            ### Changes:
-            - Latest updates from ${{ github.ref_name }} branch
-            - Package structure improvements
-            - Dependency updates
-          draft: false
-          prerelease: ${{ github.ref == 'refs/heads/develop' }}
-
-      - name: Upload wheel files to release
-        run: |
-          # Install github-release tool or use curl
-          for file in dist/*.whl dist/*.tar.gz; do
-            if [ -f "$file" ]; then
-              filename=$(basename "$file")
-              curl -L \
-                -X POST \
-                -H "Accept: application/vnd.github+json" \
-                -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Content-Type: application/octet-stream" \
-                --data-binary "@$file" \
-                "https://uploads.github.com/repos/Meesho/BharatMLStack/releases/${{ steps.create_release.outputs.id }}/assets?name=$filename"
-            fi
-          done
-
-      - name: Create PyPI-compatible index
-        run: |
-          mkdir -p pypi-index/simple
-          
-          # Process each package
-          for package_name in bharatml-commons spark-feature-push-client grpc-feature-client; do
-            package_dir="pypi-index/simple/$package_name"
-            mkdir -p "$package_dir"
-            
-            # Create package index page
-            cat > "$package_dir/index.html" << EOF
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <title>Links for $package_name</title>
-              <meta name="pypi:repository-version" content="1.0">
-          </head>
-          <body>
-              <h1>Links for $package_name</h1>
-          EOF
-            
-            # Find wheel files for this package and add download links
-            for wheel in dist/*${package_name//-/_}*.whl dist/*${package_name}*.whl; do
-              if [ -f "$wheel" ]; then
-                filename=$(basename "$wheel")
-                download_url="https://github.com/Meesho/BharatMLStack/releases/download/${{ steps.versions.outputs.release_tag }}/$filename"
-                echo "    <a href=\"$download_url\">$filename</a><br/>" >> "$package_dir/index.html"
-              fi
-            done
-            
-            echo "</body></html>" >> "$package_dir/index.html"
-          done
-          
-          # Create main index
-          cat > pypi-index/simple/index.html << EOF
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <title>BharatML Stack Python Package Index</title>
-              <meta name="pypi:repository-version" content="1.0">
-          </head>
-          <body>
-              <h1>BharatML Stack Python Package Index</h1>
-              <a href="bharatml-commons/">bharatml-commons</a><br/>
-              <a href="spark-feature-push-client/">spark-feature-push-client</a><br/>
-              <a href="grpc-feature-client/">grpc-feature-client</a><br/>
-          </body>
-          </html>
-          EOF
-          
-          # Create root index with usage instructions
-          cat > pypi-index/index.html << EOF
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <title>BharatML Stack Python Packages</title>
-              <style>
-                  body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-                  code { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
-                  pre { background: #f5f5f5; padding: 10px; border-radius: 5px; overflow-x: auto; }
-              </style>
-          </head>
-          <body>
-              <h1>🐍 BharatML Stack Python Packages</h1>
-              
-              <h2>📦 Available Packages</h2>
-              <ul>
-                  <li><strong>bharatml-commons</strong> - Core utilities and protobuf definitions</li>
-                  <li><strong>spark-feature-push-client</strong> - Apache Spark client for data pipeline operations</li>
-                  <li><strong>grpc-feature-client</strong> - High-performance gRPC client for real-time features</li>
-              </ul>
-              
-              <h2>📋 Installation</h2>
-              <pre><code># Install from BharatML Stack package index
-          pip install --index-url https://meesho.github.io/BharatMLStack/pypi/simple/ bharatml-commons
-          pip install --index-url https://meesho.github.io/BharatMLStack/pypi/simple/ spark-feature-push-client
-          pip install --index-url https://meesho.github.io/BharatMLStack/pypi/simple/ grpc-feature-client
-          
-          # Or install all packages
-          pip install --index-url https://meesho.github.io/BharatMLStack/pypi/simple/ bharatml-commons spark-feature-push-client grpc-feature-client</code></pre>
-              
-              <h2>🔗 Links</h2>
-              <ul>
-                  <li><a href="simple/">Package Index</a></li>
-                  <li><a href="https://github.com/Meesho/BharatMLStack">Source Code</a></li>
-                  <li><a href="https://github.com/Meesho/BharatMLStack/releases">Releases</a></li>
-              </ul>
-          </body>
-          </html>
-          EOF
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./pypi-index
-          publish_branch: gh-pages
-          destination_dir: pypi
-          keep_files: false
 
       - name: Generate summary
         run: |
@@ -313,11 +138,12 @@ jobs:
           echo "- **spark-feature-push-client**: \`${{ steps.versions.outputs.spark_version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **grpc-feature-client**: \`${{ steps.versions.outputs.grpc_version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔗 Registry URLs:" >> $GITHUB_STEP_SUMMARY
-          echo "- **Package Index**: https://meesho.github.io/BharatMLStack/pypi/simple/" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Links:" >> $GITHUB_STEP_SUMMARY
           echo "- **Release Page**: https://github.com/Meesho/BharatMLStack/releases/tag/${{ steps.versions.outputs.release_tag }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📋 Installation Command:" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Quick Installation:" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "pip install --index-url https://meesho.github.io/BharatMLStack/pypi/simple/ bharatml-commons" >> $GITHUB_STEP_SUMMARY
+          echo "# Download from release and install" >> $GITHUB_STEP_SUMMARY
+          echo "wget https://github.com/Meesho/BharatMLStack/releases/download/${{ steps.versions.outputs.release_tag }}/*.whl" >> $GITHUB_STEP_SUMMARY
+          echo "pip install *.whl --find-links ." >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY 
