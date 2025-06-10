@@ -1,0 +1,30 @@
+{
+    "data": [
+        {
+            "key_values": [
+                "12345"
+            ],
+            "feature_values": [
+                {
+                    "values": {
+                        "string_values": [
+                            "female"
+                        ]
+                    }
+                }
+            ]
+        }
+    ],
+    "entity_label": "user",
+    "feature_group_schema": [
+        {
+            "label": "cohorts",
+            "feature_labels": [
+                "gender"
+            ]
+        }
+    ],
+    "keys_schema": [
+        "user_id"
+    ]
+}
