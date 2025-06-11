@@ -154,6 +154,16 @@ func (e *Etcd) GetColumnsForEntityAndFG(entityLabel string, fgId int) ([]string,
 	return fg.Columns, nil
 }
 
+func (e *Etcd) GetAllRegisteredClients() map[string]string {
+	instance := e.GetEtcdInstance()
+	reader := instance.Security.Reader
+	clients := make(map[string]string)
+	for client, property := range reader {
+		clients[client] = property.Token
+	}
+	return clients
+}
+
 // GetPKMapAndPKColumnsForEntity returns the primary key and primary key columns for a given entity
 func (e *Etcd) GetPKMapAndPKColumnsForEntity(entityLabel string) (map[string]string, []string, error) {
 	entity, ok := entities.Entities[entityLabel]
