@@ -160,11 +160,12 @@ trigger_workflow() {
         print_info "Running: gh workflow run $workflow_file -f version=\"$version\" -f is_beta=\"$is_beta\" -f is_alpha=\"$is_alpha\""
         gh workflow run "$workflow_file" -f version="$version" -f is_beta="$is_beta" -f is_alpha="$is_alpha"
         print_success "Release workflow $workflow_file triggered successfully"
-        print_info "Monitor the workflow at: https://github.com/$(gh repo view --json owner,name -q '.owner.login + \"/\" + .name')/actions"
+        local repo_path=$(gh repo view --json owner,name -q '.owner.login + "/" + .name' 2>/dev/null || echo "your-repo")
+        print_info "Monitor the workflow at: https://github.com/${repo_path}/actions"
     else
         print_warning "GitHub CLI not found. Please install 'gh' or trigger workflow manually:"
         print_info "gh workflow run $workflow_file -f version=\"$version\" -f is_beta=\"$is_beta\" -f is_alpha=\"$is_alpha\""
-        print_info "Or go to Actions tab in GitHub and manually trigger: $workflow_file"
+        print_info "Or go to GitHub Actions tab and manually trigger: $workflow_file"
     fi
 }
 
