@@ -312,6 +312,21 @@ Users can access TruffleBox through registration or login:
   <img src="../assets/trufflebox/trufflebox-registration.png" alt="Registration Screen" width="500"/>
 </div>
 
+#### User Management
+Admin users can manage other users through the User Management interface:
+
+<div align="center">
+  <img src="../assets/trufflebox/trufflebox-user-management.png" alt="User Management" width="500"/>
+</div>
+
+In the User Management page, admins can:
+- View all registered users
+- Activate/deactivate user accounts
+- Modify user roles
+- Manage user permissions
+
+This is a crucial step in the user onboarding process as new users must be activated by an admin before they can log in to the system.
+
 **Login**: Existing users can login with their registered email and password.
 
 <div align="center">
