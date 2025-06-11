@@ -57,9 +57,9 @@ jobs:
       - name: Update VERSION files for build
         run: |
           echo "🔄 Temporarily updating VERSION files for package build..."
-          echo "${{ inputs.version }}" > py-sdk/bharatml_commons/VERSION
-          echo "${{ inputs.version }}" > py-sdk/spark_feature_push_client/VERSION
-          echo "${{ inputs.version }}" > py-sdk/grpc_feature_client/VERSION
+          echo "${{ steps.version.outputs.version_no_v }}" > py-sdk/bharatml_commons/VERSION
+          echo "${{ steps.version.outputs.version_no_v }}" > py-sdk/spark_feature_push_client/VERSION
+          echo "${{ steps.version.outputs.version_no_v }}" > py-sdk/grpc_feature_client/VERSION
           
           echo "📋 Updated VERSION file contents:"
           echo "  py-sdk/bharatml_commons/VERSION: $(cat py-sdk/bharatml_commons/VERSION)"
