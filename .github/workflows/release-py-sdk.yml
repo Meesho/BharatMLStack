@@ -50,6 +50,18 @@ jobs:
           echo "  py-sdk/spark_feature_push_client/VERSION: $(cat py-sdk/spark_feature_push_client/VERSION)"
           echo "  py-sdk/grpc_feature_client/VERSION: $(cat py-sdk/grpc_feature_client/VERSION)"
 
+      - name: Update VERSION files for build
+        run: |
+          echo "🔄 Temporarily updating VERSION files for package build..."
+          echo "${{ inputs.version }}" > py-sdk/bharatml_commons/VERSION
+          echo "${{ inputs.version }}" > py-sdk/spark_feature_push_client/VERSION
+          echo "${{ inputs.version }}" > py-sdk/grpc_feature_client/VERSION
+          
+          echo "📋 Updated VERSION file contents:"
+          echo "  py-sdk/bharatml_commons/VERSION: $(cat py-sdk/bharatml_commons/VERSION)"
+          echo "  py-sdk/spark_feature_push_client/VERSION: $(cat py-sdk/spark_feature_push_client/VERSION)"
+          echo "  py-sdk/grpc_feature_client/VERSION: $(cat py-sdk/grpc_feature_client/VERSION)"
+
       - name: Build all packages
         run: |
           mkdir -p dist
