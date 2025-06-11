@@ -76,6 +76,10 @@ get_prerelease_version_with_sha() {
     # Remove 'v' prefix if present
     base_version=${base_version#v}
     
+    # Remove any existing pre-release suffixes to avoid double-suffixing
+    base_version=$(echo "$base_version" | sed -E 's/-[a-z]+-[a-f0-9]+$//')
+    base_version=$(echo "$base_version" | sed -E 's/-[a-z]+\.[0-9]+$//')
+    
     # Get last commit SHA (6 characters)
     local commit_sha=$(git rev-parse --short=6 HEAD)
     
