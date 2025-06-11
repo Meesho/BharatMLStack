@@ -585,6 +585,9 @@ func (e *Etcd) EditFeatures(entityLabel, fgLabel string, featureLabels, defaultV
 	existingLabelsSlice := strings.Split(existingLabels, ",")
 	// Convert existingDefaultValues to []string
 	existingDefaultValuesSlice := strings.Split(existingDefaultValues, ",")
+	if fg.DataType.IsVector() {
+		existingDefaultValuesSlice = strings.Split(existingDefaultValues, "],")
+	}
 	for i, featureLabel := range featureLabels {
 		// Update featureMetaMap with new feature metadata
 		stringLengthUint16, err := stringToUint16(stringLength[i])
