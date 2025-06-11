@@ -18,6 +18,7 @@ import (
 
 const configManagerVersion = 1
 const normalizedEntitiesWatchPath = "/entities"
+const registeredClientsWatchPath = "/security/reader"
 
 func main() {
 	config.InitEnv()
@@ -36,6 +37,11 @@ func main() {
 	err := etcd.Instance().RegisterWatchPathCallback(normalizedEntitiesWatchPath, configManager.GetNormalizedEntities)
 	if err != nil {
 		log.Error().Err(err).Msg("Error registering watch path callback for in-memory cache")
+	}
+	configManager.RegisterClients()
+	err = etcd.Instance().RegisterWatchPathCallback(registeredClientsWatchPath, configManager.RegisterClients)
+	if err != nil {
+		log.Error().Err(err).Msg("Error registering watch path callback for registered clients")
 	}
 	provider.InitProvider(configManager, etcd.Instance())
 	err = grpc.Instance().Run()
