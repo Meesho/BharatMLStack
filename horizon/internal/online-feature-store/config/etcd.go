@@ -481,7 +481,7 @@ func (e *Etcd) AddFeatures(entityLabel, fgLabel string, labels, defaultValues, s
 		return nil, Store{}, nil, nil, err
 	}
 	totalSize := len(labels) * dataType.Size()
-	if dataType == enums.DataTypeString {
+	if dataType == "DataTypeString" {
 		var totalStringLength uint16
 		for i := range stringLength {
 			stringLengthUint16, _ := stringToUint16(stringLength[i])
@@ -496,7 +496,7 @@ func (e *Etcd) AddFeatures(entityLabel, fgLabel string, labels, defaultValues, s
 		}
 		totalSize = int(totalVectorLength) * dataType.Size()
 	}
-	if dataType == enums.DataTypeStringVector {
+	if dataType == "DataTypeStringVector" {
 		var stringVectorSize uint16
 		for i := range stringLength {
 			stringLengthUint16, _ := stringToUint16(stringLength[i])
