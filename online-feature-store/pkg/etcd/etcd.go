@@ -7,7 +7,7 @@ import (
 
 const (
 	configPath        = "/config/"
-	timeout           = 5 * time.Second
+	timeout           = 30 * time.Second
 	envAppName        = "APP_NAME"
 	envEtcdServer     = "ETCD_SERVER"
 	envEtcdUsername   = "ETCD_USERNAME"

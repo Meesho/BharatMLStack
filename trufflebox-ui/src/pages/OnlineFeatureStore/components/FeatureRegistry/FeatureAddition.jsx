@@ -21,7 +21,10 @@ import {
   Typography,
   Box,
   IconButton,
+  InputAdornment,
+  Tooltip,
 } from '@mui/material';
+import InfoIcon from '@mui/icons-material/Info';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import CloseIcon from '@mui/icons-material/Close';
@@ -32,6 +35,7 @@ import GenericTable from '../../common/GenericTable';
 import { useAuth } from '../../../Auth/AuthContext';
 
 import * as URL_CONSTANTS from '../../../../config';
+import { removeDataTypePrefix } from '../../../../constants/dataTypes';
 
 const FeatureAddition = () => {
   const [open, setOpen] = useState(false);
@@ -43,7 +47,7 @@ const FeatureAddition = () => {
   const { user } = useAuth();
 
   const cellStyle = {
-    maxWidth: "150px", 
+    maxWidth: "150px",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "normal",
@@ -62,12 +66,14 @@ const FeatureAddition = () => {
   const [FeatureAdditionData, setFeatureAdditionData] = useState({
     "entity-label": "",
     "feature-group-label": "",
-    features: [{ 
-      labels: "", 
+    features: [{
+      labels: "",
       "default-values": "",
       "source-base-path": "",
       "source-data-column": "",
-      "storage-provider": ""
+      "storage-provider": "",
+      "string-length": "0",
+      "vector-length": "0"
     }],
   });
 
@@ -156,16 +162,23 @@ const FeatureAddition = () => {
   };
 
   const addFeatureRow = () => {
+    const selectedFeatureGroup = featureGroups?.find(
+      group => group?.label === FeatureAdditionData["feature-group-label"]
+    );
+    const dataType = selectedFeatureGroup?.["data-type"];
+    const showStringLength = shouldShowField(dataType, 'string');
+    const showVectorLength = shouldShowField(dataType, 'vector');
+    
     setFeatureAdditionData((prevData) => ({
       ...prevData,
-      features: [...prevData.features, { 
-        labels: "", 
+      features: [...prevData.features, {
+        labels: "",
         "default-values": "",
         "source-base-path": "",
         "source-data-column": "",
         "storage-provider": "",
-        "string-length": "",
-        "vector-length": ""
+        "string-length": showStringLength ? "" : "0",
+        "vector-length": showVectorLength ? "" : "0"
       }],
     }));
   };
@@ -199,12 +212,14 @@ const FeatureAddition = () => {
     setFeatureAdditionData({
       "entity-label": "",
       "feature-group-label": "",
-      features: [{ 
-        labels: "", 
+      features: [{
+        labels: "",
         "default-values": "",
         "source-base-path": "",
         "source-data-column": "",
-        "storage-provider": ""
+        "storage-provider": "",
+        "string-length": "0",
+        "vector-length": "0"
       }],
     });
     setOpen(true);
@@ -214,18 +229,76 @@ const FeatureAddition = () => {
     setOpen(false);
   };
 
+  // Helper function to determine which length fields to show
+  const shouldShowField = (dataType, fieldType) => {
+    if (!dataType) return false;
+
+    try {
+      const cleanDataType = removeDataTypePrefix(dataType);
+      if (!cleanDataType) return false;
+
+      const lowerDataType = cleanDataType.toLowerCase();
+
+      if (fieldType === 'string') {
+        return lowerDataType.includes('string');
+      }
+      if (fieldType === 'vector') {
+        return lowerDataType.includes('vector');
+      }
+      return false;
+    } catch (error) {
+      return false;
+    }
+  };
+
   const handleSubmit = async () => {
-    // Validate required fields
-    const hasEmptyLengthFields = FeatureAdditionData.features.some(
-      feature => !feature["string-length"] || !feature["vector-length"]
+    // Validate required fields - Label and Default Value
+    const hasEmptyRequiredFields = FeatureAdditionData.features.some(
+      feature => !feature.labels.trim() || !feature["default-values"].trim()
     );
-    
-    if (hasEmptyLengthFields) {
-      setModalMessage("String Length and Vector Length are required for all features");
+
+    if (hasEmptyRequiredFields) {
+      setModalMessage("Label and Default Value are required for all features");
       setShowErrorModal(true);
       return;
     }
     
+    // Process and validate length fields based on data type
+    const selectedFeatureGroup = featureGroups.find(
+      group => group?.label === FeatureAdditionData["feature-group-label"]
+    );
+    const dataType = selectedFeatureGroup?.["data-type"];
+    const showStringLength = shouldShowField(dataType, 'string');
+    const showVectorLength = shouldShowField(dataType, 'vector');
+
+    const updatedFeatures = FeatureAdditionData.features.map(feature => ({
+      ...feature,
+      "string-length": showStringLength ? feature["string-length"] : "0",
+      "vector-length": showVectorLength ? feature["vector-length"] : "0"
+    }));
+
+    // Validate that shown length fields are > 0
+    const hasInvalidLengthFields = updatedFeatures.some(feature => {
+      if (showStringLength && (!feature["string-length"] || parseFloat(feature["string-length"]) <= 0)) return true;
+      if (showVectorLength && (!feature["vector-length"] || parseFloat(feature["vector-length"]) <= 0)) return true;
+      return false;
+    });
+
+    if (hasInvalidLengthFields) {
+      const requiredFields = [];
+      if (showStringLength) requiredFields.push("String Length");
+      if (showVectorLength) requiredFields.push("Vector Length");
+      const message = `${requiredFields.join(" and ")} must be greater than 0 for all features`;
+      setModalMessage(message);
+      setShowErrorModal(true);
+      return;
+    }
+
+    const finalFeatureAdditionData = {
+      ...FeatureAdditionData,
+      features: updatedFeatures
+    };
+
     try {
       const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/add-features`, {
         method: 'POST',
@@ -233,7 +306,7 @@ const FeatureAddition = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${user.token}`,
         },
-        body: JSON.stringify(FeatureAdditionData),
+        body: JSON.stringify(finalFeatureAdditionData),
       });
 
       if (response.ok) {
@@ -272,14 +345,14 @@ const FeatureAddition = () => {
             onClick: handleCreateOpen,
             variant: "contained",
             color: "#522b4a",
-            hoverColor: "#2c3e50"
+            hoverColor: "#613a5c"
           }
         ]}
       />
 
       {/* Create Modal */}
-      <Dialog 
-        open={open} 
+      <Dialog
+        open={open}
         onClose={handleCreateClose}
         fullWidth
         maxWidth="md"
@@ -296,7 +369,7 @@ const FeatureAddition = () => {
               onChange={handleChange}
               label="Entity Label"
             >
-              {entities.map((entity) => (
+              {entities?.map((entity) => (
                 <MenuItem key={entity} value={entity}>
                   {entity}
                 </MenuItem>
@@ -315,117 +388,249 @@ const FeatureAddition = () => {
               disabled={!FeatureAdditionData["entity-label"]}
               label="Feature Group Label"
             >
-              {featureGroups.map((group) => (
-                <MenuItem key={group} value={group}>
-                  {group}
+              {featureGroups?.map((group) => (
+                <MenuItem key={group?.label} value={group?.label}>
+                  {group?.label}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
 
           <h5>Features</h5>
-          {FeatureAdditionData.features.map((feature, index) => (
+          {FeatureAdditionData?.features?.map((feature, index) => (
             <React.Fragment key={index}>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  gap: '0px 16px'
-                }}
-              >
-                <TextField
-                  label="Label"
-                  name="labels"
-                  value={feature.labels}
-                  onChange={(e) => handleFeatureChange(index, e)}
-                  margin="normal"
-                />
-                <TextField
-                  label="Default Value"
-                  name="default-values"
-                  value={feature["default-values"]}
-                  onChange={(e) => handleFeatureChange(index, e)}
-                  margin="normal"
-                />
-                <TextField
-                  label="Source Base Path"
-                  name="source-base-path"
-                  value={feature["source-base-path"]}
-                  onChange={(e) => handleFeatureChange(index, e)}
-                  margin="normal"
-                  fullWidth
-                />
-                <TextField
-                  label="Source Data Column"
-                  name="source-data-column"
-                  value={feature["source-data-column"]}
-                  onChange={(e) => handleFeatureChange(index, e)}
-                  margin="normal"
-                  fullWidth
-                />
-                <FormControl margin="normal" fullWidth>
-                  <InputLabel id={`storage-provider-label-${index}`}>Storage Provider</InputLabel>
-                  <Select
-                    labelId={`storage-provider-label-${index}`}
-                    id={`storage-provider-${index}`}
-                    name="storage-provider"
-                    value={feature["storage-provider"]}
-                    onChange={(e) => handleFeatureChange(index, e)}
-                    label="Storage Provider"
-                  >
-                    <MenuItem value="PARQUET_GCS">PARQUET_GCS</MenuItem>
-                    <MenuItem value="PARQUET_S3">PARQUET_S3</MenuItem>
-                    <MenuItem value="PARQUET_ADLS">PARQUET_ADLS</MenuItem>
-                    <MenuItem value="DELTA_GCS">DELTA_GCS</MenuItem>
-                    <MenuItem value="DELTA_S3">DELTA_S3</MenuItem>
-                    <MenuItem value="DELTA_ADLS">DELTA_ADLS</MenuItem>
-                    <MenuItem value="TABLE">TABLE</MenuItem>
-                  </Select>
-                </FormControl>
-                <TextField
-                  label="String Length"
-                  name="string-length"
-                  value={feature["string-length"]}
-                  onChange={(e) => handleFeatureChange(index, e)}
-                  margin="normal"
-                  fullWidth
-                  required
-                  error={feature["string-length"] === ""}
-                  helperText={feature["string-length"] === "" ? "String Length is required" : ""}
-                />
-                <TextField
-                  label="Vector Length"
-                  name="vector-length"
-                  value={feature["vector-length"]}
-                  onChange={(e) => handleFeatureChange(index, e)}
-                  margin="normal"
-                  fullWidth
-                  required
-                  error={feature["vector-length"] === ""}
-                  helperText={feature["vector-length"] === "" ? "Vector Length is required" : ""}
-                />
-                <div style={{
-                  marginTop: '16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '0 14px'
+              <div>
+                {/* Row 1: Label and Default Value */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '0px 16px'
                   }}
                 >
-                  <Button
-                    onClick={() => removeFeatureRow(index)}
-                    startIcon={<RemoveCircleOutlineIcon />}
-                    color='error'
-                    sx={{
-                      color: '#d32f2f',
-                      '&:hover': {
-                        backgroundColor: 'transparent'
+                  <TextField
+                    label="Label"
+                    name="labels"
+                    value={feature.labels}
+                    onChange={(e) => handleFeatureChange(index, e)}
+                    margin="normal"
+                    required
+                  />
+                  <TextField
+                    label="Default Value"
+                    name="default-values"
+                    value={feature["default-values"]}
+                    onChange={(e) => handleFeatureChange(index, e)}
+                    margin="normal"
+                    required
+                  />
+                </div>
+
+                {/* Row 2: Source Type, Source Base Path, Source Data Column */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '0px 16px'
+                  }}
+                >
+                  <FormControl margin="normal" fullWidth>
+                    <InputLabel id={`source-type-label-${index}`}>
+                      Source Type
+                    </InputLabel>
+                    <Select
+                      labelId={`source-type-label-${index}`}
+                      id={`source-type-${index}`}
+                      name="storage-provider"
+                      value={feature["storage-provider"]}
+                      onChange={(e) => handleFeatureChange(index, e)}
+                      label="Source Type"
+                      endAdornment={
+                        <InputAdornment position="end">
+                          <Tooltip
+                            title="Cloud storage or table"
+                            placement="bottom-end"
+                            slotProps={{
+                              tooltip: {
+                                sx: {
+                                  bgcolor: 'white',
+                                  color: 'black',
+                                  border: '1px solid #cccccc',
+                                  boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
+                                  p: 1,
+                                  width: '280px',
+                                  maxWidth: '300px',
+                                  '& p': {
+                                    my: 0.5,
+                                  }
+                                }
+                              }
+                            }}
+                          >
+                            <InfoIcon style={{ color: '#522b4a', cursor: 'pointer', fontSize: '20px', position: 'absolute', right: '24px' }} />
+                          </Tooltip>
+                        </InputAdornment>
+                      }
+                    >
+                      <MenuItem value="PARQUET_GCS">PARQUET_GCS</MenuItem>
+                      <MenuItem value="PARQUET_S3">PARQUET_S3</MenuItem>
+                      <MenuItem value="PARQUET_ADLS">PARQUET_ADLS</MenuItem>
+                      <MenuItem value="DELTA_GCS">DELTA_GCS</MenuItem>
+                      <MenuItem value="DELTA_S3">DELTA_S3</MenuItem>
+                      <MenuItem value="DELTA_ADLS">DELTA_ADLS</MenuItem>
+                      <MenuItem value="TABLE">TABLE</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    label="Source Base Path"
+                    name="source-base-path"
+                    value={feature["source-base-path"]}
+                    onChange={(e) => handleFeatureChange(index, e)}
+                    margin="normal"
+                    fullWidth
+                    slotProps={{
+                      input: {
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <Tooltip
+                              title="Offline cloud storage path or table name source for the feature"
+                              placement="bottom-end"
+                              slotProps={{
+                                tooltip: {
+                                  sx: {
+                                    bgcolor: 'white',
+                                    color: 'black',
+                                    border: '1px solid #cccccc',
+                                    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
+                                    p: 1,
+                                    maxWidth: '250px',
+                                  }
+                                }
+                              }}
+                            >
+                              <InfoIcon style={{ color: '#522b4a', cursor: 'pointer', fontSize: '20px' }} />
+                            </Tooltip>
+                          </InputAdornment>
+                        )
                       }
                     }}
-                  >
-                    Remove
-                  </Button>
+                  />
+                  <TextField
+                    label="Source Data Column"
+                    name="source-data-column"
+                    value={feature["source-data-column"]}
+                    onChange={(e) => handleFeatureChange(index, e)}
+                    margin="normal"
+                    fullWidth
+                    slotProps={{
+                      input: {
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <Tooltip
+                              title="Name of the column in offline source"
+                              placement="bottom-end"
+                              slotProps={{
+                                tooltip: {
+                                  sx: {
+                                    bgcolor: 'white',
+                                    color: 'black',
+                                    border: '1px solid #cccccc',
+                                    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
+                                    p: 1,
+                                    maxWidth: '250px',
+                                  }
+                                }
+                              }}
+                            >
+                              <InfoIcon style={{ color: '#522b4a', cursor: 'pointer', fontSize: '20px' }} />
+                            </Tooltip>
+                          </InputAdornment>
+                        )
+                      }
+                    }}
+                  />
                 </div>
+
+                {/* Row 3: String Length, Vector Length, and Remove Button */}
+                {(() => {
+                  const selectedFeatureGroup = featureGroups?.find(
+                    group => group?.label === FeatureAdditionData["feature-group-label"]
+                  );
+                  const dataType = selectedFeatureGroup?.["data-type"];
+
+                  const showStringLength = shouldShowField(dataType, 'string');
+                  const showVectorLength = shouldShowField(dataType, 'vector');
+
+                  return (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(3, 1fr)',
+                        gap: '0px 16px'
+                      }}
+                    >
+                      {showStringLength ? (
+                        <TextField
+                          label="String Length"
+                          name="string-length"
+                          value={feature["string-length"]}
+                          onChange={(e) => handleFeatureChange(index, e)}
+                          margin="normal"
+                          fullWidth
+                          required
+                        />
+                      ) : showVectorLength ? (
+                        <TextField
+                          label="Vector Length"
+                          name="vector-length"
+                          value={feature["vector-length"]}
+                          onChange={(e) => handleFeatureChange(index, e)}
+                          margin="normal"
+                          fullWidth
+                          required
+                        />
+                      ) : (
+                        <div></div>
+                      )}
+
+                      {showStringLength && showVectorLength ? (
+                        <TextField
+                          label="Vector Length"
+                          name="vector-length"
+                          value={feature["vector-length"]}
+                          onChange={(e) => handleFeatureChange(index, e)}
+                          margin="normal"
+                          fullWidth
+                          required
+                        />
+                      ) : (
+                        <div></div>
+                      )}
+
+                      <div style={{
+                        marginTop: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '0 14px'
+                      }}>
+                        <Button
+                          onClick={() => removeFeatureRow(index)}
+                          startIcon={<RemoveCircleOutlineIcon />}
+                          color='error'
+                          sx={{
+                            color: '#d32f2f',
+                            '&:hover': {
+                              backgroundColor: 'transparent'
+                            }
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
               {index < FeatureAdditionData.features.length - 1 && (
                 <Divider sx={{ my: 2, borderColor: '#522b4a' }} />
@@ -435,7 +640,7 @@ const FeatureAddition = () => {
           <Button
             startIcon={<AddCircleOutlineIcon />}
             onClick={addFeatureRow}
-            style={{ marginTop: '10px', color: 'green'}}
+            style={{ marginTop: '10px', color: 'green' }}
             sx={{
               '&:hover': {
                 backgroundColor: '#fff',
@@ -477,9 +682,8 @@ const FeatureAddition = () => {
         </DialogActions>
       </Dialog>
 
-      {/* View Modal using MUI Dialog instead of React Bootstrap */}
-      <Dialog 
-        open={showViewModal} 
+      <Dialog
+        open={showViewModal}
         onClose={handleViewClose}
         fullWidth
         maxWidth="lg"
@@ -536,13 +740,13 @@ const FeatureAddition = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {selectedFeatureInfo.features.map((feature, index) => (
+                      {selectedFeatureInfo?.features?.map((feature, index) => (
                         <TableRow key={index}>
                           <TableCell sx={cellStyle} style={cellStyle}>{feature.labels}</TableCell>
                           <TableCell sx={cellStyle} style={cellStyle}>{feature["default-values"]}</TableCell>
                           <TableCell sx={cellStyle} style={cellStyle}>{feature["source-base-path"] || "-"}</TableCell>
                           <TableCell sx={cellStyle} style={cellStyle}>{feature["source-data-column"] || "-"}</TableCell>
-                          <TableCell sx={{...cellStyle, borderRight: 'none'}} style={cellStyle}>{feature["storage-provider"] || "-"}</TableCell>
+                          <TableCell sx={{ ...cellStyle, borderRight: 'none' }} style={cellStyle}>{feature["storage-provider"] || "-"}</TableCell>
                           <TableCell sx={cellStyle} style={cellStyle}>{feature["string-length"] || "-"}</TableCell>
                           <TableCell sx={cellStyle} style={cellStyle}>{feature["vector-length"] || "-"}</TableCell>
                         </TableRow>
@@ -581,7 +785,7 @@ const FeatureAddition = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button 
+          <Button
             onClick={handleSuccessModalClose}
             sx={{
               backgroundColor: '#522b4a',
@@ -614,7 +818,7 @@ const FeatureAddition = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button 
+          <Button
             onClick={handleErrorModalClose}
             sx={{
               backgroundColor: '#522b4a',

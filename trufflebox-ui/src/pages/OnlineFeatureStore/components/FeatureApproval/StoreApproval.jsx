@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Modal, ListGroup } from 'react-bootstrap';
+import { Modal, ListGroup, Spinner } from 'react-bootstrap';
 import { 
   Button, 
   Dialog, 
@@ -153,6 +153,7 @@ const StoreApproval = () => {
         excludeColumns={['EntityLabel', 'FeatureGroupLabel']}
         onRowAction={handleOpen}
         loading={false}
+        flowType="approval"
       />
       
       <Modal
