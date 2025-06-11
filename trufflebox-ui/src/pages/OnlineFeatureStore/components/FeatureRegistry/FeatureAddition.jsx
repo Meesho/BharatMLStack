@@ -252,53 +252,17 @@ const FeatureAddition = () => {
   };
 
   const handleSubmit = async () => {
-    // Validate required fields - Label and Default Value
-    const hasEmptyRequiredFields = FeatureAdditionData.features.some(
-      feature => !feature.labels.trim() || !feature["default-values"].trim()
+    // Validate required fields
+    const hasEmptyLengthFields = FeatureAdditionData.features.some(
+      feature => !feature["string-length"] || !feature["vector-length"]
     );
-
-    if (hasEmptyRequiredFields) {
-      setModalMessage("Label and Default Value are required for all features");
+    
+    if (hasEmptyLengthFields) {
+      setModalMessage("String Length and Vector Length are required for all features");
       setShowErrorModal(true);
       return;
     }
     
-    // Process and validate length fields based on data type
-    const selectedFeatureGroup = featureGroups.find(
-      group => group?.label === FeatureAdditionData["feature-group-label"]
-    );
-    const dataType = selectedFeatureGroup?.["data-type"];
-    const showStringLength = shouldShowField(dataType, 'string');
-    const showVectorLength = shouldShowField(dataType, 'vector');
-
-    const updatedFeatures = FeatureAdditionData.features.map(feature => ({
-      ...feature,
-      "string-length": showStringLength ? feature["string-length"] : "0",
-      "vector-length": showVectorLength ? feature["vector-length"] : "0"
-    }));
-
-    // Validate that shown length fields are > 0
-    const hasInvalidLengthFields = updatedFeatures.some(feature => {
-      if (showStringLength && (!feature["string-length"] || parseFloat(feature["string-length"]) <= 0)) return true;
-      if (showVectorLength && (!feature["vector-length"] || parseFloat(feature["vector-length"]) <= 0)) return true;
-      return false;
-    });
-
-    if (hasInvalidLengthFields) {
-      const requiredFields = [];
-      if (showStringLength) requiredFields.push("String Length");
-      if (showVectorLength) requiredFields.push("Vector Length");
-      const message = `${requiredFields.join(" and ")} must be greater than 0 for all features`;
-      setModalMessage(message);
-      setShowErrorModal(true);
-      return;
-    }
-
-    const finalFeatureAdditionData = {
-      ...FeatureAdditionData,
-      features: updatedFeatures
-    };
-
     try {
       const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/add-features`, {
         method: 'POST',

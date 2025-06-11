@@ -19,6 +19,7 @@ type Etcd struct {
 }
 
 var entities *NormalizedEntities
+var registeredClients map[string]string
 
 func NewEtcdConfig() Manager {
 	return &Etcd{
@@ -152,6 +153,21 @@ func (e *Etcd) GetColumnsForEntityAndFG(entityLabel string, fgId int) ([]string,
 		return nil, fmt.Errorf("feature group %d not found", fgId)
 	}
 	return fg.Columns, nil
+}
+
+func (e *Etcd) RegisterClients() error {
+	instance := e.GetEtcdInstance()
+	reader := instance.Security.Reader
+	clients := make(map[string]string)
+	for client, property := range reader {
+		clients[client] = property.Token
+	}
+	registeredClients = clients
+	return nil
+}
+
+func (e *Etcd) GetAllRegisteredClients() map[string]string {
+	return registeredClients
 }
 
 // GetPKMapAndPKColumnsForEntity returns the primary key and primary key columns for a given entity

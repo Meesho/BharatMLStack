@@ -255,14 +255,36 @@ const FeatureGroupRegistry = () => {
     return false;
   };
 
+  // Helper function to determine which length fields to show
+  const shouldShowField = (dataType, fieldType) => {
+    const cleanDataType = removeDataTypePrefix(dataType);
+    if (fieldType === 'string') {
+      return cleanDataType.toLowerCase().includes('string');
+    }
+    if (fieldType === 'vector') {
+      return cleanDataType.toLowerCase().includes('vector');
+    }
+    return false;
+  };
+
   const handleSubmit = async () => {
-    // Validate required fields - Label and Default Value
-    const hasEmptyRequiredFields = featureGroupData.features.some(
-      feature => !feature.labels.trim() || !feature["default-values"].trim()
+    // Check if any feature has empty string-length or vector-length
+    const hasEmptyLengthFields = featureGroupData.features.some(
+      feature => !feature["string-length"] || !feature["vector-length"]
     );
     
     if (hasEmptyRequiredFields) {
-      setModalMessage("Label and Default Value are required for all features");
+      const showStringLength = shouldShowField(currentDataType, 'string');
+      const showVectorLength = shouldShowField(currentDataType, 'vector');
+      let message = "";
+      if (showStringLength && showVectorLength) {
+        message = "Label and Default Value are required for all features";
+      } else if (showStringLength) {
+        message = "String Length is required for all features";
+      } else if (showVectorLength) {
+        message = "Vector Length is required for all features";
+      }
+      setModalMessage(message);
       setShowErrorModal(true);
       return;
     }
