@@ -32,7 +32,7 @@ classifiers = [
 
 [tool.hatch.version]
 path = "VERSION"
-pattern = "v(?P<version>[^\\s]+)"
+pattern = "(?P<version>[^\\s]+)"
 
 [tool.hatch.build.targets.wheel]
 packages = ["bharatml_commons"]
