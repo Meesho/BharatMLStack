@@ -1,0 +1,221 @@
+name: Update Build Badges
+
+on:
+  workflow_run:
+    workflows: ["CI Build and Test"]
+    types:
+      - completed
+
+jobs:
+  update-badges:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion != 'cancelled'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Get workflow run details
+        id: workflow-details
+        run: |
+          # Get the workflow run details
+          WORKFLOW_RUN_ID="${{ github.event.workflow_run.id }}"
+          
+          # Get job details from the workflow run
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/$WORKFLOW_RUN_ID/jobs" > jobs.json
+          
+          # Extract job conclusions
+          HORIZON_STATUS=$(jq -r '.jobs[] | select(.name == "build-horizon") | .conclusion // "skipped"' jobs.json)
+          TRUFFLEBOX_STATUS=$(jq -r '.jobs[] | select(.name == "build-trufflebox-ui") | .conclusion // "skipped"' jobs.json)
+          OFS_STATUS=$(jq -r '.jobs[] | select(.name == "build-online-feature-store") | .conclusion // "skipped"' jobs.json)
+          
+          # Convert to badge status
+          get_badge_status() {
+            case "$1" in
+              "success") echo "passing" ;;
+              "skipped") echo "skipped" ;;
+              *) echo "failing" ;;
+            esac
+          }
+          
+          HORIZON_BADGE=$(get_badge_status "$HORIZON_STATUS")
+          TRUFFLEBOX_BADGE=$(get_badge_status "$TRUFFLEBOX_STATUS")
+          OFS_BADGE=$(get_badge_status "$OFS_STATUS")
+          
+          echo "horizon-status=$HORIZON_BADGE" >> $GITHUB_OUTPUT
+          echo "trufflebox-status=$TRUFFLEBOX_BADGE" >> $GITHUB_OUTPUT
+          echo "ofs-status=$OFS_BADGE" >> $GITHUB_OUTPUT
+
+      - name: Get badge colors
+        id: badge-colors
+        run: |
+          get_color() {
+            case "$1" in
+              "passing") echo "brightgreen" ;;
+              "skipped") echo "yellow" ;;
+              *) echo "red" ;;
+            esac
+          }
+          
+          echo "horizon-color=$(get_color '${{ steps.workflow-details.outputs.horizon-status }}')" >> $GITHUB_OUTPUT
+          echo "trufflebox-color=$(get_color '${{ steps.workflow-details.outputs.trufflebox-status }}')" >> $GITHUB_OUTPUT
+          echo "ofs-color=$(get_color '${{ steps.workflow-details.outputs.ofs-status }}')" >> $GITHUB_OUTPUT
+
+      - name: Update root README
+        run: |
+          # Get current versions
+          HORIZON_VERSION=$(cat horizon/VERSION | tr -d '\n' | tr -d '\r')
+          TRUFFLEBOX_VERSION=$(cat trufflebox-ui/VERSION | tr -d '\n' | tr -d '\r')
+          OFS_VERSION=$(cat online-feature-store/VERSION | tr -d '\n' | tr -d '\r')
+          
+          # Create/update root README
+          cat > README.md << EOF
+          # BharatMLStack
+          
+          ![CI Build and Test](https://github.com/${{ github.repository }}/workflows/CI%20Build%20and%20Test/badge.svg)
+          
+          A comprehensive ML infrastructure stack with feature store, model serving, and UI components.
+          
+          ## Build Status
+          
+          | Component | Build Status | Version | Directory |
+          |-----------|--------------|---------|-----------|
+          | **Horizon** | ![Build](https://img.shields.io/badge/build-${{ steps.workflow-details.outputs.horizon-status }}-${{ steps.badge-colors.outputs.horizon-color }}) | ![Version](https://img.shields.io/badge/version-${HORIZON_VERSION}-blue) | [horizon/](./horizon) |
+          | **Trufflebox UI** | ![Build](https://img.shields.io/badge/build-${{ steps.workflow-details.outputs.trufflebox-status }}-${{ steps.badge-colors.outputs.trufflebox-color }}) | ![Version](https://img.shields.io/badge/version-${TRUFFLEBOX_VERSION}-blue) | [trufflebox-ui/](./trufflebox-ui) |
+          | **Online Feature Store** | ![Build](https://img.shields.io/badge/build-${{ steps.workflow-details.outputs.ofs-status }}-${{ steps.badge-colors.outputs.ofs-color }}) | ![Version](https://img.shields.io/badge/version-${OFS_VERSION}-blue) | [online-feature-store/](./online-feature-store) |
+          
+          ## Components
+          
+          ### 🚀 Horizon
+          Model serving and inference service built with Go. Provides high-performance model serving capabilities.
+          
+          ### 🎨 Trufflebox UI
+          Modern web interface for managing ML models and features. Built with React and provides an intuitive user experience.
+          
+          ### 🗄️ Online Feature Store
+          High-performance feature store for real-time ML inference. Supports both batch and streaming feature processing.
+          
+          ## Quick Start
+          
+          \`\`\`bash
+          # Check what would be released
+          ./release.sh --dry-run
+          
+          # Release components with changes
+          ./release.sh
+          
+          # Force release all components
+          ./release.sh --force-all
+          \`\`\`
+          
+          ## Development
+          
+          Each component has its own build and release process:
+          
+          - **Horizon**: Go-based service with Docker support
+          - **Trufflebox UI**: Node.js/React application with Docker support  
+          - **Online Feature Store**: Go-based service with gRPC API
+          
+          See individual README files in each directory for detailed development instructions.
+          
+          ## CI/CD
+          
+          This repository uses GitHub Actions for continuous integration:
+          
+          - **Automatic builds** on PRs to master/develop branches
+          - **Smart change detection** - only builds components that changed
+          - **Automatic badge updates** showing build status
+          - **Multi-platform Docker builds** for releases
+          
+          ## License
+          
+          See [LICENSE.md](LICENSE.md) for details.
+          EOF
+
+      - name: Update individual README badges
+        run: |
+          # Update horizon README if it exists
+          if [ -f "horizon/README.md" ]; then
+            # Check if badge already exists
+            if ! grep -q "workflows/CI.*badge.svg" horizon/README.md; then
+              # Add badge at the top
+              sed -i '1i![Build Status](https://github.com/${{ github.repository }}/workflows/CI%20Build%20and%20Test/badge.svg) ![Build](https://img.shields.io/badge/build-${{ steps.workflow-details.outputs.horizon-status }}-${{ steps.badge-colors.outputs.horizon-color }})\n' horizon/README.md
+            else
+              # Update existing badge
+              sed -i 's|!\[Build\](https://img.shields.io/badge/build-[^)]*)|![Build](https://img.shields.io/badge/build-${{ steps.workflow-details.outputs.horizon-status }}-${{ steps.badge-colors.outputs.horizon-color }})|g' horizon/README.md
+            fi
+          else
+            # Create horizon README
+            HORIZON_VERSION=$(cat horizon/VERSION | tr -d '\n' | tr -d '\r')
+            cat > horizon/README.md << EOF
+          ![Build Status](https://github.com/${{ github.repository }}/workflows/CI%20Build%20and%20Test/badge.svg) ![Build](https://img.shields.io/badge/build-${{ steps.workflow-details.outputs.horizon-status }}-${{ steps.badge-colors.outputs.horizon-color }}) ![Version](https://img.shields.io/badge/version-${HORIZON_VERSION}-blue)
+          
+          # Horizon
+          
+          Model serving and inference service built with Go.
+          
+          ## Development
+          
+          \`\`\`bash
+          # Install dependencies
+          go mod download
+          
+          # Run tests
+          go test -v ./...
+          
+          # Build
+          go build -v ./...
+          
+          # Run
+          go run ./cmd/...
+          \`\`\`
+          
+          ## Docker
+          
+          \`\`\`bash
+          # Build Docker image
+          docker build -t horizon -f cmd/horizon/Dockerfile .
+          
+          # Run container
+          docker run -p 8080:8080 horizon
+          \`\`\`
+          EOF
+          fi
+          
+          # Update trufflebox-ui README
+          if [ -f "trufflebox-ui/README.md" ]; then
+            # Check if badge already exists
+            if ! grep -q "workflows/CI.*badge.svg" trufflebox-ui/README.md; then
+              # Add badge at the top
+              sed -i '1i![Build Status](https://github.com/${{ github.repository }}/workflows/CI%20Build%20and%20Test/badge.svg) ![Build](https://img.shields.io/badge/build-${{ steps.workflow-details.outputs.trufflebox-status }}-${{ steps.badge-colors.outputs.trufflebox-color }})\n' trufflebox-ui/README.md
+            else
+              # Update existing badge
+              sed -i 's|!\[Build\](https://img.shields.io/badge/build-[^)]*)|![Build](https://img.shields.io/badge/build-${{ steps.workflow-details.outputs.trufflebox-status }}-${{ steps.badge-colors.outputs.trufflebox-color }})|g' trufflebox-ui/README.md
+            fi
+          fi
+          
+          # Update online-feature-store README
+          if [ -f "online-feature-store/README.md" ]; then
+            # Check if badge already exists
+            if ! grep -q "workflows/CI.*badge.svg" online-feature-store/README.md; then
+              # Add badge at the top
+              sed -i '1i![Build Status](https://github.com/${{ github.repository }}/workflows/CI%20Build%20and%20Test/badge.svg) ![Build](https://img.shields.io/badge/build-${{ steps.workflow-details.outputs.ofs-status }}-${{ steps.badge-colors.outputs.ofs-color }})\n' online-feature-store/README.md
+            else
+              # Update existing badge
+              sed -i 's|!\[Build\](https://img.shields.io/badge/build-[^)]*)|![Build](https://img.shields.io/badge/build-${{ steps.workflow-details.outputs.ofs-status }}-${{ steps.badge-colors.outputs.ofs-color }})|g' online-feature-store/README.md
+            fi
+          fi
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md horizon/README.md trufflebox-ui/README.md online-feature-store/README.md
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update build status badges [skip ci]"
+            git push origin HEAD:${{ github.event.workflow_run.head_branch }} 

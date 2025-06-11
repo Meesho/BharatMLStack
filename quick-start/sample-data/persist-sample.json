@@ -1,0 +1,34 @@
+{
+  "entity_label": "user",
+  "keys_schema": ["user_id"],
+  "feature_groups": [
+    {
+      "label": "user_features",
+      "feature_labels": ["age", "location", "subscription_type"]
+    }
+  ],
+  "data": [
+    {
+      "key_values": ["user_123"],
+      "feature_values": [
+        {
+          "values": {
+            "int32_values": [28],
+            "string_values": ["NYC", "premium"]
+          }
+        }
+      ]
+    },
+    {
+      "key_values": ["user_456"],
+      "feature_values": [
+        {
+          "values": {
+            "int32_values": [35],
+            "string_values": ["SF", "basic"]
+          }
+        }
+      ]
+    }
+  ]
+}

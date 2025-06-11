@@ -1,0 +1,18 @@
+{
+  "entity_label": "user",
+  "feature_groups": [
+    {
+      "label": "user_features",
+      "feature_labels": ["age", "location", "subscription_type"]
+    }
+  ],
+  "keys_schema": ["user_id"],
+  "keys": [
+    {
+      "cols": ["user_123"]
+    },
+    {
+      "cols": ["user_456"]
+    }
+  ]
+}

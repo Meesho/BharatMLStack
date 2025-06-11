@@ -102,4 +102,4 @@ We believe in transparent decision-making and open discussion. We document our p
 
 ## Join Our Community
 
-We invite all contributors, users, and interested parties to join our [Discord community](https://discord.gg/474wHtfm), where we can collaborate, learn from each other, and build BharatMLStack together within the spirit of this Code of Conduct.
+We invite all contributors, users, and interested parties to join our [Discord community](https://discord.gg/XkT7XsV2AU), where we can collaborate, learn from each other, and build BharatMLStack together within the spirit of this Code of Conduct.
