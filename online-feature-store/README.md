@@ -7,7 +7,7 @@
 
 ![Static Badge](https://img.shields.io/badge/oss_lifecycle-active-green) 
 ![build status](https://github.com/Meesho/BharatMLStack/actions/workflows/online-feature-store.yml/badge.svg)
-[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/474wHtfm)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/XkT7XsV2AU)
 [![Roadmap](https://img.shields.io/badge/Project-Roadmap-blue?style=flat&logo=github)](./roadmap/roadmap_2025_2026.md)
 
 Online-feature-store is a high-performance, scalable, and production-grade feature store built for modern machine learning systems. It supports both **real-time** and **batch** workflows, with a strong emphasis on **developer experience**, **system observability**, and **low-latency feature retrieval**.
@@ -117,7 +117,7 @@ For more detailed information, check out:
 Contributions are welcome! Please check our [Contribution Guide](docs/CONTRIBUTION.md) for details on how to get started.
 
 We encourage you to:
-- Join our [Discord community](https://discord.gg/474wHtfm) to discuss features, ideas, and questions
+- Join our [Discord community](https://discord.gg/XkT7XsV2AU) to discuss features, ideas, and questions
 - Check existing issues before opening a new one
 - Follow our coding guidelines and pull request process
 - Participate in code reviews and discussions
@@ -126,7 +126,7 @@ We encourage you to:
 
 There are several ways to get help with Online-feature-store:
 
-- Join the [Online-feature-store Discord community](https://discord.gg/474wHtfm) for questions and discussions
+- Join the [Online-feature-store Discord community](https://discord.gg/XkT7XsV2AU) for questions and discussions
 - Open an issue in the repository for bug reports or feature requests
 - Check the documentation for guides and examples
 - Reach out to the Online-feature-store core team
