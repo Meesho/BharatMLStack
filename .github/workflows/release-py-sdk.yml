@@ -37,14 +37,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install build twine
-
       - name: Set version without v prefix
         id: version
         run: |
           VERSION="${{ inputs.version }}"
           VERSION_NO_V="${VERSION#v}"
           echo "version_no_v=$VERSION_NO_V" >> $GITHUB_OUTPUT
-
       - name: Verify VERSION files
         run: |
           echo "📋 Current VERSION file contents:"
