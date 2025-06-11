@@ -71,7 +71,9 @@ const FeatureAddition = () => {
       "default-values": "",
       "source-base-path": "",
       "source-data-column": "",
-      "storage-provider": ""
+      "storage-provider": "",
+      "string-length": "0",
+      "vector-length": "0"
     }],
   });
 
@@ -160,6 +162,13 @@ const FeatureAddition = () => {
   };
 
   const addFeatureRow = () => {
+    const selectedFeatureGroup = featureGroups?.find(
+      group => group?.label === FeatureAdditionData["feature-group-label"]
+    );
+    const dataType = selectedFeatureGroup?.["data-type"];
+    const showStringLength = shouldShowField(dataType, 'string');
+    const showVectorLength = shouldShowField(dataType, 'vector');
+    
     setFeatureAdditionData((prevData) => ({
       ...prevData,
       features: [...prevData.features, {
@@ -168,8 +177,8 @@ const FeatureAddition = () => {
         "source-base-path": "",
         "source-data-column": "",
         "storage-provider": "",
-        "string-length": "",
-        "vector-length": ""
+        "string-length": showStringLength ? "" : "0",
+        "vector-length": showVectorLength ? "" : "0"
       }],
     }));
   };
@@ -208,7 +217,9 @@ const FeatureAddition = () => {
         "default-values": "",
         "source-base-path": "",
         "source-data-column": "",
-        "storage-provider": ""
+        "storage-provider": "",
+        "string-length": "0",
+        "vector-length": "0"
       }],
     });
     setOpen(true);
@@ -251,7 +262,8 @@ const FeatureAddition = () => {
       setShowErrorModal(true);
       return;
     }
-    // Validate required fields - String Length and Vector Length based on data type
+    
+    // Process and validate length fields based on data type
     const selectedFeatureGroup = featureGroups.find(
       group => group?.label === FeatureAdditionData["feature-group-label"]
     );
@@ -259,27 +271,33 @@ const FeatureAddition = () => {
     const showStringLength = shouldShowField(dataType, 'string');
     const showVectorLength = shouldShowField(dataType, 'vector');
 
-    const hasEmptyLengthFields = FeatureAdditionData.features.some(feature => {
-      if (showStringLength && (!feature["string-length"] || feature["string-length"].trim() === "")) {
-        return true;
-      }
-      if (showVectorLength && (!feature["vector-length"] || feature["vector-length"].trim() === "")) {
-        return true;
-      }
+    const updatedFeatures = FeatureAdditionData.features.map(feature => ({
+      ...feature,
+      "string-length": showStringLength ? feature["string-length"] : "0",
+      "vector-length": showVectorLength ? feature["vector-length"] : "0"
+    }));
+
+    // Validate that shown length fields are > 0
+    const hasInvalidLengthFields = updatedFeatures.some(feature => {
+      if (showStringLength && (!feature["string-length"] || parseFloat(feature["string-length"]) <= 0)) return true;
+      if (showVectorLength && (!feature["vector-length"] || parseFloat(feature["vector-length"]) <= 0)) return true;
       return false;
     });
 
-    if (hasEmptyLengthFields) {
+    if (hasInvalidLengthFields) {
       const requiredFields = [];
       if (showStringLength) requiredFields.push("String Length");
       if (showVectorLength) requiredFields.push("Vector Length");
-      const message = requiredFields.length > 0
-        ? `${requiredFields.join(" and ")} ${requiredFields.length > 1 ? 'are' : 'is'} required for all features`
-        : "Required fields are missing";
+      const message = `${requiredFields.join(" and ")} must be greater than 0 for all features`;
       setModalMessage(message);
       setShowErrorModal(true);
       return;
     }
+
+    const finalFeatureAdditionData = {
+      ...FeatureAdditionData,
+      features: updatedFeatures
+    };
 
     try {
       const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/add-features`, {
@@ -288,7 +306,7 @@ const FeatureAddition = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${user.token}`,
         },
-        body: JSON.stringify(FeatureAdditionData),
+        body: JSON.stringify(finalFeatureAdditionData),
       });
 
       if (response.ok) {
