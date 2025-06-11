@@ -68,7 +68,7 @@ get_version_from_toml() {
 
 
 
-# Function to get pre-release version with commit SHA
+# Function to get pre-release version with commit SHA (Docker/Go format)
 get_prerelease_version_with_sha() {
     local base_version=$1
     local release_type=$2
@@ -97,6 +97,39 @@ get_prerelease_version_with_sha() {
     esac
     
     echo "${base_version}-${prerelease_suffix}-${commit_sha}"
+}
+
+# Function to get Python PEP 440 pre-release version
+get_python_prerelease_version() {
+    local base_version=$1
+    local release_type=$2
+    
+    # Remove 'v' prefix if present
+    base_version=${base_version#v}
+    
+    # Remove any existing pre-release suffixes to avoid double-suffixing
+    base_version=$(echo "$base_version" | sed -E 's/-[a-z]+-[a-f0-9]+$//')
+    base_version=$(echo "$base_version" | sed -E 's/-[a-z]+\.[0-9]+$//')
+    base_version=$(echo "$base_version" | sed -E 's/[a-z][0-9]+\+[a-f0-9]+$//')
+    
+    # Get last commit SHA (6 characters)
+    local commit_sha=$(git rev-parse --short=6 HEAD)
+    
+    local prerelease_suffix=""
+    case "$release_type" in
+        "beta")
+            prerelease_suffix="b0"
+            ;;
+        "alpha")
+            prerelease_suffix="a0"
+            ;;
+        *)
+            print_error "Invalid pre-release type: $release_type"
+            return 1
+            ;;
+    esac
+    
+    echo "${base_version}${prerelease_suffix}+${commit_sha}"
 }
 
 
@@ -207,8 +240,8 @@ select_release_type() {
     echo "" >&2
     print_header "Select Release Type" >&2
     
-    echo "1) Alpha Release (x.y.z-alpha-<commit-sha>)" >&2
-    echo "2) Beta Release (x.y.z-beta-<commit-sha>)" >&2
+    echo "1) Alpha Release (Python: x.y.za0+<commit-sha>, Docker/Go: x.y.z-alpha-<commit-sha>)" >&2
+    echo "2) Beta Release (Python: x.y.zb0+<commit-sha>, Docker/Go: x.y.z-beta-<commit-sha>)" >&2
     echo "3) Standard Release (x.y.z)" >&2
     echo "" >&2
     
@@ -302,18 +335,18 @@ process_module_release() {
             print_info "Current version for $py_module: $current_version"
             
             if [[ "$release_type" == "beta" || "$release_type" == "alpha" ]]; then
-                new_version=$(get_prerelease_version_with_sha "$current_version" "$release_type")
-                print_info "Calculated release version for $py_module: v$new_version"
+                new_version=$(get_python_prerelease_version "$current_version" "$release_type")
+                print_info "Calculated release version for $py_module: $new_version"
                 print_info "VERSION file remains unchanged: $current_version"
             else
                 # Standard release - use existing version as-is
                 new_version=${current_version#v}
-                print_info "Using existing version for standard release: v$new_version"
+                print_info "Using existing version for standard release: $new_version"
             fi
             
             # Use the first module's version for the workflow trigger
             if [[ -z "$first_version" ]]; then
-                first_version="v$new_version"
+                first_version="$new_version"
             fi
         done
         final_version="$first_version"
@@ -404,7 +437,8 @@ main() {
     if [[ "$release_type" == "std-release" ]]; then
         print_info "Version Strategy: Use existing versions from files as-is"
     else
-        print_info "Version Strategy: Calculate ${release_type}-<commit-sha> suffix, keep VERSION files unchanged"
+        print_info "Version Strategy: Python uses PEP 440 format (x.y.z${release_type:0:1}0+<sha>), Docker/Go uses -${release_type}-<sha>"
+        print_info "Note: VERSION files remain unchanged for alpha/beta releases"
     fi
     for module in "${selected_modules[@]}"; do
         print_info "Module: $module"
