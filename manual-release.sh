@@ -227,8 +227,8 @@ validate_branch_for_release() {
 # Function to select release type based on current branch
 select_release_type() {
     local current_branch=$1
-    echo ""
-    print_header "Select Release Type"
+    echo "" >&2
+    print_header "Select Release Type" >&2
     
     # Show available options based on current branch
     local available_options=()
@@ -257,55 +257,57 @@ select_release_type() {
     fi
     
     if [[ ${#available_options[@]} -eq 0 ]]; then
-        print_error "No valid release types available for branch '$current_branch'"
-        print_info "Valid branches for releases:"
-        print_info "  • develop: Beta releases"
-        print_info "  • main/master/release/*: Standard releases"
-        print_info "  • feat/*/fix/*/feat-nbc/*: Alpha releases"
+        print_error "No valid release types available for branch '$current_branch'" >&2
+        print_info "Valid branches for releases:" >&2
+        print_info "  • develop: Beta releases" >&2
+        print_info "  • main/master/release/*: Standard releases" >&2
+        print_info "  • feat/*/fix/*/feat-nbc/*: Alpha releases" >&2
         exit 1
     fi
     
     # Show available options
     for option in "${available_options[@]}"; do
-        echo "$option"
+        echo "$option" >&2
     done
-    echo ""
+    echo "" >&2
     
     # If only one option, auto-select it
     if [[ ${#available_options[@]} -eq 1 ]]; then
-        print_info "Only one release type available - auto-selecting option 1"
+        print_info "Only one release type available - auto-selecting option 1" >&2
         echo "${option_map[1]}"
         return
     fi
     
     while true; do
-        read -p "Enter your choice (1-${#available_options[@]}): " choice
+        echo -n "Enter your choice (1-${#available_options[@]}): " >&2
+        read choice
         if [[ -n "${option_map[$choice]}" ]]; then
             echo "${option_map[$choice]}"
             return
         else
-            print_error "Invalid choice. Please enter a number between 1 and ${#available_options[@]}."
+            print_error "Invalid choice. Please enter a number between 1 and ${#available_options[@]}." >&2
         fi
     done
 }
 
 # Function to select directories
 select_directories() {
-    echo ""
-    print_header "Select Modules to Release"
+    echo "" >&2
+    print_header "Select Modules to Release" >&2
     
     local selected_modules=()
     local i=1
     
-    echo "Available modules:"
+    echo "Available modules:" >&2
     for module in "${AVAILABLE_MODULES[@]}"; do
-        echo "$i) $module"
+        echo "$i) $module" >&2
         i=$((i + 1))
     done
-    echo ""
+    echo "" >&2
     
-    print_info "Enter module numbers separated by spaces (e.g., '1 3 5') or 'all' for all modules:"
-    read -p "Selection: " selection
+    print_info "Enter module numbers separated by spaces (e.g., '1 3 5') or 'all' for all modules:" >&2
+    echo -n "Selection: " >&2
+    read selection
     
     if [[ "$selection" == "all" ]]; then
         selected_modules=("${AVAILABLE_MODULES[@]}")
@@ -314,13 +316,13 @@ select_directories() {
             if [[ "$num" =~ ^[0-9]+$ ]] && [[ "$num" -ge 1 ]] && [[ "$num" -le ${#AVAILABLE_MODULES[@]} ]]; then
                 selected_modules+=("${AVAILABLE_MODULES[$((num-1))]}")
             else
-                print_warning "Invalid selection: $num"
+                print_warning "Invalid selection: $num" >&2
             fi
         done
     fi
     
     if [[ ${#selected_modules[@]} -eq 0 ]]; then
-        print_error "No valid modules selected"
+        print_error "No valid modules selected" >&2
         exit 1
     fi
     
@@ -418,7 +420,8 @@ main() {
     # Check if branch is clean
     if [[ -n $(git status --porcelain) ]]; then
         print_warning "Working directory is not clean. Consider committing changes before release."
-        read -p "Continue anyway? (y/N): " -n 1 -r
+        echo -n "Continue anyway? (y/N): "
+        read -n 1 -r REPLY
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             print_info "Release cancelled"
@@ -462,7 +465,8 @@ main() {
     done
     
     echo ""
-    read -p "Proceed with release? (y/N): " -n 1 -r
+    echo -n "Proceed with release? (y/N): "
+    read -n 1 -r REPLY
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         print_info "Release cancelled"
