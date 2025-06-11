@@ -58,4 +58,4 @@ def generate_renamed_column(table_name: str, source_type: str, feature_col: str)
     return rename_feature_col 
 
 def test_function():
-    print("test_function 10")
+    print("test_function 12")
