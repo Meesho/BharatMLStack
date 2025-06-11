@@ -1,12 +1,6 @@
 name: Smart Release Management
 
 on:
-  push:
-    branches: 
-      - master
-      - main
-      - develop
-      - 'release-*'
   pull_request:
     types: [closed]
     branches:
@@ -23,7 +17,7 @@ env:
 jobs:
   detect-release-info:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
     outputs:
       should-release: ${{ steps.check-branch.outputs.should-release }}
       version-increment: ${{ steps.check-branch.outputs.version-increment }}
@@ -70,16 +64,8 @@ jobs:
           TARGET_BRANCH=""
           SOURCE_BRANCH=""
           
-          if [ "${{ github.event_name }}" == "push" ]; then
-            # Direct push to branch
-            TARGET_BRANCH="${{ github.ref_name }}"
-            echo "Direct push to $TARGET_BRANCH"
-            
-            if [ "$TARGET_BRANCH" == "develop" ]; then
-              IS_BETA="true"
-              echo "Develop branch - will create beta release"
-            fi
-          elif [ "${{ github.event_name }}" == "pull_request" ] && [ "${{ github.event.pull_request.merged }}" == "true" ]; then
+          # Only process merged pull requests - all releases require PR workflow
+          if [ "${{ github.event_name }}" == "pull_request" ] && [ "${{ github.event.pull_request.merged }}" == "true" ]; then
             # PR was merged
             TARGET_BRANCH="${{ github.event.pull_request.base.ref }}"
             SOURCE_BRANCH_FULL="${{ github.event.pull_request.head.ref }}"
@@ -111,13 +97,16 @@ jobs:
                   ;;
               esac
               
-              if [ "$TARGET_BRANCH" == "develop" ]; then
+              # Beta release only if we have a meaningful change AND targeting develop
+              if [ "$SHOULD_RELEASE" == "true" ] && [ "$TARGET_BRANCH" == "develop" ]; then
                 IS_BETA="true"
-                echo "Target is develop branch - will create beta release"
+                echo "Target is develop branch with meaningful changes - will create beta release"
               fi
             else
               echo "Target branch '$TARGET_BRANCH' doesn't support releases"
             fi
+          else
+            echo "No release triggered - only merged PRs with proper branch prefixes trigger releases"
           fi
           
           echo "should-release=$SHOULD_RELEASE" >> $GITHUB_OUTPUT
@@ -135,7 +124,7 @@ jobs:
 
   update-versions:
     needs: detect-release-info
-    if: needs.detect-release-info.outputs.should-release == 'true' || needs.detect-release-info.outputs.is-beta == 'true'
+    if: needs.detect-release-info.outputs.should-release == 'true'
     runs-on: ubuntu-latest
     outputs:
       updated-versions: ${{ steps.bump-versions.outputs.updated-versions }}
@@ -231,7 +220,7 @@ jobs:
 
   release-py-sdk:
     needs: [detect-release-info, update-versions]
-    if: (needs.detect-release-info.outputs.should-release == 'true' || needs.detect-release-info.outputs.is-beta == 'true') && needs.detect-release-info.outputs.py-sdk-changed == 'true'
+    if: needs.detect-release-info.outputs.should-release == 'true' && needs.detect-release-info.outputs.py-sdk-changed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -385,7 +374,7 @@ jobs:
 
   build-and-push-images:
     needs: [detect-release-info, update-versions]
-    if: needs.detect-release-info.outputs.should-release == 'true' || needs.detect-release-info.outputs.is-beta == 'true'
+    if: needs.detect-release-info.outputs.should-release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -508,7 +497,7 @@ jobs:
 
   release-go-sdk:
     needs: [detect-release-info, update-versions]
-    if: (needs.detect-release-info.outputs.should-release == 'true' || needs.detect-release-info.outputs.is-beta == 'true') && needs.detect-release-info.outputs.go-sdk-changed == 'true'
+    if: needs.detect-release-info.outputs.should-release == 'true' && needs.detect-release-info.outputs.go-sdk-changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -551,7 +540,7 @@ jobs:
 
   generate-release-summary:
     needs: [detect-release-info, update-versions, release-py-sdk, build-and-push-images, release-go-sdk]
-    if: always() && (needs.detect-release-info.outputs.should-release == 'true' || needs.detect-release-info.outputs.is-beta == 'true')
+    if: always() && needs.detect-release-info.outputs.should-release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Generate comprehensive summary
