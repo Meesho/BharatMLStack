@@ -37,6 +37,7 @@ function Header({ onMenuItemClick }) {
             { key: 'FeatureDiscovery', label: 'Feature', path: '/feature-discovery' },
             { key: 'StoreDiscovery', label: 'Store', path: '/store-discovery' },
             { key: 'JobDiscovery', label: 'Jobs', path: '/job-discovery' },
+            { key: 'ClientDiscovery', label: 'Clients', path: '/client-discovery' },
           ],
           roles: ['user', 'admin'], // Accessible by both roles
         },
@@ -46,7 +47,7 @@ function Header({ onMenuItemClick }) {
           label: 'Registry',
           subItems: [
             { key: 'StoreRegistry', label: 'Store', path: '/feature-registry/store' },
-            { key: 'JobRegistry', label: 'Jobs', path: '/feature-registry/job' },
+            { key: 'JobRegistry', label: 'Jobs / Clients', path: '/feature-registry/job' },
             { key: 'EntityRegistry', label: 'Entity', path: '/feature-registry/entity' },
             { key: 'FeatureGroupRegistry', label: 'Feature Group', path: '/feature-registry/feature-group' },
             { key: 'FeatureAddition', label: 'Feature', path: '/feature-registry/feature' },
@@ -59,7 +60,7 @@ function Header({ onMenuItemClick }) {
           label: 'Approval',
           subItems: [
             { key: 'Stores', label: 'Stores', path: '/feature-approval/store' },
-            { key: 'Jobs', label: 'Jobs', path: '/feature-approval/job' },
+            { key: 'Jobs', label: 'Jobs / Clients', path: '/feature-approval/job' },
             { key: 'Entities', label: 'Entities', path: '/feature-approval/entity' },
             { key: 'FeatureGroups', label: 'Feature Groups', path: '/feature-approval/feature-group' },
             { key: 'Features', label: 'Features', path: '/feature-approval/features' },
@@ -68,6 +69,12 @@ function Header({ onMenuItemClick }) {
         },
       ]
     },
+    {
+      key: 'UserManagement',
+      label: 'User Management',
+      path: '/user-management',
+      roles: ['admin'],
+    }
   ];
 
   return (
@@ -108,54 +115,82 @@ function Header({ onMenuItemClick }) {
           </Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body>
-          <Accordion defaultActiveKey="0" flush>
-            {menuItems.map((parentItem) =>
+          <div>
+            {menuItems?.map((parentItem) =>
               // Check if the current user has access to the parent item
               parentItem.roles.includes(user?.role) ? (
-                <Accordion.Item key={parentItem.key} eventKey={parentItem.key}>
-                  <Accordion.Header>
-                    <StorageIcon style={{ marginRight: '10px', color: '#000' }} />
-                    {parentItem.label}
-                  </Accordion.Header>
-                  <Accordion.Body>
-                    <Accordion flush className="nested-accordion">
-                      {parentItem.children.map((childItem) =>
-                        // Check if user has access to this child item
-                        childItem.roles.includes(user?.role) ? (
-                          <Accordion.Item key={childItem.key} eventKey={`${parentItem.key}-${childItem.key}`}>
-                            <Accordion.Header>
-                              {childItem.label}
-                            </Accordion.Header>
-                            <Accordion.Body>
-                              {childItem.subItems && (
-                                <ListGroup variant="flush">
-                                  {childItem.subItems.map((subItem) => (
-                                    <ListGroup.Item
-                                      key={subItem.key}
-                                      as={Link}
-                                      to={subItem.path}
-                                      onClick={() => {
-                                        onMenuItemClick && onMenuItemClick(subItem.key);
-                                        handleClose();
-                                      }}
-                                      className="offcanvas-link fw-bold fs-6"
-                                      style={{ paddingLeft: '20px' }}
-                                    >
-                                      {subItem.label}
-                                    </ListGroup.Item>
-                                  ))}
-                                </ListGroup>
-                              )}
-                            </Accordion.Body>
-                          </Accordion.Item>
-                        ) : null
-                      )}
-                    </Accordion>
-                  </Accordion.Body>
-                </Accordion.Item>
+                // Check if it's a direct menu item (has path) or nested item (has children)
+                parentItem.path ? (
+                  // Direct menu item - render as a simple link
+                  <ListGroup key={parentItem.key} variant="flush">
+                    <ListGroup.Item
+                      as={Link}
+                      to={parentItem.path}
+                      onClick={() => {
+                        onMenuItemClick && onMenuItemClick(parentItem.key);
+                        handleClose();
+                      }}
+                      className="offcanvas-link fs-6"
+                      style={{ 
+                        paddingLeft: '20px', 
+                        paddingTop: '12px', 
+                        paddingBottom: '12px',
+                        borderBottom: '1px solid #e9ecef'
+                      }}
+                    >
+                      <StorageIcon style={{ marginRight: '10px', color: '#000' }} />
+                      {parentItem.label}
+                    </ListGroup.Item>
+                  </ListGroup>
+                ) : (
+                  // Nested menu item - render with accordion
+                  <Accordion key={parentItem.key} defaultActiveKey="0" flush>
+                    <Accordion.Item eventKey={parentItem.key}>
+                      <Accordion.Header>
+                        <StorageIcon style={{ marginRight: '10px', color: '#000' }} />
+                        {parentItem.label}
+                      </Accordion.Header>
+                      <Accordion.Body>
+                        <Accordion flush className="nested-accordion">
+                          {parentItem.children?.map((childItem) =>
+                            // Check if user has access to this child item
+                            childItem.roles.includes(user?.role) ? (
+                              <Accordion.Item key={childItem.key} eventKey={`${parentItem.key}-${childItem.key}`}>
+                                <Accordion.Header>
+                                  {childItem.label}
+                                </Accordion.Header>
+                                <Accordion.Body>
+                                  {childItem.subItems && (
+                                    <ListGroup variant="flush">
+                                      {childItem.subItems?.map((subItem) => (
+                                        <ListGroup.Item
+                                          key={subItem.key}
+                                          as={Link}
+                                          to={subItem.path}
+                                          onClick={() => {
+                                            onMenuItemClick && onMenuItemClick(subItem.key);
+                                            handleClose();
+                                          }}
+                                          className="offcanvas-link fw-bold fs-6"
+                                          style={{ paddingLeft: '20px' }}
+                                        >
+                                          {subItem.label}
+                                        </ListGroup.Item>
+                                      ))}
+                                    </ListGroup>
+                                  )}
+                                </Accordion.Body>
+                              </Accordion.Item>
+                            ) : null
+                          )}
+                        </Accordion>
+                      </Accordion.Body>
+                    </Accordion.Item>
+                  </Accordion>
+                )
               ) : null
             )}
-          </Accordion>
+          </div>
         </Offcanvas.Body>
       </Offcanvas>
     </div>
