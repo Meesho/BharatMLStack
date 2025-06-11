@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bharatml_commons"
-version = "0.1.6"
+version = "0.1.7"
 authors = [
   { name="Jaya Kommuru", email="jaya.kommuru@meesho.com"},
   { name="BharatML Stack Team", email="bharatml@meesho.com"}
@@ -15,7 +15,7 @@ license = { text = "BharatMLStack Business Source License 1.1" }
 readme = "README.md"
 requires-python = ">=3.7"
 dependencies = [
-  "protobuf>=4.24.1",
+  "protobuf>=4.24.1,<6.0.0",
   "requests>=2.25.0"
 ]
 
