@@ -160,11 +160,12 @@ trigger_workflow() {
         print_info "Running: gh workflow run $workflow_file -f version=\"$version\" -f is_beta=\"$is_beta\" -f is_alpha=\"$is_alpha\""
         gh workflow run "$workflow_file" -f version="$version" -f is_beta="$is_beta" -f is_alpha="$is_alpha"
         print_success "Release workflow $workflow_file triggered successfully"
-        print_info "Monitor the workflow at: https://github.com/$(gh repo view --json owner,name -q '.owner.login + \"/\" + .name')/actions"
+        local repo_path=$(gh repo view --json owner,name -q '.owner.login + "/" + .name' 2>/dev/null || echo "your-repo")
+        print_info "Monitor the workflow at: https://github.com/${repo_path}/actions"
     else
         print_warning "GitHub CLI not found. Please install 'gh' or trigger workflow manually:"
         print_info "gh workflow run $workflow_file -f version=\"$version\" -f is_beta=\"$is_beta\" -f is_alpha=\"$is_alpha\""
-        print_info "Or go to Actions tab in GitHub and manually trigger: $workflow_file"
+        print_info "Or go to GitHub Actions tab and manually trigger: $workflow_file"
     fi
 }
 
@@ -302,8 +303,8 @@ process_module_release() {
             
             if [[ "$release_type" == "beta" || "$release_type" == "alpha" ]]; then
                 new_version=$(get_prerelease_version_with_sha "$current_version" "$release_type")
-                print_info "New version for $py_module: v$new_version"
-                update_version_file "$version_file" "$new_version"
+                print_info "Calculated release version for $py_module: v$new_version"
+                print_info "VERSION file remains unchanged: $current_version"
             else
                 # Standard release - use existing version as-is
                 new_version=${current_version#v}
@@ -331,8 +332,8 @@ process_module_release() {
         
         if [[ "$release_type" == "beta" || "$release_type" == "alpha" ]]; then
             new_version=$(get_prerelease_version_with_sha "$current_version" "$release_type")
-            print_info "New version for $module: v$new_version"
-            update_version_file "$version_file" "$new_version"
+            print_info "Calculated release version for $module: v$new_version"
+            print_info "VERSION file remains unchanged: $current_version"
         else
             # Standard release - use existing version as-is
             new_version=${current_version#v}
@@ -384,7 +385,7 @@ main() {
     fi
     
     # Note: For standard releases, we use the existing version as-is from VERSION files
-    # Alpha/beta releases get -<type>-<commit-sha> suffix
+    # Alpha/beta releases calculate -<type>-<commit-sha> suffix but don't update VERSION files
     
     # Select directories
     select_directories
@@ -403,7 +404,7 @@ main() {
     if [[ "$release_type" == "std-release" ]]; then
         print_info "Version Strategy: Use existing versions from files as-is"
     else
-        print_info "Version Strategy: Use ${release_type}-<commit-sha> suffix"
+        print_info "Version Strategy: Calculate ${release_type}-<commit-sha> suffix, keep VERSION files unchanged"
     fi
     for module in "${selected_modules[@]}"; do
         print_info "Module: $module"
@@ -428,8 +429,13 @@ main() {
     print_success "🎉 Release process completed successfully!"
     print_info "Don't forget to:"
     print_info "1. Review the triggered workflows in GitHub Actions"
-    print_info "2. Commit the version file changes if not already committed"
-    print_info "3. Create PR or push changes if needed"
+    if [[ "$release_type" == "std-release" ]]; then
+        print_info "2. Commit any version file changes if you updated them manually"
+        print_info "3. Create PR or push changes if needed"
+    else
+        print_info "2. VERSION files remain unchanged for alpha/beta releases"
+        print_info "3. Release artifacts will use calculated ${release_type} versions with commit SHA"
+    fi
 }
 
 # Run main function
