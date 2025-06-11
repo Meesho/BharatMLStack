@@ -13,8 +13,9 @@ The automated release system has been replaced with a manual script-based approa
 ✅ **Module Selection**: Pick which modules to release  
 ✅ **Version Management**: Automatic version handling with proper incrementing  
 ✅ **GitHub Workflow Integration**: Automatically triggers appropriate workflows  
-✅ **Smart Pre-release Versioning**: Handles `x.y.z-alpha.1`, `x.y.z-beta.1`, etc.  
+✅ **Smart Pre-release Versioning**: Handles `x.y.z-alpha-<commit-sha>`, `x.y.z-beta-<commit-sha>`, etc.  
 ✅ **Branch Validation**: Enforces release type restrictions based on branch naming conventions  
+✅ **Clean VERSION Files**: Alpha/beta releases don't modify VERSION files, only calculate release versions
 
 ## Prerequisites
 
@@ -42,12 +43,12 @@ The script will guide you through an interactive process:
 
 1. **Branch Check**: Shows current branch and checks for uncommitted changes
 2. **Release Type**: Choose from available release types based on your current branch
-   - **Alpha**: Available from `feat/`, `fix/`, `feat-nbc/` branches - Auto-increments `.alpha.N`
-   - **Beta**: Available from `develop` branch - Auto-increments `.beta.N`
+   - **Alpha**: Available from `feat/`, `fix/`, `feat-nbc/` branches - Calculates `.alpha-<commit-sha>` version for release
+   - **Beta**: Available from `develop` branch - Calculates `.beta-<commit-sha>` version for release
    - **Standard**: Available from `main`, `master`, `release/*` branches - Uses existing versions as-is
 3. **Module Selection**: Select which modules to release
 4. **Confirmation**: Review and confirm the release plan
-5. **Execution**: Updates versions (for alpha/beta only) and triggers workflows
+5. **Execution**: Triggers workflows with calculated versions (VERSION files remain unchanged for alpha/beta)
 
 ### Available Modules
 
@@ -84,18 +85,16 @@ The script will guide you through an interactive process:
 - **Manual Process**: Update version in files manually before running release script
 - **Publishing**: PyPI (production), Docker with `latest` tag, full GitHub releases
 
-#### Beta Release (`x.y.z-beta.N`) - **Testing Ready**
+#### Beta Release (`x.y.z-beta-<commit-sha>`) - **Testing Ready**
 - **Allowed Branches**: `develop` only
-- **First Beta**: `v0.1.20` → `v0.1.20-beta.1`
-- **Next Beta**: `v0.1.20-beta.1` → `v0.1.20-beta.2`
-- **Sequential**: Automatically finds next available beta number
+- **Version Format**: `v0.1.20` → `v0.1.20-beta-abc123` (based on current commit)
+- **VERSION Files**: Remain unchanged at base version (e.g., `v0.1.20`)
 - **Publishing**: TestPyPI, Docker without `latest` tag, GitHub pre-releases
 
-#### Alpha Release (`x.y.z-alpha.N`) - **Development/Experimental**
+#### Alpha Release (`x.y.z-alpha-<commit-sha>`) - **Development/Experimental**
 - **Allowed Branches**: `feat/*`, `fix/*`, `feat-nbc/*`
-- **First Alpha**: `v0.1.20` → `v0.1.20-alpha.1`
-- **Next Alpha**: `v0.1.20-alpha.1` → `v0.1.20-alpha.2`
-- **Sequential**: Automatically finds next available alpha number
+- **Version Format**: `v0.1.20` → `v0.1.20-alpha-abc123` (based on current commit)
+- **VERSION Files**: Remain unchanged at base version (e.g., `v0.1.20`)
 - **Publishing**: TestPyPI, Docker without `latest` tag, GitHub pre-releases
 
 ## Module-Specific Behavior
@@ -103,7 +102,7 @@ The script will guide you through an interactive process:
 ### Python SDK (py-sdk)
 - **Version Source**: Reads from `VERSION` files (pyproject.toml configured to read from VERSION files via hatch)
 - **Standard Releases**: Uses existing version in VERSION file as-is
-- **Alpha/Beta Releases**: Auto-increments with `.alpha.N` or `.beta.N` suffix and updates VERSION file
+- **Alpha/Beta Releases**: Calculates `.alpha-<commit-sha>` or `.beta-<commit-sha>` suffix for release (VERSION files remain unchanged)
 - **All Packages Updated**: bharatml_commons, grpc_feature_client, spark_feature_push_client
 - **Production releases**: Published to PyPI
 - **Alpha/Beta releases**: Published to TestPyPI
@@ -112,7 +111,7 @@ The script will guide you through an interactive process:
 ### Docker-based Modules (horizon, trufflebox-ui, online-feature-store)
 - **Version Source**: Reads from `VERSION` files
 - **Standard Releases**: Uses existing version in VERSION file as-is
-- **Alpha/Beta Releases**: Auto-increments with `.alpha.N` or `.beta.N` suffix and updates VERSION file
+- **Alpha/Beta Releases**: Calculates `.alpha-<commit-sha>` or `.beta-<commit-sha>` suffix for release (VERSION files remain unchanged)
 - **Container Registry**: Pushes to `ghcr.io` (GitHub Container Registry)
 - **Production releases**: Tagged with version + `latest`
 - **Alpha/Beta releases**: Tagged with version only (no `latest`)
@@ -122,7 +121,7 @@ The script will guide you through an interactive process:
 ### Go SDK (go-sdk)
 - **Version Source**: Reads from `VERSION` file
 - **Standard Releases**: Uses existing version in VERSION file as-is
-- **Alpha/Beta Releases**: Auto-increments with `.alpha.N` or `.beta.N` suffix and updates VERSION file
+- **Alpha/Beta Releases**: Calculates `.alpha-<commit-sha>` or `.beta-<commit-sha>` suffix for release (VERSION files remain unchanged)
 - **Git Tags**: Creates `go-sdk/v{version}` tags
 - **GitHub Releases**: Automatic release notes and installation instructions
 - **Alpha/Beta releases**: Marked as pre-releases
@@ -149,20 +148,20 @@ The script automatically triggers the appropriate release workflow for each modu
 ```bash
 git checkout feat/new-feature
 ./manual-release.sh
-# Available: 1) Alpha Release (x.y.z-alpha.N) - from feat/new-feature branch
+# Available: 1) Alpha Release (x.y.z-alpha-<commit-sha>) - from feat/new-feature branch
 # Select: 1) Alpha Release
 # Select: 2) horizon
-# Result: horizon gets v0.1.20-alpha.1, published to TestPyPI/Docker registry
+# Result: horizon/VERSION stays v0.1.20, release artifacts use v0.1.20-alpha-abc123
 ```
 
 ### Beta Release from Develop
 ```bash
 git checkout develop
 ./manual-release.sh
-# Available: 1) Beta Release (x.y.z-beta.N) - from develop branch
+# Available: 1) Beta Release (x.y.z-beta-<commit-sha>) - from develop branch
 # Select: 1) Beta Release
 # Select: 1 3 5 (horizon, online-feature-store, py-sdk)
-# Result: All selected modules get v0.1.20-beta.1
+# Result: VERSION files stay v0.1.20, release artifacts use v0.1.20-beta-abc123
 ```
 
 ### Standard Release from Main
@@ -185,7 +184,7 @@ git checkout feat/my-feature
 # This will work - alpha release from feature branch
 git checkout feat/my-feature
 ./manual-release.sh
-# Shows: 1) Alpha Release (x.y.z-alpha.N) - from feat/my-feature branch
+# Shows: 1) Alpha Release (x.y.z-alpha-<commit-sha>) - from feat/my-feature branch
 ```
 
 ## Post-Release Steps
@@ -193,13 +192,15 @@ git checkout feat/my-feature
 After running the script:
 
 1. **Monitor Workflows**: Check GitHub Actions for workflow status
-2. **Commit Changes**: The script updates VERSION files - commit these changes:
-   ```bash
-   git add .
-   git commit -m "chore: bump versions for release"
-   git push
-   ```
-3. **Verify Releases**: Check that packages/images are published correctly
+2. **Commit Changes**: 
+   - **Standard Releases**: If you manually updated VERSION files, commit them:
+     ```bash
+     git add .
+     git commit -m "chore: update versions for release"
+     git push
+     ```
+   - **Alpha/Beta Releases**: No VERSION file changes to commit (they remain at base version)
+3. **Verify Releases**: Check that packages/images are published correctly with the calculated versions
 4. **Create Release Notes**: Update CHANGELOG or create GitHub releases as needed
 
 ## Branch-Based Release Strategy
