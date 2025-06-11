@@ -112,8 +112,6 @@ get_python_prerelease_version() {
     base_version=$(echo "$base_version" | sed -E 's/-[a-z]+\.[0-9]+$//')
     base_version=$(echo "$base_version" | sed -E 's/[a-z][0-9]+\+[a-f0-9]+$//')
     
-    # Get last commit SHA (6 characters)
-    local commit_sha=$(git rev-parse --short=6 HEAD)
     
     local prerelease_suffix=""
     case "$release_type" in
@@ -121,7 +119,7 @@ get_python_prerelease_version() {
             prerelease_suffix="b0"
             ;;
         "alpha")
-            prerelease_suffix="a0"
+            prerelease_suffix="a0.dev"
             ;;
         *)
             print_error "Invalid pre-release type: $release_type"
@@ -129,7 +127,7 @@ get_python_prerelease_version() {
             ;;
     esac
     
-    echo "${base_version}${prerelease_suffix}+${commit_sha}"
+    echo "${base_version}${prerelease_suffix}"
 }
 
 
