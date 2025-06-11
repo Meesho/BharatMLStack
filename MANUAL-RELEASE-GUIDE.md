@@ -42,13 +42,12 @@ The script will guide you through an interactive process:
 
 1. **Branch Check**: Shows current branch and checks for uncommitted changes
 2. **Release Type**: Choose from available release types based on your current branch
-   - **Alpha**: Available from `feat/`, `fix/`, `feat-nbc/` branches
-   - **Beta**: Available from `develop` branch
-   - **Standard**: Available from `main`, `master`, `release/*` branches
-3. **Version Increment** (Standard releases only): Choose Major, Minor, or Patch
-4. **Module Selection**: Select which modules to release
-5. **Confirmation**: Review and confirm the release plan
-6. **Execution**: Updates versions and triggers workflows
+   - **Alpha**: Available from `feat/`, `fix/`, `feat-nbc/` branches - Auto-increments `.alpha.N`
+   - **Beta**: Available from `develop` branch - Auto-increments `.beta.N`
+   - **Standard**: Available from `main`, `master`, `release/*` branches - Uses existing versions as-is
+3. **Module Selection**: Select which modules to release
+4. **Confirmation**: Review and confirm the release plan
+5. **Execution**: Updates versions (for alpha/beta only) and triggers workflows
 
 ### Available Modules
 
@@ -60,8 +59,9 @@ The script will guide you through an interactive process:
 
 ## Version Management
 
-### VERSION Files Location
+### Version File Locations
 
+**All Modules** (use VERSION files):
 - `horizon/VERSION`
 - `trufflebox-ui/VERSION`
 - `online-feature-store/VERSION`
@@ -70,17 +70,18 @@ The script will guide you through an interactive process:
 - `py-sdk/grpc_feature_client/VERSION`
 - `py-sdk/spark_feature_push_client/VERSION`
 
+**Note**: Python packages use VERSION files which are automatically read by pyproject.toml via hatch configuration.
+
 ### Version Format
 
-**Current Format**: `v0.1.20`
+**All VERSION files**: `v0.1.20`
 
 ### Release Types & Branch Restrictions
 
 #### Standard Release (`x.y.z`) - **Production Ready**
 - **Allowed Branches**: `main`, `master`, `release/*`
-- **Patch**: `v0.1.20` → `v0.1.21` (bug fixes)
-- **Minor**: `v0.1.20` → `v0.2.0` (new features)  
-- **Major**: `v0.1.20` → `v1.0.0` (breaking changes)
+- **Version Strategy**: Uses existing version from files as-is (no auto-increment)
+- **Manual Process**: Update version in files manually before running release script
 - **Publishing**: PyPI (production), Docker with `latest` tag, full GitHub releases
 
 #### Beta Release (`x.y.z-beta.N`) - **Testing Ready**
@@ -100,32 +101,47 @@ The script will guide you through an interactive process:
 ## Module-Specific Behavior
 
 ### Python SDK (py-sdk)
-- Uses VERSION files (not pyproject.toml version field directly)
-- pyproject.toml configured to read from VERSION file via hatch
-- All three packages (bharatml_commons, grpc_feature_client, spark_feature_push_client) are updated
-- Triggers `py-sdk.yml` workflow
+- **Version Source**: Reads from `VERSION` files (pyproject.toml configured to read from VERSION files via hatch)
+- **Standard Releases**: Uses existing version in VERSION file as-is
+- **Alpha/Beta Releases**: Auto-increments with `.alpha.N` or `.beta.N` suffix and updates VERSION file
+- **All Packages Updated**: bharatml_commons, grpc_feature_client, spark_feature_push_client
+- **Production releases**: Published to PyPI
+- **Alpha/Beta releases**: Published to TestPyPI
+- Triggers `release-py-sdk.yml` workflow
 
 ### Docker-based Modules (horizon, trufflebox-ui, online-feature-store)
-- Uses VERSION file
-- Triggers respective workflow (`horizon.yml`, `trufflebox-ui.yml`, `online-feature-store.yml`)
-- Builds and pushes Docker images with version tags
+- **Version Source**: Reads from `VERSION` files
+- **Standard Releases**: Uses existing version in VERSION file as-is
+- **Alpha/Beta Releases**: Auto-increments with `.alpha.N` or `.beta.N` suffix and updates VERSION file
+- **Container Registry**: Pushes to `ghcr.io` (GitHub Container Registry)
+- **Production releases**: Tagged with version + `latest`
+- **Alpha/Beta releases**: Tagged with version only (no `latest`)
+- **online-feature-store**: Builds two images (`onfs-api-server`, `onfs-consumer`)
+- Triggers respective release workflows
 
 ### Go SDK (go-sdk)
-- Uses VERSION file
-- Triggers `go-sdk.yml` workflow
-- Creates Git tags for releases
+- **Version Source**: Reads from `VERSION` file
+- **Standard Releases**: Uses existing version in VERSION file as-is
+- **Alpha/Beta Releases**: Auto-increments with `.alpha.N` or `.beta.N` suffix and updates VERSION file
+- **Git Tags**: Creates `go-sdk/v{version}` tags
+- **GitHub Releases**: Automatic release notes and installation instructions
+- **Alpha/Beta releases**: Marked as pre-releases
+- **Validation**: Runs tests, builds, and go vet before release
+- Triggers `release-go-sdk.yml` workflow
 
 ## GitHub Workflows
 
-The script automatically triggers the appropriate GitHub workflow for each module:
+The script automatically triggers the appropriate release workflow for each module:
 
 | Module | Workflow File | Purpose |
 |--------|---------------|---------|
-| horizon | horizon.yml | Build and deploy Horizon service |
-| trufflebox-ui | trufflebox-ui.yml | Build and deploy UI |
-| online-feature-store | online-feature-store.yml | Build and deploy feature store |
-| go-sdk | go-sdk.yml | Test and release Go SDK |
-| py-sdk | py-sdk.yml | Build and publish Python packages |
+| horizon | release-horizon.yml | Build and push Docker images to registry |
+| trufflebox-ui | release-trufflebox-ui.yml | Build and push UI Docker images |
+| online-feature-store | release-online-feature-store.yml | Build and push feature store Docker images (api-server + consumer) |
+| go-sdk | release-go-sdk.yml | Create Git tags and GitHub releases |
+| py-sdk | release-py-sdk.yml | Build and publish Python packages to PyPI/TestPyPI |
+
+**Note**: These are separate release workflows, not the existing CI workflows (`horizon.yml`, `py-sdk.yml`, etc.) which only run tests and builds.
 
 ## Examples
 
@@ -155,9 +171,8 @@ git checkout main
 ./manual-release.sh
 # Available: 1) Standard Release (x.y.z) - from main branch
 # Select: 1) Standard Release
-# Select: 2) Minor
 # Select: all
-# Result: All modules get minor version bump (v0.2.0)
+# Result: All modules use existing versions from their files (no version changes)
 ```
 
 ### Branch Restriction Examples

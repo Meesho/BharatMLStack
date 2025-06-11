@@ -55,8 +55,12 @@ get_version_from_file() {
 # Function to get version from toml file
 get_version_from_toml() {
     local toml_file=$1
-    local version_file_path=$(dirname "$toml_file")/VERSION
-    get_version_from_file "$version_file_path"
+    if [[ -f "$toml_file" ]]; then
+        # Extract version from pyproject.toml using grep and sed
+        grep -E "^version\s*=" "$toml_file" | sed -E 's/^version\s*=\s*"([^"]+)".*/\1/' | head -1
+    else
+        echo ""
+    fi
 }
 
 
@@ -121,37 +125,7 @@ check_prerelease_version_exists() {
     return 1
 }
 
-# Function to increment version
-increment_version() {
-    local version=$1
-    local increment_type=$2
-    
-    # Remove 'v' prefix if present
-    version=${version#v}
-    
-    # Split version into parts
-    IFS='.' read -ra PARTS <<< "$version"
-    local major=${PARTS[0]:-0}
-    local minor=${PARTS[1]:-0}
-    local patch=${PARTS[2]:-0}
-    
-    case "$increment_type" in
-        "major")
-            major=$((major + 1))
-            minor=0
-            patch=0
-            ;;
-        "minor")
-            minor=$((minor + 1))
-            patch=0
-            ;;
-        "patch")
-            patch=$((patch + 1))
-            ;;
-    esac
-    
-    echo "${major}.${minor}.${patch}"
-}
+
 
 # Function to update VERSION file
 update_version_file() {
@@ -346,49 +320,19 @@ select_directories() {
     printf '%s\n' "${selected_modules[@]}"
 }
 
-# Function to select version increment for standard release
-select_version_increment() {
-    echo ""
-    print_header "Select Version Increment Type"
-    echo "1) Patch (x.y.Z)"
-    echo "2) Minor (x.Y.z)"
-    echo "3) Major (X.y.z)"
-    echo ""
-    
-    while true; do
-        read -p "Enter your choice (1-3): " choice
-        case $choice in
-            1)
-                echo "patch"
-                return
-                ;;
-            2)
-                echo "minor"
-                return
-                ;;
-            3)
-                echo "major"
-                return
-                ;;
-            *)
-                print_error "Invalid choice. Please enter 1, 2, or 3."
-                ;;
-        esac
-    done
-}
+
 
 # Function to process module release
 process_module_release() {
     local module=$1
     local release_type=$2
-    local version_increment=$3
     
     print_header "Processing $module"
     
     local final_version=""
     
     if [[ "$module" == "py-sdk" ]]; then
-        # Handle Python SDK modules
+        # Handle Python SDK modules - use VERSION files (pyproject.toml reads from them via hatch)
         local first_version=""
         for py_module in "${PY_SDK_MODULES[@]}"; do
             local version_file="py-sdk/$py_module/VERSION"
@@ -404,15 +348,13 @@ process_module_release() {
             
             if [[ "$release_type" == "beta" || "$release_type" == "alpha" ]]; then
                 new_version=$(get_next_prerelease_version "$current_version" "py-sdk/$py_module" "$release_type")
+                print_info "New version for $py_module: v$new_version"
+                update_version_file "$version_file" "$new_version"
             else
-                # Standard release - increment version
-                base_version=${current_version#v}
-                incremented_version=$(increment_version "$base_version" "$version_increment")
-                new_version="$incremented_version"
+                # Standard release - use existing version as-is
+                new_version=${current_version#v}
+                print_info "Using existing version for standard release: v$new_version"
             fi
-            
-            print_info "New version for $py_module: v$new_version"
-            update_version_file "$version_file" "$new_version"
             
             # Use the first module's version for the workflow trigger
             if [[ -z "$first_version" ]]; then
@@ -435,15 +377,13 @@ process_module_release() {
         
         if [[ "$release_type" == "beta" || "$release_type" == "alpha" ]]; then
             new_version=$(get_next_prerelease_version "$current_version" "$module" "$release_type")
+            print_info "New version for $module: v$new_version"
+            update_version_file "$version_file" "$new_version"
         else
-            # Standard release - increment version
-            base_version=${current_version#v}
-            incremented_version=$(increment_version "$base_version" "$version_increment")
-            new_version="$incremented_version"
+            # Standard release - use existing version as-is
+            new_version=${current_version#v}
+            print_info "Using existing version for standard release: v$new_version"
         fi
-        
-        print_info "New version for $module: v$new_version"
-        update_version_file "$version_file" "$new_version"
         final_version="v$new_version"
     fi
     
@@ -488,12 +428,8 @@ main() {
         exit 1
     fi
     
-    # Select version increment for standard release
-    local version_increment=""
-    if [[ "$release_type" == "std-release" ]]; then
-        version_increment=$(select_version_increment)
-        print_success "Selected version increment: $version_increment"
-    fi
+    # Note: For standard releases, we use the existing version as-is from VERSION/toml files
+    # Only alpha/beta releases get auto-incremented with .N suffix
     
     # Select directories
     local selected_modules
@@ -510,7 +446,9 @@ main() {
     print_info "Branch: $current_branch"
     print_info "Release Type: $release_type"
     if [[ "$release_type" == "std-release" ]]; then
-        print_info "Version Increment: $version_increment"
+        print_info "Version Strategy: Use existing versions from files as-is"
+    else
+        print_info "Version Strategy: Auto-increment ${release_type}.N suffix"
     fi
     for module in "${selected_modules[@]}"; do
         print_info "Module: $module"
@@ -527,7 +465,7 @@ main() {
     # Process each module
     print_header "Starting Release Process"
     for module in "${selected_modules[@]}"; do
-        process_module_release "$module" "$release_type" "$version_increment"
+        process_module_release "$module" "$release_type"
     done
     
     # Final summary
