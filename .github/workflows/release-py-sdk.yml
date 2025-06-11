@@ -43,6 +43,9 @@ jobs:
           VERSION="${{ inputs.version }}"
           RUN_NUMBER="${{ github.run_number }}"
           VERSION_NO_V="${VERSION#v}${RUN_NUMBER}"
+          echo "version=$VERSION"
+          echo "run_number=$RUN_NUMBER"
+          echo "version=$VERSION_NO_V"
           echo "version_no_v=$VERSION_NO_V" >> $GITHUB_OUTPUT
       - name: Verify VERSION files
         run: |
