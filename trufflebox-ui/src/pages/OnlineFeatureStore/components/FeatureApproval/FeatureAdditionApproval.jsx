@@ -66,9 +66,15 @@ const FeatureAdditionApproval = () => {
         headers: { Authorization: `Bearer ${user.token}` },
       });
       const data = await response.json();
-      setFeaturesRequests(data);
+
+      if (Array.isArray(data)) {
+        setFeaturesRequests(data);
+      } else {
+        setFeaturesRequests([]);
+      }
     } catch (error) {
       console.error('Error fetching features requests:', error);
+      setFeaturesRequests([]);
     } finally {
       setIsLoading(false);
     }
@@ -185,6 +191,7 @@ const FeatureAdditionApproval = () => {
         data={featuresRequests} 
         onRowAction={handleOpen} 
         loading={isLoading} 
+        flowType="approval"
       />
       
       <Modal

@@ -223,8 +223,6 @@ const FeatureAddition = () => {
     if (!dataType) return false;
 
     try {
-      console.log("dataType", dataType);
-      console.log("fieldType", fieldType);
       const cleanDataType = removeDataTypePrefix(dataType);
       if (!cleanDataType) return false;
 

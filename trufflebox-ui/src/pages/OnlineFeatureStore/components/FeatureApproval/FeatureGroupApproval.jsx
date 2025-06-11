@@ -306,6 +306,7 @@ const FeatureGroupApproval = () => {
         data={featureGroupRequests}
         onRowAction={handleOpen}
         loading={loading}
+        flowType="approval"
       />
       
       <Modal show={showModal} onHide={handleClose} size="xl" centered>
