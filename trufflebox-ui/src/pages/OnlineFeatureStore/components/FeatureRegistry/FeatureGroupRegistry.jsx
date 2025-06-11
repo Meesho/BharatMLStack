@@ -60,8 +60,8 @@ const FeatureGroupRegistry = () => {
       "source-base-path": "", 
       "source-data-column": "", 
       "storage-provider": "", 
-      "string-length": "", 
-      "vector-length": "" 
+      "string-length": "0", 
+      "vector-length": "0" 
     }],
   });
   
@@ -176,6 +176,10 @@ const FeatureGroupRegistry = () => {
   const addFeatureRow = () => {
     // Copy the string and vector length values from the last feature values
     const lastFeatureValue = featureGroupData.features[featureGroupData.features.length - 1];
+    const currentDataType = featureGroupData["data-type"];
+    const showStringLength = shouldShowField(currentDataType, 'string');
+    const showVectorLength = shouldShowField(currentDataType, 'vector');
+    
     setFeatureGroupData((prevData) => ({
       ...prevData,
       features: [...prevData.features, { 
@@ -184,8 +188,8 @@ const FeatureGroupRegistry = () => {
         "source-base-path": "", 
         "source-data-column": "", 
         "storage-provider": "",
-        "string-length": lastFeatureValue["string-length"] || "",
-        "vector-length": lastFeatureValue["vector-length"] || ""
+        "string-length": showStringLength ? (lastFeatureValue["string-length"] || "") : "0",
+        "vector-length": showVectorLength ? (lastFeatureValue["vector-length"] || "") : "0"
       }],
     }));
   };
@@ -226,8 +230,8 @@ const FeatureGroupRegistry = () => {
           "source-base-path": "", 
           "source-data-column": "", 
           "storage-provider": "", 
-          "string-length": "", 
-          "vector-length": "" 
+          "string-length": "0", 
+          "vector-length": "0" 
         }],
       });
       setOpen(true); // Open form modal
@@ -263,32 +267,38 @@ const FeatureGroupRegistry = () => {
       return;
     }
     
-    // Validate required fields - String Length and Vector Length based on data type
+    // Process and validate length fields based on data type
     const currentDataType = featureGroupData["data-type"];
-    const hasEmptyLengthFields = featureGroupData.features.some(feature => {
-      const showStringLength = shouldShowField(currentDataType, 'string');
-      const showVectorLength = shouldShowField(currentDataType, 'vector');
-      
-      if (showStringLength && !feature["string-length"]) return true;
-      if (showVectorLength && !feature["vector-length"]) return true;
+    const showStringLength = shouldShowField(currentDataType, 'string');
+    const showVectorLength = shouldShowField(currentDataType, 'vector');
+
+    const updatedFeatures = featureGroupData.features.map(feature => ({
+      ...feature,
+      "string-length": showStringLength ? feature["string-length"] : "0",
+      "vector-length": showVectorLength ? feature["vector-length"] : "0"
+    }));
+    
+    // Validate that shown length fields are > 0
+    const hasInvalidLengthFields = updatedFeatures.some(feature => {
+      if (showStringLength && (!feature["string-length"] || parseFloat(feature["string-length"]) <= 0)) return true;
+      if (showVectorLength && (!feature["vector-length"] || parseFloat(feature["vector-length"]) <= 0)) return true;
       return false;
     });
     
-    if (hasEmptyLengthFields) {
-      const showStringLength = shouldShowField(currentDataType, 'string');
-      const showVectorLength = shouldShowField(currentDataType, 'vector');
-      let message = "";
-      if (showStringLength && showVectorLength) {
-        message = "String Length and Vector Length are required for all features";
-      } else if (showStringLength) {
-        message = "String Length is required for all features";
-      } else if (showVectorLength) {
-        message = "Vector Length is required for all features";
-      }
+    if (hasInvalidLengthFields) {
+      const requiredFields = [];
+      if (showStringLength) requiredFields.push("String Length");
+      if (showVectorLength) requiredFields.push("Vector Length");
+      const message = `${requiredFields.join(" and ")} must be greater than 0 for all features`;
       setModalMessage(message);
       setShowErrorModal(true);
-      return; // Prevent form submission
+      return;
     }
+
+    const finalFeatureGroupData = {
+      ...featureGroupData,
+      features: updatedFeatures
+    };
 
     const apiEndpoint = `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/register-feature-group`;
     try {
@@ -298,7 +308,7 @@ const FeatureGroupRegistry = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${user.token}`,
         },
-        body: JSON.stringify(featureGroupData),
+        body: JSON.stringify(finalFeatureGroupData),
       });
 
       if (response.ok) {
