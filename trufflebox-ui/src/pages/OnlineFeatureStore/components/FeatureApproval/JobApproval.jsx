@@ -158,6 +158,7 @@ const JobApproval = () => {
         excludeColumns={['EntityLabel','FeatureGroupLabel']} 
         onRowAction={handleOpen} 
         loading={isLoading} 
+        flowType="approval"
       />
       
       <Modal

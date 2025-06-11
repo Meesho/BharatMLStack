@@ -160,7 +160,6 @@ const FeatureGroupRegistry = () => {
     }));
   };
 
-  // Update feature change handler to handle string and vector length
   const handleFeatureChange = (index, e) => {
     const { name, value } = e.target;
     const updatedFeatures = [...featureGroupData.features];
@@ -240,14 +239,53 @@ const FeatureGroupRegistry = () => {
     setSelectedStore(null);
   };
 
+  // Helper function to determine which length fields to show
+  const shouldShowField = (dataType, fieldType) => {
+    const cleanDataType = removeDataTypePrefix(dataType);
+    if (fieldType === 'string') {
+      return cleanDataType.toLowerCase().includes('string');
+    }
+    if (fieldType === 'vector') {
+      return cleanDataType.toLowerCase().includes('vector');
+    }
+    return false;
+  };
+
   const handleSubmit = async () => {
-    // Check if any feature has empty string-length or vector-length
-    const hasEmptyLengthFields = featureGroupData.features.some(
-      feature => !feature["string-length"] || !feature["vector-length"]
+    // Validate required fields - Label and Default Value
+    const hasEmptyRequiredFields = featureGroupData.features.some(
+      feature => !feature.labels.trim() || !feature["default-values"].trim()
     );
     
+    if (hasEmptyRequiredFields) {
+      setModalMessage("Label and Default Value are required for all features");
+      setShowErrorModal(true);
+      return;
+    }
+    
+    // Validate required fields - String Length and Vector Length based on data type
+    const currentDataType = featureGroupData["data-type"];
+    const hasEmptyLengthFields = featureGroupData.features.some(feature => {
+      const showStringLength = shouldShowField(currentDataType, 'string');
+      const showVectorLength = shouldShowField(currentDataType, 'vector');
+      
+      if (showStringLength && !feature["string-length"]) return true;
+      if (showVectorLength && !feature["vector-length"]) return true;
+      return false;
+    });
+    
     if (hasEmptyLengthFields) {
-      setModalMessage("String Length and Vector Length are required for all features");
+      const showStringLength = shouldShowField(currentDataType, 'string');
+      const showVectorLength = shouldShowField(currentDataType, 'vector');
+      let message = "";
+      if (showStringLength && showVectorLength) {
+        message = "String Length and Vector Length are required for all features";
+      } else if (showStringLength) {
+        message = "String Length is required for all features";
+      } else if (showVectorLength) {
+        message = "Vector Length is required for all features";
+      }
+      setModalMessage(message);
       setShowErrorModal(true);
       return; // Prevent form submission
     }
@@ -373,7 +411,7 @@ const FeatureGroupRegistry = () => {
                         </div>
                       }
                       placement="bottom-end"
-                      componentsProps={{
+                      slotProps={{
                         tooltip: {
                           sx: {
                             bgcolor: 'white',
@@ -390,7 +428,7 @@ const FeatureGroupRegistry = () => {
                         }
                       }}
                     >
-                      <InfoIcon style={{ color: '#522b4a', cursor: 'pointer' }} />
+                      <InfoIcon style={{ color: '#522b4a', cursor: 'pointer', fontSize: '20px', position: 'absolute', right: '24px'}} />
                     </Tooltip>
                   </InputAdornment>
                 )
@@ -469,109 +507,240 @@ const FeatureGroupRegistry = () => {
           <h5>Features</h5>
           {featureGroupData.features.map((feature, index) => (
             <React.Fragment key={index}>
-              <div 
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  gap: '0px 16px'
-                }}
-              >
-                <TextField
-                  label="Label"
-                  name="labels"
-                  value={feature.labels}
-                  onChange={(e) => handleFeatureChange(index, e)}
-                  margin="normal"
-                  disabled={viewMode}
-                  fullWidth
-                />
-                <TextField
-                  label="Default Value"
-                  name="default-values"
-                  value={feature["default-values"]}
-                  onChange={(e) => handleFeatureChange(index, e)}
-                  margin="normal"
-                  fullWidth
-                  disabled={viewMode}
-                />
-                <TextField
-                  label="Source Base Path"
-                  name="source-base-path"
-                  value={feature["source-base-path"]}
-                  onChange={(e) => handleFeatureChange(index, e)}
-                  margin="normal"
-                  fullWidth
-                  disabled={viewMode}
-                />
-                <TextField
-                  label="Source Data Column"
-                  name="source-data-column"
-                  value={feature["source-data-column"]}
-                  onChange={(e) => handleFeatureChange(index, e)}
-                  margin="normal"
-                  fullWidth
-                  disabled={viewMode}
-                />
-                <FormControl margin="normal" fullWidth>
-                  <InputLabel>Storage Provider</InputLabel>
-                  <Select
-                    name="storage-provider"
-                    value={feature["storage-provider"]}
-                    onChange={(e) => handleFeatureChange(index, e)}
-                    label="Storage Provider"
-                    disabled={viewMode}
-                  >
-                    <MenuItem value="PARQUET_GCS">PARQUET_GCS</MenuItem>
-                    <MenuItem value="PARQUET_S3">PARQUET_S3</MenuItem>
-                    <MenuItem value="PARQUET_ADLS">PARQUET_ADLS</MenuItem>
-                    <MenuItem value="DELTA_GCS">DELTA_GCS</MenuItem>
-                    <MenuItem value="DELTA_S3">DELTA_S3</MenuItem>
-                    <MenuItem value="DELTA_ADLS">DELTA_ADLS</MenuItem>
-                    <MenuItem value="TABLE">TABLE</MenuItem>
-                  </Select>
-                </FormControl>
-                <TextField
-                  label="String Length"
-                  name="string-length"
-                  value={feature["string-length"]}
-                  onChange={(e) => handleFeatureChange(index, e)}
-                  margin="normal"
-                  fullWidth
-                  disabled={viewMode}
-                  required
-                />
-                <TextField
-                  label="Vector Length"
-                  name="vector-length"
-                  value={feature["vector-length"]}
-                  onChange={(e) => handleFeatureChange(index, e)}
-                  margin="normal"
-                  fullWidth
-                  disabled={viewMode}
-                  required
-                />
-                <div style={{
-                  marginTop: '16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '0 14px'
-                }}>
-                  <Button
-                  onClick={() => removeFeatureRow(index)}
-                  startIcon={<RemoveCircleOutlineIcon />}
-                  color='error'
-                  sx={{
-                    color: '#d32f2f',
-                    '&:hover': {
-                      backgroundColor: 'transparent'
-                    }
+              <div>
+                {/* Row 1: Label and Default Value */}
+                <div 
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '0px 16px'
                   }}
-                  // disabled={featureGroupData.features.length <= 1}
                 >
-                Remove
-                </Button>
+                  <TextField
+                    label="Label"
+                    name="labels"
+                    value={feature.labels}
+                    onChange={(e) => handleFeatureChange(index, e)}
+                    margin="normal"
+                    disabled={viewMode}
+                    fullWidth
+                    required
+                  />
+                  <TextField
+                    label="Default Value"
+                    name="default-values"
+                    value={feature["default-values"]}
+                    onChange={(e) => handleFeatureChange(index, e)}
+                    margin="normal"
+                    fullWidth
+                    disabled={viewMode}
+                    required
+                  />
                 </div>
+
+                {/* Row 2: Source Type, Source Base Path, Source Data Column */}
+                <div 
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '0px 16px'
+                  }}
+                >
+                  <FormControl margin="normal" fullWidth>
+                    <InputLabel id={`source-type-label-${index}`}>Source Type</InputLabel>
+                    <Select
+                      labelId={`source-type-label-${index}`}
+                      id={`source-type-${index}`}
+                      name="storage-provider"
+                      value={feature["storage-provider"]}
+                      onChange={(e) => handleFeatureChange(index, e)}
+                      label="Source Type"
+                      disabled={viewMode}
+                      endAdornment={
+                        <InputAdornment position="end">
+                          <Tooltip
+                            title="Cloud storage or table"
+                            placement="bottom-end"
+                            slotProps={{
+                              tooltip: {
+                                sx: {
+                                  bgcolor: 'white',
+                                  color: 'black',
+                                  border: '1px solid #cccccc',
+                                  boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
+                                  p: 1,
+                                  width: '280px',
+                                  maxWidth: '300px',
+                                  '& p': {
+                                    my: 0.5,
+                                  }
+                                }
+                              }
+                            }}
+                          >
+                            <InfoIcon style={{ color: '#522b4a', cursor: 'pointer', fontSize: '20px', position: 'absolute', right: '24px'}} />
+                          </Tooltip>
+                        </InputAdornment>
+                      }
+                    >
+                      <MenuItem value="PARQUET_GCS">PARQUET_GCS</MenuItem>
+                      <MenuItem value="PARQUET_S3">PARQUET_S3</MenuItem>
+                      <MenuItem value="PARQUET_ADLS">PARQUET_ADLS</MenuItem>
+                      <MenuItem value="DELTA_GCS">DELTA_GCS</MenuItem>
+                      <MenuItem value="DELTA_S3">DELTA_S3</MenuItem>
+                      <MenuItem value="DELTA_ADLS">DELTA_ADLS</MenuItem>
+                      <MenuItem value="TABLE">TABLE</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    label="Source Base Path"
+                    name="source-base-path"
+                    value={feature["source-base-path"]}
+                    onChange={(e) => handleFeatureChange(index, e)}
+                    margin="normal"
+                    fullWidth
+                    disabled={viewMode}
+                    slotProps={{
+                      input: {
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <Tooltip
+                              title="Offline cloud storage path or table name source for the feature"
+                              placement="bottom-end"
+                              slotProps={{
+                                tooltip: {
+                                  sx: {
+                                    bgcolor: 'white',
+                                    color: 'black',
+                                    border: '1px solid #cccccc',
+                                    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
+                                    p: 1,
+                                    maxWidth: '250px',
+                                  }
+                                }
+                              }}
+                            >
+                              <InfoIcon style={{ color: '#522b4a', cursor: 'pointer', fontSize: '20px' }} />
+                            </Tooltip>
+                          </InputAdornment>
+                        )
+                      }
+                    }}
+                  />
+                  <TextField
+                    label="Source Data Column"
+                    name="source-data-column"
+                    value={feature["source-data-column"]}
+                    onChange={(e) => handleFeatureChange(index, e)}
+                    margin="normal"
+                    fullWidth
+                    disabled={viewMode}
+                    slotProps={{
+                      input: {
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <Tooltip
+                              title="Name of the column in offline source"
+                              placement="bottom-end"
+                              slotProps={{
+                                tooltip: {
+                                  sx: {
+                                    bgcolor: 'white',
+                                    color: 'black',
+                                    border: '1px solid #cccccc',
+                                    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
+                                    p: 1,
+                                    maxWidth: '250px',
+                                  }
+                                }
+                              }}
+                            >
+                              <InfoIcon style={{ color: '#522b4a', cursor: 'pointer', fontSize: '20px' }} />
+                            </Tooltip>
+                          </InputAdornment>
+                        )
+                      }
+                    }}
+                  />
+                </div>
+
+                {(() => {
+                  const showStringLength = shouldShowField(featureGroupData["data-type"], 'string');
+                  const showVectorLength = shouldShowField(featureGroupData["data-type"], 'vector');
+                  
+                  return (
+                    <div 
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(3, 1fr)',
+                        gap: '0px 16px'
+                      }}
+                    >
+                      {showStringLength ? (
+                        <TextField
+                          label="String Length"
+                          name="string-length"
+                          value={feature["string-length"]}
+                          onChange={(e) => handleFeatureChange(index, e)}
+                          margin="normal"
+                          fullWidth
+                          disabled={viewMode}
+                          required
+                        />
+                      ) : showVectorLength ? (
+                        <TextField
+                          label="Vector Length"
+                          name="vector-length"
+                          value={feature["vector-length"]}
+                          onChange={(e) => handleFeatureChange(index, e)}
+                          margin="normal"
+                          fullWidth
+                          disabled={viewMode}
+                          required
+                        />
+                      ) : (
+                        <div></div>
+                      )}
+                      
+                      {showStringLength && showVectorLength ? (
+                        <TextField
+                          label="Vector Length"
+                          name="vector-length"
+                          value={feature["vector-length"]}
+                          onChange={(e) => handleFeatureChange(index, e)}
+                          margin="normal"
+                          fullWidth
+                          disabled={viewMode}
+                          required
+                        />
+                      ) : (
+                        <div></div>
+                      )}
+                      
+                      <div style={{
+                        marginTop: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '0 14px'
+                      }}>
+                        <Button
+                          onClick={() => removeFeatureRow(index)}
+                          startIcon={<RemoveCircleOutlineIcon />}
+                          color='error'
+                          sx={{
+                            color: '#d32f2f',
+                            '&:hover': {
+                              backgroundColor: 'transparent'
+                            }
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
               {index < featureGroupData.features.length - 1 && (
                 <Divider sx={{ my: 2, borderColor: '#522b4a' }} />
@@ -788,7 +957,7 @@ const FeatureGroupRegistry = () => {
                 onClick: () => handleOpen(),
                 variant: "contained",
                 color: "#522b4a",
-                hoverColor: "#2c3e50"
+                hoverColor: "#613a5c"
               }
             ]}
           />
