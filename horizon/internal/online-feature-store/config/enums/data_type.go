@@ -132,9 +132,9 @@ func (d DataType) Size() int {
 	case d == "DataTypeUint64":
 		return 8
 	case d == "DataTypeString":
-		return 0
+		return 1
 	case d == "DataTypeBool":
-		return 0
+		return 1
 	case d == "DataTypeFP8E5M2Vector":
 		return 1
 	case d == "DataTypeFP8E4M3Vector":
@@ -162,9 +162,9 @@ func (d DataType) Size() int {
 	case d == "DataTypeUint64Vector":
 		return 8
 	case d == "DataTypeStringVector":
-		return 0
+		return 1
 	case d == "DataTypeBoolVector":
-		return 0
+		return 1
 	default:
 		return 0
 	}

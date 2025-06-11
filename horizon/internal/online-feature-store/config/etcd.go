@@ -151,6 +151,30 @@ func (e *Etcd) RegisterFeatureGroup(entityLabel, fgLabel, JobId string, storeId,
 		seen[label] = struct{}{}
 	}
 	totalSize := len(featureLabels) * dataType.Size()
+	if dataType == enums.DataTypeString {
+		var totalStringLength uint16
+		for i := range stringLength {
+			stringLengthUint16, _ := stringToUint16(stringLength[i])
+			totalStringLength += stringLengthUint16
+		}
+		totalSize = int(totalStringLength) * dataType.Size()
+	} else if dataType.IsVector() {
+		var totalVectorLength uint16
+		for i := range vectorLength {
+			vectorLengthUint16, _ := stringToUint16(vectorLength[i])
+			totalVectorLength += vectorLengthUint16
+		}
+		totalSize = int(totalVectorLength) * dataType.Size()
+	}
+	if dataType == enums.DataTypeStringVector {
+		var stringVectorSize uint16
+		for i := range stringLength {
+			stringLengthUint16, _ := stringToUint16(stringLength[i])
+			vectorLengthUint16, _ := stringToUint16(vectorLength[i])
+			stringVectorSize += stringLengthUint16 * vectorLengthUint16
+		}
+		totalSize = int(stringVectorSize) * dataType.Size()
+	}
 	stores, err := e.GetStores()
 	if err != nil {
 		return nil, Store{}, nil, err
@@ -456,7 +480,32 @@ func (e *Etcd) AddFeatures(entityLabel, fgLabel string, labels, defaultValues, s
 	if err != nil {
 		return nil, Store{}, nil, nil, err
 	}
-	newSize := featureGroup.Columns[columnToUpdate].CurrentSizeInBytes + len(defaultValues)*featureGroup.DataType.Size()
+	totalSize := len(labels) * dataType.Size()
+	if dataType == enums.DataTypeString {
+		var totalStringLength uint16
+		for i := range stringLength {
+			stringLengthUint16, _ := stringToUint16(stringLength[i])
+			totalStringLength += stringLengthUint16
+		}
+		totalSize = int(totalStringLength) * dataType.Size()
+	} else if dataType.IsVector() {
+		var totalVectorLength uint16
+		for i := range vectorLength {
+			vectorLengthUint16, _ := stringToUint16(vectorLength[i])
+			totalVectorLength += vectorLengthUint16
+		}
+		totalSize = int(totalVectorLength) * dataType.Size()
+	}
+	if dataType == enums.DataTypeStringVector {
+		var stringVectorSize uint16
+		for i := range stringLength {
+			stringLengthUint16, _ := stringToUint16(stringLength[i])
+			vectorLengthUint16, _ := stringToUint16(vectorLength[i])
+			stringVectorSize += stringLengthUint16 * vectorLengthUint16
+		}
+		totalSize = int(stringVectorSize) * dataType.Size()
+	}
+	newSize := featureGroup.Columns[columnToUpdate].CurrentSizeInBytes + totalSize
 	storeId := featureGroup.StoreId
 	stores, err := e.GetStores()
 	if err != nil {
@@ -547,8 +596,9 @@ func (e *Etcd) EditFeatures(entityLabel, fgLabel string, featureLabels, defaultV
 			return err
 		}
 		defaultValueInByte, _ := Serialize(defaultValues[i], fg.DataType)
-
+		currentSequence := featureMetaMap[featureLabel].Sequence
 		featureMetaMap[featureLabel] = FeatureMeta{
+			Sequence:             currentSequence,
 			StringLength:         stringLengthUint16,
 			VectorLength:         vectorLengthUint16,
 			DefaultValuesInBytes: defaultValueInByte,
@@ -732,22 +782,13 @@ func processFeatureDefaultValues(featureDefaultValues []string, dataType string)
 	containsVector := strings.Contains(strings.ToLower(dataType), "vector")
 
 	var formattedValues []string
-	var vectorLength int
 
-	for i, value := range featureDefaultValues {
+	for _, value := range featureDefaultValues {
 		// Convert to vector format if "vector" is in dataType
 		if containsVector {
 			if !strings.HasPrefix(value, "[") || !strings.HasSuffix(value, "]") {
 				value = "[" + value + "]"
 			}
-		}
-
-		// Check all featureDefaultValues are of the same length
-		values := strings.Split(value, ",")
-		if i == 0 {
-			vectorLength = len(values)
-		} else if len(values) != vectorLength {
-			return nil, errors.New("all featureDefaultValues must be of the same length")
 		}
 
 		formattedValues = append(formattedValues, value)
