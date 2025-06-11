@@ -151,7 +151,7 @@ func (e *Etcd) RegisterFeatureGroup(entityLabel, fgLabel, JobId string, storeId,
 		seen[label] = struct{}{}
 	}
 	totalSize := len(featureLabels) * dataType.Size()
-	if dataType == enums.DataTypeString {
+	if dataType == "DataTypeString" {
 		var totalStringLength uint16
 		for i := range stringLength {
 			stringLengthUint16, _ := stringToUint16(stringLength[i])
@@ -166,7 +166,7 @@ func (e *Etcd) RegisterFeatureGroup(entityLabel, fgLabel, JobId string, storeId,
 		}
 		totalSize = int(totalVectorLength) * dataType.Size()
 	}
-	if dataType == enums.DataTypeStringVector {
+	if dataType == "DataTypeStringVector" {
 		var stringVectorSize uint16
 		for i := range stringLength {
 			stringLengthUint16, _ := stringToUint16(stringLength[i])

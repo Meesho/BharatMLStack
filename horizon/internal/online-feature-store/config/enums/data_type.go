@@ -172,35 +172,35 @@ func (d DataType) Size() int {
 
 func (d DataType) IsVector() bool {
 	switch {
-	case d == DataTypeFP8E5M2Vector:
+	case d == "DataTypeFP8E5M2Vector":
 		return true
-	case d == DataTypeFP8E4M3Vector:
+	case d == "DataTypeFP8E4M3Vector":
 		return true
-	case d == DataTypeFP16Vector:
+	case d == "DataTypeFP16Vector":
 		return true
-	case d == DataTypeFP32Vector:
+	case d == "DataTypeFP32Vector":
 		return true
-	case d == DataTypeFP64Vector:
+	case d == "DataTypeFP64Vector":
 		return true
-	case d == DataTypeInt8Vector:
+	case d == "DataTypeInt8Vector":
 		return true
-	case d == DataTypeInt16Vector:
+	case d == "DataTypeInt16Vector":
 		return true
-	case d == DataTypeInt32Vector:
+	case d == "DataTypeInt32Vector":
 		return true
-	case d == DataTypeInt64Vector:
+	case d == "DataTypeInt64Vector":
 		return true
-	case d == DataTypeUint8Vector:
+	case d == "DataTypeUint8Vector":
 		return true
-	case d == DataTypeUint16Vector:
+	case d == "DataTypeUint16Vector":
 		return true
-	case d == DataTypeUint32Vector:
+	case d == "DataTypeUint32Vector":
 		return true
-	case d == DataTypeUint64Vector:
+	case d == "DataTypeUint64Vector":
 		return true
-	case d == DataTypeStringVector:
+	case d == "DataTypeStringVector":
 		return true
-	case d == DataTypeBoolVector:
+	case d == "DataTypeBoolVector":
 		return true
 	default:
 		return false
