@@ -68,7 +68,7 @@ jobs:
       - name: Verify pyproject.toml version regex
         run: |
           echo "📋 Current pyproject.toml version regex:"
-          grep -E 'pattern = "(?P<version>[^\\\\s]+)"' py-sdk/**/pyproject.toml
+          grep -E 'pattern = ".*version.*"' py-sdk/**/pyproject.toml
           echo "📋 Current pyproject.toml version regex:"
       - name: Build all packages
         run: |
