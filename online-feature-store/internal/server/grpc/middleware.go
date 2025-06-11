@@ -2,6 +2,11 @@ package grpc
 
 import (
 	"context"
+	"runtime/debug"
+	"slices"
+	"strings"
+	"time"
+
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -9,10 +14,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"runtime/debug"
-	"slices"
-	"strings"
-	"time"
 )
 
 const (
@@ -56,10 +57,7 @@ func isAuthorized(authHeaders []string) bool {
 	permittedTokens := viper.GetString(AuthToken)
 	tokens := strings.Split(permittedTokens, ",")
 	token := authHeaders[0]
-	if slices.Contains(tokens, token) {
-		return true
-	}
-	return false
+	return slices.Contains(tokens, token)
 }
 
 func RecoveryInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {

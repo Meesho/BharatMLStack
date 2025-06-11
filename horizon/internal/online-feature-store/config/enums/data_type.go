@@ -3,7 +3,7 @@ package enums
 type DataType string
 
 const (
-	DataTypeUnknown DataType = DataType(string(iota))
+	DataTypeUnknown DataType = DataType(string(rune(iota)))
 	DataTypeFP8E5M2
 	DataTypeFP8E4M3
 	DataTypeFP16

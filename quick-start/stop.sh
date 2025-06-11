@@ -1,0 +1,147 @@
+#!/bin/bash
+
+set -e
+
+WORKSPACE_DIR="workspace"
+PURGE_FLAG="$1"
+
+stop_services() {
+  echo "🛑 Stopping BharatML Stack services..."
+  
+  if [ -d "$WORKSPACE_DIR" ] && [ -f "$WORKSPACE_DIR/docker-compose.yml" ]; then
+    (cd "$WORKSPACE_DIR" && docker-compose down)
+    echo "✅ All services stopped"
+  else
+    echo "⚠️  Workspace directory not found, stopping individual containers..."
+    
+    # Fallback: stop containers individually
+    CONTAINERS=("trufflebox" "horizon" "onfs-api-server" "etcd-workbench" "etcd" "redis" "mysql" "scylla")
+    
+    for container in "${CONTAINERS[@]}"; do
+      if docker ps -q -f name="$container" | grep -q .; then
+        echo "🛑 Stopping $container..."
+        docker stop "$container" 2>/dev/null || true
+      fi
+    done
+    
+    echo "✅ Individual containers stopped"
+  fi
+}
+
+remove_containers() {
+  echo "🗑️  Removing containers..."
+  
+  if [ -d "$WORKSPACE_DIR" ] && [ -f "$WORKSPACE_DIR/docker-compose.yml" ]; then
+    (cd "$WORKSPACE_DIR" && docker-compose down --volumes --remove-orphans)
+  else
+    # Fallback: remove containers individually
+    CONTAINERS=("trufflebox" "horizon" "onfs-api-server" "etcd-workbench" "etcd" "redis" "mysql" "scylla")
+    
+    for container in "${CONTAINERS[@]}"; do
+      if docker ps -aq -f name="$container" | grep -q .; then
+        echo "🗑️  Removing $container..."
+        docker rm -f "$container" 2>/dev/null || true
+      fi
+    done
+  fi
+  
+  echo "✅ Containers removed"
+}
+
+remove_volumes() {
+  echo "💾 Removing persistent volumes..."
+  
+  # Remove named volumes
+  VOLUMES=("scylla-data" "mysql-data")
+  for volume in "${VOLUMES[@]}"; do
+    if docker volume ls -q | grep -q "^${volume}$"; then
+      echo "🗑️  Removing volume: $volume"
+      docker volume rm "$volume" 2>/dev/null || true
+    fi
+  done
+  
+  echo "✅ Volumes removed"
+}
+
+remove_network() {
+  echo "🌐 Removing Docker network..."
+  
+  if docker network ls | grep -q "onfs-network"; then
+    docker network rm onfs-network 2>/dev/null || true
+    echo "✅ Network removed"
+  fi
+}
+
+remove_workspace() {
+  echo "📁 Removing workspace directory..."
+  
+  if [ -d "$WORKSPACE_DIR" ]; then
+    rm -rf "$WORKSPACE_DIR"
+    echo "✅ Workspace directory removed"
+  fi
+}
+
+show_status() {
+  echo ""
+  echo "📊 Current Status:"
+  
+  # Check for running containers
+  RUNNING_CONTAINERS=$(docker ps --filter "name=scylla|mysql|redis|etcd|horizon|trufflebox|onfs-api-server" --format "{{.Names}}" 2>/dev/null || true)
+  if [ -n "$RUNNING_CONTAINERS" ]; then
+    echo "🟢 Running containers:"
+    echo "$RUNNING_CONTAINERS" | sed 's/^/   • /'
+  else
+    echo "🔴 No BharatML Stack containers running"
+  fi
+  
+  # Check for volumes
+  EXISTING_VOLUMES=$(docker volume ls -q | grep -E "scylla-data|mysql-data" 2>/dev/null || true)
+  if [ -n "$EXISTING_VOLUMES" ]; then
+    echo "💾 Existing volumes:"
+    echo "$EXISTING_VOLUMES" | sed 's/^/   • /'
+  else
+    echo "💽 No persistent volumes found"
+  fi
+  
+  # Check workspace
+  if [ -d "$WORKSPACE_DIR" ]; then
+    echo "📁 Workspace directory: exists"
+  else
+    echo "📂 Workspace directory: not found"
+  fi
+  
+  echo ""
+}
+
+# Main execution
+if [ "$PURGE_FLAG" = "--purge" ]; then
+  echo "🚨 PURGE MODE: This will remove all containers, volumes, networks, and workspace"
+  echo "⏳ Starting in 3 seconds... (Ctrl+C to cancel)"
+  sleep 3
+  
+  stop_services
+  remove_containers
+  remove_volumes
+  remove_network
+  remove_workspace
+  
+  echo ""
+  echo "🧹 Complete purge completed!"
+  echo "💡 To start fresh, run: ./start.sh"
+  
+else
+  echo "🛑 Stopping BharatML Stack..."
+  echo "💡 Use './stop.sh --purge' to completely remove everything"
+  
+  stop_services
+  
+  echo ""
+  echo "✅ Services stopped successfully!"
+  echo ""
+  echo "💡 Useful commands:"
+  echo "   Start again:     ./start.sh"
+  echo "   Complete purge:  ./stop.sh --purge"
+  echo "   View status:     cd $WORKSPACE_DIR && docker-compose ps"
+fi
+
+show_status

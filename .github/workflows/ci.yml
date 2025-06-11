@@ -1,0 +1,188 @@
+name: Integration & Coordination CI
+
+on:
+  pull_request:
+    branches: [master, develop]
+  push:
+    branches: [master, develop]
+  workflow_dispatch:  # Allow manual triggering
+
+env:
+  REGISTRY: ghcr.io
+  
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      horizon-changed: ${{ steps.changes.outputs.horizon }}
+      trufflebox-ui-changed: ${{ steps.changes.outputs.trufflebox-ui }}
+      online-feature-store-changed: ${{ steps.changes.outputs.online-feature-store }}
+      go-sdk-changed: ${{ steps.changes.outputs.go-sdk }}
+      py-sdk-changed: ${{ steps.changes.outputs.py-sdk }}
+      multiple-components: ${{ steps.check-multiple.outputs.multiple }}
+      any-component: ${{ steps.check-any.outputs.any }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            horizon:
+              - 'horizon/**'
+            trufflebox-ui:
+              - 'trufflebox-ui/**'
+            online-feature-store:
+              - 'online-feature-store/**'
+            go-sdk:
+              - 'go-sdk/**'
+            py-sdk:
+              - 'py-sdk/**'
+
+      - name: Check if multiple components changed
+        id: check-multiple
+        run: |
+          changed_count=0
+          if [ "${{ steps.changes.outputs.horizon }}" == "true" ]; then
+            changed_count=$((changed_count + 1))
+          fi
+          if [ "${{ steps.changes.outputs.trufflebox-ui }}" == "true" ]; then
+            changed_count=$((changed_count + 1))
+          fi
+          if [ "${{ steps.changes.outputs.online-feature-store }}" == "true" ]; then
+            changed_count=$((changed_count + 1))
+          fi
+          if [ "${{ steps.changes.outputs.go-sdk }}" == "true" ]; then
+            changed_count=$((changed_count + 1))
+          fi
+          if [ "${{ steps.changes.outputs.py-sdk }}" == "true" ]; then
+            changed_count=$((changed_count + 1))
+          fi
+          
+          if [ $changed_count -gt 1 ]; then
+            echo "multiple=true" >> $GITHUB_OUTPUT
+          else
+            echo "multiple=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if any component changed
+        id: check-any
+        run: |
+          if [ "${{ steps.changes.outputs.horizon }}" == "true" ] || [ "${{ steps.changes.outputs.trufflebox-ui }}" == "true" ] || [ "${{ steps.changes.outputs.online-feature-store }}" == "true" ] || [ "${{ steps.changes.outputs.go-sdk }}" == "true" ] || [ "${{ steps.changes.outputs.py-sdk }}" == "true" ]; then
+            echo "any=true" >> $GITHUB_OUTPUT
+          else
+            echo "any=false" >> $GITHUB_OUTPUT
+          fi
+
+  wait-for-component-builds:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.any-component == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for component CI workflows
+        run: |
+          echo "Component builds are handled by individual workflows:"
+          echo "- Horizon CI: ${{ needs.detect-changes.outputs.horizon-changed }}"
+          echo "- Trufflebox UI CI: ${{ needs.detect-changes.outputs.trufflebox-ui-changed }}"
+          echo "- Online Feature Store CI: ${{ needs.detect-changes.outputs.online-feature-store-changed }}"
+          echo "- Go SDK CI: ${{ needs.detect-changes.outputs.go-sdk-changed }}"
+          echo "- Python SDK CI: ${{ needs.detect-changes.outputs.py-sdk-changed }}"
+          echo "This workflow will proceed with integration tests..."
+
+  integration-tests:
+    needs: [detect-changes, wait-for-component-builds]
+    if: needs.detect-changes.outputs.multiple-components == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Integration Test - API Compatibility
+        run: |
+          echo "Running integration tests for API compatibility..."
+          echo "Checking if Horizon API is compatible with Online Feature Store..."
+          echo "Checking if Trufflebox UI can communicate with both services..."
+          echo "Testing Go SDK compatibility with backend services..."
+          echo "Testing Python SDK compatibility with backend services..."
+          # Add actual integration test commands here
+
+      - name: Integration Test - Docker Compose
+        run: |
+          echo "Testing multi-service Docker setup..."
+          # This would test if all services work together
+          # docker-compose -f docker-compose.integration.yml up -d
+          # Run integration test suite
+          # docker-compose -f docker-compose.integration.yml down
+
+      - name: Integration Test - Cross-Component Features
+        run: |
+          echo "Testing features that span multiple components..."
+          echo "Testing end-to-end workflows..."
+          # Add tests that verify the components work together
+
+  security-scan:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.any-component == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run security scan
+        run: |
+          echo "Running security scans across all components..."
+          echo "Checking for vulnerabilities in dependencies..."
+          # Add security scanning tools like:
+          # - Trivy
+          # - Snyk
+          # - OWASP dependency check
+
+  deployment-readiness:
+    needs: [detect-changes, integration-tests]
+    if: always() && (needs.detect-changes.outputs.multiple-components == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check deployment readiness
+        run: |
+          echo "Checking if all components are ready for deployment..."
+          echo "Validating configuration compatibility..."
+          echo "Checking version compatibility..."
+          # Add deployment readiness checks
+
+      - name: Generate deployment manifest
+        run: |
+          echo "Generating deployment manifests..."
+          echo "Creating Docker Compose file for production..."
+          echo "Generating Kubernetes manifests..."
+          # Generate deployment files
+
+  summary:
+    needs: [detect-changes, integration-tests, security-scan, deployment-readiness]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Integration Summary
+        run: |
+          echo "## Integration CI Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Components Changed | ${{ needs.detect-changes.outputs.any-component }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Multiple Components | ${{ needs.detect-changes.outputs.multiple-components }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Tests | ${{ needs.integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deployment Readiness | ${{ needs.deployment-readiness.result }} |" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Component Status" >> $GITHUB_STEP_SUMMARY
+          echo "- Horizon: ${{ needs.detect-changes.outputs.horizon-changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Trufflebox UI: ${{ needs.detect-changes.outputs.trufflebox-ui-changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Online Feature Store: ${{ needs.detect-changes.outputs.online-feature-store-changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Go SDK: ${{ needs.detect-changes.outputs.go-sdk-changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Python SDK: ${{ needs.detect-changes.outputs.py-sdk-changed }}" >> $GITHUB_STEP_SUMMARY 

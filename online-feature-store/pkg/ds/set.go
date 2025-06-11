@@ -303,16 +303,6 @@ func (s *OrderedSet[T]) Size() int {
 	return len(s.data)
 }
 
-// Helper method for bulk operations
-func (s *OrderedSet[T]) bulkAdd(entries []*entry[T]) {
-	for _, entry := range entries {
-		if _, exists := s.data[entry.key]; !exists {
-			elem := s.order.PushBack(entry)
-			s.data[entry.key] = elem
-		}
-	}
-}
-
 // NewOrderedSetFromSlice creates a new OrderedSet from a slice
 func NewOrderedSetFromSlice[T comparable](slice []T) Set[T] {
 	set := &OrderedSet[T]{

@@ -6,7 +6,7 @@
 # BharatMLStack's Online Feature Store: A Hyper-Scalable Feature Store for Real-Time ML
 
 ![Static Badge](https://img.shields.io/badge/oss_lifecycle-active-green) 
-![ci status](https://github.com/Meesho/BharatMLStack/online-feature-store/actions/workflows/ci.yml/badge.svg)
+![build status](https://github.com/Meesho/BharatMLStack/actions/workflows/online-feature-store.yml/badge.svg)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/474wHtfm)
 [![Roadmap](https://img.shields.io/badge/Project-Roadmap-blue?style=flat&logo=github)](./roadmap/roadmap_2025_2026.md)
 

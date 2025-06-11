@@ -1,0 +1,53 @@
+name: Horizon CI
+
+on:
+  pull_request:
+    branches: [master, develop]
+    paths: ['horizon/**']
+  push:
+    branches: [master, develop]
+    paths: ['horizon/**']
+
+jobs:
+  build-horizon:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./horizon
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+          cache: false
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-horizon-${{ hashFiles('horizon/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-horizon-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Build application
+        run: go build -v ./...
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@v0.5.1
+
+      - name: Run staticcheck
+        run: staticcheck ./... 
