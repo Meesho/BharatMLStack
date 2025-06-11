@@ -21,5 +21,5 @@ type Manager interface {
 	GetNumOfFeatures(entityLabel string, fgId int, version int) (int, error)
 	GetActiveVersion(entityLabel string, fgId int) (int, error)
 	GetNormalizedEntities() error
-	GetAllRegisteredClients() map[string]string
+	GetAllRegisteredClients() (map[string]string, error)
 }

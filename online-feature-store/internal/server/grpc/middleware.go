@@ -49,7 +49,7 @@ func ServerInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo,
 }
 
 func isAuthorized(callerId, authHeader []string) bool {
-	registeredClients := config.Instance(config.DefaultVersion).GetAllRegisteredClients()
+	registeredClients, _ := config.Instance(config.DefaultVersion).GetAllRegisteredClients()
 	token, ok := registeredClients[callerId[0]]
 	if !ok {
 		return false

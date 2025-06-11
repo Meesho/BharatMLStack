@@ -187,3 +187,11 @@ func (m *MockConfigManager) GetMaxColumnSize(storeId string) (int, error) {
 	args := m.Called(storeId)
 	return args.Int(0), args.Error(1)
 }
+
+func (m *MockConfigManager) GetAllRegisteredClients() (map[string]string, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[string]string), args.Error(1)
+}
