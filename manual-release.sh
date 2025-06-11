@@ -271,6 +271,13 @@ select_release_type() {
     done
     echo ""
     
+    # If only one option, auto-select it
+    if [[ ${#available_options[@]} -eq 1 ]]; then
+        print_info "Only one release type available - auto-selecting option 1"
+        echo "${option_map[1]}"
+        return
+    fi
+    
     while true; do
         read -p "Enter your choice (1-${#available_options[@]}): " choice
         if [[ -n "${option_map[$choice]}" ]]; then
