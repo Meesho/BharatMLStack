@@ -61,7 +61,15 @@ jobs:
           echo "  py-sdk/bharatml_commons/VERSION: $(cat py-sdk/bharatml_commons/VERSION)"
           echo "  py-sdk/spark_feature_push_client/VERSION: $(cat py-sdk/spark_feature_push_client/VERSION)"
           echo "  py-sdk/grpc_feature_client/VERSION: $(cat py-sdk/grpc_feature_client/VERSION)"
-
+      - name: Patch pyproject.toml version regex temporarily
+        run: |
+          echo "🔧 Patching version pattern to accept dev versions"
+          sed -i.bak 's/pattern = "v(?P<version>[^\\\\s]+)"/pattern = "(?P<version>[^\\\\s]+)"/' py-sdk/**/pyproject.toml
+      - name: Verify pyproject.toml version regex
+        run: |
+          echo "📋 Current pyproject.toml version regex:"
+          grep -E 'pattern = "(?P<version>[^\\\\s]+)"' py-sdk/**/pyproject.toml
+          echo "📋 Current pyproject.toml version regex:"
       - name: Build all packages
         run: |
           mkdir -p dist
