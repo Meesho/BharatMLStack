@@ -16,6 +16,9 @@ AVAILABLE_MODULES=("horizon" "trufflebox-ui" "online-feature-store" "go-sdk" "py
 # Python SDK subdirectories
 PY_SDK_MODULES=("bharatml_commons" "grpc_feature_client" "spark_feature_push_client")
 
+# Global variable to store selected modules
+SELECTED_MODULES=()
+
 # Function to print colored output
 print_info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
@@ -65,14 +68,16 @@ get_version_from_toml() {
 
 
 
-# Function to get next pre-release version (beta or alpha)
-get_next_prerelease_version() {
+# Function to get pre-release version with commit SHA
+get_prerelease_version_with_sha() {
     local base_version=$1
-    local module=$2
-    local release_type=$3
+    local release_type=$2
     
     # Remove 'v' prefix if present
     base_version=${base_version#v}
+    
+    # Get last commit SHA (6 characters)
+    local commit_sha=$(git rev-parse --short=6 HEAD)
     
     local prerelease_suffix=""
     case "$release_type" in
@@ -88,42 +93,10 @@ get_next_prerelease_version() {
             ;;
     esac
     
-    local prerelease_num=1
-    while check_prerelease_version_exists "$base_version" "$prerelease_num" "$module" "$prerelease_suffix"; do
-        prerelease_num=$((prerelease_num + 1))
-    done
-    
-    echo "${base_version}-${prerelease_suffix}.${prerelease_num}"
+    echo "${base_version}-${prerelease_suffix}-${commit_sha}"
 }
 
-# Function to check if pre-release version exists
-check_prerelease_version_exists() {
-    local base_version=$1
-    local prerelease_num=$2
-    local module=$3
-    local prerelease_suffix=$4
-    
-    # For Python packages, check PyPI
-    if [[ "$module" == py-sdk/* ]]; then
-        local package_name=$(basename "$module" | tr '_' '-')
-        # Use pip index to check if version exists (this is a simplified check)
-        # In practice, you might want to use PyPI API
-        return 1  # For now, assume it doesn't exist
-    fi
-    
-    # For Docker images, check registry
-    if [[ "$module" == "horizon" ]] || [[ "$module" == "online-feature-store" ]] || [[ "$module" == "trufflebox-ui" ]]; then
-        # Check if Docker tag exists (simplified)
-        return 1  # For now, assume it doesn't exist
-    fi
-    
-    # For Go SDK, check Git tags
-    if [[ "$module" == "go-sdk" ]]; then
-        git tag -l | grep -q "go-sdk/${base_version}-${prerelease_suffix}.${prerelease_num}" && return 0 || return 1
-    fi
-    
-    return 1
-}
+
 
 
 
@@ -192,6 +165,7 @@ trigger_workflow() {
     fi
 }
 
+
 # Function to validate branch for release type
 validate_branch_for_release() {
     local branch=$1
@@ -224,89 +198,56 @@ validate_branch_for_release() {
     return 0
 }
 
-# Function to select release type based on current branch
+# Function to select release type
 select_release_type() {
-    local current_branch=$1
     echo "" >&2
     print_header "Select Release Type" >&2
     
-    # Show available options based on current branch
-    local available_options=()
-    local option_map=()
-    local option_num=1
-    
-    # Beta releases from develop
-    if [[ "$current_branch" == "develop" ]]; then
-        available_options+=("$option_num) Beta Release (x.y.z-beta.N) - from develop branch")
-        option_map["$option_num"]="beta"
-        option_num=$((option_num + 1))
-    fi
-    
-    # Standard releases from main/master/release/*
-    if [[ "$current_branch" == "main" || "$current_branch" == "master" || "$current_branch" =~ ^release/ ]]; then
-        available_options+=("$option_num) Standard Release (x.y.z) - from $current_branch branch")
-        option_map["$option_num"]="std-release"
-        option_num=$((option_num + 1))
-    fi
-    
-    # Alpha releases from feat/fix/feat-nbc branches
-    if [[ "$current_branch" =~ ^(feat/|fix/|feat-nbc/) ]]; then
-        available_options+=("$option_num) Alpha Release (x.y.z-alpha.N) - from $current_branch branch")
-        option_map["$option_num"]="alpha"
-        option_num=$((option_num + 1))
-    fi
-    
-    if [[ ${#available_options[@]} -eq 0 ]]; then
-        print_error "No valid release types available for branch '$current_branch'" >&2
-        print_info "Valid branches for releases:" >&2
-        print_info "  • develop: Beta releases" >&2
-        print_info "  • main/master/release/*: Standard releases" >&2
-        print_info "  • feat/*/fix/*/feat-nbc/*: Alpha releases" >&2
-        exit 1
-    fi
-    
-    # Show available options
-    for option in "${available_options[@]}"; do
-        echo "$option" >&2
-    done
+    echo "1) Alpha Release (x.y.z-alpha-<commit-sha>)" >&2
+    echo "2) Beta Release (x.y.z-beta-<commit-sha>)" >&2
+    echo "3) Standard Release (x.y.z)" >&2
     echo "" >&2
     
-    # If only one option, auto-select it
-    if [[ ${#available_options[@]} -eq 1 ]]; then
-        print_info "Only one release type available - auto-selecting option 1" >&2
-        echo "${option_map[1]}"
-        return
-    fi
-    
     while true; do
-        echo -n "Enter your choice (1-${#available_options[@]}): " >&2
+        echo -n "Enter your choice (1-3): " >&2
         read choice
-        if [[ -n "${option_map[$choice]}" ]]; then
-            echo "${option_map[$choice]}"
-            return
-        else
-            print_error "Invalid choice. Please enter a number between 1 and ${#available_options[@]}." >&2
-        fi
+        case $choice in
+            1)
+                echo "alpha"
+                return
+                ;;
+            2)
+                echo "beta"
+                return
+                ;;
+            3)
+                echo "std-release"
+                return
+                ;;
+            *)
+                print_error "Invalid choice. Please enter 1, 2, or 3." >&2
+                ;;
+        esac
     done
 }
 
 # Function to select directories
 select_directories() {
-    echo "" >&2
-    print_header "Select Modules to Release" >&2
+    echo ""
+    print_header "Select Modules to Release"
     
     local selected_modules=()
     local i=1
     
-    echo "Available modules:" >&2
+    echo "Available modules:"
     for module in "${AVAILABLE_MODULES[@]}"; do
-        echo "$i) $module" >&2
+        echo "$i) $module"
         i=$((i + 1))
     done
-    echo "" >&2
+    echo ""
     
-    print_info "Enter module numbers separated by spaces (e.g., '1 3 5') or 'all' for all modules:" >&2
-    echo -n "Selection: " >&2
+    print_info "Enter module numbers separated by spaces (e.g., '1 3 5') or 'all' for all modules:"
+    echo -n "Selection: "
     read selection
     
     if [[ "$selection" == "all" ]]; then
@@ -316,17 +257,18 @@ select_directories() {
             if [[ "$num" =~ ^[0-9]+$ ]] && [[ "$num" -ge 1 ]] && [[ "$num" -le ${#AVAILABLE_MODULES[@]} ]]; then
                 selected_modules+=("${AVAILABLE_MODULES[$((num-1))]}")
             else
-                print_warning "Invalid selection: $num" >&2
+                print_warning "Invalid selection: $num"
             fi
         done
     fi
     
     if [[ ${#selected_modules[@]} -eq 0 ]]; then
-        print_error "No valid modules selected" >&2
+        print_error "No valid modules selected"
         exit 1
     fi
     
-    printf '%s\n' "${selected_modules[@]}"
+    # Store results in a global variable instead of stdout
+    SELECTED_MODULES=("${selected_modules[@]}")
 }
 
 
@@ -356,7 +298,7 @@ process_module_release() {
             print_info "Current version for $py_module: $current_version"
             
             if [[ "$release_type" == "beta" || "$release_type" == "alpha" ]]; then
-                new_version=$(get_next_prerelease_version "$current_version" "py-sdk/$py_module" "$release_type")
+                new_version=$(get_prerelease_version_with_sha "$current_version" "$release_type")
                 print_info "New version for $py_module: v$new_version"
                 update_version_file "$version_file" "$new_version"
             else
@@ -385,7 +327,7 @@ process_module_release() {
         print_info "Current version for $module: $current_version"
         
         if [[ "$release_type" == "beta" || "$release_type" == "alpha" ]]; then
-            new_version=$(get_next_prerelease_version "$current_version" "$module" "$release_type")
+            new_version=$(get_prerelease_version_with_sha "$current_version" "$release_type")
             print_info "New version for $module: v$new_version"
             update_version_file "$version_file" "$new_version"
         else
@@ -429,21 +371,21 @@ main() {
         fi
     fi
     
-    # Select release type based on current branch
-    local release_type=$(select_release_type "$current_branch")
+    # Select release type
+    local release_type=$(select_release_type)
     print_success "Selected release type: $release_type"
     
-    # Validate branch for the selected release type (double-check)
+    # Validate branch for the selected release type
     if ! validate_branch_for_release "$current_branch" "$release_type"; then
         exit 1
     fi
     
-    # Note: For standard releases, we use the existing version as-is from VERSION/toml files
-    # Only alpha/beta releases get auto-incremented with .N suffix
+    # Note: For standard releases, we use the existing version as-is from VERSION files
+    # Alpha/beta releases get -<type>-<commit-sha> suffix
     
     # Select directories
-    local selected_modules
-    mapfile -t selected_modules < <(select_directories)
+    select_directories
+    local selected_modules=("${SELECTED_MODULES[@]}")
     
     print_success "Selected modules:"
     for module in "${selected_modules[@]}"; do
@@ -458,7 +400,7 @@ main() {
     if [[ "$release_type" == "std-release" ]]; then
         print_info "Version Strategy: Use existing versions from files as-is"
     else
-        print_info "Version Strategy: Auto-increment ${release_type}.N suffix"
+        print_info "Version Strategy: Use ${release_type}-<commit-sha> suffix"
     fi
     for module in "${selected_modules[@]}"; do
         print_info "Module: $module"
