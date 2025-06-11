@@ -252,7 +252,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install build twine
 
-      - name: Determine versions
+      - name: Determine and set versions
         id: versions
         run: |
           # Extract versions from updated-versions output
@@ -284,6 +284,19 @@ jobs:
           SPARK_VERSION=$(get_version "py-sdk/spark_feature_push_client")
           GRPC_VERSION=$(get_version "py-sdk/grpc_feature_client")
           
+          # For beta releases, update VERSION files to include beta suffix
+          if [ "$IS_BETA" == "true" ]; then
+            echo "Updating VERSION files with beta versions for build..."
+            echo "${BHARATML_VERSION#v}" > py-sdk/bharatml_commons/VERSION
+            echo "${SPARK_VERSION#v}" > py-sdk/spark_feature_push_client/VERSION
+            echo "${GRPC_VERSION#v}" > py-sdk/grpc_feature_client/VERSION
+            
+            echo "Updated VERSION files:"
+            echo "  bharatml_commons: $(cat py-sdk/bharatml_commons/VERSION)"
+            echo "  spark_feature_push_client: $(cat py-sdk/spark_feature_push_client/VERSION)"
+            echo "  grpc_feature_client: $(cat py-sdk/grpc_feature_client/VERSION)"
+          fi
+          
           # Strip 'v' prefix for PyPI
           BHARATML_VERSION=${BHARATML_VERSION#v}
           SPARK_VERSION=${SPARK_VERSION#v}
@@ -293,9 +306,17 @@ jobs:
           echo "spark_version=$SPARK_VERSION" >> $GITHUB_OUTPUT
           echo "grpc_version=$GRPC_VERSION" >> $GITHUB_OUTPUT
           
-          echo "bharatml-commons version: $BHARATML_VERSION"
-          echo "spark-feature-push-client version: $SPARK_VERSION"
-          echo "grpc-feature-client version: $GRPC_VERSION"
+          echo "Final PyPI versions:"
+          echo "  bharatml-commons: $BHARATML_VERSION"
+          echo "  spark-feature-push-client: $SPARK_VERSION"
+          echo "  grpc-feature-client: $GRPC_VERSION"
+
+      - name: Verify VERSION files before build
+        run: |
+          echo "📋 Current VERSION file contents:"
+          echo "  py-sdk/bharatml_commons/VERSION: $(cat py-sdk/bharatml_commons/VERSION)"
+          echo "  py-sdk/spark_feature_push_client/VERSION: $(cat py-sdk/spark_feature_push_client/VERSION)"
+          echo "  py-sdk/grpc_feature_client/VERSION: $(cat py-sdk/grpc_feature_client/VERSION)"
 
       - name: Build all packages
         run: |
@@ -322,6 +343,13 @@ jobs:
           
           echo "📦 Built packages:"
           ls -la dist/
+          
+          echo "📋 Package versions in filenames:"
+          for file in dist/*.whl dist/*.tar.gz; do
+            if [ -f "$file" ]; then
+              echo "  $(basename "$file")"
+            fi
+          done
 
       - name: Test package installations
         run: |
@@ -336,7 +364,13 @@ jobs:
       - name: Publish to TestPyPI (beta/develop)
         if: needs.detect-release-info.outputs.is-beta == 'true'
         run: |
-          twine upload --repository testpypi dist/*
+          echo "📤 Publishing to TestPyPI..."
+          echo "Packages to upload:"
+          ls -la dist/
+          
+          # Check if packages already exist on TestPyPI (optional - will show warning but continue)
+          echo "Uploading with twine..."
+          twine upload --repository testpypi dist/* --skip-existing
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
