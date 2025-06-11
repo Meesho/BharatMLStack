@@ -1,6 +1,6 @@
 BharatMLStack Business Source License 1.1
 
-Licensor: Fashnear Technologies Private Limited
+Licensor: Meesho Limited
 
 License: Business Source License 1.1
 
