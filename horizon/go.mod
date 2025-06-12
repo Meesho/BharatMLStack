@@ -1,6 +1,6 @@
 module github.com/Meesho/BharatMLStack/horizon
 
-go 1.23.0
+go 1.22.0
 
 require (
 	github.com/DataDog/datadog-go/v5 v5.5.0
@@ -13,7 +13,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/x448/float16 v0.8.4
 	go.etcd.io/etcd/client/v3 v3.5.9
-	golang.org/x/crypto v0.35.0
+	golang.org/x/crypto v0.33.0
 	gorm.io/driver/mysql v1.5.6
 	gorm.io/gorm v1.25.10
 )
