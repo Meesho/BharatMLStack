@@ -57,7 +57,7 @@ High-performance feature store for real-time ML inference and training.
 ## Key Differentiators
 
 - ✨ **Production-Ready**: Battle-tested components used in high-traffic production systems
-- 🌐 **Cloud Agnostic**: Kubernetes-native, so deply on the cloud you love
+- 🌐 **Cloud Agnostic**: Kubernetes-native, so deploy on the cloud you love
 - 📊 **Observability**: Built-in monitoring, logging
 
 
