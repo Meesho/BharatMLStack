@@ -5,3 +5,4 @@ trufflebox-ui/node_modules/
 dist/
 .env*
 .idea/
+workspace/
