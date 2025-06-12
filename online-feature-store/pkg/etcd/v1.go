@@ -141,9 +141,16 @@ func (v *V1) updateMaps(event *clientv3.Event, nodePath, value string) {
 		v.metaMap[key] = nodePath
 	case "DELETE":
 		for k := range v.dataMap {
-			if strings.HasPrefix(k, key) {
-				delete(v.dataMap, k)
-				delete(v.metaMap, k)
+			if strings.HasSuffix(key, "/") {
+				if strings.HasPrefix(k, key) {
+					delete(v.dataMap, k)
+					delete(v.metaMap, k)
+				}
+			} else {
+				if k == key {
+					delete(v.dataMap, k)
+					delete(v.metaMap, k)
+				}
 			}
 		}
 	}
