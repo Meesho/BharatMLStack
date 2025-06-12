@@ -17,6 +17,11 @@ on:
         required: false
         type: boolean
         default: false
+      branch:
+        description: 'Branch to release from'
+        required: true
+        type: string
+        default: 'main'
 
 jobs:
   release:
@@ -27,6 +32,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.branch }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -35,6 +43,7 @@ jobs:
 
       - name: Install build dependencies
         run: |
+          echo "Current branch: ${{ github.ref }}"
           python -m pip install --upgrade pip
           pip install build twine
       - name: Set version without v prefix
