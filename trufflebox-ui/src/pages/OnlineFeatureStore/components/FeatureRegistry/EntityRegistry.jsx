@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Button,
   Dialog,
@@ -192,7 +192,7 @@ const EntityRegistry = () => {
     setShowErrorModal(false);
   };
 
-  const fetchEntityRequests = async () => {
+  const fetchEntityRequests = useCallback(async () => {
     try {
       const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/get-entity-requests`, {
         headers: {
@@ -209,11 +209,11 @@ const EntityRegistry = () => {
     } catch (error) {
       console.error('Error fetching data:', error);
     }
-  };
+  }, [user.token]);
 
   useEffect(() => {
     fetchEntityRequests();
-  }, [user.token]);
+  }, [fetchEntityRequests]);
 
   const renderEntityModal = () => (
     <Dialog open={open} onClose={handleClose} maxWidth="lg">
