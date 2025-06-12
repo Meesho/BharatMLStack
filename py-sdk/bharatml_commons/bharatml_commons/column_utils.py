@@ -54,8 +54,7 @@ def generate_renamed_column(table_name: str, source_type: str, feature_col: str)
         rename_feature_col = clean_table_name + "___" + feature_col
     else:
         raise ValueError(f"Unsupported source type: {source_type} for table: {table_name}")
-    
     return rename_feature_col 
 
 def test_function():
-    print("test_function 10")
+    print("test_function 23")

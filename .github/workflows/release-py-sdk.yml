@@ -1,0 +1,270 @@
+name: Release Python SDK
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v0.1.20 or v0.1.20-beta.1)'
+        required: true
+        type: string
+      is_beta:
+        description: 'Is this a beta release?'
+        required: false
+        type: boolean
+        default: false
+      is_alpha:
+        description: 'Is this an alpha release?'
+        required: false
+        type: boolean
+        default: false
+      branch:
+        description: 'Branch to release from'
+        required: true
+        type: string
+        default: 'main'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.branch }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install build dependencies
+        run: |
+          echo "Current branch: ${{ github.ref }}"
+          python -m pip install --upgrade pip
+          pip install build twine
+      - name: Set version without v prefix
+        id: version
+        run: |
+          VERSION="${{ inputs.version }}"
+          RUN_NUMBER="${{ github.run_number }}"
+
+          if [[ "$VERSION" == *.dev || "$VERSION" == *.b ]]; then
+            VERSION_NO_V="${VERSION}${RUN_NUMBER}"
+          else
+            VERSION_NO_V="$VERSION"
+          fi
+
+            echo "version=$VERSION"
+            echo "run_number=$RUN_NUMBER"
+            echo "final version=$VERSION_NO_V"
+
+            echo "version_no_v=$VERSION_NO_V" >> "$GITHUB_OUTPUT"
+      - name: Verify VERSION files
+        run: |
+          echo "📋 Current VERSION file contents:"
+          echo "  py-sdk/bharatml_commons/VERSION: $(cat py-sdk/bharatml_commons/VERSION)"
+          echo "  py-sdk/spark_feature_push_client/VERSION: $(cat py-sdk/spark_feature_push_client/VERSION)"
+          echo "  py-sdk/grpc_feature_client/VERSION: $(cat py-sdk/grpc_feature_client/VERSION)"
+
+      - name: Update VERSION files for build
+        run: |
+          echo "🔄 Temporarily updating VERSION files for package build..."
+          echo "${{ steps.version.outputs.version_no_v }}" > py-sdk/bharatml_commons/VERSION
+          echo "${{ steps.version.outputs.version_no_v }}" > py-sdk/spark_feature_push_client/VERSION
+          echo "${{ steps.version.outputs.version_no_v }}" > py-sdk/grpc_feature_client/VERSION
+          
+          echo "📋 Updated VERSION file contents:"
+          echo "  py-sdk/bharatml_commons/VERSION: $(cat py-sdk/bharatml_commons/VERSION)"
+          echo "  py-sdk/spark_feature_push_client/VERSION: $(cat py-sdk/spark_feature_push_client/VERSION)"
+          echo "  py-sdk/grpc_feature_client/VERSION: $(cat py-sdk/grpc_feature_client/VERSION)"
+    #   - name: Patch pyproject.toml version regex temporarily
+    #     run: |
+    #       echo "🔧 Patching version pattern to accept dev versions"
+    #       sed -i.bak 's/pattern = "v(?P<version>[^\\\\s]+)"/pattern = "(?P<version>[^\\\\s]+)"/' py-sdk/**/pyproject.toml
+    #   - name: Verify pyproject.toml version regex
+    #     run: |
+    #       echo "📋 Current pyproject.toml version regex:"
+    #       grep -E 'pattern = ".*version.*"' py-sdk/**/pyproject.toml
+    #       echo "📋 Current pyproject.toml version regex:"
+      - name: Build all packages
+        run: |
+          mkdir -p dist
+          rm -rf dist/*
+          
+          # Build bharatml_commons
+          cd py-sdk/bharatml_commons
+          rm -rf dist/ build/ *.egg-info/
+          python -m build
+          cp dist/* ../../dist/
+          cd ../..
+          
+          # Build spark_feature_push_client
+          cd py-sdk/spark_feature_push_client
+          rm -rf dist/ build/ *.egg-info/
+          python -m build
+          cp dist/* ../../dist/
+          cd ../..
+          
+          # Build grpc_feature_client
+          cd py-sdk/grpc_feature_client
+          rm -rf dist/ build/ *.egg-info/
+          python -m build
+          cp dist/* ../../dist/
+          cd ../..
+          
+          echo "📦 Built packages:"
+          ls -la dist/
+
+      - name: Validate packages
+        run: |
+          twine check dist/*
+          
+          # Test package installations
+          pip install dist/*.whl --force-reinstall --find-links dist/
+          python -c "
+          import bharatml_commons
+          import spark_feature_push_client  
+          import grpc_feature_client
+          print('✅ All packages imported successfully')
+          "
+
+      - name: Publish to TestPyPI (Beta)
+        if: ${{ inputs.is_beta }}
+        run: |
+          echo "📤 Publishing to TestPyPI (Beta Release)..."
+          twine upload --repository testpypi dist/* --skip-existing
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+
+      - name: Publish to TestPyPI (Alpha)
+        if: ${{ inputs.is_alpha }}
+        run: |
+          echo "📤 Publishing to TestPyPI (Alpha Release)..."
+          twine upload --repository testpypi dist/* --skip-existing
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+
+      - name: Publish to PyPI (Production)
+        if: ${{ !inputs.is_beta && !inputs.is_alpha }}
+        run: |
+          echo "📤 Publishing to PyPI (Production Release)..."
+          twine upload dist/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Create GitHub Release (Production)
+        if: ${{ !inputs.is_beta && !inputs.is_alpha }}
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: py-sdk/${{ steps.version.outputs.version_no_v }}
+          release_name: Python SDK ${{ steps.version.outputs.version_no_v }}
+          body: |
+            ## Python SDK Release ${{ steps.version.outputs.version_no_v }}
+            
+            ### 📦 Published Packages
+            All packages have been published to PyPI:
+            
+            #### bharatml-commons
+            ```bash
+            pip install bharatml-commons==${{ steps.version.outputs.version_no_v }}
+            ```
+            
+            #### spark-feature-push-client
+            ```bash
+            pip install spark-feature-push-client==${{ steps.version.outputs.version_no_v }}
+            ```
+            
+            #### grpc-feature-client
+            ```bash
+            pip install grpc-feature-client==${{ steps.version.outputs.version_no_v }}
+            ```
+            
+            ### 🚀 Features
+            - **bharatml-commons**: Common utilities and protobuf definitions
+            - **spark-feature-push-client**: Spark integration for feature pushing
+            - **grpc-feature-client**: gRPC client for feature retrieval
+            
+            ### 📖 Usage
+            ```python
+            from bharatml_commons import FeatureMetadataClient
+            from spark_feature_push_client import OnlineFeatureStorePyClient
+            from grpc_feature_client import GRPCFeatureClient
+            ```
+            
+            ### 🔧 Changes
+            Please see the commit history for detailed changes.
+          draft: false
+          prerelease: false
+
+      - name: Create Beta Pre-release
+        if: ${{ inputs.is_beta }}
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: py-sdk/${{ steps.version.outputs.version_no_v }}
+          release_name: Python SDK ${{ steps.version.outputs.version_no_v }} (Beta)
+          body: |
+            ## Python SDK Beta Release ${{ steps.version.outputs.version_no_v }}
+            
+            ⚠️ **This is a beta release from the develop branch** - Published to TestPyPI for testing purposes.
+            
+            ### 🧪 Test Installation
+            Install from TestPyPI for testing:
+            
+            ```bash
+            pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bharatml-commons==${{ steps.version.outputs.version_no_v }}
+            pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ spark-feature-push-client==${{ steps.version.outputs.version_no_v }}
+            pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ grpc-feature-client==${{ steps.version.outputs.version_no_v }}
+            ```
+            
+            ### 🔧 Changes
+            Please see the commit history for detailed changes.
+            
+            ### ✅ Validation
+            - All packages built successfully
+            - Import tests passed
+            - Published to TestPyPI
+          draft: false
+          prerelease: true
+
+      - name: Create Alpha Pre-release
+        if: ${{ inputs.is_alpha }}
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: py-sdk/${{ steps.version.outputs.version_no_v }}
+          release_name: Python SDK ${{ steps.version.outputs.version_no_v }} (Alpha)
+          body: |
+            ## Python SDK Alpha Release ${{ steps.version.outputs.version_no_v }}
+            
+            ⚠️ **This is an alpha release from a feature/fix branch** - Experimental build published to TestPyPI for development and testing.
+            
+            ### 🧪 Test Installation
+            Install from TestPyPI for testing:
+            
+            ```bash
+            pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bharatml-commons==${{ steps.version.outputs.version_no_v }}
+            pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ spark-feature-push-client==${{ steps.version.outputs.version_no_v }}
+            pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ grpc-feature-client==${{ steps.version.outputs.version_no_v }}
+            ```
+            
+            ### 🔧 Changes
+            Please see the commit history for detailed changes.
+            
+            ### ✅ Validation
+            - All packages built successfully
+            - Import tests passed
+            - Published to TestPyPI
+          draft: false
+          prerelease: true 

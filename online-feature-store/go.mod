@@ -11,7 +11,7 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/gocql/gocql v1.7.0
 	github.com/klauspost/compress v1.17.11
-	github.com/redis/go-redis/v9 v9.5.1
+	github.com/redis/go-redis/v9 v9.5.5
 	github.com/rs/zerolog v1.34.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/viper v1.20.1
@@ -19,7 +19,7 @@ require (
 	github.com/x448/float16 v0.8.4
 	go.etcd.io/etcd/client/v3 v3.5.17
 	golang.org/x/net v0.33.0
-	google.golang.org/grpc v1.70.0
+	google.golang.org/grpc v1.68.2
 	google.golang.org/protobuf v1.36.5
 )
 
