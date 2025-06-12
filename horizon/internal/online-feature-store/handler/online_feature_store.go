@@ -3,11 +3,12 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/spf13/viper"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/spf13/viper"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/scylla"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
@@ -620,18 +621,21 @@ func (o *OnlineFeatureStore) ProcessAddFeature(request *ProcessAddFeatureRequest
 
 func (o *OnlineFeatureStore) RetrieveEntities() (*[]RetrieveEntityResponse, error) {
 	entities, err := o.Config.GetEntities()
-	var response []RetrieveEntityResponse
-	for entityLabel, entity := range entities {
-		response = append(response, RetrieveEntityResponse{
-			EntityLabel:      entityLabel,
-			Keys:             entity.Keys,
-			InMemoryCache:    entity.InMemoryCache,
-			DistributedCache: entity.DistributedCache,
-		})
-	}
 	if err != nil {
 		log.Error().Msgf("Error Retrieving Entities")
 		return nil, err
+	}
+
+	response := make([]RetrieveEntityResponse, 0)
+	if entities != nil {
+		for entityLabel, entity := range entities {
+			response = append(response, RetrieveEntityResponse{
+				EntityLabel:      entityLabel,
+				Keys:             entity.Keys,
+				InMemoryCache:    entity.InMemoryCache,
+				DistributedCache: entity.DistributedCache,
+			})
+		}
 	}
 	return &response, nil
 }
