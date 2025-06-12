@@ -66,7 +66,6 @@ High-performance feature store for real-time ML inference and training.
 - 🌐 **Cloud Agnostic**: Kubernetes-native, so deply on the cloud you love
 - 📊 **Observability**: Built-in monitoring, logging
 
-
 ## Quick Start
 
 🚀 **Get started with BharatMLStack in minutes!**
@@ -105,7 +104,9 @@ BharatMLStack follows a microservices architecture designed for scalability and 
 
 ### Comprehensive Documentation Hub
 
-For detailed technical documentation, architecture deep-dives, and implementation guides, visit our comprehensive documentation in:
+For complete documentation index visit [Wiki](https://github.com/Meesho/BharatMLStack/wiki)
+
+For Online Feature Store detailed technical documentation, architecture deep-dives, and implementation guides, visit our comprehensive documentation in:
 
 📖 **[Online Feature Store Documentation](./online-feature-store/docs/README.md)**
 
