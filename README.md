@@ -48,12 +48,10 @@ High-performance feature store for real-time ML inference and training.
 
 ## Key Differentiators
 
-✨ **Production-Ready**: Battle-tested components used in high-traffic production systems
-🔒 **Enterprise Security**: End-to-end encryption, audit logs, and compliance ready
-🌐 **Cloud Native**: Kubernetes-native with multi-cloud support
-📊 **Observability**: Built-in monitoring, logging, and distributed tracing
-🔄 **GitOps Integration**: Infrastructure as code with automated deployments
-🤖 **AI/ML Ops**: Complete MLOps lifecycle from experimentation to production
+- ✨ **Production-Ready**: Battle-tested components used in high-traffic production systems
+- 🌐 **Cloud Agnostic**: Kubernetes-native, so deply on the cloud you love
+- 📊 **Observability**: Built-in monitoring, logging
+
 
 ## Quick Start
 
@@ -85,12 +83,12 @@ BharatMLStack follows a microservices architecture designed for scalability and 
 │ (Control Plane) │
 └─────────┬───────┘
           │
-          ├─────────────────────┬─────────────────────┐
-          ▼                     ▼                     ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│ Feature Store   │    │ Model Serving   │    │  Data Pipeline  │
-│  (Real-time)    │    │   (Inference)   │    │  (Processing)   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+          ├─────────────────────┬
+          ▼                     ▼                     
+┌─────────────────┐    ┌─────────────────┐
+│ Feature Store   │    │ Feature Store   │
+│  GRPC Server    │    │   Consumer      │
+└─────────────────┘    └─────────────────┘
 ```
 
 ## Contributing
@@ -99,17 +97,16 @@ We welcome contributions from the community! Please see our [Contributing Guide]
 
 ## Community & Support
 
-- 📖 **Documentation**: [docs.bharatmlstack.com](https://docs.bharatmlstack.com)
-- 💬 **Discord**: Join our [community chat](https://discord.gg/bharatmlstack)
-- 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/bharatml/BharatMLStack/issues)
-- 📧 **Email**: Contact us at [hello@bharatmlstack.com](mailto:hello@bharatmlstack.com)
+- 💬 **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
+- 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
+- 📧 **Email**: Contact us at [hello@bharatmlstack.com](mailto:ml-oss@meesho.com )
 
 ## License
 
-BharatMLStack is open-source software licensed under the [Apache License 2.0](LICENSE.md).
+BharatMLStack is open-source software licensed under the [BharatMLStack Business Source License 1.1](LICENSE.md).
 
 ---
 
 <div align="center">
-  <strong>Built with ❤️ for the ML community</strong>
+  <strong>Built with ❤️ for the ML community from Meesho</strong>
 </div>
