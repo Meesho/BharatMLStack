@@ -2,6 +2,9 @@
 
 [![PyPI version](https://badge.fury.io/py/spark_feature_push_client.svg)](https://badge.fury.io/py/spark_feature_push_client)
 [![Python versions](https://img.shields.io/pypi/pyversions/spark_feature_push_client.svg)](https://pypi.org/project/spark_feature_push_client/)
+[![Build Status](https://github.com/Meesho/BharatMLStack/actions/workflows/py-sdk.yml/badge.svg)](https://github.com/Meesho/BharatMLStack/actions/workflows/py-sdk.yml)
+[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-BharatMLStack%20BSL%201.1-blue.svg)](https://github.com/Meesho/BharatMLStack/blob/main/LICENSE.md)
 
 Apache Spark-based client for pushing ML features from offline batch sources to the BharatML Stack Online Feature Store via Kafka. This client is designed for **data pipeline operations** - reading from batch sources and publishing to Kafka for online consumption.
 

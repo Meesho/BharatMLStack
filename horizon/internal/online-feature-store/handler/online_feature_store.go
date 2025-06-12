@@ -755,7 +755,13 @@ func (o *OnlineFeatureStore) ProcessDeleteFeatures(request *ProcessDeleteFeature
 
 func (o *OnlineFeatureStore) RetrieveEntities() (*[]RetrieveEntityResponse, error) {
 	entities, err := o.Config.GetEntities()
-	var response []RetrieveEntityResponse
+	if err != nil {
+		log.Error().Msgf("Error Retrieving Entities")
+		return nil, err
+	}
+
+	response := make([]RetrieveEntityResponse, 0)
+
 	for entityLabel, entity := range entities {
 		response = append(response, RetrieveEntityResponse{
 			EntityLabel:      entityLabel,
@@ -764,10 +770,7 @@ func (o *OnlineFeatureStore) RetrieveEntities() (*[]RetrieveEntityResponse, erro
 			DistributedCache: entity.DistributedCache,
 		})
 	}
-	if err != nil {
-		log.Error().Msgf("Error Retrieving Entities")
-		return nil, err
-	}
+
 	return &response, nil
 }
 

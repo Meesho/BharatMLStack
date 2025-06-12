@@ -2,10 +2,11 @@ package infra
 
 import (
 	"errors"
+	"time"
+
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
-	"time"
 )
 
 const (
@@ -143,7 +144,7 @@ func BuildRedisOptionsFromEnv(envPrefix string) (*redis.Options, error) {
 		redisOptions.ConnMaxIdleTime = time.Duration(viper.GetInt(envPrefix+redisMaxConnIdleTimeoutEnvSuffix)) * time.Minute
 	}
 	if viper.IsSet(envPrefix + redisDisableIdentityEnvSuffix) {
-		redisOptions.DisableIndentity = viper.GetBool(envPrefix + redisDisableIdentityEnvSuffix)
+		redisOptions.DisableIdentity = viper.GetBool(envPrefix + redisDisableIdentityEnvSuffix)
 	}
 	log.Info().Msgf("redis options built from env, env prefix - %s, options - %+v", envPrefix, redisOptions)
 	return &redisOptions, nil

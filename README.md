@@ -1,60 +1,176 @@
 # BharatMLStack
 
-![CI Build and Test](https://github.com/Meesho/BharatMLStack/workflows/CI%20Build%20and%20Test/badge.svg)
+<div align="center">
+  <img src="assets/bharatmlstack.jpg" alt="BharatMLStack Logo" width="400"/>
+</div>
 
-A comprehensive ML infrastructure stack with feature store, model serving, and UI components.
+## What is BharatMLStack?
 
-## Build Status
+BharatMLStack is a comprehensive, production-ready machine learning infrastructure platform designed to democratize ML capabilities across India and beyond. Our mission is to provide a robust, scalable, and accessible ML stack that empowers organizations to build, deploy, and manage machine learning solutions at massive scale.
 
-| Component | Build Status | Version | Directory |
-|-----------|--------------|---------|-----------|
-| **Horizon** | ![Build](https://img.shields.io/badge/build-unknown-lightgrey) | ![Version](https://img.shields.io/badge/version-unknown-lightgrey) | [horizon/](./horizon) |
-| **Trufflebox UI** | ![Build](https://img.shields.io/badge/build-unknown-lightgrey) | ![Version](https://img.shields.io/badge/version-unknown-lightgrey) | [trufflebox-ui/](./trufflebox-ui) |
-| **Online Feature Store** | ![Build](https://img.shields.io/badge/build-unknown-lightgrey) | ![Version](https://img.shields.io/badge/version-unknown-lightgrey) | [online-feature-store/](./online-feature-store) |
+## Our Vision
 
-## Components
+🎯 **Democratize Machine Learning**: Make advanced ML infrastructure accessible to organizations of all sizes
+🚀 **Scale Without Limits**: Built to handle millions of requests per second with enterprise-grade reliability
+🇮🇳 **India-First Approach**: Optimized for Indian market needs while maintaining global standards
+⚡ **Real-Time Intelligence**: Enable instant decision-making with sub-millisecond feature serving
+🔧 **Developer-Friendly**: Intuitive APIs and interfaces that accelerate ML development cycles
 
-### 🚀 Horizon
-Model serving and inference service built with Go. Provides high-performance model serving capabilities.
+## Running at Million Scale
 
-### 🎨 Trufflebox UI
-Modern web interface for managing ML models and features. Built with React and provides an intuitive user experience.
+BharatMLStack is battle-tested in production environments, powering:
+- **1M+ predictions per second** across distributed deployments
+- **Sub-10ms latency** for real-time feature retrieval
+- **99.99% uptime** with auto-scaling and fault tolerance
+- **Petabyte-scale** feature storage and processing
+- **Multi-region deployments** with global load balancing
 
-### 🗄️ Online Feature Store
-High-performance feature store for real-time ML inference. Supports both batch and streaming feature processing.
+## Core Components
+
+### 🚀 Horizon - Control Plane & Backend
+The central control plane for BharatMLStack components, serving as the backend for Trufflebox UI.
+- **Component orchestration**: Manages and coordinates all BharatMLStack services
+- **API gateway**: Unified interface for all MLOps and workflows
+
+### 🎨 Trufflebox UI - ML Management Console  
+Modern web interface for managing ML models, features, and experiments. Currently it supports:
+- **Feature Registry**: Centralized repository for feature definitions and metadata
+- **Feature Cataloging**: Discovery and search capabilities for available features
+- **Online Feature Store Control System**: Management interface for feature store operations
+- **Approval Flows**: Workflow management for feature deployment and changes 
+
+### 🗄️ Online Feature Store - Real-Time Features
+High-performance feature store for real-time ML inference and training.
+- **Real-time serving**: Sub-10ms feature retrieval at scale  
+- **Streaming ingestion**: Process millions of feature updates per second
+- **Feature Backward Compatible Versioning**: Track and manage feature evolution
+- **Multi-source integration**: Push from stream, batch and real-time sources
+
+## Key Differentiators
+
+- ✨ **Production-Ready**: Battle-tested components used in high-traffic production systems
+- 🌐 **Cloud Agnostic**: Kubernetes-native, so deply on the cloud you love
+- 📊 **Observability**: Built-in monitoring, logging
+
 
 ## Quick Start
 
+🚀 **Get started with BharatMLStack in minutes!**
+
+For comprehensive setup instructions, examples, and deployment guides, see our detailed Quick Start documentation:
+
+📖 **[Quick Start Guide →](./quick-start/README.md)**
+
+### What You'll Find:
+
+- **🐳 Docker Setup**: Complete stack deployment with Docker Compose
+- **📊 Sample Data**: Pre-configured examples to get you started
+- **🔍 Health Checks**: Verify your deployment is working
+- **📝 Step-by-Step Tutorials**: From installation to first feature operations
+
+### TL;DR - One Command Setup:
+
 ```bash
-# Check what would be released
-./release.sh --dry-run
-
-# Release components with changes
-./release.sh
-
-# Force release all components
-./release.sh --force-all
+# Clone and start the complete stack
+git clone https://github.com/Meesho/BharatMLStack.git
+cd BharatMLStack/quick-start
+docker-compose up -d
 ```
 
-## Development
+Then follow the [Quick Start Guide](./quick-start/README.md) for detailed setup and usage instructions.
 
-Each component has its own build and release process:
+## Architecture
 
-- **Horizon**: Go-based service with Docker support
-- **Trufflebox UI**: Node.js/React application with Docker support  
-- **Online Feature Store**: Go-based service with gRPC API
+BharatMLStack follows a microservices architecture designed for scalability and maintainability:
 
-See individual README files in each directory for detailed development instructions.
+```
+┌─────────────────┐
+│  Trufflebox UI  │
+│   (Frontend)    │
+└─────────┬───────┘
+          │
+          ▼
+┌─────────────────┐
+│     Horizon     │ ◄── Control Plane & Backend
+│ (Control Plane) │
+└─────────┬───────┘
+          │
+          ├─────────────────────┬
+          ▼                     ▼                     
+┌─────────────────┐    ┌─────────────────┐
+│ Feature Store   │    │ Feature Store   │
+│  GRPC Server    │    │   Consumer      │
+└─────────────────┘    └─────────────────┘
+```
 
-## CI/CD
+## 📚 Documentation
 
-This repository uses GitHub Actions for continuous integration:
+### Comprehensive Documentation Hub
 
-- **Automatic builds** on PRs to master/develop branches
-- **Smart change detection** - only builds components that changed
-- **Automatic badge updates** showing build status
-- **Multi-platform Docker builds** for releases
+For detailed technical documentation, architecture deep-dives, and implementation guides, visit our comprehensive documentation in:
+
+📖 **[Online Feature Store Documentation](./online-feature-store/docs/README.md)**
+
+### 🎯 What You'll Find
+
+#### **Core Architecture & Design**
+- **[System Architecture](./online-feature-store/docs/architecture.md)** - Detailed system design and component interactions
+- **[Schema Management](./online-feature-store/docs/schema.md)** - Key-schema isolation and etcd mapping strategies
+- **[Performance Benchmarks](./online-feature-store/docs/)** - Latency, throughput, and scalability metrics
+
+#### **Developer Guides**
+- **[API Documentation](./online-feature-store/docs/)** - Complete API reference and usage examples
+- **[SDK Integration](./go-sdk/)** - Go SDK for seamless integration
+- **[CLI Tools](./quick-start/CLI-README.md)** - Command-line interface for testing and management
+
+#### **Deployment & Operations**
+- **[Quick Start Guide](./quick-start/)** - Get up and running in minutes
+- **[Production Deployment](./online-feature-store/docs/)** - Enterprise deployment patterns
+- **[Monitoring & Observability](./online-feature-store/docs/)** - Comprehensive monitoring setup
+
+#### **Use Cases & Examples**
+- **[Real-time ML Pipelines](./online-feature-store/docs/)** - Production ML workflow examples
+- **[Feature Engineering](./online-feature-store/docs/)** - Best practices for feature development
+- **[Scaling Patterns](./online-feature-store/docs/)** - Handle millions of requests per second
+
+### 🚀 Quick Navigation
+
+| Component | Documentation | Quick Start |
+|-----------|--------------|-------------|
+| **Online Feature Store** | [Docs](./online-feature-store/docs/) | [Setup](./quick-start/) |
+| **Go SDK** | [Docs](./go-sdk/README.md) | [Examples](./go-sdk/README.md) |
+| **Python SDK** | [Docs](./py-sdk/README.md) | [Quickstart](./py-sdk/README.md) |
+
+### 💡 Getting Started Resources
+
+**New to BharatMLStack?** Start here:
+1. 📖 Read the [System Overview](./online-feature-store/docs/README.md)
+2. 🚀 Follow the [Quick Start Guide](./quick-start/)
+3. 🔧 Try the [CLI Tutorial](./quick-start/CLI-README.md)
+4. 🏗️ Explore [Architecture Details](./online-feature-store/docs/architecture.md)
+
+**Ready for Production?** Check out:
+- 🏭 [Production Deployment Guide](./online-feature-store/docs/)
+- 📊 [Performance Tuning](./online-feature-store/docs/)
+- 🔐 [Security & Authentication](./online-feature-store/docs/)
+- 📈 [Monitoring & Alerting](./online-feature-store/docs/)
+
+## Contributing
+
+We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to get started.
+
+## Community & Support
+
+- 💬 **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
+- 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
+- 📧 **Email**: Contact us at [hello@bharatmlstack.com](mailto:ml-oss@meesho.com )
 
 ## License
 
-See [LICENSE.md](LICENSE.md) for details.
+BharatMLStack is open-source software licensed under the [BharatMLStack Business Source License 1.1](LICENSE.md).
+
+---
+
+<div align="center">
+  <strong>Built with ❤️ for the ML community from Meesho</strong>
+</div>

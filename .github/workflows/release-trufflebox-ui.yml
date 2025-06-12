@@ -1,0 +1,145 @@
+name: Release TruffleBox UI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v0.1.20 or v0.1.20-beta.1)'
+        required: true
+        type: string
+      is_beta:
+        description: 'Is this a beta release?'
+        required: false
+        type: boolean
+        default: false
+      is_alpha:
+        description: 'Is this an alpha release?'
+        required: false
+        type: boolean
+        default: false
+      branch:
+        description: 'Branch to release from'
+        required: true
+        type: string
+        default: 'main'
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/trufflebox-ui
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.branch }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ inputs.version }}
+            type=raw,value=latest,enable=${{ !inputs.is_beta && !inputs.is_alpha }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./trufflebox-ui
+          file: ./trufflebox-ui/DockerFile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create GitHub Release (Production)
+        if: ${{ !inputs.is_beta && !inputs.is_alpha }}
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: trufflebox-ui/${{ inputs.version }}
+          release_name: TruffleBox UI ${{ inputs.version }}
+          body: |
+            ## TruffleBox UI Release ${{ inputs.version }}
+            
+            ### Docker Image
+            - `${{ env.IMAGE_NAME }}:${{ inputs.version }}`
+            - `${{ env.IMAGE_NAME }}:latest`
+            
+            ### Features
+            - Web-based interface for BharatMLStack
+            - Real-time monitoring and management
+            
+            ### Changes
+            Please see the commit history for detailed changes.
+          draft: false
+          prerelease: false
+
+      - name: Create GitHub Release (Beta)
+        if: ${{ inputs.is_beta }}
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: trufflebox-ui/${{ inputs.version }}
+          release_name: TruffleBox UI ${{ inputs.version }} (Beta)
+          body: |
+            ## TruffleBox UI Beta Release ${{ inputs.version }}
+            
+            ⚠️ **This is a beta release from the develop branch** - Use for testing purposes only.
+            
+            ### Docker Image
+            - `${{ env.IMAGE_NAME }}:${{ inputs.version }}`
+            
+            ### Features
+            - Web-based interface for BharatMLStack
+            - Real-time monitoring and management
+            
+            ### Changes
+            Please see the commit history for detailed changes.
+          draft: false
+          prerelease: true
+
+      - name: Create GitHub Release (Alpha)
+        if: ${{ inputs.is_alpha }}
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: trufflebox-ui/${{ inputs.version }}
+          release_name: TruffleBox UI ${{ inputs.version }} (Alpha)
+          body: |
+            ## TruffleBox UI Alpha Release ${{ inputs.version }}
+            
+            ⚠️ **This is an alpha release from a feature/fix branch** - Experimental build for development and testing.
+            
+            ### Docker Image
+            - `${{ env.IMAGE_NAME }}:${{ inputs.version }}`
+            
+            ### Features
+            - Web-based interface for BharatMLStack
+            - Real-time monitoring and management
+            
+            ### Changes
+            Please see the commit history for detailed changes.
+          draft: false
+          prerelease: true 

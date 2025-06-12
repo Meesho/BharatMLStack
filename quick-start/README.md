@@ -42,7 +42,7 @@ Run the start script to set up your workspace and launch all services:
 You can easily test different versions of the application services by setting environment variables:
 
 ```bash
-# Test specific versions
+# Test specific versions [Replace with actual versions]
 ONFS_VERSION=v1.2.3 HORIZON_VERSION=v2.1.0 TRUFFLEBOX_VERSION=v1.0.5 ./start.sh
 
 # Or set them in your workspace and run docker-compose directly

@@ -22,6 +22,7 @@ const JobRegistry = () => {
   const [open, setOpen] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [creationType, setCreationType] = useState('job'); // 'job' or 'client'
   const [jobData, setJobData] = useState({
     "job-type": "writer",
     "job-id": "",
@@ -34,6 +35,22 @@ const JobRegistry = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
+
+  // Configuration for different creation types
+  const creationConfig = {
+    job: {
+      title: 'Create Job',
+      nameLabel: 'Job Name',
+      tokenLabel: 'Job Token',
+      jobType: 'writer'
+    },
+    client: {
+      title: 'Create Client',
+      nameLabel: 'Client Name',
+      tokenLabel: 'Client Token',
+      jobType: 'reader'
+    }
+  };
 
   useEffect(() => {
     const fetchJobRequests = async () => {
@@ -67,9 +84,11 @@ const JobRegistry = () => {
     }));
   };
 
-  const handleOpen = () => {
+  const handleOpen = (type = 'job') => {
+    const config = creationConfig[type];
+    setCreationType(type);
     setJobData({
-      "job-type": "writer",
+      "job-type": config.jobType,
       "job-id": "",
       "token": "",
     });
@@ -78,6 +97,7 @@ const JobRegistry = () => {
 
   const handleClose = () => {
     setOpen(false);
+    setCreationType('job');
   };
 
   const handleViewJob = (job) => {
@@ -131,6 +151,8 @@ const JobRegistry = () => {
     setShowErrorModal(false);
   };
 
+  const currentConfig = creationConfig[creationType];
+
   return (
     <div style={{ padding: '20px' }}>
       <GenericTable
@@ -141,20 +163,27 @@ const JobRegistry = () => {
         actionButtons={[
           {
             label: "Create Job",
-            onClick: handleOpen,
+            onClick: () => handleOpen('job'),
             variant: "contained",
             color: "#522b4a",
-            hoverColor: "#2c3e50"
+            hoverColor: "#613a5c"
+          },
+          {
+            label: "Create Client",
+            onClick: () => handleOpen('client'),
+            variant: "contained",
+            color: "#522b4a",
+            hoverColor: "#613a5c"
           }
         ]}
       />
 
-      {/* Create Job Modal */}
+      {/* Create Job/Client Modal */}
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Create Job</DialogTitle>
+        <DialogTitle>{currentConfig.title}</DialogTitle>
         <DialogContent>
           <TextField
-            label="Job Name"
+            label={currentConfig.nameLabel}
             name="job-id"
             value={jobData["job-id"]}
             onChange={handleChange}
@@ -162,7 +191,7 @@ const JobRegistry = () => {
             margin="normal"
           />
           <TextField
-            label="Job Token"
+            label={currentConfig.tokenLabel}
             name="token"
             value={jobData.token}
             onChange={handleChange}

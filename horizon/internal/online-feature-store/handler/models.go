@@ -225,3 +225,8 @@ type GetOnlineFeatureMappingResponse struct {
 	Error string   `json:"error"`
 	Data  []string `json:"data"`
 }
+
+type FeatureGroupResponse struct {
+	Label    string         `json:"label"`
+	DataType enums.DataType `json:"data-type"`
+}

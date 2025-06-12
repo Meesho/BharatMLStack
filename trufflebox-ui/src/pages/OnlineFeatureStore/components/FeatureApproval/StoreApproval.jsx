@@ -153,6 +153,7 @@ const StoreApproval = () => {
         excludeColumns={['EntityLabel', 'FeatureGroupLabel']}
         onRowAction={handleOpen}
         loading={false}
+        flowType="approval"
       />
       
       <Modal
