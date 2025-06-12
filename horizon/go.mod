@@ -1,8 +1,6 @@
 module github.com/Meesho/BharatMLStack/horizon
 
-go 1.22.0
-
-toolchain go1.22.8
+go 1.23.0
 
 require (
 	github.com/DataDog/datadog-go/v5 v5.5.0
@@ -15,7 +13,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/x448/float16 v0.8.4
 	go.etcd.io/etcd/client/v3 v3.5.9
-	golang.org/x/crypto v0.32.0
+	golang.org/x/crypto v0.35.0
 	gorm.io/driver/mysql v1.5.6
 	gorm.io/gorm v1.25.10
 )
@@ -70,8 +68,8 @@ require (
 	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/arch v0.12.0 // indirect
 	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/sys v0.29.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240814211410-ddb44dafa142 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
 	google.golang.org/grpc v1.67.1 // indirect
