@@ -4,14 +4,20 @@
   <img src="assets/bharatmlstack.jpg" alt="BharatMLStack Logo" width="400"/>
 </div>
 
+
+
 <div align="center">
 
 [![CI](https://github.com/Meesho/BharatMLStack/actions/workflows/ci.yml/badge.svg)](https://github.com/Meesho/BharatMLStack/actions/workflows/ci.yml)
+![Static Badge](https://img.shields.io/badge/oss_lifecycle-active-green)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da?style=flat&logo=discord&logoColor=white)](https://discord.gg/XkT7XsV2AU)
-[![Made in India](https://img.shields.io/badge/Made%20in-India-FF9933?style=flat&labelColor=138808&color=FFFFFF)](https://en.wikipedia.org/wiki/India)
-[![Meesho](https://img.shields.io/badge/Built%20by-Meesho-FF6B35?style=flat&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTEyIDJMMTMuMDkgOC4yNkwyMCA5TDEzLjA5IDE1Ljc0TDEyIDIyTDEwLjkxIDE1Ljc0TDQgOUwxMC45MSA4LjI2TDEyIDJaIiBmaWxsPSJ3aGl0ZSIvPjwvc3ZnPg==)](https://meesho.com)
+[![Made in India](https://img.shields.io/badge/Made%20in-India-FF9933?style=flat)](https://en.wikipedia.org/wiki/India)
+
+[![Meesho](https://img.shields.io/badge/Built%20by%20Meesho-%20%E2%9D%A4%20-white?style=flat&labelColor=white&color=450839)](https://meesho.com)
+
 
 </div>
+
 ## What is BharatMLStack?
 
 BharatMLStack is a comprehensive, production-ready machine learning infrastructure platform designed to democratize ML capabilities across India and beyond. Our mission is to provide a robust, scalable, and accessible ML stack that empowers organizations to build, deploy, and manage machine learning solutions at massive scale.
@@ -57,7 +63,7 @@ High-performance feature store for real-time ML inference and training.
 ## Key Differentiators
 
 - ✨ **Production-Ready**: Battle-tested components used in high-traffic production systems
-- 🌐 **Cloud Agnostic**: Kubernetes-native, so deploy on the cloud you love
+- 🌐 **Cloud Agnostic**: Kubernetes-native, so deply on the cloud you love
 - 📊 **Observability**: Built-in monitoring, logging
 
 
@@ -82,7 +88,7 @@ For comprehensive setup instructions, examples, and deployment guides, see our d
 # Clone and start the complete stack
 git clone https://github.com/Meesho/BharatMLStack.git
 cd BharatMLStack/quick-start
-./start.sh
+docker-compose up -d
 ```
 
 Then follow the [Quick Start Guide](./quick-start/README.md) for detailed setup and usage instructions.
