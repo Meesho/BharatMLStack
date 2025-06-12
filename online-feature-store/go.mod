@@ -19,7 +19,7 @@ require (
 	github.com/x448/float16 v0.8.4
 	go.etcd.io/etcd/client/v3 v3.5.17
 	golang.org/x/net v0.33.0
-	google.golang.org/grpc v1.70.0
+	google.golang.org/grpc v1.68.2
 	google.golang.org/protobuf v1.36.5
 )
 
