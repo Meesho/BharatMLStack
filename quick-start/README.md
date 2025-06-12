@@ -1,4 +1,5 @@
 # BharatML Stack Quick Start Guide
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da?style=flat&logo=discord&logoColor=white)](https://discord.gg/XkT7XsV2AU)
 
 A quick way to get the BharatML Stack Online Feature Store platform up and running locally for development and testing.
 

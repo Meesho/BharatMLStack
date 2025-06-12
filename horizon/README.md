@@ -1,4 +1,6 @@
-![Build Status](https://github.com/Meesho/BharatMLStack/actions/workflows/horizon.yml/badge.svg) ![Build](https://img.shields.io/badge/build-unknown-lightgrey) ![Version](https://img.shields.io/badge/version-unknown-lightgrey)
+![Build Status](https://github.com/Meesho/BharatMLStack/actions/workflows/horizon.yml/badge.svg)
+![Static Badge](https://img.shields.io/badge/release-v1.0.0-blue?style=flat)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da?style=flat&logo=discord&logoColor=white)](https://discord.gg/XkT7XsV2AU)
 
 # Horizon
 
