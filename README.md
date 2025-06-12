@@ -82,7 +82,7 @@ For comprehensive setup instructions, examples, and deployment guides, see our d
 # Clone and start the complete stack
 git clone https://github.com/Meesho/BharatMLStack.git
 cd BharatMLStack/quick-start
-docker-compose up -d
+./start.sh
 ```
 
 Then follow the [Quick Start Guide](./quick-start/README.md) for detailed setup and usage instructions.

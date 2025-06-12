@@ -8,6 +8,7 @@ A quick way to get the BharatML Stack Online Feature Store platform up and runni
 - Go 1.22 or later
 - `nc` (netcat) command for connectivity checks
 - Bash shell
+- `grpcurl` for testing gRPC API endpoints (install from [https://github.com/fullstorydev/grpcurl](https://github.com/fullstorydev/grpcurl))
 
 ## System Components
 
@@ -119,6 +120,163 @@ To stop and completely purge all containers, volumes, and workspace:
 - **etcd**:
   - Endpoint: http://localhost:2379
   - Workbench: http://localhost:8081
+
+## Feature Store API Examples
+
+### gRPC API Commands
+
+Use the following `grpcurl` commands to interact with the Online Feature Store gRPC API:
+
+**Persist Features:**
+```bash
+grpcurl -plaintext -H "online-feature-store-caller-id: <caller-id>" -H "online-feature-store-auth-token: <auth-token>" -d '<request-body>' localhost:8089 persist.FeatureService/PersistFeatures
+```
+
+**Retrieve Features (Decoded):**
+```bash
+grpcurl -plaintext -H "online-feature-store-caller-id: <caller-id>" -H "online-feature-store-auth-token: <auth-token>" -d '<request-body>' localhost:8089 retrieve.FeatureService/RetrieveDecodedResult
+```
+
+**Retrieve Features (Binary):**
+```bash
+grpcurl -plaintext -H "online-feature-store-caller-id: <caller-id>" -H "online-feature-store-auth-token: <auth-token>" -d '<request-body>' localhost:8089 retrieve.FeatureService/RetrieveFeatures
+```
+
+### Sample Request Bodies
+
+**Single Feature Group Persist:**
+```json
+{
+    "data": [{
+        "key_values": ["10"],
+        "feature_values": [{
+            "values": {"fp32_values": [123.45]}
+        }]
+    }],
+    "entity_label": "catalog",
+    "feature_group_schema": [{
+        "label": "int_fg",
+        "feature_labels": ["id"]
+    }],
+    "keys_schema": ["catalog_id"]
+}
+```
+
+**Single Feature Group Retrieve:**
+```json
+{
+    "entity_label": "catalog",
+    "feature_groups": [{
+        "label": "int_fg",
+        "feature_labels": ["id"]
+    }],
+    "keys_schema": ["catalog_id"],
+    "keys": [{"cols": ["10"]}]
+}
+```
+
+**Multiple Feature Groups Persist:**
+```json
+{
+    "data": [
+        {
+            "key_values": ["1"],
+            "feature_values": [
+                {"values": {"fp32_values": [28.5]}},
+                {"values": {"string_values": ["Bharat"]}}
+            ]
+        },
+        {
+            "key_values": ["2"],
+            "feature_values": [
+                {"values": {"fp32_values": [32.0]}},
+                {"values": {"string_values": ["India"]}}
+            ]
+        }
+    ],
+    "entity_label": "catalog",
+    "feature_group_schema": [
+        {"label": "int_fg", "feature_labels": ["id"]},
+        {"label": "string_fg", "feature_labels": ["name"]}
+    ],
+    "keys_schema": ["catalog_id"]
+}
+```
+
+**Multiple Feature Groups Retrieve:**
+```json
+{
+    "entity_label": "catalog",
+    "feature_groups": [
+        {"label": "int_fg", "feature_labels": ["id"]},
+        {"label": "string_fg", "feature_labels": ["name"]}
+    ],
+    "keys_schema": ["catalog_id"],
+    "keys": [
+        {"cols": ["1"]},
+        {"cols": ["2"]}
+    ]
+}
+```
+
+**Vector Feature Group Persist:**
+```json
+{
+    "data": [{
+        "key_values": ["123"],
+        "feature_values": [{
+            "values": {
+                "vector": [{
+                    "values": {"fp32_values": [1.0, 2.0, 3.0, 4.0]}
+                }]
+            }
+        }]
+    }],
+    "entity_label": "catalog",
+    "feature_group_schema": [{
+        "label": "vector_fg",
+        "feature_labels": ["embedding"]
+    }],
+    "keys_schema": ["catalog_id"]
+}
+```
+
+**Vector Feature Group Retrieve:**
+```json
+{
+    "entity_label": "catalog",
+    "feature_groups": [{
+        "label": "vector_fg",
+        "feature_labels": ["embedding"]
+    }],
+    "keys_schema": ["catalog_id"],
+    "keys": [{"cols": ["123"]}]
+}
+```
+
+### Key Points
+
+**Only one type per feature value block:**
+- `feature_values` is a list, and each item in the list has only one value type populated
+- For example: one item has only `fp32_values`, another has only `int64_values`
+
+**Field Types:**
+The following value types are supported:
+
+- **fp32_values**: `float32[]`
+- **fp64_values**: `float64[]`
+- **int32_values**: `int32[]`
+- **int64_values**: `string[]` (because JSON doesn't support 64-bit ints directly)
+- **uint32_values**: `uint32[]`
+- **uint64_values**: `string[]`
+- **string_values**: `string[]`
+- **bool_values**: `bool[]`
+- **vector**: list of objects with nested values (used for embedded features)
+
+### Response Format Differences
+
+- **Retrieve Features (Binary)**: Returns data in binary format for optimal performance and reduced network overhead
+- **Retrieve Features (Decoded)**: Returns data in human-readable string format for easier debugging and development purposes
 
 ## Managing Services
 
