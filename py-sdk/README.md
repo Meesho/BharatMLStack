@@ -42,22 +42,12 @@ pip install bharatml_commons grpc_feature_client
 pip install bharatml_commons
 ```
 
-## 🔄 Migration from Old Package
+## 📖 Documentation
 
-If you're migrating from the unified `bharatml_stack_py_sdk` package, see our [Migration Guide](./MIGRATION_GUIDE.md).
+- **[bharatml_commons README](./bharatml_commons/README.md)**: Common utilities and protobuf definitions
+- **[spark_feature_push_client README](./spark_feature_push_client/README.md)**: Spark-based data pipeline client
+- **[grpc_feature_client README](./grpc_feature_client/README.md)**: High-performance gRPC client  
 
-**Quick Migration:**
-```bash
-# Uninstall old package
-pip uninstall bharatml_stack_py_sdk
-
-# Install new packages
-pip install bharatml_commons spark_feature_push_client grpc_feature_client
-
-# Update imports:
-# bharatml_common → bharatml_commons
-# spark_feature_push_client → spark_feature_push_client
-```
 
 ## Prerequisites
 
