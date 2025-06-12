@@ -353,3 +353,12 @@ You can modify environment variables in the docker-compose.yml file and restart 
 ## License
 
 This project is licensed under the BharatMLStack Business Source License 1.1.
+
+---
+
+<div align="center">
+  <strong>Built with ❤️ for the ML community from Meesho</strong>
+</div>
+<div align="center">
+  <strong>If you find this useful, ⭐️ the repo — your support means the world to us!</strong>
+</div>

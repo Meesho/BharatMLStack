@@ -379,3 +379,14 @@ Licensed under the BharatMLStack Business Source License 1.1. See [LICENSE](http
 - **[PyPI Packages](https://pypi.org/search/?q=bharatml)**: All published packages
 - **[Issues](https://github.com/Meesho/BharatMLStack/issues)**: Bug reports and feature requests
 - **[Discussions](https://github.com/Meesho/BharatMLStack/discussions)**: Community discussions
+
+
+
+---
+
+<div align="center">
+  <strong>Built with ❤️ for the ML community from Meesho</strong>
+</div>
+<div align="center">
+  <strong>If you find this useful, ⭐️ the repo — your support means the world to us!</strong>
+</div>

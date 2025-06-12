@@ -25,3 +25,6 @@ Online Feature Store is a high-performance, scalable, and production-grade featu
 - [DeserializedPSDB Structure](./ddb-design.md)
 - [Key-Schema Isolation & etcd Mapping](./schema.md)
 
+### Usage
+- [Usage](./usage.md)
+

@@ -209,3 +209,13 @@ go test -race ./...
 ## License
 
 See [LICENSE.md](../LICENSE.md) for details. 
+
+
+---
+
+<div align="center">
+  <strong>Built with ❤️ for the ML community from Meesho</strong>
+</div>
+<div align="center">
+  <strong>If you find this useful, ⭐️ the repo — your support means the world to us!</strong>
+</div>
