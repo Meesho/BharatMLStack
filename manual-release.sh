@@ -148,6 +148,7 @@ trigger_workflow() {
     local module=$1
     local release_type=$2
     local version=$3
+    local branch=$4
     local workflow_file=""
     
     case "$module" in
@@ -189,7 +190,7 @@ trigger_workflow() {
     # Use GitHub CLI to trigger workflow
     if command -v gh &> /dev/null; then
         print_info "Running: gh workflow run $workflow_file -f version=\"$version\" -f is_beta=\"$is_beta\" -f is_alpha=\"$is_alpha\""
-        gh workflow run "$workflow_file" -f version="$version" -f is_beta="$is_beta" -f is_alpha="$is_alpha"
+        gh workflow run "$workflow_file" -f version="$version" -f is_beta="$is_beta" -f is_alpha="$is_alpha" -f branch="$branch"
         print_success "Release workflow $workflow_file triggered successfully"
         local repo_path=$(gh repo view --json owner,name -q '.owner.login + "/" + .name' 2>/dev/null || echo "your-repo")
         print_info "Monitor the workflow at: https://github.com/${repo_path}/actions"
@@ -312,6 +313,7 @@ select_directories() {
 process_module_release() {
     local module=$1
     local release_type=$2
+    local branch=$3
     
     print_header "Processing $module"
     
@@ -374,7 +376,7 @@ process_module_release() {
     fi
     
     # Trigger GitHub workflow
-    trigger_workflow "$module" "$release_type" "$final_version"
+    trigger_workflow "$module" "$release_type" "$final_version" "$branch"
     
     print_success "Completed processing $module"
     echo ""
@@ -454,7 +456,7 @@ main() {
     # Process each module
     print_header "Starting Release Process"
     for module in "${selected_modules[@]}"; do
-        process_module_release "$module" "$release_type"
+        process_module_release "$module" "$release_type" "$current_branch"
     done
     
     # Final summary
