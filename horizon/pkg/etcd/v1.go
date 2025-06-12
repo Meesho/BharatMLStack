@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -42,7 +41,7 @@ func newV1Etcd(config interface{}) Etcd {
 		password = viper.GetString(envEtcdPassword)
 	}
 
-	conn, err := clientv3.New(clientv3.Config{Endpoints: servers, Username: username, Password: password, DialTimeout: timeout * time.Second, DialKeepAliveTime: timeout * time.Second, PermitWithoutStream: true})
+	conn, err := clientv3.New(clientv3.Config{Endpoints: servers, Username: username, Password: password, DialTimeout: timeout, DialKeepAliveTime: timeout, PermitWithoutStream: true})
 	if err != nil {
 		log.Error().Msgf("failed to create etcd client: %v", err)
 	}
@@ -80,7 +79,7 @@ func newV1EtcdFromAppName(config interface{}, appName string) Etcd {
 		password = viper.GetString(envEtcdPassword)
 	}
 
-	conn, err := clientv3.New(clientv3.Config{Endpoints: servers, Username: username, Password: password, DialTimeout: timeout * time.Second, DialKeepAliveTime: timeout * time.Second, PermitWithoutStream: true})
+	conn, err := clientv3.New(clientv3.Config{Endpoints: servers, Username: username, Password: password, DialTimeout: timeout, DialKeepAliveTime: timeout, PermitWithoutStream: true})
 	if err != nil {
 		log.Error().Msgf("failed to create etcd client: %v", err)
 	}
@@ -573,7 +572,7 @@ func (v *V1) getOriginalPrefix(originalPath, prefix string) string {
 	var commonSegments []string
 	for i, segment := range originalSegments {
 		modifiedOriginalSeg := strings.ReplaceAll(segment, "-", "")
-		if i < len(prefixSegments) && strings.ToLower(modifiedOriginalSeg) == strings.ToLower(prefixSegments[i]) {
+		if i < len(prefixSegments) && strings.EqualFold(modifiedOriginalSeg, prefixSegments[i]) {
 			commonSegments = append(commonSegments, segment)
 		} else {
 			break

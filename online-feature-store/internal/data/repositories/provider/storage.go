@@ -11,9 +11,7 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/repositories/stores"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/etcd"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/infra"
-	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -159,26 +157,4 @@ func getHash(store config.Store) (string, error) {
 	}
 	hash := sha1.Sum(jsonBytes)
 	return hex.EncodeToString(hash[:]), nil
-}
-
-func periodicRefresh(storeIdRegistry map[string]*StorageMetadata, configManager config.Manager) {
-	interval := refreshInterval
-	if viper.IsSet(refreshIntervalEnv) {
-		interval = time.Duration(viper.GetInt(refreshIntervalEnv)) * time.Second
-	}
-	ticker := time.NewTicker(interval)
-	defer func() {
-		ticker.Stop()
-		if r := recover(); r != nil {
-			log.Error().Msgf("Panic recovered: %v", r)
-			metric.Count("online_feature_store.store-refresh.panic.count", 1, nil)
-		}
-	}()
-	for range ticker.C {
-		err := loadStores(storeIdRegistry, configManager)
-		if err != nil {
-			log.Error().Msgf("Error refreshing stores: %v", err)
-		}
-	}
-
 }

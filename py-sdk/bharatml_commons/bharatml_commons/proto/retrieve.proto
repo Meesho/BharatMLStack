@@ -1,0 +1,58 @@
+syntax = "proto3";
+package retrieve;
+
+option go_package = "../retrieve";
+
+message Keys {
+  repeated string cols = 1;
+}
+
+message Query {
+  string entity_label = 1;
+  repeated FeatureGroup feature_groups = 2;
+  repeated string keys_schema = 3;
+  repeated Keys keys = 4;
+}
+
+message Feature {
+  string label = 1;
+  int32 column_idx = 2;
+}
+
+message FeatureSchema {
+  string feature_group_label = 1;
+  repeated Feature features = 2;
+}
+
+message Row {
+  repeated string keys = 1;
+  repeated bytes columns = 2;
+}
+
+message Result {
+  string entity_label = 1;
+  repeated string keys_schema = 2;
+  repeated FeatureSchema feature_schemas = 3;
+  repeated Row rows = 4;
+}
+
+message DecodedResult {
+  repeated string keys_schema = 1;
+  repeated FeatureSchema feature_schemas = 2;
+  repeated DecodedRow rows = 3;
+}
+
+message DecodedRow {
+  repeated string keys = 1;
+  repeated string columns = 2;
+}
+
+message FeatureGroup {
+  string label = 1;
+  repeated string feature_labels = 2;
+}
+
+service FeatureService {
+  rpc RetrieveFeatures(Query) returns (Result) {};
+  rpc RetrieveDecodedResult(Query) returns (DecodedResult) {};
+} 

@@ -42,7 +42,7 @@ func newV1Etcd(config interface{}) Etcd {
 		password = viper.GetString(envEtcdPassword)
 	}
 
-	conn, err := clientv3.New(clientv3.Config{Endpoints: servers, Username: username, Password: password, DialTimeout: timeout * time.Second, DialKeepAliveTime: timeout * time.Second, PermitWithoutStream: true})
+	conn, err := clientv3.New(clientv3.Config{Endpoints: servers, Username: username, Password: password, DialTimeout: timeout, DialKeepAliveTime: timeout, PermitWithoutStream: true})
 	if err != nil {
 		log.Error().Msgf("failed to create etcd client: %v", err)
 	}
@@ -138,7 +138,7 @@ func (v *V1) updateMaps(event *clientv3.Event, nodePath, value string) {
 	switch event.Type.String() {
 	case "PUT":
 		v.dataMap[key] = value
-		v.metaMap[key] = key
+		v.metaMap[key] = nodePath
 	case "DELETE":
 		for k := range v.dataMap {
 			if strings.HasPrefix(k, key) {

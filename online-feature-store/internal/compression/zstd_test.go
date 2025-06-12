@@ -19,11 +19,11 @@ func populateNormFP64Bytes(num int) []byte {
 	bytes := make([]byte, num*8)
 
 	// Seed the random number generator
-	rand.Seed(time.Now().UnixNano())
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	for i := 0; i < num; i++ {
 		// Generate a random float32 number
-		f := rand.NormFloat64()
+		f := r.NormFloat64()
 
 		// Get the binary representation of the float32 number as a uint32
 		bits := math.Float64bits(f)

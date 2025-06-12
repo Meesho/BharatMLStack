@@ -2,17 +2,16 @@ package grpc
 
 import (
 	"context"
+	"runtime/debug"
+	"time"
+
+	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"runtime/debug"
-	"slices"
-	"strings"
-	"time"
 )
 
 const (
@@ -35,7 +34,7 @@ func ServerInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo,
 	if !ok {
 		return nil, status.Errorf(codes.InvalidArgument, "%s header is missing", AuthTokenHeader)
 	}
-	if !isAuthorized(authHeader) {
+	if !isAuthorized(callerId, authHeader) {
 		return nil, status.Errorf(codes.Unauthenticated, "Invalid auth token")
 	}
 
@@ -49,17 +48,12 @@ func ServerInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo,
 	return h, err
 }
 
-func isAuthorized(authHeaders []string) bool {
-	if !viper.IsSet(AuthToken) {
-		log.Panic().Msgf("%s not set", AuthToken)
+func isAuthorized(callerId, authHeader []string) bool {
+	token, ok := config.Instance(config.DefaultVersion).GetAllRegisteredClients()[callerId[0]]
+	if !ok {
+		return false
 	}
-	permittedTokens := viper.GetString(AuthToken)
-	tokens := strings.Split(permittedTokens, ",")
-	token := authHeaders[0]
-	if slices.Contains(tokens, token) {
-		return true
-	}
-	return false
+	return token == authHeader[0]
 }
 
 func RecoveryInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {

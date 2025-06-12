@@ -47,7 +47,6 @@ func (e *ZStdEncoder) Encode(data []byte) (cdata []byte) {
 
 func (e *ZStdEncoder) EncodeV2(data []byte, outputBuffer *[]byte) {
 	*outputBuffer = e.encoder.EncodeAll(data, (*outputBuffer)[:0])
-	return
 }
 
 func (e *ZStdEncoder) EncoderType() Type {

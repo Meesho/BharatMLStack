@@ -5,12 +5,6 @@ import (
 )
 
 type _version int
-type _fgId int
-type _featureLabel string
-type _entityLabel string
-type _pkId string
-type _columnLabel string
-type _defaultInBytes []byte
 
 type FeatureRegistry struct {
 	Entities map[string]Entity `json:"entities"`

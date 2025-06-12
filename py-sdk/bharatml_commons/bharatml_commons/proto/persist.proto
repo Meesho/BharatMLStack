@@ -1,0 +1,49 @@
+syntax = "proto3";
+package persist;
+option go_package = "../persist";
+
+message FeatureGroupSchema {
+  string label = 1;
+  repeated string feature_labels = 2;
+}
+
+
+message Data {
+  repeated string key_values = 1;
+  repeated FeatureValues feature_values = 2;
+}
+
+message FeatureValues {
+  Values values = 1;
+}
+
+message Values {
+  repeated double fp32_values = 1;
+  repeated double fp64_values = 2;
+  repeated int32 int32_values = 3;
+  repeated int64 int64_values = 4;
+  repeated uint32 uint32_values = 5;
+  repeated uint64 uint64_values = 6;
+  repeated string string_values = 7;
+  repeated bool bool_values = 8;
+  repeated Vector vector = 9;
+}
+
+message Vector {
+  Values values = 1;
+}
+
+message Query {
+  string entity_label = 1;
+  repeated string keys_schema = 2;
+  repeated FeatureGroupSchema feature_group_schema = 3;
+  repeated Data data = 4;
+}
+
+message Result {
+  string message = 2;
+}
+
+service FeatureService {
+  rpc PersistFeatures(Query) returns (Result) {};
+} 

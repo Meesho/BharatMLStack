@@ -1,0 +1,159 @@
+name: Manual Badge Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      horizon_status:
+        description: 'Horizon build status'
+        required: false
+        default: 'unknown'
+        type: choice
+        options:
+        - passing
+        - failing
+        - skipped
+        - unknown
+      trufflebox_status:
+        description: 'Trufflebox UI build status'
+        required: false
+        default: 'unknown'
+        type: choice
+        options:
+        - passing
+        - failing
+        - skipped
+        - unknown
+      ofs_status:
+        description: 'Online Feature Store build status'
+        required: false
+        default: 'unknown'
+        type: choice
+        options:
+        - passing
+        - failing
+        - skipped
+        - unknown
+
+jobs:
+  update-badges:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get badge colors
+        id: colors
+        run: |
+          get_color() {
+            case "$1" in
+              "passing") echo "brightgreen" ;;
+              "skipped") echo "yellow" ;;
+              "failing") echo "red" ;;
+              *) echo "lightgrey" ;;
+            esac
+          }
+          
+          echo "horizon-color=$(get_color '${{ github.event.inputs.horizon_status }}')" >> $GITHUB_OUTPUT
+          echo "trufflebox-color=$(get_color '${{ github.event.inputs.trufflebox_status }}')" >> $GITHUB_OUTPUT
+          echo "ofs-color=$(get_color '${{ github.event.inputs.ofs_status }}')" >> $GITHUB_OUTPUT
+
+      - name: Update root README
+        run: |
+          # Get current versions
+          HORIZON_VERSION=$(cat horizon/VERSION | tr -d '\n' | tr -d '\r')
+          TRUFFLEBOX_VERSION=$(cat trufflebox-ui/VERSION | tr -d '\n' | tr -d '\r')
+          OFS_VERSION=$(cat online-feature-store/VERSION | tr -d '\n' | tr -d '\r')
+          
+          # Update root README with manual status
+          cat > README.md << EOF
+          # BharatMLStack
+          
+          ![CI Build and Test](https://github.com/${{ github.repository }}/workflows/CI%20Build%20and%20Test/badge.svg)
+          
+          A comprehensive ML infrastructure stack with feature store, model serving, and UI components.
+          
+          ## Build Status
+          
+          | Component | Build Status | Version | Directory |
+          |-----------|--------------|---------|-----------|
+          | **Horizon** | ![Build](https://img.shields.io/badge/build-${{ github.event.inputs.horizon_status }}-${{ steps.colors.outputs.horizon-color }}) | ![Version](https://img.shields.io/badge/version-${HORIZON_VERSION}-blue) | [horizon/](./horizon) |
+          | **Trufflebox UI** | ![Build](https://img.shields.io/badge/build-${{ github.event.inputs.trufflebox_status }}-${{ steps.colors.outputs.trufflebox-color }}) | ![Version](https://img.shields.io/badge/version-${TRUFFLEBOX_VERSION}-blue) | [trufflebox-ui/](./trufflebox-ui) |
+          | **Online Feature Store** | ![Build](https://img.shields.io/badge/build-${{ github.event.inputs.ofs_status }}-${{ steps.colors.outputs.ofs-color }}) | ![Version](https://img.shields.io/badge/version-${OFS_VERSION}-blue) | [online-feature-store/](./online-feature-store) |
+          
+          ## Components
+          
+          ### 🚀 Horizon
+          Model serving and inference service built with Go. Provides high-performance model serving capabilities.
+          
+          ### 🎨 Trufflebox UI
+          Modern web interface for managing ML models and features. Built with React and provides an intuitive user experience.
+          
+          ### 🗄️ Online Feature Store
+          High-performance feature store for real-time ML inference. Supports both batch and streaming feature processing.
+          
+          ## Quick Start
+          
+          \`\`\`bash
+          # Check what would be released
+          ./release.sh --dry-run
+          
+          # Release components with changes
+          ./release.sh
+          
+          # Force release all components
+          ./release.sh --force-all
+          \`\`\`
+          
+          ## Development
+          
+          Each component has its own build and release process:
+          
+          - **Horizon**: Go-based service with Docker support
+          - **Trufflebox UI**: Node.js/React application with Docker support  
+          - **Online Feature Store**: Go-based service with gRPC API
+          
+          See individual README files in each directory for detailed development instructions.
+          
+          ## CI/CD
+          
+          This repository uses GitHub Actions for continuous integration:
+          
+          - **Automatic builds** on PRs to master/develop branches
+          - **Smart change detection** - only builds components that changed
+          - **Automatic badge updates** showing build status
+          - **Multi-platform Docker builds** for releases
+          
+          ## License
+          
+          See [LICENSE.md](LICENSE.md) for details.
+          EOF
+
+      - name: Update individual README badges
+        run: |
+          # Update horizon README
+          if [ -f "horizon/README.md" ]; then
+            sed -i 's|!\[Build\](https://img.shields.io/badge/build-[^)]*)|![Build](https://img.shields.io/badge/build-${{ github.event.inputs.horizon_status }}-${{ steps.colors.outputs.horizon-color }})|g' horizon/README.md
+          fi
+          
+          # Update trufflebox-ui README
+          if [ -f "trufflebox-ui/README.md" ]; then
+            sed -i 's|!\[Build\](https://img.shields.io/badge/build-[^)]*)|![Build](https://img.shields.io/badge/build-${{ github.event.inputs.trufflebox_status }}-${{ steps.colors.outputs.trufflebox-color }})|g' trufflebox-ui/README.md
+          fi
+          
+          # Update online-feature-store README
+          if [ -f "online-feature-store/README.md" ]; then
+            sed -i 's|!\[Build\](https://img.shields.io/badge/build-[^)]*)|![Build](https://img.shields.io/badge/build-${{ github.event.inputs.ofs_status }}-${{ steps.colors.outputs.ofs-color }})|g' online-feature-store/README.md
+          fi
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md horizon/README.md trufflebox-ui/README.md online-feature-store/README.md
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Manually update build status badges [skip ci]"
+            git push 

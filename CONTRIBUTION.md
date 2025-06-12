@@ -27,7 +27,7 @@ Thank you for your interest in contributing to BharatMLStack! This document prov
 
 ## 🌐 Join the Community
 
-The best way to connect with the BharatMLStack community is through our [Discord server](https://discord.gg/474wHtfm). Here, you can:
+The best way to connect with the BharatMLStack community is through our [Discord server](https://discord.gg/XkT7XsV2AU). Here, you can:
 
 - Ask questions about usage or development
 - Discuss feature ideas and roadmap items
@@ -125,7 +125,7 @@ We welcome various types of contributions:
 
 6. **Push Your Changes**
    ```bash
-   git push origin feature/<service>-your-feature-name
+   git push origin feat/<service>-your-feature-name
    ```
 
 ## 📝 Contribution Guidelines
@@ -256,4 +256,4 @@ Please review the full license before contributing to understand how your work m
 
 Thank you for contributing to BharatMLStack! Your efforts help make this project better for everyone.
 
-Join our [Discord community](https://discord.gg/474wHtfm) for discussions, questions, and collaborative development.
+Join our [Discord community](https://discord.gg/XkT7XsV2AU) for discussions, questions, and collaborative development.
