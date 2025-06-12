@@ -627,16 +627,16 @@ func (o *OnlineFeatureStore) RetrieveEntities() (*[]RetrieveEntityResponse, erro
 	}
 
 	response := make([]RetrieveEntityResponse, 0)
-	if entities != nil {
-		for entityLabel, entity := range entities {
-			response = append(response, RetrieveEntityResponse{
-				EntityLabel:      entityLabel,
-				Keys:             entity.Keys,
-				InMemoryCache:    entity.InMemoryCache,
-				DistributedCache: entity.DistributedCache,
-			})
-		}
+
+	for entityLabel, entity := range entities {
+		response = append(response, RetrieveEntityResponse{
+			EntityLabel:      entityLabel,
+			Keys:             entity.Keys,
+			InMemoryCache:    entity.InMemoryCache,
+			DistributedCache: entity.DistributedCache,
+		})
 	}
+
 	return &response, nil
 }
 
