@@ -135,3 +135,12 @@ Feedback and contributions are welcome!
 ## ⚖️ License
 
 This project is proprietary software of Meesho Technologies under the [Business Source License 1.1](LICENSE.md).
+
+---
+
+<div align="center">
+  <strong>Built with ❤️ for the ML community from Meesho</strong>
+</div>
+<div align="center">
+  <strong>If you find this useful, ⭐️ the repo — your support means the world to us!</strong>
+</div>

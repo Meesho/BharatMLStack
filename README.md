@@ -170,3 +170,6 @@ BharatMLStack is open-source software licensed under the [BharatMLStack Business
 <div align="center">
   <strong>Built with ❤️ for the ML community from Meesho</strong>
 </div>
+<div align="center">
+  <strong>If you find this useful, ⭐️ the repo — your support means the world to us!</strong>
+</div>
