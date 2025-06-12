@@ -98,7 +98,7 @@ Then follow the [Quick Start Guide](./quick-start/README.md) for detailed setup 
 BharatMLStack follows a microservices architecture designed for scalability and maintainability. Several components are to be open-sourced
 
 <div align="center">
-  <img src="assets/bharatmlstack-layered.png" alt="BharatMLStack Logo" width="800"/>
+  <img src="assets/bharatmlstack-layered.png" alt="BharatMLStack Logo" width="1000"/>
 </div>
 
 ## 📚 Documentation
@@ -119,7 +119,6 @@ For detailed technical documentation, architecture deep-dives, and implementatio
 #### **Developer Guides**
 - **[API Documentation](./online-feature-store/docs/)** - Complete API reference and usage examples
 - **[SDK Integration](./go-sdk/)** - Go SDK for seamless integration
-- **[CLI Tools](./quick-start/CLI-README.md)** - Command-line interface for testing and management
 
 #### **Deployment & Operations**
 - **[Quick Start Guide](./quick-start/)** - Get up and running in minutes
@@ -144,8 +143,7 @@ For detailed technical documentation, architecture deep-dives, and implementatio
 **New to BharatMLStack?** Start here:
 1. 📖 Read the [System Overview](./online-feature-store/docs/README.md)
 2. 🚀 Follow the [Quick Start Guide](./quick-start/)
-3. 🔧 Try the [CLI Tutorial](./quick-start/CLI-README.md)
-4. 🏗️ Explore [Architecture Details](./online-feature-store/docs/architecture.md)
+3. 🏗️ Explore [Architecture Details](./online-feature-store/docs/architecture.md)
 
 **Ready for Production?** Check out:
 - 🏭 [Production Deployment Guide](./online-feature-store/docs/)

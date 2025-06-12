@@ -18,7 +18,6 @@ Online Feature Store is a high-performance, scalable, and production-grade featu
 - [Online Feature Store Consumer](./architecture.md#online-feature-store-consumer)
 - [Online Feature Store gRPC API Server](./architecture.md#online-feature-store-grpc-api-server)
 - [Monitoring & Observability](./architecture.md#monitoring--observability)
-- [SDKs](./architecture.md#sdks)
 
 ### 🧱 Low-Level Design
 - [Permanent Storage Data Block (PSDB)](./psdb-design.md)
