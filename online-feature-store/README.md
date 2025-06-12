@@ -4,11 +4,10 @@
 
 ----
 # BharatMLStack's Online Feature Store: A Hyper-Scalable Feature Store for Real-Time ML
-
-![Static Badge](https://img.shields.io/badge/oss_lifecycle-active-green) 
+ 
 ![build status](https://github.com/Meesho/BharatMLStack/actions/workflows/online-feature-store.yml/badge.svg)
-[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/XkT7XsV2AU)
-[![Roadmap](https://img.shields.io/badge/Project-Roadmap-blue?style=flat&logo=github)](./roadmap/roadmap_2025_2026.md)
+![Static Badge](https://img.shields.io/badge/release-v1.0.0-blue?style=flat)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da?style=flat&logo=discord&logoColor=white)](https://discord.gg/XkT7XsV2AU)
 
 Online-feature-store is a high-performance, scalable, and production-grade feature store built for modern machine learning systems. It supports both **real-time** and **batch** workflows, with a strong emphasis on **developer experience**, **system observability**, and **low-latency feature retrieval**.
 
