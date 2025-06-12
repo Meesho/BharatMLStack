@@ -190,11 +190,12 @@ These dashboards are actively used by both **platform SREs** and **ML engineers*
 ## 8. SDKs
 
 Online-feature-store exposes SDKs for easy integration:
-- `sdks/python`:
+- `py-sdk`:
     - Used in Spark jobs
     - Powers `example/notebook`
     - Handles schema enforcement, and Kafka push
-- `sdks/go`:
+    - GRPC API for fast feature access
+- `go-sdk`:
     - Lightweight gRPC client for backend services and ML inference time consumers
 
 Both SDKs are well-documented, versioned, and compatible with TruffleBox-configured schemas.
