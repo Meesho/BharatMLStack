@@ -55,17 +55,29 @@ High-performance feature store for real-time ML inference and training.
 
 ## Quick Start
 
+🚀 **Get started with BharatMLStack in minutes!**
+
+For comprehensive setup instructions, examples, and deployment guides, see our detailed Quick Start documentation:
+
+📖 **[Quick Start Guide →](./quick-start/README.md)**
+
+### What You'll Find:
+
+- **🐳 Docker Setup**: Complete stack deployment with Docker Compose
+- **📊 Sample Data**: Pre-configured examples to get you started
+- **🔍 Health Checks**: Verify your deployment is working
+- **📝 Step-by-Step Tutorials**: From installation to first feature operations
+
+### TL;DR - One Command Setup:
+
 ```bash
-# Clone the repository
-git clone https://github.com/bharatml/BharatMLStack.git
-cd BharatMLStack
-
-# Deploy the full stack
-./scripts/deploy.sh --environment production
-
-# Access the UI
-open http://localhost:8080
+# Clone and start the complete stack
+git clone https://github.com/Meesho/BharatMLStack.git
+cd BharatMLStack/quick-start
+docker-compose up -d
 ```
+
+Then follow the [Quick Start Guide](./quick-start/README.md) for detailed setup and usage instructions.
 
 ## Architecture
 
