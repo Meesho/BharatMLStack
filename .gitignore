@@ -1,7 +1,6 @@
 .pre-commit-config.yaml
 trufflehog/
 trufflebox-ui/node_modules/
-.DS_Store
 dist/
 .env*
 .idea/
