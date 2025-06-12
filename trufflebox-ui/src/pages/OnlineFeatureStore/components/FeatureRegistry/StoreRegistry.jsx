@@ -43,6 +43,7 @@ const StoreRegistry = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
+  const [validationErrors, setValidationErrors] = useState({});
 
   useEffect(() => {
     const fetchStoreRequests = async () => {
@@ -118,9 +119,10 @@ const StoreRegistry = () => {
       "db-type": "",
       table: "",
       "table-ttl": "",
-      "primary-keys": [],
+      "primary-keys": [""],
       "RejectReason": ""
     });
+    setValidationErrors({});
     setOpen(true);
   };
 
@@ -143,7 +145,45 @@ const StoreRegistry = () => {
     setSelectedStore(null);
   };
 
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!storeData["conf-id"]) {
+      errors["conf-id"] = "Config ID is required";
+    }
+    
+    if (!storeData["db-type"]) {
+      errors["db-type"] = "Database Type is required";
+    }
+    
+    if (!storeData.table || storeData.table.trim() === "") {
+      errors.table = "Table name is required";
+    }
+    
+    if (!storeData["table-ttl"] || storeData["table-ttl"] === "") {
+      errors["table-ttl"] = "Table Time to Live is required";
+    } else if (storeData["table-ttl"] <= 0) {
+      errors["table-ttl"] = "Table Time to Live must be greater than 0";
+    }
+    
+    const nonEmptyKeys = storeData["primary-keys"].filter(key => key && key.trim() !== "");
+    if (nonEmptyKeys.length === 0) {
+      errors["primary-keys"] = "At least one primary key is required";
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = async () => {
+    setValidationErrors({});
+    
+    if (!validateForm()) {
+      setModalMessage('Please fill in all required fields correctly.');
+      setShowErrorModal(true);
+      return;
+    }
+
     const apiEndpoint = `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/register-store`;
     try {
       const response = await fetch(apiEndpoint, {
@@ -230,15 +270,16 @@ const StoreRegistry = () => {
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
         <DialogTitle>Register Store</DialogTitle>
         <DialogContent>
-          <FormControl fullWidth margin="normal">
-            <InputLabel id="conf-id-label">Config ID</InputLabel>
+          <FormControl fullWidth margin="normal" error={!!validationErrors["conf-id"]}>
+            <InputLabel id="conf-id-label">Config ID *</InputLabel>
             <Select
               labelId="conf-id-label"
               name="conf-id"
               value={storeData["conf-id"]}
               onChange={handleChange}
               fullWidth
-              label="Config ID"
+              label="Config ID *"
+              error={!!validationErrors["conf-id"]}
             >
               {configOptions.map((id) => (
                 <MenuItem key={id} value={id}>
@@ -246,42 +287,59 @@ const StoreRegistry = () => {
                 </MenuItem>
               ))}
             </Select>
+            {validationErrors["conf-id"] && (
+              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
+                {validationErrors["conf-id"]}
+              </Typography>
+            )}
           </FormControl>
-          <FormControl fullWidth margin="normal">
-            <InputLabel id="db-type-label">Database Type</InputLabel>
+          <FormControl fullWidth margin="normal" error={!!validationErrors["db-type"]}>
+            <InputLabel id="db-type-label">Database Type *</InputLabel>
             <Select
               labelId="db-type-label"
               name="db-type"
               value={storeData["db-type"]}
               onChange={handleChange}
               fullWidth
-              label="Database Type"
+              label="Database Type *"
               disabled
+              error={!!validationErrors["db-type"]}
             >
               <MenuItem value={storeData["db-type"]}>{storeData["db-type"]}</MenuItem>
             </Select>
+            {validationErrors["db-type"] && (
+              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
+                {validationErrors["db-type"]}
+              </Typography>
+            )}
           </FormControl>
           <TextField
-            label="Table"
+            label="Table *"
             name="table"
             value={storeData.table}
             onChange={handleChange}
             fullWidth
             margin="normal"
+            error={!!validationErrors.table}
+            helperText={validationErrors.table}
           />
           <TextField
-            label="Table Time to Live (in seconds)"
+            label="Table Time to Live (in seconds) *"
             name="table-ttl"
             type="number"
             value={storeData["table-ttl"]}
             onChange={handleChange}
             fullWidth
             margin="normal"
+            error={!!validationErrors["table-ttl"]}
+            helperText={validationErrors["table-ttl"]}
           />
           
           <div style={{ marginTop: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="subtitle1">Primary Keys</Typography>
+              <Typography variant="subtitle1" color={validationErrors["primary-keys"] ? "error" : "inherit"}>
+                Primary Keys *
+              </Typography>
               <Button 
                 variant="text" 
                 size="small" 
@@ -299,6 +357,12 @@ const StoreRegistry = () => {
               </Button>
             </div>
             
+            {validationErrors["primary-keys"] && (
+              <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
+                {validationErrors["primary-keys"]}
+              </Typography>
+            )}
+            
             {storeData["primary-keys"].length === 0 && (
               <Typography variant="body2" color="textSecondary" style={{ marginTop: '10px' }}>
                 No primary keys added yet
@@ -309,9 +373,10 @@ const StoreRegistry = () => {
               <div key={index} style={{ display: 'flex', gap: '10px', marginTop: '10px', alignItems: 'center' }}>
                 <TextField
                   fullWidth
-                  label={`Primary Key ${index + 1}`}
+                  label={`Primary Key ${index + 1} *`}
                   value={key}
                   onChange={(e) => updatePrimaryKey(index, e.target.value)}
+                  error={validationErrors["primary-keys"] && (!key || key.trim() === "")}
                 />
                 <Button 
                   variant="text" 

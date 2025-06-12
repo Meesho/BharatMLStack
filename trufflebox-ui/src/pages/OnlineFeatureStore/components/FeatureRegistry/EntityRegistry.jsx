@@ -43,6 +43,7 @@ const EntityRegistry = () => {
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({});
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -75,6 +76,7 @@ const EntityRegistry = () => {
 
   const handleOpen = () => {
     setEntityData(getInitialEntityData());
+    setValidationErrors({});
     setOpen(true);
   };
 
@@ -149,6 +151,14 @@ const EntityRegistry = () => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    setValidationErrors({});
+    
+    if (!validateForm()) {
+      setModalMessage('Please fill in all required fields correctly.');
+      setShowErrorModal(true);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const requestData = transformRequestData(entityData);
@@ -222,41 +232,54 @@ const EntityRegistry = () => {
         <form ref={form} onSubmit={handleSubmit} noValidate>
           <Box sx={{ marginBottom: 3 }}>
             <TextField
-              label="Entity Label"
+              label="Entity Label *"
               name="entity-label"
               value={entityData['entity-label']}
               onChange={handleChange}
               fullWidth
               className="custom-textfield"
               placeholder='Enter Entity Label'
+              error={!!validationErrors['entity-label']}
+              helperText={validationErrors['entity-label']}
             />
           </Box>
           
           <Box sx={{ marginBottom: 3 }}>
-            <h5>Keys</h5>
+            <Typography variant="h6" sx={{ mb: 2, color: validationErrors['key-map'] ? 'error.main' : 'inherit' }}>
+              Keys *
+            </Typography>
+            {validationErrors['key-map'] && (
+              <Typography variant="caption" color="error" sx={{ display: 'block', mb: 2 }}>
+                {validationErrors['key-map']}
+              </Typography>
+            )}
             {entityData['key-map'].map((keyMap, index) => (
               <Box key={index} sx={{ marginBottom: 2 }}>
                 <Grid container spacing={2} alignItems="center">
                   <Grid item xs={4}>
                     <TextField
-                      label="Entity Key"
+                      label="Entity Key *"
                       name={`key-map.${index}.entity-label`}
                       value={keyMap['entity-label']}
                       onChange={(e) => handleKeyMapChange(index, e)}
                       fullWidth
                       className="custom-textfield"
                       placeholder="Enter Entity Key"
+                      error={!!validationErrors[`key-map.${index}.entity-label`]}
+                      helperText={validationErrors[`key-map.${index}.entity-label`]}
                     />
                   </Grid>
                   <Grid item xs={4}>
                     <TextField
-                      label="Column Key"
+                      label="Column Key *"
                       name={`key-map.${index}.column-label`}
                       value={keyMap['column-label']}
                       onChange={(e) => handleKeyMapChange(index, e)}
                       fullWidth
                       className="custom-textfield"
                       placeholder="Enter Column Key"
+                      error={!!validationErrors[`key-map.${index}.column-label`]}
+                      helperText={validationErrors[`key-map.${index}.column-label`]}
                     />
                   </Grid>
                   <Grid item>
@@ -342,39 +365,46 @@ const EntityRegistry = () => {
 
   const renderCacheSection = (title, cacheKey) => (
     <div>
-      <h5>{title}</h5>
+      <Typography variant="h6" sx={{ mb: 2 }}>{title}</Typography>
       {['enabled', 'conf-id', 'ttl-in-seconds', 'jitter-percentage'].map((field) => (
         field === 'enabled' ? (
-          <FormControl key={field} fullWidth style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-start' }}>
+          <FormControl key={field} fullWidth style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-start' }} error={!!validationErrors[`${cacheKey}.${field}`]}>
             <InputLabel id={`${cacheKey}-${field}-label`} sx={{ left: '0px', '&.Mui-focused': { left: '0px' }}}>
-              Enabled
+              Enabled *
             </InputLabel>
             <Select
               labelId={`${cacheKey}-${field}-label`}
               name={`${cacheKey}.${field}`}
               value={entityData[cacheKey][field]}
               onChange={handleChange}
-              label="Enabled"
+              label="Enabled *"
               className="custom-textfield"
               sx={{ '& .MuiSelect-select': { textAlign: 'left' }}}
+              error={!!validationErrors[`${cacheKey}.${field}`]}
             >
               <MenuItem value="true">True</MenuItem>
               <MenuItem value="false">False</MenuItem>
             </Select>
+            {validationErrors[`${cacheKey}.${field}`] && (
+              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
+                {validationErrors[`${cacheKey}.${field}`]}
+              </Typography>
+            )}
           </FormControl>
         ) : field === 'conf-id' ? (
-          <FormControl key={field} fullWidth style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-start' }}>
+          <FormControl key={field} fullWidth style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-start' }} error={!!validationErrors[`${cacheKey}.${field}`]}>
             <InputLabel id={`${cacheKey}-${field}-label`} sx={{ left: '0px', '&.Mui-focused': { left: '0px' }}}>
-              Config ID
+              Config ID *
             </InputLabel>
             <Select
               labelId={`${cacheKey}-${field}-label`}
               name={`${cacheKey}.${field}`}
               value={entityData[cacheKey][field]}
               onChange={handleChange}
-              label="Config ID"
+              label="Config ID *"
               className="custom-textfield"
               sx={{ '& .MuiSelect-select': { textAlign: 'left' }}}
+              error={!!validationErrors[`${cacheKey}.${field}`]}
             >
               {cacheKey === 'distributed-cache' ? (
                 <MenuItem value="2">2</MenuItem>
@@ -382,11 +412,16 @@ const EntityRegistry = () => {
                 <MenuItem value="3">3</MenuItem>
               )}
             </Select>
+            {validationErrors[`${cacheKey}.${field}`] && (
+              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
+                {validationErrors[`${cacheKey}.${field}`]}
+              </Typography>
+            )}
           </FormControl>
         ) : (
           <TextField
             key={field}
-            label={field.charAt(0).toUpperCase() + field.slice(1).replace(/-/g, ' ')}
+            label={`${field.charAt(0).toUpperCase() + field.slice(1).replace(/-/g, ' ')} *`}
             name={`${cacheKey}.${field}`}
             value={entityData[cacheKey][field]}
             onChange={handleChange}
@@ -394,11 +429,77 @@ const EntityRegistry = () => {
             placeholder={`Enter ${field.charAt(0).toUpperCase() + field.slice(1).replace(/-/g, ' ')}`}
             style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '1.5rem' }}
             className="custom-textfield"
+            error={!!validationErrors[`${cacheKey}.${field}`]}
+            helperText={validationErrors[`${cacheKey}.${field}`]}
           />
         )
       ))}
     </div>
   );
+
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!entityData['entity-label'] || entityData['entity-label'].trim() === "") {
+      errors['entity-label'] = "Entity Label is required";
+    }
+    
+    const completeKeyPairs = entityData['key-map'].filter(key => 
+      key['entity-label'] && key['entity-label'].trim() !== "" &&
+      key['column-label'] && key['column-label'].trim() !== ""
+    );
+    
+    if (completeKeyPairs.length === 0) {
+      errors['key-map'] = "At least one complete key pair (Entity Key and Column Key) is required";
+    }
+    
+    entityData['key-map'].forEach((key, index) => {
+      const hasEntityKey = key['entity-label'] && key['entity-label'].trim() !== "";
+      const hasColumnKey = key['column-label'] && key['column-label'].trim() !== "";
+      
+      if (hasEntityKey && !hasColumnKey) {
+        errors[`key-map.${index}.column-label`] = "Column Key is required when Entity Key is provided";
+      }
+      if (!hasEntityKey && hasColumnKey) {
+        errors[`key-map.${index}.entity-label`] = "Entity Key is required when Column Key is provided";
+      }
+    });
+    
+    // Validate Distributed Cache
+    if (!entityData['distributed-cache'].enabled) {
+      errors['distributed-cache.enabled'] = "Distributed Cache enabled status is required";
+    }
+    if (!entityData['distributed-cache']['conf-id']) {
+      errors['distributed-cache.conf-id'] = "Distributed Cache Config ID is required";
+    }
+    if (!entityData['distributed-cache']['ttl-in-seconds'] || entityData['distributed-cache']['ttl-in-seconds'] === "") {
+      errors['distributed-cache.ttl-in-seconds'] = "Distributed Cache TTL is required";
+    } else if (parseInt(entityData['distributed-cache']['ttl-in-seconds'], 10) <= 0) {
+      errors['distributed-cache.ttl-in-seconds'] = "Distributed Cache TTL must be greater than 0";
+    }
+    if (!entityData['distributed-cache']['jitter-percentage'] || entityData['distributed-cache']['jitter-percentage'] === "") {
+      errors['distributed-cache.jitter-percentage'] = "Distributed Cache Jitter Percentage is required";
+    }
+    
+    // Validate In-Memory Cache
+    if (!entityData['in-memory-cache'].enabled) {
+      errors['in-memory-cache.enabled'] = "In-Memory Cache enabled status is required";
+    }
+    if (!entityData['in-memory-cache']['conf-id']) {
+      errors['in-memory-cache.conf-id'] = "In-Memory Cache Config ID is required";
+    }
+    if (!entityData['in-memory-cache']['ttl-in-seconds'] || entityData['in-memory-cache']['ttl-in-seconds'] === "") {
+      errors['in-memory-cache.ttl-in-seconds'] = "In-Memory Cache TTL is required";
+    } else if (parseInt(entityData['in-memory-cache']['ttl-in-seconds'], 10) <= 0) {
+      errors['in-memory-cache.ttl-in-seconds'] = "In-Memory Cache TTL must be greater than 0";
+    }
+    if (!entityData['in-memory-cache']['jitter-percentage'] || entityData['in-memory-cache']['jitter-percentage'] === "") {
+      errors['in-memory-cache.jitter-percentage'] = "In-Memory Cache Jitter Percentage is required";
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   return (
     <div style={{ padding: '20px' }}>
