@@ -4,6 +4,14 @@
   <img src="assets/bharatmlstack.jpg" alt="BharatMLStack Logo" width="400"/>
 </div>
 
+<div align="center">
+
+[![CI](https://github.com/Meesho/BharatMLStack/actions/workflows/ci.yml/badge.svg)](https://github.com/Meesho/BharatMLStack/actions/workflows/ci.yml)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da?style=flat&logo=discord&logoColor=white)](https://discord.gg/XkT7XsV2AU)
+[![Made in India](https://img.shields.io/badge/Made%20in-India-FF9933?style=flat&labelColor=138808&color=FFFFFF)](https://en.wikipedia.org/wiki/India)
+[![Meesho](https://img.shields.io/badge/Built%20by-Meesho-FF6B35?style=flat&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTEyIDJMMTMuMDkgOC4yNkwyMCA5TDEzLjA5IDE1Ljc0TDEyIDIyTDEwLjkxIDE1Ljc0TDQgOUwxMC45MSA4LjI2TDEyIDJaIiBmaWxsPSJ3aGl0ZSIvPjwvc3ZnPg==)](https://meesho.com)
+
+</div>
 ## What is BharatMLStack?
 
 BharatMLStack is a comprehensive, production-ready machine learning infrastructure platform designed to democratize ML capabilities across India and beyond. Our mission is to provide a robust, scalable, and accessible ML stack that empowers organizations to build, deploy, and manage machine learning solutions at massive scale.
@@ -55,17 +63,29 @@ High-performance feature store for real-time ML inference and training.
 
 ## Quick Start
 
+🚀 **Get started with BharatMLStack in minutes!**
+
+For comprehensive setup instructions, examples, and deployment guides, see our detailed Quick Start documentation:
+
+📖 **[Quick Start Guide →](./quick-start/README.md)**
+
+### What You'll Find:
+
+- **🐳 Docker Setup**: Complete stack deployment with Docker Compose
+- **📊 Sample Data**: Pre-configured examples to get you started
+- **🔍 Health Checks**: Verify your deployment is working
+- **📝 Step-by-Step Tutorials**: From installation to first feature operations
+
+### TL;DR - One Command Setup:
+
 ```bash
-# Clone the repository
-git clone https://github.com/bharatml/BharatMLStack.git
-cd BharatMLStack
-
-# Deploy the full stack
-./scripts/deploy.sh --environment production
-
-# Access the UI
-open http://localhost:8080
+# Clone and start the complete stack
+git clone https://github.com/Meesho/BharatMLStack.git
+cd BharatMLStack/quick-start
+./start.sh
 ```
+
+Then follow the [Quick Start Guide](./quick-start/README.md) for detailed setup and usage instructions.
 
 ## Architecture
 
@@ -90,6 +110,58 @@ BharatMLStack follows a microservices architecture designed for scalability and 
 │  GRPC Server    │    │   Consumer      │
 └─────────────────┘    └─────────────────┘
 ```
+
+## 📚 Documentation
+
+### Comprehensive Documentation Hub
+
+For detailed technical documentation, architecture deep-dives, and implementation guides, visit our comprehensive documentation in:
+
+📖 **[Online Feature Store Documentation](./online-feature-store/docs/README.md)**
+
+### 🎯 What You'll Find
+
+#### **Core Architecture & Design**
+- **[System Architecture](./online-feature-store/docs/architecture.md)** - Detailed system design and component interactions
+- **[Schema Management](./online-feature-store/docs/schema.md)** - Key-schema isolation and etcd mapping strategies
+- **[Performance Benchmarks](./online-feature-store/docs/)** - Latency, throughput, and scalability metrics
+
+#### **Developer Guides**
+- **[API Documentation](./online-feature-store/docs/)** - Complete API reference and usage examples
+- **[SDK Integration](./go-sdk/)** - Go SDK for seamless integration
+- **[CLI Tools](./quick-start/CLI-README.md)** - Command-line interface for testing and management
+
+#### **Deployment & Operations**
+- **[Quick Start Guide](./quick-start/)** - Get up and running in minutes
+- **[Production Deployment](./online-feature-store/docs/)** - Enterprise deployment patterns
+- **[Monitoring & Observability](./online-feature-store/docs/)** - Comprehensive monitoring setup
+
+#### **Use Cases & Examples**
+- **[Real-time ML Pipelines](./online-feature-store/docs/)** - Production ML workflow examples
+- **[Feature Engineering](./online-feature-store/docs/)** - Best practices for feature development
+- **[Scaling Patterns](./online-feature-store/docs/)** - Handle millions of requests per second
+
+### 🚀 Quick Navigation
+
+| Component | Documentation | Quick Start |
+|-----------|--------------|-------------|
+| **Online Feature Store** | [Docs](./online-feature-store/docs/) | [Setup](./quick-start/) |
+| **Go SDK** | [Docs](./go-sdk/README.md) | [Examples](./go-sdk/README.md) |
+| **Python SDK** | [Docs](./py-sdk/README.md) | [Quickstart](./py-sdk/README.md) |
+
+### 💡 Getting Started Resources
+
+**New to BharatMLStack?** Start here:
+1. 📖 Read the [System Overview](./online-feature-store/docs/README.md)
+2. 🚀 Follow the [Quick Start Guide](./quick-start/)
+3. 🔧 Try the [CLI Tutorial](./quick-start/CLI-README.md)
+4. 🏗️ Explore [Architecture Details](./online-feature-store/docs/architecture.md)
+
+**Ready for Production?** Check out:
+- 🏭 [Production Deployment Guide](./online-feature-store/docs/)
+- 📊 [Performance Tuning](./online-feature-store/docs/)
+- 🔐 [Security & Authentication](./online-feature-store/docs/)
+- 📈 [Monitoring & Alerting](./online-feature-store/docs/)
 
 ## Contributing
 

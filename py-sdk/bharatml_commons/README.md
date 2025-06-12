@@ -2,6 +2,9 @@
 
 [![PyPI version](https://badge.fury.io/py/bharatml_commons.svg)](https://badge.fury.io/py/bharatml_commons)
 [![Python versions](https://img.shields.io/pypi/pyversions/bharatml_commons.svg)](https://pypi.org/project/bharatml_commons/)
+[![Build Status](https://github.com/Meesho/BharatMLStack/actions/workflows/py-sdk.yml/badge.svg)](https://github.com/Meesho/BharatMLStack/actions/workflows/py-sdk.yml)
+[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-BharatMLStack%20BSL%201.1-blue.svg)](https://github.com/Meesho/BharatMLStack/blob/main/LICENSE.md)
 
 Common utilities and protobuf definitions for BharatML Stack.
 

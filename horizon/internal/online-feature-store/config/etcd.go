@@ -303,7 +303,7 @@ func (e *Etcd) GetAllEntities() ([]string, error) {
 	featureRegistry := e.GetEtcdInstance()
 	entities := featureRegistry.Entities
 	if entities == nil {
-		return nil, errors.New("entities not found in configuration")
+		return []string{}, errors.New("entities not found in configuration")
 	}
 	keys := make([]string, 0, len(entities))
 	for key := range entities {

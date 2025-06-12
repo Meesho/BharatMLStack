@@ -4,3 +4,5 @@ trufflebox-ui/node_modules/
 .DS_Store
 dist/
 .env*
+.idea/
+workspace/
