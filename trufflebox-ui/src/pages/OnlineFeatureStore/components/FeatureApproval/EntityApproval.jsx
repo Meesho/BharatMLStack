@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Modal, ListGroup, Table } from 'react-bootstrap';
 import { 
   Button, 
@@ -131,7 +131,7 @@ const EntityApproval = () => {
   };
 
   // Extract fetching logic to reusable function
-  const fetchEntityRequests = async () => {
+  const fetchEntityRequests = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/get-entity-requests`, {
@@ -146,11 +146,11 @@ const EntityApproval = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user.token]);
 
   useEffect(() => {
     fetchEntityRequests();
-  }, [user.token]);
+  }, [fetchEntityRequests]);
 
   // Check if status is APPROVED or REJECTED
   const shouldShowFooter = showModal && entityData.status !== 'APPROVED' && entityData.status !== 'REJECTED';
