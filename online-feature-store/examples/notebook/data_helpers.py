@@ -62,7 +62,6 @@ def get_features_from_all_sources(
     spark,
     entity_column_names,
     feature_mapping,
-    offline_col_to_default_values_map,
     src_type_to_partition_col_map={
         "TABLE": "process_date",
         "PARQUET_GCS": "ts",
@@ -85,7 +84,6 @@ def get_features_from_all_sources(
         entity_column_names (list): List of column names that uniquely identify an entity
         feature_mapping (list): List of tuples containing source details:
             [(source_path, source_type, [(source_col, renamed_col), ...]), ...]
-        offline_col_to_default_values_map (dict): Mapping of column names to their default values
         src_type_to_partition_col_map (dict): Mapping of source types to their partition columns.
             Defaults to:
             {
@@ -95,7 +93,7 @@ def get_features_from_all_sources(
                 "PARQUET_ADLS": "ts",
                 "DELTA_GCS": "ts",
                 "DELTA_S3": "ts",
-                "DELTA_S3": "ts"
+                "DELTA_ADLS": "ts"
             }
 
     Returns:
@@ -110,8 +108,7 @@ def get_features_from_all_sources(
         >>> df = get_features_from_all_sources(
         ...     spark,
         ...     ["entity_id"],
-        ...     feature_mapping,
-        ...     {"renamed_feat1": 0, "renamed_feat2": ""}
+        ...     feature_mapping
         ... )
     """
 
@@ -153,14 +150,54 @@ def get_features_from_all_sources(
         sdf = sdf_list[0]
     else:
         # Perform a single multi-way join using reduce
-        print("Joining all sources...")
+        print("Joining all feature sources...")
         sdf = reduce(
             lambda df1, df2: df1.join(df2, entity_column_names, "outer"), sdf_list
         )
 
     print("filling null features with default values")
-    sdf = sdf.fillna(offline_col_to_default_values_map)
-
+    
     sdf = sdf.na.drop(subset=entity_column_names)
 
     return sdf
+
+def fill_na_features_with_default_values(df, offline_col_to_default_values_map, offline_col_to_datatype_map):
+    vector_types = {
+        'DataTypeFP8E5M2Vector', 'DataTypeFP8E4M3Vector', 'DataTypeFP16Vector', 
+        'DataTypeFP32Vector', 'DataTypeFP64Vector', 'DataTypeInt8Vector', 
+        'DataTypeInt16Vector', 'DataTypeInt32Vector', 'DataTypeInt64Vector',
+        'DataTypeUint8Vector', 'DataTypeUint16Vector', 'DataTypeUint32Vector', 
+        'DataTypeUint64Vector', 'DataTypeStringVector', 'DataTypeBoolVector'
+    }
+    
+    # Separate scalar and vector columns
+    scalar_fill_map = {}
+    vector_fill_map = {}
+    
+    for col, datatype in offline_col_to_datatype_map.items():
+        default_val = offline_col_to_default_values_map[col]
+        if datatype in vector_types:
+            default_val = default_val.strip('[]').split(',')
+            if datatype in {'DataTypeFP8E5M2Vector', 'DataTypeFP8E4M3Vector', 'DataTypeFP16Vector', 'DataTypeFP32Vector', 'DataTypeFP64Vector'}:
+                default_val = [float(x) for x in default_val]
+            elif datatype in {'DataTypeInt8Vector', 'DataTypeInt16Vector', 'DataTypeInt32Vector', 'DataTypeInt64Vector', 
+                              'DataTypeUint8Vector', 'DataTypeUint16Vector', 'DataTypeUint32Vector', 'DataTypeUint64Vector'}:
+                default_val = [int(x) for x in default_val]
+            elif datatype == 'DataTypeBoolVector':
+                default_val = [x for x in default_val]
+            # String vector doesn't need casting
+            vector_fill_map[col] = default_val
+        else:
+            scalar_fill_map[col] = default_val
+
+    # Fill scalar columns with fillna
+    if scalar_fill_map:
+        df = df.fillna(scalar_fill_map)
+    
+    # Fill vector columns with withColumn/when/otherwise
+    for col, default_val in vector_fill_map.items():
+        df = df.withColumn(
+            col,
+            F.when(F.col(col).isNull(), F.array([F.lit(x) for x in default_val])).otherwise(F.col(col))
+        )
+    return df
