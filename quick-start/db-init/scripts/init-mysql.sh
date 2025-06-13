@@ -97,8 +97,6 @@ mysql -hmysql -uroot -proot -e "
     updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY id (id),
-    UNIQUE KEY first_name (first_name),
-    UNIQUE KEY last_name (last_name),
     UNIQUE KEY email (email),
     CONSTRAINT users_chk_1 CHECK ((role in ('user','admin')))
   );
