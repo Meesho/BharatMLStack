@@ -154,17 +154,20 @@ jobs:
         if: ${{ !inputs.is_beta && !inputs.is_alpha }}
         run: |
           echo "📤 Publishing to PyPI (Production Release)..."
-          if ! twine upload dist/* 2>&1 | tee upload_output.log; then
-            if grep -q "File already exists" upload_output.log; then
-              echo "⚠️  Some files already exist on PyPI, but continuing with release process..."
-              echo "📋 Upload output:"
-              cat upload_output.log
-              echo "✅ Skipping upload error and continuing with GitHub release creation"
-            else
-              echo "❌ Upload failed with a different error:"
-              cat upload_output.log
-              exit 1
-            fi
+          set +e  # Don't exit on command failure
+          twine upload dist/* 2>&1 | tee upload_output.log
+          upload_exit_code=$?
+          set -e  # Re-enable exit on failure
+          
+          if grep -q "File already exists" upload_output.log; then
+            echo "⚠️  Some files already exist on PyPI, but continuing with release process..."
+            echo "📋 Upload output:"
+            cat upload_output.log
+            echo "✅ Skipping upload error and continuing with GitHub release creation"
+          elif [ $upload_exit_code -ne 0 ]; then
+            echo "❌ Upload failed with a different error:"
+            cat upload_output.log
+            exit 1
           else
             echo "✅ All packages uploaded successfully to PyPI"
           fi
