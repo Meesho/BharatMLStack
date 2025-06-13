@@ -207,7 +207,10 @@ func (e *Etcd) RegisterFeatureGroup(entityLabel, fgLabel, JobId string, storeId,
 	}
 
 	maxColumnSize := stores[strconv.Itoa(storeId)].MaxColumnSizeInBytes
-	numColumns := (totalSize / maxColumnSize) + 1
+	numColumns := totalSize / maxColumnSize
+	if totalSize%maxColumnSize != 0 {
+		numColumns++
+	}
 	paths := make(map[string]interface{})
 	maxColumn := e.getMaxColumnForEntity(entityLabel) + 1
 	columnsToAdd := make([]string, 0)
@@ -412,8 +415,9 @@ func (e *Etcd) AddFeatures(entityLabel, fgLabel string, labels, defaultValues, s
 	entities := e.GetEtcdInstance().Entities
 	featureGroup := entities[entityLabel].FeatureGroups[fgLabel]
 	columns := featureGroup.Columns
-	maxSegment, err := findLargestSegment(columns)
-	columnToUpdate := "seg_" + strconv.Itoa(maxSegment)
+	maxSegmentInFg, err := findLargestSegment(columns)
+	maxSegmentInEntity := e.getMaxColumnForEntity(entityLabel) + 1
+	columnToUpdate := "seg_" + strconv.Itoa(maxSegmentInFg)
 	dataType := featureGroup.DataType
 	if err != nil {
 		log.Error().Msgf("Error finding largest segment: %s", err)
@@ -517,12 +521,15 @@ func (e *Etcd) AddFeatures(entityLabel, fgLabel string, labels, defaultValues, s
 	columnsToAdd := make([]string, 0)
 	if newSize > stores[storeId].MaxColumnSizeInBytes {
 		pathsToUpdate[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/columns/%s/current-size-in-bytes", e.appName, entityLabel, fgLabel, columnToUpdate)] = stores[storeId].MaxColumnSizeInBytes
-		columnsLimit := maxSegment + newSize/stores[storeId].MaxColumnSizeInBytes
-		for i := maxSegment + 1; i <= columnsLimit; i++ {
+		columnsLimit := maxSegmentInEntity + newSize/stores[storeId].MaxColumnSizeInBytes
+		if newSize%stores[storeId].MaxColumnSizeInBytes == 0 {
+			columnsLimit--
+		}
+		for i := maxSegmentInEntity + 1; i <= columnsLimit; i++ {
 			columnLabel := fmt.Sprintf("seg_%d", i)
 			columnSize := stores[storeId].MaxColumnSizeInBytes
 			if i == columnsLimit {
-				columnSize = newSize - (stores[storeId].MaxColumnSizeInBytes * (columnsLimit - maxSegment))
+				columnSize = newSize - (stores[storeId].MaxColumnSizeInBytes * (columnsLimit - maxSegmentInEntity))
 				if columnSize == 0 {
 					break
 				}
@@ -537,7 +544,10 @@ func (e *Etcd) AddFeatures(entityLabel, fgLabel string, labels, defaultValues, s
 	paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/features/%v/labels", e.appName, entityLabel, fgLabel, activeVersionInt)] = existingLabels
 	paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/features/%v/default-values", e.appName, entityLabel, fgLabel, activeVersionInt)] = existingDefaultValues
 
-	pathsToUpdate[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/columns/%s/current-size-in-bytes", e.appName, entityLabel, fgLabel, columnToUpdate)] = newSize
+	currentColumnKey := fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/columns/%s/current-size-in-bytes", e.appName, entityLabel, fgLabel, columnToUpdate)
+	if _, exists := pathsToUpdate[currentColumnKey]; !exists { // for the cases where newSize <= MaxColumnSizeInBytes
+		pathsToUpdate[currentColumnKey] = newSize
+	}
 	pathsToUpdate[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/active-version", e.appName, entityLabel, fgLabel)] = activeVersionInt
 	for key, value := range sourceMap {
 		paths[fmt.Sprintf("/config/%s/source/%s", e.appName, key)] = value
