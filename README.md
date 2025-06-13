@@ -41,6 +41,16 @@ BharatMLStack is battle-tested in production environments, powering:
 
 ## Core Components
 
+### 📋 Current Releases
+
+| Component | Version | Description |
+|-----------|---------|-------------|
+| 🚀 **Horizon** | `v1.0.0` | Control Plane & Backend |
+| 🎨 **Trufflebox UI** | `v1.0.0` | ML Management Console |
+| 🗄️ **Online Feature Store** | `v1.0.0` | Real-Time Features |
+| 🐹 **Go SDK** | `v1.0.0` | Go Client Library |
+| 🐍 **Python SDK** | `v1.0.0` | Python Client Library |
+
 ### 🚀 Horizon - Control Plane & Backend
 The central control plane for BharatMLStack components, serving as the backend for Trufflebox UI.
 - **Component orchestration**: Manages and coordinates all BharatMLStack services
