@@ -536,6 +536,68 @@ func (o *OnlineFeatureStore) EditFeatures(request *EditFeatureRequest) (uint, er
 	return requestId, nil
 }
 
+func (o *OnlineFeatureStore) DeleteFeatures(request *DeleteFeaturesRequest) (uint, error) {
+	fg, err := o.Config.GetFeatureGroup(request.EntityLabel, request.FeatureGroupLabel)
+	if err != nil {
+		return 0, err
+	}
+
+	if fg == nil || fg.Features == nil {
+		return 0, fmt.Errorf("feature group not found or has no features")
+	}
+
+	activeVersion := fg.ActiveVersion
+	if _, exists := fg.Features[activeVersion]; !exists {
+		return 0, fmt.Errorf("active version %s not found in feature group", activeVersion)
+	}
+
+	featureMetaMap := fg.Features[activeVersion].FeatureMeta
+	if featureMetaMap == nil {
+		return 0, fmt.Errorf("feature meta map is nil for active version %s", activeVersion)
+	}
+
+	existingLabelSet := make(map[string]struct{})
+	for key := range featureMetaMap {
+		existingLabelSet[key] = struct{}{}
+	}
+
+	var missingFeatures []string
+	for _, label := range request.FeatureLabels {
+		if _, exists := existingLabelSet[label]; !exists {
+			missingFeatures = append(missingFeatures, label)
+		}
+	}
+
+	if len(missingFeatures) > 0 {
+		log.Error().Msgf("features not found in the active version schema: %s", strings.Join(missingFeatures, ", "))
+		return 0, fmt.Errorf("features not found in the active version schema: %s", strings.Join(missingFeatures, ", "))
+	}
+
+	payload, err := json.Marshal(request)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return 0, err
+	}
+
+	requestId, err := o.featureRepo.Create(&features.Table{
+		Payload:           payload,
+		CreatedBy:         request.UserId,
+		EntityLabel:       request.EntityLabel,
+		FeatureGroupLabel: request.FeatureGroupLabel,
+		ApprovedBy:        "",
+		Status:            "PENDING APPROVAL",
+		RequestType:       "DELETE",
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+		Service:           "Online Feature Store",
+	})
+	if err != nil {
+		log.Error().Msgf("Error Deleting Features for %s , %s", request.EntityLabel, request.FeatureGroupLabel)
+		return 0, err
+	}
+	return requestId, nil
+}
+
 func (o *OnlineFeatureStore) ProcessAddFeature(request *ProcessAddFeatureRequest) error {
 	fg, err := o.featureRepo.GetById(request.RequestId)
 	if fg == nil || err != nil {
@@ -614,6 +676,78 @@ func (o *OnlineFeatureStore) ProcessAddFeature(request *ProcessAddFeatureRequest
 	})
 	if err != nil {
 		log.Error().Msg("Error Approving Features")
+		return err
+	}
+	return nil
+}
+
+func (o *OnlineFeatureStore) ProcessDeleteFeatures(request *ProcessDeleteFeaturesRequest) error {
+	fg, err := o.featureRepo.GetById(request.RequestId)
+	if fg == nil || err != nil {
+		log.Error().Msgf("Error Approving Feature Delete for %d", request.RequestId)
+		return err
+	}
+	if fg.Status == "APPROVED" {
+		log.Error().Msgf("Delete features request is already Processed for request id %d", request.RequestId)
+		return fmt.Errorf("delete features request is already Processed for request id %d", request.RequestId)
+	}
+
+	if request.Status != "REJECTED" {
+		var deletePayload DeleteFeaturesRequest
+		json.Unmarshal(fg.Payload, &deletePayload)
+
+		fg, err := o.Config.GetFeatureGroup(deletePayload.EntityLabel, deletePayload.FeatureGroupLabel)
+		if err != nil {
+			return err
+		}
+
+		if fg == nil || fg.Features == nil {
+			return fmt.Errorf("feature group not found or has no features")
+		}
+
+		activeVersion := fg.ActiveVersion
+		if _, exists := fg.Features[activeVersion]; !exists {
+			return fmt.Errorf("active version %s not found in feature group", activeVersion)
+		}
+
+		featureMetaMap := fg.Features[activeVersion].FeatureMeta
+		if featureMetaMap == nil {
+			return fmt.Errorf("feature meta map is nil for active version %s", activeVersion)
+		}
+
+		existingLabelSet := make(map[string]struct{})
+		for key := range featureMetaMap {
+			existingLabelSet[key] = struct{}{}
+		}
+
+		var missingFeatures []string
+		for _, label := range deletePayload.FeatureLabels {
+			if _, exists := existingLabelSet[label]; !exists {
+				missingFeatures = append(missingFeatures, label)
+			}
+		}
+
+		if len(missingFeatures) > 0 {
+			log.Error().Msgf("features not found in the active version schema: %s", strings.Join(missingFeatures, ", "))
+			return fmt.Errorf("features not found in the active version schema: %s", strings.Join(missingFeatures, ", "))
+		}
+
+		err = o.Config.DeleteFeatures(deletePayload.EntityLabel, deletePayload.FeatureGroupLabel, deletePayload.FeatureLabels)
+		if err != nil {
+			log.Error().Msgf("Error Deleting Features for %s , %s", deletePayload.EntityLabel, deletePayload.FeatureGroupLabel)
+			return err
+		}
+	}
+
+	err = o.featureRepo.Update(&features.Table{
+		RequestId:    uint(request.RequestId),
+		ApprovedBy:   request.ApproverId,
+		Status:       request.Status,
+		Service:      "Online Feature Store",
+		RejectReason: request.RejectReason,
+	})
+	if err != nil {
+		log.Error().Msgf("Error updating delete features request status for request ID %d: %v", request.RequestId, err)
 		return err
 	}
 	return nil
