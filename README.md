@@ -170,7 +170,7 @@ We welcome contributions from the community! Please see our [Contributing Guide]
 
 - 💬 **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
 - 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
-- 📧 **Email**: Contact us at [hello@bharatmlstack.com](mailto:ml-oss@meesho.com )
+- 📧 **Email**: Contact us at [ml-oss@meesho.com](mailto:ml-oss@meesho.com )
 
 ## License
 

@@ -1,0 +1,8 @@
+{
+    "label": "Online Feature Store",
+    "position": 1,
+    "link": {
+        "type": "generated-index",
+        "description": "Online-feature-store is a high-performance, scalable, and production-grade feature store built for modern machine learning systems. It supports both real-time and batch workflows, with a strong emphasis on developer experience, system observability, and low-latency feature retrieval."
+    }
+}
