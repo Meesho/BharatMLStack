@@ -4,46 +4,48 @@ import styles from './styles.module.css';
 
 const FeatureList = [
   {
-    title: 'Easy to Use',
-    Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
+    title: 'High-Performance Feature Store',
+    icon: '🚀',
     description: (
       <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
+        Sub-10ms P99 latency and 1M+ RPS capacity. Built for real-time ML inference 
+        with custom PSDB serialization format that outperforms Protocol Buffers and Apache Arrow.
       </>
     ),
   },
   {
-    title: 'Focus on What Matters',
-    Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
+    title: 'Production-Ready ML Infrastructure',
+    icon: '⚡',
     description: (
       <>
-        Docusaurus lets you focus on your docs, and we&apos;ll do the chores. Go
-        ahead and move your docs into the <code>docs</code> directory.
+        Multi-database backends (Scylla, Dragonfly, Redis), comprehensive monitoring, 
+        and enterprise-grade features. Deploy with confidence using battle-tested components.
       </>
     ),
   },
   {
-    title: 'Powered by React',
-    Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
+    title: 'Developer-First Experience',
+    icon: '🛠️',
     description: (
       <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
+        Multi-language SDKs (Go, Python), gRPC APIs, and extensive documentation. 
+        From data scientists, ML engineers to backend engineers, everyone gets tools they love.                    
       </>
     ),
   },
 ];
 
-function Feature({Svg, title, description}) {
+function Feature({icon, title, description}) {
   return (
     <div className={clsx('col col--4')}>
       <div className="text--center">
-        <Svg className={styles.featureSvg} role="img" />
+        <div className="bharatml-icon">
+          {icon}
+        </div>
       </div>
-      <div className="text--center padding-horiz--md">
+      <div className="text--center padding-horiz--md bharatml-card">
         <Heading as="h3">{title}</Heading>
-        <p>{description}</p>
+        <p className={styles.featureDescription}>{description}</p>
       </div>
     </div>
   );
@@ -53,6 +55,14 @@ export default function HomepageFeatures() {
   return (
     <section className={styles.features}>
       <div className="container">
+        <div className="text--center margin-bottom--xl">
+          <Heading as="h2" className={styles.featuresHeader}>
+            Online Feature Store
+          </Heading>
+          <p className={styles.featuresSubtitle}>
+            High-performance, production-ready feature serving for real-time ML inference
+          </p>
+        </div>
         <div className="row">
           {FeatureList.map((props, idx) => (
             <Feature key={idx} {...props} />

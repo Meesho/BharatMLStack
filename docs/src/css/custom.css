@@ -6,25 +6,138 @@
 
 /* You can override the default Infima variables here. */
 :root {
-  --ifm-color-primary: #2e8555;
-  --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
-  --ifm-color-primary-light: #33925d;
-  --ifm-color-primary-lighter: #359962;
-  --ifm-color-primary-lightest: #3cad6e;
+  /* BharatMLStack brand colors - purple/burgundy theme */
+  --ifm-color-primary: #450839;
+  --ifm-color-primary-dark: #3d0732;
+  --ifm-color-primary-darker: #39062f;
+  --ifm-color-primary-darkest: #2f0527;
+  --ifm-color-primary-light: #4d0940;
+  --ifm-color-primary-lighter: #510a43;
+  --ifm-color-primary-lightest: #5d0c4d;
   --ifm-code-font-size: 95%;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  
+  /* Custom BharatMLStack variables with better contrast */
+  --bharatml-primary: #450839;
+  --bharatml-primary-hover: #6a0c59;
+  --bharatml-secondary: #f9f9f9;
+  --bharatml-text: #1c1e21;  /* Much darker for better contrast */
+  --bharatml-text-light: #606770;  /* Darker gray for better readability */
 }
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
-  --ifm-color-primary: #25c2a0;
-  --ifm-color-primary-dark: #21af90;
-  --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
-  --ifm-color-primary-light: #29d5b0;
-  --ifm-color-primary-lighter: #32d8b4;
-  --ifm-color-primary-lightest: #4fddbf;
+  --ifm-color-primary: #8b4582;
+  --ifm-color-primary-dark: #7d3f75;
+  --ifm-color-primary-darker: #763c6e;
+  --ifm-color-primary-darkest: #62315a;
+  --ifm-color-primary-light: #994b8f;
+  --ifm-color-primary-lighter: #a04e96;
+  --ifm-color-primary-lightest: #b657a9;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+  
+  /* Dark mode BharatMLStack colors */
+  --bharatml-primary: #8b4582;
+  --bharatml-primary-hover: #a04e96;
+  --bharatml-secondary: #1e1e1e;
+  --bharatml-text: #e3e3e3;  /* Light text for dark mode */
+  --bharatml-text-light: #b4b4b4;  /* Lighter gray for dark mode */
+}
+
+/* Custom BharatMLStack styles */
+.bharatml-hero {
+  background: linear-gradient(135deg, var(--bharatml-primary) 0%, var(--bharatml-primary-hover) 100%);
+  color: white;
+}
+
+/* Hero button styling - both buttons should have white borders and proper text colors */
+.bharatml-hero .bharatml-button {
+  background-color: var(--bharatml-primary);
+  border: 2px solid white !important;
+  color: white !important;
+  transition: all 0.3s ease;
+}
+
+.bharatml-hero .bharatml-button:hover {
+  background-color: white !important;
+  border-color: white !important;
+  color: var(--bharatml-primary) !important;
+}
+
+.bharatml-hero .button--outline {
+  background-color: transparent !important;
+  border: 2px solid white !important;
+  color: white !important;
+  transition: all 0.3s ease;
+}
+
+.bharatml-hero .button--outline:hover {
+  background-color: white !important;
+  border-color: white !important;
+  color: var(--bharatml-primary) !important;
+}
+
+/* Dark mode hero buttons */
+[data-theme='dark'] .bharatml-hero .bharatml-button {
+  background-color: var(--bharatml-primary);
+  border: 2px solid white !important;
+  color: white !important;
+}
+
+[data-theme='dark'] .bharatml-hero .bharatml-button:hover {
+  background-color: white !important;
+  border-color: white !important;
+  color: var(--bharatml-primary) !important;
+}
+
+[data-theme='dark'] .bharatml-hero .button--outline {
+  background-color: transparent !important;
+  border: 2px solid white !important;
+  color: white !important;
+}
+
+[data-theme='dark'] .bharatml-hero .button--outline:hover {
+  background-color: white !important;
+  border-color: white !important;
+  color: var(--bharatml-primary) !important;
+}
+
+/* General button styling for other parts of the site */
+.bharatml-button {
+  background-color: var(--bharatml-primary);
+  border-color: var(--bharatml-primary);
+  transition: all 0.3s ease;
+}
+
+.bharatml-button:hover {
+  background-color: var(--bharatml-primary-hover);
+  border-color: var(--bharatml-primary-hover);
+  color: white;
+}
+
+.bharatml-card {
+  border: 1px solid rgba(69, 8, 57, 0.1);
+  border-radius: 8px;
+  padding: 2rem;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.bharatml-card:hover {
+  border-color: var(--bharatml-primary);
+  box-shadow: 0 4px 20px rgba(69, 8, 57, 0.1);
+  transform: translateY(-2px);
+}
+
+.bharatml-icon {
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, var(--bharatml-primary), var(--bharatml-primary-hover));
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+  font-size: 1.5rem;
+  color: white;
 }

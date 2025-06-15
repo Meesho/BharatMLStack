@@ -1,11 +1,110 @@
 .features {
-  display: flex;
-  align-items: center;
-  padding: 2rem 0;
+  display: block;
+  padding: 4rem 0;
   width: 100%;
+  background-color: var(--ifm-background-surface-color);
+  text-align: center;
 }
 
 .featureSvg {
   height: 200px;
   width: 200px;
+}
+
+/* Section header styling */
+.featuresHeader {
+  color: var(--bharatml-primary);
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.featuresSubtitle {
+  color: var(--ifm-font-color-base);
+  font-size: 1.2rem;
+  opacity: 1;
+  text-align: center;
+}
+
+/* Custom styles for BharatMLStack feature cards */
+.features .bharatml-card {
+  height: 100%;
+  margin-top: 1rem;
+}
+
+.features .bharatml-icon {
+  margin-bottom: 1.5rem;
+}
+
+.features h3 {
+  color: var(--bharatml-primary);
+  margin-bottom: 1rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.features p {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--ifm-font-color-base) !important;
+  margin: 0;
+  font-weight: 400;
+}
+
+/* Specific styling for feature descriptions to ensure readability */
+.featureDescription {
+  color: #1c1e21 !important;
+  font-size: 0.95rem !important;
+  line-height: 1.6 !important;
+  margin: 0 !important;
+  font-weight: 400 !important;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 996px) {
+  .features .bharatml-card {
+    margin-bottom: 2rem;
+  }
+  
+  .featuresHeader {
+    font-size: 2rem;
+  }
+  
+  .featuresSubtitle {
+    font-size: 1rem;
+  }
+}
+
+/* Dark mode adjustments */
+[data-theme='dark'] .bharatml-card {
+  background: #2a2a2a !important;  /* Lighter gray background */
+  border-color: rgba(139, 69, 130, 0.3);
+  color: white;
+}
+
+[data-theme='dark'] .bharatml-card:hover {
+  border-color: var(--bharatml-primary);
+  box-shadow: 0 4px 20px rgba(139, 69, 130, 0.3);
+  background: #333333 !important;  /* Slightly lighter on hover */
+}
+
+[data-theme='dark'] .features p {
+  color: #a04e96 !important;
+}
+
+[data-theme='dark'] .featureDescription {
+  color: #a04e96 !important;
+}
+
+[data-theme='dark'] .features h3 {
+  color: #a04e96 !important;  /* Lighter purple for better visibility */
+}
+
+[data-theme='dark'] .featuresHeader {
+  color: #a04e96 !important;
+}
+
+[data-theme='dark'] .featuresSubtitle {
+  color: #e0e0e0 !important;
 }
