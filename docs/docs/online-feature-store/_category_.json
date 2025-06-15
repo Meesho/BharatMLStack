@@ -1,0 +1,8 @@
+{
+    "label": "Online Feature Store",
+    "position": 1,
+    "link": {
+        "type": "generated-index",
+        "description": "Online Feature Store is a high-performance feature serving system designed for real-time ML inference with sub-10ms P99 latency, supporting multiple database backends."
+    }
+}
