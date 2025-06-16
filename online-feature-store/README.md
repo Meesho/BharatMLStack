@@ -394,19 +394,6 @@ docker run -d \
   horizon:latest
 ```
 
-### Kubernetes
-
-```bash
-# Apply Kubernetes manifests
-kubectl apply -f k8s/
-
-# Check deployment status
-kubectl get pods -l app=horizon
-
-# Port forward for testing
-kubectl port-forward svc/horizon 8080:8080
-```
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please check our [Contribution Guide](docs/CONTRIBUTING.md) for details on how to get started.
