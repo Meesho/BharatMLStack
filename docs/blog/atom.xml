@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="utf-8"?><?xml-stylesheet type="text/xsl" href="atom.xsl"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>https://meesho.github.io/BharatMLStack/blog</id>
+    <title>BharatMLStack Blog</title>
+    <updated>2022-11-15T00:00:00.000Z</updated>
+    <generator>https://github.com/jpmonette/feed</generator>
+    <link rel="alternate" href="https://meesho.github.io/BharatMLStack/blog"/>
+    <subtitle>BharatMLStack Blog</subtitle>
+    <icon>https://meesho.github.io/BharatMLStack/img/favicon.ico</icon>
+    <entry>
+        <title type="html"><![CDATA[Building Meesho’s ML Platform: From Chaos to Cutting-Edge (Part 1)]]></title>
+        <id>https://meesho.github.io/BharatMLStack/blog/post-one</id>
+        <link href="https://meesho.github.io/BharatMLStack/blog/post-one"/>
+        <updated>2022-11-15T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[BharatMLStack]]></summary>
+        <content type="html"><![CDATA[<p><img decoding="async" loading="lazy" alt="BharatMLStack" src="https://meesho.github.io/BharatMLStack/assets/images/bharatmlstack-72e1796337bfa224dee2a0f59ec4e2da.png" width="1472" height="892" class="img_ev3q"></p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-genesis-how-a-friday-night-roast-sparked-meeshos-ml-platform">The Genesis: How a Friday Night Roast Sparked Meesho’s ML Platform<a href="https://meesho.github.io/BharatMLStack/blog/post-one#the-genesis-how-a-friday-night-roast-sparked-meeshos-ml-platform" class="hash-link" aria-label="Direct link to The Genesis: How a Friday Night Roast Sparked Meesho’s ML Platform" title="Direct link to The Genesis: How a Friday Night Roast Sparked Meesho’s ML Platform">​</a></h2>
+<p>It all started in early 2022, over a casual Friday evening catch-up. Like many great origin stories, this one began with friendly banter between a group of backend engineers and data scientists. As the conversations unfolded, so did the roasting—until one remark hit a little too close to home:</p>
+<p><em>"Why are we still crunching data for Monthly Active Users (MAU) when the next day it’s all about Daily Active Users (DAU)?"</em></p>
+<p>The laughter died down, and the question lingered. When we regrouped on Monday—clear-headed and slightly reflective—we decided to dig into the numbers. What they discovered was quite revealing: a large portion of compute resources wasn’t being put to good use.
+Much of the system’s effort was spent supporting users who weren’t actively engaging, and even for new users, the experience wasn’t optimized to make a meaningful impact.</p>
+<p>At the same time, Meesho had just launched a company-wide initiative to reduce costs—and every team had to contribute. This realization sparked the journey that would eventually lead to the <strong>Meesho ML Platform</strong>, known today as <strong>BharatMLStack</strong>.</p>
+<p><img decoding="async" loading="lazy" alt="Alt Text" src="https://meesho.github.io/BharatMLStack/assets/images/old-batch-arch-bc2cedbc1fed0fc6f08479ba8fe52996.png" width="1600" height="1078" class="img_ev3q"></p>
+<p>Before the ML Platform, our recommendation and ranking pipelines followed a batch processing approach:</p>
+<ul>
+<li><strong>Data Ingestion</strong>: The Data Platform team executed ETL jobs to ingest raw user data—including user profiles, interaction logs, and product impressions—into designated S3 buckets.</li>
+<li><strong>Layer 1</strong>: Embedding Generation: On the Data Science side, Spark jobs pulled data from multiple S3 sources, cleaned and preprocessed it, and applied matrix factorization to generate user and item embeddings. The processed data and embeddings were then stored back in S3 in a structured format.</li>
+<li><strong>Layer 2</strong>: Candidate Generation (CG): In this stage, Spark jobs leveraged embeddings and historical interaction data to generate candidate recommendations for users. These candidate lists were subsequently written to S3.</li>
+<li><strong>Layer 3</strong>: Ranking and Merging – A final round of processing ranked the generated candidates using ML models, combined different candidate lists, and stored the final ranked recommendations in a caching system.</li>
+<li><strong>Serving</strong>: A microservice retrieved ranked recommendations from an in-memory data store via exposed APIs, delivering personalized listings across key surfaces such as "For You" and Category Landing Pages (CLP).</li>
+</ul>
+<p>This approach held up well—until Meesho started seeing a significant surge in traffic.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-turning-point-from-batch-to-real-time">The Turning Point: From Batch to Real-Time<a href="https://meesho.github.io/BharatMLStack/blog/post-one#the-turning-point-from-batch-to-real-time" class="hash-link" aria-label="Direct link to The Turning Point: From Batch to Real-Time" title="Direct link to The Turning Point: From Batch to Real-Time">​</a></h2>
+<p>At this time, the team was iterating on new <strong>Ranker models</strong>, and real-time inference seemed like the next logical step. But Rankers needed <strong>real-time feature retrieval</strong>, which meant an <strong>online feature store</strong> had to be built first.</p>
+<p>Exploring open-source options led to <strong>cost vs. performance trade-offs</strong>, but Meesho’s surging traffic meant that <strong>latency and stability were non-negotiable</strong>. After multiple debates and stakeholder discussions, a bold decision was made:</p>
+<p><em>We would build our own feature store.</em></p>
+<p>Meanwhile, efforts began to bring <strong>Candidate Generators (CGs)</strong> to real-time. The challenge? <strong>Storing and retrieving user interactions quickly enough</strong> to power real-time recommendations.</p>
+<p>As the team dove deeper, a new roadblock emerged:<br>
+<!-- -->Our ML jobs were orchestrated using <strong>Airflow DAGs</strong>, giving data scientists flexibility in experimentation. But transitioning to real-time execution threatened this agility. Every change would now require backend engineering support, <strong>slowing down iteration cycles</strong>.</p>
+<p>That’s when the idea struck:<br>
+<!-- -->We needed a <strong>framework for real-time DAG execution</strong>—one that preserved the same flexibility as Airflow but worked for <strong>streaming data</strong>.</p>
+<p>This moment shaped the <strong>next phase of our journey</strong>.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="first-generation-design">First Generation Design<a href="https://meesho.github.io/BharatMLStack/blog/post-one#first-generation-design" class="hash-link" aria-label="Direct link to First Generation Design" title="Direct link to First Generation Design">​</a></h2>
+<p><img decoding="async" loading="lazy" alt="Alt Text" src="https://meesho.github.io/BharatMLStack/assets/images/first-gen-arch-7c0b286810aecb7eff42b48f51caee1f.png" width="1600" height="1006" class="img_ev3q"></p>
+<h1>Laying the Groundwork: The First-Gen ML Platform</h1>
+<p>To solve these challenges, the team built three foundational components:</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="1-iop-framework-a-real-time-dag-executor">1. IOP Framework: A Real-Time DAG Executor<a href="https://meesho.github.io/BharatMLStack/blog/post-one#1-iop-framework-a-real-time-dag-executor" class="hash-link" aria-label="Direct link to 1. IOP Framework: A Real-Time DAG Executor" title="Direct link to 1. IOP Framework: A Real-Time DAG Executor">​</a></h3>
+<ul>
+<li><strong>Reusable Nodes</strong>: Each DAG node (e.g., an invocation to a CG service, a ranker, or a filter) had to be implemented only once. After that, it could be reused across any workflow by referencing it in config.</li>
+<li><strong>Config-driven Dynamic Graphs</strong>: Execution graphs were defined as adjacency lists stored in <strong>ZooKeeper</strong>, allowing teams to modify the sequence or structure of operations without touching application code.</li>
+<li><strong>Plug-and-play CGs</strong>: The Candidate Generator interface was preserved, so a single CG node could call any CG service by passing <code>cg_name</code> in the request. This drastically reduced the code surface area and improved maintainability.</li>
+<li><strong>Production-Grade DAGs</strong>: DAGs were designed to execute in <strong>low-latency real-time environments</strong>, with support for <strong>parallel execution, retries, and branching</strong>.</li>
+</ul>
+<u><a href="https://www.meesho.io/blog/rebuilding-meeshos-ranking-platform" target="_blank" rel="noopener noreferrer">More about IOP DAG</a></u>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="2-online-feature-store---0th-version">2. Online Feature Store - 0th Version<a href="https://meesho.github.io/BharatMLStack/blog/post-one#2-online-feature-store---0th-version" class="hash-link" aria-label="Direct link to 2. Online Feature Store - 0th Version" title="Direct link to 2. Online Feature Store - 0th Version">​</a></h3>
+<ul>
+<li>Used <strong>Cassandra</strong> and <strong>Redis</strong> for low-latency feature serving.</li>
+<li>Maintained feature consistency using <strong>Feature Groups</strong> with TTL-based expiry.</li>
+<li>A hybrid schema was used: feature keys stored in <strong>ZooKeeper</strong>, data stored in <strong>compact arrays</strong>.</li>
+</ul>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="3-interaction-store---0th-version">3. Interaction Store - 0th Version<a href="https://meesho.github.io/BharatMLStack/blog/post-one#3-interaction-store---0th-version" class="hash-link" aria-label="Direct link to 3. Interaction Store - 0th Version" title="Direct link to 3. Interaction Store - 0th Version">​</a></h3>
+<ul>
+<li>Captured real-time user interactions like clicks, orders, and add-to-cart events.</li>
+<li>Stored event data in <strong>Redis ZSETs (sorted sets)</strong> to enable fast lookups for recommendation engines.</li>
+<li>Provided an API to fetch a user's <strong>last <em>k</em> interactions</strong> or <strong>interactions within a time window</strong>.</li>
+</ul>
+<p>With these components in place, <strong>real-time ML at Meesho became a reality</strong>.</p>
+<p>This was just the beginning.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="building-the-online-feature-store---0th-version">Building the Online Feature Store - 0th Version<a href="https://meesho.github.io/BharatMLStack/blog/post-one#building-the-online-feature-store---0th-version" class="hash-link" aria-label="Direct link to Building the Online Feature Store - 0th Version" title="Direct link to Building the Online Feature Store - 0th Version">​</a></h2>
+<p><img decoding="async" loading="lazy" alt="Alt text" src="https://meesho.github.io/BharatMLStack/assets/images/online-feature-store-v0-86ec0010947ae24621f39ebd0d1729ca.png" width="1574" height="562" class="img_ev3q"></p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="choosing-the-right-tech-stack">Choosing the Right Tech Stack<a href="https://meesho.github.io/BharatMLStack/blog/post-one#choosing-the-right-tech-stack" class="hash-link" aria-label="Direct link to Choosing the Right Tech Stack" title="Direct link to Choosing the Right Tech Stack">​</a></h3>
+<p>We spent considerable time evaluating various databases, caches, and communication protocols for our <strong>online feature store</strong>. After carefully weighing <strong>cost, latency, throughput</strong>, and <strong>operational stability</strong>, we settled on a combination of:</p>
+<ul>
+<li><strong>Cassandra</strong> and <strong>Redis</strong> for storage</li>
+<li><strong>gRPC + Proto3</strong> as our communication layer</li>
+</ul>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="streamlining-the-data-flow">Streamlining the Data Flow<a href="https://meesho.github.io/BharatMLStack/blog/post-one#streamlining-the-data-flow" class="hash-link" aria-label="Direct link to Streamlining the Data Flow" title="Direct link to Streamlining the Data Flow">​</a></h3>
+<p>To keep things simple in the initial version:</p>
+<ul>
+<li><strong>Feature engineering jobs</strong> wrote raw outputs to an <strong>S3 bucket</strong></li>
+<li>A <strong>daily feature push job</strong>:<!-- -->
+<ul>
+<li>Read from S3</li>
+<li>Grouped related features into <strong>Feature Groups</strong> (ensuring consistency)</li>
+<li>Pushed them to <strong>Kafka</strong></li>
+</ul>
+</li>
+</ul>
+<p>For features requiring frequent updates:</p>
+<ul>
+<li><strong>Ad-hoc jobs</strong> computed features in higher frequency</li>
+<li>These jobs pushed to both <strong>Kafka</strong> and <strong>S3</strong>  (S3 preserved historical data for future model training)</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-challenges-data-format-and-storage">The Challenges: Data Format and Storage<a href="https://meesho.github.io/BharatMLStack/blog/post-one#the-challenges-data-format-and-storage" class="hash-link" aria-label="Direct link to The Challenges: Data Format and Storage" title="Direct link to The Challenges: Data Format and Storage">​</a></h2>
+<p>One of the most critical design challenges was how to store feature data <strong>efficiently and consistently</strong>, especially in databases like <strong>Cassandra</strong> and <strong>Redis</strong>, which come with unique storage constraints.</p>
+<p>We had to solve for three key requirements:</p>
+<ul>
+<li>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="feature-consistency">Feature Consistency<a href="https://meesho.github.io/BharatMLStack/blog/post-one#feature-consistency" class="hash-link" aria-label="Direct link to Feature Consistency" title="Direct link to Feature Consistency">​</a></h3>
+<p>When a feature group contains features like <code>order_count_1h</code> and <code>click_count_1h</code>, both must reflect the <strong>same time window</strong>. Inconsistent updates would lead to <strong>unreliable model predictions</strong>.</p>
+</li>
+<li>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="ttl-granularity">TTL Granularity<a href="https://meesho.github.io/BharatMLStack/blog/post-one#ttl-granularity" class="hash-link" aria-label="Direct link to TTL Granularity" title="Direct link to TTL Granularity">​</a></h3>
+<p>Each feature group required an <strong>expiry timestamp</strong>, so that <strong>all features within it expired together</strong>—preserving consistency during reads.</p>
+</li>
+<li>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="extensibility-across-databases">Extensibility Across Databases<a href="https://meesho.github.io/BharatMLStack/blog/post-one#extensibility-across-databases" class="hash-link" aria-label="Direct link to Extensibility Across Databases" title="Direct link to Extensibility Across Databases">​</a></h3>
+<p>We anticipated that infra needs would evolve. To future-proof our system, the data format was designed to be <strong>decoupled from DB-specific layouts</strong>, enabling portability to systems like <strong>ScyllaDB</strong>, <strong>DynamoDB</strong>, <strong>HBase</strong>, or <strong>BigTable</strong>.</p>
+</li>
+</ul>
+<hr>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="overcoming-technical-constraints">Overcoming Technical Constraints<a href="https://meesho.github.io/BharatMLStack/blog/post-one#overcoming-technical-constraints" class="hash-link" aria-label="Direct link to Overcoming Technical Constraints" title="Direct link to Overcoming Technical Constraints">​</a></h2>
+<p>At the time, we were using Cassandra, which not only imposed a soft limit of 75 columns per row, but also exhibited significant performance degradation as the number of columns increased further, particularly in memory constrained machines. Wide rows caused high memory usage during reads, unpredictable latencies due to heavy deserialization overhead, and inefficiencies during compactions and repairs. This ruled out the naive "one column per feature" approach. We needed a format that was compact, minimized the number of columns, and remained efficient and portable across different storage systems.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-solution-schema-separation">The Solution: Schema Separation<a href="https://meesho.github.io/BharatMLStack/blog/post-one#the-solution-schema-separation" class="hash-link" aria-label="Direct link to The Solution: Schema Separation" title="Direct link to The Solution: Schema Separation">​</a></h2>
+<p>We introduced the concept of Feature Groups—logical groupings of features that must remain consistent with one another.
+To represent these groups efficiently, we adopted a layered storage approach:</p>
+<ul>
+<li><strong>Feature Labels (Keys)</strong> were stored in ZooKeeper, serving as the schema.</li>
+<li><strong>Feature Values</strong> were stored as a comma-separated string array in Cassandra or Redis.</li>
+<li><strong>Expiry Timestamp and Schema Version</strong> were appended using a semi-colon delimiter at the end of the string.</li>
+</ul>
+<p>Example:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">feature_1_value,feature_2_value,feature_3_value;expiry_ts</span><br></span></code></pre></div></div>
+<p>This format allowed:</p>
+<ul>
+<li>Consistent writes and reads at the group level</li>
+<li>Easy parsing of feature values using the schema lookup from ZooKeeper</li>
+<li>Efficient storage with minimal DB column usage</li>
+<li>Support for per-group TTLs and schema evolution</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="tracking-changes-in-feature-groups">Tracking Changes in Feature Groups<a href="https://meesho.github.io/BharatMLStack/blog/post-one#tracking-changes-in-feature-groups" class="hash-link" aria-label="Direct link to Tracking Changes in Feature Groups" title="Direct link to Tracking Changes in Feature Groups">​</a></h2>
+<p>Feature groups don’t stay static. As models evolve, features get added, renamed, or removed. But schema changes often go live before the data is ready—and stopping ingestion just to wait for everything to align isn't feasible.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="common-real-world-scenarios">Common Real-World Scenarios:<a href="https://meesho.github.io/BharatMLStack/blog/post-one#common-real-world-scenarios" class="hash-link" aria-label="Direct link to Common Real-World Scenarios:" title="Direct link to Common Real-World Scenarios:">​</a></h3>
+<ul>
+<li>A new feature is added to the schema, but ingestion jobs still use the older schema version.</li>
+<li>Ongoing writes don’t include the newly added feature, and stopping ingestion would break freshness for existing features.</li>
+<li>During serving, models request a mix of old and new features, depending on rollout stages.</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-solution-schema-versioning">The Solution: Schema Versioning<a href="https://meesho.github.io/BharatMLStack/blog/post-one#the-solution-schema-versioning" class="hash-link" aria-label="Direct link to The Solution: Schema Versioning" title="Direct link to The Solution: Schema Versioning">​</a></h2>
+<p>We solved this with versioned feature group schemas, which unlocked several capabilities:</p>
+<ul>
+<li>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="backward-compatibility">Backward Compatibility<a href="https://meesho.github.io/BharatMLStack/blog/post-one#backward-compatibility" class="hash-link" aria-label="Direct link to Backward Compatibility" title="Direct link to Backward Compatibility">​</a></h3>
+<!-- -->Older ingestion jobs can continue writing using older schema versions. During reads, the system uses the schema version embedded in the value to interpret the data correctly.</li>
+<li>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="partial-availability-handling">Partial Availability Handling<a href="https://meesho.github.io/BharatMLStack/blog/post-one#partial-availability-handling" class="hash-link" aria-label="Direct link to Partial Availability Handling" title="Direct link to Partial Availability Handling">​</a></h3>
+<!-- -->During inference, if some features in the request aren’t available (due to rollout delays or missing data), the system serves default values, ensuring the inference call doesn’t fail.</li>
+<li>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="safe-writes-without-pipeline-pauses">Safe Writes Without Pipeline Pauses<a href="https://meesho.github.io/BharatMLStack/blog/post-one#safe-writes-without-pipeline-pauses" class="hash-link" aria-label="Direct link to Safe Writes Without Pipeline Pauses" title="Direct link to Safe Writes Without Pipeline Pauses">​</a></h3>
+<!-- -->With schema versioning, we no longer had to stop ingestion pipelines for schema updates. Writes using previous versions can continue safely, and downstream consumers evolve independently.
+This design gave us the flexibility to move fast without breaking things—preserving data quality, enabling experimentation, and ensuring reliability at scale.</li>
+</ul>
+<p><img decoding="async" loading="lazy" alt="Alt Text" src="https://meesho.github.io/BharatMLStack/assets/images/schema-d699efc400ed0f83bba421c1f55ab211.png" width="1600" height="599" class="img_ev3q"></p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="interaction-store---0th-version">Interaction Store - 0th Version<a href="https://meesho.github.io/BharatMLStack/blog/post-one#interaction-store---0th-version" class="hash-link" aria-label="Direct link to Interaction Store - 0th Version" title="Direct link to Interaction Store - 0th Version">​</a></h2>
+<p><img decoding="async" loading="lazy" alt="Alt Text" src="https://meesho.github.io/BharatMLStack/assets/images/interaction-store-v0-68167b64c6e462ef2f177f0f86d55bda.png" width="1600" height="518" class="img_ev3q"></p>
+<p>To power real-time Candidate Generators (CGs), we needed fast access to user behavior signals—like what a user recently clicked, ordered, or added to their cart. These interactions form the basis for many real-time recommendations, such as <strong>Similar Products</strong>, <strong>People Also Viewed</strong>, or <strong>Recently Ordered Again</strong>.
+For the <strong>0th version</strong> of the Interaction Store, we focused on a design that was <strong>simple, fast, and reliable</strong> — optimized for high-throughput ingestion and low-latency lookups.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="event-ingestion">Event Ingestion<a href="https://meesho.github.io/BharatMLStack/blog/post-one#event-ingestion" class="hash-link" aria-label="Direct link to Event Ingestion" title="Direct link to Event Ingestion">​</a></h2>
+<p>We instrumented our backend services to emit key user interaction events to Kafka in real time. These included:</p>
+<ul>
+<li>Click</li>
+<li>Order</li>
+<li>Add to Cart</li>
+<li>Wishlist</li>
+<li>Share</li>
+</ul>
+<p>Each event carried essential metadata:</p>
+<ul>
+<li>userId — uniquely identifies the user</li>
+<li>productId — the item being interacted with</li>
+<li>timestamp — the moment the interaction occurred</li>
+</ul>
+<p>This decoupled the interaction logging from storage, allowing ingestion and consumption to scale independently.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="storage-design">Storage Design<a href="https://meesho.github.io/BharatMLStack/blog/post-one#storage-design" class="hash-link" aria-label="Direct link to Storage Design" title="Direct link to Storage Design">​</a></h2>
+<p>To store these events, we built Kafka consumers that processed the incoming streams and wrote the data into Redis, using sorted sets (ZSETs) as the primary data structure.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="why-redis">Why Redis?<a href="https://meesho.github.io/BharatMLStack/blog/post-one#why-redis" class="hash-link" aria-label="Direct link to Why Redis?" title="Direct link to Why Redis?">​</a></h3>
+<p>Redis gave us:</p>
+<ul>
+<li><strong>Low-latency</strong> reads and writes</li>
+<li><strong>Time-ordered data</strong> using ZSETs (via score = timestamp)</li>
+<li><strong>Native TTL support</strong>, if needed in later versions</li>
+<li><strong>In-memory performance</strong> —ideal for real-time CGs</li>
+</ul>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="storage-structure">Storage Structure<a href="https://meesho.github.io/BharatMLStack/blog/post-one#storage-structure" class="hash-link" aria-label="Direct link to Storage Structure" title="Direct link to Storage Structure">​</a></h3>
+<p>Each user’s interactions were stored using a composite key format, uniquely identifying the user and interaction type. This structure allowed efficient organization and quick retrieval of recent activity for recommendation generation:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">userId_eventType → ZSET[...(pid, ts)...]</span><br></span></code></pre></div></div>
+<p>Within each ZSET:</p>
+<ul>
+<li>The <strong>timestamp</strong> served as the score, maintaining temporal order</li>
+<li>The <strong>productId</strong> (optionally with metadata) was the <strong>value</strong></li>
+</ul>
+<p>This allowed us to efficiently retrieve the interactions with HTTP-based API server with two query modes:</p>
+<ul>
+<li>Fetch the <strong>last k interactions</strong> of a specific type for a given user with  <code>ZREVRANGE(userId_eventType, count)</code></li>
+<li>Retrieve <strong>all interactions within a time range</strong> (e.g., last 24 hours) with <code>ZREVRANGEBYSCORE(userId_eventType, timeRange)</code></li>
+</ul>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="built-in-guardrails">Built-in Guardrails<a href="https://meesho.github.io/BharatMLStack/blog/post-one#built-in-guardrails" class="hash-link" aria-label="Direct link to Built-in Guardrails" title="Direct link to Built-in Guardrails">​</a></h3>
+<p>Since Redis was the sole store, we implemented High Availability (HA) to prevent data loss. To optimize memory usage, we also enforced size limits per event type—only storing the last k interactions per user, with older entries getting truncated.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="conclusion-laying-the-foundation-for-real-time-ml">Conclusion: Laying the Foundation for Real-Time ML<a href="https://meesho.github.io/BharatMLStack/blog/post-one#conclusion-laying-the-foundation-for-real-time-ml" class="hash-link" aria-label="Direct link to Conclusion: Laying the Foundation for Real-Time ML" title="Direct link to Conclusion: Laying the Foundation for Real-Time ML">​</a></h2>
+<p>In this first phase, we tackled the <strong>fundamentals</strong>—shifting from batch-based recommendations to a <strong>real-time Recommendation</strong> using ML platform that could keep up with Meesho’s growth.</p>
+<p>With the <strong>IOP Framework</strong>, <strong>Online Feature Store</strong>, and <strong>Interaction Store</strong>, we built the core infrastructure to support real-time personalization at scale. These wins have already unlocked:</p>
+<ul>
+<li>✅ Faster, more dynamic recommendations for millions of users.</li>
+<li>✅ Better infrastructure efficiency, reducing wasted compute power.</li>
+<li>✅ A flexible, modular system that allows for further experimentation.</li>
+</ul>
+<p>But this is just the beginning. While we've solved key challenges, <strong>certain roadblocks remain</strong> —from optimizing <strong>cost-performance trade-offs</strong> to <strong>seamlessly evolving schemas</strong>.</p>
+<p>This foundational work laid the path for a reliable and scalable <strong>real-time feature serving layer</strong>.</p>]]></content>
+        <author>
+            <name>Adarsha Das</name>
+            <uri>https://github.com/a0d00kc</uri>
+        </author>
+        <author>
+            <name>Aditya Kumar</name>
+            <uri>https://github.com/Adit2607</uri>
+        </author>
+        <author>
+            <name>Bhawani Singh</name>
+            <uri>https://github.com/singh-bhawani</uri>
+        </author>
+        <author>
+            <name>Jigar Dave</name>
+            <uri>https://github.com/jigarpatel26</uri>
+        </author>
+        <category label="online-feature-store" term="online-feature-store"/>
+        <category label="interaction-store" term="interaction-store"/>
+        <category label="mlplatform" term="mlplatform"/>
+        <category label="meesho" term="meesho"/>
+    </entry>
+</feed>

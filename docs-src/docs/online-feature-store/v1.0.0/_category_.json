@@ -3,6 +3,7 @@
     "position": 1,
     "link": {
         "type": "generated-index",
-        "description": "Online Feature Store v1.0.0"
+        "description": "Online Feature Store v1.0.0",
+        "slug": "/online-feature-store/v1.0.0"
     }
 }

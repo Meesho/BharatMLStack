@@ -31,7 +31,7 @@ Online-feature-store consists of several key components working together:
 - **Online-feature-store gRPC API Server** - Low-latency feature retrieval and high-consistency ingestion
 - **Storage Backends** - Redis/Dragonfly for caching and ScyllaDB for persistence
 
-![Online-feature-store Architecture](assets/production-architecture.png)
+![Online-feature-store Architecture](../docs-src/static/img/v1.0.0-onfs-arch.png)
 
 ## 🚀 Quick Start
 
@@ -66,14 +66,6 @@ Online-feature-store provides SDKs to interact with the feature store:
 - **[Go SDK](sdks/go/README.md)** - For backend services and ML inference
 - **[Python SDK](sdks/python/README.md)** - For feature ingestion and Spark jobs
 
-## 💡 Key Features
-
-- **Low-latency retrieval** - In-memory LRU caches and efficient binary formats
-- **Efficient storage** - Optimized binary data blocks with PSDBBlocks and CSDBBlocks
-- **Cache hierarchy** - Multi-level caching with Redis/Dragonfly and in-memory options
-- **Schema versioning** - Safe evolution of feature schemas with backward compatibility
-- **Operational simplicity** - Centralized configuration via TruffleBox UI
-- **Comprehensive monitoring** - Deep visibility into system performance with Prometheus/Grafana
 
 ## 📊 Use Cases
 
@@ -83,37 +75,20 @@ Online-feature-store is ideal for:
 - **Feature Catalogue** - Centralized feature registry for organizations
 - **Flexible Data Ingestion** - Support for batch processing, streaming pipelines, and real-time data sources with unified ingestion APIs
 
-## 🖥️ UI and Management
-
-TruffleBox provides a comprehensive UI for:
-
-- Entity and feature group registration
-- Feature discovery and metadata management
-- TTL and caching configuration
-- Request approval workflows
-
-To access the UI after starting Online-feature-store:
-```
-http://localhost:3000
-```
 
 ## 📚 Documentation
 
-For more detailed information, check out:
+| Version |  Link |
+|---------|-------------------|
+| v1.0.0  | [Documentation](https://meesho.github.io/BharatMLStack/category/online-feature-store) |
+| v1.0.0  | [User Guide](https://meesho.github.io/BharatMLStack/trufflebox-ui/v1.0.0/userguide) |
 
-- [Architecture Overview](docs/architecture.md)
-- [Storage Design - PSDB](docs/psdb-design.md)
-- [Storage Design - CSDB](docs/csdb-design.md)
-- [Key-Schema Isolation](docs/schema.md)
-- [TruffleBox UI Guide](docs/usage.md)
-- [2025-2026 Roadmap](roadmap/roadmap_2025_2026.md)
-- [Contribution Guide](docs/CONTRIBUTION.md)
-- [Code of Conduct](docs/CODE_OF_CONDUCT.md)
-- [License](LICENSE.md)
+
+
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please check our [Contribution Guide](docs/CONTRIBUTION.md) for details on how to get started.
+Contributions are welcome! Please check our [Contribution Guide](../CONTRIBUTING.md) for details on how to get started.
 
 We encourage you to:
 - Join our [Discord community](https://discord.gg/XkT7XsV2AU) to discuss features, ideas, and questions
