@@ -1,4 +1,4 @@
-# Online Feature Store Usage Guide
+# Usage Guide
 
 This guide covers the complete setup and usage of the Online Feature Store system, including the core services (Online Feature Store and Horizon) and the TruffleBox UI for feature management.
 
@@ -308,16 +308,12 @@ Users can access TruffleBox through registration or login:
 - New users should fill in all details and click Register.
 - Once Registered, Please wait for an admin to activate your User
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-registration.png" alt="Registration Screen" width="500"/>
-</div>
+![Registration Screen](../../../static/img/v1.0.0-trufflebox-registration.png)
 
 #### User Management
 Admin users can manage other users through the User Management interface:
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-user-management.png" alt="User Management" width="500"/>
-</div>
+![User Management](../../../static/img/v1.0.0-trufflebox-user-management.png)
 
 In the User Management page, admins can:
 - View all registered users
@@ -329,16 +325,12 @@ This is a crucial step in the user onboarding process as new users must be activ
 
 **Login**: Existing users can login with their registered email and password.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-login.png" alt="Login Screen" width="500"/>
-</div>
+![Login Screen](../../../static/img/v1.0.0-trufflebox-login.png)
 
 #### Navigation
 After logging in, you'll be redirected to the feature-discovery page. Access the Control Center by clicking the hamburger icon in the top left corner.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-navigation.png" alt="Control Center Navigation" width="500"/>
-</div>
+![Control Center Navigation](../../../static/img/v1.0.0-trufflebox-navigation.png)
 
 ---
 
@@ -346,9 +338,7 @@ After logging in, you'll be redirected to the feature-discovery page. Access the
 
 The Feature Discovery page displays approved entities, feature groups, and features.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-feature-discovery.png" alt="Feature Discovery Landing Page" width="500"/>
-</div>
+![Feature Discovery Landing Page](../../../static/img/v1.0.0-trufflebox-feature-discovery.png)
 
 You can:
 - View details by clicking the info icon
@@ -356,55 +346,39 @@ You can:
 
 #### Entity Management
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-feature-discovery-entity-details.png" alt="Entity Details" width="500"/>
-</div>
+![Entity Details](../../../static/img/v1.0.0-trufflebox-feature-discovery-entity-details.png)
 
 View entity details and edit them (limited to In Memory Cache and Distributed Cache details excluding config ID). Submit changes via "Save Changes" to raise an edit request.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-edit-entity.png" alt="Edit Entity" width="500"/>
-</div>
+![Edit Entity](../../../static/img/v1.0.0-trufflebox-edit-entity.png)
 
 #### Feature Group Management
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-feature-discovery-fg-details.png" alt="Feature Group Details" width="500"/>
-</div>
+![Feature Group Details](../../../static/img/v1.0.0-trufflebox-feature-discovery-fg-details.png)
 
 Edit feature groups (TTL, In-Memory Cache Enabled, Distributed Cache Enabled, Layout Version) and submit changes to raise an edit request.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-edit-fg.png" alt="Edit Feature Group" width="500"/>
-</div>
+![Edit Feature Group](../../../static/img/v1.0.0-trufflebox-edit-fg.png)
 
 #### Feature Management
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-feature-discovery-feature-details.png" alt="Feature Details" width="500"/>
-</div>
+![Feature Details](../../../static/img/v1.0.0-trufflebox-feature-discovery-feature-details.png)
 
 Edit features (Default Value, Source Base Path, Source Data Column, Storage Provider) and submit changes to raise an edit request.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-edit-features.png" alt="Edit Features" width="500"/>
-</div>
+![Edit Features](../../../static/img/v1.0.0-trufflebox-edit-features.png)
 
 #### Store Discovery
 Access Store Discovery from the Control Center to view all stores in the database.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-store-discovery.png" alt="Store Discovery" width="500"/>
-</div>
+![Store Discovery](../../../static/img/v1.0.0-trufflebox-store-discovery.png)
 
 You can search for specific stores but have view-only access.
 
 #### Job Discovery
 Access Job Discovery from the Control Center to view all jobs in the database.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-job-discovery.png" alt="Job Discovery" width="500"/>
-</div>
+![Job Discovery](../../../static/img/v1.0.0-trufflebox-job-discovery.png)
 
 You can search for specific jobs but have view-only access.
 
@@ -414,9 +388,7 @@ You can search for specific jobs but have view-only access.
 
 In the Control Center, find the 'Feature Registry' accordion to access various registry options for component registration.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-navigation.png" alt="Feature Registry Accordion" width="500"/>
-</div>
+![Feature Registry Accordion](../../../static/img/v1.0.0-trufflebox-navigation.png)
 
 #### Request Status Tracking
 After raising a request, track its status in the respective registry page. For rejected requests, view the rejection reason by clicking the info icon in the Actions column.
@@ -432,15 +404,11 @@ For proper feature lifecycle management, register components in this order:
 
 #### Store Registry
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-register-store.png" alt="Register Store" width="500"/>
-</div>
+![Register Store](../../../static/img/v1.0.0-trufflebox-register-store.png)
 
 Access Store Registry from the Control Center to view raised requests and register new stores. Fill required data and submit to raise a request.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-register-store-details.png" alt="Store Details" width="500"/>
-</div>
+![Store Details](../../../static/img/v1.0.0-trufflebox-register-store-details.png)
 
 **Important Considerations:**
 - Always add primary keys for proper data identification
@@ -449,29 +417,21 @@ Access Store Registry from the Control Center to view raised requests and regist
 
 #### Job Registry
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-register-job.png" alt="Create Job" width="500"/>
-</div>
+![Create Job](../../../static/img/v1.0.0-trufflebox-register-job.png)
 
 Access Job Registry from the Control Center to view raised requests and create new jobs. Fill required data and submit your request.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-register-job-details.png" alt="Job Details" width="500"/>
-</div>
+![Job Details](../../../static/img/v1.0.0-trufflebox-register-job-details.png)
 
 Ensure job details are accurate before proceeding to Entity Registry.
 
 #### Entity Registry
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-register-entity.png" alt="Create Entity" width="500"/>
-</div>
+![Create Entity](../../../static/img/v1.0.0-trufflebox-register-entity.png)
 
 Access Entity Registry from the Control Center to view raised requests and create new entities. Fill required data and submit your request.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-register-entity-details.png" alt="Entity Detail View" width="500"/>
-</div>
+![Entity Detail View](../../../static/img/v1.0.0-trufflebox-register-entity-details.png)
 
 **Important Considerations:**
 - Ensure entity details align with your data model
@@ -479,15 +439,11 @@ Access Entity Registry from the Control Center to view raised requests and creat
 
 #### Feature Group Registry
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-register-fg.png" alt="Create Feature Group" width="500"/>
-</div>
+![Create Feature Group](../../../static/img/v1.0.0-trufflebox-register-fg.png)
 
 Access Feature Group Registry from the Control Center to view raised requests and create new feature groups. Fill required data and submit your request.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-register-fg-details.png" alt="Feature Group Detail View" width="500"/>
-</div>
+![Feature Group Detail View](../../../static/img/v1.0.0-trufflebox-register-fg-details.png)
 
 **Important Considerations:**
 - Primary keys must match the store primary keys
@@ -497,15 +453,11 @@ Access Feature Group Registry from the Control Center to view raised requests an
 
 #### Feature Addition
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-add-features.png" alt="Add Features" width="500"/>
-</div>
+![Add Features](../../../static/img/v1.0.0-trufflebox-add-features.png)
 
 Access Feature Addition from the Control Center to view raised requests and add new features. Fill required data and submit your request.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-add-features-details.png" alt="Feature Detail View" width="500"/>
-</div>
+![Feature Detail View](../../../static/img/v1.0.0-trufflebox-add-features-details.png)
 
 **Important Considerations:**
 - Ensure feature data types are compatible with source data
@@ -526,37 +478,27 @@ As an admin, you're responsible for reviewing and managing user requests.
 #### Viewing All Requests
 After logging in as an admin, you can see all pending requests across different components (Stores, Jobs, Entities, Feature Groups, Features).
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-approve-store.png" alt="Admin Dashboard" width="500"/>
-</div>
+![Admin Dashboard](../../../static/img/v1.0.0-trufflebox-approve-store.png)
 
 #### Request Approval Process
 
 1. **Review Details**: Click the info icon to view complete request details
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-approve-store.png" alt="Request Details" width="500"/>
-</div>
+![Request Details](../../../static/img/v1.0.0-trufflebox-approve-store.png)
 
 2. **Approval Option**: After review, use the approve/reject buttons
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-approve-store.png" alt="Approval Buttons" width="500"/>
-</div>
+![Approval Buttons](../../../static/img/v1.0.0-trufflebox-approve-store.png)
 
 3. **Approval Process**:  
    Click "Approve" to process the request. The system will create database tables or add columns as needed. A success message confirms completion.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-approve-store.png" alt="Approval Success" width="500"/>
-</div>
+![Approval Success](../../../static/img/v1.0.0-trufflebox-approve-store.png)
 
 4. **Rejection Process**:  
    Click "Reject" to deny a request. Provide a rejection reason to help users understand why their request wasn't approved.
 
-<div align="center">
-  <img src="../assets/trufflebox/trufflebox-reject-popup.png" alt="Rejection Reason" width="500"/>
-</div>
+![Rejection Reason](../../../static/img/v1.0.0-trufflebox-reject-popup.png)
    
 Users can view the rejection reason in their respective registry page.
 
