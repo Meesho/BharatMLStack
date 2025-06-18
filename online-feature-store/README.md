@@ -80,7 +80,7 @@ Online-feature-store is ideal for:
 
 | Version |  Link |
 |---------|-------------------|
-| v1.0.0  | [Documentation](https://meesho.github.io/BharatMLStack/category/online-feature-store) |
+| v1.0.0  | [Documentation](https://meesho.github.io/BharatMLStack/online-feature-store/v1.0.0) |
 | v1.0.0  | [User Guide](https://meesho.github.io/BharatMLStack/trufflebox-ui/v1.0.0/userguide) |
 
 
