@@ -6,3 +6,4 @@ dist/
 .idea/
 workspace/
 trufflebox-ui/build
+target/

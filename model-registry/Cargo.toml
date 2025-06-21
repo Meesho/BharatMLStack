@@ -1,0 +1,17 @@
+[package]
+name = "model-registry"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+config = "0.13"
+serde = { version = "1.0", features = ["derive"] }
+dotenvy = "0.15"  # Optional: .env support
+tokio = { version = "1.0", features = ["full"] }
+aws-config = "1.1"
+aws-sdk-s3 = "1.12"
+cloud-storage = "0.11"
+url = "2.4"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
