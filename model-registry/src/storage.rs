@@ -2,6 +2,7 @@ use crate::config::StorageConfig;
 use anyhow::{anyhow, Result};
 use aws_sdk_s3::Client as S3Client;
 use url::Url;
+use tracing::info;
 
 pub struct StorageManager {
     config: StorageConfig,
@@ -30,8 +31,25 @@ impl StorageManager {
         // Configure AWS SDK
         let mut config_builder = aws_config::defaults(aws_config::BehaviorVersion::latest());
         
+        // Add region if specified
         if let Some(region) = &self.config.region {
             config_builder = config_builder.region(aws_config::Region::new(region.clone()));
+        }
+
+        // Use explicit credentials if provided
+        if let (Some(access_key), Some(secret_key)) = (&self.config.access_key, &self.config.secret_key) {
+            use aws_sdk_s3::config::Credentials;
+            let credentials = Credentials::new(
+                access_key,
+                secret_key,
+                None, // No session token
+                None, // No expiration
+                "explicit_config"
+            );
+            config_builder = config_builder.credentials_provider(credentials);
+            info!("Using explicit S3 credentials");
+        } else {
+            info!("Using default S3 credential chain (IAM roles, environment variables, etc.)");
         }
 
         let aws_config = config_builder.load().await;
@@ -40,12 +58,12 @@ impl StorageManager {
         // Check if bucket exists
         match s3_client.head_bucket().bucket(bucket_name).send().await {
             Ok(_) => {
-                println!("S3 bucket '{}' already exists", bucket_name);
+                info!("S3 bucket '{}' already exists", bucket_name);
                 Ok(())
             }
             Err(_) => {
                 // Bucket doesn't exist, create it
-                println!("Creating S3 bucket '{}'", bucket_name);
+                info!("Creating S3 bucket '{}'", bucket_name);
                 
                 let mut create_bucket_request = s3_client.create_bucket().bucket(bucket_name);
                 
@@ -64,7 +82,7 @@ impl StorageManager {
                 create_bucket_request.send().await
                     .map_err(|e| anyhow!("Failed to create S3 bucket: {}", e))?;
                 
-                println!("Successfully created S3 bucket '{}'", bucket_name);
+                info!("Successfully created S3 bucket '{}'", bucket_name);
                 Ok(())
             }
         }
@@ -78,18 +96,42 @@ impl StorageManager {
         let _project_id = self.config.project_id.as_ref()
             .ok_or_else(|| anyhow!("GCS project_id is required"))?;
 
-        // Create GCS client
-        let client = cloud_storage::Client::default();
+        // Create GCS client with explicit credentials if provided
+        let client = if let Some(credentials_path) = &self.config.credentials_path {
+            // Temporarily set the environment variable for this client
+            // This is the standard way the cloud-storage crate reads credentials
+            let original_var = std::env::var("GOOGLE_APPLICATION_CREDENTIALS").ok();
+            
+            unsafe {
+                std::env::set_var("GOOGLE_APPLICATION_CREDENTIALS", credentials_path);
+            }
+            
+            info!("Using explicit GCS credentials from: {}", credentials_path);
+            let client = cloud_storage::Client::default();
+            
+            // Restore original environment variable if it existed
+            unsafe {
+                match original_var {
+                    Some(original) => std::env::set_var("GOOGLE_APPLICATION_CREDENTIALS", original),
+                    None => std::env::remove_var("GOOGLE_APPLICATION_CREDENTIALS"),
+                }
+            }
+            
+            client
+        } else {
+            info!("Using default GCS credential chain (application default credentials, environment variables, etc.)");
+            cloud_storage::Client::default()
+        };
 
         // Check if bucket exists
         match client.bucket().read(bucket_name).await {
             Ok(_) => {
-                println!("GCS bucket '{}' already exists", bucket_name);
+                info!("GCS bucket '{}' already exists", bucket_name);
                 Ok(())
             }
             Err(_) => {
                 // Bucket doesn't exist, create it
-                println!("Creating GCS bucket '{}'", bucket_name);
+                info!("Creating GCS bucket '{}'", bucket_name);
                 
                 let new_bucket = cloud_storage::NewBucket {
                     name: bucket_name.to_string(),
@@ -98,7 +140,7 @@ impl StorageManager {
 
                 match client.bucket().create(&new_bucket).await {
                     Ok(_) => {
-                        println!("Successfully created GCS bucket '{}'", bucket_name);
+                        info!("Successfully created GCS bucket '{}'", bucket_name);
                         Ok(())
                     }
                     Err(e) => Err(anyhow!("Failed to create GCS bucket: {}", e))
