@@ -82,6 +82,12 @@ func (csdb *CacheStorageDataBlock) SerializeForInMemory() ([]byte, error) {
 func (csdb *CacheStorageDataBlock) SerializeForDistributedCache() ([]byte, error) {
 	return csdb.serialize(true)
 }
+
+// GetSerializedData returns the serialized CSDB data for external access
+func (csdb *CacheStorageDataBlock) GetSerializedData() []byte {
+	return csdb.serializedCSDB
+}
+
 func (csdb *CacheStorageDataBlock) serialize(compressed bool) ([]byte, error) {
 	if len(csdb.FGIdToDDB) == 0 {
 		return nil, fmt.Errorf("no data to serialize")
@@ -114,6 +120,43 @@ func (csdb *CacheStorageDataBlock) serialize(compressed bool) ([]byte, error) {
 		}
 	}
 	return buffer.Bytes(), nil
+}
+
+func (csdb *CacheStorageDataBlock) GetDeserializedPSDBForAllFGIds() (map[int]*DeserializedPSDB, error) {
+	if csdb.FGIdToDDB != nil {
+		return csdb.FGIdToDDB, nil
+	}
+	if len(csdb.serializedCSDB) == 0 {
+		return nil, fmt.Errorf("no data to deserialize")
+	}
+	fgIdToDDB := make(map[int]*DeserializedPSDB)
+	layoutVersion := csdb.serializedCSDB[0]
+	csdb.layoutVersion = layoutVersion
+	var fgOffLenMap map[int]uint64
+	var foundFGIds []uint16
+	switch layoutVersion {
+	case 1:
+		fgOffLenMap, foundFGIds = getAllFGOffLenMapForCSDBLayout1(csdb)
+	default:
+		return nil, fmt.Errorf("unsupported layout version: %d", layoutVersion)
+	}
+	fgIds := ds.NewOrderedSetFromSlice(foundFGIds)
+	fgIds.KeyIterator(func(fgId uint16) bool {
+		offLen := fgOffLenMap[int(fgId)]
+		startOffSet, endOffSet := system.UnpackUint64InUint32(offLen)
+		fgData := csdb.serializedCSDB[startOffSet:endOffSet]
+		ddb, err := DeserializePSDB(fgData)
+		if err == nil && !ddb.Expired {
+			fgIdToDDB[int(fgId)] = ddb
+		} else {
+			//Handle Deserialization error or expired data
+			fgIdToDDB = nil
+			return false
+		}
+		return true
+	})
+	csdb.FGIdToDDB = fgIdToDDB
+	return fgIdToDDB, nil
 }
 
 func (csdb *CacheStorageDataBlock) GetDeserializedPSDBForFGIds(fgIds ds.Set[int]) (map[int]*DeserializedPSDB, error) {
@@ -180,6 +223,20 @@ func getFGOffLenMapForCSDBLayout1(csdb *CacheStorageDataBlock, fgIds ds.Set[int]
 			idx += csdbPrefixLen + fgDataLen
 			continue
 		}
+		foundFGIds = append(foundFGIds, uint16(fgId))
+		fgOffLenMap[fgId] = system.BinPackUint32InUint64(uint32(idx+csdbPrefixLen), uint32(idx+csdbPrefixLen+fgDataLen))
+		idx += csdbPrefixLen + fgDataLen
+	}
+	return fgOffLenMap, foundFGIds
+}
+
+func getAllFGOffLenMapForCSDBLayout1(csdb *CacheStorageDataBlock) (map[int]uint64, []uint16) {
+	fgOffLenMap := make(map[int]uint64)
+	foundFGIds := make([]uint16, 0)
+	idx := 1 //Skip layout version
+	for idx < len(csdb.serializedCSDB)-1 {
+		fgId := int(system.ByteOrder.Uint16(csdb.serializedCSDB[idx : idx+2]))
+		fgDataLen := int(system.ByteOrder.Uint16(csdb.serializedCSDB[idx+2 : idx+4]))
 		foundFGIds = append(foundFGIds, uint16(fgId))
 		fgOffLenMap[fgId] = system.BinPackUint32InUint64(uint32(idx+csdbPrefixLen), uint32(idx+csdbPrefixLen+fgDataLen))
 		idx += csdbPrefixLen + fgDataLen
