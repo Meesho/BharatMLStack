@@ -561,6 +561,12 @@ func ParseFeatureValue(featureLabels []string, features *persist.FeatureValues, 
 }
 
 func GetInt32(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([]int32, error) {
+	if featureValues.GetValues().Int32Values == nil {
+		return nil, fmt.Errorf("nil values for Data type: %d", types.DataTypeInt32)
+	}
+	if len(featureValues.GetValues().Int32Values) != len(featureLabels) {
+		return nil, fmt.Errorf("nil values for Data type: %d", types.DataTypeInt32)
+	}
 	int32Array := make([]int32, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
