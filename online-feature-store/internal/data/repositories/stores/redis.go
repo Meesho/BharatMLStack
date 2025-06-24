@@ -179,7 +179,6 @@ func (r *RedisStore) mergeRowsIntoCSDB(existingCSDB *blocks.CacheStorageDataBloc
 func (r *RedisStore) BatchRetrieveV2(entityLabel string, pkMaps []map[string]string, fgIds []int) ([]map[int]*blocks.DeserializedPSDB, error) {
 	t1 := time.Now()
 	metric.Count("db_retrieve_count", int64(len(pkMaps)), []string{"entity_label", entityLabel, "db_type", "redis"})
-
 	results := make([]map[int]*blocks.DeserializedPSDB, len(pkMaps))
 
 	colPKMap, pkCols, err := r.configManager.GetPKMapAndPKColumnsForEntity(entityLabel)
@@ -187,55 +186,35 @@ func (r *RedisStore) BatchRetrieveV2(entityLabel string, pkMaps []map[string]str
 		return nil, err
 	}
 
-	// Build all keys
 	keys := make([]string, len(pkMaps))
 	for i, pkMap := range pkMaps {
 		keys[i] = buildCacheKeyForPersist(pkMap, colPKMap, pkCols, entityLabel)
 	}
 
-	// Retrieve all values using MGET
 	values, err := r.client.MGet(r.ctx, keys...).Result()
 	if err != nil && err != redis.Nil {
 		return nil, err
 	}
 
-	// Process each result
-	requestedFGIds := ds.NewOrderedSetFromSlice(fgIds)
-	currentTime := uint64(time.Now().Unix())
-
 	for i, value := range values {
 		if value == nil {
-			results[i] = make(map[int]*blocks.DeserializedPSDB)
+			results[i] = nil
 			continue
 		}
 
 		data := []byte(value.(string))
 		csdb, err := blocks.CreateCSDBForDistributedCache(data)
 		if err != nil {
-			log.Error().Err(err).Msgf("Failed to create CSDB for key %s", keys[i])
-			results[i] = make(map[int]*blocks.DeserializedPSDB)
-			continue
+			return nil, err
 		}
 
-		// Get only requested FG IDs
-		fgIdToDDB, err := csdb.GetDeserializedPSDBForFGIds(requestedFGIds)
+		// Filter requested FGIds
+		fgIdToDDB, err := csdb.GetDeserializedPSDBForFGIds(ds.NewOrderedSetFromSlice(fgIds))
 		if err != nil {
-			log.Error().Err(err).Msgf("Failed to deserialize FGs for key %s", keys[i])
-			results[i] = make(map[int]*blocks.DeserializedPSDB)
-			continue
+			return nil, err
 		}
-
-		// Filter out expired or negative cache entries
-		filteredResults := make(map[int]*blocks.DeserializedPSDB)
-		for fgId, ddb := range fgIdToDDB {
-			if ddb != nil && !ddb.NegativeCache && ddb.ExpiryAt > currentTime {
-				filteredResults[fgId] = ddb
-			}
-		}
-
-		results[i] = filteredResults
+		results[i] = fgIdToDDB
 	}
-
 	metric.Timing("db_retrieve_latency", time.Since(t1), []string{"entity_label", entityLabel, "db_type", "redis"})
 	return results, nil
 }
