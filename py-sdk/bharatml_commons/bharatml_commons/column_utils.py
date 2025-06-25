@@ -30,7 +30,7 @@ def clean_column_name(column_name: str) -> str:
     return cleaned_name.lower()  # Convert to lowercase (Delta standard)
 
 
-def generate_renamed_column(table_name: str, source_type: str, feature_col: str) -> str:
+def generate_renamed_column(table_name: str, source_type: str, fg_label: str, feature_col: str) -> str:
     """
     Generate renamed column based on source type and table name
     
@@ -43,7 +43,7 @@ def generate_renamed_column(table_name: str, source_type: str, feature_col: str)
         Renamed column following naming conventions
     """
     if source_type == "TABLE":
-        rename_feature_col = table_name.split(".")[1] + "___" + feature_col
+        rename_feature_col = table_name.split(".")[1] + "___" + fg_label + "___" + feature_col
     elif source_type in [
         "PARQUET_GCS", "PARQUET_S3", "PARQUET_ADLS",  # Parquet sources
         "DELTA_GCS", "DELTA_S3", "DELTA_ADLS"         # Delta sources
@@ -51,7 +51,7 @@ def generate_renamed_column(table_name: str, source_type: str, feature_col: str)
         # Extract the last part of the path and clean it
         path_parts = table_name.split("gs://")[1].strip("/ ").split("/")
         clean_table_name = clean_column_name(path_parts[-1])
-        rename_feature_col = clean_table_name + "___" + feature_col
+        rename_feature_col = clean_table_name + "___" + fg_label + "___" + feature_col
     else:
         raise ValueError(f"Unsupported source type: {source_type} for table: {table_name}")
     return rename_feature_col 
