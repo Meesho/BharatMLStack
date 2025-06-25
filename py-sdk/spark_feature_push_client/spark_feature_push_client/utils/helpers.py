@@ -95,17 +95,18 @@ def get_features_from_response_v2(json_response, fg_to_consider):
                 feature_col = features["source-data-column"]
                 feature_label = features["feature-label"]
                 
+                # create rename feature col as there can be same column from multiple sources and same source can be used in multiple feature groups
                 # Use shared utility if available, otherwise fallback to original logic
                 if _USE_SHARED_UTILS:
                     try:
-                        rename_feature_col = generate_renamed_column(table_name, source_type, feature_col)
+                        rename_feature_col = generate_renamed_column(table_name, source_type, fg_label, feature_label)
                     except ValueError:
                         print(f"source: {table_name} of type {source_type} not expected")
                         sys.exit(1)
                 else:
                     # Original logic
                     if source_type == "TABLE":
-                        rename_feature_col = table_name.split(".")[1] + "___" + feature_col
+                        rename_feature_col = table_name.split(".")[1] + "___" + fg_label + "___" + feature_label
                                             
                     elif source_type in ["PARQUET_GCS", # GCP
                                          "PARQUET_S3", # AWS
@@ -114,7 +115,7 @@ def get_features_from_response_v2(json_response, fg_to_consider):
                                          "DELTA_S3", # AWS
                                          "DELTA_ADLS" # Azure
                                          ]:
-                        rename_feature_col = clean_column_name(table_name.split("gs://")[1].strip("/ ").split("/")[-1]) + "___" + feature_col
+                        rename_feature_col = clean_column_name(table_name.split("gs://")[1].strip("/ ").split("/")[-1]) + "___" + fg_label + "___" + feature_label
                         
                     else:
                         print(f"source: {table_name} of type {source_type} not expected")
