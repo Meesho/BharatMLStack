@@ -7,7 +7,7 @@
 ## 📌 Summary
 
 <!-- Provide a concise explanation of what this PR does -->
-> e.g., Adds AF_XDP-based packet routing for Horizon, optimizes Redis fetch latency in `online-feature-store`, or improves search UI responsiveness in `trufflebox-ui`.
+> e.g., Adds optimizes Redis fetch latency in `online-feature-store`, or improves search UI responsiveness in `trufflebox-ui`.
 
 ---
 

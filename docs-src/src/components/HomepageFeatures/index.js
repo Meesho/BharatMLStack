@@ -35,6 +35,72 @@ const FeatureList = [
   },
 ];
 
+const TruffleboxFeatures = [
+  {
+    title: 'Feature Catalog & Management',
+    icon: '📋',
+    description: (
+      <>
+        Comprehensive feature catalog with metadata management, versioning, and governance. 
+        Organize and discover features across your ML platform with ease.
+      </>
+    ),
+  },
+  {
+    title: 'User Management & Admin Ops',
+    icon: '👥',
+    description: (
+      <>
+        Role-based access control, user authentication, and administrative operations. 
+        Secure your ML platform with enterprise-grade user management capabilities.
+      </>
+    ),
+  },
+  {
+    title: 'Modern UI Framework',
+    icon: '🎨',
+    description: (
+      <>
+        Intuitive, responsive web interface built with modern web technologies. 
+        Streamline MLOps workflows with beautiful and functional user experiences.
+      </>
+    ),
+  },
+];
+
+const SDKFeatures = [
+  {
+    title: 'Multi-Language Support',
+    icon: '🌐',
+    description: (
+      <>
+        Native SDKs for Go and Python with idiomatic APIs. Choose the language that fits 
+        your team's expertise and existing infrastructure.
+      </>
+    ),
+  },
+  {
+    title: 'gRPC & REST APIs',
+    icon: '🔗',
+    description: (
+      <>
+        High-performance gRPC clients and REST APIs for seamless integration. 
+        Built-in support for streaming, batching, and async operations.
+      </>
+    ),
+  },
+  {
+    title: 'Spark Integration',
+    icon: '⚡',
+    description: (
+      <>
+        Native Apache Spark integration for batch feature processing and ingestion. 
+        Scale your feature engineering workflows with distributed computing power.
+      </>
+    ),
+  },
+];
+
 function Feature({icon, title, description}) {
   return (
     <div className={clsx('col col--4')}>
@@ -51,24 +117,65 @@ function Feature({icon, title, description}) {
   );
 }
 
-export default function HomepageFeatures() {
+function FeatureSection({title, subtitle, features}) {
   return (
     <section className={styles.features}>
       <div className="container">
         <div className="text--center margin-bottom--xl">
           <Heading as="h2" className={styles.featuresHeader}>
-            Online Feature Store
+            {title}
           </Heading>
           <p className={styles.featuresSubtitle}>
-            High-performance, production-ready feature serving for real-time ML inference
+            {subtitle}
           </p>
         </div>
         <div className="row">
-          {FeatureList.map((props, idx) => (
+          {features.map((props, idx) => (
             <Feature key={idx} {...props} />
           ))}
         </div>
       </div>
     </section>
+  );
+}
+
+export function OnlineFeatureStoreFeatures() {
+  return (
+    <FeatureSection
+      title="Online Feature Store"
+      subtitle="High-performance, production-ready feature serving for real-time ML inference"
+      features={FeatureList}
+    />
+  );
+}
+
+export function TruffleboxUIFeatures() {
+  return (
+    <FeatureSection
+      title="Trufflebox UI"
+      subtitle="Modern, feature-rich UI framework for comprehensive MLOps management"
+      features={TruffleboxFeatures}
+    />
+  );
+}
+
+export function SDKsFeatures() {
+  return (
+    <FeatureSection
+      title="SDKs"
+      subtitle="Developer-friendly client libraries and APIs for seamless platform integration"
+      features={SDKFeatures}
+    />
+  );
+}
+
+// Default export for backward compatibility
+export default function HomepageFeatures() {
+  return (
+    <>
+      <OnlineFeatureStoreFeatures />
+      <TruffleboxUIFeatures />
+      <SDKsFeatures />
+    </>
   );
 }

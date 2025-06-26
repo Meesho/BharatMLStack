@@ -34,20 +34,9 @@ If applicable, add screenshots to help explain your problem.
 
 ---
 
-## 💻 Desktop (if applicable)
+## 💻 Image Details
 
-- OS: [e.g. Ubuntu 24.04]
-- Browser: [e.g. Firefox, Chrome]
-- Version: [e.g. 125.0]
-
----
-
-## 📱 Smartphone (if applicable)
-
-- Device: [e.g. iPhone 12]
-- OS: [e.g. iOS 17]
-- Browser: [e.g. Safari]
-- Version: [e.g. 17.4]
+- module: <online-feature-store> - version: <v1.0.0>
 
 ---
 

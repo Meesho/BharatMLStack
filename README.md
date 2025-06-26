@@ -73,7 +73,7 @@ High-performance feature store for real-time ML inference and training.
 ## Key Differentiators
 
 - ✨ **Production-Ready**: Battle-tested components used in high-traffic production systems
-- 🌐 **Cloud Agnostic**: Kubernetes-native, so deply on the cloud you love
+- 🌐 **Cloud Agnostic**: Kubernetes-native, so deploy on the cloud you love
 - 📊 **Observability**: Built-in monitoring, logging
 
 ## Quick Start
@@ -114,10 +114,10 @@ BharatMLStack follows a microservices architecture designed for scalability and 
 
 | Component | Documentation | Quick Start |
 |-----------|--------------|-------------|
-| **Online Feature Store** | [Docs](https://meesho.github.io/BharatMLStack/category/online-feature-store) | [Setup](./quick-start/) |
+| **Online Feature Store** | [Docs](https://meesho.github.io/BharatMLStack/category/online-feature-store) | [Setup](./quick-start/README.md) |
 | **Go SDK** | [Docs](./go-sdk/README.md) | [Examples](./go-sdk/README.md) |
 | **Python SDK** | [Docs](./py-sdk/README.md) | [Quickstart](./py-sdk/README.md) |
-| **User Guide** | [Docs](https://meesho.github.io/BharatMLStack/trufflebox-ui/v1.0.0/userguide) | [Setup](./quick-start/) |
+| **User Guide** | [Docs](https://meesho.github.io/BharatMLStack/trufflebox-ui/v1.0.0/userguide) | [Setup](./quick-start/README.md) |
 
 ## Contributing
 

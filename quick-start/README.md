@@ -122,6 +122,8 @@ To stop and completely purge all containers, volumes, and workspace:
   - Endpoint: http://localhost:2379
   - Workbench: http://localhost:8081
 
+
+
 ## Feature Store API Examples
 
 ### gRPC API Commands
@@ -330,6 +332,7 @@ cd workspace && docker-compose ps
    ```bash
    docker login ghcr.io
    ```
+5. [How to use Etcd Workbench ?](https://github.com/tzfun/etcd-workbench/blob/master/README.md)
 
 ### Service Dependencies
 
@@ -350,9 +353,19 @@ The workspace directory contains all runtime configuration:
 
 You can modify environment variables in the docker-compose.yml file and restart services.
 
+## Contributing
+
+We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to get started.
+
+## Community & Support
+
+- 💬 **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
+- 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
+- 📧 **Email**: Contact us at [ml-oss@meesho.com](mailto:ml-oss@meesho.com )
+
 ## License
 
-This project is licensed under the BharatMLStack Business Source License 1.1.
+BharatMLStack is open-source software licensed under the [BharatMLStack Business Source License 1.1](LICENSE.md).
 
 ---
 

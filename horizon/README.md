@@ -295,9 +295,19 @@ docker run -d \
 - **[Online Feature Store](../online-feature-store)**: Core feature store service
 - **[Python SDK](../py-sdk)**: Python client libraries
 
+## Contributing
+
+We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to get started.
+
+## Community & Support
+
+- 💬 **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
+- 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
+- 📧 **Email**: Contact us at [ml-oss@meesho.com](mailto:ml-oss@meesho.com )
+
 ## License
 
-Licensed under the BharatMLStack Business Source License 1.1. See [LICENSE.md](../LICENSE.md) for details. 
+BharatMLStack is open-source software licensed under the [BharatMLStack Business Source License 1.1](LICENSE.md).
 
 ---
 
