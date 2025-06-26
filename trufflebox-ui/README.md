@@ -198,22 +198,25 @@ TruffleBox UI integrates seamlessly with BharatMLStack components:
 - [API Documentation](../online-feature-store/docs/api/)
 - [Deployment Guide](../quick-start/)
 
-## 🤝 Contributing
+## Contributing
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to get started.
 
-## 📄 License
+## Community & Support
 
-This project is part of BharatMLStack and follows the same licensing terms.
+- 💬 **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
+- 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
+- 📧 **Email**: Contact us at [ml-oss@meesho.com](mailto:ml-oss@meesho.com )
+
+## License
+
+BharatMLStack is open-source software licensed under the [BharatMLStack Business Source License 1.1](LICENSE.md).
 
 ---
 
 <div align="center">
-  <strong>TruffleBox UI - Your Gateway to Friendly MLOps</strong>
-  <br/>
-  Built with ❤️ for the BharatMLStack ecosystem
+  <strong>Built with ❤️ for the ML community from Meesho</strong>
+</div>
+<div align="center">
+  <strong>If you find this useful, ⭐️ the repo — your support means the world to us!</strong>
 </div>

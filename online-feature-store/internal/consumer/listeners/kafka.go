@@ -219,6 +219,7 @@ func (k *KafkaListener) process(event [][]byte) {
 			defer func() {
 				if r := recover(); r != nil {
 					log.Error().Msgf("Panic occurred in worker: %v\n", r)
+					metric.Incr("feature_persist_panic_count", []string{})
 				}
 				<-k.workerPool // Release worker back to pool
 			}()
@@ -226,7 +227,7 @@ func (k *KafkaListener) process(event [][]byte) {
 			value := &persist.Query{}
 			err := proto.Unmarshal(e, value)
 			if err != nil {
-				log.Error().Err(err).Msg("Failed to deserialize FeatureDataEvent.")
+				log.Error().Err(err).Msg("Failed to deserialize FeatureDataEvent")
 				return
 			}
 

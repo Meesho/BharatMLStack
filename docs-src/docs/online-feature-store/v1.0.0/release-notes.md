@@ -19,7 +19,7 @@ We're excited to announce the first stable release of the **BharatML Online Feat
 - **Ultra-Low Latency**: Achieve sub-10ms P99 response times for real-time inference
 - **High Throughput**: Tested and validated at 1M+ requests per second with 100 IDs per request
 - **Multi-Entity Support**: Serve features for multiple entity types (users, transactions, products, etc.)
-- **Batch Retrieval**: Efficient bulk feature fetching for training and inference workloads
+- **Batch Retrieval**: Efficient bulk feature fetching for real-time inference and incremental/online training workloads
 
 ### **Advanced Data Type Support**
 Complete support for all ML-relevant data types:
@@ -27,7 +27,7 @@ Complete support for all ML-relevant data types:
 | Data Type | Variants | Optimizations |
 |-----------|----------|---------------|
 | **Integers** | int8, int16, int32, int64 | Varint encoding, bit packing |
-| **Floats** | float16, float32, float64 | IEEE 754 compliant storage |
+| **Floats** | float8, float16, float32, float64 | IEEE 754 compliant storage |
 | **Strings** | Variable length | Pascal string encoding |
 | **Booleans** | Bit-packed | 8x memory compression |
 | **Vectors** | All above types | Contiguous memory layout |
@@ -40,7 +40,7 @@ Flexible backend storage with optimized drivers:
 
 ## 🚀 **Performance & Optimization**
 
-### **PSDB v2 Serialization Format**
+### **PSDB v2 Serialization Format without compression**
 Our proprietary **Permanent Storage Data Block** format delivers:
 - **35% faster** serialization than Protocol Buffers
 - **100.0-102.2%** size efficiency (near raw data size)
@@ -55,8 +55,6 @@ Our proprietary **Permanent Storage Data Block** format delivers:
 
 ### **Compression Support**
 Intelligent compression with multiple algorithms:
-- **LZ4**: Ultra-fast compression for latency-critical workloads
-- **Snappy**: Balanced compression ratio and speed
 - **ZSTD**: Maximum compression for bandwidth-constrained environments
 - **Auto-Fallback**: Intelligent selection based on data characteristics
 
@@ -105,7 +103,7 @@ HTTP API for web applications:
 ## 🔧 **Enterprise Features**
 
 ### **Production Readiness**
-- **Health Checks**: `/health` and `/ready` endpoints for orchestration
+- **Health Checks**: `/health/self` endpoints for probing
 - **Graceful Shutdown**: Clean resource cleanup with configurable timeouts
 - **Structured Logging**: Formatted logs with configurable levels
 - **Signal Handling**: SIGTERM/SIGINT support for container environments
@@ -114,7 +112,7 @@ HTTP API for web applications:
 - **DataDog Integration**: Built-in metrics collection and reporting
 - **Prometheus Compatibility**: Standard metrics format support
 - **Custom Metrics**: Request rates, latencies, error rates, and business metrics
-- **Distributed Tracing**: Request flow visibility across services
+- **Distributed Tracing [untested]**: Request flow visibility across services
 
 ### **Data Management**
 - **TTL Support**: Automatic feature expiration
@@ -125,36 +123,15 @@ HTTP API for web applications:
 
 ### **Container Support**
 - **Docker Images**: Multi-architecture support (amd64, arm64)
-- **Kubernetes Manifests**: Production-ready deployment templates
-- **Helm Charts**: Parameterized installation with best practices
-- **Resource Requirements**: Optimized CPU and memory specifications
 
 
-## 📊 **Benchmarks & Performance**
 
-### **Serialization Performance**
-Comprehensive benchmarking against industry standards:
-
-| Format | Speed (ns/op) | Size Efficiency | Memory (allocs/op) | Throughput (MB/s) |
-|--------|---------------|-----------------|-------------------|-------------------|
-| **PSDB v2** | **359,932** | **100.0%** | **4** | **975.31** |
-| Protocol Buffers | 556,541 | 121.8% | 2 | 666.12 |
-| Apache Arrow | 118,489* | 100.1% | 66 | 768.25 |
-
-*Arrow performs better at 100k+ features due to amortized setup costs
-
-### **Scale Testing Results**
-- **Latency**: P50: 2.1ms, P95: 6.7ms, P99: 9.8ms
-- **Throughput**: 1.2M RPS sustained with 100 concurrent features per request
-- **Memory**: 512MB baseline, linear scaling with dataset size
-- **Storage**: 99.9% compression efficiency vs raw data
 
 ## 🔄 **Compatibility**
 
 ### **Supported Go Versions**
 - **Minimum**: Go 1.22.0
 - **Recommended**: Go 1.22.8+
-- **Testing**: Automated CI/CD across Go 1.22, 1.23
 
 ### **Database Compatibility**
 | Database | Version | Status | Notes |
@@ -162,11 +139,6 @@ Comprehensive benchmarking against industry standards:
 | Scylla DB | 5.0+ | ✅ Recommended | Optimal performance |
 | Dragonfly | 1.0+ | ✅ Supported | Memory efficient |
 | Redis | 6.0+ | ✅ Development | Limited scale |
-
-### **Protocol Compatibility**
-- **gRPC**: Protocol Buffers v3 compatible
-- **HTTP**: REST API with OpenAPI 3.0 specification
-- **Serialization**: Forward/backward compatible PSDB format
 
 ## 🐛 **Known Issues**
 
@@ -176,19 +148,6 @@ Comprehensive benchmarking against industry standards:
 ### **Workarounds**
 1. **Vector Chunking**: Split large vectors into smaller segments
 
-## 🔜 **What's Next**
-
-### **Upcoming Features (v1.1.0)**
-- **Stream Processing**: Real-time feature updates via Kafka/Pulsar
-- **Feature Store UI**: Web-based management console
-- **Advanced Analytics**: Built-in feature drift detection
-- **Multi-Region**: Cross-region replication and failover
-
-### **Performance Roadmap**
-- **Vector Search**: Approximate nearest neighbor search
-- **GPU Acceleration**: CUDA support for large-scale operations
-- **Edge Deployment**: ARM-optimized builds for edge computing
-
 ## 💾 **Download & Installation**
 
 ### **Container Images**
@@ -196,6 +155,8 @@ Comprehensive benchmarking against industry standards:
 # Pull the latest image
 docker pull ghcr.io/meesho/onfs-api-server:latest
 docker pull ghcr.io/meesho/onfs-consumer:latest
+docker pull ghcr.io/meesho/horizon:latest
+docker pull ghcr.io/meesho/trufflebox-ui:latest
 
 ```
 

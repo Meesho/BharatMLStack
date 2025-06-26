@@ -561,6 +561,12 @@ func ParseFeatureValue(featureLabels []string, features *persist.FeatureValues, 
 }
 
 func GetInt32(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([]int32, error) {
+	if featureValues.GetValues().Int32Values == nil {
+		return nil, fmt.Errorf("int32_values is nil")
+	}
+	if len(featureValues.GetValues().Int32Values) != len(featureLabels) {
+		return nil, fmt.Errorf("int32_values length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().Int32Values))
+	}
 	int32Array := make([]int32, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -577,6 +583,12 @@ func GetInt32(featureLabels []string, featureValues *persist.FeatureValues, feat
 }
 
 func GetUInt32(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([]uint32, error) {
+	if featureValues.GetValues().Uint32Values == nil {
+		return nil, fmt.Errorf("uint32_values is nil")
+	}
+	if len(featureValues.GetValues().Uint32Values) != len(featureLabels) {
+		return nil, fmt.Errorf("uint32_values length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().Uint32Values))
+	}
 	uint32Array := make([]uint32, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -593,6 +605,12 @@ func GetUInt32(featureLabels []string, featureValues *persist.FeatureValues, fea
 }
 
 func GetInt64(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([]int64, error) {
+	if featureValues.GetValues().Int64Values == nil {
+		return nil, fmt.Errorf("int64_values is nil")
+	}
+	if len(featureValues.GetValues().Int64Values) != len(featureLabels) {
+		return nil, fmt.Errorf("int64_values length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().Int64Values))
+	}
 	int64Array := make([]int64, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -610,6 +628,12 @@ func GetInt64(featureLabels []string, featureValues *persist.FeatureValues, feat
 }
 
 func GetUInt64(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([]uint64, error) {
+	if featureValues.GetValues().Uint64Values == nil {
+		return nil, fmt.Errorf("uint64_values is nil")
+	}
+	if len(featureValues.GetValues().Uint64Values) != len(featureLabels) {
+		return nil, fmt.Errorf("uint64_values length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().Uint64Values))
+	}
 	uint64Array := make([]uint64, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -626,6 +650,12 @@ func GetUInt64(featureLabels []string, featureValues *persist.FeatureValues, fea
 }
 
 func GetFP32(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([]float32, error) {
+	if featureValues.GetValues().Fp32Values == nil {
+		return nil, fmt.Errorf("fp32_values is nil")
+	}
+	if len(featureValues.GetValues().Fp32Values) != len(featureLabels) {
+		return nil, fmt.Errorf("fp32_values length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().Fp32Values))
+	}
 	fp32Array := make([]float32, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -642,6 +672,12 @@ func GetFP32(featureLabels []string, featureValues *persist.FeatureValues, featu
 }
 
 func GetFP64(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([]float64, error) {
+	if featureValues.GetValues().Fp64Values == nil {
+		return nil, fmt.Errorf("fp64_values is nil")
+	}
+	if len(featureValues.GetValues().Fp64Values) != len(featureLabels) {
+		return nil, fmt.Errorf("fp64_values length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().Fp64Values))
+	}
 	fp64Array := make([]float64, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -658,6 +694,12 @@ func GetFP64(featureLabels []string, featureValues *persist.FeatureValues, featu
 }
 
 func GetUInt8(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([]uint8, error) {
+	if featureValues.GetValues().BoolValues == nil {
+		return nil, fmt.Errorf("bool_values is nil")
+	}
+	if len(featureValues.GetValues().BoolValues) != len(featureLabels) {
+		return nil, fmt.Errorf("bool_values length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().BoolValues))
+	}
 	uint8Array := make([]uint8, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -679,6 +721,12 @@ func GetUInt8(featureLabels []string, featureValues *persist.FeatureValues, feat
 }
 
 func GetString(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([]string, error) {
+	if featureValues.GetValues().StringValues == nil {
+		return nil, fmt.Errorf("string_values is nil")
+	}
+	if len(featureValues.GetValues().StringValues) != len(featureLabels) {
+		return nil, fmt.Errorf("string_values length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().StringValues))
+	}
 	stringArray := make([]string, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -695,6 +743,12 @@ func GetString(featureLabels []string, featureValues *persist.FeatureValues, fea
 }
 
 func GetInt32Vector(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([][]int32, error) {
+	if featureValues.GetValues().Vector == nil {
+		return nil, fmt.Errorf("vector is nil")
+	}
+	if len(featureValues.GetValues().Vector) != len(featureLabels) {
+		return nil, fmt.Errorf("vector length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().Vector))
+	}
 	int32Vectors := make([][]int32, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -711,6 +765,12 @@ func GetInt32Vector(featureLabels []string, featureValues *persist.FeatureValues
 }
 
 func GetInt64Vector(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([][]int64, error) {
+	if featureValues.GetValues().Vector == nil {
+		return nil, fmt.Errorf("vector is nil")
+	}
+	if len(featureValues.GetValues().Vector) != len(featureLabels) {
+		return nil, fmt.Errorf("vector length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().Vector))
+	}
 	int64Vectors := make([][]int64, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -727,6 +787,12 @@ func GetInt64Vector(featureLabels []string, featureValues *persist.FeatureValues
 }
 
 func GetUInt32Vector(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([][]uint32, error) {
+	if featureValues.GetValues().Vector == nil {
+		return nil, fmt.Errorf("vector is nil")
+	}
+	if len(featureValues.GetValues().Vector) != len(featureLabels) {
+		return nil, fmt.Errorf("vector length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().Vector))
+	}
 	uint32Vectors := make([][]uint32, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -743,6 +809,12 @@ func GetUInt32Vector(featureLabels []string, featureValues *persist.FeatureValue
 }
 
 func GetUInt64Vector(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([][]uint64, error) {
+	if featureValues.GetValues().Vector == nil {
+		return nil, fmt.Errorf("vector is nil")
+	}
+	if len(featureValues.GetValues().Vector) != len(featureLabels) {
+		return nil, fmt.Errorf("vector length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().Vector))
+	}
 	uint64Vectors := make([][]uint64, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -759,6 +831,12 @@ func GetUInt64Vector(featureLabels []string, featureValues *persist.FeatureValue
 }
 
 func GetFP32Vector(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([][]float32, error) {
+	if featureValues.GetValues().Vector == nil {
+		return nil, fmt.Errorf("vector is nil")
+	}
+	if len(featureValues.GetValues().Vector) != len(featureLabels) {
+		return nil, fmt.Errorf("vector length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().Vector))
+	}
 	fp32Vectors := make([][]float32, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -779,6 +857,12 @@ func GetFP32Vector(featureLabels []string, featureValues *persist.FeatureValues,
 }
 
 func GetFP64Vector(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([][]float64, error) {
+	if featureValues.GetValues().Vector == nil {
+		return nil, fmt.Errorf("vector is nil")
+	}
+	if len(featureValues.GetValues().Vector) != len(featureLabels) {
+		return nil, fmt.Errorf("vector length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().Vector))
+	}
 	fp64Vectors := make([][]float64, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -795,6 +879,12 @@ func GetFP64Vector(featureLabels []string, featureValues *persist.FeatureValues,
 }
 
 func GetBoolVector(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([][]bool, error) {
+	if featureValues.GetValues().Vector == nil {
+		return nil, fmt.Errorf("vector is nil")
+	}
+	if len(featureValues.GetValues().Vector) != len(featureLabels) {
+		return nil, fmt.Errorf("vector length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().Vector))
+	}
 	boolVectors := make([][]bool, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
@@ -811,6 +901,12 @@ func GetBoolVector(featureLabels []string, featureValues *persist.FeatureValues,
 }
 
 func GetStringVector(featureLabels []string, featureValues *persist.FeatureValues, featureMeta map[string]config.FeatureMeta) ([][]string, error) {
+	if featureValues.GetValues().Vector == nil {
+		return nil, fmt.Errorf("vector is nil")
+	}
+	if len(featureValues.GetValues().Vector) != len(featureLabels) {
+		return nil, fmt.Errorf("vector length mismatch with feature labels, expected %d, received %d", len(featureLabels), len(featureValues.GetValues().Vector))
+	}
 	stringVectors := make([][]string, len(featureMeta))
 	labelExists := make(map[string]bool, len(featureLabels))
 	for index, label := range featureLabels {
