@@ -98,7 +98,7 @@ func (p *PersistHandler) preProcessRequest(persistData *PersistData) error {
 	if err != nil {
 		return err
 	}
-	err = p.perProcessAndValidateFeatureSchema(persistData)
+	err = p.preProcessAndValidateFeatureSchema(persistData)
 	if err != nil {
 		return err
 	}
@@ -154,7 +154,7 @@ func (p *PersistHandler) preProcessEntity(persistData *PersistData) error {
 	return nil
 }
 
-func (p *PersistHandler) perProcessAndValidateFeatureSchema(persistData *PersistData) error {
+func (p *PersistHandler) preProcessAndValidateFeatureSchema(persistData *PersistData) error {
 	query := persistData.Query
 	entityLabel := persistData.EntityLabel
 
@@ -193,7 +193,10 @@ func (p *PersistHandler) preparePersistData(persistData *PersistData) error {
 			if err != nil {
 				return fmt.Errorf("failed to get feature group %s: %w", fgSchema.GetLabel(), err)
 			}
-			featureData, _ := system.ParseFeatureValue(fgSchema.GetFeatureLabels(), data.GetFeatureValues()[fgIndex], persistData.AllFGIdToFgConf[fgId].DataType, persistData.AllFGIdToFgConf[fgId].FeatureMeta)
+			featureData, err := system.ParseFeatureValue(fgSchema.GetFeatureLabels(), data.GetFeatureValues()[fgIndex], persistData.AllFGIdToFgConf[fgId].DataType, persistData.AllFGIdToFgConf[fgId].FeatureMeta)
+			if err != nil {
+				return fmt.Errorf("failed to parse feature value for entity %s and feature group %s: %w", persistData.EntityLabel, fgSchema.GetLabel(), err)
+			}
 			activeVersion, err := p.config.GetActiveVersion(persistData.EntityLabel, fgId)
 			if err != nil {
 				return fmt.Errorf("failed to get active version for feature group %s: %w", fgSchema.GetLabel(), err)
