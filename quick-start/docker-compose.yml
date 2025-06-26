@@ -215,8 +215,6 @@ services:
     depends_on:
       db-init:
         condition: service_completed_successfully
-      onfs-healthcheck:
-        condition: service_healthy
     restart: unless-stopped
   
   horizon-healthcheck:
