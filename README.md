@@ -110,57 +110,14 @@ BharatMLStack follows a microservices architecture designed for scalability and 
   <img src="assets/bharatmlstack-layered.png" alt="BharatMLStack Logo" width="1000"/>
 </div>
 
-## 📚 Documentation
-
-### Comprehensive Documentation Hub
-
-For complete documentation index visit [Wiki](https://github.com/Meesho/BharatMLStack/wiki)
-
-For Online Feature Store detailed technical documentation, architecture deep-dives, and implementation guides, visit our comprehensive documentation in:
-
-📖 **[Online Feature Store Documentation](./online-feature-store/docs/README.md)**
-
-### 🎯 What You'll Find
-
-#### **Core Architecture & Design**
-- **[System Architecture](./online-feature-store/docs/architecture.md)** - Detailed system design and component interactions
-- **[Schema Management](./online-feature-store/docs/schema.md)** - Key-schema isolation and etcd mapping strategies
-- **[Performance Benchmarks](./online-feature-store/docs/)** - Latency, throughput, and scalability metrics
-
-#### **Developer Guides**
-- **[API Documentation](./online-feature-store/docs/)** - Complete API reference and usage examples
-- **[SDK Integration](./go-sdk/)** - Go SDK for seamless integration
-
-#### **Deployment & Operations**
-- **[Quick Start Guide](./quick-start/)** - Get up and running in minutes
-- **[Production Deployment](./online-feature-store/docs/)** - Enterprise deployment patterns
-- **[Monitoring & Observability](./online-feature-store/docs/)** - Comprehensive monitoring setup
-
-#### **Use Cases & Examples**
-- **[Real-time ML Pipelines](./online-feature-store/docs/)** - Production ML workflow examples
-- **[Feature Engineering](./online-feature-store/docs/)** - Best practices for feature development
-- **[Scaling Patterns](./online-feature-store/docs/)** - Handle millions of requests per second
-
 ### 🚀 Quick Navigation
 
 | Component | Documentation | Quick Start |
 |-----------|--------------|-------------|
-| **Online Feature Store** | [Docs](./online-feature-store/docs/) | [Setup](./quick-start/) |
+| **Online Feature Store** | [Docs](https://meesho.github.io/BharatMLStack/category/online-feature-store) | [Setup](./quick-start/) |
 | **Go SDK** | [Docs](./go-sdk/README.md) | [Examples](./go-sdk/README.md) |
 | **Python SDK** | [Docs](./py-sdk/README.md) | [Quickstart](./py-sdk/README.md) |
-
-### 💡 Getting Started Resources
-
-**New to BharatMLStack?** Start here:
-1. 📖 Read the [System Overview](./online-feature-store/docs/README.md)
-2. 🚀 Follow the [Quick Start Guide](./quick-start/)
-3. 🏗️ Explore [Architecture Details](./online-feature-store/docs/architecture.md)
-
-**Ready for Production?** Check out:
-- 🏭 [Production Deployment Guide](./online-feature-store/docs/)
-- 📊 [Performance Tuning](./online-feature-store/docs/)
-- 🔐 [Security & Authentication](./online-feature-store/docs/)
-- 📈 [Monitoring & Alerting](./online-feature-store/docs/)
+| **User Guide** | [Docs](https://meesho.github.io/BharatMLStack/trufflebox-ui/v1.0.0/userguide) | [Setup](./quick-start/) |
 
 ## Contributing
 
