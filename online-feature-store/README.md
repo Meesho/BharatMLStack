@@ -337,6 +337,10 @@ docker run -d \
   onfs-consumer:latest
 ```
 
+### Observability
+
+Use [Grafana](./grafana.json) to visualize the monitoring data. The `json` file can be directly imported to Grafana.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please check our [Contribution Guide](../CONTRIBUTING.md) for details on how to get started.
