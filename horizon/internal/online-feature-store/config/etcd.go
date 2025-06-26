@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	Delimitter = "|"
+	Delimitter           = "|"
+	Layout1MetadataBytes = 9
 )
 
 type Etcd struct {
@@ -175,6 +176,12 @@ func (e *Etcd) RegisterFeatureGroup(entityLabel, fgLabel, JobId string, storeId,
 		}
 		totalSize = int(stringVectorSize) * dataType.Size()
 	}
+	metadataSize, err := getMetadataSizeForLayout(layoutVersion)
+	if err != nil {
+		return nil, Store{}, nil, err
+	}
+	totalSize = totalSize + metadataSize
+
 	stores, err := e.GetStores()
 	if err != nil {
 		return nil, Store{}, nil, err
@@ -847,4 +854,16 @@ func (e *Etcd) GetAllFeatureGroupByEntityLabel(entityLabel string) ([]string, er
 	}
 
 	return featureGroupKeys, nil
+}
+
+func getMetadataSizeForLayout(version int) (int, error) {
+
+	switch version {
+	case 1:
+		return Layout1MetadataBytes, nil
+	default:
+		return 0, fmt.Errorf("unsupported layout version: %d", version)
+
+	}
+
 }
