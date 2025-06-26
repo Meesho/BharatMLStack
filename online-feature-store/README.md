@@ -31,7 +31,7 @@ Online-feature-store consists of several key components working together:
 - **Online-feature-store gRPC API Server** - Low-latency feature retrieval and high-consistency ingestion
 - **Storage Backends** - Redis/Dragonfly for caching and ScyllaDB for persistence
 
-![Online-feature-store Architecture](assets/production-architecture.png)
+![Online-feature-store Architecture](../docs-src/static/img/v1.0.0-onfs-arch.png)
 
 ## 🚀 Quick Start
 
@@ -74,14 +74,6 @@ Online-feature-store provides SDKs to interact with the feature store:
 - **[Go SDK](sdks/go/README.md)** - For backend services and ML inference
 - **[Python SDK](sdks/python/README.md)** - For feature ingestion and Spark jobs
 
-## 💡 Key Features
-
-- **Low-latency retrieval** - In-memory LRU caches and efficient binary formats
-- **Efficient storage** - Optimized binary data blocks with PSDBBlocks and CSDBBlocks
-- **Cache hierarchy** - Multi-level caching with Redis/Dragonfly and in-memory options
-- **Schema versioning** - Safe evolution of feature schemas with backward compatibility
-- **Operational simplicity** - Centralized configuration via TruffleBox UI
-- **Comprehensive monitoring** - Deep visibility into system performance with Prometheus/Grafana
 
 ## 📊 Use Cases
 
@@ -91,33 +83,13 @@ Online-feature-store is ideal for:
 - **Feature Catalogue** - Centralized feature registry for organizations
 - **Flexible Data Ingestion** - Support for batch processing, streaming pipelines, and real-time data sources with unified ingestion APIs
 
-## 🖥️ UI and Management
-
-TruffleBox provides a comprehensive UI for:
-
-- Entity and feature group registration
-- Feature discovery and metadata management
-- TTL and caching configuration
-- Request approval workflows
-
-To access the UI after starting Online-feature-store:
-```
-http://localhost:3000
-```
 
 ## 📚 Documentation
 
-For more detailed information, check out:
-
-- [Architecture Overview](docs/architecture.md)
-- [Storage Design - PSDB](docs/psdb-design.md)
-- [Storage Design - CSDB](docs/csdb-design.md)
-- [Key-Schema Isolation](docs/schema.md)
-- [TruffleBox UI Guide](docs/usage.md)
-- [2025-2026 Roadmap](roadmap/roadmap_2025_2026.md)
-- [Contribution Guide](docs/CONTRIBUTNG.md)
-- [Code of Conduct](docs/CODE_OF_CONDUCT.md)
-- [License](LICENSE.md)
+| Version |  Link |
+|---------|-------------------|
+| v1.0.0  | [Documentation](https://meesho.github.io/BharatMLStack/online-feature-store/v1.0.0) |
+| v1.0.0  | [User Guide](https://meesho.github.io/BharatMLStack/trufflebox-ui/v1.0.0/userguide) |
 
 ## Development
 
@@ -261,6 +233,9 @@ Before running the consumer service, you'll need to set up a Kafka environment. 
 ### Testing
 
 ```bash
+# Clone and navigate to the project
+cd online-feature-store
+
 # Run all tests
 go test -v ./...
 
@@ -277,6 +252,9 @@ go test -v -tags=integration ./...
 ### Building - api-server
 
 ```bash
+# Clone and navigate to the project
+cd online-feature-store
+
 # Build for current platform
 go build -v ./cmd/api-server
 
@@ -290,6 +268,9 @@ GOOS=linux GOARCH=amd64 go build -v ./cmd/api-server
 ### Building - consumer
 
 ```bash
+# Clone and navigate to the project
+cd online-feature-store
+
 # Build for current platform
 go build -v ./cmd/consumer
 
@@ -305,76 +286,25 @@ GOOS=linux GOARCH=amd64 go build -v ./cmd/consumer
 ### Building the Docker Image
 
 ```bash
-# Build Docker image
-docker build -t horizon -f cmd/horizon/Dockerfile .
+# Clone and navigate to the project
+cd online-feature-store
+
+# Build Docker image - api-server
+docker build -t onfs-api-server -f cmd/api-server/DockerFile .
+
+# Build Docker image - consumer
+docker build -t onfs-consumer -f cmd/consumer/DockerFile .
 
 # Run container with environment variables
+# For api-server
 docker run -p 8080:8080 \
-  -e DB_HOST=host.docker.internal \
-  -e DB_NAME=horizon \
-  horizon
-```
-
-### Docker Compose (Development)
-
-```bash
-# Start all services (includes database)
-docker-compose up -d
-
-# View logs
-docker-compose logs -f horizon
-
-# Stop services
-docker-compose down
-```
-
-## Integration with TruffleBox UI
-
-Horizon is designed to work seamlessly with TruffleBox UI:
-
-1. **Start Horizon Backend**:
-   ```bash
-   cd horizon
-   go run ./cmd/horizon
-   # Backend runs on http://localhost:8080
-   ```
-
-2. **Start TruffleBox UI Frontend**:
-   ```bash
-   cd trufflebox-ui
-   npm install
-   npm start
-   # Frontend runs on http://localhost:3000
-   ```
-
-3. **Configure API Base URL** in TruffleBox UI:
-   ```javascript
-   // trufflebox-ui/.env
-   REACT_APP_API_BASE_URL=http://localhost:8080/api/v1
-   ```
-
-## API Documentation
-
-### Health Check
-```bash
-curl http://localhost:8080/api/v1/health
-```
-
-### Features API
-```bash
-# Get all features
-curl http://localhost:8080/api/v1/features
-
-# Get specific feature
-curl http://localhost:8080/api/v1/features/{feature_id}
-```
-
-### Authentication
-```bash
-# Login
-curl -X POST http://localhost:8080/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "user", "password": "pass"}'
+   --env-file ./cmd/api-server/.env \
+  onfs-api-server
+  
+# For consumer
+docker run -p 8080:8080 \
+   --env-file ./cmd/consumer/.env \
+  onfs-consumer
 ```
 
 ## Deployment
@@ -382,21 +312,34 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 ### Production with Docker
 
 ```bash
-# Build production image
-docker build -t horizon:latest -f cmd/horizon/Dockerfile .
+# Clone and navigate to the project
+cd online-feature-store
+
+# Build production image - api-server
+docker build -t onfs-api-server:latest -f cmd/api-server/DockerFile .
+
+# Build production image - consumer
+docker build -t onfs-consumer:latest -f cmd/consumer/DockerFile .
 
 # Run in production mode
+# For API Server
 docker run -d \
-  --name horizon \
+  --name onfs-api-server \
   -p 8080:8080 \
-  -e ENV=production \
-  -e DB_HOST=your-db-host \
-  horizon:latest
+  --env-file ./cmd/api-server/.env \
+  onfs-api-server:latest
+
+# For Consumer
+docker run -d \
+  --name onfs-consumer \
+  -p 8090:8090 \
+  --env-file ./cmd/api-server/.env \
+  onfs-consumer:latest
 ```
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please check our [Contribution Guide](docs/CONTRIBUTING.md) for details on how to get started.
+Contributions are welcome! Please check our [Contribution Guide](../CONTRIBUTING.md) for details on how to get started.
 
 We encourage you to:
 - Join our [Discord community](https://discord.gg/XkT7XsV2AU) to discuss features, ideas, and questions

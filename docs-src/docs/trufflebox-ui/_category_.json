@@ -1,0 +1,8 @@
+{
+    "label": "Trufflebox UI",
+    "position": 2,
+    "link": {
+        "type": "generated-index",
+        "description": "Trufflebox UI is a modern, feature rich UI framework for supporting MLOps. It supports Feature catalog, management, user managemnet and other adminops"
+    }
+}

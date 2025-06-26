@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkdocs=self.webpackChunkdocs||[]).push([[472],{5513:e=>{e.exports=JSON.parse('{"title":"Recent posts","items":[{"title":"Building Meesho\u2019s ML Platform: From Chaos to Cutting-Edge (Part 1)","permalink":"/BharatMLStack/blog/post-one","unlisted":false,"date":"2022-11-15T00:00:00.000Z"}]}')}}]);

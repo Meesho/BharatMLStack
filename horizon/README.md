@@ -181,6 +181,9 @@ go test -v -tags=integration ./...
 ### Building
 
 ```bash
+# Clone and navigate to the project
+cd horizon
+
 # Build for current platform
 go build -v ./cmd/horizon
 
@@ -196,27 +199,16 @@ GOOS=linux GOARCH=amd64 go build -v ./cmd/horizon
 ### Building the Docker Image
 
 ```bash
+# Clone and navigate to the project
+cd horizon
+
 # Build Docker image
 docker build -t horizon -f cmd/horizon/Dockerfile .
 
 # Run container with environment variables
 docker run -p 8080:8080 \
-  -e DB_HOST=host.docker.internal \
-  -e DB_NAME=horizon \
+  --env-file ./cmd/horizon/.env \
   horizon
-```
-
-### Docker Compose (Development)
-
-```bash
-# Start all services (includes database)
-docker-compose up -d
-
-# View logs
-docker-compose logs -f horizon
-
-# Stop services
-docker-compose down
 ```
 
 ## Integration with TruffleBox UI
@@ -273,6 +265,9 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 ### Production with Docker
 
 ```bash
+# Clone and navigate to the project
+cd horizon
+
 # Build production image
 docker build -t horizon:latest -f cmd/horizon/Dockerfile .
 
@@ -280,22 +275,8 @@ docker build -t horizon:latest -f cmd/horizon/Dockerfile .
 docker run -d \
   --name horizon \
   -p 8080:8080 \
-  -e ENV=production \
-  -e DB_HOST=your-db-host \
+  --env-file ./cmd/horizon/.env \
   horizon:latest
-```
-
-### Kubernetes
-
-```bash
-# Apply Kubernetes manifests
-kubectl apply -f k8s/
-
-# Check deployment status
-kubectl get pods -l app=horizon
-
-# Port forward for testing
-kubectl port-forward svc/horizon 8080:8080
 ```
 
 ## Contributing
