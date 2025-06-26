@@ -15,7 +15,7 @@ license = { text = "BharatMLStack Business Source License 1.1" }
 readme = "README.md"
 requires-python = ">=3.7"
 dependencies = [
-  "bharatml_commons>=0.1.0",
+  "bharatml_commons>=1.0.1",
   "pyspark>=3.0.0",
   "numpy>=1.19.0"
 ]
