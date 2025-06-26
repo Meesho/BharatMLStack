@@ -98,6 +98,7 @@ Online-feature-store is ideal for:
 - Go 1.22 or later
 - Database (PostgreSQL/MySQL)
 - Docker (optional, for containerization)
+- Start the infrastructure using quick-start interactive startup
 
 ### Getting Started
 
@@ -110,13 +111,11 @@ go mod download
 
 # Set up environment variables
 # For api-server
-cp .env-api-server.example ./cmd/api-server/.env
-# For consumer
-cp .env-consumer.example ./cmd/consumer/.env
-# Edit .env with your configuration
+cp env-api-server.example ./cmd/api-server/.env
 
-# Run database migrations (if applicable)
-make migrate
+# For consumer
+cp env-consumer.example ./cmd/consumer/.env
+# Edit .env with your configuration
 
 # Run tests
 go test -v ./...
@@ -128,6 +127,7 @@ go build -v ./cmd/consumer
 # Run the service
 # Run api-server
 bash -c 'set -a; source ./cmd/api-server/.env; set +a; exec go run ./cmd/api-server'
+
 # Run consumer
 bash -c 'set -a; source ./cmd/consumer/.env; set +a; exec go run ./cmd/consumer'
 ```

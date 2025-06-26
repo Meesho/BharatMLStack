@@ -58,6 +58,7 @@ Horizon provides various API endpoints to support TruffleBox UI functionality:
 - Go 1.22 or later
 - Database (PostgreSQL/MySQL)
 - Docker (optional, for containerization)
+- Start the infrastructure using quick-start interactive startup
 
 ### Getting Started
 
@@ -69,11 +70,8 @@ cd horizon
 go mod download
 
 # Set up environment variables
-cp .env.example .env
+cp env.example ./cmd/horizon/.env
 # Edit .env with your configuration
-
-# Run database migrations (if applicable)
-make migrate
 
 # Run tests
 go test -v ./...
@@ -82,7 +80,7 @@ go test -v ./...
 go build -v ./cmd/horizon
 
 # Run the service
-bash -c 'set -a; source .env; set +a; exec go run ./cmd/horizon'
+bash -c 'set -a; source ./cmd/horizon/.env; set +a; exec go run ./cmd/horizon'
 ```
 
 ### Configuration
