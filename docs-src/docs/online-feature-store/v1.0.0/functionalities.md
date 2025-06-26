@@ -16,6 +16,7 @@ The BharatML Online Feature Store is a high-performance, production-ready system
 - **High Throughput**: Tested at 1M+ requests per second with 100 IDs per request
 - **Batch Retrieval**: Fetch multiple features for multiple entities in a single request
 - **Point-in-Time Consistency**: Ensure feature consistency across model predictions
+- **Dependent feature consistency**: features part of same feature group.
 
 ### **Multi-Format Data Support**
 Supports all common ML data types with optimized serialization:
@@ -53,7 +54,7 @@ Flexible storage options for different deployment needs:
 - **gRPC API**: High-performance, language-agnostic interface
 - **Go SDK**: Native Go client with connection pooling and error handling
 - **Python SDK**: ML-friendly Python bindings for data scientists
-- **RESTful Interface**: HTTP API for web applications and testing
+- **RESTful Interface**: HTTP API for health check
 
 ### **Production Ready**
 - **Health Checks**: Built-in monitoring and health endpoints
@@ -141,9 +142,9 @@ decodedResult, err := client.RetrieveDecodedFeatures(ctx, query)
 
 ### **Storage Configuration**
 - **Database Selection**: Choose backend based on scale and requirements
-- **Replication Factor**: Set availability vs consistency trade-offs
-- **Partition Strategy**: Optimize data distribution
-- **Backup Frequency**: Configure data durability requirements
+- **Replication Factor**: RF=2 for ScyllaDB
+- **Partition Strategy**: DB side control - not handled here
+- **Backup Frequency**: DB side control - not handled here
 
 ### **Monitoring & Observability**
 - **Metrics Collection**: Request rates, latencies, error rates
@@ -160,9 +161,30 @@ decodedResult, err := client.RetrieveDecodedFeatures(ctx, query)
 ### **Scaling Guidelines**
 - **Horizontal Scaling**: Add more feature store instances
 - **Database Scaling**: Increase partition count or upgrade hardware
-- **Cache Warming**: Pre-load frequently accessed features
+- **Dragonfly/Remote Cache Scaling**: Use Cluster or Failover/Sentinal based setup
 - **Connection Tuning**: Optimize pool sizes for your traffic patterns
 
 ---
 
-*The Online Feature Store is designed to be the high-performance bridge between your offline feature engineering and real-time ML inference needs.*
+## Contributing
+
+We welcome contributions from the community! Please see our [Contributing Guide](https://github.com/Meesho/BharatMLStack/blob/main/CONTRIBUTING.md) for details on how to get started.
+
+## Community & Support
+
+- 💬 **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
+- 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
+- 📧 **Email**: Contact us at [ml-oss@meesho.com](mailto:ml-oss@meesho.com )
+
+## License
+
+BharatMLStack is open-source software licensed under the [BharatMLStack Business Source License 1.1](https://github.com/Meesho/BharatMLStack/blob/main/LICENSE.md).
+
+---
+
+<div align="center">
+  <strong>Built with ❤️ for the ML community from Meesho</strong>
+</div>
+<div align="center">
+  <strong>If you find this useful, ⭐️ the repo — your support means the world to us!</strong>
+</div>
