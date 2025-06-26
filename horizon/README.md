@@ -82,7 +82,7 @@ go test -v ./...
 go build -v ./cmd/horizon
 
 # Run the service
-go run ./cmd/horizon
+bash -c 'set -a; source .env; set +a; exec go run ./cmd/horizon'
 ```
 
 ### Configuration
@@ -90,22 +90,76 @@ go run ./cmd/horizon
 Create a `.env` file or set environment variables:
 
 ```bash
-# Server Configuration
-PORT=8080
-HOST=localhost
+# APPLICATION CONFIGURATION - Basic app settings
+APP_NAME=horizon
+APP_ENVIRONMENT=PROD
+APP_ENV=production
+APP_PORT=8082
+APP_LOG_LEVEL=DEBUG
 
-# Database Configuration
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=horizon
-DB_USER=your_user
-DB_PASSWORD=your_password
+# Optional - Performance tuning parameters
+APP_METRIC_SAMPLING_RATE=1
+APP_GC_PERCENTAGE=1
 
-# CORS Configuration (for TruffleBox UI)
+# MYSQL DATABASE CONFIGURATION - Primary data storage
+# Master Database (required for write operations)
+MYSQL_MASTER_HOST=127.0.0.1
+MYSQL_MASTER_PORT=3306
+MYSQL_MASTER_USERNAME=root
+MYSQL_MASTER_PASSWORD=root
+MYSQL_MASTER_MAX_POOL_SIZE=5
+MYSQL_MASTER_MIN_POOL_SIZE=2
+
+# Slave Database (optional for read-only operations)
+MYSQL_SLAVE_HOST=127.0.0.1
+MYSQL_SLAVE_PORT=3306
+MYSQL_SLAVE_USERNAME=root
+MYSQL_SLAVE_PASSWORD=root
+MYSQL_SLAVE_MAX_POOL_SIZE=5
+MYSQL_SLAVE_MIN_POOL_SIZE=2
+
+MYSQL_DB_NAME=testdb
+
+# ETCD CONFIGURATION - Distributed configuration management
+ETCD_WATCHER_ENABLED=true
+ETCD_SERVER=127.0.0.1:2379
+
+# CORS CONFIGURATION - Cross-origin resource sharing for frontend
 CORS_ORIGINS=http://localhost:3000,http://localhost:8080
 
-# BharatML Stack Integration
-FEATURE_STORE_URL=http://localhost:9000
+# ONLINE FEATURE STORE INTEGRATION - BharatML Stack component integration
+ONLINE_FEATURE_STORE_APP_NAME=onfs
+
+# REDIS FAILOVER CONFIGURATION - Distributed caching or redis storage layer
+# Can be used for either distributed caching or as a redis storage layer
+STORAGE_REDIS_FAILOVER_2_SENTINEL_ADDRESSES=localhost:26379
+STORAGE_REDIS_FAILOVER_2_DB=0
+STORAGE_REDIS_FAILOVER_2_DISABLE_IDENTITY=true
+STORAGE_REDIS_FAILOVER_2_MASTER_NAME=mymaster
+STORAGE_REDIS_FAILOVER_2_MAX_IDLE_CONN=32
+STORAGE_REDIS_FAILOVER_2_MIN_IDLE_CONN=20
+STORAGE_REDIS_FAILOVER_2_MAX_ACTIVE_CONN=32
+STORAGE_REDIS_FAILOVER_2_MAX_RETRY=-1
+STORAGE_REDIS_FAILOVER_2_POOL_FIFO=false
+STORAGE_REDIS_FAILOVER_2_READ_TIMEOUT_IN_MS=3000
+STORAGE_REDIS_FAILOVER_2_WRITE_TIMEOUT_IN_MS=3000
+STORAGE_REDIS_FAILOVER_2_POOL_TIMEOUT_IN_MS=3000
+STORAGE_REDIS_FAILOVER_2_POOL_SIZE=32
+STORAGE_REDIS_FAILOVER_2_CONN_MAX_IDLE_TIMEOUT_IN_MINUTES=15
+STORAGE_REDIS_FAILOVER_2_CONN_MAX_AGE_IN_MINUTES=30
+
+# SCYLLA DATABASE CONFIGURATION - NoSQL storage for features
+STORAGE_SCYLLA_1_CONTACT_POINTS=127.0.0.1
+STORAGE_SCYLLA_1_KEYSPACE=onfs
+STORAGE_SCYLLA_1_NUM_CONNS=1
+STORAGE_SCYLLA_1_PORT=9042
+STORAGE_SCYLLA_1_TIMEOUT_IN_MS=10000
+STORAGE_SCYLLA_1_USERNAME=
+STORAGE_SCYLLA_1_PASSWORD=
+
+# ACTIVE STORAGE CONFIGURATION - Which storage backends to use
+STORAGE_SCYLLA_ACTIVE_CONFIG_IDS=1
+STORAGE_REDIS_FAILOVER_ACTIVE_CONFIG_IDS=2
 ```
 
 ### Testing
@@ -127,6 +181,9 @@ go test -v -tags=integration ./...
 ### Building
 
 ```bash
+# Clone and navigate to the project
+cd horizon
+
 # Build for current platform
 go build -v ./cmd/horizon
 
@@ -142,27 +199,16 @@ GOOS=linux GOARCH=amd64 go build -v ./cmd/horizon
 ### Building the Docker Image
 
 ```bash
+# Clone and navigate to the project
+cd horizon
+
 # Build Docker image
 docker build -t horizon -f cmd/horizon/Dockerfile .
 
 # Run container with environment variables
 docker run -p 8080:8080 \
-  -e DB_HOST=host.docker.internal \
-  -e DB_NAME=horizon \
+  --env-file ./cmd/horizon/.env \
   horizon
-```
-
-### Docker Compose (Development)
-
-```bash
-# Start all services (includes database)
-docker-compose up -d
-
-# View logs
-docker-compose logs -f horizon
-
-# Stop services
-docker-compose down
 ```
 
 ## Integration with TruffleBox UI
@@ -219,6 +265,9 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 ### Production with Docker
 
 ```bash
+# Clone and navigate to the project
+cd horizon
+
 # Build production image
 docker build -t horizon:latest -f cmd/horizon/Dockerfile .
 
@@ -226,38 +275,8 @@ docker build -t horizon:latest -f cmd/horizon/Dockerfile .
 docker run -d \
   --name horizon \
   -p 8080:8080 \
-  -e ENV=production \
-  -e DB_HOST=your-db-host \
+  --env-file ./cmd/horizon/.env \
   horizon:latest
-```
-
-### Kubernetes
-
-```bash
-# Apply Kubernetes manifests
-kubectl apply -f k8s/
-
-# Check deployment status
-kubectl get pods -l app=horizon
-
-# Port forward for testing
-kubectl port-forward svc/horizon 8080:8080
-```
-
-### Environment Variables
-
-Key environment variables for production:
-
-```bash
-ENV=production
-PORT=8080
-DB_HOST=production-db-host
-DB_PORT=5432
-DB_NAME=horizon_prod
-DB_SSL_MODE=require
-CORS_ORIGINS=https://your-trufflebox-ui-domain.com
-JWT_SECRET=your-jwt-secret
-LOG_LEVEL=info
 ```
 
 ## Contributing
