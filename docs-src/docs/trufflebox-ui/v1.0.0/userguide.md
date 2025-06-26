@@ -1,3 +1,8 @@
+---
+title: User Manual
+sidebar_position: 1
+---
+
 # Usage Guide
 
 This guide covers the complete setup and usage of the Online Feature Store system, including the core services (Online Feature Store and Horizon) and the TruffleBox UI for feature management.
@@ -294,7 +299,6 @@ TruffleBox is a comprehensive and intuitive UI to help users onboard new feature
   - [Feature Registry](#feature-registry)
 - [Admin Approval Flow](#admin-approval-flow)
   - [Request Management](#request-management)
-
 ---
 
 ## User Flow
@@ -504,3 +508,27 @@ Users can view the rejection reason in their respective registry page.
 
 #### Admin Support
 If you need assistance with admin functions, please contact the BharatMLStack core team.
+
+
+## Contributing
+
+We welcome contributions from the community! Please see our [Contributing Guide](https://github.com/Meesho/BharatMLStack/blob/main/CONTRIBUTING.md) for details on how to get started.
+
+## Community & Support
+
+- 💬 **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
+- 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
+- 📧 **Email**: Contact us at [ml-oss@meesho.com](mailto:ml-oss@meesho.com )
+
+## License
+
+BharatMLStack is open-source software licensed under the [BharatMLStack Business Source License 1.1](https://github.com/Meesho/BharatMLStack/blob/main/LICENSE.md).
+
+---
+
+<div align="center">
+  <strong>Built with ❤️ for the ML community from Meesho</strong>
+</div>
+<div align="center">
+  <strong>If you find this useful, ⭐️ the repo — your support means the world to us!</strong>
+</div>

@@ -19,7 +19,7 @@ We're excited to announce the first stable release of the **BharatML Online Feat
 - **Ultra-Low Latency**: Achieve sub-10ms P99 response times for real-time inference
 - **High Throughput**: Tested and validated at 1M+ requests per second with 100 IDs per request
 - **Multi-Entity Support**: Serve features for multiple entity types (users, transactions, products, etc.)
-- **Batch Retrieval**: Efficient bulk feature fetching for training and inference workloads
+- **Batch Retrieval**: Efficient bulk feature fetching for real-time inference and incremental/online training workloads
 
 ### **Advanced Data Type Support**
 Complete support for all ML-relevant data types:

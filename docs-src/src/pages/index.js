@@ -3,7 +3,7 @@ import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import Layout from '@theme/Layout';
-import HomepageFeatures from '@site/src/components/HomepageFeatures';
+import { OnlineFeatureStoreFeatures, TruffleboxUIFeatures, SDKsFeatures } from '@site/src/components/HomepageFeatures';
 
 import Heading from '@theme/Heading';
 import styles from './index.module.css';
@@ -58,7 +58,7 @@ function HomepageHeader() {
   );
 }
 
-function AboutSection() {
+function OnlineFeatureStoreAbout() {
   return (
     <section className={styles.aboutSection}>
       <div className="container">
@@ -95,6 +95,78 @@ function AboutSection() {
   );
 }
 
+function TruffleboxAbout() {
+  return (
+    <section className={styles.aboutSection}>
+      <div className="container">
+        <div className="row">
+          <div className="col col--6">
+            <Heading as="h2">Modern MLOps Management</Heading>
+            <p>
+              Trufflebox UI provides a comprehensive, modern web interface for managing your entire 
+              ML infrastructure. Built with cutting-edge web technologies, it delivers an intuitive 
+              experience for feature management, user administration, and operational oversight. 
+              Streamline your MLOps workflows with enterprise-grade UI components.
+            </p>
+            <Link
+              className="button button--primary"
+              to="/category/trufflebox-ui">
+              Explore Trufflebox UI →
+            </Link>
+          </div>
+          <div className="col col--6">
+            <div className={styles.highlightBox}>
+              <h3>🎨 UI Features</h3>
+              <ul>
+                <li>✅ Comprehensive feature catalog & discovery</li>
+                <li>✅ Role-based access control & user management</li>
+                <li>✅ Job, Store, Admin Ops management</li>
+                <li>✅ Approval flow for everything</li>
+                <li>✅ Responsive design for desktop & mobile</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SDKsAbout() {
+  return (
+    <section className={styles.aboutSection}>
+      <div className="container">
+        <div className="row">
+          <div className="col col--6">
+            <Heading as="h2">Developer-First Integration</Heading>
+            <p>
+              Our SDKs are designed with developers in mind, providing idiomatic APIs for Go and Python 
+              that feel natural in your existing codebase. Whether you're building microservices, 
+              data pipelines, or ML applications, our SDKs provide the tools you need for seamless 
+              integration with BharatMLStack's powerful infrastructure.
+            </p>
+            <Link
+              className="button button--primary"
+              to="/category/sdks">
+              Explore SDKs →
+            </Link>
+          </div>
+          <div className="col col--6">
+            <div className={styles.highlightBox}>
+              <h3>🛠️ Developer Tools</h3>
+              <ul>
+                <li>✅ Native Go & Python SDKs with type safety</li>
+                <li>✅ High-performance gRPC</li>
+                <li>✅ Apache Spark integration for publishing features</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const {siteConfig} = useDocusaurusContext();
   return (
@@ -103,8 +175,12 @@ export default function Home() {
       description="Open source, end-to-end ML infrastructure stack built for scale, speed, and simplicity. Features high-performance Online Feature Store with sub-10ms latency.">
       <HomepageHeader />
       <main>
-        <HomepageFeatures />
-        <AboutSection />
+        <OnlineFeatureStoreFeatures />
+        <OnlineFeatureStoreAbout />
+        <TruffleboxUIFeatures />
+        <TruffleboxAbout />
+        <SDKsFeatures />
+        <SDKsAbout />
       </main>
     </Layout>
   );

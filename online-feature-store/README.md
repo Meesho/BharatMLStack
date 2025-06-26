@@ -337,6 +337,10 @@ docker run -d \
   onfs-consumer:latest
 ```
 
+### Observability
+
+Use [Grafana](./grafana.json) to visualize the monitoring data. The `json` file can be directly imported to Grafana.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please check our [Contribution Guide](../CONTRIBUTING.md) for details on how to get started.
@@ -358,9 +362,19 @@ There are several ways to get help with Online-feature-store:
 
 Feedback and contributions are welcome!
 
-## ⚖️ License
+## Contributing
 
-This project is proprietary software of Meesho Technologies under the [Business Source License 1.1](LICENSE.md).
+We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to get started.
+
+## Community & Support
+
+- 💬 **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
+- 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
+- 📧 **Email**: Contact us at [ml-oss@meesho.com](mailto:ml-oss@meesho.com )
+
+## License
+
+BharatMLStack is open-source software licensed under the [BharatMLStack Business Source License 1.1](LICENSE.md).
 
 ---
 
