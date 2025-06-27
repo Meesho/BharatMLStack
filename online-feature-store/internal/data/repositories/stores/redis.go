@@ -140,7 +140,7 @@ func (r *RedisStore) mergeRowsIntoCSDB(existingCSDB *blocks.CacheStorageDataBloc
 		if !ddb.Expired && ddb.ExpiryAt > currentTime {
 			err := mergedCSDB.AddFGIdToDDB(fgId, ddb.Copy())
 			if err != nil {
-				return nil, 0, fmt.Errorf("failed to add existing FG %d: %w", fgId, err)
+				return nil, 0, fmt.Errorf("failed to add existing fg id %d to ddb: %w", fgId, err)
 			}
 			maxTtlAcrossFgs = max(maxTtlAcrossFgs, ddb.ExpiryAt-currentTime)
 		}
