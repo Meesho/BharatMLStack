@@ -137,7 +137,7 @@ func (r *RedisStore) mergeRowsIntoCSDB(existingCSDB *blocks.CacheStorageDataBloc
 	currentTime := uint64(time.Now().Unix())
 
 	for fgId, ddb := range existingFGMap {
-		if !ddb.Expired && !ddb.NegativeCache && ddb.ExpiryAt > currentTime {
+		if !ddb.Expired && ddb.ExpiryAt > currentTime {
 			err := mergedCSDB.AddFGIdToDDB(fgId, ddb.Copy())
 			if err != nil {
 				return nil, 0, fmt.Errorf("failed to add existing FG %d: %w", fgId, err)
