@@ -51,7 +51,6 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 		return err
 	}
 
-	// Step 1: Group rows by Redis key to handle multiple rows for same entity
 	keyToRowsMap := make(map[string][]models.Row)
 	keysToRead := make([]string, 0)
 
@@ -64,19 +63,16 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 		keyToRowsMap[key] = append(keyToRowsMap[key], row)
 	}
 
-	// Step 2: Read existing data for all keys using MGET
 	existingValues, err := r.client.MGet(r.ctx, keysToRead...).Result()
 	if err != nil && err != redis.Nil {
 		return fmt.Errorf("failed to read existing data: %w", err)
 	}
 
-	// Step 3: Process each key with proper merging
 	pipe := r.client.Pipeline()
 
 	for i, key := range keysToRead {
 		rowsForKey := keyToRowsMap[key]
 
-		// Parse existing CSDB or create new one
 		var existingCSDB *blocks.CacheStorageDataBlock
 		if existingValues[i] != nil {
 			existingData := []byte(existingValues[i].(string))
@@ -89,13 +85,11 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 			existingCSDB = blocks.NewCacheStorageDataBlock(1)
 		}
 
-		// Step 4: Merge all new FGs into existing CSDB
 		mergedCSDB, maxTtl, err := r.mergeRowsIntoCSDB(existingCSDB, rowsForKey)
 		if err != nil {
 			return fmt.Errorf("failed to merge rows for key %s: %w", key, err)
 		}
 
-		// Step 5: Serialize and add to pipeline
 		serializedCSDB, err := mergedCSDB.SerializeForDistributedCache()
 		if err != nil {
 			return fmt.Errorf("failed to serialize merged CSDB for key %s: %w", key, err)
@@ -104,7 +98,6 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 		pipe.Set(r.ctx, key, serializedCSDB, time.Duration(maxTtl)*time.Second)
 	}
 
-	// Step 6: Execute pipeline atomically
 	_, err2 := pipe.Exec(r.ctx)
 	if err2 != nil {
 		metric.Count("persist_query_failure", int64(len(rows)), []string{"entity_name", entityLabel, "db_type", "redis"})
@@ -114,9 +107,7 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 	return nil
 }
 
-// mergeRowsIntoCSDB merges multiple rows into an existing CSDB
 func (r *RedisStore) mergeRowsIntoCSDB(existingCSDB *blocks.CacheStorageDataBlock, rows []models.Row) (*blocks.CacheStorageDataBlock, uint64, error) {
-	// If we have existing FGs, deserialize them
 	var existingFGIdtoCSDBMap map[int]*blocks.DeserializedPSDB
 	if len(existingCSDB.GetSerializedData()) > 0 {
 		var err error
@@ -129,10 +120,8 @@ func (r *RedisStore) mergeRowsIntoCSDB(existingCSDB *blocks.CacheStorageDataBloc
 		existingFGIdtoCSDBMap = make(map[int]*blocks.DeserializedPSDB)
 	}
 
-	// Create new CSDB for merged data
 	mergedCSDB := blocks.NewCacheStorageDataBlock(1)
 
-	// Step 1: Add all existing FGs to merged CSDB (skip expired/negative cache)
 	maxTtlAcrossFgs := uint64(0)
 	currentTime := uint64(time.Now().Unix())
 
@@ -146,10 +135,8 @@ func (r *RedisStore) mergeRowsIntoCSDB(existingCSDB *blocks.CacheStorageDataBloc
 		}
 	}
 
-	// Step 2: Add/update with new FGs from all rows
 	for _, row := range rows {
 		for fgId, psdb := range row.FgIdToPsDb {
-			// Serialize and deserialize to create DDB
 			serializedData, err := psdb.Serialize()
 			if err != nil {
 				return nil, 0, fmt.Errorf("failed to serialize PSDB for fgId %d: %w", fgId, err)
@@ -160,13 +147,11 @@ func (r *RedisStore) mergeRowsIntoCSDB(existingCSDB *blocks.CacheStorageDataBloc
 				return nil, 0, fmt.Errorf("failed to deserialize PSDB for fgId %d: %w", fgId, err)
 			}
 
-			// Add/update the FG in merged CSDB (this overwrites if FG already exists)
 			err = mergedCSDB.AddFGIdToDDB(fgId, ddb)
 			if err != nil {
 				return nil, 0, fmt.Errorf("failed to add FGId to merged CSDB for fgId %d: %w", fgId, err)
 			}
 
-			// Update max TTL
 			if ddb.ExpiryAt > currentTime {
 				maxTtlAcrossFgs = max(maxTtlAcrossFgs, ddb.ExpiryAt-currentTime)
 			}
@@ -208,7 +193,6 @@ func (r *RedisStore) BatchRetrieveV2(entityLabel string, pkMaps []map[string]str
 			return nil, err
 		}
 
-		// Filter requested FGIds
 		fgIdToDDB, err := csdb.GetDeserializedPSDBForFGIds(ds.NewOrderedSetFromSlice(fgIds))
 		if err != nil {
 			return nil, err

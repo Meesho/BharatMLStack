@@ -83,7 +83,6 @@ func (csdb *CacheStorageDataBlock) SerializeForDistributedCache() ([]byte, error
 	return csdb.serialize(true)
 }
 
-// GetSerializedData returns the serialized CSDB data for external access
 func (csdb *CacheStorageDataBlock) GetSerializedData() []byte {
 	return csdb.serializedCSDB
 }
@@ -149,7 +148,6 @@ func (csdb *CacheStorageDataBlock) GetDeserializedPSDBForAllFGIds() (map[int]*De
 		if err == nil && !ddb.Expired {
 			fgIdToDDB[int(fgId)] = ddb
 		} else {
-			//Handle Deserialization error or expired data
 			fgIdToDDB = nil
 			return false
 		}
