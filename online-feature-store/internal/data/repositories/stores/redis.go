@@ -65,7 +65,7 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 
 	existingValues, err := r.client.MGet(r.ctx, keysToRead...).Result()
 	if err != nil && err != redis.Nil {
-		return fmt.Errorf("failed to read existing data: %w", err)
+		return fmt.Errorf("failed to read existing data from redis store for entity %s: %w", entityLabel, err)
 	}
 
 	pipe := r.client.Pipeline()
