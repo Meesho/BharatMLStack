@@ -147,12 +147,11 @@ func (r *RedisStore) mergeRowsIntoCSDB(existingCSDB *blocks.CacheStorageDataBloc
 				return nil, 0, fmt.Errorf("failed to deserialize PSDB for fgId %d: %w", fgId, err)
 			}
 
-			err = mergedCSDB.AddFGIdToDDB(fgId, ddb)
-			if err != nil {
-				return nil, 0, fmt.Errorf("failed to add FGId to merged CSDB for fgId %d: %w", fgId, err)
-			}
-
-			if ddb.ExpiryAt > currentTime {
+			if !ddb.Expired && ddb.ExpiryAt > currentTime {
+				err = mergedCSDB.AddFGIdToDDB(fgId, ddb)
+				if err != nil {
+					return nil, 0, fmt.Errorf("failed to add FGId to merged CSDB for fgId %d: %w", fgId, err)
+				}
 				maxTtlAcrossFgs = max(maxTtlAcrossFgs, ddb.ExpiryAt-currentTime)
 			}
 		}
