@@ -117,16 +117,16 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 // mergeRowsIntoCSDB merges multiple rows into an existing CSDB
 func (r *RedisStore) mergeRowsIntoCSDB(existingCSDB *blocks.CacheStorageDataBlock, rows []models.Row) (*blocks.CacheStorageDataBlock, uint64, error) {
 	// If we have existing FGs, deserialize them
-	var existingFGMap map[int]*blocks.DeserializedPSDB
+	var existingFGIdtoCSDBMap map[int]*blocks.DeserializedPSDB
 	if len(existingCSDB.GetSerializedData()) > 0 {
 		var err error
-		existingFGMap, err = existingCSDB.GetDeserializedPSDBForAllFGIds()
+		existingFGIdtoCSDBMap, err = existingCSDB.GetDeserializedPSDBForAllFGIds()
 		if err != nil {
 			log.Warn().Err(err).Msg("Failed to deserialize existing FGs, proceeding with new data only")
-			existingFGMap = make(map[int]*blocks.DeserializedPSDB)
+			existingFGIdtoCSDBMap = make(map[int]*blocks.DeserializedPSDB)
 		}
 	} else {
-		existingFGMap = make(map[int]*blocks.DeserializedPSDB)
+		existingFGIdtoCSDBMap = make(map[int]*blocks.DeserializedPSDB)
 	}
 
 	// Create new CSDB for merged data
@@ -136,7 +136,7 @@ func (r *RedisStore) mergeRowsIntoCSDB(existingCSDB *blocks.CacheStorageDataBloc
 	maxTtlAcrossFgs := uint64(0)
 	currentTime := uint64(time.Now().Unix())
 
-	for fgId, ddb := range existingFGMap {
+	for fgId, ddb := range existingFGIdtoCSDBMap {
 		if !ddb.Expired && ddb.ExpiryAt > currentTime {
 			err := mergedCSDB.AddFGIdToDDB(fgId, ddb.Copy())
 			if err != nil {
