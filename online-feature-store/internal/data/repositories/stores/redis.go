@@ -11,6 +11,8 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/ds"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/infra"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
+	redsync "github.com/go-redsync/redsync/v4"
+	redsyncgoredis "github.com/go-redsync/redsync/v4/redis/goredis/v9"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/context"
@@ -20,6 +22,7 @@ type RedisStore struct {
 	client        redis.UniversalClient
 	configManager config.Manager
 	ctx           context.Context
+	rs            *redsync.Redsync
 }
 
 func NewRedisStore(connection *infra.RedisFailoverConnection) (*RedisStore, error) {
@@ -28,10 +31,14 @@ func NewRedisStore(connection *infra.RedisFailoverConnection) (*RedisStore, erro
 		return nil, err
 	}
 	configManager := config.Instance(config.DefaultVersion)
+	pool := redsyncgoredis.NewPool(client.(redis.UniversalClient))
+	rs := redsync.New(pool)
+
 	return &RedisStore{
 		client:        client.(redis.UniversalClient),
 		ctx:           context.Background(),
 		configManager: configManager,
+		rs:            rs,
 	}, nil
 }
 
@@ -62,6 +69,17 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 		}
 		keyToRowsMap[key] = append(keyToRowsMap[key], row)
 	}
+
+	lockKey := fmt.Sprintf("onfs:%s:%s", entityLabel, time.Now().String())
+	mutex := r.rs.NewMutex(lockKey)
+	if err := mutex.Lock(); err != nil {
+		return err
+	}
+	defer func() {
+		if ok, err := mutex.Unlock(); !ok || err != nil {
+			log.Error().Err(err).Msg("Failed to release redis lock")
+		}
+	}()
 
 	existingValues, err := r.client.MGet(r.ctx, keysToRead...).Result()
 	if err != nil && err != redis.Nil {
