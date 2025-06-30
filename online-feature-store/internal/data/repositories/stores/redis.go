@@ -70,7 +70,7 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 		keyToRowsMap[key] = append(keyToRowsMap[key], row)
 	}
 
-	lockKey := fmt.Sprintf("onfs:%s:%s", entityLabel, time.Now().String())
+	lockKey := fmt.Sprintf("onfs:%s", entityLabel)
 	mutex := r.rs.NewMutex(lockKey)
 	if err := mutex.Lock(); err != nil {
 		return err
