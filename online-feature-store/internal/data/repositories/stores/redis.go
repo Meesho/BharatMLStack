@@ -2,6 +2,9 @@ package stores
 
 import (
 	"fmt"
+	"math"
+	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,6 +19,15 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/context"
+)
+
+const (
+	LockMaxAttempts   = 5
+	LockBaseDelay     = 100 * time.Millisecond
+	LockMaxDelay      = 2 * time.Second
+	LockJitterDivisor = 4
+	LockExpiry        = 5 * time.Second
+	LockDriftFactor   = 0.01
 )
 
 type RedisStore struct {
@@ -93,21 +105,13 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 		keyToRowsMap[key] = append(keyToRowsMap[key], row)
 	}
 
-	lockKey := fmt.Sprintf("onfs:%s", entityLabel)
-	mutex := r.rs.NewMutex(lockKey,
-		redsync.WithExpiry(3*time.Second),
-		redsync.WithTries(5),
-		redsync.WithRetryDelay(150*time.Millisecond),
-		redsync.WithDriftFactor(0.01),
-	)
-	if err := mutex.Lock(); err != nil {
-		return err
+	// Lock all keys that will be modified to prevent race conditions
+	uniqueKeys := DeduplicateKeys(keysToRead)
+	locks, err := LockKeys(r.ctx, r.rs, uniqueKeys)
+	if err != nil {
+		return fmt.Errorf("failed to acquire locks for keys: %w", err)
 	}
-	defer func() {
-		if ok, err := mutex.Unlock(); !ok || err != nil {
-			log.Error().Err(err).Msg("Failed to release redis lock")
-		}
-	}()
+	defer UnlockKeys(locks)
 
 	var existingValues []interface{}
 	if !canReplace {
@@ -317,4 +321,86 @@ func buildCacheKeyForPersist(pkMap map[string]string, colPKMap map[string]string
 	}
 
 	return entityLabel + ":" + strings.Join(keys, "|")
+}
+
+// LockKeys acquires locks for multiple keys in a consistent order to prevent deadlocks
+func LockKeys(ctx context.Context, rs *redsync.Redsync, keys []string) ([]*redsync.Mutex, error) {
+	sort.Strings(keys) // Prevent deadlocks by consistent ordering
+	var locks []*redsync.Mutex
+
+	for _, key := range keys {
+		mutex, err := TryLockWithBackoff(ctx, rs, key, LockMaxAttempts)
+		if err != nil {
+			// Unlock all previously acquired locks
+			for _, m := range locks {
+				if ok, unlockErr := m.Unlock(); !ok || unlockErr != nil {
+					log.Error().Err(unlockErr).Msg("Failed to release lock during cleanup")
+				}
+			}
+			return nil, fmt.Errorf("failed to lock key %s: %w", key, err)
+		}
+
+		locks = append(locks, mutex)
+	}
+	return locks, nil
+}
+
+// UnlockKeys releases all acquired locks
+func UnlockKeys(locks []*redsync.Mutex) {
+	for _, l := range locks {
+		if ok, err := l.Unlock(); !ok || err != nil {
+			log.Error().Err(err).Msg("Failed to release lock")
+		}
+	}
+}
+
+// DeduplicateKeys removes duplicate keys from the slice while preserving order
+func DeduplicateKeys(keys []string) []string {
+	seen := make(map[string]bool)
+	var result []string
+
+	for _, key := range keys {
+		if !seen[key] {
+			seen[key] = true
+			result = append(result, key)
+		}
+	}
+	return result
+}
+
+func TryLockWithBackoff(ctx context.Context, rs *redsync.Redsync, key string, maxAttempts int) (*redsync.Mutex, error) {
+	baseDelay := LockBaseDelay
+	maxDelay := LockMaxDelay
+
+	mutex := rs.NewMutex("lock:"+key,
+		redsync.WithExpiry(LockExpiry),
+		redsync.WithDriftFactor(LockDriftFactor),
+	)
+
+	var attempt int
+	for {
+		err := mutex.LockContext(ctx)
+		if err == nil {
+			return mutex, nil
+		}
+
+		attempt++
+		if attempt >= maxAttempts {
+			return nil, err
+		}
+
+		// Exponential backoff with jitter
+		delay := time.Duration(float64(baseDelay) * math.Pow(2, float64(attempt)))
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+		jitter := time.Duration(rand.Int63n(int64(delay / LockJitterDivisor)))
+		delay += jitter
+
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 }
