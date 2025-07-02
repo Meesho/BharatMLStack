@@ -94,7 +94,12 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 	}
 
 	lockKey := fmt.Sprintf("onfs:%s", entityLabel)
-	mutex := r.rs.NewMutex(lockKey)
+	mutex := r.rs.NewMutex(lockKey,
+		redsync.WithExpiry(3*time.Second),
+		redsync.WithTries(5),
+		redsync.WithRetryDelay(150*time.Millisecond),
+		redsync.WithDriftFactor(0.01),
+	)
 	if err := mutex.Lock(); err != nil {
 		return err
 	}
