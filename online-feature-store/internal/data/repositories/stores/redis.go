@@ -58,6 +58,29 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 		return err
 	}
 
+	allFGIds, err := r.getAllFGIdsForEntity(entityLabel)
+	if err != nil {
+		log.Error().Err(err).Msgf("Error while getting all FGIDs for entity: %s", entityLabel)
+		return err
+	}
+
+	batchFGIds := make(map[int]bool)
+	for _, row := range rows {
+		for fgId := range row.FgIdToPsDb {
+			batchFGIds[fgId] = true
+		}
+	}
+
+	canReplace := len(batchFGIds) == len(allFGIds)
+	if canReplace {
+		for fgId := range allFGIds {
+			if !batchFGIds[fgId] {
+				canReplace = false
+				break
+			}
+		}
+	}
+
 	keyToRowsMap := make(map[string][]models.Row)
 	keysToRead := make([]string, 0)
 
@@ -81,9 +104,12 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 		}
 	}()
 
-	existingValues, err := r.client.MGet(r.ctx, keysToRead...).Result()
-	if err != nil && err != redis.Nil {
-		return fmt.Errorf("failed to read existing data from redis store for entity %s: %w", entityLabel, err)
+	var existingValues []interface{}
+	if !canReplace {
+		existingValues, err = r.client.MGet(r.ctx, keysToRead...).Result()
+		if err != nil && err != redis.Nil {
+			return fmt.Errorf("failed to read existing data from redis store for entity %s: %w", entityLabel, err)
+		}
 	}
 
 	pipe := r.client.Pipeline()
@@ -91,26 +117,36 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 	for i, key := range keysToRead {
 		rowsForKey := keyToRowsMap[key]
 
-		var existingCSDB *blocks.CacheStorageDataBlock
-		if existingValues[i] != nil {
-			existingData := []byte(existingValues[i].(string))
-			existingCSDB, err = blocks.CreateCSDBForDistributedCache(existingData)
+		var finalCSDB *blocks.CacheStorageDataBlock
+		var maxTtl uint64
+
+		if canReplace {
+			finalCSDB, maxTtl, err = r.createCSDBFromRows(rowsForKey)
 			if err != nil {
-				log.Warn().Err(err).Msgf("Failed to parse existing CSDB for key %s, creating new", key)
-				existingCSDB = blocks.NewCacheStorageDataBlock(1)
+				return fmt.Errorf("failed to create CSDB from rows for key %s: %w", key, err)
 			}
 		} else {
-			existingCSDB = blocks.NewCacheStorageDataBlock(1)
+			var existingCSDB *blocks.CacheStorageDataBlock
+			if existingValues[i] != nil {
+				existingData := []byte(existingValues[i].(string))
+				existingCSDB, err = blocks.CreateCSDBForDistributedCache(existingData)
+				if err != nil {
+					log.Warn().Err(err).Msgf("Failed to parse existing CSDB for key %s, creating new", key)
+					existingCSDB = blocks.NewCacheStorageDataBlock(1)
+				}
+			} else {
+				existingCSDB = blocks.NewCacheStorageDataBlock(1)
+			}
+
+			finalCSDB, maxTtl, err = r.mergeRowsIntoCSDB(existingCSDB, rowsForKey)
+			if err != nil {
+				return fmt.Errorf("failed to merge rows for key %s: %w", key, err)
+			}
 		}
 
-		mergedCSDB, maxTtl, err := r.mergeRowsIntoCSDB(existingCSDB, rowsForKey)
+		serializedCSDB, err := finalCSDB.SerializeForDistributedCache()
 		if err != nil {
-			return fmt.Errorf("failed to merge rows for key %s: %w", key, err)
-		}
-
-		serializedCSDB, err := mergedCSDB.SerializeForDistributedCache()
-		if err != nil {
-			return fmt.Errorf("failed to serialize merged CSDB for key %s: %w", key, err)
+			return fmt.Errorf("failed to serialize final CSDB for key %s: %w", key, err)
 		}
 
 		pipe.Set(r.ctx, key, serializedCSDB, time.Duration(maxTtl)*time.Second)
@@ -123,6 +159,50 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 	}
 
 	return nil
+}
+
+func (r *RedisStore) getAllFGIdsForEntity(entityLabel string) (map[int]bool, error) {
+	entity, err := r.configManager.GetEntity(entityLabel)
+	if err != nil {
+		return nil, err
+	}
+
+	allFGIds := make(map[int]bool)
+	for _, fg := range entity.FeatureGroups {
+		allFGIds[fg.Id] = true
+	}
+
+	return allFGIds, nil
+}
+
+func (r *RedisStore) createCSDBFromRows(rows []models.Row) (*blocks.CacheStorageDataBlock, uint64, error) {
+	csdb := blocks.NewCacheStorageDataBlock(1)
+	maxTtlAcrossFgs := uint64(0)
+	currentTime := uint64(time.Now().Unix())
+
+	for _, row := range rows {
+		for fgId, psdb := range row.FgIdToPsDb {
+			serializedData, err := psdb.Serialize()
+			if err != nil {
+				return nil, 0, fmt.Errorf("failed to serialize PSDB for fgId %d: %w", fgId, err)
+			}
+
+			ddb, err := blocks.DeserializePSDBWithoutDecompression(serializedData)
+			if err != nil {
+				return nil, 0, fmt.Errorf("failed to deserialize PSDB for fgId %d: %w", fgId, err)
+			}
+
+			if !ddb.Expired && ddb.ExpiryAt > currentTime {
+				err = csdb.AddFGIdToDDB(fgId, ddb)
+				if err != nil {
+					return nil, 0, fmt.Errorf("failed to add FGId to CSDB for fgId %d: %w", fgId, err)
+				}
+				maxTtlAcrossFgs = max(maxTtlAcrossFgs, ddb.ExpiryAt-currentTime)
+			}
+		}
+	}
+
+	return csdb, maxTtlAcrossFgs, nil
 }
 
 func (r *RedisStore) mergeRowsIntoCSDB(existingCSDB *blocks.CacheStorageDataBlock, rows []models.Row) (*blocks.CacheStorageDataBlock, uint64, error) {
