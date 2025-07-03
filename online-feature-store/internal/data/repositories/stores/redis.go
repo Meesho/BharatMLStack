@@ -337,7 +337,8 @@ func LockKeys(ctx context.Context, rs *redsync.Redsync, keys []string) ([]*redsy
 					log.Error().Err(unlockErr).Msg("Failed to release lock during cleanup")
 				}
 			}
-			return nil, fmt.Errorf("failed to lock key %s: %w", key, err)
+			metric.Count("lock_acquire_failure", 1, []string{"key", key, "error", err.Error()})
+			return nil, fmt.Errorf("failed to acquire lock for key %s: %w", key, err)
 		}
 
 		locks = append(locks, mutex)
@@ -349,6 +350,7 @@ func LockKeys(ctx context.Context, rs *redsync.Redsync, keys []string) ([]*redsy
 func UnlockKeys(locks []*redsync.Mutex) {
 	for _, l := range locks {
 		if ok, err := l.Unlock(); !ok || err != nil {
+			metric.Count("lock_release_failure", 1, []string{"key", l.Name(), "error", err.Error()})
 			log.Error().Err(err).Msg("Failed to release lock")
 		}
 	}
