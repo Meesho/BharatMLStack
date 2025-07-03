@@ -483,3 +483,17 @@ func isEntityValid(entity *Entity) bool {
 	}
 	return true
 }
+
+func (e *Etcd) GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error) {
+	entity, err := e.GetEntity(entityLabel)
+	if err != nil {
+		return nil, err
+	}
+
+	allFGIds := make(map[int]bool)
+	for _, fg := range entity.FeatureGroups {
+		allFGIds[fg.Id] = true
+	}
+
+	return allFGIds, nil
+}

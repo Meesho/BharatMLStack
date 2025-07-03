@@ -10,6 +10,7 @@ require (
 	github.com/confluentinc/confluent-kafka-go/v2 v2.6.1
 	github.com/coocood/freecache v1.2.4
 	github.com/gin-gonic/gin v1.10.0
+	github.com/go-redsync/redsync/v4 v4.13.0
 	github.com/gocql/gocql v1.7.0
 	github.com/klauspost/compress v1.17.11
 	github.com/redis/go-redis/v9 v9.5.5
@@ -48,6 +49,8 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/flatbuffers v24.3.25+incompatible // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
+	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
@@ -80,9 +83,9 @@ require (
 	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8 // indirect
 	golang.org/x/mod v0.22.0 // indirect
-	golang.org/x/sync v0.11.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/sys v0.29.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/tools v0.29.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20241209162323-e6fa225c2576 // indirect
@@ -91,4 +94,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/redis/go-redis/v9 v9.5.1 => github.com/Meesho/go-redis/v9 v9.6.3
+replace github.com/redis/go-redis/v9 v9.5.1 => github.com/Meesho/go-redis/v9 v9.6.2
