@@ -10,6 +10,7 @@ require (
 	github.com/confluentinc/confluent-kafka-go/v2 v2.6.1
 	github.com/coocood/freecache v1.2.4
 	github.com/gin-gonic/gin v1.10.0
+	github.com/go-redsync/redsync/v4 v4.13.0
 	github.com/gocql/gocql v1.7.0
 	github.com/klauspost/compress v1.17.11
 	github.com/redis/go-redis/v9 v9.5.5
@@ -48,6 +49,8 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/flatbuffers v24.3.25+incompatible // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
+	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
@@ -90,3 +93,5 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/redis/go-redis/v9 v9.5.1 => github.com/Meesho/go-redis/v9 v9.6.2
