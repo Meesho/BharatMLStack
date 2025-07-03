@@ -70,7 +70,7 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 		return err
 	}
 
-	allFGIds, err := r.getAllFGIdsForEntity(entityLabel)
+	allFGIds, err := r.configManager.GetAllFGIdsForEntity(entityLabel)
 	if err != nil {
 		log.Error().Err(err).Msgf("Error while getting all FGIDs for entity: %s", entityLabel)
 		return err
@@ -168,20 +168,6 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 	}
 
 	return nil
-}
-
-func (r *RedisStore) getAllFGIdsForEntity(entityLabel string) (map[int]bool, error) {
-	entity, err := r.configManager.GetEntity(entityLabel)
-	if err != nil {
-		return nil, err
-	}
-
-	allFGIds := make(map[int]bool)
-	for _, fg := range entity.FeatureGroups {
-		allFGIds[fg.Id] = true
-	}
-
-	return allFGIds, nil
 }
 
 func (r *RedisStore) createCSDBFromRows(rows []models.Row) (*blocks.CacheStorageDataBlock, uint64, error) {
