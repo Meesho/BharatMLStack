@@ -323,7 +323,7 @@ func LockKeys(ctx context.Context, rs *redsync.Redsync, keys []string, entityLab
 					log.Error().Err(unlockErr).Msg("Failed to release lock during cleanup")
 				}
 			}
-			metric.Count("fs_persist_lock_acquire_failure", 1, []string{"key", key, "entity_label", entityLabel})
+			metric.Count("fs_persist_lock_acquire_failure", 1, []string{"entity_label", entityLabel})
 			return nil, fmt.Errorf("failed to acquire lock for key %s: %w", key, err)
 		}
 
@@ -336,7 +336,7 @@ func LockKeys(ctx context.Context, rs *redsync.Redsync, keys []string, entityLab
 func UnlockKeys(locks []*redsync.Mutex, entityLabel string) {
 	for _, l := range locks {
 		if ok, err := l.Unlock(); !ok || err != nil {
-			metric.Count("fs_persist_lock_release_failure", 1, []string{"key", l.Name(), "entity_label", entityLabel})
+			metric.Count("fs_persist_lock_release_failure", 1, []string{"entity_label", entityLabel})
 			log.Error().Err(err).Msg("Failed to release lock")
 		}
 	}
