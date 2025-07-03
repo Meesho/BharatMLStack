@@ -107,11 +107,11 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 
 	// Lock all keys that will be modified to prevent race conditions
 	uniqueKeys := DeduplicateKeys(keysToRead)
-	locks, err := LockKeys(r.ctx, r.rs, uniqueKeys)
+	locks, err := LockKeys(r.ctx, r.rs, uniqueKeys, entityLabel)
 	if err != nil {
 		return fmt.Errorf("failed to acquire locks for keys: %w", err)
 	}
-	defer UnlockKeys(locks)
+	defer UnlockKeys(locks, entityLabel)
 
 	var existingValues []interface{}
 	if !canReplace {
@@ -310,7 +310,7 @@ func buildCacheKeyForPersist(pkMap map[string]string, colPKMap map[string]string
 }
 
 // LockKeys acquires locks for multiple keys in a consistent order to prevent deadlocks
-func LockKeys(ctx context.Context, rs *redsync.Redsync, keys []string) ([]*redsync.Mutex, error) {
+func LockKeys(ctx context.Context, rs *redsync.Redsync, keys []string, entityLabel string) ([]*redsync.Mutex, error) {
 	sort.Strings(keys) // Prevent deadlocks by consistent ordering
 	var locks []*redsync.Mutex
 
@@ -323,7 +323,7 @@ func LockKeys(ctx context.Context, rs *redsync.Redsync, keys []string) ([]*redsy
 					log.Error().Err(unlockErr).Msg("Failed to release lock during cleanup")
 				}
 			}
-			metric.Count("lock_acquire_failure", 1, []string{"key", key, "error", err.Error()})
+			metric.Count("fs_persist_lock_acquire_failure", 1, []string{"key", key, "entity_label", entityLabel})
 			return nil, fmt.Errorf("failed to acquire lock for key %s: %w", key, err)
 		}
 
@@ -333,10 +333,10 @@ func LockKeys(ctx context.Context, rs *redsync.Redsync, keys []string) ([]*redsy
 }
 
 // UnlockKeys releases all acquired locks
-func UnlockKeys(locks []*redsync.Mutex) {
+func UnlockKeys(locks []*redsync.Mutex, entityLabel string) {
 	for _, l := range locks {
 		if ok, err := l.Unlock(); !ok || err != nil {
-			metric.Count("lock_release_failure", 1, []string{"key", l.Name(), "error", err.Error()})
+			metric.Count("fs_persist_lock_release_failure", 1, []string{"key", l.Name(), "entity_label", entityLabel})
 			log.Error().Err(err).Msg("Failed to release lock")
 		}
 	}
