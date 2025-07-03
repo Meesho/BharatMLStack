@@ -17,3 +17,4 @@ echo "Copying new docs..."
 cp -r build/* ../docs/
 
 echo "✅ Documentation built and copied successfully."
+echo "TO DO: create PR to develop and merge to main to update the doc site"
