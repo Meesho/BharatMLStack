@@ -2,8 +2,6 @@ package stores
 
 import (
 	"fmt"
-	"math"
-	"math/rand"
 	"sort"
 	"strings"
 	"time"
@@ -14,27 +12,21 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/ds"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/infra"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
-	"github.com/go-redsync/redsync/v4"
-	redsyncgoredis "github.com/go-redsync/redsync/v4/redis/goredis/v9"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/context"
 )
 
 const (
-	LockMaxAttempts   = 5
-	LockBaseDelay     = 100 * time.Millisecond
-	LockMaxDelay      = 2 * time.Second
-	LockJitterDivisor = 4
-	LockExpiry        = 2 * time.Second
-	LockDriftFactor   = 0.01
+	LockKeyPrefix     = "l:"
+	LockMaxRetries    = 3
+	LockBackoffBaseMs = 100
 )
 
 type RedisStore struct {
 	client        redis.UniversalClient
 	configManager config.Manager
 	ctx           context.Context
-	rs            *redsync.Redsync
 }
 
 func NewRedisStore(connection *infra.RedisFailoverConnection) (*RedisStore, error) {
@@ -43,14 +35,11 @@ func NewRedisStore(connection *infra.RedisFailoverConnection) (*RedisStore, erro
 		return nil, err
 	}
 	configManager := config.Instance(config.DefaultVersion)
-	pool := redsyncgoredis.NewPool(client.(redis.UniversalClient))
-	rs := redsync.New(pool)
 
 	return &RedisStore{
 		client:        client.(redis.UniversalClient),
 		ctx:           context.Background(),
 		configManager: configManager,
-		rs:            rs,
 	}, nil
 }
 
@@ -143,11 +132,8 @@ func (r *RedisStore) batchPersistReplace(entityLabel string, keysToRead []string
 func (r *RedisStore) batchPersistMerge(entityLabel string, keysToRead []string, keyToRowsMap map[string][]models.Row) error {
 	// Lock all keys that will be modified to prevent race conditions
 	uniqueKeys := DeduplicateKeys(keysToRead)
-	_, err := LockKeys(r.ctx, r.rs, uniqueKeys, entityLabel)
-	if err != nil {
-		return fmt.Errorf("failed to acquire locks for keys: %w", err)
-	}
-	//defer UnlockKeys(locks, entityLabel)
+	acquiredLocks, err := LockKeys(r.ctx, r.client, uniqueKeys, entityLabel)
+	defer UnlockKeys(r.ctx, r.client, acquiredLocks, entityLabel)
 
 	existingValues, err := r.client.MGet(r.ctx, keysToRead...).Result()
 	if err != nil && err != redis.Nil {
@@ -338,33 +324,53 @@ func buildCacheKeyForPersist(pkMap map[string]string, colPKMap map[string]string
 	return entityLabel + ":" + strings.Join(keys, "|")
 }
 
-// LockKeys acquires locks for multiple keys in a consistent order to prevent deadlocks
-func LockKeys(ctx context.Context, rs *redsync.Redsync, keys []string, entityLabel string) ([]*redsync.Mutex, error) {
+// LockKeys acquires locks for multiple keys using SETNX with retries
+func LockKeys(ctx context.Context, client redis.UniversalClient, keys []string, entityLabel string) ([]string, error) {
 	sort.Strings(keys) // Prevent deadlocks by consistent ordering
-	var locks []*redsync.Mutex
+	var acquiredLocks []string
+
+	// Round current timestamp to 5 seconds
+	currentTime := time.Now().Unix()
+	roundedTime := (currentTime / 5) * 5
 
 	for _, key := range keys {
-		mutex, err := TryLockWithBackoff(ctx, rs, key, LockMaxAttempts)
-		if err != nil {
-			// Unlock all previously acquired locks
-			for _, m := range locks {
-				if ok, unlockErr := m.Unlock(); !ok || unlockErr != nil {
-					log.Error().Err(unlockErr).Msg("Failed to release lock during cleanup")
+		lockKey := fmt.Sprintf("%s%s:%d", LockKeyPrefix, key, roundedTime)
+
+		// Retry logic for lock acquisition
+		var success bool
+		var err error
+
+		for attempt := 0; attempt < LockMaxRetries; attempt++ {
+			success, err = client.SetNX(ctx, lockKey, "1", 0).Result()
+			if err == nil && success {
+				break
+			}
+
+			if attempt < LockMaxRetries-1 {
+				// Wait before retry (exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms)
+				backoffTime := time.Duration(LockBackoffBaseMs*(1<<attempt)) * time.Millisecond
+				select {
+				case <-time.After(backoffTime):
+				case <-ctx.Done():
+					return acquiredLocks, ctx.Err()
 				}
 			}
-			metric.Count("fs_persist_lock_acquire_failure", 1, []string{"entity_label", entityLabel})
-			return nil, fmt.Errorf("failed to acquire lock for key %s: %w", key, err)
 		}
 
-		locks = append(locks, mutex)
+		if err != nil || !success {
+			metric.Count("fs_persist_lock_acquire_failure", 1, []string{"entity_label", entityLabel})
+			continue
+		}
+		acquiredLocks = append(acquiredLocks, lockKey)
 	}
-	return locks, nil
+
+	return acquiredLocks, nil
 }
 
 // UnlockKeys releases all acquired locks
-func UnlockKeys(locks []*redsync.Mutex, entityLabel string) {
-	for _, l := range locks {
-		if ok, err := l.Unlock(); !ok || err != nil {
+func UnlockKeys(ctx context.Context, client redis.UniversalClient, lockKeys []string, entityLabel string) {
+	for _, lockKey := range lockKeys {
+		if err := client.Del(ctx, lockKey).Err(); err != nil {
 			metric.Count("fs_persist_lock_release_failure", 1, []string{"entity_label", entityLabel})
 			log.Error().Err(err).Msg("Failed to release lock")
 		}
@@ -383,41 +389,4 @@ func DeduplicateKeys(keys []string) []string {
 		}
 	}
 	return result
-}
-
-func TryLockWithBackoff(ctx context.Context, rs *redsync.Redsync, key string, maxAttempts int) (*redsync.Mutex, error) {
-	baseDelay := LockBaseDelay
-	maxDelay := LockMaxDelay
-
-	mutex := rs.NewMutex("lock:"+key,
-		redsync.WithExpiry(LockExpiry),
-		redsync.WithDriftFactor(LockDriftFactor),
-	)
-
-	var attempt int
-	for {
-		err := mutex.LockContext(ctx)
-		if err == nil {
-			return mutex, nil
-		}
-
-		attempt++
-		if attempt >= maxAttempts {
-			return nil, err
-		}
-
-		// Exponential backoff with jitter
-		delay := time.Duration(float64(baseDelay) * math.Pow(2, float64(attempt)))
-		if delay > maxDelay {
-			delay = maxDelay
-		}
-		jitter := time.Duration(rand.Int63n(int64(delay / LockJitterDivisor)))
-		delay += jitter
-
-		select {
-		case <-time.After(delay):
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
 }
