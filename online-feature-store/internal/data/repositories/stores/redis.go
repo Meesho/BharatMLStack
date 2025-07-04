@@ -26,7 +26,7 @@ const (
 	LockBaseDelay     = 100 * time.Millisecond
 	LockMaxDelay      = 2 * time.Second
 	LockJitterDivisor = 4
-	LockExpiry        = 5 * time.Second
+	LockExpiry        = 2 * time.Second
 	LockDriftFactor   = 0.01
 )
 
@@ -143,11 +143,11 @@ func (r *RedisStore) batchPersistReplace(entityLabel string, keysToRead []string
 func (r *RedisStore) batchPersistMerge(entityLabel string, keysToRead []string, keyToRowsMap map[string][]models.Row) error {
 	// Lock all keys that will be modified to prevent race conditions
 	uniqueKeys := DeduplicateKeys(keysToRead)
-	locks, err := LockKeys(r.ctx, r.rs, uniqueKeys, entityLabel)
+	_, err := LockKeys(r.ctx, r.rs, uniqueKeys, entityLabel)
 	if err != nil {
 		return fmt.Errorf("failed to acquire locks for keys: %w", err)
 	}
-	defer UnlockKeys(locks, entityLabel)
+	//defer UnlockKeys(locks, entityLabel)
 
 	existingValues, err := r.client.MGet(r.ctx, keysToRead...).Result()
 	if err != nil && err != redis.Nil {
@@ -298,7 +298,13 @@ func (r *RedisStore) BatchRetrieveV2(entityLabel string, pkMaps []map[string]str
 
 	for i, value := range values {
 		if value == nil {
-			results[i] = nil
+			// No data found for this key, create negative cache entries for all fgIds
+			results[i] = make(map[int]*blocks.DeserializedPSDB)
+			for _, fgId := range fgIds {
+				results[i][fgId] = &blocks.DeserializedPSDB{
+					NegativeCache: true,
+				}
+			}
 			continue
 		}
 
