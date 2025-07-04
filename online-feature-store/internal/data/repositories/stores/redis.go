@@ -105,52 +105,22 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 		keyToRowsMap[key] = append(keyToRowsMap[key], row)
 	}
 
-	// Lock all keys that will be modified to prevent race conditions
-	uniqueKeys := DeduplicateKeys(keysToRead)
-	locks, err := LockKeys(r.ctx, r.rs, uniqueKeys, entityLabel)
-	if err != nil {
-		return fmt.Errorf("failed to acquire locks for keys: %w", err)
+	if canReplace {
+		return r.batchPersistReplace(entityLabel, keysToRead, keyToRowsMap)
+	} else {
+		return r.batchPersistMerge(entityLabel, keysToRead, keyToRowsMap)
 	}
-	defer UnlockKeys(locks, entityLabel)
+}
 
-	var existingValues []interface{}
-	if !canReplace {
-		existingValues, err = r.client.MGet(r.ctx, keysToRead...).Result()
-		if err != nil && err != redis.Nil {
-			return fmt.Errorf("failed to read existing data from redis store for entity %s: %w", entityLabel, err)
-		}
-	}
-
+func (r *RedisStore) batchPersistReplace(entityLabel string, keysToRead []string, keyToRowsMap map[string][]models.Row) error {
 	pipe := r.client.Pipeline()
 
-	for i, key := range keysToRead {
+	for _, key := range keysToRead {
 		rowsForKey := keyToRowsMap[key]
 
-		var finalCSDB *blocks.CacheStorageDataBlock
-		var maxTtl uint64
-
-		if canReplace {
-			finalCSDB, maxTtl, err = r.createCSDBFromRows(rowsForKey)
-			if err != nil {
-				return fmt.Errorf("failed to create CSDB from rows for key %s: %w", key, err)
-			}
-		} else {
-			var existingCSDB *blocks.CacheStorageDataBlock
-			if existingValues[i] != nil {
-				existingData := []byte(existingValues[i].(string))
-				existingCSDB, err = blocks.CreateCSDBForDistributedCache(existingData)
-				if err != nil {
-					log.Warn().Err(err).Msgf("Failed to parse existing CSDB for key %s, creating new", key)
-					existingCSDB = blocks.NewCacheStorageDataBlock(1)
-				}
-			} else {
-				existingCSDB = blocks.NewCacheStorageDataBlock(1)
-			}
-
-			finalCSDB, maxTtl, err = r.mergeRowsIntoCSDB(existingCSDB, rowsForKey)
-			if err != nil {
-				return fmt.Errorf("failed to merge rows for key %s: %w", key, err)
-			}
+		finalCSDB, maxTtl, err := r.createCSDBFromRows(rowsForKey)
+		if err != nil {
+			return fmt.Errorf("failed to create CSDB from rows for key %s: %w", key, err)
 		}
 
 		serializedCSDB, err := finalCSDB.SerializeForDistributedCache()
@@ -161,10 +131,63 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 		pipe.Set(r.ctx, key, serializedCSDB, time.Duration(maxTtl)*time.Second)
 	}
 
-	_, err2 := pipe.Exec(r.ctx)
-	if err2 != nil {
-		metric.Count("persist_query_failure", int64(len(rows)), []string{"entity_name", entityLabel, "db_type", "redis"})
-		return fmt.Errorf("failed to execute batch persist: %w", err2)
+	_, err := pipe.Exec(r.ctx)
+	if err != nil {
+		metric.Count("persist_query_failure", int64(len(keysToRead)), []string{"entity_name", entityLabel, "db_type", "redis"})
+		return fmt.Errorf("failed to execute batch persist replace: %w", err)
+	}
+
+	return nil
+}
+
+func (r *RedisStore) batchPersistMerge(entityLabel string, keysToRead []string, keyToRowsMap map[string][]models.Row) error {
+	// Lock all keys that will be modified to prevent race conditions
+	uniqueKeys := DeduplicateKeys(keysToRead)
+	locks, err := LockKeys(r.ctx, r.rs, uniqueKeys, entityLabel)
+	if err != nil {
+		return fmt.Errorf("failed to acquire locks for keys: %w", err)
+	}
+	defer UnlockKeys(locks, entityLabel)
+
+	existingValues, err := r.client.MGet(r.ctx, keysToRead...).Result()
+	if err != nil && err != redis.Nil {
+		return fmt.Errorf("failed to read existing data from redis store for entity %s: %w", entityLabel, err)
+	}
+
+	pipe := r.client.Pipeline()
+
+	for i, key := range keysToRead {
+		rowsForKey := keyToRowsMap[key]
+
+		var existingCSDB *blocks.CacheStorageDataBlock
+		if existingValues[i] != nil {
+			existingData := []byte(existingValues[i].(string))
+			existingCSDB, err = blocks.CreateCSDBForDistributedCache(existingData)
+			if err != nil {
+				log.Warn().Err(err).Msgf("Failed to parse existing CSDB for key %s, creating new", key)
+				existingCSDB = blocks.NewCacheStorageDataBlock(1)
+			}
+		} else {
+			existingCSDB = blocks.NewCacheStorageDataBlock(1)
+		}
+
+		finalCSDB, maxTtl, err := r.mergeRowsIntoCSDB(existingCSDB, rowsForKey)
+		if err != nil {
+			return fmt.Errorf("failed to merge rows for key %s: %w", key, err)
+		}
+
+		serializedCSDB, err := finalCSDB.SerializeForDistributedCache()
+		if err != nil {
+			return fmt.Errorf("failed to serialize final CSDB for key %s: %w", key, err)
+		}
+
+		pipe.Set(r.ctx, key, serializedCSDB, time.Duration(maxTtl)*time.Second)
+	}
+
+	_, err = pipe.Exec(r.ctx)
+	if err != nil {
+		metric.Count("persist_query_failure", int64(len(keysToRead)), []string{"entity_name", entityLabel, "db_type", "redis"})
+		return fmt.Errorf("failed to execute batch persist merge: %w", err)
 	}
 
 	return nil
