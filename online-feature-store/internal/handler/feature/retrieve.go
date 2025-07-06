@@ -492,8 +492,8 @@ func preProcessForKeys(retrieveData *RetrieveData, configManager config.Manager)
 	query := retrieveData.Query
 	rows := make([]*retrieve.Row, len(query.Keys))
 	reqKeyToIdx := make(map[string]int, len(query.Keys))
-	uniquekeysList := make([]*retrieve.Keys, 0)
-	uniquekeyToIndexMap := make(map[string][]int)
+	uniquekeys := make([]*retrieve.Keys, 0)
+	keyToOriginalIndices := make(map[string][]int)
 	// Create a map of feature group properties for quick lookup
 	fgProps := make(map[string]struct {
 		id       int
@@ -525,13 +525,13 @@ func preProcessForKeys(retrieveData *RetrieveData, configManager config.Manager)
 	for i, key := range query.Keys {
 		keyStr := getKeyString(key)
 
-		if _, exists := uniquekeyToIndexMap[keyStr]; !exists {
-			uniquekeysList = append(uniquekeysList, key)
+		if _, exists := keyToOriginalIndices[keyStr]; !exists {
+			uniquekeys = append(uniquekeys, key)
 			reqKeyToIdx[keyStr] = i
-			uniquekeyToIndexMap[keyStr] = make([]int, 0)
+			keyToOriginalIndices[keyStr] = make([]int, 0)
 		}
 
-		uniquekeyToIndexMap[keyStr] = append(uniquekeyToIndexMap[keyStr], i)
+		keyToOriginalIndices[keyStr] = append(keyToOriginalIndices[keyStr], i)
 		// Create row with pre-allocated columns
 		dt := make([][]byte, retrieveData.ReqColumnCount)
 		rows[i] = &retrieve.Row{
@@ -568,8 +568,8 @@ func preProcessForKeys(retrieveData *RetrieveData, configManager config.Manager)
 			}
 		}
 	}
-	retrieveData.UniqueKeys = uniquekeysList
-	retrieveData.UniquekeyToIndexMap = uniquekeyToIndexMap
+	retrieveData.UniqueKeys = uniquekeys
+	retrieveData.KeyToOriginalIndices = keyToOriginalIndices
 	retrieveData.ReqKeyToIdx = reqKeyToIdx
 	retrieveData.Result.Rows = rows
 	return nil
@@ -748,7 +748,7 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			}
 
 			colIdx := meta.(int)
-			for _, idx := range data.UniquekeyToIndexMap[keyStr] {
+			for _, idx := range data.KeyToOriginalIndices[keyStr] {
 				fgDataCopy := make([]byte, len(fdata))
 				copy(fgDataCopy, fdata)
 				data.Result.Rows[idx].Columns[colIdx] = fgDataCopy

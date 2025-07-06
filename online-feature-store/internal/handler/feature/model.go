@@ -26,7 +26,7 @@ type RetrieveData struct {
 	ReqFGIdToFeatureLabelWithQuantType map[int]map[string]types.DataType
 	ReqKeyToIdx                        map[string]int
 	UniqueKeys                         []*retrieve.Keys
-	UniquekeyToIndexMap                map[string][]int
+	KeyToOriginalIndices               map[string][]int
 	ReqFGIds                           ds.Set[int]
 	ReqIdxToFgIdToDdb                  map[int]map[int]*blocks.DeserializedPSDB
 }
