@@ -20,8 +20,8 @@ from .config import GRPCClientConfig
 logger = logging.getLogger(__name__)
 
 # gRPC authentication headers (from Go SDK)
-HEADER_CALLER_ID = "ONLINE-FEATURE-STORE-CALLER-ID"
-HEADER_CALLER_TOKEN = "ONLINE-FEATURE-STORE-AUTH-TOKEN"
+HEADER_CALLER_ID = "online_feature_store_caller_id"
+HEADER_CALLER_TOKEN = "online_feature_store_auth_token"
 
 try:
     import grpc
