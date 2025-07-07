@@ -749,9 +749,7 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 
 			colIdx := meta.(int)
 			for _, idx := range data.KeyToOriginalIndices[keyStr] {
-				fgDataCopy := make([]byte, len(fdata))
-				copy(fgDataCopy, fdata)
-				data.Result.Rows[idx].Columns[colIdx] = fgDataCopy
+				data.Result.Rows[idx].Columns[colIdx] = fdata
 			}
 		})
 	}
