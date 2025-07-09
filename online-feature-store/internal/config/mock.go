@@ -9,6 +9,14 @@ type MockConfigManager struct {
 	mock.Mock
 }
 
+func (m *MockConfigManager) GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error) {
+	args := m.Called(entityLabel)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[int]bool), args.Error(1)
+}
+
 func (m *MockConfigManager) GetEntity(entityLabel string) (*Entity, error) {
 	args := m.Called(entityLabel)
 	if args.Get(0) == nil {
