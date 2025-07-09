@@ -91,7 +91,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 	}()
 	ReqInMemEmpty := retrieveData.ReqInMemCachedFGIds.IsEmpty()
 	ReqDistEmpty := retrieveData.ReqDistCachedFGIds.IsEmpty()
-	allKeys := retrieveData.Query.Keys
+	allKeys := retrieveData.UniqueKeys
 	reqDistCachedFGIds := retrieveData.ReqDistCachedFGIds
 	reqDbFGIds := retrieveData.ReqDbFGIds
 	allDistFGIds := retrieveData.AllDistCachedFGIds
@@ -492,7 +492,8 @@ func preProcessForKeys(retrieveData *RetrieveData, configManager config.Manager)
 	query := retrieveData.Query
 	rows := make([]*retrieve.Row, len(query.Keys))
 	reqKeyToIdx := make(map[string]int, len(query.Keys))
-
+	uniquekeys := make([]*retrieve.Keys, 0)
+	keyToOriginalIndices := make(map[string][]int)
 	// Create a map of feature group properties for quick lookup
 	fgProps := make(map[string]struct {
 		id       int
@@ -523,8 +524,14 @@ func preProcessForKeys(retrieveData *RetrieveData, configManager config.Manager)
 	// Process each key
 	for i, key := range query.Keys {
 		keyStr := getKeyString(key)
-		reqKeyToIdx[keyStr] = i
 
+		if _, exists := keyToOriginalIndices[keyStr]; !exists {
+			uniquekeys = append(uniquekeys, key)
+			reqKeyToIdx[keyStr] = i
+			keyToOriginalIndices[keyStr] = make([]int, 0)
+		}
+
+		keyToOriginalIndices[keyStr] = append(keyToOriginalIndices[keyStr], i)
 		// Create row with pre-allocated columns
 		dt := make([][]byte, retrieveData.ReqColumnCount)
 		rows[i] = &retrieve.Row{
@@ -561,7 +568,8 @@ func preProcessForKeys(retrieveData *RetrieveData, configManager config.Manager)
 			}
 		}
 	}
-
+	retrieveData.UniqueKeys = uniquekeys
+	retrieveData.KeyToOriginalIndices = keyToOriginalIndices
 	retrieveData.ReqKeyToIdx = reqKeyToIdx
 	retrieveData.Result.Rows = rows
 	return nil
@@ -664,6 +672,8 @@ func preProcessFGs(retrieveData *RetrieveData, configManager config.Manager) err
 }
 
 func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks.DeserializedPSDB, keyIdx int) {
+	keyStr := getKeyString(data.Query.Keys[keyIdx])
+
 	for fgId, ddb := range fgToDDB {
 		if _, ok := data.ReqIdxToFgIdToDdb[keyIdx]; !ok {
 			data.ReqIdxToFgIdToDdb[keyIdx] = make(map[int]*blocks.DeserializedPSDB)
@@ -738,7 +748,9 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			}
 
 			colIdx := meta.(int)
-			data.Result.Rows[keyIdx].Columns[colIdx] = fdata
+			for _, idx := range data.KeyToOriginalIndices[keyStr] {
+				data.Result.Rows[idx].Columns[colIdx] = fdata
+			}
 		})
 	}
 }
