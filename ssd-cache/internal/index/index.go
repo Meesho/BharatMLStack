@@ -47,7 +47,7 @@ func NewIndex() *Index {
 }
 
 func (i *Index) Put(key string, offset, size int64, fileOffset int64, memtableId int64) {
-	b := make([]byte, 16)
+	b := make([]byte, 32)
 	ByteOrder.PutInt64(b[0:8], offset)
 	ByteOrder.PutInt64(b[8:16], size)
 	ByteOrder.PutInt64(b[16:24], fileOffset)

@@ -1,9 +1,8 @@
 package allocator
 
 import (
-	"log"
-
 	"github.com/Meesho/BharatMLStack/ssd-cache/internal/pool"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/sys/unix"
 )
 
@@ -63,7 +62,7 @@ func NewAlignedPageAllocator(config AlignedPageAllocatorConfig) *AlignedPageAllo
 func (a *AlignedPageAllocator) Get() (*Page, bool) {
 	page, crossBound := a.pool.Get()
 	if crossBound {
-		log.Println("AlignedPageAllocator: Crossed bound")
+		log.Warn().Msg("AlignedPageAllocator: Crossed bound")
 	}
 	return page.(*Page), true
 }

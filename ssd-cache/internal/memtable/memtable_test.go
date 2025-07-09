@@ -7,6 +7,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/Meesho/BharatMLStack/ssd-cache/internal/allocator"
 )
 
 const (
@@ -126,6 +128,64 @@ func createTestFileWithoutDSYNC(t testing.TB, capacity int64) (*os.File, string)
 
 	return file, filename
 }
+
+// Helper function to create test file descriptor for V3 tests
+func createTestFileDescriptor(t testing.TB, capacity int64) (int, *os.File) {
+	t.Helper()
+
+	// Create temporary directory
+	tmpDir := t.TempDir()
+	filename := filepath.Join(tmpDir, "test_memtable_v3.dat")
+
+	// Open file with DIRECT_IO, WRITE_ONLY, CREAT flags
+	flags := O_DIRECT | O_WRONLY | O_CREAT | O_DSYNC
+	fd, err := syscall.Open(filename, flags, FILE_MODE)
+	if err != nil {
+		// If DIRECT_IO is not supported, fall back to regular flags
+		t.Logf("DIRECT_IO not supported, falling back to regular flags: %v", err)
+		flags = O_WRONLY | O_CREAT | O_DSYNC
+		fd, err = syscall.Open(filename, flags, FILE_MODE)
+		if err != nil {
+			t.Fatalf("Failed to open file: %v", err)
+		}
+	}
+	file := os.NewFile(uintptr(fd), filename)
+	if file == nil {
+		t.Fatalf("Failed to create file from fd")
+	}
+
+	return fd, file
+}
+
+// Helper function to create test file descriptor without DSYNC for V3 tests
+func createTestFileDescriptorWithoutDSYNC(t testing.TB, capacity int64) (int, *os.File) {
+	t.Helper()
+
+	// Create temporary directory
+	tmpDir := t.TempDir()
+	filename := filepath.Join(tmpDir, "test_memtable_v3.dat")
+
+	// Open file with DIRECT_IO, WRITE_ONLY, CREAT flags
+	flags := O_DIRECT | O_WRONLY | O_CREAT
+	fd, err := syscall.Open(filename, flags, FILE_MODE)
+	if err != nil {
+		// If DIRECT_IO is not supported, fall back to regular flags
+		t.Logf("DIRECT_IO not supported, falling back to regular flags: %v", err)
+		flags = O_WRONLY | O_CREAT
+		fd, err = syscall.Open(filename, flags, FILE_MODE)
+		if err != nil {
+			t.Fatalf("Failed to open file: %v", err)
+		}
+	}
+
+	file := os.NewFile(uintptr(fd), filename)
+	if file == nil {
+		t.Fatalf("Failed to create file from fd")
+	}
+
+	return fd, file
+}
+
 func TestNewMemtable(t *testing.T) {
 	for _, tc := range testCapacities {
 		t.Run(tc.name, func(t *testing.T) {
@@ -624,54 +684,6 @@ func TestMemtable_EdgeCases(t *testing.T) {
 	}
 }
 
-// High-performance benchmark: Write 16KB records until 100MB+16KB total
-// This simulates realistic SSD cache workload patterns
-func BenchmarkMemtable_Write16KBWorkload(b *testing.B) {
-	disableFlushes := false
-	const recordSize = 16 * 1024 // 16KB per record
-
-	// Create 16KB test data
-	testData := make([]byte, recordSize)
-	for i := range testData {
-		testData[i] = byte(i % 256)
-	}
-
-	for _, tc := range benchmarkCapacities {
-		b.Run(tc.name, func(b *testing.B) {
-
-			file, _ := createTestFile(b, tc.capacity)
-			defer file.Close()
-			memtable := NewMemtable(file, 0, tc.capacity)
-			runtime.LockOSThread()
-			defer runtime.UnlockOSThread()
-
-			b.ResetTimer()
-			b.ReportAllocs()
-
-			start := time.Now()
-			totalData := int64(0)
-			for i := 0; i < b.N; i++ {
-				if totalData+int64(len(testData)) > tc.capacity && disableFlushes {
-					break
-				}
-				_, length := memtable.Put(testData)
-				totalData += length
-			}
-
-			elapsed := time.Since(start)
-
-			// Calculate metrics
-			recordsPerSecond := float64(b.N) / elapsed.Seconds()
-			b.ReportMetric(float64(memtable.flushCount), "flushes")
-			b.ReportMetric(float64(memtable.flushCount)/elapsed.Seconds(), "flushes/sec")
-			b.ReportMetric(recordsPerSecond, "records/sec")
-			b.ReportMetric(recordsPerSecond*16*1024/(1024*1024), "MB/sec")
-			fileInfo, _ := file.Stat()
-			b.ReportMetric(float64(fileInfo.Size()), "file_size")
-		})
-	}
-}
-
 // Benchmark single record latency
 func BenchmarkMemtable_RecordLatency(b *testing.B) {
 	const recordSize = 16 * 1024 // 16KB per record
@@ -772,6 +784,123 @@ func BenchmarkMemtable_FlushBehavior(b *testing.B) {
 					memtable.Put(testData)
 				}
 			}
+		})
+	}
+}
+
+func BenchmarkMemtable_Write16KBWorkload(b *testing.B) {
+	disableFlushes := false
+	const recordSize = 16 * 1024 // 16KB per record
+
+	// Create 16KB test data
+	testData := make([]byte, recordSize)
+	for i := range testData {
+		testData[i] = byte(i % 256)
+	}
+
+	for _, tc := range benchmarkCapacities {
+		b.Run(tc.name, func(b *testing.B) {
+			var file *os.File
+			if tc.dsync {
+				file, _ = createTestFile(b, tc.capacity)
+			} else {
+				file, _ = createTestFileWithoutDSYNC(b, tc.capacity)
+			}
+
+			defer file.Close()
+			memtable := NewMemtable(file, 0, tc.capacity)
+			runtime.LockOSThread()
+			defer runtime.UnlockOSThread()
+
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			start := time.Now()
+			totalData := int64(0)
+			for i := 0; i < b.N; i++ {
+				if totalData+int64(len(testData)) > tc.capacity && disableFlushes {
+					break
+				}
+				offset, length := memtable.Put(testData)
+				if offset == -1 && length == -1 {
+					memtable.Flush()
+					_, length = memtable.Put(testData)
+				}
+				totalData += length
+			}
+
+			elapsed := time.Since(start)
+
+			// Calculate metrics
+			recordsPerSecond := float64(b.N) / elapsed.Seconds()
+			b.ReportMetric(float64(memtable.flushCount), "flushes")
+			b.ReportMetric(float64(memtable.flushCount)/elapsed.Seconds(), "flushes/sec")
+			b.ReportMetric(recordsPerSecond, "records/sec")
+			b.ReportMetric(recordsPerSecond*16*1024/(1024*1024), "MB/sec")
+			fileInfo, _ := file.Stat()
+			b.ReportMetric(float64(fileInfo.Size()), "file_size")
+		})
+	}
+}
+
+// Benchmark NewMemtableV3 and FlushV2 performance
+func BenchmarkMemtableV3_Write16KBWorkload(b *testing.B) {
+	const recordSize = 16 * 1024 // 16KB per record
+
+	// Create 16KB test data
+	testData := make([]byte, recordSize)
+	for i := range testData {
+		testData[i] = byte(i % 256)
+	}
+
+	for _, tc := range benchmarkCapacities {
+		b.Run(tc.name, func(b *testing.B) {
+			var fd int
+			var file *os.File
+			if tc.dsync {
+				fd, file = createTestFileDescriptor(b, tc.capacity)
+			} else {
+				fd, file = createTestFileDescriptorWithoutDSYNC(b, tc.capacity)
+			}
+			defer func() {
+				syscall.Close(fd)
+				file.Close()
+			}()
+
+			allocator := allocator.NewAlignedPageAllocator(allocator.AlignedPageAllocatorConfig{
+				PageSizeAlignement: 4096,
+				Multiplier:         int(tc.capacity / 4096),
+				MaxPages:           1000,
+			})
+
+			memtable := NewMemtableV3(fd, 0, tc.capacity, allocator, 1)
+			runtime.LockOSThread()
+			defer runtime.UnlockOSThread()
+
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			start := time.Now()
+			totalData := int64(0)
+			for i := 0; i < b.N; i++ {
+				offset, length := memtable.Put(testData)
+				if offset == -1 && length == -1 {
+					memtable.FlushV2()
+					_, length = memtable.Put(testData)
+				}
+				totalData += length
+			}
+
+			elapsed := time.Since(start)
+
+			// Calculate metrics
+			recordsPerSecond := float64(b.N) / elapsed.Seconds()
+			b.ReportMetric(float64(memtable.flushCount), "flushes")
+			b.ReportMetric(float64(memtable.flushCount)/elapsed.Seconds(), "flushes/sec")
+			b.ReportMetric(recordsPerSecond, "records/sec")
+			b.ReportMetric(recordsPerSecond*16*1024/(1024*1024), "MB/sec")
+			fileInfo, _ := file.Stat()
+			b.ReportMetric(float64(fileInfo.Size()), "file_size")
 		})
 	}
 }
