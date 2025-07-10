@@ -109,10 +109,11 @@ func (m *Memtable) FlushV2() error {
 	if !m.readyForFlush {
 		return fmt.Errorf("memtable not ready for flush")
 	}
+	//log.Info().Msgf("Flushing memtable, memId:%d fileDescriptor: %d, fileOffset: %d, capacity: %d, flushCount: %d, afterFlushFileOffset: %d", m.Id, m.writeFD, m.fileOffset, m.capacity, m.flushCount, m.capacity+m.fileOffset)
 	m.readyForFlush = false
 	n, err := syscall.Pwrite(m.writeFD, m.page.Buf, m.fileOffset)
 	if err != nil {
-		log.Error().Msgf("Failed to flush, fileDescriptor: %d, fileOffset: %d, capacity: %d, flushCount: %d, err: %v", m.writeFD, m.fileOffset, m.capacity, m.flushCount, err)
+		log.Error().Msgf("Failed to flush, memId:%d, fileDescriptor: %d, fileOffset: %d, capacity: %d, flushCount: %d, err: %v", m.Id, m.writeFD, m.fileOffset, m.capacity, m.flushCount, err)
 		return err
 	}
 	if n != int(m.capacity) {

@@ -22,7 +22,7 @@ func NewSlabAlignedPageAllocator(config SlabAlignedPageAllocatorConfig) *SlabAli
 	sizeClassToIndex := make(map[int]int)
 	for i, multiplier := range config.Multipliers {
 		size := config.PageSizeAlignement * multiplier
-		pools[i] = pool.NewLeakyPool(config.MaxPages[i], func() interface{} {
+		pools[i] = pool.NewLeakyPoolV2(config.MaxPages[i], size, func() interface{} {
 			return NewAlignedPage(size)
 		})
 		pools[i].RegisterPreDrefHook(func(obj interface{}) {
@@ -35,9 +35,9 @@ func NewSlabAlignedPageAllocator(config SlabAlignedPageAllocatorConfig) *SlabAli
 }
 
 func (a *SlabAlignedPageAllocator) Get(size int) (*Page, bool) {
-	for sizeClass, index := range a.sizeClassToIndex {
-		if size <= sizeClass {
-			page, crossBound := a.pools[index].Get()
+	for _, pool := range a.pools {
+		if size <= pool.SizeClass {
+			page, crossBound := pool.Get()
 			if crossBound {
 				log.Warn().Msgf("SlabAlignedPageAllocator: Crossed bound for size %d", size)
 			}
@@ -48,9 +48,9 @@ func (a *SlabAlignedPageAllocator) Get(size int) (*Page, bool) {
 }
 
 func (a *SlabAlignedPageAllocator) Put(p *Page) {
-	for sizeClass, index := range a.sizeClassToIndex {
-		if len(p.Buf) <= sizeClass {
-			a.pools[index].Put(p)
+	for _, pool := range a.pools {
+		if len(p.Buf) <= pool.SizeClass {
+			pool.Put(p)
 			return
 		}
 	}

@@ -2,6 +2,7 @@ package pool
 
 type LeakyPool struct {
 	availabilityList []interface{}
+	SizeClass        int
 	createFunc       func() interface{}
 	preDrefHook      func(obj interface{})
 	capacity         int
@@ -12,6 +13,18 @@ type LeakyPool struct {
 func NewLeakyPool(capacity int, createFunc func() interface{}) *LeakyPool {
 	return &LeakyPool{
 		availabilityList: make([]interface{}, capacity),
+		capacity:         capacity,
+		createFunc:       createFunc,
+		usage:            0,
+		idx:              -1,
+		preDrefHook:      nil,
+	}
+}
+
+func NewLeakyPoolV2(capacity int, sizeClass int, createFunc func() interface{}) *LeakyPool {
+	return &LeakyPool{
+		availabilityList: make([]interface{}, capacity),
+		SizeClass:        sizeClass,
 		capacity:         capacity,
 		createFunc:       createFunc,
 		usage:            0,
