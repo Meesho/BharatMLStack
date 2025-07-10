@@ -111,8 +111,10 @@ func (k *KafkaListener) Consume() {
 				}
 			}()
 			run := true
-			messages := make([]*kafka.Message, 0, k.kafkaConfig.BatchSize)
-			msgCount := 0
+
+			// Partition-wise message storage
+			partitionMessages := make(map[int32][]*kafka.Message)
+			partitionCounts := make(map[int32]int)
 			flushTimer := time.NewTicker(30 * time.Second) // ⏳ Flush every 30 seconds (configurable)
 
 			for run {
@@ -120,10 +122,12 @@ func (k *KafkaListener) Consume() {
 				case <-k.sigChan:
 					log.Info().Msgf("Terminating Instance %v", c)
 
-					// Process remaining messages before shutdown
-					if msgCount > 0 {
-						log.Info().Msgf("Processing remaining %d messages before shutdown", msgCount)
-						k.process(c, messages)
+					// Process remaining messages from all partitions before shutdown
+					for partition, messages := range partitionMessages {
+						if len(messages) > 0 {
+							log.Info().Msgf("Processing remaining %d messages from partition %d before shutdown", len(messages), partition)
+							k.process(c, messages)
+						}
 					}
 
 					if err := c.Unsubscribe(); err != nil {
@@ -135,11 +139,13 @@ func (k *KafkaListener) Consume() {
 					run = false
 
 				case <-flushTimer.C: // ⏳ Flush on timeout even if batch size is not reached
-					if msgCount > 0 {
-						log.Info().Msgf("Processing %d messages due to timeout", msgCount)
-						k.process(c, messages)
-						msgCount = 0
-						messages = messages[:0]
+					for partition, messages := range partitionMessages {
+						if len(messages) > 0 {
+							log.Info().Msgf("Processing %d messages from partition %d due to timeout", len(messages), partition)
+							k.process(c, messages)
+							partitionMessages[partition] = partitionMessages[partition][:0] // Clear the slice
+							partitionCounts[partition] = 0
+						}
 					}
 
 				default:
@@ -155,24 +161,33 @@ func (k *KafkaListener) Consume() {
 							"client:" + k.kafkaConfig.ClientID,
 						})
 
-						messages = append(messages, e)
-						msgCount++
+						partition := e.TopicPartition.Partition
+						if _, exists := partitionMessages[partition]; !exists {
+							partitionMessages[partition] = make([]*kafka.Message, 0, k.kafkaConfig.BatchSize)
+							partitionCounts[partition] = 0
+						}
+						// Add message to partition-specific list
+						partitionMessages[partition] = append(partitionMessages[partition], e)
+						partitionCounts[partition]++
 
-						// Process batch if it reaches batch size
-						if msgCount == k.kafkaConfig.BatchSize {
-							k.process(c, messages)
-							msgCount = 0
-							messages = messages[:0]
+						// Process batch if this partition reaches batch size
+						if partitionCounts[partition] == k.kafkaConfig.BatchSize {
+							log.Info().Msgf("Processing batch of %d messages from partition %d", partitionCounts[partition], partition)
+							k.process(c, partitionMessages[partition])
+							partitionMessages[partition] = partitionMessages[partition][:0] // Clear the slice
+							partitionCounts[partition] = 0
 						}
 
 					case kafka.Error:
 						if e.IsFatal() {
 							log.Error().Err(e).Msg("Fatal Kafka error. Shutting down consumer.")
 
-							// Process remaining messages before shutting down due to fatal error
-							if msgCount > 0 {
-								log.Info().Msgf("Processing remaining %d messages before fatal error", msgCount)
-								k.process(c, messages)
+							// Process remaining messages from all partitions before shutting down due to fatal error
+							for partition, messages := range partitionMessages {
+								if len(messages) > 0 {
+									log.Info().Msgf("Processing remaining %d messages from partition %d before fatal error", len(messages), partition)
+									k.process(c, messages)
+								}
 							}
 
 							run = false
@@ -213,9 +228,9 @@ func (k *KafkaListener) process(consumer *kafka.Consumer, messages []*kafka.Mess
 				isFailed = true
 			}
 			log.Error().Err(err).Msg("Failed to persist features.")
-			metric.Incr("feature_persist", []string{"success", "false", "entity", value.EntityLabel})
+			k.publishMetrics(value, value.EntityLabel, false, value)
 		} else {
-			metric.Incr("feature_persist", []string{"success", "true", "entity", value.EntityLabel})
+			k.publishMetrics(value, value.EntityLabel, true, value)
 		}
 	}
 
@@ -237,5 +252,19 @@ func (k *KafkaListener) process(consumer *kafka.Consumer, messages []*kafka.Mess
 				log.Error().Msgf("%v : Failed to seek partitions", consumer)
 			}
 		}
+	}
+}
+
+func (k *KafkaListener) publishMetrics(persistQuery *persist.Query, entityLabel string, success bool, value *persist.Query) {
+	dataSize := int64(len(persistQuery.Data))
+	successStr := "false"
+	if success {
+		successStr = "true"
+	}
+	baseTags := []string{"success:" + successStr, "entity:" + entityLabel}
+
+	// Publish metric for each feature group
+	for _, fg := range value.FeatureGroupSchema {
+		metric.Count("feature_persist", dataSize, append(baseTags, "feature_group:"+fg.Label))
 	}
 }

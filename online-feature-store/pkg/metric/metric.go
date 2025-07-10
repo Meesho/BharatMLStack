@@ -103,3 +103,11 @@ func Gauge(name string, value float64, tags []string) {
 		log.Warn().AnErr("Error occurred while doing statsd gauge", err)
 	}
 }
+
+// CountBatch sends multiple count metrics efficiently for different tag combinations
+func CountBatch(name string, value int64, baseTags []string, tagKey string, tagValues []string) {
+	for _, tagValue := range tagValues {
+		tags := append(baseTags, tagKey+":"+tagValue)
+		Count(name, value, tags)
+	}
+}
