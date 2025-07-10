@@ -209,7 +209,7 @@ func (p *PersistHandler) preparePersistData(persistData *PersistData) error {
 			}
 			featureData, err := system.ParseFeatureValue(fgSchema.GetFeatureLabels(), data.GetFeatureValues()[fgIndex], persistData.AllFGIdToFgConf[fgId].DataType, persistData.AllFGIdToFgConf[fgId].FeatureMeta)
 			if err != nil {
-				return NewInvalidEventError(fmt.Sprintf("failed to parse feature value for entity %s and feature group %s: %w", persistData.EntityLabel, fgSchema.GetLabel(), err))
+				return NewInvalidEventError(fmt.Sprintf("failed to parse feature value for entity %s and feature group %s: %v", persistData.EntityLabel, fgSchema.GetLabel(), err))
 			}
 			activeVersion, err := p.config.GetActiveVersion(persistData.EntityLabel, fgId)
 			if err != nil {
@@ -358,7 +358,7 @@ func (p *PersistHandler) processBatchesForRedis(store stores.Store, storeId, ent
 	// Check for any errors
 	for err := range errChan {
 		if err != nil {
-			return err
+			return fmt.Errorf("persist failed for redis store %s: %w", storeId, err)
 		}
 	}
 
@@ -397,7 +397,7 @@ func (p *PersistHandler) processRowsForScylla(wg *sync.WaitGroup, store stores.S
 	// Check for any errors
 	for err := range errChan {
 		if err != nil {
-			return fmt.Errorf("persist failed for store %s: %w", storeId, err)
+			return fmt.Errorf("persist failed for scylla store %s: %w", storeId, err)
 		}
 	}
 
