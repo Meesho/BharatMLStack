@@ -240,7 +240,6 @@ func (p *PersistHandler) PersistToDb(persistData *PersistData) error {
 
 	for storeId, allRows := range persistData.StoreIdToRows {
 		// Restructure rows by grouping them based on primary keys
-		// KeysSchema will remain same for all the rows belong to same entity label
 		restructuredRows := p.restructureRowsByPrimaryKeys(allRows, persistData.Query.KeysSchema)
 
 		store, err := p.dbProvider.GetStore(storeId)
