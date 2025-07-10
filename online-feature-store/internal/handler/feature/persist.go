@@ -240,7 +240,8 @@ func (p *PersistHandler) PersistToDb(persistData *PersistData) error {
 
 	for storeId, allRows := range persistData.StoreIdToRows {
 		// Restructure rows by grouping them based on primary keys
-		restructuredRows := p.restructureRowsByPrimaryKeys(allRows)
+		// KeysSchema will remain same for all the rows belong to same entity label
+		restructuredRows := p.restructureRowsByPrimaryKeys(allRows, persistData.Query.KeysSchema)
 
 		store, err := p.dbProvider.GetStore(storeId)
 		if err != nil {
@@ -267,7 +268,7 @@ func (p *PersistHandler) PersistToDb(persistData *PersistData) error {
 // row1: catalog_id:123 -> {fg1->psdb1}
 // row2: catalog_id:123 -> {fg2->psdb2}
 // It becomes: catalog_id:123 -> {fg1->psdb1, fg2->psdb2}
-func (p *PersistHandler) restructureRowsByPrimaryKeys(rows []Row) []Row {
+func (p *PersistHandler) restructureRowsByPrimaryKeys(rows []Row, keysSchema []string) []Row {
 	if len(rows) == 0 {
 		return rows
 	}
@@ -275,7 +276,7 @@ func (p *PersistHandler) restructureRowsByPrimaryKeys(rows []Row) []Row {
 	pkToRow := make(map[string]*Row)
 
 	for _, row := range rows {
-		keyStr := p.createPrimaryKeyStr(row.PkMap)
+		keyStr := p.createPrimaryKeyStr(row.PkMap, keysSchema)
 		if existingRow, exists := pkToRow[keyStr]; exists {
 			// Merge feature groups from current row into existing row
 			for fgId, psdb := range row.FgIdToPsDb {
@@ -314,12 +315,13 @@ func (p *PersistHandler) restructureRowsByPrimaryKeys(rows []Row) []Row {
 	return restructuredRows
 }
 
-func (p *PersistHandler) createPrimaryKeyStr(pkMap map[string]string) string {
-	keys := make([]string, 0, len(pkMap))
-	for key := range pkMap {
-		keys = append(keys, pkMap[key])
+func (p *PersistHandler) createPrimaryKeyStr(pkMap map[string]string, keysSchema []string) string {
+	// Build the primary key string in the order defined by keysSchema
+	values := make([]string, len(keysSchema))
+	for i, keyName := range keysSchema {
+		values[i] = pkMap[keyName]
 	}
-	return strings.Join(keys, "|")
+	return strings.Join(values, "|")
 }
 func (p *PersistHandler) processBatchesForRedis(store stores.Store, storeId, entityLabel string, rows []Row, batchSize int) error {
 	var wg sync.WaitGroup

@@ -67,7 +67,7 @@ func TestPersist(t *testing.T) {
 				}, nil)
 				m.On("GetFeatureGroup", "user_sscat", "invalid_fg").Return(nil, fmt.Errorf("feature group not found"))
 			},
-			expectedError: "failed to get feature group invalid_fg: feature group not found",
+			expectedError: "feature group invalid_fg not found for entity : user_sscat",
 		},
 		{
 			name: "Happy path - single feature group, all features",
@@ -1371,7 +1371,9 @@ func TestRestructureRowsByPrimaryKeys(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := handler.restructureRowsByPrimaryKeys(tt.inputRows)
+			// For testing, we'll use a simple keysSchema that matches the test data
+			keysSchema := []string{"catalog_id", "campaign_id"}
+			result := handler.restructureRowsByPrimaryKeys(tt.inputRows, keysSchema)
 
 			assert.Equal(t, tt.expectedCount, len(result), tt.description)
 
