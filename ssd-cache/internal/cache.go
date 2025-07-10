@@ -152,6 +152,9 @@ func (c *Cache) Put(key string, value []byte) {
 }
 
 func (c *Cache) Get(key string) []byte {
+	if value, err := c.lruCache.Get([]byte(key)); err == nil {
+		return value
+	}
 	offset, length, fileOffset, id, ok := c.index.Get(key)
 	if !ok {
 		return nil
