@@ -178,6 +178,32 @@ func (k *KafkaListener) Consume() {
 							partitionCounts[partition] = 0
 						}
 
+					case *kafka.AssignedPartitions:
+						log.Info().Msgf("Partitions assigned: %v", e.Partitions)
+						// Commit the assignment
+						if err := c.Assign(e.Partitions); err != nil {
+							log.Error().Err(err).Msg("Failed to assign partitions")
+						}
+
+					case *kafka.RevokedPartitions:
+						log.Info().Msgf("Partitions revoked: %v", e.Partitions)
+
+						// Process any remaining messages before partitions are revoked
+						for _, p := range e.Partitions {
+							messages := partitionMessages[p.Partition]
+							if len(messages) > 0 {
+								log.Info().Msgf("Processing remaining %d messages from partition %d before revocation", len(messages), p.Partition)
+								k.process(c, messages)
+							}
+							delete(partitionMessages, p.Partition)
+							delete(partitionCounts, p.Partition)
+						}
+
+						// Commit the revocation
+						if err := c.Unassign(); err != nil {
+							log.Error().Err(err).Msg("Failed to unassign partitions")
+						}
+
 					case kafka.Error:
 						if e.IsFatal() {
 							log.Error().Err(e).Msg("Fatal Kafka error. Shutting down consumer.")
