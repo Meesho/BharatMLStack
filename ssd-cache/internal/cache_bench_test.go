@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -104,7 +105,13 @@ func BenchmarkCache_PUT_LoadTest(b *testing.B) {
 	defer runtime.UnlockOSThread()
 	time.Sleep(1 * time.Second)
 	for _, tc := range loadTestCapacities {
-		cache := NewCache(tc.capacity)
+		cache := NewCacheV2(CacheConfig{
+			MemtableCapacity:     tc.capacity,
+			BlockSizeMultipliers: []int{1, 2, 4, 5},
+			LRUCacheSize:         21024 * 1024 * 1024,
+			FilePunchHoleSize:    1024 * 1024 * 1024,
+			FileMaxSize:          tc.capacity * 2,
+		})
 		b.Run(tc.name, func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
@@ -132,6 +139,13 @@ func BenchmarkCache_PUT_LoadTest(b *testing.B) {
 			b.ReportMetric(mbPerSecond, "MB/sec")
 			b.ReportMetric(float64(avgLatencyNs), "ns/op")
 			b.ReportMetric(float64(totalBytes)/(1024*1024), "total_MB")
+			var stat unix.Stat_t
+			if err := unix.Stat(cache.writeFile.Name(), &stat); err != nil {
+				fmt.Printf("Failed to stat file: %v\n", err)
+				return
+			}
+			allocatedSize := stat.Blocks * 512
+			b.ReportMetric(float64(allocatedSize)/(1024*1024), "allocated_MB")
 		})
 		ch <- cache
 	}
@@ -153,7 +167,13 @@ func BenchmarkCache_GET_LoadTest(b *testing.B) {
 	time.Sleep(1 * time.Second)
 
 	for _, tc := range loadTestCapacities {
-		cache := NewCache(tc.capacity)
+		cache := NewCacheV2(CacheConfig{
+			MemtableCapacity:     tc.capacity,
+			BlockSizeMultipliers: []int{1, 2, 4, 5},
+			LRUCacheSize:         21024 * 1024 * 1024,
+			FilePunchHoleSize:    1024 * 1024 * 1024,
+			FileMaxSize:          tc.capacity * 15,
+		})
 
 		// Pre-populate cache with data for GET testing
 		recordsToStore := PREGENERATED_RECORDS
@@ -208,6 +228,7 @@ func BenchmarkCache_GET_LoadTest(b *testing.B) {
 			b.ReportMetric(float64(recordsToStore), "stored_records")
 			b.ReportMetric(float64(cache.fromMemtableCount), "from_memtable_count")
 			b.ReportMetric(float64(cache.fromDiskCount), "from_disk_count")
+			b.ReportMetric(float64(cache.fromLruCacheCount), "from_lru_cache_count")
 		})
 		ch <- cache
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/Meesho/BharatMLStack/ssd-cache/internal/index"
 	"github.com/Meesho/BharatMLStack/ssd-cache/internal/memtable"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -34,16 +35,24 @@ type Cache struct {
 	index              *index.Index
 	writeFD            int
 	readFD             int
+	fileStartOffset    int64
+	filePunchHoleSize  int64
+	fileCurrentSize    int64
+	fileMaxSize        int64
+	memtableSize       int64
 	writeFile          *os.File
 	readFile           *os.File
 	fromDiskCount      int64
 	fromMemtableCount  int64
+	fromLruCacheCount  int64
 }
 
 type CacheConfig struct {
 	MemtableCapacity     int64
 	BlockSizeMultipliers []int
 	LRUCacheSize         int
+	FilePunchHoleSize    int64
+	FileMaxSize          int64
 }
 
 func NewCache(memtableCapacity int64) *Cache {
@@ -84,8 +93,11 @@ func NewCache(memtableCapacity int64) *Cache {
 		writeFile:          writeFile,
 		readFD:             readFd,
 		readFile:           readFile,
+		fileStartOffset:    0,
+		filePunchHoleSize:  0,
 		fromDiskCount:      0,
 		fromMemtableCount:  0,
+		memtableSize:       memtableCapacity,
 	}
 }
 
@@ -134,8 +146,13 @@ func NewCacheV2(config CacheConfig) *Cache {
 		writeFile:          writeFile,
 		readFD:             readFd,
 		readFile:           readFile,
+		fileStartOffset:    0,
+		filePunchHoleSize:  config.FilePunchHoleSize,
+		fileCurrentSize:    0,
+		fileMaxSize:        config.FileMaxSize,
 		fromDiskCount:      0,
 		fromMemtableCount:  0,
+		memtableSize:       memtableCapacity,
 	}
 }
 
@@ -145,6 +162,18 @@ func (c *Cache) Put(key string, value []byte) {
 	offset, length := memtable.Put(data)
 	if offset == -1 && length == -1 {
 		c.memtableManager.Flush()
+		c.fileCurrentSize += c.memtableSize
+
+		if c.fileCurrentSize > c.fileMaxSize {
+			err := unix.Fallocate(c.writeFD, unix.FALLOC_FL_PUNCH_HOLE|unix.FALLOC_FL_KEEP_SIZE, c.fileStartOffset, c.filePunchHoleSize)
+			if err != nil {
+				log.Error().Msgf("Failed to punch hole: %v", err)
+			} else {
+				log.Info().Msgf("Punched hole: %d", c.fileStartOffset)
+			}
+			c.fileStartOffset += c.filePunchHoleSize
+			c.fileCurrentSize -= c.filePunchHoleSize
+		}
 		memtable, memtableId, fileOffset = c.memtableManager.GetMemtable()
 		offset, length = memtable.Put(data)
 	}
@@ -153,10 +182,11 @@ func (c *Cache) Put(key string, value []byte) {
 
 func (c *Cache) Get(key string) []byte {
 	if value, err := c.lruCache.Get([]byte(key)); err == nil {
+		c.fromLruCacheCount++
 		return value
 	}
 	offset, length, fileOffset, id, ok := c.index.Get(key)
-	if !ok {
+	if !ok || fileOffset < c.fileStartOffset {
 		return nil
 	}
 	memtable := c.memtableManager.GetMemtableById(id)
@@ -167,6 +197,7 @@ func (c *Cache) Get(key string) []byte {
 	} else {
 		data = make([]byte, length)
 		c.ReadFromDisk(fileOffset+offset, length, data)
+		c.lruCache.Set([]byte(key), data[len(key):], 0)
 		c.fromDiskCount++
 	}
 	gotKey := string(data[:len(key)])
