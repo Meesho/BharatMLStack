@@ -4,7 +4,9 @@ import (
 	"strconv"
 
 	authRouter "github.com/Meesho/BharatMLStack/horizon/internal/auth/router"
-	"github.com/Meesho/BharatMLStack/horizon/internal/middlewares"
+	middlewares "github.com/Meesho/BharatMLStack/horizon/internal/middlewares"
+	numerixConfig "github.com/Meesho/BharatMLStack/horizon/internal/numerix/config"
+	numerixRouter "github.com/Meesho/BharatMLStack/horizon/internal/numerix/router"
 	ofsConfig "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/config"
 	ofsRouter "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/router"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/config"
@@ -23,7 +25,9 @@ func main() {
 	metric.Init()
 	httpframework.Init(middlewares.NewMiddleware().GetMiddleWares()...)
 	etcd.InitFromAppName(&ofsConfig.FeatureRegistry{}, viper.GetString("ONLINE_FEATURE_STORE_APP_NAME"))
+	etcd.InitFromAppName(&numerixConfig.NumerixConfig{}, viper.GetString("NUMERIX_APP_NAME"))
 	authRouter.Init()
 	ofsRouter.Init()
+	numerixRouter.Init()
 	httpframework.Instance().Run(":" + strconv.Itoa(viper.GetInt("APP_PORT")))
 }
