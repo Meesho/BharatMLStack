@@ -11,97 +11,55 @@ import (
 	"github.com/Meesho/BharatMLStack/ssd-cache/internal/freecache"
 	"github.com/Meesho/BharatMLStack/ssd-cache/internal/index"
 	"github.com/Meesho/BharatMLStack/ssd-cache/internal/memtable"
+	"github.com/Meesho/BharatMLStack/ssd-cache/internal/pool"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sys/unix"
 )
 
 const (
 	// File flags for testing
-	O_DIRECT   = 0x4000
-	O_WRONLY   = syscall.O_WRONLY
-	O_RDONLY   = syscall.O_RDONLY
-	O_APPEND   = syscall.O_APPEND
-	O_CREAT    = syscall.O_CREAT
-	O_DSYNC    = syscall.O_DSYNC
-	FILE_MODE  = 0644
-	BLOCK_SIZE = 4096
+	O_DIRECT          = 0x4000
+	O_WRONLY          = syscall.O_WRONLY
+	O_RDONLY          = syscall.O_RDONLY
+	O_APPEND          = syscall.O_APPEND
+	O_CREAT           = syscall.O_CREAT
+	O_DSYNC           = syscall.O_DSYNC
+	FILE_MODE         = 0644
+	BLOCK_SIZE        = 4096
+	INDEX_BUFFER_SIZE = 16
 )
 
 type Cache struct {
-	memtableManager    *memtable.MemtableManager
-	writePageAllocator *allocator.AlignedPageAllocator
-	readPageAllocator  *allocator.SlabAlignedPageAllocator
-	lruCache           *freecache.Cache
-	index              *index.Index
 	writeFD            int
 	readFD             int
+	memtableSize       int32
+	filePunchHoleSize  int32
 	fileStartOffset    int64
-	filePunchHoleSize  int64
 	fileCurrentSize    int64
 	fileMaxSize        int64
-	memtableSize       int64
-	writeFile          *os.File
-	readFile           *os.File
 	fromDiskCount      int64
 	fromMemtableCount  int64
 	fromLruCacheCount  int64
+	punchHoleCount     int64
+	punchHoleMissCount int64
+	writeFile          *os.File
+	readFile           *os.File
+	index              *index.Index
+	lruCache           *freecache.Cache
+	memtableManager    *memtable.MemtableManager
+	writePageAllocator *allocator.AlignedPageAllocator
+	readPageAllocator  *allocator.SlabAlignedPageAllocator
 }
 
 type CacheConfig struct {
-	MemtableCapacity     int64
-	BlockSizeMultipliers []int
-	LRUCacheSize         int
-	FilePunchHoleSize    int64
-	FileMaxSize          int64
+	MemtableCapacity       int32
+	BlockSizeMultipliers   []int
+	LRUCacheSize           int
+	FileMaxSize            int64
+	IndexBufferPoolMinSize int
 }
 
-func NewCache(memtableCapacity int64) *Cache {
-	if memtableCapacity%BLOCK_SIZE != 0 {
-		memtableCapacity = (memtableCapacity/BLOCK_SIZE + 1) * BLOCK_SIZE
-	}
-	writePageAllocator := allocator.NewAlignedPageAllocator(allocator.AlignedPageAllocatorConfig{
-		PageSizeAlignement: BLOCK_SIZE,
-		Multiplier:         int(memtableCapacity / BLOCK_SIZE),
-		MaxPages:           1000,
-	})
-
-	readPageAllocator := allocator.NewSlabAlignedPageAllocator(allocator.SlabAlignedPageAllocatorConfig{
-		PageSizeAlignement: BLOCK_SIZE,
-		Multipliers:        []int{1, 2, 4, 8},
-		MaxPages:           []int{1, 1, 1, 1},
-	})
-	filename := fmt.Sprintf("test_memtable_%d.dat", time.Now().UnixNano())
-	filename = filepath.Join(".", filename)
-
-	writeFd, writeFile, err := createWriteFileDescriptor(filename)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create write file descriptor")
-	}
-	readFd, readFile, err := createReadFileDescriptor(filename)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create read file descriptor")
-	}
-	memtableManager := memtable.NewMemtableManagerV2(writeFd, memtableCapacity, writePageAllocator)
-	index := index.NewIndex()
-
-	return &Cache{
-		memtableManager:    memtableManager,
-		writePageAllocator: writePageAllocator,
-		readPageAllocator:  readPageAllocator,
-		index:              index,
-		writeFD:            writeFd,
-		writeFile:          writeFile,
-		readFD:             readFd,
-		readFile:           readFile,
-		fileStartOffset:    0,
-		filePunchHoleSize:  0,
-		fromDiskCount:      0,
-		fromMemtableCount:  0,
-		memtableSize:       memtableCapacity,
-	}
-}
-
-func NewCacheV2(config CacheConfig) *Cache {
+func NewCache(config CacheConfig) *Cache {
 	memtableCapacity := config.MemtableCapacity
 	if memtableCapacity%BLOCK_SIZE != 0 {
 		memtableCapacity = (memtableCapacity/BLOCK_SIZE + 1) * BLOCK_SIZE
@@ -121,6 +79,9 @@ func NewCacheV2(config CacheConfig) *Cache {
 		Multipliers:        config.BlockSizeMultipliers,
 		MaxPages:           maxPages,
 	})
+	bufferPool := pool.NewLeakyPool(config.IndexBufferPoolMinSize, INDEX_BUFFER_SIZE, func() interface{} {
+		return make([]byte, INDEX_BUFFER_SIZE)
+	})
 	filename := fmt.Sprintf("test_memtable_%d.dat", time.Now().UnixNano())
 	filename = filepath.Join(".", filename)
 
@@ -132,8 +93,8 @@ func NewCacheV2(config CacheConfig) *Cache {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create read file descriptor")
 	}
-	memtableManager := memtable.NewMemtableManagerV2(writeFd, memtableCapacity, writePageAllocator)
-	index := index.NewIndex()
+	memtableManager := memtable.NewMemtableManager(writeFd, memtableCapacity, writePageAllocator)
+	index := index.NewIndexV2(bufferPool, int32(memtableCapacity))
 	lruCache := freecache.NewCache(config.LRUCacheSize)
 
 	return &Cache{
@@ -147,37 +108,40 @@ func NewCacheV2(config CacheConfig) *Cache {
 		readFD:             readFd,
 		readFile:           readFile,
 		fileStartOffset:    0,
-		filePunchHoleSize:  config.FilePunchHoleSize,
+		filePunchHoleSize:  memtableCapacity,
 		fileCurrentSize:    0,
 		fileMaxSize:        config.FileMaxSize,
 		fromDiskCount:      0,
 		fromMemtableCount:  0,
 		memtableSize:       memtableCapacity,
+		punchHoleCount:     0,
+		punchHoleMissCount: 0,
 	}
 }
 
 func (c *Cache) Put(key string, value []byte) {
-	memtable, memtableId, fileOffset := c.memtableManager.GetMemtable()
+	memtable, memtableId, _ := c.memtableManager.GetMemtable()
 	data := append([]byte(key), value...)
 	offset, length := memtable.Put(data)
 	if offset == -1 && length == -1 {
 		c.memtableManager.Flush()
-		c.fileCurrentSize += c.memtableSize
+		c.fileCurrentSize += int64(c.memtableSize)
 
 		if c.fileCurrentSize > c.fileMaxSize {
-			err := unix.Fallocate(c.writeFD, unix.FALLOC_FL_PUNCH_HOLE|unix.FALLOC_FL_KEEP_SIZE, c.fileStartOffset, c.filePunchHoleSize)
+			err := unix.Fallocate(c.writeFD, unix.FALLOC_FL_PUNCH_HOLE|unix.FALLOC_FL_KEEP_SIZE, c.fileStartOffset, int64(c.filePunchHoleSize))
 			if err != nil {
 				log.Error().Msgf("Failed to punch hole: %v", err)
 			} else {
 				log.Info().Msgf("Punched hole: %d", c.fileStartOffset)
 			}
-			c.fileStartOffset += c.filePunchHoleSize
-			c.fileCurrentSize -= c.filePunchHoleSize
+			c.fileStartOffset += int64(c.filePunchHoleSize)
+			c.fileCurrentSize -= int64(c.filePunchHoleSize)
+			c.punchHoleCount++
 		}
-		memtable, memtableId, fileOffset = c.memtableManager.GetMemtable()
+		memtable, memtableId, _ = c.memtableManager.GetMemtable()
 		offset, length = memtable.Put(data)
 	}
-	c.index.Put(key, offset, length, fileOffset, memtableId)
+	c.index.Put(key, offset, length, memtableId)
 }
 
 func (c *Cache) Get(key string) []byte {
@@ -196,7 +160,7 @@ func (c *Cache) Get(key string) []byte {
 		c.fromMemtableCount++
 	} else {
 		data = make([]byte, length)
-		c.ReadFromDisk(fileOffset+offset, length, data)
+		c.ReadFromDisk(fileOffset, length, data)
 		c.lruCache.Set([]byte(key), data[len(key):], 0)
 		c.fromDiskCount++
 	}
@@ -217,9 +181,13 @@ func (c *Cache) Discard() {
 	os.Remove(c.readFile.Name())
 }
 
-func (c *Cache) ReadFromDisk(fileOffset int64, length int64, buf []byte) error {
+func (c *Cache) ReadFromDisk(fileOffset int64, length int32, buf []byte) error {
+	if fileOffset < c.fileStartOffset {
+		c.punchHoleMissCount++
+		return fmt.Errorf("fileOffset is less than fileStartOffset")
+	}
 	alignedStartOffset := (fileOffset / BLOCK_SIZE) * BLOCK_SIZE
-	endndOffset := fileOffset + length
+	endndOffset := fileOffset + int64(length)
 	endAlignedOffset := ((endndOffset + BLOCK_SIZE - 1) / BLOCK_SIZE) * BLOCK_SIZE
 	alignedReadSize := endAlignedOffset - alignedStartOffset
 
@@ -237,7 +205,7 @@ func (c *Cache) ReadFromDisk(fileOffset int64, length int64, buf []byte) error {
 		return fmt.Errorf("read size mismatch: %d != %d", n, alignedReadSize)
 	}
 	start := fileOffset - alignedStartOffset
-	copy(buf, page.Buf[start:start+length])
+	copy(buf, page.Buf[start:start+int64(length)])
 	log.Debug().Msgf("Read data: %s", string(buf))
 	c.readPageAllocator.Put(page)
 	return nil

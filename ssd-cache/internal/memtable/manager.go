@@ -10,7 +10,7 @@ import (
 type MemtableManager struct {
 	file      *os.File
 	writeFD   int
-	capacity  int64
+	capacity  int32
 	allocator *allocator.AlignedPageAllocator
 
 	// Two memtables for swapping
@@ -31,33 +31,7 @@ type MemtableManager struct {
 	flushChan       chan struct{}
 }
 
-func NewMemtableManager(file *os.File, capacity int64, allocator *allocator.AlignedPageAllocator) *MemtableManager {
-	manager := &MemtableManager{
-		file:            file,
-		capacity:        capacity,
-		allocator:       allocator,
-		nextFileOffset:  0,
-		nextId:          0,
-		flushInProgress: false,
-		flushChan:       make(chan struct{}, 1),
-	}
-
-	// Initialize two memtables with proper fileOffsets
-	manager.memtable1 = NewMemtableV2(file, manager.nextFileOffset, capacity, allocator, manager.nextId)
-	manager.nextFileOffset += capacity
-	manager.nextId++
-
-	manager.memtable2 = NewMemtableV2(file, manager.nextFileOffset, capacity, allocator, manager.nextId)
-	manager.nextFileOffset += capacity
-	manager.nextId++
-
-	// Set first memtable as active
-	manager.activeMemtable = manager.memtable1
-
-	return manager
-}
-
-func NewMemtableManagerV2(writeFD int, capacity int64, allocator *allocator.AlignedPageAllocator) *MemtableManager {
+func NewMemtableManager(writeFD int, capacity int32, allocator *allocator.AlignedPageAllocator) *MemtableManager {
 	manager := &MemtableManager{
 		writeFD:         writeFD,
 		capacity:        capacity,
@@ -69,12 +43,12 @@ func NewMemtableManagerV2(writeFD int, capacity int64, allocator *allocator.Alig
 	}
 
 	// Initialize two memtables with proper fileOffsets
-	manager.memtable1 = NewMemtableV3(writeFD, manager.nextFileOffset, capacity, allocator, manager.nextId)
-	manager.nextFileOffset += capacity
+	manager.memtable1 = NewMemtable(writeFD, manager.nextFileOffset, capacity, allocator, manager.nextId)
+	manager.nextFileOffset += int64(capacity)
 	manager.nextId++
 
-	manager.memtable2 = NewMemtableV3(writeFD, manager.nextFileOffset, capacity, allocator, manager.nextId)
-	manager.nextFileOffset += capacity
+	manager.memtable2 = NewMemtable(writeFD, manager.nextFileOffset, capacity, allocator, manager.nextId)
+	manager.nextFileOffset += int64(capacity)
 	manager.nextId++
 
 	// Set first memtable as active
@@ -107,23 +81,27 @@ func (mm *MemtableManager) Flush() error {
 
 	// Async flush
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Error().Msgf("Recovered from panic: %v", r)
-				mm.flushInProgress = false
-				mm.flushChan <- struct{}{}
-			}
-		}()
+		// defer func() {
+		// 	if r := recover(); r != nil {
+		// 		log.Error().Msgf("Recovered from panic: %v", r)
+		// 		mm.flushInProgress = false
+		// 		mm.flushChan <- struct{}{}
+		// 	}
+		// }()
+		if !memtableToFlush.readyForFlush {
+			panic("memtable not ready for flush")
+		}
 		err := memtableToFlush.FlushV2()
 		if err != nil {
 			log.Error().Msgf("Failed to flush memtable: %d %d %d %d %v", memtableToFlush.Id, memtableToFlush.fileOffset, mm.nextFileOffset, memtableToFlush.flushCount, err)
 		}
 
 		// Update metadata (only flushed memtable touched here)
+		memtableToFlush.readyForFlush = false
 		memtableToFlush.Id = mm.nextId
 		mm.nextId++
 		memtableToFlush.fileOffset = mm.nextFileOffset
-		mm.nextFileOffset += mm.capacity
+		mm.nextFileOffset += int64(mm.capacity)
 
 		// Mark flush as done and notify
 		mm.flushInProgress = false

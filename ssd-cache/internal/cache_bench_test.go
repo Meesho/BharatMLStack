@@ -42,26 +42,16 @@ func init() {
 
 // Test capacities from 64KB to 1GB
 var loadTestCapacities = []struct {
-	name     string
-	capacity int64
+	name        string
+	cacheConfig CacheConfig
 }{
-	// {"64KB", 64 * 1024},
-	// {"128KB", 128 * 1024},
-	// {"256KB", 256 * 1024},
-	// {"512KB", 512 * 1024},
-	// {"1MB", 1024 * 1024},
-	// {"2MB", 2 * 1024 * 1024},
-	// {"4MB", 4 * 1024 * 1024},
-	// {"8MB", 8 * 1024 * 1024},
-	// {"16MB", 16 * 1024 * 1024},
-	// {"32MB", 32 * 1024 * 1024},
-	// {"64MB", 64 * 1024 * 1024},
-	// {"128MB", 128 * 1024 * 1024},
-	// {"256MB", 256 * 1024 * 1024},
-	// {"512MB", 512 * 1024 * 1024},
-	{"1GB", 1024 * 1024 * 1024},
-	// {"2GB", 2 * 1024 * 1024 * 1024},
-	// {"4GB", 4 * 1024 * 1024 * 1024},
+	{"1GB", CacheConfig{
+		MemtableCapacity:       1024 * 1024 * 1024,
+		BlockSizeMultipliers:   []int{1, 2, 4, 5},
+		LRUCacheSize:           2 * 1024 * 1024 * 1024,
+		FileMaxSize:            20 * 1024 * 1024 * 1024,
+		IndexBufferPoolMinSize: 100000,
+	}},
 }
 
 // Generate a key of exactly KEY_SIZE bytes
@@ -105,13 +95,7 @@ func BenchmarkCache_PUT_LoadTest(b *testing.B) {
 	defer runtime.UnlockOSThread()
 	time.Sleep(1 * time.Second)
 	for _, tc := range loadTestCapacities {
-		cache := NewCacheV2(CacheConfig{
-			MemtableCapacity:     tc.capacity,
-			BlockSizeMultipliers: []int{1, 2, 4, 5},
-			LRUCacheSize:         21024 * 1024 * 1024,
-			FilePunchHoleSize:    1024 * 1024 * 1024,
-			FileMaxSize:          tc.capacity * 2,
-		})
+		cache := NewCache(tc.cacheConfig)
 		b.Run(tc.name, func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
@@ -146,6 +130,7 @@ func BenchmarkCache_PUT_LoadTest(b *testing.B) {
 			}
 			allocatedSize := stat.Blocks * 512
 			b.ReportMetric(float64(allocatedSize)/(1024*1024), "allocated_MB")
+			b.ReportMetric(float64(cache.punchHoleCount), "punch_hole_count")
 		})
 		ch <- cache
 	}
@@ -167,13 +152,7 @@ func BenchmarkCache_GET_LoadTest(b *testing.B) {
 	time.Sleep(1 * time.Second)
 
 	for _, tc := range loadTestCapacities {
-		cache := NewCacheV2(CacheConfig{
-			MemtableCapacity:     tc.capacity,
-			BlockSizeMultipliers: []int{1, 2, 4, 5},
-			LRUCacheSize:         21024 * 1024 * 1024,
-			FilePunchHoleSize:    1024 * 1024 * 1024,
-			FileMaxSize:          tc.capacity * 15,
-		})
+		cache := NewCache(tc.cacheConfig)
 
 		// Pre-populate cache with data for GET testing
 		recordsToStore := PREGENERATED_RECORDS
@@ -229,6 +208,7 @@ func BenchmarkCache_GET_LoadTest(b *testing.B) {
 			b.ReportMetric(float64(cache.fromMemtableCount), "from_memtable_count")
 			b.ReportMetric(float64(cache.fromDiskCount), "from_disk_count")
 			b.ReportMetric(float64(cache.fromLruCacheCount), "from_lru_cache_count")
+			b.ReportMetric(float64(cache.punchHoleCount), "punch_hole_count")
 		})
 		ch <- cache
 	}
