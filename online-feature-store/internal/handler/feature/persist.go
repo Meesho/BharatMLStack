@@ -239,8 +239,6 @@ func (p *PersistHandler) PersistToDb(persistData *PersistData) error {
 	const batchSize = 100
 
 	for storeId, allRows := range persistData.StoreIdToRows {
-		// Restructure rows by grouping them based on primary keys
-		restructuredRows := p.restructureRowsByPrimaryKeys(allRows, persistData.Query.KeysSchema)
 
 		store, err := p.dbProvider.GetStore(storeId)
 		if err != nil {
@@ -248,11 +246,11 @@ func (p *PersistHandler) PersistToDb(persistData *PersistData) error {
 		}
 
 		if store.Type() == stores.StoreTypeRedis {
-			if err := p.processBatchesForRedis(store, storeId, persistData.EntityLabel, restructuredRows, batchSize); err != nil {
+			if err := p.processBatchesForRedis(store, storeId, persistData.EntityLabel, allRows, batchSize); err != nil {
 				return err
 			}
 		} else {
-			if err := p.processRowsForScylla(&wg, store, storeId, persistData.EntityLabel, restructuredRows); err != nil {
+			if err := p.processRowsForScylla(&wg, store, storeId, persistData.EntityLabel, allRows); err != nil {
 				return err
 			}
 		}
@@ -260,58 +258,6 @@ func (p *PersistHandler) PersistToDb(persistData *PersistData) error {
 	}
 	wg.Wait()
 	return nil
-}
-
-// restructureRowsByPrimaryKeys groups rows by their primary keys and merges feature groups
-// For example, if we have:
-// row1: catalog_id:123 -> {fg1->psdb1}
-// row2: catalog_id:123 -> {fg2->psdb2}
-// It becomes: catalog_id:123 -> {fg1->psdb1, fg2->psdb2}
-func (p *PersistHandler) restructureRowsByPrimaryKeys(rows []Row, keysSchema []string) []Row {
-	if len(rows) == 0 {
-		return rows
-	}
-
-	pkToRow := make(map[string]*Row)
-
-	for _, row := range rows {
-		keyStr := p.createPrimaryKeyStr(row.PkMap, keysSchema)
-		if existingRow, exists := pkToRow[keyStr]; exists {
-			// Merge feature groups from current row into existing row
-			for fgId, psdb := range row.FgIdToPsDb {
-				existingRow.FgIdToPsDb[fgId] = psdb
-			}
-			log.Debug().Msgf("Merged feature groups for primary key: %s", keyStr)
-		} else {
-			// Create a new row with copied primary key map and feature groups
-			newRow := Row{
-				PkMap:      make(map[string]string, len(row.PkMap)),
-				FgIdToPsDb: make(map[int]*blocks.PermStorageDataBlock, len(row.FgIdToPsDb)),
-			}
-
-			// Copy primary key map
-			for k, v := range row.PkMap {
-				newRow.PkMap[k] = v
-			}
-
-			// Copy feature groups
-			for fgId, psdb := range row.FgIdToPsDb {
-				newRow.FgIdToPsDb[fgId] = psdb
-			}
-
-			pkToRow[keyStr] = &newRow
-			log.Debug().Msgf("Created new row for primary key: %s", keyStr)
-		}
-	}
-
-	// Convert map back to slice
-	restructuredRows := make([]Row, 0, len(pkToRow))
-	for _, row := range pkToRow {
-		restructuredRows = append(restructuredRows, *row)
-	}
-
-	log.Debug().Msgf("Restructuring complete: %d rows -> %d rows", len(rows), len(restructuredRows))
-	return restructuredRows
 }
 
 func (p *PersistHandler) createPrimaryKeyStr(pkMap map[string]string, keysSchema []string) string {

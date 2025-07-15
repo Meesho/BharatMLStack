@@ -200,29 +200,6 @@ func (k *KafkaListener) Consume() {
 							messages = messages[:0]
 						}
 
-					case *kafka.AssignedPartitions:
-						log.Debug().Msgf("Partitions assigned: %v", e.Partitions)
-						// Commit the assignment
-						if err := c.Assign(e.Partitions); err != nil {
-							log.Error().Err(err).Msg("Failed to assign partitions")
-						}
-
-					case *kafka.RevokedPartitions:
-						log.Debug().Msgf("Partitions revoked: %v", e.Partitions)
-
-						// Process any remaining messages before partitions are revoked
-						if msgCount > 0 {
-							log.Debug().Msgf("Processing remaining %d messages before revocation", msgCount)
-							k.processBatch(c, messages)
-							msgCount = 0
-							messages = messages[:0]
-						}
-
-						// Commit the revocation
-						if err := c.Unassign(); err != nil {
-							log.Error().Err(err).Msg("Failed to unassign partitions")
-						}
-
 					case kafka.Error:
 						if e.IsFatal() {
 							log.Error().Err(e).Msg("Fatal Kafka error. Shutting down consumer.")
@@ -311,18 +288,18 @@ func (k *KafkaListener) process(value *persist.Query) bool {
 
 func (k *KafkaListener) startWorkers() {
 	for i := 0; i < k.maxWorkers; i++ {
-		workerID := i
+		workerId := i
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Error().Msgf("Worker %d recovered from panic: %v", workerID, r)
-					metric.Incr("worker_panic", []string{"worker_id:" + strconv.Itoa(workerID), "group:" + k.kafkaConfig.GroupID})
+					log.Error().Msgf("Worker %d recovered from panic: %v", workerId, r)
+					metric.Incr("worker_panic", []string{"worker_id:" + strconv.Itoa(workerId), "group:" + k.kafkaConfig.GroupID})
 				}
 			}()
 
-			for msg := range k.workerChannels[workerID] {
+			for msg := range k.workerChannels[workerId] {
 				success := k.process(msg)
-				k.resultChannels[workerID] <- success
+				k.resultChannels[workerId] <- success
 			}
 		}()
 	}
