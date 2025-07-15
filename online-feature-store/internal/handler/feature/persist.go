@@ -3,7 +3,6 @@ package feature
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -260,14 +259,6 @@ func (p *PersistHandler) PersistToDb(persistData *PersistData) error {
 	return nil
 }
 
-func (p *PersistHandler) createPrimaryKeyStr(pkMap map[string]string, keysSchema []string) string {
-	// Build the primary key string in the order defined by keysSchema
-	values := make([]string, len(keysSchema))
-	for i, keyName := range keysSchema {
-		values[i] = pkMap[keyName]
-	}
-	return strings.Join(values, "|")
-}
 func (p *PersistHandler) processBatchesForRedis(store stores.Store, storeId, entityLabel string, rows []Row, batchSize int) error {
 	var wg sync.WaitGroup
 	errChan := make(chan error, (len(rows)+batchSize-1)/batchSize)
