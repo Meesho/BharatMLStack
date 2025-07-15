@@ -74,7 +74,6 @@ func BuildRedisFailoverOptionsFromEnv(envPrefix string) (*redis.FailoverOptions,
 	for i := range addresses {
 		addresses[i] = strings.TrimSpace(addresses[i])
 	}
-	// Use a local random generator instead of the deprecated rand.Seed
 	localRand := rand.New(rand.NewSource(time.Now().UnixNano()))
 	localRand.Shuffle(len(addresses), func(i, j int) {
 		addresses[i], addresses[j] = addresses[j], addresses[i]
