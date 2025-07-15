@@ -1,0 +1,8 @@
+[package]
+name = "feature-store-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rust-sdk = { path = "../BharatMLStack/rust-sdk" }
+tokio = { version = "1", features = ["full"] } 
