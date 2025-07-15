@@ -262,6 +262,7 @@ func (r *RedisStore) BatchRetrieveV2(entityLabel string, pkMaps []map[string]str
 
 	values, err := r.client.MGet(r.ctx, keys...).Result()
 	if err != nil && err != redis.Nil {
+		metric.Count("retrieve.failure", 1, []string{"db_type", "redis", "entity", entityLabel})
 		return nil, err
 	}
 
