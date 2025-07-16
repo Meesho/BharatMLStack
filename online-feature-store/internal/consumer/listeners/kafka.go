@@ -293,7 +293,7 @@ func (k *KafkaListener) startWorkers() {
 			defer func() {
 				if r := recover(); r != nil {
 					log.Error().Msgf("Worker %d recovered from panic: %v", workerId, r)
-					metric.Incr("worker_panic", []string{"worker_id:" + strconv.Itoa(workerId), "group:" + k.kafkaConfig.GroupID})
+					metric.Incr("feature_persist_panic_count", []string{})
 				}
 			}()
 
