@@ -2,6 +2,7 @@ package stores
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,6 +15,12 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/context"
+)
+
+const (
+	LockKeyPrefix     = "l:"
+	LockMaxRetries    = 3
+	LockBackoffBaseMs = 100
 )
 
 type RedisStore struct {
@@ -75,33 +82,34 @@ func (r *RedisStore) BatchPersistV2(storeId string, entityLabel string, rows []m
 		}
 	}
 
-	keyToRowMap := make(map[string]models.Row)
+	keyToRowsMap := make(map[string][]models.Row)
 	keysToRead := make([]string, 0)
 
 	for _, row := range rows {
 		key := buildCacheKeyForPersist(row.PkMap, colPKMap, pkCols, entityLabel)
-		if _, exists := keyToRowMap[key]; !exists {
+		if _, exists := keyToRowsMap[key]; !exists {
 			keysToRead = append(keysToRead, key)
+			keyToRowsMap[key] = make([]models.Row, 0)
 		}
-		keyToRowMap[key] = row
+		keyToRowsMap[key] = append(keyToRowsMap[key], row)
 	}
 
 	if canReplace {
-		return r.batchPersistReplace(entityLabel, keysToRead, keyToRowMap)
+		return r.batchPersistReplace(entityLabel, keysToRead, keyToRowsMap)
 	} else {
-		return r.batchPersistMerge(entityLabel, keysToRead, keyToRowMap)
+		return r.batchPersistMerge(entityLabel, keysToRead, keyToRowsMap)
 	}
 }
 
-func (r *RedisStore) batchPersistReplace(entityLabel string, keysToRead []string, keyToRowMap map[string]models.Row) error {
+func (r *RedisStore) batchPersistReplace(entityLabel string, keysToRead []string, keyToRowsMap map[string][]models.Row) error {
 	pipe := r.client.Pipeline()
 
 	for _, key := range keysToRead {
-		rowForKey := keyToRowMap[key]
+		rowsForKey := keyToRowsMap[key]
 
-		finalCSDB, maxTtl, err := r.createCSDBFromRow(rowForKey)
+		finalCSDB, maxTtl, err := r.createCSDBFromRows(rowsForKey)
 		if err != nil {
-			return fmt.Errorf("failed to create CSDB from row for key %s: %w", key, err)
+			return fmt.Errorf("failed to create CSDB from rows for key %s: %w", key, err)
 		}
 
 		serializedCSDB, err := finalCSDB.SerializeForDistributedCache()
@@ -121,7 +129,12 @@ func (r *RedisStore) batchPersistReplace(entityLabel string, keysToRead []string
 	return nil
 }
 
-func (r *RedisStore) batchPersistMerge(entityLabel string, keysToRead []string, keyToRowMap map[string]models.Row) error {
+func (r *RedisStore) batchPersistMerge(entityLabel string, keysToRead []string, keyToRowsMap map[string][]models.Row) error {
+	// Lock all keys that will be modified to prevent race conditions
+	uniqueKeys := DeduplicateKeys(keysToRead)
+	acquiredLocks, err := LockKeys(r.ctx, r.client, uniqueKeys, entityLabel)
+	defer UnlockKeys(r.ctx, r.client, acquiredLocks, entityLabel)
+
 	existingValues, err := r.client.MGet(r.ctx, keysToRead...).Result()
 	if err != nil && err != redis.Nil {
 		return fmt.Errorf("failed to read existing data from redis store for entity %s: %w", entityLabel, err)
@@ -130,7 +143,7 @@ func (r *RedisStore) batchPersistMerge(entityLabel string, keysToRead []string, 
 	pipe := r.client.Pipeline()
 
 	for i, key := range keysToRead {
-		rowForKey := keyToRowMap[key]
+		rowsForKey := keyToRowsMap[key]
 
 		var existingCSDB *blocks.CacheStorageDataBlock
 		if existingValues[i] != nil {
@@ -144,9 +157,9 @@ func (r *RedisStore) batchPersistMerge(entityLabel string, keysToRead []string, 
 			existingCSDB = blocks.NewCacheStorageDataBlock(1)
 		}
 
-		finalCSDB, maxTtl, err := r.mergeRowIntoCSDB(existingCSDB, rowForKey)
+		finalCSDB, maxTtl, err := r.mergeRowsIntoCSDB(existingCSDB, rowsForKey)
 		if err != nil {
-			return fmt.Errorf("failed to merge row for key %s: %w", key, err)
+			return fmt.Errorf("failed to merge rows for key %s: %w", key, err)
 		}
 
 		serializedCSDB, err := finalCSDB.SerializeForDistributedCache()
@@ -166,35 +179,37 @@ func (r *RedisStore) batchPersistMerge(entityLabel string, keysToRead []string, 
 	return nil
 }
 
-func (r *RedisStore) createCSDBFromRow(row models.Row) (*blocks.CacheStorageDataBlock, uint64, error) {
+func (r *RedisStore) createCSDBFromRows(rows []models.Row) (*blocks.CacheStorageDataBlock, uint64, error) {
 	csdb := blocks.NewCacheStorageDataBlock(1)
 	maxTtlAcrossFgs := uint64(0)
 	currentTime := uint64(time.Now().Unix())
 
-	for fgId, psdb := range row.FgIdToPsDb {
-		serializedData, err := psdb.Serialize()
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to serialize PSDB for fgId %d: %w", fgId, err)
-		}
-
-		ddb, err := blocks.DeserializePSDBWithoutDecompression(serializedData)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to deserialize PSDB for fgId %d: %w", fgId, err)
-		}
-
-		if !ddb.Expired && ddb.ExpiryAt > currentTime {
-			err = csdb.AddFGIdToDDB(fgId, ddb)
+	for _, row := range rows {
+		for fgId, psdb := range row.FgIdToPsDb {
+			serializedData, err := psdb.Serialize()
 			if err != nil {
-				return nil, 0, fmt.Errorf("failed to add FGId to CSDB for fgId %d: %w", fgId, err)
+				return nil, 0, fmt.Errorf("failed to serialize PSDB for fgId %d: %w", fgId, err)
 			}
-			maxTtlAcrossFgs = max(maxTtlAcrossFgs, ddb.ExpiryAt-currentTime)
+
+			ddb, err := blocks.DeserializePSDBWithoutDecompression(serializedData)
+			if err != nil {
+				return nil, 0, fmt.Errorf("failed to deserialize PSDB for fgId %d: %w", fgId, err)
+			}
+
+			if !ddb.Expired && ddb.ExpiryAt > currentTime {
+				err = csdb.AddFGIdToDDB(fgId, ddb)
+				if err != nil {
+					return nil, 0, fmt.Errorf("failed to add FGId to CSDB for fgId %d: %w", fgId, err)
+				}
+				maxTtlAcrossFgs = max(maxTtlAcrossFgs, ddb.ExpiryAt-currentTime)
+			}
 		}
 	}
 
 	return csdb, maxTtlAcrossFgs, nil
 }
 
-func (r *RedisStore) mergeRowIntoCSDB(existingCSDB *blocks.CacheStorageDataBlock, row models.Row) (*blocks.CacheStorageDataBlock, uint64, error) {
+func (r *RedisStore) mergeRowsIntoCSDB(existingCSDB *blocks.CacheStorageDataBlock, rows []models.Row) (*blocks.CacheStorageDataBlock, uint64, error) {
 	var existingFGIdtoCSDBMap map[int]*blocks.DeserializedPSDB
 	if len(existingCSDB.GetSerializedData()) > 0 {
 		var err error
@@ -222,23 +237,25 @@ func (r *RedisStore) mergeRowIntoCSDB(existingCSDB *blocks.CacheStorageDataBlock
 		}
 	}
 
-	for fgId, psdb := range row.FgIdToPsDb {
-		serializedData, err := psdb.Serialize()
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to serialize PSDB for fgId %d: %w", fgId, err)
-		}
-
-		ddb, err := blocks.DeserializePSDBWithoutDecompression(serializedData)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to deserialize PSDB for fgId %d: %w", fgId, err)
-		}
-
-		if !ddb.Expired && ddb.ExpiryAt > currentTime {
-			err = mergedCSDB.AddFGIdToDDB(fgId, ddb)
+	for _, row := range rows {
+		for fgId, psdb := range row.FgIdToPsDb {
+			serializedData, err := psdb.Serialize()
 			if err != nil {
-				return nil, 0, fmt.Errorf("failed to add FGId to merged CSDB for fgId %d: %w", fgId, err)
+				return nil, 0, fmt.Errorf("failed to serialize PSDB for fgId %d: %w", fgId, err)
 			}
-			maxTtlAcrossFgs = max(maxTtlAcrossFgs, ddb.ExpiryAt-currentTime)
+
+			ddb, err := blocks.DeserializePSDBWithoutDecompression(serializedData)
+			if err != nil {
+				return nil, 0, fmt.Errorf("failed to deserialize PSDB for fgId %d: %w", fgId, err)
+			}
+
+			if !ddb.Expired && ddb.ExpiryAt > currentTime {
+				err = mergedCSDB.AddFGIdToDDB(fgId, ddb)
+				if err != nil {
+					return nil, 0, fmt.Errorf("failed to add FGId to merged CSDB for fgId %d: %w", fgId, err)
+				}
+				maxTtlAcrossFgs = max(maxTtlAcrossFgs, ddb.ExpiryAt-currentTime)
+			}
 		}
 	}
 
@@ -305,4 +322,71 @@ func buildCacheKeyForPersist(pkMap map[string]string, colPKMap map[string]string
 	}
 
 	return entityLabel + ":" + strings.Join(keys, "|")
+}
+
+// LockKeys acquires locks for multiple keys using SETNX with retries
+func LockKeys(ctx context.Context, client redis.UniversalClient, keys []string, entityLabel string) ([]string, error) {
+	sort.Strings(keys) // Prevent deadlocks by consistent ordering
+	var acquiredLocks []string
+
+	// Round current timestamp to 5 seconds
+	currentTime := time.Now().Unix()
+	roundedTime := (currentTime / 5) * 5
+
+	for _, key := range keys {
+		lockKey := fmt.Sprintf("%s%s:%d", LockKeyPrefix, key, roundedTime)
+
+		// Retry logic for lock acquisition
+		var success bool
+		var err error
+
+		for attempt := 0; attempt < LockMaxRetries; attempt++ {
+			success, err = client.SetNX(ctx, lockKey, "1", 0).Result()
+			if err == nil && success {
+				break
+			}
+
+			if attempt < LockMaxRetries-1 {
+				// Wait before retry (exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms)
+				backoffTime := time.Duration(LockBackoffBaseMs*(1<<attempt)) * time.Millisecond
+				select {
+				case <-time.After(backoffTime):
+				case <-ctx.Done():
+					return acquiredLocks, ctx.Err()
+				}
+			}
+		}
+
+		if err != nil || !success {
+			metric.Count("fs_persist_lock_acquire_failure", 1, []string{"entity_label", entityLabel})
+			continue
+		}
+		acquiredLocks = append(acquiredLocks, lockKey)
+	}
+
+	return acquiredLocks, nil
+}
+
+// UnlockKeys releases all acquired locks
+func UnlockKeys(ctx context.Context, client redis.UniversalClient, lockKeys []string, entityLabel string) {
+	for _, lockKey := range lockKeys {
+		if err := client.Del(ctx, lockKey).Err(); err != nil {
+			metric.Count("fs_persist_lock_release_failure", 1, []string{"entity_label", entityLabel})
+			log.Error().Err(err).Msg("Failed to release lock")
+		}
+	}
+}
+
+// DeduplicateKeys removes duplicate keys from the slice while preserving order
+func DeduplicateKeys(keys []string) []string {
+	seen := make(map[string]bool)
+	var result []string
+
+	for _, key := range keys {
+		if !seen[key] {
+			seen[key] = true
+			result = append(result, key)
+		}
+	}
+	return result
 }
