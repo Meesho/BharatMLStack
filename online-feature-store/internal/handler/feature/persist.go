@@ -3,6 +3,10 @@ package feature
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/compression"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config/enums"
@@ -15,14 +19,24 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/persist"
 	"github.com/rs/zerolog/log"
-	"sync"
-	"time"
 )
 
 var (
 	fpV2Once    sync.Once
 	fpV2Handler *PersistHandler
 )
+
+type InvalidEventError struct {
+	message string
+}
+
+func (e *InvalidEventError) Error() string {
+	return e.message
+}
+
+func NewInvalidEventError(message string) *InvalidEventError {
+	return &InvalidEventError{message: message}
+}
 
 type PersistHandler struct {
 	persist.FeatureServiceServer
@@ -159,16 +173,16 @@ func (p *PersistHandler) preProcessAndValidateFeatureSchema(persistData *Persist
 	entityLabel := persistData.EntityLabel
 
 	// Validate entity exists first
-	_, err := p.config.GetEntity(entityLabel)
-	if err != nil {
-		return fmt.Errorf("invalid entity %s: %w", entityLabel, err)
+	entityConf, err := p.config.GetEntity(entityLabel)
+	if err != nil || entityConf == nil {
+		return NewInvalidEventError(fmt.Sprintf("invalid entity %s: %v", entityLabel, err))
 	}
 	persistData.StoreIdToMaxColumnSize = make(map[string]int)
 
 	for _, fg := range query.FeatureGroupSchema {
-		fgConf, err := p.config.GetFeatureGroup(entityLabel, fg.Label)
-		if err != nil {
-			return fmt.Errorf("failed to get feature group %s: %w", fg.Label, err)
+		fgConf, ok := entityConf.FeatureGroups[fg.Label]
+		if !ok {
+			return NewInvalidEventError(fmt.Sprintf("feature group %s not found for entity : %s", fg.Label, entityLabel))
 		}
 		storeConf, err := p.config.GetStore(fgConf.StoreId)
 		if err != nil {
@@ -195,7 +209,7 @@ func (p *PersistHandler) preparePersistData(persistData *PersistData) error {
 			}
 			featureData, err := system.ParseFeatureValue(fgSchema.GetFeatureLabels(), data.GetFeatureValues()[fgIndex], persistData.AllFGIdToFgConf[fgId].DataType, persistData.AllFGIdToFgConf[fgId].FeatureMeta)
 			if err != nil {
-				return fmt.Errorf("failed to parse feature value for entity %s and feature group %s: %w", persistData.EntityLabel, fgSchema.GetLabel(), err)
+				return NewInvalidEventError(fmt.Sprintf("failed to parse feature value for entity %s and feature group %s: %w", persistData.EntityLabel, fgSchema.GetLabel(), err))
 			}
 			activeVersion, err := p.config.GetActiveVersion(persistData.EntityLabel, fgId)
 			if err != nil {
@@ -225,17 +239,20 @@ func (p *PersistHandler) PersistToDb(persistData *PersistData) error {
 	const batchSize = 100
 
 	for storeId, allRows := range persistData.StoreIdToRows {
+		// Restructure rows by grouping them based on primary keys
+		restructuredRows := p.restructureRowsByPrimaryKeys(allRows)
+
 		store, err := p.dbProvider.GetStore(storeId)
 		if err != nil {
 			return fmt.Errorf("failed to get store for storeId %s: %w", storeId, err)
 		}
 
 		if store.Type() == stores.StoreTypeRedis {
-			if err := p.processBatchesForRedis(store, storeId, persistData.EntityLabel, allRows, batchSize); err != nil {
+			if err := p.processBatchesForRedis(store, storeId, persistData.EntityLabel, restructuredRows, batchSize); err != nil {
 				return err
 			}
 		} else {
-			if err := p.processRowsForScylla(&wg, store, storeId, persistData.EntityLabel, allRows); err != nil {
+			if err := p.processRowsForScylla(&wg, store, storeId, persistData.EntityLabel, restructuredRows); err != nil {
 				return err
 			}
 		}
@@ -245,6 +262,65 @@ func (p *PersistHandler) PersistToDb(persistData *PersistData) error {
 	return nil
 }
 
+// restructureRowsByPrimaryKeys groups rows by their primary keys and merges feature groups
+// For example, if we have:
+// row1: catalog_id:123 -> {fg1->psdb1}
+// row2: catalog_id:123 -> {fg2->psdb2}
+// It becomes: catalog_id:123 -> {fg1->psdb1, fg2->psdb2}
+func (p *PersistHandler) restructureRowsByPrimaryKeys(rows []Row) []Row {
+	if len(rows) == 0 {
+		return rows
+	}
+
+	pkToRow := make(map[string]*Row)
+
+	for _, row := range rows {
+		keyStr := p.createPrimaryKeyStr(row.PkMap)
+		if existingRow, exists := pkToRow[keyStr]; exists {
+			// Merge feature groups from current row into existing row
+			for fgId, psdb := range row.FgIdToPsDb {
+				existingRow.FgIdToPsDb[fgId] = psdb
+			}
+			log.Debug().Msgf("Merged feature groups for primary key: %s", keyStr)
+		} else {
+			// Create a new row with copied primary key map and feature groups
+			newRow := Row{
+				PkMap:      make(map[string]string, len(row.PkMap)),
+				FgIdToPsDb: make(map[int]*blocks.PermStorageDataBlock, len(row.FgIdToPsDb)),
+			}
+
+			// Copy primary key map
+			for k, v := range row.PkMap {
+				newRow.PkMap[k] = v
+			}
+
+			// Copy feature groups
+			for fgId, psdb := range row.FgIdToPsDb {
+				newRow.FgIdToPsDb[fgId] = psdb
+			}
+
+			pkToRow[keyStr] = &newRow
+			log.Debug().Msgf("Created new row for primary key: %s", keyStr)
+		}
+	}
+
+	// Convert map back to slice
+	restructuredRows := make([]Row, 0, len(pkToRow))
+	for _, row := range pkToRow {
+		restructuredRows = append(restructuredRows, *row)
+	}
+
+	log.Debug().Msgf("Restructuring complete: %d rows -> %d rows", len(rows), len(restructuredRows))
+	return restructuredRows
+}
+
+func (p *PersistHandler) createPrimaryKeyStr(pkMap map[string]string) string {
+	keys := make([]string, 0, len(pkMap))
+	for key := range pkMap {
+		keys = append(keys, pkMap[key])
+	}
+	return strings.Join(keys, "|")
+}
 func (p *PersistHandler) processBatchesForRedis(store stores.Store, storeId, entityLabel string, rows []Row, batchSize int) error {
 	var wg sync.WaitGroup
 	errChan := make(chan error, (len(rows)+batchSize-1)/batchSize)

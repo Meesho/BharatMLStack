@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/blocks"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/system"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
@@ -1171,4 +1172,237 @@ func TestPersist(t *testing.T) {
 			mockConfig.AssertExpectations(t)
 		})
 	}
+}
+
+func TestRestructureRowsByPrimaryKeys(t *testing.T) {
+	handler := &PersistHandler{}
+
+	tests := []struct {
+		name           string
+		inputRows      []Row
+		expectedRows   []Row
+		expectedCount  int
+		description    string
+		validateMerged func(*testing.T, []Row)
+	}{
+		{
+			name: "Single row - no restructuring needed",
+			inputRows: []Row{
+				{
+					PkMap: map[string]string{"catalog_id": "123"},
+					FgIdToPsDb: map[int]*blocks.PermStorageDataBlock{
+						1: &blocks.PermStorageDataBlock{},
+					},
+				},
+			},
+			expectedCount: 1,
+			description:   "Single row should remain unchanged",
+			validateMerged: func(t *testing.T, result []Row) {
+				assert.Equal(t, 1, len(result))
+				row := result[0]
+				assert.Equal(t, map[string]string{"catalog_id": "123"}, row.PkMap)
+				assert.Equal(t, 1, len(row.FgIdToPsDb))
+				assert.Contains(t, row.FgIdToPsDb, 1)
+			},
+		},
+		{
+			name: "Multiple rows with same primary key - should merge",
+			inputRows: []Row{
+				{
+					PkMap: map[string]string{"catalog_id": "123"},
+					FgIdToPsDb: map[int]*blocks.PermStorageDataBlock{
+						1: &blocks.PermStorageDataBlock{},
+					},
+				},
+				{
+					PkMap: map[string]string{"catalog_id": "123"},
+					FgIdToPsDb: map[int]*blocks.PermStorageDataBlock{
+						2: &blocks.PermStorageDataBlock{},
+					},
+				},
+			},
+			expectedCount: 1,
+			description:   "Two rows with same catalog_id should be merged into one",
+			validateMerged: func(t *testing.T, result []Row) {
+				assert.Equal(t, 1, len(result))
+				row := result[0]
+				assert.Equal(t, map[string]string{"catalog_id": "123"}, row.PkMap)
+				assert.Equal(t, 2, len(row.FgIdToPsDb), "Should have 2 feature groups after merging")
+				assert.Contains(t, row.FgIdToPsDb, 1, "Should contain feature group 1")
+				assert.Contains(t, row.FgIdToPsDb, 2, "Should contain feature group 2")
+			},
+		},
+		{
+			name: "Multiple rows with different primary keys - no merging",
+			inputRows: []Row{
+				{
+					PkMap: map[string]string{"catalog_id": "123"},
+					FgIdToPsDb: map[int]*blocks.PermStorageDataBlock{
+						1: &blocks.PermStorageDataBlock{},
+					},
+				},
+				{
+					PkMap: map[string]string{"catalog_id": "456"},
+					FgIdToPsDb: map[int]*blocks.PermStorageDataBlock{
+						2: &blocks.PermStorageDataBlock{},
+					},
+				},
+			},
+			expectedCount: 2,
+			description:   "Two rows with different catalog_ids should remain separate",
+			validateMerged: func(t *testing.T, result []Row) {
+				assert.Equal(t, 2, len(result))
+
+				// Find the row with catalog_id:123
+				var row123, row456 *Row
+				for i := range result {
+					if result[i].PkMap["catalog_id"] == "123" {
+						row123 = &result[i]
+					} else if result[i].PkMap["catalog_id"] == "456" {
+						row456 = &result[i]
+					}
+				}
+
+				assert.NotNil(t, row123, "Should have row with catalog_id:123")
+				assert.NotNil(t, row456, "Should have row with catalog_id:456")
+
+				assert.Equal(t, 1, len(row123.FgIdToPsDb))
+				assert.Contains(t, row123.FgIdToPsDb, 1)
+
+				assert.Equal(t, 1, len(row456.FgIdToPsDb))
+				assert.Contains(t, row456.FgIdToPsDb, 2)
+			},
+		},
+		{
+			name: "Cross entity primary keys - should merge correctly",
+			inputRows: []Row{
+				{
+					PkMap: map[string]string{"campaign_id": "123", "catalog_id": "456"},
+					FgIdToPsDb: map[int]*blocks.PermStorageDataBlock{
+						1: &blocks.PermStorageDataBlock{},
+					},
+				},
+				{
+					PkMap: map[string]string{"catalog_id": "456", "campaign_id": "123"}, // Same keys, different order
+					FgIdToPsDb: map[int]*blocks.PermStorageDataBlock{
+						2: &blocks.PermStorageDataBlock{},
+					},
+				},
+			},
+			expectedCount: 1,
+			description:   "Cross entity rows with same keys in different order should be merged",
+			validateMerged: func(t *testing.T, result []Row) {
+				assert.Equal(t, 1, len(result))
+				row := result[0]
+				expectedPkMap := map[string]string{"campaign_id": "123", "catalog_id": "456"}
+				assert.Equal(t, expectedPkMap, row.PkMap)
+				assert.Equal(t, 2, len(row.FgIdToPsDb), "Should have 2 feature groups after merging")
+				assert.Contains(t, row.FgIdToPsDb, 1, "Should contain feature group 1")
+				assert.Contains(t, row.FgIdToPsDb, 2, "Should contain feature group 2")
+			},
+		},
+		{
+			name: "Complex scenario - multiple merges",
+			inputRows: []Row{
+				{
+					PkMap: map[string]string{"catalog_id": "123"},
+					FgIdToPsDb: map[int]*blocks.PermStorageDataBlock{
+						1: &blocks.PermStorageDataBlock{},
+					},
+				},
+				{
+					PkMap: map[string]string{"catalog_id": "123"},
+					FgIdToPsDb: map[int]*blocks.PermStorageDataBlock{
+						2: &blocks.PermStorageDataBlock{},
+					},
+				},
+				{
+					PkMap: map[string]string{"catalog_id": "456"},
+					FgIdToPsDb: map[int]*blocks.PermStorageDataBlock{
+						3: &blocks.PermStorageDataBlock{},
+					},
+				},
+				{
+					PkMap: map[string]string{"catalog_id": "123"},
+					FgIdToPsDb: map[int]*blocks.PermStorageDataBlock{
+						4: &blocks.PermStorageDataBlock{},
+					},
+				},
+			},
+			expectedCount: 2,
+			description:   "Should merge 3 rows with catalog_id=123 into 1, keep 1 row with catalog_id=456",
+			validateMerged: func(t *testing.T, result []Row) {
+				assert.Equal(t, 2, len(result))
+
+				// Find the merged row with catalog_id:123
+				var row123, row456 *Row
+				for i := range result {
+					if result[i].PkMap["catalog_id"] == "123" {
+						row123 = &result[i]
+					} else if result[i].PkMap["catalog_id"] == "456" {
+						row456 = &result[i]
+					}
+				}
+
+				assert.NotNil(t, row123, "Should have merged row with catalog_id:123")
+				assert.NotNil(t, row456, "Should have row with catalog_id:456")
+
+				// Check that catalog_id:123 row has all 3 feature groups merged
+				assert.Equal(t, 3, len(row123.FgIdToPsDb), "Should have 3 feature groups after merging")
+				assert.Contains(t, row123.FgIdToPsDb, 1, "Should contain feature group 1")
+				assert.Contains(t, row123.FgIdToPsDb, 2, "Should contain feature group 2")
+				assert.Contains(t, row123.FgIdToPsDb, 4, "Should contain feature group 4")
+
+				// Check that catalog_id:456 row has its single feature group
+				assert.Equal(t, 1, len(row456.FgIdToPsDb))
+				assert.Contains(t, row456.FgIdToPsDb, 3)
+			},
+		},
+		{
+			name:          "Empty input - should return empty",
+			inputRows:     []Row{},
+			expectedCount: 0,
+			description:   "Empty input should return empty output",
+			validateMerged: func(t *testing.T, result []Row) {
+				assert.Equal(t, 0, len(result))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := handler.restructureRowsByPrimaryKeys(tt.inputRows)
+
+			assert.Equal(t, tt.expectedCount, len(result), tt.description)
+
+			// Verify that all feature groups are preserved
+			totalFgCount := 0
+			for _, row := range tt.inputRows {
+				totalFgCount += len(row.FgIdToPsDb)
+			}
+
+			resultFgCount := 0
+			for _, row := range result {
+				resultFgCount += len(row.FgIdToPsDb)
+			}
+
+			assert.Equal(t, totalFgCount, resultFgCount, "Total feature group count should be preserved")
+
+			// Run the specific validation for this test case
+			tt.validateMerged(t, result)
+		})
+	}
+}
+
+// Helper function to compare maps
+func mapsEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
 }

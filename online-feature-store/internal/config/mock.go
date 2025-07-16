@@ -205,3 +205,11 @@ func (m *MockConfigManager) RegisterClients() error {
 	args := m.Called()
 	return args.Error(0)
 }
+
+func (m *MockConfigManager) GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error) {
+	args := m.Called(entityLabel)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[int]bool), args.Error(1)
+}
