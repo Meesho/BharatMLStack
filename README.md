@@ -39,6 +39,9 @@ BharatMLStack is battle-tested in production environments, powering:
 - **Petabyte-scale** feature storage and processing
 - **Multi-region deployments** with global load balancing
 
+## Document
+- [Doc](https://meesho.github.io/BharatMLStack/)
+- [Blogs](https://meesho.github.io/BharatMLStack/blog)
 ## Core Components
 
 ### 📋 Current Releases
@@ -49,7 +52,7 @@ BharatMLStack is battle-tested in production environments, powering:
 | 🎨 **Trufflebox UI** | `v1.0.0` | ML Management Console |
 | 🗄️ **Online Feature Store** | `v1.0.0` | Real-Time Features |
 | 🐹 **Go SDK** | `v1.0.0` | Go Client Library |
-| 🐍 **Python SDK** | `v1.0.0` | Python Client Library |
+| 🐍 **Python SDK** | `v1.0.1` | Python Client Library |
 
 ### 🚀 Horizon - Control Plane & Backend
 The central control plane for BharatMLStack components, serving as the backend for Trufflebox UI.
