@@ -1,8 +1,8 @@
 module github.com/Meesho/BharatMLStack/online-feature-store
 
-go 1.23.0
+go 1.22.0
 
-toolchain go1.23.3
+toolchain go1.22.8
 
 require (
 	github.com/DataDog/datadog-go/v5 v5.5.0
@@ -19,9 +19,9 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/x448/float16 v0.8.4
 	go.etcd.io/etcd/client/v3 v3.5.17
-	golang.org/x/net v0.40.0
-	google.golang.org/grpc v1.75.0-dev
-	google.golang.org/protobuf v1.36.6
+	golang.org/x/net v0.34.0
+	google.golang.org/grpc v1.68.2
+	google.golang.org/protobuf v1.36.5
 )
 
 require (
@@ -77,16 +77,16 @@ require (
 	go.uber.org/multierr v1.9.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/arch v0.13.0 // indirect
-	golang.org/x/crypto v0.38.0 // indirect
+	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8 // indirect
 	golang.org/x/mod v0.22.0 // indirect
-	golang.org/x/sync v0.14.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
-	golang.org/x/text v0.25.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/sys v0.29.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/tools v0.29.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250528174236-200df99c418a // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250528174236-200df99c418a // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20241209162323-e6fa225c2576 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20241223144023-3abc09e42ca8 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

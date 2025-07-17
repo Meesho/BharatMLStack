@@ -2,7 +2,7 @@ arch: arm64
 bu: datascience
 build_tool: docker
 deployArgo: true
-dockerBuildVersion: go-1.23.2
+dockerBuildVersion: go-1.22
 environment:
     int:
         deployment_order:
