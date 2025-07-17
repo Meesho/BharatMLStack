@@ -62,7 +62,7 @@ environment:
     as_min: 2
     as_max: 200
     minCanaryReplicas: 5
-    maxCanaryReplicas: 5
+    maxCanaryReplicas: 8
     cpu_limit: 12
     cpu_request: 9
     memory_limit: 24G
