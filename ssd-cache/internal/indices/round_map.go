@@ -2,6 +2,7 @@ package indices
 
 import (
 	"github.com/cespare/xxhash/v2"
+	"github.com/zeebo/xxh3"
 )
 
 const (
@@ -10,6 +11,9 @@ const (
 	_LO_12BIT_IN_32BIT = (1 << 12) - 1
 	_LO_24BIT_IN_32BIT = (1 << 24) - 1
 	_LO_28BIT_IN_64BIT = (1 << 28) - 1
+	_LO_6BIT_IN_32BIT  = (1 << 6) - 1
+	_LO_9BIT_IN_32BIT  = (1 << 9) - 1
+	_LO_3BIT_IN_32BIT  = (1 << 3) - 1
 )
 
 type TestRoundMap struct {
@@ -42,42 +46,65 @@ func Fingureprint28Matcher(srcMeta2 uint64, targetMeta2 uint64) bool {
 	return (srcMeta2 >> 20 & _LO_28BIT_IN_32BIT) == (targetMeta2 >> 20 & _LO_28BIT_IN_32BIT)
 }
 
+func Hash10(data string) uint64 {
+	return uint64(xxh3.HashString(data) & 0x3FF) // mask 10 bits
+}
+
 type RoundMap struct {
-	bitmaps []*HBM24L4
+	bitmaps []*FlatBitmap
 }
 
 func NewRoundMap(numRounds int) *RoundMap {
-	bitmaps := make([]*HBM24L4, numRounds)
+	bitmaps := make([]*FlatBitmap, numRounds)
 	for i := 0; i < numRounds; i++ {
-		bitmaps[i] = NewHBM24L4WithMatcher(true, Fingureprint28Matcher, CreateMeta, UpdateLastAccess, IncrementFreq, ExtractMeta)
+		bitmaps[i] = NewFlatBitmap()
 	}
 	return &RoundMap{
 		bitmaps: bitmaps,
 	}
 }
 
-func (rm *RoundMap) Add(key string, memTableId uint32, offset uint32, length uint16, freq uint32, ttl uint32, lastAccess uint32) bool {
+func (rm *RoundMap) Add(key string, idx uint32) bool {
 	hash := xxhash.Sum64String(key)
 
 	first12bits := (hash >> 52) & _LO_12BIT_IN_32BIT // Bits 63–52
 	next24bits := (hash >> 28) & _LO_24BIT_IN_32BIT  // Bits 51–28
 	last28bits := hash & _LO_28BIT_IN_32BIT          // Bits 27–0
+	h2 := Hash10(key)
 
 	round := first12bits % uint64(len(rm.bitmaps))
-	return rm.bitmaps[round].Add(uint32(next24bits), memTableId, offset, length, uint32(last28bits), freq, ttl, lastAccess)
+	rm.bitmaps[round].SetV2(uint64(next24bits), uint64(last28bits), h2, idx)
+	return true
 }
 
-func (rm *RoundMap) Get(key string) (bool, uint32, uint32, uint16, uint32, uint32, uint32, uint32) {
+func (rm *RoundMap) AddV2(key string, idx uint32, h64, h10 uint64) bool {
+	first12bits := (h64 >> 52) & _LO_12BIT_IN_32BIT // Bits 63–52
+	next24bits := (h64 >> 28) & _LO_24BIT_IN_32BIT  // Bits 51–28
+	last28bits := h64 & _LO_28BIT_IN_32BIT          // Bits 27–0
+
+	round := first12bits % uint64(len(rm.bitmaps))
+	rm.bitmaps[round].SetV2(uint64(next24bits), uint64(last28bits), h10, idx)
+	return true
+}
+
+func (rm *RoundMap) Get(key string) (uint32, bool) {
 	hash := xxhash.Sum64String(key)
 
 	first12bits := (hash >> 52) & _LO_12BIT_IN_32BIT // Bits 63–52
 	next24bits := (hash >> 28) & _LO_24BIT_IN_32BIT  // Bits 51–28
 	last28bits := hash & _LO_28BIT_IN_32BIT          // Bits 27–0
+	h2 := Hash10(key)
 
 	round := first12bits % uint64(len(rm.bitmaps))
-	found, memTableId, offset, length, fingerprint28, freq, ttl, lastAccess := rm.bitmaps[round].GetMeta(uint32(next24bits))
-	if !found || uint32(last28bits) != fingerprint28 {
-		return false, 0, 0, 0, 0, 0, 0, 0
-	}
-	return true, memTableId, offset, length, fingerprint28, freq, ttl, lastAccess
+	return rm.bitmaps[round].GetV2(uint64(next24bits), uint64(last28bits), h2)
+}
+
+func (rm *RoundMap) GetV2(h64, h10 uint64) (uint32, bool) {
+
+	first12bits := (h64 >> 52) & _LO_12BIT_IN_32BIT // Bits 63–52
+	next24bits := (h64 >> 28) & _LO_24BIT_IN_32BIT  // Bits 51–28
+	last28bits := h64 & _LO_28BIT_IN_32BIT          // Bits 27–0
+
+	round := first12bits % uint64(len(rm.bitmaps))
+	return rm.bitmaps[round].GetV2(uint64(next24bits), uint64(last28bits), h10)
 }

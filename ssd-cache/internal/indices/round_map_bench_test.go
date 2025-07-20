@@ -3,6 +3,7 @@ package indices
 import (
 	"fmt"
 	"math/rand"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -386,34 +387,9 @@ func generateTestKeys(count int) []string {
 	return keys
 }
 
-// Comprehensive RoundMap benchmarks for specific scenarios
-func BenchmarkRoundMap_Scenario_1024_100K(b *testing.B) {
-	runRoundMapScenario(b, 1024, 100000, "RoundMap_1024_100K")
-}
-
 func BenchmarkRoundMap_Scenario_1024_1M(b *testing.B) {
-	runRoundMapScenario(b, 512, 1000000, "RoundMap_1024_1M")
+	runRoundMapScenario(b, 5, 1000000, "RoundMap_1024_1M")
 	//runMapScenario(b, "Map_1024_1M")
-}
-
-func BenchmarkRoundMap_Scenario_1024_10M(b *testing.B) {
-	runRoundMapScenario(b, 1024, 10000000, "RoundMap_1024_10M")
-}
-
-func BenchmarkRoundMap_Scenario_2048_100K(b *testing.B) {
-	runRoundMapScenario(b, 2048, 100000, "RoundMap_2048_100K")
-}
-
-func BenchmarkRoundMap_Scenario_2048_1M(b *testing.B) {
-	runRoundMapScenario(b, 2048, 1000000, "RoundMap_2048_1M")
-}
-
-func BenchmarkRoundMap_Scenario_2048_10M(b *testing.B) {
-	runRoundMapScenario(b, 2048, 10000000, "RoundMap_2048_10M")
-}
-
-func BenchmarkRoundMap_Scenario_4096_50M(b *testing.B) {
-	runRoundMapScenario(b, 4096, 50000000, "RoundMap_4096_50M")
 }
 
 func runRoundMapScenario(b *testing.B, numRounds int, uniqueKeys int, scenarioName string) {
@@ -421,13 +397,15 @@ func runRoundMapScenario(b *testing.B, numRounds int, uniqueKeys int, scenarioNa
 	stats := &RoundMapBenchmarkStats{}
 
 	// Prepare metadata for each key
-	memTableIds := uint32(0)
-	offsets := uint32(0)
-	lengths := uint16(0)
-	freqs := uint32(0)
-	ttls := uint32(0)
-	lastAccesses := uint32(0)
+	b.Run("Prepare", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = fmt.Sprintf("key_%d", i)
+		}
+		b.StopTimer()
+	})
 
+	printMem("Before Add")
 	// Phase 1: Add all unique keys
 	b.Run(scenarioName+"_Add", func(b *testing.B) {
 		b.ResetTimer()
@@ -436,12 +414,7 @@ func runRoundMapScenario(b *testing.B, numRounds int, uniqueKeys int, scenarioNa
 
 			collision := rm.Add(
 				fmt.Sprintf("key_%d", i),
-				memTableIds,
-				offsets,
-				lengths,
-				freqs,
-				ttls,
-				lastAccesses,
+				uint32(i),
 			)
 			stats.RecordAdd(collision)
 		}
@@ -449,15 +422,20 @@ func runRoundMapScenario(b *testing.B, numRounds int, uniqueKeys int, scenarioNa
 		stats.MemoryBytes = estimateRoundMapMemory(rm, uniqueKeys)
 	})
 
+	printMem("Before Get")
+
 	// Phase 2: Get operations (mix of hits and misses)
 	b.Run(scenarioName+"_Get", func(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			found, _, _, _, _, _, _, _ := rm.Get(fmt.Sprintf("key_%d", i))
-			stats.RecordGet(found)
+			idx, found := rm.Get(fmt.Sprintf("key_%d", i))
+			stats.RecordGet(found && idx == uint32(i))
 		}
 	})
+	runtime.GC()
+
+	printMem("After Get")
 
 	b.StopTimer()
 	stats.MemoryBytes = estimateRoundMapMemory(rm, uniqueKeys)
@@ -465,129 +443,32 @@ func runRoundMapScenario(b *testing.B, numRounds int, uniqueKeys int, scenarioNa
 }
 
 func runMapScenario(b *testing.B, scenarioName string) {
-	rm := make(map[uint64]struct {
-		meta1 uint64
-		meta2 uint64
-		meta3 uint64
-	})
+	rm := make(map[string]uint32)
 	stats := &RoundMapBenchmarkStats{}
-
-	// Prepare metadata for each key
-	memTableIds := uint32(0)
-	offsets := uint32(0)
-	lengths := uint16(0)
-	freqs := uint32(0)
-	ttls := uint32(0)
-	lastAccesses := uint32(0)
+	printMem("Before Add")
 
 	// Phase 1: Add all unique keys
 	b.Run(scenarioName+"_Add", func(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			meta1, meta2, meta3 := CreateMeta(memTableIds, offsets, lengths, memTableIds, freqs, ttls, lastAccesses)
-			rm[uint64(i)] = struct {
-				meta1 uint64
-				meta2 uint64
-				meta3 uint64
-			}{
-				meta1: meta1,
-				meta2: meta2,
-				meta3: meta3,
-			}
+			rm[fmt.Sprintf("key_%d", i)] = uint32(i)
 		}
 	})
+
+	printMem("Before Get")
 
 	// Phase 2: Get operations (mix of hits and misses)
 	b.Run(scenarioName+"_Get", func(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			st := rm[uint64(i)]
-			_, _, _, _, _, _, _ = ExtractMeta(st.meta1, st.meta2, st.meta3)
-			stats.RecordGet(true)
+			idx, found := rm[fmt.Sprintf("key_%d", i)]
+			stats.RecordGet(found && idx == uint32(i))
 		}
 	})
 
+	printMem("After Get")
+
 	b.StopTimer()
-}
-
-// Specific latency benchmarks for Add and Get operations
-func BenchmarkRoundMap_Add_Latency(b *testing.B) {
-	scenarios := []struct {
-		numRounds  int
-		uniqueKeys int
-		name       string
-	}{
-		{1024, 100000, "1024_100K"},
-		{1024, 1000000, "1024_1M"},
-		{1024, 10000000, "1024_10M"},
-		{2048, 100000, "2048_100K"},
-		{2048, 1000000, "2048_1M"},
-		{2048, 10000000, "2048_10M"},
-		{4096, 50000000, "4096_50M"},
-	}
-
-	for _, scenario := range scenarios {
-		b.Run(scenario.name, func(b *testing.B) {
-			rm := NewRoundMap(scenario.numRounds)
-			keys := generateTestKeys(scenario.uniqueKeys)
-
-			rand.Seed(42)
-			memTableId := rand.Uint32()
-			offset := rand.Uint32()
-			length := uint16(rand.Intn(65536))
-			freq := rand.Uint32() & _LO_20BIT_IN_32BIT
-			ttl := rand.Uint32()
-			lastAccess := rand.Uint32()
-
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				keyIndex := i % scenario.uniqueKeys
-				rm.Add(keys[keyIndex], memTableId, offset, length, freq, ttl, lastAccess)
-			}
-		})
-	}
-}
-
-func BenchmarkRoundMap_Get_Latency(b *testing.B) {
-	scenarios := []struct {
-		numRounds  int
-		uniqueKeys int
-		name       string
-	}{
-		{1024, 100000, "1024_100K"},
-		{1024, 1000000, "1024_1M"},
-		{1024, 10000000, "1024_10M"},
-		{2048, 100000, "2048_100K"},
-		{2048, 1000000, "2048_1M"},
-		{2048, 10000000, "2048_10M"},
-		{4096, 50000000, "4096_50M"},
-	}
-
-	for _, scenario := range scenarios {
-		b.Run(scenario.name, func(b *testing.B) {
-			rm := NewRoundMap(scenario.numRounds)
-			keys := generateTestKeys(scenario.uniqueKeys)
-
-			// Pre-populate the map
-			rand.Seed(42)
-			for i := 0; i < scenario.uniqueKeys; i++ {
-				memTableId := rand.Uint32()
-				offset := rand.Uint32()
-				length := uint16(rand.Intn(65536))
-				freq := rand.Uint32() & _LO_20BIT_IN_32BIT
-				ttl := rand.Uint32()
-				lastAccess := rand.Uint32()
-
-				rm.Add(keys[i], memTableId, offset, length, freq, ttl, lastAccess)
-			}
-
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				keyIndex := i % scenario.uniqueKeys
-				rm.Get(keys[keyIndex])
-			}
-		})
-	}
 }

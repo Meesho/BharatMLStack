@@ -139,20 +139,35 @@ type incrementFreq func(uint32) uint32
 type extractMeta func(uint64, uint64, uint64) (uint32, uint32, uint16, uint32, uint32, uint32, uint32)
 
 // Capacity: 64 * 64 = 4096 entries(2^12) | Space: 64 * 8 = 512 bytes | Inline to avoid pointer indirection
-type Level0 struct {
-	Leafs [64]uint64
-	Sum   uint64
+// type Level0 struct {
+// 	Leafs [64]uint64
+// 	Sum   uint64
 
-	meta1 [4096]uint64 //memId << 32 | offset
-	meta2 [4096]uint64 //length << 48 | figerprint28 << 20 | freq
-	meta3 [4096]uint64 //ttl << 32 | lastAccess
+// 	meta1 [4096]uint64 //memId << 32 | offset
+// 	meta2 [4096]uint64 //length << 48 | figerprint28 << 20 | freq
+// 	meta3 [4096]uint64 //ttl << 32 | lastAccess
+
+// }
+
+type Level0 struct {
+	Leafs [8]uint64
+	Sum   uint8
+
+	meta1 [512]uint64 //memId << 32 | offset
+	meta2 [512]uint64 //length << 48 | figerprint28 << 20 | freq
+	meta3 [512]uint64 //ttl << 32 | lastAccess
 
 }
 
 // Capacity: 64 * 4096 = 262144 entries(2^18) | Space: 64 * 512 = 32768 bytes
+// type Level1 struct {
+// 	Nodes [64]*Level0
+// 	Sum   uint64
+// }
+
 type Level1 struct {
-	Nodes [64]*Level0
-	Sum   uint64
+	Nodes [512]*Level0
+	Sum   [8]uint64
 }
 
 // Capacity: 64 * 262144 =
@@ -211,19 +226,19 @@ func NewHBM24L4WithMatcher(lazyAlloc bool, matcher fingerPrintMatcher, createMet
 
 func generateLevel0() *Level0 {
 	return &Level0{
-		Leafs: [64]uint64{},
+		Leafs: [8]uint64{},
 		Sum:   0,
 	}
 }
 
 func generateLevel1() *Level1 {
-	nodes := [64]*Level0{}
+	nodes := [512]*Level0{}
 	for i := range nodes {
 		nodes[i] = generateLevel0()
 	}
 	return &Level1{
 		Nodes: nodes,
-		Sum:   0,
+		Sum:   [8]uint64{},
 	}
 }
 
@@ -238,12 +253,21 @@ func generateLevel2() *Level2 {
 	}
 }
 
-func extractIndices24(hash uint32) (i0, i1, i2, i3 uint8) {
+// func extractIndices24(hash uint32) (i0, i1, i2, i3 uint8) {
+// 	hash &= _24BIT_MASK
+// 	i0 = uint8((hash >> 18) & 0x3F)
+// 	i1 = uint8((hash >> 12) & 0x3F)
+// 	i2 = uint8((hash >> 6) & 0x3F)
+// 	i3 = uint8(hash & 0x3F)
+// 	return
+// }
+
+func extractIndices24(hash uint32) (i0 uint8, i1 uint16, i2 uint8, i3 uint8) {
 	hash &= _24BIT_MASK
-	i0 = uint8((hash >> 18) & 0x3F)
-	i1 = uint8((hash >> 12) & 0x3F)
-	i2 = uint8((hash >> 6) & 0x3F)
-	i3 = uint8(hash & 0x3F)
+	i0 = uint8((hash >> 18) & _LO_6BIT_IN_32BIT)
+	i1 = uint16((hash >> 9) & _LO_9BIT_IN_32BIT)
+	i2 = uint8((hash >> 6) & _LO_3BIT_IN_32BIT)
+	i3 = uint8(hash & _LO_6BIT_IN_32BIT)
 	return
 }
 
@@ -254,7 +278,9 @@ func (hbm *HBM24L4) Put(hash uint32) {
 
 	l1 := l2.Nodes[i0]
 	if l1 == nil {
-		l1 = &Level1{}
+		l1 = &Level1{
+			Sum: [8]uint64{},
+		}
 		l2.Nodes[i0] = l1
 	}
 
@@ -267,8 +293,8 @@ func (hbm *HBM24L4) Put(hash uint32) {
 	l0.Leafs[i2] |= bitIndex[i3]
 
 	// Set summary bits
-	l0.Sum |= bitIndex[i2]
-	l1.Sum |= bitIndex[i1]
+	l0.Sum |= uint8(bitIndex[i2])
+	l1.Sum[i1/64] |= bitIndex[i1%64]
 	l2.Sum |= bitIndex[i0]
 }
 
@@ -284,6 +310,50 @@ func (hbm *HBM24L4) Put(hash uint32) {
 // - lastAccess: the lastAccess of the object
 // Returns:
 // - bool: true if the object is overwritten because of collision on 24bit space, false otherwise
+// func (hbm *HBM24L4) Add(hash uint32, memTableId uint32, offset uint32, length uint16, fingerprint28 uint32, freq uint32, ttl uint32, lastAccess uint32) bool {
+// 	i0, i1, i2, i3 := extractIndices24(hash)
+
+// 	l2 := hbm.root
+
+// 	l1 := l2.Nodes[i0]
+// 	if l1 == nil {
+// 		l1 = &Level1{}
+// 		l2.Nodes[i0] = l1
+// 	}
+
+// 	l0 := l1.Nodes[i1]
+// 	if l0 == nil {
+// 		l0 = &Level0{}
+// 		l1.Nodes[i1] = l0
+// 	}
+
+// 	metaOffset := i2*64 + i3
+// 	overwritten := false
+// 	meta1, meta2, meta3 := hbm.createMeta(memTableId, offset, length, fingerprint28, freq, ttl, lastAccess)
+// 	if l0.Leafs[i2]&bitIndex[i3] != 0 {
+// 		// Slot is occupied, check if it's the same key (same fingerprint) or a collision
+// 		if ok := hbm.matcher(l0.meta2[metaOffset], meta2); !ok {
+// 			// Different fingerprint = collision, we're overwriting a different key
+// 			overwritten = true
+// 		}
+// 		// If fingerprints match, we're updating the same key (overwritten = false)
+// 	} else {
+// 		// Slot is empty, set the bit
+// 		l0.Leafs[i2] |= bitIndex[i3]
+// 	}
+
+// 	l0.meta1[metaOffset] = meta1
+// 	l0.meta2[metaOffset] = meta2
+// 	l0.meta3[metaOffset] = meta3
+
+// 	// Set summary bits
+// 	l0.Sum |= bitIndex[i2]
+// 	l1.Sum |= bitIndex[i1]
+// 	l2.Sum |= bitIndex[i0]
+
+// 	return overwritten
+// }
+
 func (hbm *HBM24L4) Add(hash uint32, memTableId uint32, offset uint32, length uint16, fingerprint28 uint32, freq uint32, ttl uint32, lastAccess uint32) bool {
 	i0, i1, i2, i3 := extractIndices24(hash)
 
@@ -301,7 +371,7 @@ func (hbm *HBM24L4) Add(hash uint32, memTableId uint32, offset uint32, length ui
 		l1.Nodes[i1] = l0
 	}
 
-	metaOffset := i2*64 + i3
+	metaOffset := i2*8 + i3
 	overwritten := false
 	meta1, meta2, meta3 := hbm.createMeta(memTableId, offset, length, fingerprint28, freq, ttl, lastAccess)
 	if l0.Leafs[i2]&bitIndex[i3] != 0 {
@@ -321,8 +391,8 @@ func (hbm *HBM24L4) Add(hash uint32, memTableId uint32, offset uint32, length ui
 	l0.meta3[metaOffset] = meta3
 
 	// Set summary bits
-	l0.Sum |= bitIndex[i2]
-	l1.Sum |= bitIndex[i1]
+	l0.Sum |= uint8(bitIndex[i2])
+	l1.Sum[i1/64] |= bitIndex[i1%64]
 	l2.Sum |= bitIndex[i0]
 
 	return overwritten
@@ -337,12 +407,12 @@ func (hbm *HBM24L4) Get(hash uint32) bool {
 	}
 
 	l1 := l2.Nodes[i0]
-	if l1.Sum&bitIndex[i1] == 0 {
+	if l1.Sum[i1/64]&bitIndex[i1%64] == 0 {
 		return false
 	}
 
 	l0 := l1.Nodes[i1]
-	if l0.Sum&bitIndex[i2] == 0 {
+	if l0.Sum&uint8(bitIndex[i2]) == 0 {
 		return false
 	}
 
@@ -370,17 +440,17 @@ func (hbm *HBM24L4) GetMeta(hash uint32) (bool, uint32, uint32, uint16, uint32, 
 	}
 
 	l1 := l2.Nodes[i0]
-	if l1.Sum&bitIndex[i1] == 0 {
+	if l1.Sum[i1/64]&bitIndex[i1%64] == 0 {
 		return false, 0, 0, 0, 0, 0, 0, 0
 	}
 
 	l0 := l1.Nodes[i1]
-	if l0.Sum&bitIndex[i2] == 0 {
+	if l0.Sum&uint8(bitIndex[i2]) == 0 {
 		return false, 0, 0, 0, 0, 0, 0, 0
 	}
 
 	if l0.Leafs[i2]&bitIndex[i3] != 0 {
-		memTableId, offset, length, fingerprint28, freq, ttl, lastAccess := hbm.extractMeta(l0.meta1[i2*64+i3], l0.meta2[i2*64+i3], l0.meta3[i2*64+i3])
+		memTableId, offset, length, fingerprint28, freq, ttl, lastAccess := hbm.extractMeta(l0.meta1[i2*8+i3], l0.meta2[i2*8+i3], l0.meta3[i2*8+i3])
 		return true, memTableId, offset, length, fingerprint28, freq, ttl, lastAccess
 	}
 
@@ -396,11 +466,11 @@ func (hbm *HBM24L4) Remove(hash uint32) {
 		return
 	}
 	l1 := l2.Nodes[i0]
-	if l1.Sum&bitIndex[i1] == 0 {
+	if l1.Sum[i1/64]&bitIndex[i1%64] == 0 {
 		return
 	}
 	l0 := l1.Nodes[i1]
-	if l0.Sum&bitIndex[i2] == 0 {
+	if l0.Sum&uint8(bitIndex[i2]) == 0 {
 		return
 	}
 
@@ -408,16 +478,16 @@ func (hbm *HBM24L4) Remove(hash uint32) {
 
 	// Clear l0 summary if that word is now 0
 	if l0.Leafs[i2] == 0 {
-		l0.Sum &= ^bitIndex[i2]
+		l0.Sum &= ^uint8(bitIndex[i2])
 	}
 
 	// Clear l1 summary if l0 is now empty
 	if l0.Sum == 0 {
-		l1.Sum &= ^bitIndex[i1]
+		l1.Sum[i1/64] &= ^bitIndex[i1%64]
 	}
 
 	// Clear l2 summary if l1 is now empty
-	if l1.Sum == 0 {
+	if l1.Sum[i1/64] == 0 {
 		l2.Sum &= ^bitIndex[i0]
 	}
 }
