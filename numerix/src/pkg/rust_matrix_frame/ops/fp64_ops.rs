@@ -1,7 +1,7 @@
+use crate::pkg::rust_matrix_frame::vector::Vector;
+use crate::pkg::rust_matrix_frame::error::Mat2DError;
 use super::VectorOps;
-use crate::vector::Vector;
 use std::f64;
-use crate::error::Mat2DError;
 
 pub struct F64Ops;
 

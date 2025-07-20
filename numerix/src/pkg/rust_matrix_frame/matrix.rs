@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::fmt::{Debug, Display};
-use crate::ops::VectorOps;
-use crate::vector::Vector;
-use crate::error::Mat2DError;
+use super::ops::VectorOps;
+use super::vector::Vector;
+use super::error::Mat2DError;
 use std::borrow::Cow;   
 
 type BinaryOp<V> = fn(&Vector<<V as VectorOps>::Scalar>, &Vector<<V as VectorOps>::Scalar>) -> Vector<<V as VectorOps>::Scalar>;

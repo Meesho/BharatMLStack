@@ -1,6 +1,7 @@
-use crate::vector::Vector;
+use crate::pkg::rust_matrix_frame::vector::Vector;
+use crate::pkg::rust_matrix_frame::error::Mat2DError;
 use super::VectorOps;
-use crate::error::Mat2DError;
+
 pub struct F32Ops;
 
 impl VectorOps for F32Ops {

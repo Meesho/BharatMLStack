@@ -3,11 +3,12 @@ use std::time::Instant;
 use crate::pkg::metrics::metrics;
 use crate::handler::config;
 use std::collections::HashMap;
-use rust_matrix_frame::matrix::Mat2D;
-use rust_matrix_frame::ops::F32Ops;
-use rust_matrix_frame::ops::F64Ops;
-use rust_matrix_frame::vector::Vector;
-use rust_matrix_frame::error::Mat2DError;
+use crate::pkg::rust_matrix_frame::matrix::Mat2D;
+use crate::pkg::rust_matrix_frame::ops::F32Ops;
+use crate::pkg::rust_matrix_frame::ops::F64Ops;
+use crate::pkg::rust_matrix_frame::vector::Vector;
+use crate::pkg::rust_matrix_frame::ops::VectorOps;
+use crate::pkg::rust_matrix_frame::error::Mat2DError;
 use bytemuck::Pod;
 use std::str::FromStr;
 use crate::logger;
@@ -157,7 +158,7 @@ where
     T: Copy + FromStr + Default + From<u8> + Pod + std::fmt::Display + PartialOrd + std::fmt::Debug + FromBytes + FastToString,
     <T as FromStr>::Err: std::fmt::Debug,
     Vector<T>: Clone,
-    Ops: rust_matrix_frame::ops::VectorOps<Scalar = T>,
+    Ops: VectorOps<Scalar = T>,
     Ops::Scalar: Default + Copy + FromStr + std::fmt::Display,
     <Ops::Scalar as FromStr>::Err: std::fmt::Debug,
 {

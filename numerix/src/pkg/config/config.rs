@@ -37,7 +37,7 @@ fn init_config() -> AppConfig{
     if cfg!(test) {
         dotenv::from_path(Path::new(".env")).ok();
     } else {
-        dotenv::from_path(Path::new("numerix/.env")).ok();
+        dotenv::from_path(Path::new(".env")).ok();
     }
 
     let mut builder = Config::builder();

@@ -1,9 +1,9 @@
-use crate::matrix::Mat2D;
-use crate::ops::F64Ops;
-use crate::vector::Vector;
+use crate::pkg::rust_matrix_frame::matrix::Mat2D;
+use crate::pkg::rust_matrix_frame::ops::F32Ops;
+use crate::pkg::rust_matrix_frame::vector::Vector;
 use std::collections::HashMap;
 
-fn setup() -> Mat2D<F64Ops> {
+fn setup() -> Mat2D<F32Ops> {
     let mut column_names = HashMap::new();
     column_names.insert("pctr".to_string(), 0);
     column_names.insert("pcvr".to_string(), 1);
@@ -26,12 +26,12 @@ fn setup() -> Mat2D<F64Ops> {
     Mat2D::from_data(4, 7, matrix, column_names).unwrap()
 }
 
-fn vectors_are_equal(vec1: &Vector<f64>, vec2: &[f64]) -> bool {
+fn vectors_are_equal(vec1: &Vector<f32>, vec2: &[f32]) -> bool {
     if vec1.len() != vec2.len() {
         return false;
     }
     for i in 0..vec1.len() {
-        if (vec1[i] - vec2[i]).abs() > 10e-14 {
+        if (vec1[i] - vec2[i]).abs() > 10e-7 {
             return false;
         }
     }

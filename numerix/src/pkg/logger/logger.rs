@@ -17,7 +17,7 @@ static COUNTER: AtomicU64 = AtomicU64::new(0);
 #[inline]
 fn should_log() -> bool {
     let sampling_rate = *SAMPLING_RATE.get().unwrap_or(&1.0);
-    
+    println!("sampling_rate: {}", sampling_rate);
     if sampling_rate >= 1.0 {
         return true;
     }
@@ -28,6 +28,7 @@ fn should_log() -> bool {
     
     let count = COUNTER.fetch_add(1, Ordering::Relaxed);
     let threshold = (1.0 / sampling_rate) as u64;
+    println!("count: {}, threshold: {}", count, threshold);
     (count % threshold) == 0
 }
 
@@ -82,7 +83,7 @@ pub fn init_logger() {
             error(format!("Logger already initialized for app '{}', cannot reinitialize", config.app_name), None)
         }
     }
-    
+    println!("SAMPLING_RATE: {}", config.log_sampling_rate);
     // Cache the sampling rate for performance
     match SAMPLING_RATE.set(config.log_sampling_rate) {
         Ok(_) => (),
@@ -90,6 +91,7 @@ pub fn init_logger() {
             error("Logger sampling rate already initialized, cannot reinitialize".to_string(), None)
         }
     }
+
     
     let log_level = config.app_log_level.clone().to_ascii_uppercase();
 
