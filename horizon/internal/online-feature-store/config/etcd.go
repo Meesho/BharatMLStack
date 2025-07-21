@@ -16,6 +16,7 @@ import (
 
 const (
 	Delimitter = "|"
+	Layout1MetadataBytes = 9
 )
 
 type Etcd struct {
@@ -151,6 +152,14 @@ func (e *Etcd) RegisterFeatureGroup(entityLabel, fgLabel, JobId string, storeId,
 		}
 		seen[label] = struct{}{}
 	}
+	stringLengthsUint16, vectorLengthsUint16, err := e.extractStringAndVectorLenghts(stringLength, vectorLength)
+	if err != nil {
+		return nil, Store{}, nil, err
+	}
+	err = e.validateFeatureConstraints(featureDefaultValues, dataType, stringLengthsUint16, vectorLengthsUint16)
+	if err != nil {
+		return nil, Store{}, nil, err
+	}
 	totalSize := len(featureLabels) * dataType.Size()
 	if dataType == "DataTypeString" {
 		var totalStringLength uint16
@@ -176,6 +185,13 @@ func (e *Etcd) RegisterFeatureGroup(entityLabel, fgLabel, JobId string, storeId,
 		}
 		totalSize = int(stringVectorSize) * dataType.Size()
 	}
+
+	metadataSize, err := getMetadataSizeForLayout(layoutVersion)
+	if err != nil {
+		return nil, Store{}, nil, err
+	}
+	totalSize = totalSize + metadataSize
+
 	stores, err := e.GetStores()
 	if err != nil {
 		return nil, Store{}, nil, err
@@ -208,7 +224,10 @@ func (e *Etcd) RegisterFeatureGroup(entityLabel, fgLabel, JobId string, storeId,
 	}
 
 	maxColumnSize := stores[strconv.Itoa(storeId)].MaxColumnSizeInBytes
-	numColumns := (totalSize / maxColumnSize) + 1
+	numColumns := totalSize / maxColumnSize
+	if totalSize%maxColumnSize != 0 {
+		numColumns++
+	}
 	paths := make(map[string]interface{})
 	maxColumn := e.getMaxColumnForEntity(entityLabel) + 1
 	columnsToAdd := make([]string, 0)
@@ -232,14 +251,8 @@ func (e *Etcd) RegisterFeatureGroup(entityLabel, fgLabel, JobId string, storeId,
 	sourceMap := make(map[string]string)
 	for i, featureLabel := range featureLabels {
 		defaultValueInByte, _ := Serialize(featureDefaultValues[i], dataType)
-		stringLengthUint16, err := stringToUint16(stringLength[i])
-		if err != nil {
-			return nil, Store{}, nil, err
-		}
-		vectorLengthUint16, err := stringToUint16(vectorLength[i])
-		if err != nil {
-			return nil, Store{}, nil, err
-		}
+		stringLengthUint16 := stringLengthsUint16[i]
+		vectorLengthUint16 := vectorLengthsUint16[i]
 		featureMeta := FeatureMeta{
 			Sequence:             i,
 			DefaultValuesInBytes: defaultValueInByte,
@@ -397,7 +410,7 @@ func (e *Etcd) AddFeatures(entityLabel, fgLabel string, labels, defaultValues, s
 	}
 	fgExists, _ := e.instance.IsNodeExist(fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s", e.appName, entityLabel, fgLabel))
 	if !fgExists {
-		return nil, Store{}, nil, nil, fmt.Errorf("feature group %s not found", entityLabel)
+		return nil, Store{}, nil, nil, fmt.Errorf("feature group %s not found", fgLabel)
 	}
 
 	// Check for duplicates in the input feature labels
@@ -412,14 +425,7 @@ func (e *Etcd) AddFeatures(entityLabel, fgLabel string, labels, defaultValues, s
 	// if yes, process logic to add features
 	entities := e.GetEtcdInstance().Entities
 	featureGroup := entities[entityLabel].FeatureGroups[fgLabel]
-	columns := featureGroup.Columns
-	maxSegment, err := findLargestSegment(columns)
-	columnToUpdate := "seg_" + strconv.Itoa(maxSegment)
 	dataType := featureGroup.DataType
-	if err != nil {
-		log.Error().Msgf("Error finding largest segment: %s", err)
-		return nil, Store{}, nil, nil, err
-	}
 	activeVersion := featureGroup.ActiveVersion
 	existingLabels := featureGroup.Features[activeVersion].Labels
 	featureMetaMap := featureGroup.Features[activeVersion].FeatureMeta
@@ -442,6 +448,14 @@ func (e *Etcd) AddFeatures(entityLabel, fgLabel string, labels, defaultValues, s
 		existingLabels = newLabels
 	}
 	defaultValues, _ = processFeatureDefaultValues(defaultValues, featureGroup.DataType.String())
+	stringLengthsUint16, vectorLengthsUint16, err := e.extractStringAndVectorLenghts(stringLength, vectorLength)
+	if err != nil {
+		return nil, Store{}, nil, nil, err
+	}
+	err = e.validateFeatureConstraints(defaultValues, dataType, stringLengthsUint16, vectorLengthsUint16)
+	if err != nil {
+		return nil, Store{}, nil, nil, err
+	}
 	newDefaultValues := strings.Join(defaultValues, ",")
 	if existingDefaultValues != "" {
 		existingDefaultValues = existingDefaultValues + "," + newDefaultValues
@@ -457,14 +471,8 @@ func (e *Etcd) AddFeatures(entityLabel, fgLabel string, labels, defaultValues, s
 	sourceMap := make(map[string]string)
 	for i, featureLabel := range labels {
 		defaultValueInByte, _ := Serialize(defaultValues[i], dataType)
-		stringLengthUint16, err := stringToUint16(stringLength[i])
-		if err != nil {
-			return nil, Store{}, nil, nil, err
-		}
-		vectorLengthUint16, err := stringToUint16(vectorLength[i])
-		if err != nil {
-			return nil, Store{}, nil, nil, err
-		}
+		stringLengthUint16 := stringLengthsUint16[i]
+		vectorLengthUint16 := vectorLengthsUint16[i]
 		featureMeta := FeatureMeta{
 			Sequence:             featureSequenceCurrentSize + i,
 			DefaultValuesInBytes: defaultValueInByte,
@@ -481,64 +489,28 @@ func (e *Etcd) AddFeatures(entityLabel, fgLabel string, labels, defaultValues, s
 	if err != nil {
 		return nil, Store{}, nil, nil, err
 	}
-	totalSize := len(labels) * dataType.Size()
-	if dataType == "DataTypeString" {
-		var totalStringLength uint16
-		for i := range stringLength {
-			stringLengthUint16, _ := stringToUint16(stringLength[i])
-			totalStringLength += stringLengthUint16
-		}
-		totalSize = int(totalStringLength) * dataType.Size()
-	} else if dataType.IsVector() {
-		var totalVectorLength uint16
-		for i := range vectorLength {
-			vectorLengthUint16, _ := stringToUint16(vectorLength[i])
-			totalVectorLength += vectorLengthUint16
-		}
-		totalSize = int(totalVectorLength) * dataType.Size()
-	}
-	if dataType == "DataTypeStringVector" {
-		var stringVectorSize uint16
-		for i := range stringLength {
-			stringLengthUint16, _ := stringToUint16(stringLength[i])
-			vectorLengthUint16, _ := stringToUint16(vectorLength[i])
-			stringVectorSize += stringLengthUint16 * vectorLengthUint16
-		}
-		totalSize = int(stringVectorSize) * dataType.Size()
-	}
-	newSize := featureGroup.Columns[columnToUpdate].CurrentSizeInBytes + totalSize
+
 	storeId := featureGroup.StoreId
 	stores, err := e.GetStores()
 	if err != nil {
 		return nil, Store{}, nil, nil, err
 	}
+
+	bytesToAdd := e.calculateFeatureBytesSize(defaultValues, featureGroup.DataType, stringLengthsUint16, vectorLengthsUint16)
+
+	columnsToAdd, err := e.updateSegmentSizesForAddition(entityLabel, fgLabel, &featureGroup, bytesToAdd)
+	if err != nil {
+		return nil, Store{}, nil, nil, fmt.Errorf("failed to update segment sizes: %w", err)
+	}
+
 	paths := make(map[string]interface{})
 	activeVersionInt, _ := strconv.Atoi(activeVersion)
 	pathsToUpdate := make(map[string]interface{})
-	columnsToAdd := make([]string, 0)
-	if newSize > stores[storeId].MaxColumnSizeInBytes {
-		pathsToUpdate[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/columns/%s/current-size-in-bytes", e.appName, entityLabel, fgLabel, columnToUpdate)] = stores[storeId].MaxColumnSizeInBytes
-		columnsLimit := maxSegment + newSize/stores[storeId].MaxColumnSizeInBytes
-		for i := maxSegment + 1; i <= columnsLimit; i++ {
-			columnLabel := fmt.Sprintf("seg_%d", i)
-			columnSize := stores[storeId].MaxColumnSizeInBytes
-			if i == columnsLimit {
-				columnSize = newSize - (stores[storeId].MaxColumnSizeInBytes * (columnsLimit - maxSegment))
-				if columnSize == 0 {
-					break
-				}
-			}
-			paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/columns/%s/label", e.appName, entityLabel, fgLabel, columnLabel)] = columnLabel
-			paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/columns/%s/current-size-in-bytes", e.appName, entityLabel, fgLabel, columnLabel)] = columnSize
-			columnsToAdd = append(columnsToAdd, columnLabel)
-		}
-	}
+
 	activeVersionInt = activeVersionInt + 1
 	paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/features/%v/feature-meta", e.appName, entityLabel, fgLabel, activeVersionInt)] = string(featureMetaJson)
 	paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/features/%v/labels", e.appName, entityLabel, fgLabel, activeVersionInt)] = existingLabels
 	paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/features/%v/default-values", e.appName, entityLabel, fgLabel, activeVersionInt)] = existingDefaultValues
-
-	pathsToUpdate[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/columns/%s/current-size-in-bytes", e.appName, entityLabel, fgLabel, columnToUpdate)] = newSize
 	pathsToUpdate[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/active-version", e.appName, entityLabel, fgLabel)] = activeVersionInt
 	for key, value := range sourceMap {
 		paths[fmt.Sprintf("/config/%s/source/%s", e.appName, key)] = value
@@ -578,6 +550,14 @@ func (e *Etcd) EditFeatures(entityLabel, fgLabel string, featureLabels, defaultV
 	if err != nil {
 		return err
 	}
+	stringLengthsUint16, vectorLengthsUint16, err := e.extractStringAndVectorLenghts(stringLength, vectorLength)
+	if err != nil {
+		return err
+	}
+	err = e.validateFeatureConstraints(defaultValues, fg.DataType, stringLengthsUint16, vectorLengthsUint16)
+	if err != nil {
+		return err
+	}
 	currentActiveVersion := fg.ActiveVersion
 	featureMetaMap := fg.Features[currentActiveVersion].FeatureMeta
 	existingLabels := fg.Features[currentActiveVersion].Labels
@@ -585,20 +565,40 @@ func (e *Etcd) EditFeatures(entityLabel, fgLabel string, featureLabels, defaultV
 	// Convert existingLabels to []string
 	existingLabelsSlice := strings.Split(existingLabels, ",")
 	// Convert existingDefaultValues to []string
-	existingDefaultValuesSlice := strings.Split(existingDefaultValues, ",")
-	if fg.DataType.IsVector() {
-		existingDefaultValuesSlice = strings.Split(existingDefaultValues, "],")
-	}
+	existingDefaultValuesSlice := splitDefaultValues(existingDefaultValues, fg.DataType)
+
+	var oldFeatureValues []string
+	var newFeatureValues []string
 	for i, featureLabel := range featureLabels {
-		// Update featureMetaMap with new feature metadata
-		stringLengthUint16, err := stringToUint16(stringLength[i])
-		if err != nil {
-			return err
+		if meta, exits := featureMetaMap[featureLabel]; exits {
+			if meta.Sequence < len(existingDefaultValuesSlice) {
+				oldFeatureValues = append(oldFeatureValues, existingDefaultValuesSlice[meta.Sequence])
+			}
 		}
-		vectorLengthUint16, err := stringToUint16(vectorLength[i])
+		newFeatureValues = append(newFeatureValues, defaultValues[i])
+	}
+
+	oldStringLengths, oldVectorLengths := e.extractLengthsFromFeatureMeta(featureMetaMap, featureLabels)
+	oldBytes := e.calculateFeatureBytesSize(oldFeatureValues, fg.DataType, oldStringLengths, oldVectorLengths)
+	newBytes := e.calculateFeatureBytesSize(newFeatureValues, fg.DataType, stringLengthsUint16, vectorLengthsUint16)
+
+	if newBytes > oldBytes {
+		bytesToAdd := newBytes - oldBytes
+		_, err = e.updateSegmentSizesForAddition(entityLabel, fgLabel, fg, bytesToAdd)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to increase segment sizes: %w", err)
 		}
+	} else if newBytes < oldBytes {
+		bytesToRemove := oldBytes - newBytes
+		err = e.updateSegmentSizesForDeletion(entityLabel, fgLabel, fg, bytesToRemove)
+		if err != nil {
+			return fmt.Errorf("failed to decrease segment sizes: %w", err)
+		}
+	}
+
+	for i, featureLabel := range featureLabels {
+		stringLengthUint16 := stringLengthsUint16[i]
+		vectorLengthUint16 := vectorLengthsUint16[i]
 		defaultValueInByte, _ := Serialize(defaultValues[i], fg.DataType)
 		currentSequence := featureMetaMap[featureLabel].Sequence
 		featureMetaMap[featureLabel] = FeatureMeta{
@@ -638,6 +638,7 @@ func (e *Etcd) EditFeatures(entityLabel, fgLabel string, featureLabels, defaultV
 	return nil
 }
 
+// splitDefaultValues splits the default values into a slice of strings
 func splitDefaultValues(defaultValues string, dataType enums.DataType) []string {
 	if dataType.IsVector() {
 		values := strings.Split(defaultValues, ",")
@@ -702,13 +703,34 @@ func (e *Etcd) DeleteFeatures(entityLabel, fgLabel string, featureLabels []strin
 
 	featureMetaMap := fg.Features[currentActiveVersion].FeatureMeta
 	existingDefaultValues := fg.Features[currentActiveVersion].DefaultValues
-
 	existingDefaultValuesSlice := splitDefaultValues(existingDefaultValues, fg.DataType)
+
+	// Calculate bytes being deleted by getting default values of features to be deleted
+	var featuresToDeleteValues []string
+	var featuresToDeleteLabels []string
+	for i, label := range existingLabelsSlice {
+		if slices.Contains(featureLabels, label) {
+			if i < len(existingDefaultValuesSlice) {
+				featuresToDeleteValues = append(featuresToDeleteValues, existingDefaultValuesSlice[i])
+				featuresToDeleteLabels = append(featuresToDeleteLabels, label)
+			}
+		}
+	}
+
+	// Extract string and vector lengths for features being deleted
+	deletedStringLengths, deletedVectorLengths := e.extractLengthsFromFeatureMeta(featureMetaMap, featuresToDeleteLabels)
+	bytesBeingDeleted := e.calculateFeatureBytesSize(featuresToDeleteValues, fg.DataType, deletedStringLengths, deletedVectorLengths)
 
 	// Remove the features to be deleted
 	var updatedLabels []string
 	var updatedDefaultValues []string
 	updatedFeatureMetaMap := make(map[string]FeatureMeta)
+
+	// Update segment sizes for deletion
+	err = e.updateSegmentSizesForDeletion(entityLabel, fgLabel, fg, bytesBeingDeleted)
+	if err != nil {
+		return fmt.Errorf("failed to update segment sizes: %w", err)
+	}
 
 	for i, label := range existingLabelsSlice {
 		if !slices.Contains(featureLabels, label) {
@@ -740,27 +762,180 @@ func (e *Etcd) DeleteFeatures(entityLabel, fgLabel string, featureLabels []strin
 	paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/features/%s/default-values", e.appName, entityLabel, fgLabel, newVersion)] = strings.Join(updatedDefaultValues, ",")
 	paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/active-version", e.appName, entityLabel, fgLabel)] = newVersion
 
-	var sourcePaths []string
+	var deletionErrors []error
 	for _, featureLabel := range featureLabels {
 		key := entityLabel + Delimitter + fgLabel + Delimitter + featureLabel
 		sourcePath := fmt.Sprintf("/config/%s/source/%s", e.appName, key)
-		sourcePaths = append(sourcePaths, sourcePath)
-	}
-
-	if err := e.instance.DeleteValues(sourcePaths); err != nil {
-		return fmt.Errorf("failed to delete source mappings for features in feature group '%s' of entity '%s': %w", fgLabel, entityLabel, err)
-	}
-
-	// Verify all paths were deleted
-	for _, sourcePath := range sourcePaths {
-		exists, _ := e.instance.IsNodeExist(sourcePath)
-		if exists {
-			return fmt.Errorf("source mapping still exists at path: %s", sourcePath)
+		if err := e.instance.DeleteValue(sourcePath); err != nil {
+			deletionErrors = append(deletionErrors, fmt.Errorf("failed to delete source mapping for feature %s: %w", featureLabel, err))
 		}
 	}
 
 	if err := e.instance.SetValues(paths); err != nil {
 		return fmt.Errorf("failed to update feature group: %w", err)
+	}
+
+	if len(deletionErrors) > 0 {
+		return fmt.Errorf("encountered errors while deleting source mappings: %v", deletionErrors)
+	}
+
+	return nil
+}
+
+// findLastNonEmptySegment finds the last non-empty segment in the columns
+func (e *Etcd) findLastNonEmptySegment(columns map[string]Column) (int, error) {
+	maxSegment := -1
+
+	for _, column := range columns {
+		if !strings.HasPrefix(column.Label, "seg_") {
+			continue
+		}
+
+		numStr := column.Label[4:]
+		num, err := strconv.Atoi(numStr)
+		if err != nil {
+			continue
+		}
+
+		// Only consider segments with size > 0
+		if column.CurrentSizeInBytes > 0 && num > maxSegment {
+			maxSegment = num
+		}
+	}
+
+	if maxSegment == -1 {
+		return -1, fmt.Errorf("no non-empty segments found")
+	}
+
+	return maxSegment, nil
+}
+
+// updateSegmentSizesForAddition updates segment sizes when features are added or edited and returns the columns to add
+func (e *Etcd) updateSegmentSizesForAddition(entityLabel, fgLabel string, fg *FeatureGroup, bytesToAdd int) ([]string, error) {
+	if bytesToAdd <= 0 {
+		return []string{}, nil
+	}
+
+	stores, err := e.GetStores()
+	if err != nil {
+		return nil, err
+	}
+
+	maxSegment, err := e.findLastNonEmptySegment(fg.Columns)
+	if err != nil {
+		maxSegment, err = findLargestSegment(fg.Columns)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	columnToUpdate := fmt.Sprintf("seg_%d", maxSegment)
+	currentSize := fg.Columns[columnToUpdate].CurrentSizeInBytes
+	newSize := currentSize + bytesToAdd
+
+	paths := make(map[string]interface{})
+	pathsToUpdate := make(map[string]interface{})
+	var columnsToAdd []string
+
+	if newSize > stores[fg.StoreId].MaxColumnSizeInBytes {
+		pathsToUpdate[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/columns/%s/current-size-in-bytes", e.appName, entityLabel, fgLabel, columnToUpdate)] = stores[fg.StoreId].MaxColumnSizeInBytes
+
+		remainingBytes := newSize - stores[fg.StoreId].MaxColumnSizeInBytes
+		segmentIndex := maxSegment + 1
+		for remainingBytes > 0 {
+			columnLabel := fmt.Sprintf("seg_%d", segmentIndex)
+
+			columnSize := remainingBytes
+			if columnSize > stores[fg.StoreId].MaxColumnSizeInBytes {
+				columnSize = stores[fg.StoreId].MaxColumnSizeInBytes
+			}
+
+			if _, exists := fg.Columns[columnLabel]; exists {
+				pathsToUpdate[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/columns/%s/current-size-in-bytes", e.appName, entityLabel, fgLabel, columnLabel)] = columnSize
+			} else {
+				paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/columns/%s/label", e.appName, entityLabel, fgLabel, columnLabel)] = columnLabel
+				paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/columns/%s/current-size-in-bytes", e.appName, entityLabel, fgLabel, columnLabel)] = columnSize
+				columnsToAdd = append(columnsToAdd, columnLabel)
+			}
+
+			remainingBytes -= columnSize
+			segmentIndex++
+		}
+	} else {
+		pathsToUpdate[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/columns/%s/current-size-in-bytes", e.appName, entityLabel, fgLabel, columnToUpdate)] = newSize
+	}
+
+	if len(pathsToUpdate) > 0 {
+		if err := e.instance.SetValues(pathsToUpdate); err != nil {
+			return nil, fmt.Errorf("failed to update existing segment sizes: %w", err)
+		}
+	}
+	if len(paths) > 0 {
+		if err := e.instance.CreateNodes(paths); err != nil {
+			return nil, fmt.Errorf("failed to create new segments: %w", err)
+		}
+	}
+
+	return columnsToAdd, nil
+}
+
+// updateSegmentSizesForDeletion updates segment sizes when features are deleted
+func (e *Etcd) updateSegmentSizesForDeletion(entityLabel, fgLabel string, fg *FeatureGroup, bytesToDelete int) error {
+	if bytesToDelete <= 0 {
+		return nil
+	}
+
+	maxSegment := -1
+	segmentMap := make(map[int]string)
+
+	for segmentKey, segment := range fg.Columns {
+		if !strings.HasPrefix(segment.Label, "seg_") {
+			continue
+		}
+		numStr := segment.Label[4:]
+		num, err := strconv.Atoi(numStr)
+		if err != nil {
+			continue
+		}
+		segmentMap[num] = segmentKey
+		if num > maxSegment {
+			maxSegment = num
+		}
+	}
+
+	if maxSegment == -1 {
+		return fmt.Errorf("no segments found")
+	}
+
+	paths := make(map[string]interface{})
+	remainingBytesToDelete := bytesToDelete
+
+	for segmentNum := maxSegment; segmentNum >= 0 && remainingBytesToDelete > 0; segmentNum-- {
+		segmentKey, exists := segmentMap[segmentNum]
+		if !exists {
+			continue
+		}
+		segment := fg.Columns[segmentKey]
+		currentSize := segment.CurrentSizeInBytes
+		if currentSize == 0 {
+			continue
+		}
+		var newSize int
+		if currentSize <= remainingBytesToDelete {
+			newSize = 0
+			remainingBytesToDelete -= currentSize
+		} else {
+			newSize = currentSize - remainingBytesToDelete
+			remainingBytesToDelete = 0
+		}
+		paths[fmt.Sprintf("/config/%s/entities/%s/feature-groups/%s/columns/%s/current-size-in-bytes",
+			e.appName, entityLabel, fgLabel, segmentKey)] = newSize
+	}
+
+	if len(paths) > 0 {
+		if err := e.instance.SetValues(paths); err != nil {
+			return fmt.Errorf("failed to update segment sizes: %w", err)
+		}
 	}
 
 	return nil
@@ -966,4 +1141,143 @@ func (e *Etcd) GetAllFeatureGroupByEntityLabel(entityLabel string) ([]string, er
 	}
 
 	return featureGroupKeys, nil
+}
+
+func getMetadataSizeForLayout(version int) (int, error) {
+
+	switch version {
+	case 1:
+		return Layout1MetadataBytes, nil
+	default:
+		return 0, fmt.Errorf("unsupported layout version: %d", version)
+
+	}
+
+}
+
+// calculateFeatureBytesSize calculates bytes size for feature addition and deletion
+func (e *Etcd) calculateFeatureBytesSize(defaultValues []string, dataType enums.DataType, stringLengths []uint16, vectorLengths []uint16) int {
+	totalBytes := 0
+
+	for i, value := range defaultValues {
+		switch dataType {
+		case enums.DataTypeString:
+			if i < len(stringLengths) && stringLengths[i] > 0 {
+				totalBytes += int(stringLengths[i])
+			} else {
+				totalBytes += len(value)
+			}
+		case enums.DataTypeBool:
+			totalBytes += 1
+		case enums.DataTypeStringVector:
+			vectorValues := strings.Split(strings.Trim(value, "[]"), ",")
+			for j := range vectorValues {
+				vectorValues[j] = strings.TrimSpace(vectorValues[j])
+			}
+
+			if i < len(stringLengths) && i < len(vectorLengths) && stringLengths[i] > 0 && vectorLengths[i] > 0 {
+				totalBytes += int(vectorLengths[i]) * int(stringLengths[i])
+			} else {
+				for _, v := range vectorValues {
+					totalBytes += len(v)
+				}
+			}
+		case enums.DataTypeBoolVector:
+			vectorValues := strings.Split(strings.Trim(value, "[]"), ",")
+			totalBytes += (len(vectorValues) + 7) / 8
+		default:
+			if dataType.IsVector() {
+				vectorValues := strings.Split(strings.Trim(value, "[]"), ",")
+				totalBytes += len(vectorValues) * dataType.Size()
+			} else {
+				totalBytes += dataType.Size()
+			}
+		}
+	}
+
+	return totalBytes
+}
+
+func (e *Etcd) validateFeatureConstraints(defaultValues []string, dataType enums.DataType, stringLengths []uint16, vectorLengths []uint16) error {
+	for i, value := range defaultValues {
+		switch dataType {
+		case enums.DataTypeString:
+			if i < len(stringLengths) && stringLengths[i] > 0 {
+				if len(value) > int(stringLengths[i]) {
+					return fmt.Errorf("default value length (%d) exceeds configured string length (%d) for feature at index %d", len(value), stringLengths[i], i)
+				}
+			}
+		case enums.DataTypeStringVector:
+			vectorValues := strings.Split(strings.Trim(value, "[]"), ",")
+			for j := range vectorValues {
+				vectorValues[j] = strings.TrimSpace(vectorValues[j])
+			}
+
+			if i < len(stringLengths) && i < len(vectorLengths) && stringLengths[i] > 0 && vectorLengths[i] > 0 {
+				if len(vectorValues) > int(vectorLengths[i]) {
+					return fmt.Errorf("vector size (%d) exceeds configured vector length (%d) for feature at index %d", len(vectorValues), vectorLengths[i], i)
+				}
+
+				for j, v := range vectorValues {
+					if len(v) > int(stringLengths[i]) {
+						return fmt.Errorf("string at position %d (length %d) exceeds configured string length (%d) for feature at index %d", j, len(v), stringLengths[i], i)
+					}
+				}
+			}
+		case enums.DataTypeBoolVector:
+			vectorValues := strings.Split(strings.Trim(value, "[]"), ",")
+			vectorLength := len(vectorValues)
+			if i < len(vectorLengths) && vectorLength > int(vectorLengths[i]) {
+				return fmt.Errorf("vector size (%d) exceeds configured vector length (%d) for feature at index %d", vectorLength, vectorLengths[i], i)
+			}
+		default:
+			if dataType.IsVector() {
+				vectorValues := strings.Split(strings.Trim(value, "[]"), ",")
+				vectorLength := len(vectorValues)
+				if i < len(vectorLengths) && vectorLength > int(vectorLengths[i]) {
+					return fmt.Errorf("vector size (%d) exceeds configured vector length (%d) for feature at index %d", vectorLength, vectorLengths[i], i)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// extractLengthsFromFeatureMeta extracts string and vector lengths from feature metadata for given feature labels
+func (e *Etcd) extractLengthsFromFeatureMeta(featureMeta map[string]FeatureMeta, featureLabels []string) ([]uint16, []uint16) {
+	stringLengths := make([]uint16, len(featureLabels))
+	vectorLengths := make([]uint16, len(featureLabels))
+
+	for i, label := range featureLabels {
+		if meta, exists := featureMeta[label]; exists {
+			stringLengths[i] = meta.StringLength
+			vectorLengths[i] = meta.VectorLength
+		}
+	}
+
+	return stringLengths, vectorLengths
+}
+
+// extractStringAndVectorLenghts converts string lengths and vector lengths to uint16 arrays
+func (e *Etcd) extractStringAndVectorLenghts(stringLengths []string, vectorLengths []string) ([]uint16, []uint16, error) {
+	stringLengthsUint16 := make([]uint16, len(stringLengths))
+	vectorLengthsUint16 := make([]uint16, len(vectorLengths))
+
+	for i := range stringLengths {
+		stringLengthUint16, err := stringToUint16(stringLengths[i])
+		if err != nil {
+			return nil, nil, err
+		}
+		stringLengthsUint16[i] = stringLengthUint16
+	}
+
+	for i := range vectorLengths {
+		vectorLengthUint16, err := stringToUint16(vectorLengths[i])
+		if err != nil {
+			return nil, nil, err
+		}
+		vectorLengthsUint16[i] = vectorLengthUint16
+	}
+
+	return stringLengthsUint16, vectorLengthsUint16, nil
 }
