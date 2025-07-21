@@ -665,3 +665,12 @@ func (v *V1) RegisterWatchPathCallback(path string, callback func() error) error
 	}
 	return nil
 }
+
+func (v *V1) Delete(path string) error {
+	_, err := v.conn.Delete(context.Background(), path)
+	if err != nil {
+		log.Error().Msgf("Failed to delete node %s: %v", path, err)
+		return err
+	}
+	return nil
+}
