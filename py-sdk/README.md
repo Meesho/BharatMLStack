@@ -1,6 +1,7 @@
 # BharatML Stack Python SDKs
 
 ![Build Status](https://github.com/Meesho/BharatMLStack/actions/workflows/py-sdk.yml/badge.svg)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da?style=flat&logo=discord&logoColor=white)](https://discord.gg/XkT7XsV2AU)
 
 A collection of independent Python packages for interacting with [BharatMLStack](https://github.com/Meesho/BharatMLStack) components. 🚀 
 
@@ -10,9 +11,9 @@ The BharatML Stack Python SDK has been **separated into 3 independent packages**
 
 | Package | Purpose | PyPI |
 |---------|---------|------|
-| **[bharatml_commons](https://pypi.org/project/bharatml_commons/)** | Common utilities and protobuf definitions | [![PyPI](https://badge.fury.io/py/bharatml_commons.svg)](https://pypi.org/project/bharatml_commons/) |
-| **[spark_feature_push_client](https://pypi.org/project/spark_feature_push_client/)** | Apache Spark-based data pipeline client | [![PyPI](https://badge.fury.io/py/spark_feature_push_client.svg)](https://pypi.org/project/spark_feature_push_client/) |
-| **[grpc_feature_client](https://pypi.org/project/grpc_feature_client/)** | High-performance gRPC client for real-time operations | [![PyPI](https://badge.fury.io/py/grpc_feature_client.svg)](https://pypi.org/project/grpc_feature_client/) |
+| **[bharatml_commons](https://pypi.org/project/bharatml_commons/)** | Common utilities and protobuf definitions | [![PyPI package](https://img.shields.io/pypi/v/bharatml_commons?label=pypi-package&color=light%20green)](https://pypi.org/project/bharatml_commons/) |
+| **[spark_feature_push_client](https://pypi.org/project/spark_feature_push_client/)** | Apache Spark-based data pipeline client | [![PyPI](https://img.shields.io/pypi/v/spark_feature_push_client?label=pypi-package&color=light%20green)](https://pypi.org/project/spark_feature_push_client/) |
+| **[grpc_feature_client](https://pypi.org/project/grpc_feature_client/)** | High-performance gRPC client for real-time operations | [![PyPI](https://img.shields.io/pypi/v/grpc_feature_client?label=pypi-package&color=light%20green)](https://pypi.org/project/grpc_feature_client/) |
 
 ## Key Features
 
@@ -378,3 +379,14 @@ Licensed under the BharatMLStack Business Source License 1.1. See [LICENSE](http
 - **[PyPI Packages](https://pypi.org/search/?q=bharatml)**: All published packages
 - **[Issues](https://github.com/Meesho/BharatMLStack/issues)**: Bug reports and feature requests
 - **[Discussions](https://github.com/Meesho/BharatMLStack/discussions)**: Community discussions
+
+
+
+---
+
+<div align="center">
+  <strong>Built with ❤️ for the ML community from Meesho</strong>
+</div>
+<div align="center">
+  <strong>If you find this useful, ⭐️ the repo — your support means the world to us!</strong>
+</div>

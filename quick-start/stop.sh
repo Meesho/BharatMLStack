@@ -63,6 +63,31 @@ remove_volumes() {
   echo "✅ Volumes removed"
 }
 
+remove_images() {
+  echo "🖼️  Removing Docker images..."
+  
+  # List of image patterns to remove
+  IMAGES=("ghcr.io/meesho/trufflebox-ui" "ghcr.io/meesho/horizon" "ghcr.io/meesho/onfs-api-server" "quay.io/coreos/etcd" "tzfun/etcd-workbench" "redis" "mysql" "scylladb/scylla" "workspace-db-init" "alpine")
+  
+  for image_pattern in "${IMAGES[@]}"; do
+    # Find images that match the pattern
+    IMAGE_IDS=$(docker images --filter "reference=*${image_pattern}*" -q 2>/dev/null || true)
+    if [ -n "$IMAGE_IDS" ]; then
+      echo "🗑️  Removing images matching: $image_pattern"
+      echo "$IMAGE_IDS" | xargs docker rmi -f 2>/dev/null || true
+    fi
+  done
+  
+  # Also remove any dangling images
+  DANGLING_IMAGES=$(docker images -f "dangling=true" -q 2>/dev/null || true)
+  if [ -n "$DANGLING_IMAGES" ]; then
+    echo "🧹 Removing dangling images..."
+    echo "$DANGLING_IMAGES" | xargs docker rmi -f 2>/dev/null || true
+  fi
+  
+  echo "✅ Images removed"
+}
+
 remove_network() {
   echo "🌐 Removing Docker network..."
   
@@ -115,12 +140,13 @@ show_status() {
 
 # Main execution
 if [ "$PURGE_FLAG" = "--purge" ]; then
-  echo "🚨 PURGE MODE: This will remove all containers, volumes, networks, and workspace"
+  echo "🚨 PURGE MODE: This will remove all containers, images, volumes, networks, and workspace"
   echo "⏳ Starting in 3 seconds... (Ctrl+C to cancel)"
   sleep 3
   
   stop_services
   remove_containers
+  remove_images
   remove_volumes
   remove_network
   remove_workspace

@@ -1,9 +1,9 @@
 # bharatml_commons
 
-[![PyPI version](https://badge.fury.io/py/bharatml_commons.svg)](https://badge.fury.io/py/bharatml_commons)
-[![Python versions](https://img.shields.io/pypi/pyversions/bharatml_commons.svg)](https://pypi.org/project/bharatml_commons/)
+[![PyPI version](https://img.shields.io/pypi/v/bharatml_commons?label=pypi-package&color=light%20green)](https://badge.fury.io/py/bharatml_commons)
 [![Build Status](https://github.com/Meesho/BharatMLStack/actions/workflows/py-sdk.yml/badge.svg)](https://github.com/Meesho/BharatMLStack/actions/workflows/py-sdk.yml)
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da?style=flat&logo=discord&logoColor=white)](https://discord.gg/XkT7XsV2AU)
 [![License](https://img.shields.io/badge/License-BharatMLStack%20BSL%201.1-blue.svg)](https://github.com/Meesho/BharatMLStack/blob/main/LICENSE.md)
 
 Common utilities and protobuf definitions for BharatML Stack.
@@ -139,10 +139,25 @@ This package is part of the BharatML Stack ecosystem:
 - **[spark_feature_push_client](https://pypi.org/project/spark_feature_push_client/)**: Spark-based data pipeline client
 - **[grpc_feature_client](https://pypi.org/project/grpc_feature_client/)**: High-performance gRPC client for real-time operations
 
-## License
-
-Licensed under the BharatMLStack Business Source License 1.1. See [LICENSE](https://github.com/Meesho/BharatMLStack/blob/main/LICENSE.md) for details.
-
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](https://github.com/Meesho/BharatMLStack/blob/main/CONTRIBUTION.md) for details. 
+We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to get started.
+
+## Community & Support
+
+- 💬 **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
+- 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
+- 📧 **Email**: Contact us at [ml-oss@meesho.com](mailto:ml-oss@meesho.com )
+
+## License
+
+BharatMLStack is open-source software licensed under the [BharatMLStack Business Source License 1.1](LICENSE.md).
+
+---
+
+<div align="center">
+  <strong>Built with ❤️ for the ML community from Meesho</strong>
+</div>
+<div align="center">
+  <strong>If you find this useful, ⭐️ the repo — your support means the world to us!</strong>
+</div>

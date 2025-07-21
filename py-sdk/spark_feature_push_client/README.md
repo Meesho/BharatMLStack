@@ -1,9 +1,9 @@
 # spark_feature_push_client
 
-[![PyPI version](https://badge.fury.io/py/spark_feature_push_client.svg)](https://badge.fury.io/py/spark_feature_push_client)
-[![Python versions](https://img.shields.io/pypi/pyversions/spark_feature_push_client.svg)](https://pypi.org/project/spark_feature_push_client/)
+[![PyPI version](https://img.shields.io/pypi/v/spark_feature_push_client?label=pypi-package&color=light%20green)](https://badge.fury.io/py/spark_feature_push_client)
 [![Build Status](https://github.com/Meesho/BharatMLStack/actions/workflows/py-sdk.yml/badge.svg)](https://github.com/Meesho/BharatMLStack/actions/workflows/py-sdk.yml)
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da?style=flat&logo=discord&logoColor=white)](https://discord.gg/XkT7XsV2AU)
 [![License](https://img.shields.io/badge/License-BharatMLStack%20BSL%201.1-blue.svg)](https://github.com/Meesho/BharatMLStack/blob/main/LICENSE.md)
 
 Apache Spark-based client for pushing ML features from offline batch sources to the BharatML Stack Online Feature Store via Kafka. This client is designed for **data pipeline operations** - reading from batch sources and publishing to Kafka for online consumption.
@@ -598,3 +598,26 @@ from spark_feature_push_client import OnlineFeatureStorePyClient
 6. **Performance**: Monitor Spark UI for optimization opportunities
 
 The Spark Feature Push Client is your gateway from batch data sources to the real-time online feature store! 🚀 
+
+## Contributing
+
+We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to get started.
+
+## Community & Support
+
+- 💬 **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
+- 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
+- 📧 **Email**: Contact us at [ml-oss@meesho.com](mailto:ml-oss@meesho.com )
+
+## License
+
+BharatMLStack is open-source software licensed under the [BharatMLStack Business Source License 1.1](LICENSE.md).
+
+---
+
+<div align="center">
+  <strong>Built with ❤️ for the ML community from Meesho</strong>
+</div>
+<div align="center">
+  <strong>If you find this useful, ⭐️ the repo — your support means the world to us!</strong>
+</div>

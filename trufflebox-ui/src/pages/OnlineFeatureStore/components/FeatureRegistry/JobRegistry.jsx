@@ -35,6 +35,7 @@ const JobRegistry = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
+  const [validationErrors, setValidationErrors] = useState({});
 
   // Configuration for different creation types
   const creationConfig = {
@@ -92,6 +93,7 @@ const JobRegistry = () => {
       "job-id": "",
       "token": "",
     });
+    setValidationErrors({});
     setOpen(true);
   };
 
@@ -115,7 +117,30 @@ const JobRegistry = () => {
     setSelectedJob(null);
   };
 
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!jobData["job-id"] || jobData["job-id"].trim() === "") {
+      errors["job-id"] = `${currentConfig.nameLabel} is required`;
+    }
+    
+    if (!jobData.token || jobData.token.trim() === "") {
+      errors.token = `${currentConfig.tokenLabel} is required`;
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = async () => {
+    setValidationErrors({});
+    
+    if (!validateForm()) {
+      setModalMessage('Please fill in all required fields correctly.');
+      setShowErrorModal(true);
+      return;
+    }
+
     const apiEndpoint = `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/register-job`;
     try {
       const response = await fetch(apiEndpoint, {
@@ -183,20 +208,24 @@ const JobRegistry = () => {
         <DialogTitle>{currentConfig.title}</DialogTitle>
         <DialogContent>
           <TextField
-            label={currentConfig.nameLabel}
+            label={`${currentConfig.nameLabel} *`}
             name="job-id"
             value={jobData["job-id"]}
             onChange={handleChange}
             fullWidth
             margin="normal"
+            error={!!validationErrors["job-id"]}
+            helperText={validationErrors["job-id"]}
           />
           <TextField
-            label={currentConfig.tokenLabel}
+            label={`${currentConfig.tokenLabel} *`}
             name="token"
             value={jobData.token}
             onChange={handleChange}
             fullWidth
             margin="normal"
+            error={!!validationErrors.token}
+            helperText={validationErrors.token}
           />
         </DialogContent>
         <DialogActions sx={{ padding: '0px 24px 16px 24px', gap: '12px' }}>

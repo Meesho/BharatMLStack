@@ -81,6 +81,7 @@ const FeatureAddition = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
+  const [validationErrors, setValidationErrors] = useState({});
 
   // Memoize fetch functions with useCallback
   const fetchEntities = useCallback(async () => {
@@ -222,6 +223,7 @@ const FeatureAddition = () => {
         "vector-length": "0"
       }],
     });
+    setValidationErrors({});
     setOpen(true);
   };
 
@@ -251,19 +253,55 @@ const FeatureAddition = () => {
     }
   };
 
-  const handleSubmit = async () => {
-    // Validate required fields - Label and Default Value
-    const hasEmptyRequiredFields = FeatureAdditionData.features.some(
-      feature => !feature.labels.trim() || !feature["default-values"].trim()
-    );
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!FeatureAdditionData["entity-label"]) {
+      errors["entity-label"] = "Entity Label is required";
+    }
 
-    if (hasEmptyRequiredFields) {
-      setModalMessage("Label and Default Value are required for all features");
+    if (!FeatureAdditionData["feature-group-label"]) {
+      errors["feature-group-label"] = "Feature Group Label is required";
+    }
+    
+    const selectedFeatureGroup = featureGroups?.find(
+      group => group?.label === FeatureAdditionData["feature-group-label"]
+    );
+    const dataType = selectedFeatureGroup?.["data-type"];
+    const showStringLength = shouldShowField(dataType, 'string');
+    const showVectorLength = shouldShowField(dataType, 'vector');
+    
+    FeatureAdditionData.features.forEach((feature, index) => {
+      if (!feature.labels || feature.labels.trim() === "") {
+        errors[`features.${index}.labels`] = "Label is required";
+      }
+      
+      if (!feature["default-values"] || feature["default-values"].trim() === "") {
+        errors[`features.${index}.default-values`] = "Default Value is required";
+      }
+      
+      if (showStringLength && (!feature["string-length"] || parseFloat(feature["string-length"]) <= 0)) {
+        errors[`features.${index}.string-length`] = "String Length must be greater than 0";
+      }
+      
+      if (showVectorLength && (!feature["vector-length"] || parseFloat(feature["vector-length"]) <= 0)) {
+        errors[`features.${index}.vector-length`] = "Vector Length must be greater than 0";
+      }
+    });
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    setValidationErrors({});
+    
+    if (!validateForm()) {
+      setModalMessage('Please fill in all required fields correctly.');
       setShowErrorModal(true);
       return;
     }
     
-    // Process and validate length fields based on data type
     const selectedFeatureGroup = featureGroups.find(
       group => group?.label === FeatureAdditionData["feature-group-label"]
     );
@@ -276,23 +314,6 @@ const FeatureAddition = () => {
       "string-length": showStringLength ? feature["string-length"] : "0",
       "vector-length": showVectorLength ? feature["vector-length"] : "0"
     }));
-
-    // Validate that shown length fields are > 0
-    const hasInvalidLengthFields = updatedFeatures.some(feature => {
-      if (showStringLength && (!feature["string-length"] || parseFloat(feature["string-length"]) <= 0)) return true;
-      if (showVectorLength && (!feature["vector-length"] || parseFloat(feature["vector-length"]) <= 0)) return true;
-      return false;
-    });
-
-    if (hasInvalidLengthFields) {
-      const requiredFields = [];
-      if (showStringLength) requiredFields.push("String Length");
-      if (showVectorLength) requiredFields.push("Vector Length");
-      const message = `${requiredFields.join(" and ")} must be greater than 0 for all features`;
-      setModalMessage(message);
-      setShowErrorModal(true);
-      return;
-    }
 
     const finalFeatureAdditionData = {
       ...FeatureAdditionData,
@@ -359,15 +380,16 @@ const FeatureAddition = () => {
       >
         <DialogTitle>Add Features</DialogTitle>
         <DialogContent>
-          <FormControl fullWidth margin="normal">
-            <InputLabel id="entity-label-id">Entity Label</InputLabel>
+          <FormControl fullWidth margin="normal" error={!!validationErrors["entity-label"]}>
+            <InputLabel id="entity-label-id">Entity Label *</InputLabel>
             <Select
               labelId="entity-label-id"
               id="entity-label"
               name="entity-label"
               value={FeatureAdditionData["entity-label"]}
               onChange={handleChange}
-              label="Entity Label"
+              label="Entity Label *"
+              error={!!validationErrors["entity-label"]}
             >
               {entities?.map((entity) => (
                 <MenuItem key={entity} value={entity}>
@@ -375,10 +397,15 @@ const FeatureAddition = () => {
                 </MenuItem>
               ))}
             </Select>
+            {validationErrors["entity-label"] && (
+              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
+                {validationErrors["entity-label"]}
+              </Typography>
+            )}
           </FormControl>
 
-          <FormControl fullWidth margin="normal">
-            <InputLabel id="feature-group-label-id">Feature Group Label</InputLabel>
+          <FormControl fullWidth margin="normal" error={!!validationErrors["feature-group-label"]}>
+            <InputLabel id="feature-group-label-id">Feature Group Label *</InputLabel>
             <Select
               labelId="feature-group-label-id"
               id="feature-group-label"
@@ -386,7 +413,8 @@ const FeatureAddition = () => {
               value={FeatureAdditionData["feature-group-label"]}
               onChange={handleChange}
               disabled={!FeatureAdditionData["entity-label"]}
-              label="Feature Group Label"
+              label="Feature Group Label *"
+              error={!!validationErrors["feature-group-label"]}
             >
               {featureGroups?.map((group) => (
                 <MenuItem key={group?.label} value={group?.label}>
@@ -394,6 +422,11 @@ const FeatureAddition = () => {
                 </MenuItem>
               ))}
             </Select>
+            {validationErrors["feature-group-label"] && (
+              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
+                {validationErrors["feature-group-label"]}
+              </Typography>
+            )}
           </FormControl>
 
           <h5>Features</h5>
@@ -409,20 +442,22 @@ const FeatureAddition = () => {
                   }}
                 >
                   <TextField
-                    label="Label"
+                    label="Label *"
                     name="labels"
                     value={feature.labels}
                     onChange={(e) => handleFeatureChange(index, e)}
                     margin="normal"
-                    required
+                    error={!!validationErrors[`features.${index}.labels`]}
+                    helperText={validationErrors[`features.${index}.labels`]}
                   />
                   <TextField
-                    label="Default Value"
+                    label="Default Value *"
                     name="default-values"
                     value={feature["default-values"]}
                     onChange={(e) => handleFeatureChange(index, e)}
                     margin="normal"
-                    required
+                    error={!!validationErrors[`features.${index}.default-values`]}
+                    helperText={validationErrors[`features.${index}.default-values`]}
                   />
                 </div>
 
@@ -571,23 +606,25 @@ const FeatureAddition = () => {
                     >
                       {showStringLength ? (
                         <TextField
-                          label="String Length"
+                          label="String Length *"
                           name="string-length"
                           value={feature["string-length"]}
                           onChange={(e) => handleFeatureChange(index, e)}
                           margin="normal"
                           fullWidth
-                          required
+                          error={!!validationErrors[`features.${index}.string-length`]}
+                          helperText={validationErrors[`features.${index}.string-length`]}
                         />
                       ) : showVectorLength ? (
                         <TextField
-                          label="Vector Length"
+                          label="Vector Length *"
                           name="vector-length"
                           value={feature["vector-length"]}
                           onChange={(e) => handleFeatureChange(index, e)}
                           margin="normal"
                           fullWidth
-                          required
+                          error={!!validationErrors[`features.${index}.vector-length`]}
+                          helperText={validationErrors[`features.${index}.vector-length`]}
                         />
                       ) : (
                         <div></div>
@@ -595,13 +632,14 @@ const FeatureAddition = () => {
 
                       {showStringLength && showVectorLength ? (
                         <TextField
-                          label="Vector Length"
+                          label="Vector Length *"
                           name="vector-length"
                           value={feature["vector-length"]}
                           onChange={(e) => handleFeatureChange(index, e)}
                           margin="normal"
                           fullWidth
-                          required
+                          error={!!validationErrors[`features.${index}.vector-length`]}
+                          helperText={validationErrors[`features.${index}.vector-length`]}
                         />
                       ) : (
                         <div></div>

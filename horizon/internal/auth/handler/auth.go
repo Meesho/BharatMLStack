@@ -2,6 +2,8 @@ package handler
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/auth"
@@ -39,8 +41,65 @@ func InitAuthHandler() Authenticator {
 	return authenticator
 }
 
+// validatePassword performs comprehensive password validation
+func (a *AuthHandler) validatePassword(password string) error {
+	var failedRules []string
+
+	// Check minimum length (8 characters)
+	if len(password) < 8 {
+		failedRules = append(failedRules, "At least 8 characters")
+	}
+
+	// Check for uppercase letter
+	if matched, _ := regexp.MatchString(`[A-Z]`, password); !matched {
+		failedRules = append(failedRules, "One uppercase letter (A-Z)")
+	}
+
+	// Check for lowercase letter
+	if matched, _ := regexp.MatchString(`[a-z]`, password); !matched {
+		failedRules = append(failedRules, "One lowercase letter (a-z)")
+	}
+
+	// Check for number
+	if matched, _ := regexp.MatchString(`\d`, password); !matched {
+		failedRules = append(failedRules, "One number (0-9)")
+	}
+
+	// Check for special character
+	if matched, _ := regexp.MatchString(`[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]`, password); !matched {
+		failedRules = append(failedRules, "One special character (!@#$%^&*...)")
+	}
+
+	// Check for spaces
+	if strings.Contains(password, " ") {
+		failedRules = append(failedRules, "No spaces allowed")
+	}
+
+	// Check for common passwords
+	commonPasswords := []string{"password", "123456", "qwerty", "abc123", "admin", "user"}
+	for _, common := range commonPasswords {
+		if strings.ToLower(password) == common {
+			failedRules = append(failedRules, "Not a common password")
+			break
+		}
+	}
+
+	if len(failedRules) > 0 {
+		return fmt.Errorf("password validation failed: %s", strings.Join(failedRules, ", "))
+	}
+
+	return nil
+}
+
 // Register handler
 func (a *AuthHandler) Register(user *User) error {
+
+	// Validate password before hashing
+	if err := a.validatePassword(user.Password); err != nil {
+		log.Error().Msgf("Password validation failed: %v", err)
+		return err
+	}
+
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {

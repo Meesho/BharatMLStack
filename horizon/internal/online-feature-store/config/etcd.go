@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	Delimitter = "|"
+	Delimitter           = "|"
 	Layout1MetadataBytes = 9
 )
 
@@ -185,7 +185,6 @@ func (e *Etcd) RegisterFeatureGroup(entityLabel, fgLabel, JobId string, storeId,
 		}
 		totalSize = int(stringVectorSize) * dataType.Size()
 	}
-
 	metadataSize, err := getMetadataSizeForLayout(layoutVersion)
 	if err != nil {
 		return nil, Store{}, nil, err

@@ -1,0 +1,8 @@
+{
+    "label": "Go SDK",
+    "position": 1,
+    "link": {
+        "type": "generated-index",
+        "description": "Go SDK for BharatML Stack. Provides Go client libraries and packages for interacting with the online feature store, including gRPC clients and protocol buffer definitions."
+    }
+}
