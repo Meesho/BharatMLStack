@@ -19,7 +19,7 @@ type Memtable struct {
 	Id            uint32
 	capacity      int
 	currentOffset int
-	file          *fs.RollingAppendFile
+	file          *fs.WrapAppendFile
 	page          *fs.AlignedPage
 	readyForFlush bool
 }
@@ -28,7 +28,7 @@ type MemtableConfig struct {
 	capacity int
 	id       uint32
 	page     *fs.AlignedPage
-	file     *fs.RollingAppendFile
+	file     *fs.WrapAppendFile
 }
 
 func NewMemtable(config MemtableConfig) (*Memtable, error) {

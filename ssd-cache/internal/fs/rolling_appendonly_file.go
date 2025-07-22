@@ -26,7 +26,7 @@ type RollingAppendFile struct {
 	Stat                  *Stat    // file statistics
 }
 
-func NewRollingAppendFile(config RAFileConfig) (*RollingAppendFile, error) {
+func NewRollingAppendFile(config FileConfig) (*RollingAppendFile, error) {
 	filename := config.Filename
 	maxFileSize := config.MaxFileSize
 	filePunchHoleSize := config.FilePunchHoleSize

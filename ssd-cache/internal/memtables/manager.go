@@ -7,19 +7,20 @@ import (
 )
 
 type MemtableManager struct {
-	file     *fs.RollingAppendFile
+	file     *fs.WrapAppendFile
 	capacity int32
 
-	memtable1       *Memtable
-	memtable2       *Memtable
-	activeMemtable  *Memtable
-	nextFileOffset  int64
-	nextId          uint32
-	flushInProgress bool
-	flushChan       chan *Memtable
+	memtable1         *Memtable
+	memtable2         *Memtable
+	activeMemtable    *Memtable
+	nextFileOffset    int64
+	nextId            uint32
+	flushInProgress   bool
+	flushChan         chan *Memtable
+	flushCompleteChan chan struct{}
 }
 
-func NewMemtableManager(file *fs.RollingAppendFile, capacity int32) (*MemtableManager, error) {
+func NewMemtableManager(file *fs.WrapAppendFile, capacity int32) (*MemtableManager, error) {
 	allocatorConfig := allocators.SlabAlignedPageAllocatorConfig{
 		SizeClasses: []allocators.SizeClass{
 			{Size: int(capacity), MinCount: 2},
@@ -49,17 +50,20 @@ func NewMemtableManager(file *fs.RollingAppendFile, capacity int32) (*MemtableMa
 	if err != nil {
 		return nil, err
 	}
-	return &MemtableManager{
-		file:            file,
-		capacity:        capacity,
-		memtable1:       memtable1,
-		memtable2:       memtable2,
-		activeMemtable:  memtable1,
-		nextFileOffset:  2 * int64(capacity),
-		nextId:          2,
-		flushInProgress: false,
-		flushChan:       make(chan *Memtable, 1),
-	}, nil
+	memtableManager := &MemtableManager{
+		file:              file,
+		capacity:          capacity,
+		memtable1:         memtable1,
+		memtable2:         memtable2,
+		activeMemtable:    memtable1,
+		nextFileOffset:    2 * int64(capacity),
+		nextId:            2,
+		flushChan:         make(chan *Memtable, 1),
+		flushCompleteChan: make(chan struct{}, 1),
+		flushInProgress:   false,
+	}
+	go memtableManager.flushConsumer()
+	return memtableManager, nil
 }
 
 func (mm *MemtableManager) GetMemtable() (*Memtable, uint32, uint64) {
@@ -78,6 +82,7 @@ func (mm *MemtableManager) GetMemtableById(id uint32) *Memtable {
 
 func (mm *MemtableManager) flushConsumer() {
 	for {
+		mm.flushInProgress = true
 		memtable, ok := <-mm.flushChan
 		if !ok {
 			break
@@ -89,17 +94,24 @@ func (mm *MemtableManager) flushConsumer() {
 		if err != nil {
 			log.Error().Msgf("Failed to flush memtable: memId:%d fileOffset:%d nextFileOffset:%d n:%d err:%v", memtable.Id, fileOffset, mm.nextFileOffset, n, err)
 		}
+		memtable.Id = mm.nextId
+		mm.nextId++
+		mm.nextFileOffset += int64(n)
+		mm.flushInProgress = false
+		mm.flushCompleteChan <- struct{}{}
 	}
 }
 func (mm *MemtableManager) Flush() error {
+
 	if mm.flushInProgress {
 		// Wait for previous flush to complete before starting new one
-		<-mm.flushChan
+		<-mm.flushCompleteChan
 	}
 
 	mm.flushInProgress = true
 
 	memtableToFlush := mm.activeMemtable
+	mm.flushChan <- memtableToFlush
 
 	// Swap to the other memtable
 	if mm.activeMemtable == mm.memtable1 {
@@ -107,36 +119,6 @@ func (mm *MemtableManager) Flush() error {
 	} else {
 		mm.activeMemtable = mm.memtable1
 	}
-
-	// Async flush
-	go func() {
-		// defer func() {
-		// 	if r := recover(); r != nil {
-		// 		log.Error().Msgf("Recovered from panic: %v", r)
-		// 		mm.flushInProgress = false
-		// 		mm.flushChan <- struct{}{}
-		// 	}
-		// }()
-		if !memtableToFlush.readyForFlush {
-			panic("memtable not ready for flush")
-		}
-		n, fileOffset, err := memtableToFlush.Flush()
-		if n != int(mm.capacity) {
-			log.Error().Msgf("Flush size mismatch: memId:%d fileOffset:%d nextFileOffset:%d n:%d err:%v", memtableToFlush.Id, fileOffset, mm.nextFileOffset, n, err)
-		}
-		if err != nil {
-			log.Error().Msgf("Failed to flush memtable: memId:%d fileOffset:%d nextFileOffset:%d n:%d err:%v", memtableToFlush.Id, fileOffset, mm.nextFileOffset, n, err)
-		}
-
-		// Update metadata (only flushed memtable touched here)
-		memtableToFlush.Id = mm.nextId
-		mm.nextId++
-		mm.nextFileOffset += int64(n)
-
-		// Mark flush as done and notify to unblock next flush
-		mm.flushInProgress = false
-		mm.flushChan <- struct{}{}
-	}()
 
 	return nil
 }

@@ -25,18 +25,17 @@ const (
 )
 
 // Helper function to create benchmark file
-func createBenchmarkFile(b *testing.B) *fs.RollingAppendFile {
-	tmpDir := b.TempDir()
-	filename := filepath.Join(tmpDir, "bench_memtable.dat")
+func createBenchmarkFile(b *testing.B) *fs.WrapAppendFile {
+	filename := filepath.Join("/media/a0d00kc/freedom/bench_memtable.dat")
 
-	config := fs.RAFileConfig{
+	config := fs.FileConfig{
 		Filename:          filename,
 		MaxFileSize:       BENCH_MAX_FILE_SIZE,
 		FilePunchHoleSize: BENCH_PUNCH_HOLE_SIZE,
 		BlockSize:         fs.BLOCK_SIZE,
 	}
 
-	file, err := fs.NewRollingAppendFile(config)
+	file, err := fs.NewWrapAppendFile(config)
 	if err != nil {
 		b.Fatalf("Failed to create benchmark file: %v", err)
 	}
@@ -49,7 +48,7 @@ func createBenchmarkPage() *fs.AlignedPage {
 }
 
 // Helper function to create benchmark memtable
-func createBenchmarkMemtable(b *testing.B) (*Memtable, *fs.RollingAppendFile, *fs.AlignedPage) {
+func createBenchmarkMemtable(b *testing.B) (*Memtable, *fs.WrapAppendFile, *fs.AlignedPage) {
 	file := createBenchmarkFile(b)
 	page := createBenchmarkPage()
 

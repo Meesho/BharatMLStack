@@ -8,18 +8,18 @@ import (
 )
 
 // Helper function to create a mock file for testing
-func createTestFile(t *testing.T) *fs.RollingAppendFile {
+func createTestFile(t *testing.T) *fs.WrapAppendFile {
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "test_memtable.dat")
 
-	config := fs.RAFileConfig{
+	config := fs.FileConfig{
 		Filename:          filename,
 		MaxFileSize:       1024 * 1024, // 1MB
 		FilePunchHoleSize: 64 * 1024,   // 64KB
 		BlockSize:         fs.BLOCK_SIZE,
 	}
 
-	file, err := fs.NewRollingAppendFile(config)
+	file, err := fs.NewWrapAppendFile(config)
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
@@ -32,7 +32,7 @@ func createTestPage(size int) *fs.AlignedPage {
 }
 
 // Helper function to cleanup resources
-func cleanup(file *fs.RollingAppendFile, page *fs.AlignedPage) {
+func cleanup(file *fs.WrapAppendFile, page *fs.AlignedPage) {
 	if file != nil {
 		file.Close()
 	}

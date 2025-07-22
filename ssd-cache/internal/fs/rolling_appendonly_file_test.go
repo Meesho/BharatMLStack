@@ -30,7 +30,7 @@ func TestNewRollingAppendFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "test_rolling_file.dat")
 
-	config := RAFileConfig{
+	config := FileConfig{
 		Filename:          filename,
 		MaxFileSize:       1024 * 1024, // 1MB
 		FilePunchHoleSize: 64 * 1024,   // 64KB
@@ -65,7 +65,7 @@ func TestNewRollingAppendFile_DefaultBlockSize(t *testing.T) {
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "test_rolling_file.dat")
 
-	config := RAFileConfig{
+	config := FileConfig{
 		Filename:          filename,
 		MaxFileSize:       1024 * 1024,
 		FilePunchHoleSize: 64 * 1024,
@@ -87,7 +87,7 @@ func TestPwrite_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "test_rolling_file.dat")
 
-	config := RAFileConfig{
+	config := FileConfig{
 		Filename:          filename,
 		MaxFileSize:       1024 * 1024,
 		FilePunchHoleSize: 64 * 1024,
@@ -128,7 +128,7 @@ func TestPwrite_FileSizeExceeded(t *testing.T) {
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "test_rolling_file.dat")
 
-	config := RAFileConfig{
+	config := FileConfig{
 		Filename:          filename,
 		MaxFileSize:       1024, // Small max size
 		FilePunchHoleSize: 512,
@@ -154,7 +154,7 @@ func TestPwrite_BufferNotAligned(t *testing.T) {
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "test_rolling_file.dat")
 
-	config := RAFileConfig{
+	config := FileConfig{
 		Filename:          filename,
 		MaxFileSize:       1024 * 1024,
 		FilePunchHoleSize: 64 * 1024,
@@ -183,7 +183,7 @@ func TestPread_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "test_rolling_file.dat")
 
-	config := RAFileConfig{
+	config := FileConfig{
 		Filename:          filename,
 		MaxFileSize:       1024 * 1024,
 		FilePunchHoleSize: 64 * 1024,
@@ -234,7 +234,7 @@ func TestPread_FileOffsetOutOfRange(t *testing.T) {
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "test_rolling_file.dat")
 
-	config := RAFileConfig{
+	config := FileConfig{
 		Filename:          filename,
 		MaxFileSize:       1024 * 1024,
 		FilePunchHoleSize: 64 * 1024,
@@ -272,7 +272,7 @@ func TestPread_OffsetNotAligned(t *testing.T) {
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "test_rolling_file.dat")
 
-	config := RAFileConfig{
+	config := FileConfig{
 		Filename:          filename,
 		MaxFileSize:       1024 * 1024,
 		FilePunchHoleSize: 64 * 1024,
@@ -307,7 +307,7 @@ func TestTrimHead_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "test_rolling_file.dat")
 
-	config := RAFileConfig{
+	config := FileConfig{
 		Filename:          filename,
 		MaxFileSize:       1024 * 1024,
 		FilePunchHoleSize: 4096, // One block
@@ -371,7 +371,7 @@ func TestMultipleOperations(t *testing.T) {
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "test_rolling_file.dat")
 
-	config := RAFileConfig{
+	config := FileConfig{
 		Filename:          filename,
 		MaxFileSize:       1024 * 1024,
 		FilePunchHoleSize: 4096,
@@ -433,7 +433,7 @@ func TestStatistics(t *testing.T) {
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "test_rolling_file.dat")
 
-	config := RAFileConfig{
+	config := FileConfig{
 		Filename:          filename,
 		MaxFileSize:       1024 * 1024,
 		FilePunchHoleSize: 4096,
@@ -498,79 +498,5 @@ func cleanup(raf *RollingAppendFile) {
 	}
 	if raf.WriteFile != nil {
 		os.Remove(raf.WriteFile.Name())
-	}
-}
-
-// Benchmarks
-func BenchmarkPwrite(b *testing.B) {
-	tmpDir := b.TempDir()
-	filename := filepath.Join(tmpDir, "bench_rolling_file.dat")
-
-	config := RAFileConfig{
-		Filename:          filename,
-		MaxFileSize:       1024 * 1024 * 1024, // 1GB
-		FilePunchHoleSize: 64 * 1024,
-		BlockSize:         4096,
-	}
-
-	raf, err := NewRollingAppendFile(config)
-	if err != nil {
-		b.Fatalf("Failed to create RollingAppendFile: %v", err)
-	}
-	defer cleanup(raf)
-
-	// Create aligned buffer for DirectIO
-	data := createAlignedBuffer(4096, 4096)
-	for i := range data {
-		data[i] = byte(i % 256)
-	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		_, err := raf.Pwrite(data)
-		if err != nil {
-			b.Fatalf("Pwrite failed: %v", err)
-		}
-	}
-}
-
-func BenchmarkPread(b *testing.B) {
-	tmpDir := b.TempDir()
-	filename := filepath.Join(tmpDir, "bench_rolling_file.dat")
-
-	config := RAFileConfig{
-		Filename:          filename,
-		MaxFileSize:       1024 * 1024 * 1024, // 1GB
-		FilePunchHoleSize: 64 * 1024,
-		BlockSize:         4096,
-	}
-
-	raf, err := NewRollingAppendFile(config)
-	if err != nil {
-		b.Fatalf("Failed to create RollingAppendFile: %v", err)
-	}
-	defer cleanup(raf)
-
-	// Pre-populate with data using aligned buffer
-	writeData := createAlignedBuffer(4096, 4096)
-	for i := 0; i < 1000; i++ {
-		_, err := raf.Pwrite(writeData)
-		if err != nil {
-			b.Fatalf("Pwrite failed: %v", err)
-		}
-	}
-
-	readData := createAlignedBuffer(4096, 4096)
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		offset := int64((i % 1000) * 4096)
-		_, err := raf.Pread(offset, readData)
-		if err != nil {
-			b.Fatalf("Pread failed: %v", err)
-		}
 	}
 }

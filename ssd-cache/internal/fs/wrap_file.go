@@ -11,23 +11,23 @@ import (
 )
 
 type WrapAppendFile struct {
-	WriteDirectIO         bool
-	ReadDirectIO          bool
-	wrapped               bool
-	blockSize             int
-	WriteFd               int      // write file descriptor
-	ReadFd                int      // read file descriptor
-	MaxFileSize           int64    // max file size in bytes
-	FilePunchHoleSize     int64    // file punch hole size in bytes
-	PhysicalStartOffset   int64    // physical start offset in bytes
-	LogicalCurrentOffset  int64    // file current size in bytes
-	PhysicalWriteOffset   int64    // file current physical offset in bytes
-	WriteFile             *os.File // write file
-	ReadFile              *os.File // read file
-	Stat                  *Stat    // file statistics
+	WriteDirectIO        bool
+	ReadDirectIO         bool
+	wrapped              bool
+	blockSize            int
+	WriteFd              int      // write file descriptor
+	ReadFd               int      // read file descriptor
+	MaxFileSize          int64    // max file size in bytes
+	FilePunchHoleSize    int64    // file punch hole size in bytes
+	PhysicalStartOffset  int64    // physical start offset in bytes
+	LogicalCurrentOffset int64    // file current size in bytes
+	PhysicalWriteOffset  int64    // file current physical offset in bytes
+	WriteFile            *os.File // write file
+	ReadFile             *os.File // read file
+	Stat                 *Stat    // file statistics
 }
 
-func NewWrapAppendFile(config RAFileConfig) (*WrapAppendFile, error) {
+func NewWrapAppendFile(config FileConfig) (*WrapAppendFile, error) {
 	filename := config.Filename
 	maxFileSize := config.MaxFileSize
 	filePunchHoleSize := config.FilePunchHoleSize
@@ -45,18 +45,18 @@ func NewWrapAppendFile(config RAFileConfig) (*WrapAppendFile, error) {
 		blockSize = BLOCK_SIZE
 	}
 	return &WrapAppendFile{
-		WriteDirectIO:         wDirectIO,
-		ReadDirectIO:          rDirectIO,
-		blockSize:             blockSize,
-		WriteFd:               writeFd,
-		ReadFd:                readFd,
-		WriteFile:             writeFile,
-		ReadFile:              readFile,
-		MaxFileSize:           maxFileSize,
-		FilePunchHoleSize:     filePunchHoleSize,
-		PhysicalStartOffset:    0,
-		LogicalCurrentOffset:  0,
-		PhysicalWriteOffset:   0,
+		WriteDirectIO:        wDirectIO,
+		ReadDirectIO:         rDirectIO,
+		blockSize:            blockSize,
+		WriteFd:              writeFd,
+		ReadFd:               readFd,
+		WriteFile:            writeFile,
+		ReadFile:             readFile,
+		MaxFileSize:          maxFileSize,
+		FilePunchHoleSize:    filePunchHoleSize,
+		PhysicalStartOffset:  0,
+		LogicalCurrentOffset: 0,
+		PhysicalWriteOffset:  0,
 		Stat: &Stat{
 			WriteCount:         0,
 			ReadCount:          0,
@@ -67,7 +67,7 @@ func NewWrapAppendFile(config RAFileConfig) (*WrapAppendFile, error) {
 }
 
 func (r *WrapAppendFile) Pwrite(buf []byte) (currentPhysicalOffset int64, err error) {
-	if r.wrapped && r.PhysicalWriteOffset  == r.PhysicalStartOffset  {
+	if r.wrapped && r.PhysicalWriteOffset == r.PhysicalStartOffset {
 		r.TrimHead()
 	}
 
@@ -103,7 +103,7 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 	// Validate read window depending on wrap state
 	readEnd := fileOffset + int64(len(buf))
 	valid := false
-	
+
 	if !r.wrapped {
 		// Single valid region: [PhysicalStartOffset, PhysicalWriteOffset)
 		valid = fileOffset >= r.PhysicalStartOffset && readEnd <= r.PhysicalWriteOffset
@@ -129,7 +129,6 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 	return int32(n), nil
 }
 
-
 func (r *WrapAppendFile) TrimHead() (err error) {
 	if r.WriteDirectIO {
 		if !isAlignedOffset(r.PhysicalStartOffset, r.blockSize) {
@@ -143,7 +142,7 @@ func (r *WrapAppendFile) TrimHead() (err error) {
 	r.PhysicalStartOffset += int64(r.FilePunchHoleSize)
 	if r.PhysicalStartOffset >= r.MaxFileSize {
 		r.PhysicalStartOffset = 0
-	r.PhysicalStartOffset = r.PhysicalStartOffset % r.MaxFileSize
+	}
 	r.Stat.PunchHoleCount++
 	return nil
 }

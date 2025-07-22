@@ -41,7 +41,7 @@ type Stat struct {
 	CurrentLogicalSize int64
 }
 
-type RAFileConfig struct {
+type FileConfig struct {
 	Filename          string
 	MaxFileSize       int64
 	FilePunchHoleSize int64
