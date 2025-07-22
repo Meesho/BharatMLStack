@@ -14,6 +14,7 @@ const (
 	_LO_6BIT_IN_32BIT  = (1 << 6) - 1
 	_LO_9BIT_IN_32BIT  = (1 << 9) - 1
 	_LO_3BIT_IN_32BIT  = (1 << 3) - 1
+	_LO_54BIT_IN_64BIT = (1 << 54) - 1
 )
 
 type TestRoundMap struct {
@@ -107,4 +108,26 @@ func (rm *RoundMap) GetV2(h64, h10 uint64) (uint32, bool) {
 
 	round := first12bits % uint64(len(rm.bitmaps))
 	return rm.bitmaps[round].GetV2(uint64(next24bits), uint64(last28bits), h10)
+}
+
+func (rm *RoundMap) Remove(key string) (uint32, bool) {
+	hash := xxhash.Sum64String(key)
+
+	first12bits := (hash >> 52) & _LO_12BIT_IN_32BIT // Bits 63–52
+	next24bits := (hash >> 28) & _LO_24BIT_IN_32BIT  // Bits 51–28
+	last28bits := hash & _LO_28BIT_IN_32BIT          // Bits 27–0
+	h2 := Hash10(key)
+
+	round := first12bits % uint64(len(rm.bitmaps))
+	return rm.bitmaps[round].Remove(uint64(next24bits), uint64(last28bits), h2)
+}
+
+func (rm *RoundMap) RemoveV2(h64, h10 uint64) (uint32, bool) {
+
+	first12bits := (h64 >> 52) & _LO_12BIT_IN_32BIT // Bits 63–52
+	next24bits := (h64 >> 28) & _LO_24BIT_IN_32BIT  // Bits 51–28
+	last28bits := h64 & _LO_28BIT_IN_32BIT          // Bits 27–0
+
+	round := first12bits % uint64(len(rm.bitmaps))
+	return rm.bitmaps[round].Remove(uint64(next24bits), uint64(last28bits), h10)
 }

@@ -131,3 +131,28 @@ func (fb *FlatBitmap) GetV2(next24bits, last28bits, h2 uint64) (uint32, bool) {
 	}
 	return 0, false
 }
+
+func (fb *FlatBitmap) Remove(next24bits, last28bits, h2 uint64) (uint32, bool) {
+	pos := int((next24bits >> 6) & 0x3FFFF)
+	bitPos := next24bits & 0x3F
+	if fb.bitmap[pos] == 0 || fb.bitmap[pos]&bitIndex[bitPos] == 0 {
+		return 0, false
+	}
+	if fb.bitmap[pos]&bitIndex[bitPos] == bitIndex[bitPos] {
+		if fb.valueSlice[pos][bitPos]>>36 == last28bits && (fb.valueSlice[pos][bitPos]>>26)&0x3FF == h2 {
+			fb.bitmap[pos] &= ^bitIndex[bitPos]
+			fb.valueSlice[pos][bitPos] = 0
+			return 0, true
+		}
+		i := 64
+		for i < len(fb.valueSlice[pos]) {
+			if fb.valueSlice[pos][i]>>36 == last28bits && (fb.valueSlice[pos][i]>>26)&0x3FF == h2 {
+				fb.bitmap[pos] &= ^bitIndex[bitPos]
+				fb.valueSlice[pos][i] = 0
+				return 0, true
+			}
+			i++
+		}
+	}
+	return 0, false
+}

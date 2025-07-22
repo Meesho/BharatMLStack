@@ -148,8 +148,11 @@ func (r *RollingAppendFile) Pwrite(buf []byte) (currentPhysicalOffset int64, err
 			return 0, ErrBufNoAlign
 		}
 	}
-	syscall.Pwrite(r.WriteFd, buf, r.CurrentPhysicalOffset)
-	r.CurrentPhysicalOffset += int64(len(buf))
+	n, err := syscall.Pwrite(r.WriteFd, buf, r.CurrentPhysicalOffset)
+	if err != nil {
+		return 0, err
+	}
+	r.CurrentPhysicalOffset += int64(n)
 	r.Stat.WriteCount++
 	return r.CurrentPhysicalOffset, nil
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/Meesho/BharatMLStack/ssd-cache/internal/maths"
 	"github.com/cespare/xxhash/v2"
+	"github.com/rs/zerolog/log"
 )
 
 var ByteOrder *CustomByteOrder
@@ -46,11 +47,11 @@ func (c *CustomByteOrder) Int32(b []byte) int32 {
 }
 
 func (c *CustomByteOrder) PutUint32(b []byte, v uint32) {
-	c.PutUint32(b, v)
+	c.ByteOrder.PutUint32(b, v)
 }
 
 func (c *CustomByteOrder) Uint32(b []byte) uint32 {
-	return c.Uint32(b)
+	return c.ByteOrder.Uint32(b)
 }
 
 type KeyIndex struct {
@@ -80,7 +81,7 @@ func (ki *KeyIndex) Add(key string, length uint16, memId, offset, lastAccess, fr
 	h64 := xxhash.Sum64String(key)
 	h10 := Hash10(key)
 	d1 := uint64(length)<<48 | uint64(lastAccess)<<24 | uint64(freq)&0xFFFFFF
-	d2 := uint64(h10)<<54 | uint64(exptime)&0xFFFFFFFFFFFF
+	d2 := uint64(h10)<<54 | uint64(exptime)&_LO_54BIT_IN_64BIT
 	entry := Entry{}
 	ByteOrder.PutUint64(entry[:8], h64)
 	ByteOrder.PutUint32(entry[8:12], memId)
@@ -92,8 +93,16 @@ func (ki *KeyIndex) Add(key string, length uint16, memId, offset, lastAccess, fr
 	if ki.deleteInProgress {
 		i := 0
 		for i < ki.deleteAmortizedStep {
-			shouldDeleteNext := ki.delete()
-			if !shouldDeleteNext {
+			deleted, next, ok := ki.delete()
+			if !ok {
+				ki.deleteInProgress = false
+				log.Warn().Msg("no more entries to delete.")
+				break
+			}
+			ki.rm.RemoveV2(extractHash(deleted))
+			delMemId := extractMemId(deleted)
+			nextMemId := extractMemId(next)
+			if delMemId != nextMemId {
 				ki.deleteInProgress = false
 				break
 			}
@@ -142,8 +151,22 @@ func extract(entry *Entry) (length uint16, memId, offset, lastAccess, freq uint3
 	length = uint16(d1>>48) & 0xFFFF
 	memId = ByteOrder.Uint32(entry[8:12])
 	offset = ByteOrder.Uint32(entry[12:16])
-	exptime = uint64(d2) & 0xFFFFFFFFFFFF
+	exptime = uint64(d2) & _LO_54BIT_IN_64BIT
 	return length, memId, offset, lastAccess, freq, exptime
+}
+
+func extractHash(entry *Entry) (h64, h10 uint64) {
+	h64 = ByteOrder.Uint64(entry[:8])
+	d2 := ByteOrder.Uint64(entry[24:32])
+	return h64, d2 >> 54
+}
+
+func extractMemId(entry *Entry) (memId uint32) {
+	return ByteOrder.Uint32(entry[8:12])
+}
+
+func extractOffset(entry *Entry) (offset uint32) {
+	return ByteOrder.Uint32(entry[12:16])
 }
 
 func (ki *KeyIndex) StartTrim() {
@@ -154,12 +177,10 @@ func (ki *KeyIndex) TrimStatus() bool {
 	return ki.deleteInProgress
 }
 
-func (ki *KeyIndex) delete() bool {
-	deleted, next, ok := ki.rb.Delete()
+func (ki *KeyIndex) delete() (deleted, next *Entry, ok bool) {
+	deleted, next, ok = ki.rb.Delete()
 	if !ok {
-		return false
+		return nil, nil, false
 	}
-	_, delMemId, _, _, _, _ := extract(deleted)
-	_, nextMemId, _, _, _, _ := extract(next)
-	return delMemId == nextMemId
+	return deleted, next, true
 }
