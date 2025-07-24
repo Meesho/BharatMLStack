@@ -1,6 +1,8 @@
 package memtables
 
 import (
+	"sync"
+
 	"github.com/Meesho/BharatMLStack/ssd-cache/internal/allocators"
 	"github.com/Meesho/BharatMLStack/ssd-cache/internal/fs"
 	"github.com/rs/zerolog/log"
@@ -10,14 +12,14 @@ type MemtableManager struct {
 	file     *fs.WrapAppendFile
 	capacity int32
 
-	memtable1         *Memtable
-	memtable2         *Memtable
-	activeMemtable    *Memtable
-	nextFileOffset    int64
-	nextId            uint32
-	flushInProgress   bool
-	flushChan         chan *Memtable
-	flushCompleteChan chan struct{}
+	memtable1       *Memtable
+	memtable2       *Memtable
+	activeMemtable  *Memtable
+	nextFileOffset  int64
+	nextId          uint32
+	flushInProgress chan struct{}
+	flushChan       chan *Memtable
+	mutex           sync.Mutex
 }
 
 func NewMemtableManager(file *fs.WrapAppendFile, capacity int32) (*MemtableManager, error) {
@@ -51,16 +53,15 @@ func NewMemtableManager(file *fs.WrapAppendFile, capacity int32) (*MemtableManag
 		return nil, err
 	}
 	memtableManager := &MemtableManager{
-		file:              file,
-		capacity:          capacity,
-		memtable1:         memtable1,
-		memtable2:         memtable2,
-		activeMemtable:    memtable1,
-		nextFileOffset:    2 * int64(capacity),
-		nextId:            2,
-		flushChan:         make(chan *Memtable, 1),
-		flushCompleteChan: make(chan struct{}, 1),
-		flushInProgress:   false,
+		file:            file,
+		capacity:        capacity,
+		memtable1:       memtable1,
+		memtable2:       memtable2,
+		activeMemtable:  memtable1,
+		nextFileOffset:  2 * int64(capacity),
+		nextId:          2,
+		flushInProgress: make(chan struct{}, 1),
+		flushChan:       make(chan *Memtable, 1),
 	}
 	go memtableManager.flushConsumer()
 	return memtableManager, nil
@@ -82,8 +83,8 @@ func (mm *MemtableManager) GetMemtableById(id uint32) *Memtable {
 
 func (mm *MemtableManager) flushConsumer() {
 	for {
-		mm.flushInProgress = true
 		memtable, ok := <-mm.flushChan
+		mm.mutex.Lock()
 		if !ok {
 			break
 		}
@@ -97,20 +98,13 @@ func (mm *MemtableManager) flushConsumer() {
 		memtable.Id = mm.nextId
 		mm.nextId++
 		mm.nextFileOffset += int64(n)
-		mm.flushInProgress = false
-		mm.flushCompleteChan <- struct{}{}
+		mm.mutex.Unlock()
 	}
 }
 func (mm *MemtableManager) Flush() error {
 
-	if mm.flushInProgress {
-		// Wait for previous flush to complete before starting new one
-		<-mm.flushCompleteChan
-	}
-
-	mm.flushInProgress = true
-
 	memtableToFlush := mm.activeMemtable
+	mm.mutex.Lock()
 	mm.flushChan <- memtableToFlush
 
 	// Swap to the other memtable
