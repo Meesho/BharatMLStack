@@ -23,13 +23,13 @@ The current deployment methods are manual and component-specific, making it hard
 A **Helm-based deployment approach** is needed to:
 - **Simplify deployment** for ML engineers and data scientists.
 - **Enable consistent configuration as code** across all environments.
-- **Support production-grade scaling** (HPA, PDB, Gateway routing).
+- **Support production-grade scaling** (VPA,HPA, PDB, Gateway routing).
 - **Adopt cloud-native best practices** from the start.
 
 ## ✅ Goals
 
 - Provide **modular Helm charts** for core components:  
-  **Online Feature Store**, **Horizon**, **Trufflebox UI**, and optional **SDK utilities**.
+  **Online Feature Store**, **Horizon** and **Trufflebox UI**.
 - Support **Ingress** (default) and **Gateway API** (production-ready routing).
 - Embed **security & observability best practices** (RBAC, NetworkPolicy, ServiceMonitor).
 - Enable environment-specific overrides (`values-dev.yaml`, `values-prod.yaml`).
@@ -63,6 +63,7 @@ bharatmlstack/helm/
 │       ├── configmap.yaml
 │       ├── secret.yaml
 │       ├── hpa.yaml
+│       ├── vpa.yaml
 │       ├── networkpolicy.yaml
 │       ├── servicemonitor.yaml
 │       ├── pdb.yaml
@@ -83,10 +84,11 @@ bharatmlstack/helm/
 │       ├── httproute.yaml
 │       ├── configmap.yaml
 │       ├── secret.yaml
-│       ├── cronjob.yaml
-│       ├── rbac.yaml
+│       ├── hpa.yaml
+│       ├── vpa.yaml
 │       ├── networkpolicy.yaml
 │       ├── servicemonitor.yaml
+│       ├── pdb.yaml
 │       └── tests/
 │           └── api-test.yaml
 
@@ -103,16 +105,13 @@ bharatmlstack/helm/
 │       ├── httproute.yaml
 │       ├── configmap.yaml
 │       ├── secret.yaml
+│       ├── hpa.yaml
+│       ├── vpa.yaml
+│       ├── networkpolicy.yaml
+│       ├── servicemonitor.yaml
 │       ├── pdb.yaml
 │       └── tests/
 │           └── ui-availability.yaml
-
-└── sdk-common/ (optional shared utilities)
-    ├── Chart.yaml
-    ├── values.yaml
-    └── templates/
-        ├── job.yaml
-        └── cronjob.yaml
 ```
 
 ## 🌐 Ingress and Gateway API Support
