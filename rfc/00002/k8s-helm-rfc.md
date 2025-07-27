@@ -8,6 +8,8 @@
 - **Created**: 2025-07-26
 - **Last Updated**: 2025-07-26
 - **Repository**: [Meesho/BharatMLStack](https://github.com/Meesho/BharatMLStack)
+- **Target Release:** v1.0.0
+- **Discussion Channel:** #infra-dev
 
 ## 🎯 Motivation
 
