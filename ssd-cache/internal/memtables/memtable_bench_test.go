@@ -26,7 +26,7 @@ const (
 
 // Helper function to create benchmark file
 func createBenchmarkFile(b *testing.B) *fs.WrapAppendFile {
-	filename := filepath.Join("/media/a0d00kc/freedom/bench_memtable.dat")
+	filename := filepath.Join("/media/a0d00kc/freedom/tmp/bench_memtable.dat")
 
 	config := fs.FileConfig{
 		Filename:          filename,

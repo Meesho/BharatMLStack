@@ -111,6 +111,42 @@ func (ki *KeyIndex) Add(key string, length uint16, memId, offset, lastAccess, fr
 	}
 }
 
+func (ki *KeyIndex) Put(key string, length uint16, memId, offset uint32, exptime uint64) {
+	lastAccess := ki.GenerateLastAccess()
+	freq := uint32(1)
+	h64 := xxhash.Sum64String(key)
+	h10 := Hash10(key)
+	d1 := uint64(length)<<48 | uint64(lastAccess)<<24 | uint64(freq)&0xFFFFFF
+	d2 := uint64(h10)<<54 | uint64(exptime)&_LO_54BIT_IN_64BIT
+	entry := Entry{}
+	ByteOrder.PutUint64(entry[:8], h64)
+	ByteOrder.PutUint32(entry[8:12], memId)
+	ByteOrder.PutUint32(entry[12:16], offset)
+	ByteOrder.PutUint64(entry[16:24], d1)
+	ByteOrder.PutUint64(entry[24:32], d2)
+	idx := ki.rb.Add(&entry)
+	ki.rm.AddV2(key, uint32(idx), h64, h10)
+	if ki.deleteInProgress {
+		i := 0
+		for i < ki.deleteAmortizedStep {
+			deleted, next, ok := ki.delete()
+			if !ok {
+				ki.deleteInProgress = false
+				log.Warn().Msg("no more entries to delete.")
+				break
+			}
+			ki.rm.RemoveV2(extractHash(deleted))
+			delMemId := extractMemId(deleted)
+			nextMemId := extractMemId(next)
+			if delMemId != nextMemId {
+				ki.deleteInProgress = false
+				break
+			}
+			i++
+		}
+	}
+}
+
 func (ki *KeyIndex) IncrLastAccessAndFreq(key string) {
 	idx, found := ki.rm.Get(key)
 	if !found {
@@ -126,6 +162,10 @@ func (ki *KeyIndex) IncrLastAccessAndFreq(key string) {
 	freq, _ = ki.mc.Inc(freq)
 	d1 = uint64(lastAccess)<<24 | uint64(freq)&0xFFFFFF
 	ByteOrder.PutUint64(entry[16:24], d1)
+}
+
+func (ki *KeyIndex) GenerateLastAccess() uint32 {
+	return uint32(time.Now().Unix()-ki.startAt) / 60
 }
 
 func (ki *KeyIndex) Get(key string) (uint16, uint32, uint32, uint32, uint32, uint64, bool) {

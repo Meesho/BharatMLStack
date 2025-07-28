@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/Meesho/BharatMLStack/ssd-cache/internal/fs"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -22,6 +23,8 @@ type Memtable struct {
 	file          *fs.WrapAppendFile
 	page          *fs.AlignedPage
 	readyForFlush bool
+	next          *Memtable
+	prev          *Memtable
 }
 
 type MemtableConfig struct {
@@ -72,6 +75,17 @@ func (m *Memtable) Put(buf []byte) (offset int, length uint16, readyForFlush boo
 	return offset, uint16(len(buf)), false
 }
 
+func (m *Memtable) GetBuf(size uint16) (bbuf []byte, offset int, length uint16, readyForFlush bool) {
+	offset = m.currentOffset
+	if offset+int(size) > m.capacity {
+		m.readyForFlush = true
+		return nil, -1, 0, true
+	}
+	bbuf = m.page.Buf[offset : offset+int(size)]
+	m.currentOffset += int(size)
+	return bbuf, offset, size, false
+}
+
 func (m *Memtable) Flush() (n int, fileOffset int64, err error) {
 	if !m.readyForFlush {
 		return 0, 0, ErrMemtableNotReadyForFlush
@@ -79,7 +93,10 @@ func (m *Memtable) Flush() (n int, fileOffset int64, err error) {
 	fileOffset, err = m.file.Pwrite(m.page.Buf)
 	if err != nil {
 		return 0, 0, err
+	} else {
+		log.Debug().Msgf("Flushed memtable %d to file %d", m.Id, fileOffset)
 	}
+	m.currentOffset = 0
 	m.readyForFlush = false
 	return len(m.page.Buf), fileOffset, nil
 }

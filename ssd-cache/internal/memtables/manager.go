@@ -1,8 +1,6 @@
 package memtables
 
 import (
-	"sync"
-
 	"github.com/Meesho/BharatMLStack/ssd-cache/internal/allocators"
 	"github.com/Meesho/BharatMLStack/ssd-cache/internal/fs"
 	"github.com/rs/zerolog/log"
@@ -12,14 +10,17 @@ type MemtableManager struct {
 	file     *fs.WrapAppendFile
 	capacity int32
 
-	memtable1       *Memtable
-	memtable2       *Memtable
-	activeMemtable  *Memtable
-	nextFileOffset  int64
-	nextId          uint32
-	flushInProgress chan struct{}
-	flushChan       chan *Memtable
-	mutex           sync.Mutex
+	memtable1      *Memtable
+	memtable2      *Memtable
+	activeMemtable *Memtable
+	nextFileOffset int64
+	nextId         uint32
+	semaphore      chan int
+	stats          Stats
+}
+
+type Stats struct {
+	Flushes int64
 }
 
 func NewMemtableManager(file *fs.WrapAppendFile, capacity int32) (*MemtableManager, error) {
@@ -53,17 +54,16 @@ func NewMemtableManager(file *fs.WrapAppendFile, capacity int32) (*MemtableManag
 		return nil, err
 	}
 	memtableManager := &MemtableManager{
-		file:            file,
-		capacity:        capacity,
-		memtable1:       memtable1,
-		memtable2:       memtable2,
-		activeMemtable:  memtable1,
-		nextFileOffset:  2 * int64(capacity),
-		nextId:          2,
-		flushInProgress: make(chan struct{}, 1),
-		flushChan:       make(chan *Memtable, 1),
+		file:           file,
+		capacity:       capacity,
+		memtable1:      memtable1,
+		memtable2:      memtable2,
+		activeMemtable: memtable1,
+		nextFileOffset: 2 * int64(capacity),
+		nextId:         2,
+		semaphore:      make(chan int, 1),
+		stats:          Stats{},
 	}
-	go memtableManager.flushConsumer()
 	return memtableManager, nil
 }
 
@@ -81,31 +81,23 @@ func (mm *MemtableManager) GetMemtableById(id uint32) *Memtable {
 	return nil
 }
 
-func (mm *MemtableManager) flushConsumer() {
-	for {
-		memtable, ok := <-mm.flushChan
-		mm.mutex.Lock()
-		if !ok {
-			break
-		}
-		n, fileOffset, err := memtable.Flush()
-		if n != int(mm.capacity) {
-			log.Error().Msgf("Flush size mismatch: memId:%d fileOffset:%d nextFileOffset:%d n:%d err:%v", memtable.Id, fileOffset, mm.nextFileOffset, n, err)
-		}
-		if err != nil {
-			log.Error().Msgf("Failed to flush memtable: memId:%d fileOffset:%d nextFileOffset:%d n:%d err:%v", memtable.Id, fileOffset, mm.nextFileOffset, n, err)
-		}
-		memtable.Id = mm.nextId
-		mm.nextId++
-		mm.nextFileOffset += int64(n)
-		mm.mutex.Unlock()
+func (mm *MemtableManager) flushConsumer(memtable *Memtable) {
+	n, fileOffset, err := memtable.Flush()
+	if n != int(mm.capacity) {
+		log.Error().Msgf("Flush size mismatch: memId:%d fileOffset:%d nextFileOffset:%d n:%d err:%v", memtable.Id, fileOffset, mm.nextFileOffset, n, err)
 	}
+	if err != nil {
+		log.Error().Msgf("Failed to flush memtable: memId:%d fileOffset:%d nextFileOffset:%d n:%d err:%v", memtable.Id, fileOffset, mm.nextFileOffset, n, err)
+	}
+	memtable.Id = mm.nextId
+	mm.nextId++
+	mm.nextFileOffset += int64(n)
+	mm.stats.Flushes++
 }
 func (mm *MemtableManager) Flush() error {
 
 	memtableToFlush := mm.activeMemtable
-	mm.mutex.Lock()
-	mm.flushChan <- memtableToFlush
+	mm.semaphore <- 1
 
 	// Swap to the other memtable
 	if mm.activeMemtable == mm.memtable1 {
@@ -113,6 +105,15 @@ func (mm *MemtableManager) Flush() error {
 	} else {
 		mm.activeMemtable = mm.memtable1
 	}
+	go func() {
+		defer func() {
+			<-mm.semaphore
+			if r := recover(); r != nil {
+				log.Error().Msgf("Recovered from panic in goroutine: %v", r)
+			}
+		}()
+		mm.flushConsumer(memtableToFlush)
+	}()
 
 	return nil
 }

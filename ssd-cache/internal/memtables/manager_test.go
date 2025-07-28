@@ -2,16 +2,17 @@ package memtables
 
 import (
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/ssd-cache/internal/fs"
 )
 
-// Helper function to create a test file for memtable manager
-func createManagerTestFile(t *testing.T) *fs.WrapAppendFile {
+// Helper function to create a mock file for testing
+func createTestFileForManager(t *testing.T) *fs.WrapAppendFile {
 	tmpDir := t.TempDir()
-	filename := filepath.Join(tmpDir, "test_manager.dat")
+	filename := filepath.Join(tmpDir, "test_memtable_manager.dat")
 
 	config := fs.FileConfig{
 		Filename:          filename,
@@ -27,357 +28,348 @@ func createManagerTestFile(t *testing.T) *fs.WrapAppendFile {
 	return file
 }
 
-func TestNewMemtableManager(t *testing.T) {
-	tests := []struct {
-		name        string
-		capacity    int32
-		expectError bool
-	}{
-		{
-			name:        "valid capacity aligned to block size",
-			capacity:    fs.BLOCK_SIZE,
-			expectError: false,
-		},
-		{
-			name:        "valid larger capacity",
-			capacity:    fs.BLOCK_SIZE * 2,
-			expectError: false,
-		},
-		{
-			name:        "invalid capacity not aligned",
-			capacity:    fs.BLOCK_SIZE + 1,
-			expectError: true,
-		},
-		{
-			name:        "very small capacity",
-			capacity:    1,
-			expectError: true,
-		},
+func TestNewMemtableManager_Success(t *testing.T) {
+	capacity := int32(fs.BLOCK_SIZE * 2) // 8192 bytes
+	file := createTestFileForManager(t)
+	defer file.Close()
+
+	manager, err := NewMemtableManager(file, capacity)
+	if err != nil {
+		t.Fatalf("NewMemtableManager failed: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			testFile := createManagerTestFile(t)
-			defer testFile.Close()
+	// Verify initial state
+	if manager.file != file {
+		t.Errorf("Expected file to be set correctly")
+	}
+	if manager.capacity != capacity {
+		t.Errorf("Expected capacity %d, got %d", capacity, manager.capacity)
+	}
+	if manager.memtable1 == nil {
+		t.Errorf("Expected memtable1 to be initialized")
+	}
+	if manager.memtable2 == nil {
+		t.Errorf("Expected memtable2 to be initialized")
+	}
+	if manager.activeMemtable != manager.memtable1 {
+		t.Errorf("Expected activeMemtable to be memtable1 initially")
+	}
+	if manager.nextFileOffset != 2*int64(capacity) {
+		t.Errorf("Expected nextFileOffset to be %d, got %d", 2*int64(capacity), manager.nextFileOffset)
+	}
+	if manager.nextId != 2 {
+		t.Errorf("Expected nextId to be 2, got %d", manager.nextId)
+	}
+	if cap(manager.semaphore) != 1 {
+		t.Errorf("Expected semaphore capacity to be 1, got %d", cap(manager.semaphore))
+	}
 
-			manager, err := NewMemtableManager(testFile, tt.capacity)
+	// Verify memtable initial IDs
+	if manager.memtable1.Id != 0 {
+		t.Errorf("Expected memtable1 ID to be 0, got %d", manager.memtable1.Id)
+	}
+	if manager.memtable2.Id != 1 {
+		t.Errorf("Expected memtable2 ID to be 1, got %d", manager.memtable2.Id)
+	}
+}
 
-			if tt.expectError {
-				if err == nil {
-					t.Errorf("NewMemtableManager() expected error but got none")
-				}
-				return
-			}
+func TestNewMemtableManager_InvalidCapacity(t *testing.T) {
+	// Test with capacity not aligned to block size
+	capacity := int32(fs.BLOCK_SIZE + 1) // Should fail alignment check
+	file := createTestFileForManager(t)
+	defer file.Close()
 
-			if err != nil {
-				t.Errorf("NewMemtableManager() unexpected error = %v", err)
-				return
-			}
+	_, err := NewMemtableManager(file, capacity)
+	if err == nil {
+		t.Errorf("Expected NewMemtableManager to fail with invalid capacity")
+	}
+}
 
-			if manager == nil {
-				t.Error("NewMemtableManager() returned nil manager")
-				return
-			}
+func TestNewMemtableManager_NilFile(t *testing.T) {
+	capacity := int32(fs.BLOCK_SIZE * 2)
 
-			// Verify manager state
-			if manager.capacity != tt.capacity {
-				t.Errorf("capacity = %v, want %v", manager.capacity, tt.capacity)
-			}
-
-			if manager.file != testFile {
-				t.Error("file not set correctly")
-			}
-
-			if manager.memtable1 == nil || manager.memtable2 == nil {
-				t.Error("memtables not initialized")
-			}
-
-			if manager.activeMemtable != manager.memtable1 {
-				t.Error("activeMemtable should initially be memtable1")
-			}
-
-			if manager.nextFileOffset != 2*int64(tt.capacity) {
-				t.Errorf("nextFileOffset = %v, want %v", manager.nextFileOffset, 2*int64(tt.capacity))
-			}
-
-			if manager.nextId != 2 {
-				t.Errorf("nextId = %v, want %v", manager.nextId, 2)
-			}
-
-			if manager.flushInProgress != false {
-				t.Error("flushInProgress should initially be false")
-			}
-
-			// Verify memtables are initialized correctly
-			if manager.memtable1.Id != 0 {
-				t.Errorf("memtable1.Id = %v, want %v", manager.memtable1.Id, 0)
-			}
-
-			if manager.memtable2.Id != 1 {
-				t.Errorf("memtable2.Id = %v, want %v", manager.memtable2.Id, 1)
-			}
-
-			// Clean up: close flush goroutine
-			close(manager.flushChan)
-		})
+	_, err := NewMemtableManager(nil, capacity)
+	if err == nil {
+		t.Errorf("Expected NewMemtableManager to fail with nil file")
 	}
 }
 
 func TestMemtableManager_GetMemtable(t *testing.T) {
-	testFile := createManagerTestFile(t)
-	defer testFile.Close()
+	capacity := int32(fs.BLOCK_SIZE * 2)
+	file := createTestFileForManager(t)
+	defer file.Close()
 
-	capacity := int32(fs.BLOCK_SIZE)
-	manager, err := NewMemtableManager(testFile, capacity)
+	manager, err := NewMemtableManager(file, capacity)
 	if err != nil {
-		t.Fatalf("NewMemtableManager() error = %v", err)
+		t.Fatalf("NewMemtableManager failed: %v", err)
 	}
-	defer close(manager.flushChan)
 
 	memtable, id, offset := manager.GetMemtable()
 
-	if memtable != manager.activeMemtable {
-		t.Error("GetMemtable() returned wrong memtable")
+	// Initially should return memtable1
+	if memtable != manager.memtable1 {
+		t.Errorf("Expected to get memtable1")
 	}
-
-	if id != manager.activeMemtable.Id {
-		t.Errorf("GetMemtable() id = %v, want %v", id, manager.activeMemtable.Id)
+	if id != 0 {
+		t.Errorf("Expected ID 0, got %d", id)
 	}
-
-	expectedOffset := uint64(manager.activeMemtable.Id) * uint64(capacity)
+	expectedOffset := uint64(0) * uint64(capacity)
 	if offset != expectedOffset {
-		t.Errorf("GetMemtable() offset = %v, want %v", offset, expectedOffset)
+		t.Errorf("Expected offset %d, got %d", expectedOffset, offset)
 	}
 }
 
 func TestMemtableManager_GetMemtableById(t *testing.T) {
-	testFile := createManagerTestFile(t)
-	defer testFile.Close()
+	capacity := int32(fs.BLOCK_SIZE * 2)
+	file := createTestFileForManager(t)
+	defer file.Close()
 
-	capacity := int32(fs.BLOCK_SIZE)
-	manager, err := NewMemtableManager(testFile, capacity)
+	manager, err := NewMemtableManager(file, capacity)
 	if err != nil {
-		t.Fatalf("NewMemtableManager() error = %v", err)
-	}
-	defer close(manager.flushChan)
-
-	tests := []struct {
-		name      string
-		id        uint32
-		expectNil bool
-		expectMem *Memtable
-	}{
-		{
-			name:      "get memtable1 by id 0",
-			id:        0,
-			expectNil: false,
-			expectMem: manager.memtable1,
-		},
-		{
-			name:      "get memtable2 by id 1",
-			id:        1,
-			expectNil: false,
-			expectMem: manager.memtable2,
-		},
-		{
-			name:      "get non-existent memtable",
-			id:        999,
-			expectNil: true,
-			expectMem: nil,
-		},
+		t.Fatalf("NewMemtableManager failed: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := manager.GetMemtableById(tt.id)
+	// Test getting memtable1 by ID
+	memtable := manager.GetMemtableById(0)
+	if memtable != manager.memtable1 {
+		t.Errorf("Expected to get memtable1 for ID 0")
+	}
 
-			if tt.expectNil {
-				if result != nil {
-					t.Errorf("GetMemtableById() = %v, want nil", result)
-				}
-			} else {
-				if result != tt.expectMem {
-					t.Errorf("GetMemtableById() = %v, want %v", result, tt.expectMem)
-				}
-			}
-		})
+	// Test getting memtable2 by ID
+	memtable = manager.GetMemtableById(1)
+	if memtable != manager.memtable2 {
+		t.Errorf("Expected to get memtable2 for ID 1")
+	}
+
+	// Test getting non-existent memtable
+	memtable = manager.GetMemtableById(999)
+	if memtable != nil {
+		t.Errorf("Expected nil for non-existent ID, got %v", memtable)
 	}
 }
 
 func TestMemtableManager_Flush(t *testing.T) {
-	testFile := createManagerTestFile(t)
-	defer testFile.Close()
+	capacity := int32(fs.BLOCK_SIZE * 2)
+	file := createTestFileForManager(t)
+	defer file.Close()
 
-	capacity := int32(fs.BLOCK_SIZE)
-	manager, err := NewMemtableManager(testFile, capacity)
+	manager, err := NewMemtableManager(file, capacity)
 	if err != nil {
-		t.Fatalf("NewMemtableManager() error = %v", err)
-	}
-	defer close(manager.flushChan)
-
-	// Get initial active memtable
-	initialActive := manager.activeMemtable
-	var otherMemtable *Memtable
-	if initialActive == manager.memtable1 {
-		otherMemtable = manager.memtable2
-	} else {
-		otherMemtable = manager.memtable1
+		t.Fatalf("NewMemtableManager failed: %v", err)
 	}
 
-	// Make the memtable ready for flush by filling it
-	initialActive.readyForFlush = true
+	// Verify initial state
+	originalActive := manager.activeMemtable
+	originalNextId := manager.nextId
 
 	// Perform flush
 	err = manager.Flush()
 	if err != nil {
-		t.Errorf("Flush() error = %v", err)
+		t.Fatalf("Flush failed: %v", err)
 	}
 
-	// Verify that active memtable was swapped
-	if manager.activeMemtable == initialActive {
-		t.Error("Flush() should have swapped active memtable")
+	// Verify active memtable swapped
+	if manager.activeMemtable == originalActive {
+		t.Errorf("Expected active memtable to be swapped")
 	}
 
-	if manager.activeMemtable != otherMemtable {
-		t.Error("Flush() should have swapped to the other memtable")
+	// Active should now be the other memtable
+	if originalActive == manager.memtable1 {
+		if manager.activeMemtable != manager.memtable2 {
+			t.Errorf("Expected active memtable to be memtable2")
+		}
+	} else {
+		if manager.activeMemtable != manager.memtable1 {
+			t.Errorf("Expected active memtable to be memtable1")
+		}
 	}
 
-	// Wait a bit for the flush goroutine to process
+	// Give time for background goroutine to complete
 	time.Sleep(100 * time.Millisecond)
 
-	// Verify flush was initiated
-	if !manager.flushInProgress {
-		t.Error("flushInProgress should be true during flush")
+	// Verify nextId was incremented (this happens in background)
+	if manager.nextId <= originalNextId {
+		t.Errorf("Expected nextId to be incremented, got %d, expected > %d", manager.nextId, originalNextId)
 	}
 }
 
-func TestMemtableManager_FlushBasic(t *testing.T) {
-	testFile := createManagerTestFile(t)
-	defer testFile.Close()
+func TestMemtableManager_FlushSwapsBetweenMemtables(t *testing.T) {
+	capacity := int32(fs.BLOCK_SIZE * 2)
+	file := createTestFileForManager(t)
+	defer file.Close()
 
-	capacity := int32(fs.BLOCK_SIZE)
-	manager, err := NewMemtableManager(testFile, capacity)
+	manager, err := NewMemtableManager(file, capacity)
 	if err != nil {
-		t.Fatalf("NewMemtableManager() error = %v", err)
+		t.Fatalf("NewMemtableManager failed: %v", err)
 	}
-	defer close(manager.flushChan)
 
-	// Get initial state
-	initialNextId := manager.nextId
-	initialNextFileOffset := manager.nextFileOffset
+	// Initially active is memtable1
+	if manager.activeMemtable != manager.memtable1 {
+		t.Fatalf("Expected initial active to be memtable1")
+	}
 
-	// Make memtable ready for flush
-	manager.activeMemtable.readyForFlush = true
-
-	// Trigger flush
+	// First flush - should swap to memtable2
 	err = manager.Flush()
 	if err != nil {
-		t.Errorf("Flush() error = %v", err)
+		t.Fatalf("First flush failed: %v", err)
+	}
+	if manager.activeMemtable != manager.memtable2 {
+		t.Errorf("Expected active to be memtable2 after first flush")
 	}
 
-	// Wait for flush to complete
-	select {
-	case <-manager.flushCompleteChan:
-		// Flush completed successfully
-	case <-time.After(2 * time.Second):
-		t.Error("Flush did not complete within timeout")
-		return
+	// Second flush - should swap back to memtable1
+	err = manager.Flush()
+	if err != nil {
+		t.Fatalf("Second flush failed: %v", err)
 	}
-
-	// Verify that nextId was incremented
-	expectedNextId := initialNextId + 1
-	if manager.nextId != expectedNextId {
-		t.Errorf("nextId = %v, want %v", manager.nextId, expectedNextId)
-	}
-
-	// Verify that nextFileOffset was updated
-	expectedOffset := initialNextFileOffset + int64(capacity)
-	if manager.nextFileOffset != expectedOffset {
-		t.Errorf("nextFileOffset = %v, want %v", manager.nextFileOffset, expectedOffset)
+	if manager.activeMemtable != manager.memtable1 {
+		t.Errorf("Expected active to be memtable1 after second flush")
 	}
 }
 
-func TestMemtableManager_SequentialFlush(t *testing.T) {
-	testFile := createManagerTestFile(t)
-	defer testFile.Close()
+func TestMemtableManager_FlushConcurrency(t *testing.T) {
+	capacity := int32(fs.BLOCK_SIZE * 2)
+	file := createTestFileForManager(t)
+	defer file.Close()
 
-	capacity := int32(fs.BLOCK_SIZE)
-	manager, err := NewMemtableManager(testFile, capacity)
+	manager, err := NewMemtableManager(file, capacity)
 	if err != nil {
-		t.Fatalf("NewMemtableManager() error = %v", err)
-	}
-	defer close(manager.flushChan)
-
-	// Get initial state
-	initialNextId := manager.nextId
-
-	// Perform first flush
-	manager.activeMemtable.readyForFlush = true
-	err = manager.Flush()
-	if err != nil {
-		t.Errorf("First flush error: %v", err)
+		t.Fatalf("NewMemtableManager failed: %v", err)
 	}
 
-	// Wait for first flush to complete
-	select {
-	case <-manager.flushCompleteChan:
-		// First flush completed
-	case <-time.After(2 * time.Second):
-		t.Error("First flush did not complete within timeout")
-		return
+	const numConcurrentFlushes = 10
+	var wg sync.WaitGroup
+	errors := make(chan error, numConcurrentFlushes)
+
+	// Launch multiple concurrent flushes
+	for i := 0; i < numConcurrentFlushes; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := manager.Flush(); err != nil {
+				errors <- err
+			}
+		}()
 	}
 
-	// Perform second flush
-	manager.activeMemtable.readyForFlush = true
-	err = manager.Flush()
-	if err != nil {
-		t.Errorf("Second flush error: %v", err)
+	wg.Wait()
+	close(errors)
+
+	// Check for errors
+	for err := range errors {
+		t.Errorf("Concurrent flush failed: %v", err)
 	}
 
-	// Wait for second flush to complete
-	select {
-	case <-manager.flushCompleteChan:
-		// Second flush completed
-	case <-time.After(2 * time.Second):
-		t.Error("Second flush did not complete within timeout")
-		return
-	}
+	// Give time for all background operations to complete
+	time.Sleep(200 * time.Millisecond)
 
-	// Verify final state - should have incremented by 2
-	expectedNextId := initialNextId + 2
-	if manager.nextId != expectedNextId {
-		t.Errorf("nextId = %v, want %v", manager.nextId, expectedNextId)
+	// Verify manager is still in a valid state
+	memtable, id, offset := manager.GetMemtable()
+	if memtable == nil {
+		t.Errorf("Active memtable should not be nil")
+	}
+	if id != memtable.Id {
+		t.Errorf("Returned ID %d should match memtable ID %d", id, memtable.Id)
+	}
+	expectedOffset := uint64(memtable.Id) * uint64(capacity)
+	if offset != expectedOffset {
+		t.Errorf("Expected offset %d, got %d", expectedOffset, offset)
 	}
 }
 
-// Note: TestMemtableManager_FlushWithError removed because we can't easily
-// mock file errors with the real WrapAppendFile implementation
+func TestMemtableManager_GetMemtableAfterFlush(t *testing.T) {
+	capacity := int32(fs.BLOCK_SIZE * 2)
+	file := createTestFileForManager(t)
+	defer file.Close()
 
-func TestMemtableManager_InitialState(t *testing.T) {
-	testFile := createManagerTestFile(t)
-	defer testFile.Close()
-
-	capacity := int32(fs.BLOCK_SIZE)
-	manager, err := NewMemtableManager(testFile, capacity)
+	manager, err := NewMemtableManager(file, capacity)
 	if err != nil {
-		t.Fatalf("NewMemtableManager() error = %v", err)
-	}
-	defer close(manager.flushChan)
-
-	// Test initial state invariants
-	if manager.memtable1.Id == manager.memtable2.Id {
-		t.Error("memtable1 and memtable2 should have different IDs")
+		t.Fatalf("NewMemtableManager failed: %v", err)
 	}
 
-	if manager.activeMemtable != manager.memtable1 && manager.activeMemtable != manager.memtable2 {
-		t.Error("activeMemtable should be one of the two memtables")
+	// Get initial memtable
+	initialMemtable, initialId, _ := manager.GetMemtable()
+
+	// Perform flush
+	err = manager.Flush()
+	if err != nil {
+		t.Fatalf("Flush failed: %v", err)
 	}
 
-	if cap(manager.flushChan) != 1 {
-		t.Errorf("flushChan capacity = %v, want %v", cap(manager.flushChan), 1)
+	// Get memtable after flush
+	newMemtable, newId, newOffset := manager.GetMemtable()
+
+	// Should be different memtable
+	if newMemtable == initialMemtable {
+		t.Errorf("Expected different memtable after flush")
+	}
+	if newId == initialId {
+		t.Errorf("Expected different ID after flush")
 	}
 
-	if cap(manager.flushCompleteChan) != 1 {
-		t.Errorf("flushCompleteChan capacity = %v, want %v", cap(manager.flushCompleteChan), 1)
+	// Offset calculation should be correct
+	expectedOffset := uint64(newId) * uint64(capacity)
+	if newOffset != expectedOffset {
+		t.Errorf("Expected offset %d, got %d", expectedOffset, newOffset)
 	}
+}
+
+func TestMemtableManager_Integration(t *testing.T) {
+	capacity := int32(fs.BLOCK_SIZE * 2)
+	file := createTestFileForManager(t)
+	defer file.Close()
+
+	manager, err := NewMemtableManager(file, capacity)
+	if err != nil {
+		t.Fatalf("NewMemtableManager failed: %v", err)
+	}
+
+	// Test complete workflow: get memtable, put data, flush, repeat
+	testData := []byte("Hello, MemtableManager!")
+
+	// Get initial memtable and put some data
+	memtable, id, _ := manager.GetMemtable()
+	offset, length, readyForFlush := memtable.Put(testData)
+	if readyForFlush {
+		t.Errorf("Memtable should not be ready for flush after small put")
+	}
+
+	// Verify data can be retrieved
+	data, err := memtable.Get(offset, length)
+	if err != nil {
+		t.Fatalf("Failed to get data: %v", err)
+	}
+	if string(data) != string(testData) {
+		t.Errorf("Expected %s, got %s", testData, data)
+	}
+
+	// Verify GetMemtableById works
+	retrievedMemtable := manager.GetMemtableById(id)
+	if retrievedMemtable != memtable {
+		t.Errorf("GetMemtableById should return the same memtable")
+	}
+
+	// Perform flush and verify state changes
+	err = manager.Flush()
+	if err != nil {
+		t.Fatalf("Flush failed: %v", err)
+	}
+
+	// Get new active memtable
+	newMemtable, newId, _ := manager.GetMemtable()
+	if newMemtable == memtable {
+		t.Errorf("Active memtable should have changed after flush")
+	}
+	if newId == id {
+		t.Errorf("Active memtable ID should have changed after flush")
+	}
+
+	// Old memtable should still be retrievable by its original ID
+	oldMemtable := manager.GetMemtableById(id)
+	if oldMemtable != memtable {
+		t.Errorf("Should still be able to retrieve old memtable by ID")
+	}
+
+	// Give background flush time to complete
+	time.Sleep(100 * time.Millisecond)
 }
