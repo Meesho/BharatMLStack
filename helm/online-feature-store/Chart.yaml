@@ -1,0 +1,21 @@
+apiVersion: v2
+name: online-feature-store
+description: BharatMLStack Online Feature Store - A hyper-scalable feature store for real-time ML
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/AbhijithGanesh/BharatMLStack
+sources:
+  - https://github.com/AbhijithGanesh/BharatMLStack/tree/main/online-feature-store
+maintainers:
+  - name: BharatMLStack Team
+    email: contact@bharatmlstack.dev
+keywords:
+  - machine-learning
+  - feature-store
+  - real-time
+  - ml-platform
+  - bharatmlstack
+annotations:
+  category: Machine Learning
+  licenses: MIT
