@@ -1,20 +1,20 @@
 apiVersion: v2
-name: online-feature-store
-description: BharatMLStack Online Feature Store - A hyper-scalable feature store for real-time ML
+name: horizon
+description: BharatMLStack Horizon - Control plane backend for metadata and configuration management
 type: application
 version: 1.0.0
 appVersion: "1.0.0"
-home: https://github.com/Meesho/BharatMLStack
+home: https://github.com/AbhijithGanesh/BharatMLStack
 sources:
-  - https://github.com/Meesho/BharatMLStack/tree/main/online-feature-store
+  - https://github.com/AbhijithGanesh/BharatMLStack/tree/main/horizon
 maintainers:
   - name: BharatMLStack Team
     email: contact@bharatmlstack.dev
 keywords:
   - machine-learning
   - feature-store
-  - real-time
-  - ml-platform
+  - control-plane
+  - metadata-management
   - bharatmlstack
 annotations:
   category: Machine Learning

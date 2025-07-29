@@ -1,0 +1,171 @@
+# Production environment overrides
+# This file overrides values.yaml for production environments
+
+replicaCount: 5
+
+image:
+  tag: "v1.0.0"  # Use stable version in production
+  pullPolicy: IfNotPresent
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 5
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 70
+
+verticalPodAutoscaler:
+  enabled: true
+  updateMode: "Auto"
+  minAllowed:
+    cpu: 500m
+    memory: 1Gi
+  maxAllowed:
+    cpu: 4
+    memory: 8Gi
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 3
+
+# Use Gateway API for production
+ingress:
+  enabled: false
+
+gateway:
+  enabled: true
+  className: "istio"
+  gatewayName: "bharatmlstack-gateway"
+  namespace: "bharatml-system"
+  hosts:
+    - "onfs.bharatml.prod.com"
+  tls:
+    enabled: true
+    certificateRefs:
+      - name: "bharatml-prod-tls"
+        namespace: "bharatml-system"
+
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: "bharatmlstack-gateway"
+      namespace: "bharatml-system"
+  hostnames:
+    - "onfs.bharatml.prod.com"
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: bharatml-system
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: horizon
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: trufflebox-ui
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: istio-proxy
+      ports:
+        - protocol: TCP
+          port: 8089
+
+serviceMonitor:
+  enabled: true
+  namespace: "bharatml-monitoring"
+  interval: 15s
+  scrapeTimeout: 10s
+
+config:
+  app:
+    env: "production"
+    logLevel: "INFO"
+    metricSamplingRate: 0.1
+  
+  etcd:
+    server: "etcd.bharatml-infra.svc.cluster.local:2379"
+  
+  storage:
+    scylla:
+      contactPoints: "scylla-cluster.bharatml-infra.svc.cluster.local"
+      numConns: 20
+      timeoutMs: 30000
+    
+    redis:
+      addr: "redis-cluster.bharatml-infra.svc.cluster.local:6379"
+      maxIdleConn: 64
+      minIdleConn: 32
+      maxActiveConn: 128
+  
+  cache:
+    inMemory:
+      sizeInBytes: 10000000
+    
+    p2p:
+      ownPartitionSizeInBytes: 10000000
+      globalSizeInBytes: 100000
+
+# Production affinity rules
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+                - online-feature-store
+        topologyKey: kubernetes.io/hostname
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: node-type
+              operator: In
+              values:
+                - compute-optimized
+
+# Production node selector
+nodeSelector:
+  bharatml.io/workload-type: "feature-store"
+
+# Production tolerations
+tolerations:
+  - key: "bharatml.io/feature-store"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+# Enhanced probes for production
+probes:
+  liveness:
+    initialDelaySeconds: 60
+    periodSeconds: 15
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 2
+
+# Production-specific environment variables
+extraEnvVars:
+  - name: APP_ENV
+    value: "production"
+  - name: GOMAXPROCS
+    value: "4"
+  - name: GOGC
+    value: "100"
