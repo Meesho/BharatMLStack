@@ -1,6 +1,6 @@
 ---
 
-app_name: online-feature-store-api-secondary
+app_name: online-feature-store-api-mp
 app_port: 9700
 health_check: /health/self
 module: api-server
@@ -39,6 +39,19 @@ environment:
     memory_limit: 16G
     memory_request: 8500M
     deploymentStrategy: canary
+    appMetrics: true
+    deployment_args: false
+    command: /app/server
+  stg:
+    as_enabled: true
+    replica_count: 2
+    as_min: 2
+    as_max: 40
+    cpu_limit: 4
+    cpu_request: 4
+    memory_limit: 16G
+    memory_request: 8500M
+    deploymentStrategy: rollingUpdate
     appMetrics: true
     deployment_args: false
     command: /app/server
