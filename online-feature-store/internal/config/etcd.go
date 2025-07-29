@@ -497,3 +497,11 @@ func (e *Etcd) GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error) {
 
 	return allFGIds, nil
 }
+
+func (e *Etcd) GetDefaultPercent(entityLabel string) (int, error) {
+	entity, err := e.GetEntity(entityLabel)
+	if err != nil {
+		return 0, err
+	}
+	return entity.DefaultPercent, nil
+}

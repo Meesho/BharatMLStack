@@ -28,6 +28,7 @@ type Entity struct {
 	DistributedCache Cache                   `json:"distributed-cache"`
 	InMemoryCache    Cache                   `json:"in-memory-cache"`
 	P2PCache         Cache                   `json:"p2p-cache"`
+	DefaultPercent   int                     `json:"default-percent"`
 }
 
 type Cache struct {

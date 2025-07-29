@@ -2,6 +2,11 @@ package stores
 
 import (
 	"fmt"
+	"math/rand"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/blocks"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/models"
@@ -10,9 +15,6 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/gocql/gocql"
 	"github.com/rs/zerolog/log"
-	"strconv"
-	"strings"
-	"time"
 )
 
 const (
@@ -51,6 +53,20 @@ func NewScyllaStore(table string, connection *infra.ScyllaClusterConnection) (St
 func (s *ScyllaStore) RetrieveV2(entityLabel string, pkMap map[string]string, fgIds []int) (map[int]*blocks.DeserializedPSDB, error) {
 	t1 := time.Now()
 	metric.Incr("db_retrieve_count", []string{"entity_label", entityLabel, "db_type", "scylla"})
+	randomNumber := rand.Intn(100)
+	defaultPercent, err := s.configManager.GetDefaultPercent(entityLabel)
+	if err != nil {
+		return nil, err
+	}
+	if randomNumber < defaultPercent {
+		fgIdToDDB := make(map[int]*blocks.DeserializedPSDB, len(fgIds))
+		for _, fgId := range fgIds {
+			fgIdToDDB[fgId] = &blocks.DeserializedPSDB{
+				NegativeCache: true,
+			}
+		}
+		return fgIdToDDB, nil
+	}
 	colPKMap, pkCols, err := s.configManager.GetPKMapAndPKColumnsForEntity(entityLabel)
 	if err != nil {
 		// log.Error().Err(err).Msgf("Error while getting PK and PK columns for entity: %s", entityLabel)
