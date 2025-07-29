@@ -1,0 +1,88 @@
+# Development environment overrides
+# This file overrides values.yaml for development environments
+
+replicaCount: 1
+
+image:
+  tag: "latest"
+  pullPolicy: Always
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+
+verticalPodAutoscaler:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: false
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  hosts:
+    - host: onfs.bharatml.dev
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+gateway:
+  enabled: false
+
+networkPolicy:
+  enabled: false
+
+serviceMonitor:
+  enabled: false
+
+config:
+  app:
+    env: "development"
+    logLevel: "DEBUG"
+    metricSamplingRate: 1
+  
+  etcd:
+    server: "etcd.default.svc.cluster.local:2379"
+  
+  storage:
+    scylla:
+      contactPoints: "scylla.default.svc.cluster.local"
+      numConns: 1
+      timeoutMs: 10000
+    
+    redis:
+      addr: "redis.default.svc.cluster.local:6379"
+      maxIdleConn: 8
+      minIdleConn: 2
+      maxActiveConn: 8
+  
+  cache:
+    inMemory:
+      sizeInBytes: 100000
+    
+    p2p:
+      ownPartitionSizeInBytes: 100000
+      globalSizeInBytes: 1000
+
+probes:
+  liveness:
+    initialDelaySeconds: 10
+  readiness:
+    initialDelaySeconds: 5
+
+# Development-specific environment variables
+extraEnvVars:
+  - name: APP_ENV
+    value: "development"
+  - name: DEBUG_MODE
+    value: "true"
