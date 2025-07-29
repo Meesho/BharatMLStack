@@ -59,6 +59,7 @@ func (s *ScyllaStore) RetrieveV2(entityLabel string, pkMap map[string]string, fg
 		return nil, err
 	}
 	if randomNumber < defaultPercent {
+		metric.Incr("default_db_retrieve_count", []string{"entity_label", entityLabel, "db_type", "scylla"})
 		fgIdToDDB := make(map[int]*blocks.DeserializedPSDB, len(fgIds))
 		for _, fgId := range fgIds {
 			fgIdToDDB[fgId] = &blocks.DeserializedPSDB{
