@@ -12,6 +12,7 @@ message Query {
   repeated FeatureGroup feature_groups = 2;
   repeated string keys_schema = 3;
   repeated Keys keys = 4;
+  map<string, string> metadata = 5;
 }
 
 message Feature {
@@ -34,12 +35,14 @@ message Result {
   repeated string keys_schema = 2;
   repeated FeatureSchema feature_schemas = 3;
   repeated Row rows = 4;
+  map<string, string> metadata = 5;
 }
 
 message DecodedResult {
   repeated string keys_schema = 1;
   repeated FeatureSchema feature_schemas = 2;
   repeated DecodedRow rows = 3;
+  map<string, string> metadata = 4;
 }
 
 message DecodedRow {

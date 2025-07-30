@@ -38,9 +38,11 @@ message Query {
   repeated string keys_schema = 2;
   repeated FeatureGroupSchema feature_group_schema = 3;
   repeated Data data = 4;
+  map<string, string> metadata = 5;
 }
 
 message Result {
+  map<string, string> metadata = 1;
   string message = 2;
 }
 

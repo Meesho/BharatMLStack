@@ -4,9 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tonic = "0.11"
-prost = "0.12"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tonic = "0.11.0"
+tokio = { version = "1.36.0", features = ["full"] }
+prost = "0.12.3"
+bytes = "1.5.0"
+http-body = "1.0.0"
 
 [build-dependencies]
-tonic-build = "0.11"
+tonic-build = "0.11.0"
