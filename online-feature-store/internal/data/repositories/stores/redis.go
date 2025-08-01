@@ -108,8 +108,11 @@ func (r *RedisStore) batchPersistReplace(entityLabel string, keysToRead []string
 		if err != nil {
 			return fmt.Errorf("failed to serialize final CSDB for key %s: %w", key, err)
 		}
-
-		pipe.Set(r.ctx, key, serializedCSDB, time.Duration(maxTtl)*time.Second)
+		if maxTtl == 0 { //handle infinite ttl
+			pipe.Set(r.ctx, key, serializedCSDB, -1)
+		} else {
+			pipe.Set(r.ctx, key, serializedCSDB, time.Duration(maxTtl)*time.Second)
+		}
 	}
 
 	_, err := pipe.Exec(r.ctx)
@@ -135,7 +138,7 @@ func (r *RedisStore) batchPersistMerge(entityLabel string, keysToRead []string, 
 		var existingCSDB *blocks.CacheStorageDataBlock
 		if existingValues[i] != nil {
 			existingData := []byte(existingValues[i].(string))
-			existingCSDB, err = blocks.CreateCSDBForDistributedCache(existingData)
+			existingCSDB, err = blocks.CreateCSDBForStorage(existingData)
 			if err != nil {
 				log.Warn().Err(err).Msgf("Failed to parse existing CSDB for key %s, creating new", key)
 				existingCSDB = blocks.NewCacheStorageDataBlock(1)
@@ -153,8 +156,11 @@ func (r *RedisStore) batchPersistMerge(entityLabel string, keysToRead []string, 
 		if err != nil {
 			return fmt.Errorf("failed to serialize final CSDB for key %s: %w", key, err)
 		}
-
-		pipe.Set(r.ctx, key, serializedCSDB, time.Duration(maxTtl)*time.Second)
+		if maxTtl == 0 { //handle infinite ttl
+			pipe.Set(r.ctx, key, serializedCSDB, -1)
+		} else {
+			pipe.Set(r.ctx, key, serializedCSDB, time.Duration(maxTtl)*time.Second)
+		}
 	}
 
 	_, err = pipe.Exec(r.ctx)
@@ -279,7 +285,7 @@ func (r *RedisStore) BatchRetrieveV2(entityLabel string, pkMaps []map[string]str
 		}
 
 		data := []byte(value.(string))
-		csdb, err := blocks.CreateCSDBForDistributedCache(data)
+		csdb, err := blocks.CreateCSDBForStorage(data)
 		if err != nil {
 			return nil, err
 		}

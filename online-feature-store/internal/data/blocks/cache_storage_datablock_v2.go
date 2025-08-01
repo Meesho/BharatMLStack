@@ -16,6 +16,7 @@ const (
 	// CacheTypeInMemory represents in-memory cache
 	CacheTypeInMemory CacheType = iota
 	CacheTypeDistributed
+	CacheTypeStorage
 	csdbPrefixLen      = 4
 	CSDBLayoutVersion1 = 1
 )
@@ -63,6 +64,18 @@ func CreateCSDBForDistributedCache(data []byte) (*CacheStorageDataBlock, error) 
 		FGIdToDDB:      nil,
 		serializedCSDB: data,
 		cacheType:      CacheTypeDistributed,
+	}
+	return csdb, nil
+}
+
+func CreateCSDBForStorage(data []byte) (*CacheStorageDataBlock, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("no data to deserialize")
+	}
+	csdb := &CacheStorageDataBlock{
+		FGIdToDDB:      nil,
+		serializedCSDB: data,
+		cacheType:      CacheTypeStorage,
 	}
 	return csdb, nil
 }
@@ -181,14 +194,24 @@ func (csdb *CacheStorageDataBlock) GetDeserializedPSDBForFGIds(fgIds ds.Set[int]
 	}
 	//Handle partial hit
 	if len(foundFGIds) != fgIds.Size() {
-		for _, id := range foundFGIds {
-			fgIds.Add(int(id))
+		// For distributed cache mode return nil to trigger a cache miss
+		// For storage mode, we should return whatever we found and set negative cache DDB for missing FGIds
+		if csdb.cacheType != CacheTypeStorage {
+			for _, id := range foundFGIds {
+				fgIds.Add(int(id))
+			}
+			// Some FGIds are missing, have to be fetched anyway
+			return nil, nil
 		}
-		// Some FGIds are missing, have to be fetched anyway
-		return nil, nil
 	}
+	// Process found FGIds
 	fgIds.KeyIterator(func(fgId int) bool {
-		offLen := fgOffLenMap[fgId]
+		offLen, exists := fgOffLenMap[fgId]
+		if csdb.cacheType == CacheTypeStorage && !exists {
+			fgIdToDDB[fgId] = NegativeCacheDeserializePSDB()
+			return true
+		}
+
 		startOffSet, endOffSet := system.UnpackUint64InUint32(offLen)
 		if startOffSet == endOffSet {
 			fgIdToDDB[fgId] = NegativeCacheDeserializePSDB()
