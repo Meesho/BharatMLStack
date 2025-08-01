@@ -24,5 +24,4 @@ type Manager interface {
 	RegisterClients() error
 	GetAllRegisteredClients() map[string]string
 	GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error)
-	GetDefaultPercent(entityLabel string) (int, error)
 }
