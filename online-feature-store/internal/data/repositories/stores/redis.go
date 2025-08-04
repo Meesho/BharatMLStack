@@ -109,7 +109,11 @@ func (r *RedisStore) batchPersistReplace(entityLabel string, keysToRead []string
 			return fmt.Errorf("failed to serialize final CSDB for key %s: %w", key, err)
 		}
 
-		pipe.Set(r.ctx, key, serializedCSDB, time.Duration(maxTtl)*time.Second)
+		if maxTtl == 0 { //handle infinite ttl
+			pipe.Set(r.ctx, key, serializedCSDB, -1)
+		} else {
+			pipe.Set(r.ctx, key, serializedCSDB, time.Duration(maxTtl)*time.Second)
+		}
 	}
 
 	_, err := pipe.Exec(r.ctx)
@@ -154,7 +158,11 @@ func (r *RedisStore) batchPersistMerge(entityLabel string, keysToRead []string, 
 			return fmt.Errorf("failed to serialize final CSDB for key %s: %w", key, err)
 		}
 
-		pipe.Set(r.ctx, key, serializedCSDB, time.Duration(maxTtl)*time.Second)
+		if maxTtl == 0 { //handle infinite ttl
+			pipe.Set(r.ctx, key, serializedCSDB, -1)
+		} else {
+			pipe.Set(r.ctx, key, serializedCSDB, time.Duration(maxTtl)*time.Second)
+		}
 	}
 
 	_, err = pipe.Exec(r.ctx)
