@@ -1,3 +1,4 @@
+#![allow(clippy::excessive_precision, clippy::approx_constant)]
 use crate::pkg::rust_matrix_frame::matrix::Mat2D;
 use crate::pkg::rust_matrix_frame::ops::F32Ops;
 use crate::pkg::rust_matrix_frame::vector::Vector;

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::handler::handler::{
+    use crate::handler::service::{
         proto, proto::numerix_response_proto, proto::numerix_server::Numerix, ByteList,
         ComputationScoreData, EntityScoreData, MyNumerixService, NumerixRequestProto,
         NumerixResponseProto, Score, StringList,
@@ -8,10 +8,10 @@ mod tests {
     use tonic::Request;
 
     use crate::handler::config as handler_config;
-    use crate::pkg::config::config;
-    use crate::pkg::etcd::etcd;
-    use crate::pkg::logger::logger;
-    use crate::pkg::metrics::metrics;
+    use crate::pkg::config::app_config;
+    use crate::pkg::etcd::client as etcd_client;
+    use crate::pkg::logger::log;
+    use crate::pkg::metrics::client as metrics_client;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::LazyLock;
     use tokio::sync::Mutex;
@@ -42,9 +42,9 @@ mod tests {
     async fn setup() {
         // Initialize sync components once
         LOGGER_INITIALIZED.call_once(|| {
-            logger::init_logger();
-            config::get_config();
-            metrics::init_config();
+            log::init_logger();
+            app_config::get_config();
+            metrics_client::init_config();
         });
 
         // Initialize etcd client only once with proper locking
@@ -55,7 +55,7 @@ mod tests {
             // Check again after acquiring the lock
             if !ETCD_INITIALIZED.load(Ordering::SeqCst) {
                 println!("Initializing etcd client...");
-                etcd::init_etcd_connection().await;
+                etcd_client::init_etcd_connection().await;
                 handler_config::init_config().await;
                 ETCD_INITIALIZED.store(true, Ordering::SeqCst);
                 println!("Etcd client initialized successfully");
@@ -66,7 +66,7 @@ mod tests {
     #[tokio::test]
     async fn test_valid_compute_request() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
 
         let request = create_test_request(
             vec!["a".to_string(), "b".to_string()],
@@ -122,7 +122,7 @@ mod tests {
     #[tokio::test]
     async fn test_valid_compute_request_with_byte_data() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
         let num1: f64 = 1.0;
         let num2: f64 = 2.0;
         let num3: f64 = 3.0;
@@ -179,7 +179,7 @@ mod tests {
     #[tokio::test]
     async fn test_f32_data_type() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
 
         // Create a request with f32 data type
         let request = create_test_request(
@@ -239,7 +239,7 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_compute_id() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
 
         // Create request with invalid compute_id
         let request = create_test_request(
@@ -271,7 +271,7 @@ mod tests {
     #[tokio::test]
     async fn test_missing_entity_score_data() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
 
         // Create a request with missing entity_score_data
         let request = NumerixRequestProto {
@@ -296,7 +296,7 @@ mod tests {
     #[tokio::test]
     async fn test_empty_schema() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
 
         // Create a request with empty schema
         let request = create_test_request(
@@ -328,7 +328,7 @@ mod tests {
     #[tokio::test]
     async fn test_empty_entity_scores() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
 
         // Create a request with empty entity_scores
         let request = create_test_request(
@@ -356,7 +356,7 @@ mod tests {
     #[tokio::test]
     async fn test_empty_compute_id() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
 
         // Create a request with empty compute_id
         let request = create_test_request(
@@ -388,7 +388,7 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_string_data_format() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
 
         // Create a request with invalid string data (not parsable as numbers)
         let request = create_test_request(
@@ -421,7 +421,7 @@ mod tests {
     #[tokio::test]
     async fn test_larger_dataset() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
 
         // Create 10 scores to test with a larger dataset
         let mut scores = Vec::new();
@@ -459,7 +459,7 @@ mod tests {
     #[tokio::test]
     async fn test_no_data_type_specified() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
 
         // Create a request without specifying data_type (should default to f64)
         let request = create_test_request(
@@ -517,7 +517,7 @@ mod tests {
     #[tokio::test]
     async fn test_negative_values() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
 
         // Create a request with negative values
         let request = create_test_request(
@@ -575,7 +575,7 @@ mod tests {
     #[tokio::test]
     async fn test_matrix_format_none() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
 
         // Create a request with a score that has no matrix_format specified
         let request = create_test_request(
@@ -608,7 +608,7 @@ mod tests {
     #[tokio::test]
     async fn test_mismatched_schema_and_values() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
 
         // Create a request where schema length doesn't match values length
         let request = create_test_request(
@@ -643,7 +643,7 @@ mod tests {
     #[tokio::test]
     async fn test_mixed_data_types() {
         setup().await;
-        let service = MyNumerixService::default();
+        let service = MyNumerixService;
 
         // Get byte representation of some f64 values
         let num1: f64 = 1.0;

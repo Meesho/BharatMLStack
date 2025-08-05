@@ -1,5 +1,5 @@
-use crate::logger;
-use crate::pkg::config::config::get_config;
+use crate::pkg::logger::log;
+use crate::pkg::config::app_config::get_config;
 use cadence::{BufferedUdpMetricSink, MetricClient, QueuingMetricSink, StatsdClient};
 use std::net::UdpSocket;
 use std::sync::Arc;
@@ -22,7 +22,7 @@ pub fn init_config() {
     let socket = UdpSocket::bind("0.0.0.0:0");
     let socket = match socket {
         Ok(socket) => socket,
-        Err(e) => logger::fatal(
+        Err(e) => log::fatal(
             format!(
                 "Failed to bind UDP socket for metrics client to telegraf {}:{}",
                 config.telegraf_udp_host, config.telegraf_udp_port
@@ -33,7 +33,7 @@ pub fn init_config() {
     let sink = BufferedUdpMetricSink::from(host, socket);
     let sink = match sink {
         Ok(sink) => sink,
-        Err(e) => logger::fatal(
+        Err(e) => log::fatal(
             format!(
                 "Failed to create UDP metrics sink for telegraf {}:{}",
                 config.telegraf_udp_host, config.telegraf_udp_port
@@ -50,9 +50,10 @@ pub fn init_config() {
             .build(),
     ));
 
-    logger::info(format!(
-        "Metrics client initialized with telegraf address = {}, global tags = {:?}, and sampling rate = {}",
-        format!("{}:{}", config.telegraf_udp_host, config.telegraf_udp_port),
+    log::info(format!(
+        "Metrics client initialized with telegraf address = {}:{}, global tags = {:?}, and sampling rate = {}",
+        config.telegraf_udp_host,
+        config.telegraf_udp_port,
         vec![("env", app_env), ("service", app_name)],
         config.metric_sampling_rate));
 }

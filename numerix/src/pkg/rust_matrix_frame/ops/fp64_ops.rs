@@ -275,7 +275,7 @@ impl VectorOps for F64Ops {
     }
 
     fn percentile_rank(vec: &Vector<Self::Scalar>) -> Result<Vector<Self::Scalar>, Mat2DError> {
-        if vec.len() <= 0 {
+        if vec.is_empty() {
             return Err(Mat2DError::InvalidOperation(
                 "Vector length cannot be 0 or less".to_string(),
             ));

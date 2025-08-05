@@ -1,1 +1,1 @@
-pub mod etcd;
+pub mod client;

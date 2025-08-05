@@ -1,5 +1,5 @@
-use crate::logger;
-use crate::pkg::metrics::metrics;
+use crate::pkg::logger::log;
+use crate::pkg::metrics::client;
 use hyper::StatusCode;
 use hyper::{Request, Response};
 use std::fmt;
@@ -66,7 +66,7 @@ where
             let response = match response {
                 Ok(resp) => resp,
                 Err(e) => {
-                    logger::error(
+                    log::error(
                         format!(
                             "Request failed: method={}, status={}, duration={:?}, error={}",
                             method, status_code, duration, e
@@ -87,6 +87,6 @@ where
 fn telemetry_middleware(method: &str, duration: Duration, status_code: StatusCode) {
     let tags = vec![("api", method), ("status", status_code.as_str())];
 
-    let _ = metrics::timing("router.api.request.latency", duration, &tags);
-    let _ = metrics::count("router.api.request.total", 1, &tags);
+    client::timing("router.api.request.latency", duration, &tags);
+    client::count("router.api.request.total", 1, &tags);
 }

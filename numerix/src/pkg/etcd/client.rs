@@ -1,5 +1,5 @@
-use crate::logger;
-use crate::pkg::config::config::get_config;
+use crate::pkg::logger::log;
+use crate::pkg::config::app_config::get_config;
 use etcd_client::EventType;
 use etcd_client::{Client, ConnectOptions, WatchOptions};
 use regex::Regex;
@@ -23,7 +23,7 @@ static EMPTY_RESPONSE: &str = "";
 pub async fn init_etcd_connection() {
     match ETCD_TIMEOUT.set(Duration::from_secs(5)) {
         Ok(_) => (),
-        Err(e) => logger::fatal(
+        Err(e) => log::fatal(
             format!("Failed to initialize ETCD timeout to 5 seconds: {:?}", e),
             None,
         ),
@@ -64,7 +64,7 @@ pub async fn init_etcd_connection() {
     let client = match client {
         Ok(client) => client,
         Err(e) => {
-            logger::fatal(
+            log::fatal(
                 format!("Failed to connect to ETCD servers {:?}", etcd_servers),
                 Some(&e),
             );
@@ -72,7 +72,7 @@ pub async fn init_etcd_connection() {
     };
 
     if let Err(e) = ETCD_APP_PATH.set(etcd_path.clone()) {
-        logger::error(
+        log::error(
             format!(
                 "ETCD_APP_PATH already initialized when setting to '{}': {:?}",
                 etcd_path, e
@@ -81,8 +81,8 @@ pub async fn init_etcd_connection() {
         );
     }
 
-    if let Err(_) = ETCD_CLIENT.set(Arc::new(Mutex::new(client))) {
-        logger::error(
+    if ETCD_CLIENT.set(Arc::new(Mutex::new(client))).is_err() {
+        log::error(
             "ETCD_CLIENT already initialized during connection setup",
             None,
         );
@@ -106,7 +106,7 @@ pub async fn get_child_nodes(
     let resp = match resp {
         Ok(resp) => resp,
         Err(e) => {
-            logger::error(
+            log::error(
                 format!(
                     "Failed to get child nodes from ETCD path: {}",
                     etcd_absolute_path
@@ -142,7 +142,7 @@ where
     let re = match Regex::new(r"-?\d+(\.\d+)?") {
         Ok(re) => re,
         Err(_e) => {
-            logger::fatal(
+            log::fatal(
                 format!(
                     "Failed to create regex pattern for expression {:?} : {:?}",
                     expression, _e
@@ -183,7 +183,7 @@ pub async fn watch_etcd_path(
             let mut stream = match watch_result {
                 Ok((_, stream)) => stream,
                 Err(e) => {
-                    logger::error(
+                    log::error(
                         format!("Failed to start ETCD watch on path: {}", etcd_absolute_path),
                         Some(&e),
                     );
@@ -195,7 +195,7 @@ pub async fn watch_etcd_path(
             loop {
                 match stream.message().await {
                     Ok(Some(event)) => {
-                        logger::info(format!("Event: {:?}", event));
+                        log::info(format!("Event: {:?}", event));
                         for ev in event.events() {
                             match ev.event_type() {
                                 EventType::Put => {
@@ -209,7 +209,7 @@ pub async fn watch_etcd_path(
                                                 let key_str = match kv.key_str() {
                                                     Ok(k) => k.to_string(),
                                                     Err(e) => {
-                                                        logger::error(format!("Failed to parse ETCD key string during PUT event on path: {}", etcd_absolute_path), Some(&e));
+                                                        log::error(format!("Failed to parse ETCD key string during PUT event on path: {}", etcd_absolute_path), Some(&e));
                                                         continue;
                                                     }
                                                 };
@@ -239,7 +239,7 @@ pub async fn watch_etcd_path(
                                         let key_str = match kv.key_str() {
                                             Ok(k) => k.to_string(),
                                             Err(e) => {
-                                                logger::error(format!("Failed to parse ETCD key string during DELETE event on path: {}", etcd_absolute_path), Some(&e));
+                                                log::error(format!("Failed to parse ETCD key string during DELETE event on path: {}", etcd_absolute_path), Some(&e));
                                                 continue;
                                             }
                                         };
@@ -258,7 +258,7 @@ pub async fn watch_etcd_path(
                         }
                     }
                     Ok(None) => {
-                        logger::error(
+                        log::error(
                             format!(
                                 "ETCD watch stream ended unexpectedly for path: {}",
                                 etcd_absolute_path
@@ -268,7 +268,7 @@ pub async fn watch_etcd_path(
                         break;
                     }
                     Err(e) => {
-                        logger::error(
+                        log::error(
                             format!("ETCD watch stream error on path: {}", etcd_absolute_path),
                             Some(&e),
                         );
@@ -276,7 +276,7 @@ pub async fn watch_etcd_path(
                     }
                 }
             }
-            logger::info(format!(
+            log::info(format!(
                 "Re-establishing ETCD watch after error on path: {}",
                 etcd_absolute_path
             ));

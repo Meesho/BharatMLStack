@@ -1,4 +1,4 @@
-use crate::pkg::config::config;
+use crate::pkg::config::app_config;
 use std::error::Error;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
@@ -79,7 +79,7 @@ where
 }
 
 pub fn init_logger() {
-    let config = config::get_config();
+    let config = app_config::get_config();
 
     match APP_NAME.set(config.app_name.clone()) {
         Ok(_) => (),
@@ -96,7 +96,7 @@ pub fn init_logger() {
     match SAMPLING_RATE.set(config.log_sampling_rate) {
         Ok(_) => (),
         Err(_) => error(
-            "Logger sampling rate already initialized, cannot reinitialize".to_string(),
+            "Logger sampling rate already initialized, cannot reinitialize",
             None,
         ),
     }
@@ -110,7 +110,7 @@ pub fn init_logger() {
         "ERROR" => "error",
         "FATAL" | "PANIC" => "error",
         "DISABLED" => "off",
-        _ => fatal(&format!("Invalid log level '{}' for app '{}', expected: DEBUG/INFO/WARN/ERROR/FATAL/DISABLED", log_level, config.app_name), None),
+        _ => fatal(format!("Invalid log level '{}' for app '{}', expected: DEBUG/INFO/WARN/ERROR/FATAL/DISABLED", log_level, config.app_name), None),
     };
 
     let env_filter = EnvFilter::new(filter_directive);

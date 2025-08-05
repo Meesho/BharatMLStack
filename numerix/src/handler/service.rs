@@ -1,6 +1,6 @@
 use crate::handler::config;
-use crate::logger;
-use crate::pkg::metrics::metrics;
+use crate::pkg::logger::log;
+use crate::pkg::metrics::client;
 use crate::pkg::rust_matrix_frame::error::Mat2DError;
 use crate::pkg::rust_matrix_frame::matrix::Mat2D;
 use crate::pkg::rust_matrix_frame::ops::F32Ops;
@@ -43,7 +43,7 @@ impl Numerix for MyNumerixService {
         match validate_request(&req) {
             Ok(_) => (),
             Err(e) => {
-                logger::error(format!("Invalid request: {:?}, Error: {}", req, e), None);
+                log::error(format!("Invalid request: {:?}, Error: {}", req, e), None);
                 return Ok(Response::new(NumerixResponseProto {
                     response: Some(numerix_response_proto::Response::Error(Error {
                         message: format!("Request validation failed: {}", e),
@@ -56,7 +56,7 @@ impl Numerix for MyNumerixService {
         let compute_id = entity_score_data.compute_id.clone();
         let tags = vec![(COMPUTE_ID, compute_id.as_str())];
 
-        let _ = metrics::count("numerix.computation.request.total", 1, &tags);
+        let _ = client::count("numerix.computation.request.total", 1, &tags);
 
         let expression = config::get_exression(compute_id.as_str());
         if expression.is_empty() {
@@ -69,12 +69,12 @@ impl Numerix for MyNumerixService {
 
         let result = compute_expression(&expression, &req);
         if let Some(numerix_response_proto::Response::Error(_)) = &result.response {
-            let _ = metrics::count("numerix.computation.request.error", 1, &tags);
+            let _ = client::count("numerix.computation.request.error", 1, &tags);
             return Ok(Response::new(result));
         }
 
         let duration = start.elapsed();
-        let _ = metrics::timing("numerix.computation.request.latency", duration, &tags);
+        let _ = client::timing("numerix.computation.request.latency", duration, &tags);
 
         Ok(Response::new(result))
     }
@@ -183,7 +183,7 @@ where
     let matrix = match matrix {
         Ok(matrix) => matrix,
         Err(e) => {
-            logger::error(
+            log::error(
                 format!("Failed to create matrix for request: {:?}", req),
                 Some(&e),
             );
@@ -242,7 +242,7 @@ where
                     if value_idx < cols && idx < rows {
                         let expected_size = std::mem::size_of::<T>();
                         if value.len() != expected_size {
-                            logger::error(format!("Invalid byte length: expected {} bytes, got {} bytes for request: {:?}", 
+                            log::error(format!("Invalid byte length: expected {} bytes, got {} bytes for request: {:?}", 
                                 expected_size, value.len(), req), None);
                             continue;
                         }
@@ -265,7 +265,7 @@ where
                                 converted_scores[value_idx * rows + idx] = parsed_value
                             }
                             Err(e) => {
-                                logger::error(format!("Failed to parse string value '{}' for request: {:?}, parse error: {:?}", value, req, e), None);
+                                log::error(format!("Failed to parse string value '{}' for request: {:?}, parse error: {:?}", value, req, e), None);
                             }
                         }
                     }
@@ -294,7 +294,7 @@ where
                     .or_insert(Vector::from_vec(vec![number_value; size]));
             }
             Err(e) => {
-                logger::error(
+                log::error(
                     format!(
                         "Failed to parse number '{}' in expression for compute_id: {}: {:?}",
                         number_str, compute_id, e
@@ -338,7 +338,7 @@ where
     let result_vec = match result {
         Ok(result_vec) => result_vec,
         Err(err) => {
-            logger::error(
+            log::error(
                 format!("Matrix calculation failed for request: {:?}", req),
                 Some(&err),
             );

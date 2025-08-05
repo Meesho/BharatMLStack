@@ -1,18 +1,18 @@
+pub mod handler;
 pub mod pkg;
 pub mod server;
 use handler::config as handler_config;
-use pkg::config::config;
-use pkg::etcd::etcd;
-use pkg::metrics::metrics;
-pub mod handler;
-use pkg::logger::logger;
+use pkg::config::app_config;
+use pkg::etcd::client as etcd_client;
+use pkg::logger::log;
+use pkg::metrics::client as metrics_client;
 
 #[tokio::main]
 async fn main() {
-    logger::init_logger();
-    config::get_config();
-    metrics::init_config();
-    etcd::init_etcd_connection().await;
+    log::init_logger();
+    app_config::get_config();
+    metrics_client::init_config();
+    etcd_client::init_etcd_connection().await;
     handler_config::init_config().await;
     server::init_server().await;
 }

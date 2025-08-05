@@ -1,4 +1,4 @@
-use crate::logger;
+use crate::pkg::logger::log;
 use config::{Config, Environment};
 use dotenv;
 use once_cell::sync::Lazy;
@@ -21,7 +21,7 @@ pub struct AppConfig {
     pub channel_buffer_size: u32,
 }
 
-static CONFIG: Lazy<AppConfig> = Lazy::new(|| init_config());
+static CONFIG: Lazy<AppConfig> = Lazy::new(init_config);
 
 static TELEGRAF_UDP_HOST: &str = "telegraf_udp_host";
 static TELEGRAF_UDP_PORT: &str = "telegraf_udp_port";
@@ -31,18 +31,14 @@ static TELEGRAF_UDP_PORT_VALUE: u32 = 8125;
 static LOG_SAMPLING_RATE_VALUE: f64 = 1.0;
 
 fn init_config() -> AppConfig {
-    if cfg!(test) {
-        dotenv::from_path(Path::new(".env")).ok();
-    } else {
-        dotenv::from_path(Path::new(".env")).ok();
-    }
+    dotenv::from_path(Path::new(".env")).ok();
 
     let mut builder = Config::builder();
 
     // Add default values - if these fail, it's a critical error
     match builder.set_default(TELEGRAF_UDP_HOST, TELEGRAF_UDP_HOST_VALUE) {
         Ok(b) => builder = b,
-        Err(e) => logger::fatal(
+        Err(e) => log::fatal(
             "Failed to set default value for telegraf_udp_host to 'localhost'",
             Some(&e),
         ),
@@ -50,7 +46,7 @@ fn init_config() -> AppConfig {
 
     match builder.set_default(TELEGRAF_UDP_PORT, TELEGRAF_UDP_PORT_VALUE) {
         Ok(b) => builder = b,
-        Err(e) => logger::fatal(
+        Err(e) => log::fatal(
             "Failed to set default value for telegraf_udp_port to 8125",
             Some(&e),
         ),
@@ -58,7 +54,7 @@ fn init_config() -> AppConfig {
 
     match builder.set_default(LOG_SAMPLING_RATE, LOG_SAMPLING_RATE_VALUE) {
         Ok(b) => builder = b,
-        Err(e) => logger::fatal(
+        Err(e) => log::fatal(
             "Failed to set default value for log_sampling_rate to 1.0",
             Some(&e),
         ),
@@ -66,7 +62,7 @@ fn init_config() -> AppConfig {
 
     let settings = match builder.add_source(Environment::default()).build() {
         Ok(cfg) => cfg,
-        Err(e) => logger::fatal(
+        Err(e) => log::fatal(
             "Failed to build configuration from environment variables",
             Some(&e),
         ),
@@ -74,7 +70,7 @@ fn init_config() -> AppConfig {
 
     match settings.try_deserialize() {
         Ok(cfg) => cfg,
-        Err(e) => logger::fatal(
+        Err(e) => log::fatal(
             "Failed to deserialize configuration into AppConfig struct",
             Some(&e),
         ),
