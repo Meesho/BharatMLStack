@@ -1,0 +1,57 @@
+name: Numerix CI
+
+on:
+  pull_request:
+    branches: [master, develop]
+    paths: ['numerix/**']
+  push:
+    branches: [master, develop]
+    paths: ['numerix/**']
+
+jobs:
+  build-numerix:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./numerix
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.80
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            numerix/target
+          key: ${{ runner.os }}-cargo-numerix-${{ hashFiles('numerix/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-numerix-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Build application
+        run: cargo build --release --verbose
+
+      - name: Run security audit
+        run: |
+          cargo install cargo-audit
+          cargo audit
