@@ -1,6 +1,9 @@
 package storage
 
-import "github.com/coocood/freecache"
+import (
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
+	"github.com/coocood/freecache"
+)
 
 type CacheStore struct {
 	ownPartitionCache *freecache.Cache
@@ -17,10 +20,12 @@ func NewCacheStore(ownPartitionSizeInBytes int, globalSizeInBytes int) *CacheSto
 func (c *CacheStore) Get(key string) ([]byte, error) {
 	value, err := c.ownPartitionCache.Get([]byte(key))
 	if err == nil {
+		metric.Count("p2p.cache.store.keys.hit", 1, []string{"partition", "own"})
 		return value, nil
 	}
 	value, err = c.globalCache.Get([]byte(key))
 	if err == nil {
+		metric.Count("p2p.cache.store.keys.hit", 1, []string{"partition", "global"})
 		return value, nil
 	}
 	return nil, err

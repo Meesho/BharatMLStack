@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
@@ -280,13 +281,25 @@ func (h *RetrieveHandler) retrieveFromInMemoryCache(keys []*retrieve.Keys, retri
 	return missingDataKeys, nil
 }
 
+// TODO: To make it production ready,
+// - take fgDataChan in input and send the data to the channel
+// - remove the random percentage rollout
+// - fix metrics naming conventions
 func (h *RetrieveHandler) testRetrieveFromP2PCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int]) ([]*retrieve.Keys, error) {
+	metric.Count("test.feature.retrieve.cache.p2p.requests.total", 1, []string{"entity_name", retrieveData.EntityLabel})
+	if rand.Intn(100) >= h.config.GetP2PEnabledPercentage() {
+		return nil, nil
+	}
+	metric.Count("test.feature.retrieve.cache.p2p.requests.pass", 1, []string{"entity_name", retrieveData.EntityLabel})
 	log.Debug().Msgf("Retrieving features from P2P cache for keys %v and fgIds %v", keys, fgIds)
+
 	entityLabel := retrieveData.EntityLabel
 	cache, err := h.p2pCacheProvider.GetCache(entityLabel)
 	if err != nil {
 		return nil, err
 	}
+
+	metric.Count("test.feature.retrieve.cache.p2p.keys.total", int64(len(keys)), []string{"entity_name", retrieveData.EntityLabel})
 	cacheData, err := cache.MultiGetV2(entityLabel, keys)
 	log.Debug().Msgf("Retrieved features from P2P cache for keys %v and fgIds %v, cacheData: %v", keys, fgIds, cacheData)
 	if err != nil {
@@ -308,6 +321,7 @@ func (h *RetrieveHandler) testRetrieveFromP2PCache(keys []*retrieve.Keys, retrie
 			missingDataKeys = append(missingDataKeys, key)
 		}
 	}
+	metric.Count("test.feature.retrieve.cache.p2p.keys.miss", int64(len(missingDataKeys)), []string{"entity_name", retrieveData.EntityLabel})
 	log.Debug().Msgf("Missing data keys from P2P cache: %v", missingDataKeys)
 	return missingDataKeys, nil
 }

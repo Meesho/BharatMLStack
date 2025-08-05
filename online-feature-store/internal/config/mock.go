@@ -86,6 +86,11 @@ func (m *MockConfigManager) GetP2PCacheConfForEntity(entityLabel string) (*Cache
 	return args.Get(0).(*Cache), args.Error(1)
 }
 
+func (m *MockConfigManager) GetP2PEnabledPercentage() int {
+	args := m.Called()
+	return args.Int(0)
+}
+
 func (m *MockConfigManager) GetStores() (*map[string]Store, error) {
 	args := m.Called()
 	if args.Get(0) == nil {

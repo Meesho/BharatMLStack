@@ -2,9 +2,10 @@ package p2pcache
 
 import (
 	"fmt"
+	"hash/fnv"
 	"maps"
-	"time"
 
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache/clustermanager"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache/network"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache/storage"
@@ -20,10 +21,10 @@ type P2PCacheConfig struct {
 }
 
 type P2PCache struct {
-	cm            clustermanager.ClusterManager
-	cacheStore    *storage.CacheStore
-	requestRouter *network.RequestRouter
-	server        *network.Server
+	cm         clustermanager.ClusterManager
+	cacheStore *storage.CacheStore
+	clients    []*network.ClientManager
+	server     *network.Server
 }
 
 func NewP2PCache(config P2PCacheConfig) (*P2PCache, error) {
@@ -32,12 +33,17 @@ func NewP2PCache(config P2PCacheConfig) (*P2PCache, error) {
 		log.Error().Err(err).Msgf("Error validating p2p cache config %+v", config)
 		return nil, err
 	}
+
 	cacheStore := storage.NewCacheStore(config.OwnPartitionSizeInBytes, config.GlobalSizeInBytes)
+	clients := make([]*network.ClientManager, config.NumClients)
+	for i := 0; i < config.NumClients; i++ {
+		clients[i] = network.NewClientManager(config.ServerPort)
+	}
 	return &P2PCache{
-		cm:            clustermanager.NewEtcdBasedClusterManager(config.Name),
-		cacheStore:    cacheStore,
-		requestRouter: network.NewRequestRouter(config.NumClients, config.ServerPort),
-		server:        network.NewServer(config.ServerPort, cacheStore),
+		cm:         clustermanager.NewEtcdBasedClusterManager(config.Name),
+		cacheStore: cacheStore,
+		clients:    clients,
+		server:     network.NewServer(config.ServerPort, cacheStore),
 	}, nil
 }
 
@@ -63,6 +69,8 @@ func validateConfig(config P2PCacheConfig) error {
 func (p *P2PCache) MultiGet(keys []string) (map[string][]byte, error) {
 	kvResponse := make(map[string][]byte)
 	missingKeys := make([]string, 0)
+
+	metric.Count("p2p.cache.store.keys.total", int64(len(keys)), []string{})
 	for _, key := range keys {
 		value, err := p.cacheStore.Get(key)
 		if err == nil {
@@ -75,6 +83,7 @@ func (p *P2PCache) MultiGet(keys []string) (map[string][]byte, error) {
 	if len(missingKeys) > 0 {
 		maps.Copy(kvResponse, p.fetchKeysFromOtherPods(missingKeys))
 	}
+	metric.Count("p2p.cache.store.keys.global.miss", int64(len(keys)-len(kvResponse)), []string{})
 	return kvResponse, nil
 }
 
@@ -112,7 +121,11 @@ func (p *P2PCache) fetchKeysFromOtherPods(missingKeys []string) map[string][]byt
 		keysToPodIdMap[key] = podId
 	}
 
-	dataChannel := make(chan *network.ResponseMessage, len(keysToPodIdMap))
+	missingKeysFromOtherPodsCounts := len(keysToPodIdMap)
+	metric.Count("p2p.cache.store.keys.local.miss", int64(len(missingKeys)-missingKeysFromOtherPodsCounts), []string{"partition", "own"})
+	metric.Count("p2p.cache.store.keys.local.miss", int64(missingKeysFromOtherPodsCounts), []string{"partition", "global"})
+
+	dataChannel := make(chan *network.ResponseMessage, missingKeysFromOtherPodsCounts)
 	for key, podId := range keysToPodIdMap {
 		// TODO: Multiple keys belonging to the same pod can be merged and sent in a single packet
 		go p.fetchKeyFromPod(key, podId, dataChannel)
@@ -139,13 +152,12 @@ func (p *P2PCache) fetchKeyFromPod(key string, podId string, dataChannel chan *n
 		return
 	}
 
-	responseChan := p.requestRouter.GetData(key, podData.PodIP)
-	select {
-	case value := <-responseChan:
-		dataChannel <- &value
-	case <-time.After(network.REQUEST_TIMEOUT):
-		// TODO: Add metrics for timeout
-		close(responseChan)
-		dataChannel <- nil
-	}
+	dataChannel <- p.clients[p.getClientIdx(key)].GetData(key, podData.PodIP)
+}
+
+func (p *P2PCache) getClientIdx(key string) int {
+	hash := fnv.New32()
+	hash.Write([]byte(key))
+	hashValue := hash.Sum32()
+	return int(hashValue % uint32(len(p.clients)))
 }

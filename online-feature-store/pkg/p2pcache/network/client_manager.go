@@ -2,7 +2,9 @@ package network
 
 import (
 	"bytes"
+	"time"
 
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache/network/client"
 )
 
@@ -11,7 +13,7 @@ const (
 )
 
 // Message types for the unified channel
-type Message interface{}
+type Message any
 
 type RequestMessage struct {
 	Key          string
@@ -24,6 +26,11 @@ type ResponseMessage struct {
 	Data []byte
 }
 
+type CancelMessage struct {
+	Key          string
+	ResponseChan chan ResponseMessage
+}
+
 type ClientManager struct {
 	messageChannel   chan Message
 	responseChannels map[string][]chan ResponseMessage
@@ -32,8 +39,8 @@ type ClientManager struct {
 
 func NewClientManager(serverPort int) *ClientManager {
 	// TODO: Tune the buffer sizes
-	messageChannel := make(chan Message, 1000)
-	clientResponseChannel := make(chan []byte, 1000)
+	messageChannel := make(chan Message, 10000)
+	clientResponseChannel := make(chan []byte, 10000)
 
 	client := &ClientManager{
 		messageChannel:   messageChannel,
@@ -43,8 +50,6 @@ func NewClientManager(serverPort int) *ClientManager {
 	go client.start()
 	go client.handleResponses(clientResponseChannel)
 
-	// TODO: Handle cleaning up responseChannels which are orphaned
-	// Can happen due to client timing out and packets dropping
 	return client
 }
 
@@ -55,11 +60,14 @@ func (c *ClientManager) start() {
 			c.handleRequest(msg)
 		case ResponseMessage:
 			c.handleResponse(msg)
+		case CancelMessage:
+			c.handleCancel(msg)
 		}
 	}
 }
 
 func (c *ClientManager) handleRequest(msg RequestMessage) {
+	metric.Count("p2p.client.manager.requests.total", 1, []string{})
 	if _, ok := c.responseChannels[msg.Key]; !ok {
 		c.responseChannels[msg.Key] = make([]chan ResponseMessage, 0)
 	}
@@ -77,6 +85,7 @@ func (c *ClientManager) handleResponse(msg ResponseMessage) {
 		return
 	}
 
+	metric.Count("p2p.client.manager.responses.total", int64(len(responseChannels)), []string{})
 	for _, responseChan := range responseChannels {
 		select {
 		case responseChan <- msg:
@@ -85,6 +94,23 @@ func (c *ClientManager) handleResponse(msg ResponseMessage) {
 		}
 	}
 	delete(c.responseChannels, msg.Key)
+}
+
+func (c *ClientManager) handleCancel(msg CancelMessage) {
+	responseChannels, ok := c.responseChannels[msg.Key]
+	if !ok {
+		return
+	}
+	for i, responseChan := range responseChannels {
+		if responseChan == msg.ResponseChan {
+			c.responseChannels[msg.Key] = append(c.responseChannels[msg.Key][:i], c.responseChannels[msg.Key][i+1:]...)
+			break
+		}
+	}
+	close(msg.ResponseChan)
+	if len(c.responseChannels[msg.Key]) == 0 {
+		delete(c.responseChannels, msg.Key)
+	}
 }
 
 // handleResponses reads from clientResponseChannel and converts to ResponseMessage
@@ -107,12 +133,27 @@ func (c *ClientManager) handleResponses(clientResponseChannel <-chan []byte) {
 }
 
 // GetData sends a request and returns a channel for the response
-func (c *ClientManager) GetData(key string, ip string) chan ResponseMessage {
+func (c *ClientManager) GetData(key string, ip string) *ResponseMessage {
 	responseChan := make(chan ResponseMessage, 1)
 	c.messageChannel <- RequestMessage{
 		Key:          key,
 		ResponseChan: responseChan,
 		IP:           ip,
 	}
-	return responseChan
+
+	select {
+	case value := <-responseChan:
+		return &value
+	case <-time.After(REQUEST_TIMEOUT):
+		metric.Count("p2p.cache.store.keys.timeout", 1, []string{"sendTo", ip})
+		go c.CancelRequest(key, responseChan)
+		return nil
+	}
+}
+
+func (c *ClientManager) CancelRequest(key string, responseChan chan ResponseMessage) {
+	c.messageChannel <- CancelMessage{
+		Key:          key,
+		ResponseChan: responseChan,
+	}
 }
