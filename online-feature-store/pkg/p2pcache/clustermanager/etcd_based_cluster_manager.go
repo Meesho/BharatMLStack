@@ -199,17 +199,8 @@ func (c *EtcdBasedClusterManager) LeaveCluster(podData PodData) error {
 	return nil
 }
 
-func (c *EtcdBasedClusterManager) GetKeyToPodIdMap(keys []string) (map[string]string, error) {
-	return c.hashRing.GetNodeMap(keys), nil
-}
-
-func (c *EtcdBasedClusterManager) GetPodIdToKeysMap(keys []string) (map[string][]string, error) {
-	keysToPodIdMap := c.hashRing.GetNodeMap(keys)
-	podIdToKeysMap := make(map[string][]string)
-	for key, podId := range keysToPodIdMap {
-		podIdToKeysMap[podId] = append(podIdToKeysMap[podId], key)
-	}
-	return podIdToKeysMap, nil
+func (c *EtcdBasedClusterManager) GetKeysToPodIdMap(keys []string) map[string]string {
+	return c.hashRing.GetNodeMap(keys)
 }
 
 func (c *EtcdBasedClusterManager) GetCurrentPodId() string {

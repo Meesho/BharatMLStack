@@ -44,20 +44,22 @@ type FGData struct {
 }
 
 type RetrieveHandler struct {
-	config      config.Manager
-	imcProvider provider.CacheProvider
-	dcProvider  provider.CacheProvider
-	dbProvider  provider.StoreProvider
+	config           config.Manager
+	imcProvider      provider.CacheProvider
+	dcProvider       provider.CacheProvider
+	dbProvider       provider.StoreProvider
+	p2pCacheProvider provider.CacheProvider
 }
 
 func InitRetrieveHandler(configManager config.Manager) *RetrieveHandler {
 	if frHandler == nil {
 		frOnce.Do(func() {
 			frHandler = &RetrieveHandler{
-				config:      configManager,
-				imcProvider: provider.InMemoryCacheProviderImpl,
-				dcProvider:  provider.DistributedCacheProviderImpl,
-				dbProvider:  provider.StorageProviderImpl,
+				config:           configManager,
+				imcProvider:      provider.InMemoryCacheProviderImpl,
+				dcProvider:       provider.DistributedCacheProviderImpl,
+				dbProvider:       provider.StorageProviderImpl,
+				p2pCacheProvider: provider.P2PCacheProviderImpl,
 			}
 		})
 	}
@@ -245,6 +247,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 }
 
 func (h *RetrieveHandler) retrieveFromInMemoryCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int], fgDataChan chan *FGData) ([]*retrieve.Keys, error) {
+	go h.testRetrieveFromP2PCache(keys, retrieveData, fgIds)
 	entityLabel := retrieveData.EntityLabel
 	cache, err := h.imcProvider.GetCache(entityLabel)
 	if err != nil {
@@ -274,6 +277,38 @@ func (h *RetrieveHandler) retrieveFromInMemoryCache(keys []*retrieve.Keys, retri
 			missingDataKeys = append(missingDataKeys, key)
 		}
 	}
+	return missingDataKeys, nil
+}
+
+func (h *RetrieveHandler) testRetrieveFromP2PCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int]) ([]*retrieve.Keys, error) {
+	log.Debug().Msgf("Retrieving features from P2P cache for keys %v and fgIds %v", keys, fgIds)
+	entityLabel := retrieveData.EntityLabel
+	cache, err := h.p2pCacheProvider.GetCache(entityLabel)
+	if err != nil {
+		return nil, err
+	}
+	cacheData, err := cache.MultiGetV2(entityLabel, keys)
+	log.Debug().Msgf("Retrieved features from P2P cache for keys %v and fgIds %v, cacheData: %v", keys, fgIds, cacheData)
+	if err != nil {
+		log.Error().Err(err).Msgf("Error while retrieving features from P2P cache for keys %v and fgIds %v", keys, fgIds)
+		return nil, err
+	}
+	missingDataKeys := make([]*retrieve.Keys, 0)
+	for i, key := range keys {
+		serData := cacheData[i]
+		if len(serData) == 0 {
+			missingDataKeys = append(missingDataKeys, key)
+			continue
+		}
+		csdb, _ := blocks.CreateCSDBForP2PCache(serData)
+		fgIdToDDB, _ := csdb.GetDeserializedPSDBForFGIds(fgIds)
+		if fgIdToDDB != nil {
+			log.Debug().Msgf("Found data in P2P cache for key %v and fgIds %v, fgIdToDDB: %v", key, fgIds, fgIdToDDB)
+		} else {
+			missingDataKeys = append(missingDataKeys, key)
+		}
+	}
+	log.Debug().Msgf("Missing data keys from P2P cache: %v", missingDataKeys)
 	return missingDataKeys, nil
 }
 
