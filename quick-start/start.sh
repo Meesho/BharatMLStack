@@ -42,6 +42,7 @@ check_go_version() {
 
 setup_workspace() {
   echo "📁 Setting up workspace in ./$WORKSPACE_DIR"
+  rm -rf "$WORKSPACE_DIR"
   mkdir -p "$WORKSPACE_DIR"
   
   # Copy docker-compose.yml
@@ -165,8 +166,25 @@ start_selected_services() {
     echo "   • TruffleBox UI"
   fi
   
-  
   if [[ $START_ONFS == true || $START_HORIZON == true || $START_TRUFFLEBOX == true ]]; then
+    if [[ $LOCAL_MODE == true ]]; then
+      echo ""
+      echo "🐳 Building docker images locally"
+      if [[ $START_ONFS == true ]]; then
+        cd ../online-feature-store && docker build -t ghcr.io/meesho/onfs-api-server:local -f cmd/api-server/DockerFile .
+        export ONFS_VERSION="local"
+      fi
+      if [[ $START_HORIZON == true ]]; then
+        cd ../horizon && docker build -t ghcr.io/meesho/horizon:local -f cmd/horizon/DockerFile .
+        export HORIZON_VERSION="local"
+      fi
+      if [[ $START_TRUFFLEBOX == true ]]; then
+        cd ../trufflebox && docker build -t ghcr.io/meesho/trufflebox-ui:local -f cmd/trufflebox/DockerFile .
+        export TRUFFLEBOX_VERSION="local"
+      fi
+      cd ../quick-start
+    fi
+
     echo ""
     echo "🏷️  Application versions:"
     if [[ $START_ONFS == true ]]; then
@@ -306,12 +324,16 @@ show_access_info() {
 }
 
 # Handle command line arguments
+# --help, -h: Show help
+# --all: Start all services (non-interactive)
+# --local: Start services in local mode (build docker images locally)
 if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   echo "BharatML Stack Quick Start"
   echo ""
   echo "Usage:"
   echo "  ./start.sh              # Interactive mode with service selection"
   echo "  ./start.sh --all        # Start all services (non-interactive)"
+  echo "  ./start.sh --local      # Start all services in local mode"
   echo "  ./start.sh --help       # Show this help"
   echo ""
   echo "Infrastructure (ScyllaDB, MySQL, Redis, etcd) is always started."
@@ -327,6 +349,11 @@ echo "🚀 Starting BharatML Stack Quick Start..."
 
 check_go_version
 setup_workspace
+
+if [ "$1" = "--local" ]; then
+  echo "🎯 Starting services in local mode"
+  LOCAL_MODE=true
+fi
 
 # Handle non-interactive mode
 if [ "$1" = "--all" ]; then
