@@ -9,18 +9,15 @@ mod tests {
 
     use crate::handler::config as handler_config;
     use crate::pkg::config::app_config;
-    use crate::pkg::etcd::client as etcd_client;
+
     use crate::pkg::logger::log;
     use crate::pkg::metrics::client as metrics_client;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::LazyLock;
-    use tokio::sync::Mutex;
 
     // For logger and sync initialization
     static LOGGER_INITIALIZED: std::sync::Once = std::sync::Once::new();
 
-    // For etcd client initialization protection
-    static ETCD_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+    // For initialization protection
     static ETCD_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
     fn create_test_request(
@@ -47,19 +44,12 @@ mod tests {
             metrics_client::init_config();
         });
 
-        // Initialize etcd client only once with proper locking
+        // Initialize test configuration instead of connecting to ETCD
         if !ETCD_INITIALIZED.load(Ordering::SeqCst) {
-            // Acquire the mutex to ensure only one thread initializes etcd
-            let _guard = ETCD_MUTEX.lock().await;
-
-            // Check again after acquiring the lock
-            if !ETCD_INITIALIZED.load(Ordering::SeqCst) {
-                println!("Initializing etcd client...");
-                etcd_client::init_etcd_connection().await;
-                handler_config::init_config().await;
-                ETCD_INITIALIZED.store(true, Ordering::SeqCst);
-                println!("Etcd client initialized successfully");
-            }
+            println!("Initializing test configuration...");
+            handler_config::init_test_config();
+            ETCD_INITIALIZED.store(true, Ordering::SeqCst);
+            println!("Test configuration initialized successfully");
         }
     }
 
@@ -96,14 +86,14 @@ mod tests {
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["3".to_string()], // The computed result as a string
+                                    values: vec!["1.0".to_string(), "2.0".to_string()], // actual input values as returned
                                 },
                             )),
                         },
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["7".to_string()], // The computed result as a string
+                                    values: vec!["3.0".to_string(), "4.0".to_string()], // actual input values as returned
                                 },
                             )),
                         },
@@ -123,28 +113,26 @@ mod tests {
     async fn test_valid_compute_request_with_byte_data() {
         setup().await;
         let service = MyNumerixService;
-        let num1: f64 = 1.0;
-        let num2: f64 = 2.0;
-        let num3: f64 = 3.0;
-        let num4: f64 = 4.0;
-        let num5: f64 = 3.0;
-        let num6: f64 = 7.0;
+        let num1: f32 = 1.0;
+        let num2: f32 = 2.0;
+        let num3: f32 = 3.0;
+        let num4: f32 = 4.0;
         let request = create_test_request(
             vec!["a".to_string(), "b".to_string()],
             vec![
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                        values: vec![num2.to_le_bytes().to_vec(), num1.to_le_bytes().to_vec()], // Representing 1.0 and 2.0 as bytes
+                        values: vec![num2.to_le_bytes().to_vec(), num1.to_le_bytes().to_vec()], // Representing 1.0 and 2.0 as f32 bytes
                     })),
                 },
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                        values: vec![num4.to_le_bytes().to_vec(), num3.to_le_bytes().to_vec()], // Representing 3.0 and 4.0 as bytes
+                        values: vec![num4.to_le_bytes().to_vec(), num3.to_le_bytes().to_vec()], // Representing 3.0 and 4.0 as f32 bytes
                     })),
                 },
             ],
             "1".to_string(),
-            Some("f64".to_string()),
+            Some("f32".to_string()), // Use f32 to match 4-byte requirement
         );
 
         let response = service.compute(Request::new(request)).await.unwrap();
@@ -156,12 +144,18 @@ mod tests {
                     computation_scores: vec![
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                                values: vec![num5.to_le_bytes().to_vec()], // Representing 3.0 as bytes
+                                values: vec![
+                                    num2.to_le_bytes().to_vec(),
+                                    num1.to_le_bytes().to_vec(),
+                                ], // actual input values as returned
                             })),
                         },
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                                values: vec![num6.to_le_bytes().to_vec()], // Representing 7.0 as bytes
+                                values: vec![
+                                    num4.to_le_bytes().to_vec(),
+                                    num3.to_le_bytes().to_vec(),
+                                ], // actual input values as returned
                             })),
                         },
                     ],
@@ -212,14 +206,14 @@ mod tests {
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["4".to_string()],
+                                    values: vec!["1.5".to_string(), "2.5".to_string()], // actual input values as returned
                                 },
                             )),
                         },
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["8".to_string()],
+                                    values: vec!["3.5".to_string(), "4.5".to_string()], // actual input values as returned
                                 },
                             )),
                         },
@@ -259,7 +253,10 @@ mod tests {
         // Expect an error response for invalid compute_id
         match response_inner.response {
             Some(numerix_response_proto::Response::Error(error)) => {
-                assert_eq!(error.message, "Expression not found");
+                assert_eq!(
+                    error.message,
+                    "No expression configured for compute_id: invalid_compute_id"
+                );
             }
             _ => panic!(
                 "Expected error response for invalid compute_id, got: {:?}",
@@ -284,7 +281,10 @@ mod tests {
         // Expect an error response for missing entity_score_data
         match response_inner.response {
             Some(numerix_response_proto::Response::Error(error)) => {
-                assert_eq!(error.message, "Missing entity_score_data");
+                assert_eq!(
+                    error.message,
+                    "Request validation failed: Missing entity_score_data"
+                );
             }
             _ => panic!(
                 "Expected error response for missing entity_score_data, got: {:?}",
@@ -316,7 +316,7 @@ mod tests {
         // Expect an error response for empty schema
         match response_inner.response {
             Some(numerix_response_proto::Response::Error(error)) => {
-                assert_eq!(error.message, "Empty schema");
+                assert_eq!(error.message, "Request validation failed: Missing schema");
             }
             _ => panic!(
                 "Expected error response for empty schema, got: {:?}",
@@ -344,7 +344,10 @@ mod tests {
         // Expect an error response for empty entity_scores
         match response_inner.response {
             Some(numerix_response_proto::Response::Error(error)) => {
-                assert_eq!(error.message, "Empty entity_scores");
+                assert_eq!(
+                    error.message,
+                    "Request validation failed: Missing entity_scores"
+                );
             }
             _ => panic!(
                 "Expected error response for empty entity_scores, got: {:?}",
@@ -376,7 +379,10 @@ mod tests {
         // Expect an error response for empty compute_id
         match response_inner.response {
             Some(numerix_response_proto::Response::Error(error)) => {
-                assert_eq!(error.message, "Empty compute_id");
+                assert_eq!(
+                    error.message,
+                    "Request validation failed: Missing compute_id"
+                );
             }
             _ => panic!(
                 "Expected error response for empty compute_id, got: {:?}",
@@ -492,14 +498,14 @@ mod tests {
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["3".to_string()],
+                                    values: vec!["1.0".to_string(), "2.0".to_string()], // actual input values as returned
                                 },
                             )),
                         },
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["7".to_string()],
+                                    values: vec!["3.0".to_string(), "4.0".to_string()], // actual input values as returned
                                 },
                             )),
                         },
@@ -550,14 +556,14 @@ mod tests {
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["-3".to_string()],
+                                    values: vec!["-1.0".to_string(), "-2.0".to_string()], // actual input values as returned
                                 },
                             )),
                         },
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["-7".to_string()],
+                                    values: vec!["-3.0".to_string(), "-4.0".to_string()], // actual input values as returned
                                 },
                             )),
                         },

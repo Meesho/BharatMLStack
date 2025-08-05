@@ -138,3 +138,17 @@ pub fn get_meta_data(compute_id: &str) -> Vec<String> {
         }
     }
 }
+
+#[cfg(test)]
+pub fn init_test_config() {
+    // Initialize expression map with test data for compute_id "1"
+    let mut expression_map = HashMap::new();
+    expression_map.insert("1".to_string(), "a b +".to_string()); // Simple addition expression in RPN
+
+    let mut meta_map = HashMap::new();
+    meta_map.insert("1".to_string(), vec![]); // Empty meta data - columns are handled by matrix itself
+
+    let _ = EXPRESSION_MAP.set(Arc::new(RwLock::new(expression_map)));
+    let _ = EXPRESSION_META_MAP.set(Arc::new(RwLock::new(meta_map)));
+    let _ = EXPRESSION_CONFIG_ETCD_PATH.set("/test-expression-config".to_string());
+}
