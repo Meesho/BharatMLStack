@@ -1,5 +1,5 @@
-use crate::pkg::logger::log;
 use crate::pkg::config::app_config::get_config;
+use crate::pkg::logger::log;
 use cadence::{BufferedUdpMetricSink, MetricClient, QueuingMetricSink, StatsdClient};
 use std::net::UdpSocket;
 use std::sync::Arc;

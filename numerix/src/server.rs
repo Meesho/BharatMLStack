@@ -1,7 +1,7 @@
 use crate::handler::service::proto::numerix_server::NumerixServer;
 use crate::handler::service::MyNumerixService;
-use crate::pkg::logger::log;
 use crate::pkg::config::app_config;
+use crate::pkg::logger::log;
 use crate::pkg::metrics::client;
 use crate::pkg::middleware::layer::GrpcMiddlewareLayer;
 use futures::StreamExt;

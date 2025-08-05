@@ -1,5 +1,5 @@
-use crate::pkg::logger::log;
 use crate::pkg::etcd::client as etcd;
+use crate::pkg::logger::log;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -10,7 +10,10 @@ type ExpressionMetaMap = OnceLock<Arc<RwLock<HashMap<String, Vec<String>>>>>;
 static EXPRESSION_META_MAP: ExpressionMetaMap = OnceLock::new();
 
 pub async fn init_config() {
-    if EXPRESSION_CONFIG_ETCD_PATH.set("/expression-config".to_string()).is_err() {
+    if EXPRESSION_CONFIG_ETCD_PATH
+        .set("/expression-config".to_string())
+        .is_err()
+    {
         log::fatal(
             "Failed to set EXPRESSION_CONFIG_ETCD_PATH, it was already initialized",
             None,

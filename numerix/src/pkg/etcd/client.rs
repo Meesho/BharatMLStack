@@ -1,5 +1,5 @@
-use crate::pkg::logger::log;
 use crate::pkg::config::app_config::get_config;
+use crate::pkg::logger::log;
 use etcd_client::EventType;
 use etcd_client::{Client, ConnectOptions, WatchOptions};
 use regex::Regex;
