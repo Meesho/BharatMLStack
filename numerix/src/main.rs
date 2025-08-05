@@ -1,9 +1,9 @@
-pub mod server;
 pub mod pkg;
-use pkg::config::config;
-use pkg::metrics::metrics;
-use pkg::etcd::etcd;
+pub mod server;
 use handler::config as handler_config;
+use pkg::config::config;
+use pkg::etcd::etcd;
+use pkg::metrics::metrics;
 pub mod handler;
 use pkg::logger::logger;
 
@@ -15,5 +15,4 @@ async fn main() {
     etcd::init_etcd_connection().await;
     handler_config::init_config().await;
     server::init_server().await;
-    
 }
