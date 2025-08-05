@@ -47,6 +47,16 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Run tests
+        env:
+          APPLICATION_PORT: 8083
+          APP_ENV: test
+          APP_LOG_LEVEL: ERROR
+          APP_NAME: numerix
+          CHANNEL_BUFFER_SIZE: 10000
+          ETCD_SERVERS: 127.0.0.1:2379
+          METRIC_SAMPLING_RATE: 1
+          TELEGRAF_UDP_HOST: 127.0.0.1
+          TELEGRAF_UDP_PORT: 8125
         run: cargo test --verbose
 
       - name: Build application

@@ -90,3 +90,21 @@ pub fn gauge(name: &str, value: f64, tags: &[(&str, &str)]) {
     }
     metric.with_sampling_rate(*rate).send();
 }
+
+#[cfg(test)]
+pub fn init_test_config() {
+    let _ = SAMPLING_RATE.set(1.0);
+
+    // Create a dummy UDP socket for tests
+    let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind test UDP socket");
+    let sink = BufferedUdpMetricSink::from(("127.0.0.1", 8125), socket)
+        .expect("Failed to create test metrics sink");
+    let queuing_sink = QueuingMetricSink::from(sink);
+
+    let _ = STATSD_CLIENT.set(Arc::new(
+        StatsdClient::builder("test-numerix", queuing_sink)
+            .with_tag("env", "test")
+            .with_tag("service", "numerix")
+            .build(),
+    ));
+}

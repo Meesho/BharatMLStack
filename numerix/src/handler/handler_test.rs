@@ -8,14 +8,8 @@ mod tests {
     use tonic::Request;
 
     use crate::handler::config as handler_config;
-    use crate::pkg::config::app_config;
-
-    use crate::pkg::logger::log;
     use crate::pkg::metrics::client as metrics_client;
     use std::sync::atomic::{AtomicBool, Ordering};
-
-    // For logger and sync initialization
-    static LOGGER_INITIALIZED: std::sync::Once = std::sync::Once::new();
 
     // For initialization protection
     static ETCD_INITIALIZED: AtomicBool = AtomicBool::new(false);
@@ -37,17 +31,11 @@ mod tests {
     }
 
     async fn setup() {
-        // Initialize sync components once
-        LOGGER_INITIALIZED.call_once(|| {
-            log::init_logger();
-            app_config::get_config();
-            metrics_client::init_config();
-        });
-
         // Initialize test configuration instead of connecting to ETCD
         if !ETCD_INITIALIZED.load(Ordering::SeqCst) {
             println!("Initializing test configuration...");
             handler_config::init_test_config();
+            metrics_client::init_test_config();
             ETCD_INITIALIZED.store(true, Ordering::SeqCst);
             println!("Test configuration initialized successfully");
         }
