@@ -12,6 +12,7 @@ INFRASTRUCTURE_SERVICES="scylla mysql redis etcd db-init"
 # Application services (user selectable)
 ONFS_SERVICES="onfs-api-server onfs-healthcheck"
 HORIZON_SERVICES="horizon horizon-healthcheck"
+NUMERIX_SERVICES="numerix numerix-healthcheck"
 TRUFFLEBOX_SERVICES="trufflebox-ui trufflebox-healthcheck"
 
 # Management tools
@@ -21,6 +22,7 @@ MANAGEMENT_SERVICES="etcd-workbench"
 SELECTED_SERVICES="$INFRASTRUCTURE_SERVICES $MANAGEMENT_SERVICES"
 START_ONFS=false
 START_HORIZON=false
+START_NUMERIX=false
 START_TRUFFLEBOX=false
 
 check_go_version() {
@@ -65,7 +67,7 @@ show_service_menu() {
   echo "Choose which application services to start:"
   echo ""
   echo "1) 🚀 All Services"
-  echo "   • Online Feature Store + Horizon + TruffleBox UI"
+  echo "   • Online Feature Store + Horizon + Numerix + TruffleBox UI"
   echo ""
   echo "2) 🎛️  Custom Selection"
   echo "   • Choose individual services"
@@ -82,9 +84,10 @@ get_user_choice() {
     case $choice in
       1)
         echo "✅ Selected: All Services"
-        SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $HORIZON_SERVICES $TRUFFLEBOX_SERVICES"
+        SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES"
         START_ONFS=true
         START_HORIZON=true
+        START_NUMERIX=true
         START_TRUFFLEBOX=true
         break
         ;;
@@ -127,6 +130,13 @@ custom_selection() {
     echo "✅ Added: Horizon Backend"
   fi
   
+  read -p "Include Numerix Matrix Operations? [y/N]: " include_numerix
+  if [[ $include_numerix =~ ^[Yy]$ ]]; then
+    SELECTED_SERVICES="$SELECTED_SERVICES $NUMERIX_SERVICES"
+    START_NUMERIX=true
+    echo "✅ Added: Numerix Matrix Operations"
+  fi
+  
   read -p "Include TruffleBox UI? [y/N]: " include_trufflebox
   if [[ $include_trufflebox =~ ^[Yy]$ ]]; then
     if [[ $START_HORIZON != true ]]; then
@@ -140,7 +150,7 @@ custom_selection() {
   fi
   
   echo ""
-  if [[ $START_ONFS == false && $START_HORIZON == false && $START_TRUFFLEBOX == false ]]; then
+  if [[ $START_ONFS == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false ]]; then
     echo "🎯 Custom selection complete: Only infrastructure services will be started"
   else
     echo "🎯 Custom selection complete!"
@@ -161,12 +171,15 @@ start_selected_services() {
   if [[ $START_HORIZON == true ]]; then
     echo "   • Horizon Backend API"
   fi
+  if [[ $START_NUMERIX == true ]]; then
+    echo "   • Numerix Matrix Operations"
+  fi
   if [[ $START_TRUFFLEBOX == true ]]; then
     echo "   • TruffleBox UI"
   fi
   
   
-  if [[ $START_ONFS == true || $START_HORIZON == true || $START_TRUFFLEBOX == true ]]; then
+  if [[ $START_ONFS == true || $START_HORIZON == true || $START_NUMERIX == true || $START_TRUFFLEBOX == true ]]; then
     echo ""
     echo "🏷️  Application versions:"
     if [[ $START_ONFS == true ]]; then
@@ -174,6 +187,9 @@ start_selected_services() {
     fi
     if [[ $START_HORIZON == true ]]; then
       echo "   • Horizon Backend: ${HORIZON_VERSION:-latest}"
+    fi
+    if [[ $START_NUMERIX == true ]]; then
+      echo "   • Numerix Matrix: ${NUMERIX_VERSION:-latest}"
     fi
     if [[ $START_TRUFFLEBOX == true ]]; then
       echo "   • Trufflebox UI: ${TRUFFLEBOX_VERSION:-latest}"
@@ -217,7 +233,7 @@ verify_services() {
   echo ""
   
   # If no application services selected, skip health checks
-  if [[ $START_ONFS == false && $START_HORIZON == false && $START_TRUFFLEBOX == false ]]; then
+  if [[ $START_ONFS == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false ]]; then
     echo "🏥 Infrastructure-only setup - skipping application health checks..."
     echo "✅ Infrastructure services started successfully!"
     return 0
@@ -245,6 +261,13 @@ verify_services() {
       fi
     fi
     
+    # Check Numerix if selected
+    if [[ $START_NUMERIX == true ]]; then
+      if ! curl -s http://localhost:8083/health > /dev/null 2>&1; then
+        all_healthy=false
+      fi
+    fi
+    
     # Check TruffleBox if selected
     if [[ $START_TRUFFLEBOX == true ]]; then
       if ! curl -s http://localhost:3000 > /dev/null 2>&1; then
@@ -267,7 +290,7 @@ verify_services() {
 
 show_access_info() {
   echo ""
-  if [[ $START_ONFS == false && $START_HORIZON == false && $START_TRUFFLEBOX == false ]]; then
+  if [[ $START_ONFS == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false ]]; then
     echo "🎉 BharatML Stack infrastructure is now running!"
   else
     echo "🎉 BharatML Stack services are now running!"
@@ -281,6 +304,9 @@ show_access_info() {
   fi
   if [[ $START_HORIZON == true ]]; then
     echo "   📡 Horizon API:       http://localhost:8082"
+  fi
+  if [[ $START_NUMERIX == true ]]; then
+    echo "   🔢 Numerix Matrix:    http://localhost:8083"
   fi
   if [[ $START_TRUFFLEBOX == true ]]; then
     echo "   🌐 Trufflebox UI:     http://localhost:3000"
@@ -318,6 +344,7 @@ if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   echo "You can choose which application services to start:"
   echo "  • Online Feature Store API"
   echo "  • Horizon Backend"
+  echo "  • Numerix Matrix Operations"
   echo "  • TruffleBox UI"
   echo ""
   exit 0
@@ -331,9 +358,10 @@ setup_workspace
 # Handle non-interactive mode
 if [ "$1" = "--all" ]; then
   echo "🎯 Non-interactive mode: Starting all services"
-  SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $HORIZON_SERVICES $TRUFFLEBOX_SERVICES"
+  SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES"
   START_ONFS=true
   START_HORIZON=true
+  START_NUMERIX=true
   START_TRUFFLEBOX=true
 else
   # Interactive mode
