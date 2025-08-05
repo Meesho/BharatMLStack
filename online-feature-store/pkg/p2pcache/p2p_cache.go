@@ -79,8 +79,19 @@ func (p *P2PCache) MultiGet(keys []string) (map[string][]byte, error) {
 }
 
 func (p *P2PCache) MultiSet(kvMap map[string][]byte, ttlInSeconds int) error {
-	// Setting into global cache is applicable only when fetching data from other pods and it is handled in the getter methods
-	return p.cacheStore.MultiSetIntoOwnPartitionCache(kvMap, ttlInSeconds)
+	if len(kvMap) == 0 {
+		return nil
+	}
+	currentPodId := p.cm.GetCurrentPodId()
+	for key, value := range kvMap {
+		podId := p.cm.GetPodIdForKey(key)
+		if podId == currentPodId {
+			p.cacheStore.SetIntoOwnPartitionCache(key, value, ttlInSeconds)
+		} else {
+			p.cacheStore.SetIntoGlobalCache(key, value, ttlInSeconds)
+		}
+	}
+	return nil
 }
 
 func (p *P2PCache) MultiDelete(keys []string) error {
@@ -92,10 +103,13 @@ func (p *P2PCache) GetClusterTopology() clustermanager.ClusterTopology {
 }
 
 func (p *P2PCache) fetchKeysFromOtherPods(missingKeys []string) map[string][]byte {
-	kvResponse := make(map[string][]byte)
-	keysToPodIdMap := p.cm.GetKeysToPodIdMap(missingKeys)
-	if len(keysToPodIdMap) == 0 {
-		return kvResponse
+	keysToPodIdMap := make(map[string]string)
+	for _, key := range missingKeys {
+		podId := p.cm.GetPodIdForKey(key)
+		if podId == p.cm.GetCurrentPodId() {
+			continue
+		}
+		keysToPodIdMap[key] = podId
 	}
 
 	dataChannel := make(chan *network.ResponseMessage, len(keysToPodIdMap))
@@ -104,6 +118,7 @@ func (p *P2PCache) fetchKeysFromOtherPods(missingKeys []string) map[string][]byt
 		go p.fetchKeyFromPod(key, podId, dataChannel)
 	}
 
+	kvResponse := make(map[string][]byte)
 	for i := 0; i < len(keysToPodIdMap); i++ {
 		data := <-dataChannel
 		if data != nil && data.Data != nil {
@@ -117,14 +132,14 @@ func (p *P2PCache) fetchKeysFromOtherPods(missingKeys []string) map[string][]byt
 }
 
 func (p *P2PCache) fetchKeyFromPod(key string, podId string, dataChannel chan *network.ResponseMessage) {
-	_, err := p.cm.GetPodDataForPodId(podId)
+	podData, err := p.cm.GetPodDataForPodId(podId)
 	if err != nil {
 		log.Error().Err(err).Msgf("Error getting pod data for pod id %s", podId)
 		dataChannel <- nil
 		return
 	}
 
-	responseChan := p.requestRouter.GetData(key, podId)
+	responseChan := p.requestRouter.GetData(key, podData.PodIP)
 	select {
 	case value := <-responseChan:
 		dataChannel <- &value

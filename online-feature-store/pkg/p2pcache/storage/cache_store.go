@@ -40,6 +40,14 @@ func (c *CacheStore) MultiSetIntoOwnPartitionCache(kvMap map[string][]byte, ttlI
 	return nil
 }
 
+func (c *CacheStore) SetIntoOwnPartitionCache(key string, value []byte, ttlInSeconds int) error {
+	return c.ownPartitionCache.Set([]byte(key), value, ttlInSeconds)
+}
+
+func (c *CacheStore) SetIntoGlobalCache(key string, value []byte, ttlInSeconds int) error {
+	return c.globalCache.Set([]byte(key), value, ttlInSeconds)
+}
+
 func (c *CacheStore) MultiDelete(keys []string) error {
 	for _, key := range keys {
 		c.ownPartitionCache.Del([]byte(key))

@@ -190,17 +190,8 @@ func (c *EtcdBasedClusterManager) joinCluster(podData PodData) error {
 	return nil
 }
 
-func (c *EtcdBasedClusterManager) LeaveCluster(podData PodData) error {
-	key := fmt.Sprintf("%s/%s", c.etcdBasePath, podData.GetUniqueId())
-	_, err := c.conn.Delete(context.Background(), key)
-	if err != nil {
-		return fmt.Errorf("failed to delete pod data from etcd: %v", err)
-	}
-	return nil
-}
-
-func (c *EtcdBasedClusterManager) GetKeysToPodIdMap(keys []string) map[string]string {
-	return c.hashRing.GetNodeMap(keys)
+func (c *EtcdBasedClusterManager) GetPodIdForKey(key string) string {
+	return c.hashRing.GetNodeForKey(key)
 }
 
 func (c *EtcdBasedClusterManager) GetCurrentPodId() string {

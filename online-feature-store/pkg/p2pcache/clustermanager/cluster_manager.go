@@ -28,8 +28,7 @@ func (p *PodData) GetUniqueId() string {
 }
 
 type ClusterManager interface {
-	LeaveCluster(podData PodData) error
-	GetKeysToPodIdMap(keys []string) map[string]string
+	GetPodIdForKey(key string) string
 	GetCurrentPodId() string
 	GetPodDataForPodId(podId string) (*PodData, error)
 	GetClusterTopology() ClusterTopology
