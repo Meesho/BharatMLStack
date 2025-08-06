@@ -19,6 +19,7 @@ environment:
             - online-feature-store-consumer-v3
             - online-feature-store-consumer-v4
             - online-feature-store-consumer-realtime
+            - online-feature-store-consumer-v5
     stg:
         deployment_order:
             - online-feature-store-api
