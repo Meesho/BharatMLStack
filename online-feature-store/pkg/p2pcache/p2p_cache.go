@@ -70,7 +70,7 @@ func (p *P2PCache) MultiGet(keys []string) (map[string][]byte, error) {
 	kvResponse := make(map[string][]byte)
 	missingKeys := make([]string, 0)
 
-	metric.Count("p2p.cache.store.keys.total", int64(len(keys)), []string{})
+	metric.Count("p2p.cache.keys.total", int64(len(keys)), []string{})
 	for _, key := range keys {
 		value, err := p.cacheStore.Get(key)
 		if err == nil {
@@ -83,7 +83,7 @@ func (p *P2PCache) MultiGet(keys []string) (map[string][]byte, error) {
 	if len(missingKeys) > 0 {
 		maps.Copy(kvResponse, p.fetchKeysFromOtherPods(missingKeys))
 	}
-	metric.Count("p2p.cache.store.keys.global.miss", int64(len(keys)-len(kvResponse)), []string{})
+	metric.Count("p2p.cache.keys.global.miss", int64(len(keys)-len(kvResponse)), []string{})
 	return kvResponse, nil
 }
 
@@ -112,27 +112,38 @@ func (p *P2PCache) GetClusterTopology() clustermanager.ClusterTopology {
 }
 
 func (p *P2PCache) fetchKeysFromOtherPods(missingKeys []string) map[string][]byte {
-	keysToPodIdMap := make(map[string]string)
-	for _, key := range missingKeys {
-		podId := p.cm.GetPodIdForKey(key)
-		if podId == p.cm.GetCurrentPodId() {
+	podIdToKeysMap := p.cm.GetPodIdToKeysMap(missingKeys)
+
+	currentPodKeysCount := len(podIdToKeysMap[p.cm.GetCurrentPodId()])
+	// Remove keys from the current pod from the map
+	metric.Count("p2p.cache.keys.local.miss", int64(currentPodKeysCount), []string{"partition", "own"})
+	delete(podIdToKeysMap, p.cm.GetCurrentPodId())
+
+	totalKeysToFetch := len(missingKeys) - currentPodKeysCount
+	metric.Count("p2p.cache.keys.local.miss", int64(totalKeysToFetch), []string{"partition", "global"})
+
+	dataChannel := make(chan *network.ResponseMessage, totalKeysToFetch)
+	currentPodData, _ := p.cm.GetPodDataForPodId(p.cm.GetCurrentPodId())
+
+	actualKeysFetched := 0
+	for podId, keys := range podIdToKeysMap {
+		podData, err := p.cm.GetPodDataForPodId(podId)
+		if err != nil {
+			log.Error().Err(err).Msgf("Error getting pod data for pod id %s", podId)
 			continue
 		}
-		keysToPodIdMap[key] = podId
-	}
 
-	missingKeysFromOtherPodsCounts := len(keysToPodIdMap)
-	metric.Count("p2p.cache.store.keys.local.miss", int64(len(missingKeys)-missingKeysFromOtherPodsCounts), []string{"partition", "own"})
-	metric.Count("p2p.cache.store.keys.local.miss", int64(missingKeysFromOtherPodsCounts), []string{"partition", "global"})
+		metric.Count("p2p.cache.network.keys.sent", int64(len(keys)), []string{"fromPod", currentPodData.PodIP, "toPod", podData.PodIP})
 
-	dataChannel := make(chan *network.ResponseMessage, missingKeysFromOtherPodsCounts)
-	for key, podId := range keysToPodIdMap {
+		actualKeysFetched += len(keys)
 		// TODO: Multiple keys belonging to the same pod can be merged and sent in a single packet
-		go p.fetchKeyFromPod(key, podId, dataChannel)
+		for _, key := range keys {
+			go p.fetchKeyFromPod(key, podData, dataChannel)
+		}
 	}
 
 	kvResponse := make(map[string][]byte)
-	for i := 0; i < len(keysToPodIdMap); i++ {
+	for range actualKeysFetched {
 		data := <-dataChannel
 		if data != nil && data.Data != nil {
 			kvResponse[data.Key] = data.Data
@@ -144,14 +155,7 @@ func (p *P2PCache) fetchKeysFromOtherPods(missingKeys []string) map[string][]byt
 	return kvResponse
 }
 
-func (p *P2PCache) fetchKeyFromPod(key string, podId string, dataChannel chan *network.ResponseMessage) {
-	podData, err := p.cm.GetPodDataForPodId(podId)
-	if err != nil {
-		log.Error().Err(err).Msgf("Error getting pod data for pod id %s", podId)
-		dataChannel <- nil
-		return
-	}
-
+func (p *P2PCache) fetchKeyFromPod(key string, podData *clustermanager.PodData, dataChannel chan *network.ResponseMessage) {
 	dataChannel <- p.clients[p.getClientIdx(key)].GetData(key, podData.PodIP)
 }
 

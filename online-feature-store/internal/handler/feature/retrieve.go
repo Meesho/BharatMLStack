@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/quantization"
 
@@ -290,6 +291,7 @@ func (h *RetrieveHandler) testRetrieveFromP2PCache(keys []*retrieve.Keys, retrie
 	if rand.Intn(100) >= h.config.GetP2PEnabledPercentage() {
 		return nil, nil
 	}
+	startTime := time.Now()
 	metric.Count("test.feature.retrieve.cache.p2p.requests.pass", 1, []string{"entity_name", retrieveData.EntityLabel})
 	log.Debug().Msgf("Retrieving features from P2P cache for keys %v and fgIds %v", keys, fgIds)
 
@@ -323,6 +325,7 @@ func (h *RetrieveHandler) testRetrieveFromP2PCache(keys []*retrieve.Keys, retrie
 	}
 	metric.Count("test.feature.retrieve.cache.p2p.keys.miss", int64(len(missingDataKeys)), []string{"entity_name", retrieveData.EntityLabel})
 	log.Debug().Msgf("Missing data keys from P2P cache: %v", missingDataKeys)
+	metric.Timing("test.feature.retrieve.cache.p2p.latency", time.Since(startTime), []string{"entity_name", retrieveData.EntityLabel})
 	return missingDataKeys, nil
 }
 

@@ -190,6 +190,15 @@ func (c *EtcdBasedClusterManager) joinCluster(podData PodData) error {
 	return nil
 }
 
+func (c *EtcdBasedClusterManager) GetPodIdToKeysMap(keys []string) map[string][]string {
+	podIdToKeysMap := make(map[string][]string)
+	for _, key := range keys {
+		podId := c.GetPodIdForKey(key)
+		podIdToKeysMap[podId] = append(podIdToKeysMap[podId], key)
+	}
+	return podIdToKeysMap
+}
+
 func (c *EtcdBasedClusterManager) GetPodIdForKey(key string) string {
 	return c.hashRing.GetNodeForKey(key)
 }

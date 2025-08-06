@@ -28,6 +28,7 @@ func (p *PodData) GetUniqueId() string {
 }
 
 type ClusterManager interface {
+	GetPodIdToKeysMap(keys []string) map[string][]string
 	GetPodIdForKey(key string) string
 	GetCurrentPodId() string
 	GetPodDataForPodId(podId string) (*PodData, error)
