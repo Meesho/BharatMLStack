@@ -64,5 +64,5 @@ jobs:
 
       - name: Run security audit
         run: |
-          cargo install cargo-audit --version 0.20.1
+          cargo install cargo-audit
           cargo audit
