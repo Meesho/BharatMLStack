@@ -16,6 +16,8 @@ const (
 	// CacheTypeInMemory represents in-memory cache
 	CacheTypeInMemory CacheType = iota
 	CacheTypeDistributed
+	CacheTypeP2P
+
 	csdbPrefixLen      = 4
 	CSDBLayoutVersion1 = 1
 )
@@ -51,6 +53,18 @@ func CreateCSDBForInMemory(data []byte) (*CacheStorageDataBlock, error) {
 		FGIdToDDB:      nil,
 		serializedCSDB: data,
 		cacheType:      CacheTypeInMemory,
+	}
+	return csdb, nil
+}
+
+func CreateCSDBForP2PCache(data []byte) (*CacheStorageDataBlock, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("no data to deserialize")
+	}
+	csdb := &CacheStorageDataBlock{
+		FGIdToDDB:      nil,
+		serializedCSDB: data,
+		cacheType:      CacheTypeP2P,
 	}
 	return csdb, nil
 }

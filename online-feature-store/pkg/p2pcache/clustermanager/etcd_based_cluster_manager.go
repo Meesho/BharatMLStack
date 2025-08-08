@@ -190,26 +190,17 @@ func (c *EtcdBasedClusterManager) joinCluster(podData PodData) error {
 	return nil
 }
 
-func (c *EtcdBasedClusterManager) LeaveCluster(podData PodData) error {
-	key := fmt.Sprintf("%s/%s", c.etcdBasePath, podData.GetUniqueId())
-	_, err := c.conn.Delete(context.Background(), key)
-	if err != nil {
-		return fmt.Errorf("failed to delete pod data from etcd: %v", err)
-	}
-	return nil
-}
-
-func (c *EtcdBasedClusterManager) GetKeyToPodIdMap(keys []string) (map[string]string, error) {
-	return c.hashRing.GetNodeMap(keys), nil
-}
-
-func (c *EtcdBasedClusterManager) GetPodIdToKeysMap(keys []string) (map[string][]string, error) {
-	keysToPodIdMap := c.hashRing.GetNodeMap(keys)
+func (c *EtcdBasedClusterManager) GetPodIdToKeysMap(keys []string) map[string][]string {
 	podIdToKeysMap := make(map[string][]string)
-	for key, podId := range keysToPodIdMap {
+	for _, key := range keys {
+		podId := c.GetPodIdForKey(key)
 		podIdToKeysMap[podId] = append(podIdToKeysMap[podId], key)
 	}
-	return podIdToKeysMap, nil
+	return podIdToKeysMap
+}
+
+func (c *EtcdBasedClusterManager) GetPodIdForKey(key string) string {
+	return c.hashRing.GetNodeForKey(key)
 }
 
 func (c *EtcdBasedClusterManager) GetCurrentPodId() string {

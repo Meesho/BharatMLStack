@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/quantization"
 
@@ -44,20 +46,22 @@ type FGData struct {
 }
 
 type RetrieveHandler struct {
-	config      config.Manager
-	imcProvider provider.CacheProvider
-	dcProvider  provider.CacheProvider
-	dbProvider  provider.StoreProvider
+	config           config.Manager
+	imcProvider      provider.CacheProvider
+	dcProvider       provider.CacheProvider
+	dbProvider       provider.StoreProvider
+	p2pCacheProvider provider.CacheProvider
 }
 
 func InitRetrieveHandler(configManager config.Manager) *RetrieveHandler {
 	if frHandler == nil {
 		frOnce.Do(func() {
 			frHandler = &RetrieveHandler{
-				config:      configManager,
-				imcProvider: provider.InMemoryCacheProviderImpl,
-				dcProvider:  provider.DistributedCacheProviderImpl,
-				dbProvider:  provider.StorageProviderImpl,
+				config:           configManager,
+				imcProvider:      provider.InMemoryCacheProviderImpl,
+				dcProvider:       provider.DistributedCacheProviderImpl,
+				dbProvider:       provider.StorageProviderImpl,
+				p2pCacheProvider: provider.P2PCacheProviderImpl,
 			}
 		})
 	}
@@ -245,6 +249,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 }
 
 func (h *RetrieveHandler) retrieveFromInMemoryCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int], fgDataChan chan *FGData) ([]*retrieve.Keys, error) {
+	go h.testRetrieveFromP2PCache(keys, retrieveData, fgIds)
 	entityLabel := retrieveData.EntityLabel
 	cache, err := h.imcProvider.GetCache(entityLabel)
 	if err != nil {
@@ -274,6 +279,53 @@ func (h *RetrieveHandler) retrieveFromInMemoryCache(keys []*retrieve.Keys, retri
 			missingDataKeys = append(missingDataKeys, key)
 		}
 	}
+	return missingDataKeys, nil
+}
+
+// TODO: To make it production ready,
+// - take fgDataChan in input and send the data to the channel
+// - remove the random percentage rollout
+// - fix metrics naming conventions
+func (h *RetrieveHandler) testRetrieveFromP2PCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int]) ([]*retrieve.Keys, error) {
+	metric.Count("test.feature.retrieve.cache.p2p.requests.total", 1, []string{"entity_name", retrieveData.EntityLabel})
+	if rand.Intn(100) >= h.config.GetP2PEnabledPercentage() {
+		return nil, nil
+	}
+	startTime := time.Now()
+	metric.Count("test.feature.retrieve.cache.p2p.requests.pass", 1, []string{"entity_name", retrieveData.EntityLabel})
+	log.Debug().Msgf("Retrieving features from P2P cache for keys %v and fgIds %v", keys, fgIds)
+
+	entityLabel := retrieveData.EntityLabel
+	cache, err := h.p2pCacheProvider.GetCache(entityLabel)
+	if err != nil {
+		return nil, err
+	}
+
+	metric.Count("test.feature.retrieve.cache.p2p.keys.total", int64(len(keys)), []string{"entity_name", retrieveData.EntityLabel})
+	cacheData, err := cache.MultiGetV2(entityLabel, keys)
+	log.Debug().Msgf("Retrieved features from P2P cache for keys %v and fgIds %v, cacheData: %v", keys, fgIds, cacheData)
+	if err != nil {
+		log.Error().Err(err).Msgf("Error while retrieving features from P2P cache for keys %v and fgIds %v", keys, fgIds)
+		return nil, err
+	}
+	missingDataKeys := make([]*retrieve.Keys, 0)
+	for i, key := range keys {
+		serData := cacheData[i]
+		if len(serData) == 0 {
+			missingDataKeys = append(missingDataKeys, key)
+			continue
+		}
+		csdb, _ := blocks.CreateCSDBForP2PCache(serData)
+		fgIdToDDB, _ := csdb.GetDeserializedPSDBForFGIds(fgIds)
+		if fgIdToDDB != nil {
+			log.Debug().Msgf("Found data in P2P cache for key %v and fgIds %v, fgIdToDDB: %v", key, fgIds, fgIdToDDB)
+		} else {
+			missingDataKeys = append(missingDataKeys, key)
+		}
+	}
+	metric.Count("test.feature.retrieve.cache.p2p.keys.miss", int64(len(missingDataKeys)), []string{"entity_name", retrieveData.EntityLabel})
+	log.Debug().Msgf("Missing data keys from P2P cache: %v", missingDataKeys)
+	metric.Timing("test.feature.retrieve.cache.p2p.latency", time.Since(startTime), []string{"entity_name", retrieveData.EntityLabel})
 	return missingDataKeys, nil
 }
 

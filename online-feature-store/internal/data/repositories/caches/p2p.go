@@ -6,6 +6,7 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/infra"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache/clustermanager"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
 )
 
@@ -88,4 +89,8 @@ func (c *P2PCache) MultiSetV2(entityLabel string, bulkKeys []*retrieve.Keys, bul
 		kvMap[buildCacheKeyForPersist(key.Cols, entityLabel)] = bulkData[i]
 	}
 	return c.cache.MultiSet(kvMap, cacheConfig.TtlInSeconds)
+}
+
+func (c *P2PCache) GetClusterTopology() clustermanager.ClusterTopology {
+	return c.cache.GetClusterTopology()
 }

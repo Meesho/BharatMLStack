@@ -147,6 +147,8 @@ services:
       - P2P_CACHE_5_NAME=p2p-onfs
       - P2P_CACHE_5_OWN_PARTITION_SIZE_IN_BYTES=100000
       - P2P_CACHE_5_GLOBAL_SIZE_IN_BYTES=1000
+      - P2P_CACHE_5_NUM_CLIENTS=2
+      - P2P_CACHE_5_SERVER_PORT=8088
       - P2P_CACHE_ACTIVE_CONFIG_IDS=5
     networks:
       - onfs-network
