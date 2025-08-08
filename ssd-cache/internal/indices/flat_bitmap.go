@@ -54,33 +54,40 @@ func (fb *FlatBitmap) Set(key string, idx uint32) {
 	}
 }
 
-func (fb *FlatBitmap) SetV2(next24bits, last28bits, h2 uint64, idx uint32) {
+func (fb *FlatBitmap) SetV2(next24bits, last28bits, h10 uint64, idx uint32) {
 	pos := int((next24bits >> 6) & 0x3FFFF)
 	bitPos := next24bits & 0x3F
 	if fb.bitmap[pos] == 0 {
 		fb.valueSlice[pos] = make([]uint64, 64)
 		fb.bitmap[pos] |= bitIndex[bitPos]
-		fb.valueSlice[pos][bitPos] = last28bits<<36 | h2<<26 | uint64(idx)
+		fb.valueSlice[pos][bitPos] = last28bits<<36 | h10<<26 | uint64(idx)
 	} else if fb.bitmap[pos]&bitIndex[bitPos] == 0 {
 		fb.bitmap[pos] |= bitIndex[bitPos]
-		fb.valueSlice[pos][bitPos] = last28bits<<36 | h2<<26 | uint64(idx)
+		fb.valueSlice[pos][bitPos] = last28bits<<36 | h10<<26 | uint64(idx)
 	} else {
 		// First check the initial position for existing key
-		if fb.valueSlice[pos][bitPos]>>36 == last28bits && (fb.valueSlice[pos][bitPos]>>26)&0x3FF == h2 {
-			fb.valueSlice[pos][bitPos] = last28bits<<36 | h2<<26 | uint64(idx)
+		if fb.valueSlice[pos][bitPos]>>36 == last28bits && (fb.valueSlice[pos][bitPos]>>26)&0x3FF == h10 {
+			fb.valueSlice[pos][bitPos] = last28bits<<36 | h10<<26 | uint64(idx)
 			return
 		}
 
 		// Then check collision list starting from index 64
 		i := 64
+		firstZeroIdx := -1
 		for i < len(fb.valueSlice[pos]) {
-			if fb.valueSlice[pos][i]>>36 == last28bits && (fb.valueSlice[pos][i]>>26)&0x3FF == h2 {
-				fb.valueSlice[pos][i] = last28bits<<36 | h2<<26 | uint64(idx)
+			if fb.valueSlice[pos][i]>>36 == last28bits && (fb.valueSlice[pos][i]>>26)&0x3FF == h10 {
+				fb.valueSlice[pos][i] = last28bits<<36 | h10<<26 | uint64(idx)
 				return
+			} else if fb.valueSlice[pos][i] == 0 && firstZeroIdx == -1 {
+				firstZeroIdx = i
 			}
 			i++
 		}
-		fb.valueSlice[pos] = append(fb.valueSlice[pos], last28bits<<36|h2<<26|uint64(idx))
+		if firstZeroIdx != -1 {
+			fb.valueSlice[pos][firstZeroIdx] = last28bits<<36 | h10<<26 | uint64(idx)
+		} else {
+			fb.valueSlice[pos] = append(fb.valueSlice[pos], last28bits<<36|h10<<26|uint64(idx))
+		}
 	}
 }
 
@@ -140,14 +147,14 @@ func (fb *FlatBitmap) Remove(next24bits, last28bits, h2 uint64) (uint32, bool) {
 	}
 	if fb.bitmap[pos]&bitIndex[bitPos] == bitIndex[bitPos] {
 		if fb.valueSlice[pos][bitPos]>>36 == last28bits && (fb.valueSlice[pos][bitPos]>>26)&0x3FF == h2 {
-			fb.bitmap[pos] &= ^bitIndex[bitPos]
+			//fb.bitmap[pos] &= ^bitIndex[bitPos]
 			fb.valueSlice[pos][bitPos] = 0
 			return 0, true
 		}
 		i := 64
 		for i < len(fb.valueSlice[pos]) {
 			if fb.valueSlice[pos][i]>>36 == last28bits && (fb.valueSlice[pos][i]>>26)&0x3FF == h2 {
-				fb.bitmap[pos] &= ^bitIndex[bitPos]
+				//fb.bitmap[pos] &= ^bitIndex[bitPos]
 				fb.valueSlice[pos][i] = 0
 				return 0, true
 			}

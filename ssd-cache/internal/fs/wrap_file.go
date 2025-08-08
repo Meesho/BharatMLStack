@@ -67,10 +67,6 @@ func NewWrapAppendFile(config FileConfig) (*WrapAppendFile, error) {
 }
 
 func (r *WrapAppendFile) Pwrite(buf []byte) (currentPhysicalOffset int64, err error) {
-	if r.wrapped && r.PhysicalWriteOffset == r.PhysicalStartOffset {
-		r.TrimHead()
-	}
-
 	if r.WriteDirectIO {
 		if !isAlignedBuffer(buf, r.blockSize) {
 			return 0, ErrBufNoAlign
@@ -88,6 +84,13 @@ func (r *WrapAppendFile) Pwrite(buf []byte) (currentPhysicalOffset int64, err er
 	r.LogicalCurrentOffset += int64(n)
 	r.Stat.WriteCount++
 	return r.PhysicalWriteOffset, nil
+}
+
+func (r *WrapAppendFile) TrimHeadIfNeeded() bool {
+	if r.wrapped && r.PhysicalWriteOffset == r.PhysicalStartOffset {
+		return true
+	}
+	return false
 }
 
 func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
@@ -111,6 +114,8 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 		// Two valid regions:
 		// 1. [PhysicalStartOffset, MaxFileSize)
 		// 2. [0, PhysicalWriteOffset)
+		fileOffset = fileOffset % r.MaxFileSize
+		readEnd = readEnd % r.MaxFileSize
 		if fileOffset >= r.PhysicalStartOffset {
 			valid = readEnd <= r.MaxFileSize
 		} else {

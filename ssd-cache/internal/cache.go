@@ -2,247 +2,114 @@ package internal
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"syscall"
+	"strconv"
+	"sync"
 	"time"
 
-	"github.com/Meesho/BharatMLStack/ssd-cache/internal/allocator"
-	"github.com/Meesho/BharatMLStack/ssd-cache/internal/freecache"
-	"github.com/Meesho/BharatMLStack/ssd-cache/internal/index"
-	"github.com/Meesho/BharatMLStack/ssd-cache/internal/memtable"
-	"github.com/Meesho/BharatMLStack/ssd-cache/internal/pool"
-	"github.com/rs/zerolog/log"
-	"golang.org/x/sys/unix"
+	"github.com/Meesho/BharatMLStack/ssd-cache/internal/filecache"
+	"github.com/cespare/xxhash/v2"
 )
+
+/*
+ Each shard can keep 67M keys
+ With Round = 1, expected collision (67M)^2/(2*2^62) = 4.87×10^-4
+*/
 
 const (
-	// File flags for testing
-	O_DIRECT          = 0x4000
-	O_WRONLY          = syscall.O_WRONLY
-	O_RDONLY          = syscall.O_RDONLY
-	O_APPEND          = syscall.O_APPEND
-	O_CREAT           = syscall.O_CREAT
-	O_DSYNC           = syscall.O_DSYNC
-	FILE_MODE         = 0644
-	BLOCK_SIZE        = 4096
-	INDEX_BUFFER_SIZE = 16
+	ROUNDS         = 1
+	KEYS_PER_SHARD = (1 << 26)
+	BLOCK_SIZE     = 4096
 )
 
-type Cache struct {
-	writeFD            int
-	readFD             int
-	memtableSize       int32
-	filePunchHoleSize  int32
-	fileStartOffset    int64
-	fileCurrentSize    int64
-	fileMaxSize        int64
-	fromDiskCount      int64
-	fromMemtableCount  int64
-	fromLruCacheCount  int64
-	punchHoleCount     int64
-	punchHoleMissCount int64
-	writeFile          *os.File
-	readFile           *os.File
-	index              *index.Index
-	lruCache           *freecache.Cache
-	memtableManager    *memtable.MemtableManager
-	writePageAllocator *allocator.AlignedPageAllocator
-	readPageAllocator  *allocator.SlabAlignedPageAllocator
+var (
+	ErrNumShardLessThan1            = fmt.Errorf("num shards must be greater than 0")
+	ErrKeysPerShardLessThan1        = fmt.Errorf("keys per shard must be greater than 0")
+	ErrKeysPerShardGreaterThan67M   = fmt.Errorf("keys per shard must be less than 67M")
+	ErrMemtableSizeLessThan1        = fmt.Errorf("memtable size must be greater than 0")
+	ErrMemtableSizeGreaterThan1GB   = fmt.Errorf("memtable size must be less than 1GB")
+	ErrMemtableSizeNotMultipleOf4KB = fmt.Errorf("memtable size must be a multiple of 4KB")
+	ErrFileSizeLessThan1            = fmt.Errorf("file size must be greater than 0")
+	ErrFileSizeNotMultipleOf4KB     = fmt.Errorf("file size must be a multiple of 4KB")
+	Seed                            = strconv.Itoa(int(time.Now().UnixNano()))
+)
+
+type WrapCache struct {
+	shards     []*filecache.FileCache
+	shardLocks []sync.RWMutex
 }
 
-type CacheConfig struct {
-	MemtableCapacity       int32
-	BlockSizeMultipliers   []int
-	LRUCacheSize           int
-	FileMaxSize            int64
-	IndexBufferPoolMinSize int
+type WrapCacheConfig struct {
+	NumShards    int
+	KeysPerShard int
+	FileSize     int64
+	MemtableSize int32
 }
 
-func NewCache(config CacheConfig) *Cache {
-	memtableCapacity := config.MemtableCapacity
-	if memtableCapacity%BLOCK_SIZE != 0 {
-		memtableCapacity = (memtableCapacity/BLOCK_SIZE + 1) * BLOCK_SIZE
+func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error) {
+	if config.NumShards <= 0 {
+		return nil, ErrNumShardLessThan1
 	}
-	maxPages := make([]int, len(config.BlockSizeMultipliers))
-	for i := range config.BlockSizeMultipliers {
-		maxPages[i] = 1
+	if config.KeysPerShard <= 0 {
+		return nil, ErrKeysPerShardLessThan1
 	}
-	writePageAllocator := allocator.NewAlignedPageAllocator(allocator.AlignedPageAllocatorConfig{
-		PageSizeAlignement: BLOCK_SIZE,
-		Multiplier:         int(memtableCapacity / BLOCK_SIZE),
-		MaxPages:           1000,
-	})
-
-	readPageAllocator := allocator.NewSlabAlignedPageAllocator(allocator.SlabAlignedPageAllocatorConfig{
-		PageSizeAlignement: BLOCK_SIZE,
-		Multipliers:        config.BlockSizeMultipliers,
-		MaxPages:           maxPages,
-	})
-	bufferPool := pool.NewLeakyPool(config.IndexBufferPoolMinSize, INDEX_BUFFER_SIZE, func() interface{} {
-		return make([]byte, INDEX_BUFFER_SIZE)
-	})
-	filename := fmt.Sprintf("test_memtable_%d.dat", time.Now().UnixNano())
-	filename = filepath.Join(".", filename)
-
-	writeFd, writeFile, err := createWriteFileDescriptor(filename)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create write file descriptor")
+	if config.KeysPerShard > KEYS_PER_SHARD {
+		return nil, ErrKeysPerShardGreaterThan67M
 	}
-	readFd, readFile, err := createReadFileDescriptor(filename)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create read file descriptor")
+	if config.MemtableSize <= 0 {
+		return nil, ErrMemtableSizeLessThan1
 	}
-	memtableManager := memtable.NewMemtableManager(writeFd, memtableCapacity, writePageAllocator)
-	index := index.NewIndexV2(bufferPool, int32(memtableCapacity))
-	lruCache := freecache.NewCache(config.LRUCacheSize)
-
-	return &Cache{
-		memtableManager:    memtableManager,
-		writePageAllocator: writePageAllocator,
-		readPageAllocator:  readPageAllocator,
-		lruCache:           lruCache,
-		index:              index,
-		writeFD:            writeFd,
-		writeFile:          writeFile,
-		readFD:             readFd,
-		readFile:           readFile,
-		fileStartOffset:    0,
-		filePunchHoleSize:  memtableCapacity,
-		fileCurrentSize:    0,
-		fileMaxSize:        config.FileMaxSize,
-		fromDiskCount:      0,
-		fromMemtableCount:  0,
-		memtableSize:       memtableCapacity,
-		punchHoleCount:     0,
-		punchHoleMissCount: 0,
+	if config.MemtableSize > 1024*1024*1024 {
+		return nil, ErrMemtableSizeGreaterThan1GB
 	}
+	if config.MemtableSize%BLOCK_SIZE != 0 {
+		return nil, ErrMemtableSizeNotMultipleOf4KB
+	}
+	if config.FileSize <= 0 {
+		return nil, ErrFileSizeLessThan1
+	}
+	if config.FileSize%BLOCK_SIZE != 0 {
+		return nil, ErrFileSizeNotMultipleOf4KB
+	}
+	shards := make([]*filecache.FileCache, config.NumShards)
+	for i := 0; i < config.NumShards; i++ {
+		shards[i] = filecache.NewFileCache(filecache.FileCacheConfig{
+			MemtableSize:        config.MemtableSize,
+			Rounds:              ROUNDS,
+			RbInitial:           config.KeysPerShard,
+			RbMax:               config.KeysPerShard,
+			DeleteAmortizedStep: 1000,
+			MaxFileSize:         int64(config.FileSize),
+			BlockSize:           BLOCK_SIZE,
+			Directory:           mountPoint,
+		})
+	}
+	shardLocks := make([]sync.RWMutex, config.NumShards)
+	return &WrapCache{
+		shards:     shards,
+		shardLocks: shardLocks,
+	}, nil
 }
 
-func (c *Cache) Put(key string, value []byte) {
-	memtable, memtableId, _ := c.memtableManager.GetMemtable()
-	data := append([]byte(key), value...)
-	offset, length := memtable.Put(data)
-	if offset == -1 && length == -1 {
-		c.memtableManager.Flush()
-		c.fileCurrentSize += int64(c.memtableSize)
-
-		if c.fileCurrentSize > c.fileMaxSize {
-			err := unix.Fallocate(c.writeFD, unix.FALLOC_FL_PUNCH_HOLE|unix.FALLOC_FL_KEEP_SIZE, c.fileStartOffset, int64(c.filePunchHoleSize))
-			if err != nil {
-				log.Error().Msgf("Failed to punch hole: %v", err)
-			} else {
-				log.Info().Msgf("Punched hole: %d", c.fileStartOffset)
-			}
-			c.fileStartOffset += int64(c.filePunchHoleSize)
-			c.fileCurrentSize -= int64(c.filePunchHoleSize)
-			c.punchHoleCount++
-		}
-		memtable, memtableId, _ = c.memtableManager.GetMemtable()
-		offset, length = memtable.Put(data)
-	}
-	c.index.Put(key, offset, length, memtableId)
-}
-
-func (c *Cache) Get(key string) []byte {
-	if value, err := c.lruCache.Get([]byte(key)); err == nil {
-		c.fromLruCacheCount++
-		return value
-	}
-	offset, length, fileOffset, id, ok := c.index.Get(key)
-	if !ok || fileOffset < c.fileStartOffset {
-		return nil
-	}
-	memtable := c.memtableManager.GetMemtableById(id)
-	var data []byte
-	if memtable != nil {
-		data = memtable.Get(offset, length)
-		c.fromMemtableCount++
-	} else {
-		data = make([]byte, length)
-		c.ReadFromDisk(fileOffset, length, data)
-		c.lruCache.Set([]byte(key), data[len(key):], 0)
-		c.fromDiskCount++
-	}
-	gotKey := string(data[:len(key)])
-	if gotKey != key {
-		return nil
-	}
-	return data[len(key):]
-}
-
-func (c *Cache) Discard() {
-	// TODO: implement cleanup for memtables
-	//Wait for flush to complete
-	time.Sleep(1 * time.Second)
-	syscall.Close(c.writeFD)
-	syscall.Close(c.readFD)
-	os.Remove(c.writeFile.Name())
-	os.Remove(c.readFile.Name())
-}
-
-func (c *Cache) ReadFromDisk(fileOffset int64, length int32, buf []byte) error {
-	if fileOffset < c.fileStartOffset {
-		c.punchHoleMissCount++
-		return fmt.Errorf("fileOffset is less than fileStartOffset")
-	}
-	alignedStartOffset := (fileOffset / BLOCK_SIZE) * BLOCK_SIZE
-	endndOffset := fileOffset + int64(length)
-	endAlignedOffset := ((endndOffset + BLOCK_SIZE - 1) / BLOCK_SIZE) * BLOCK_SIZE
-	alignedReadSize := endAlignedOffset - alignedStartOffset
-
-	page, crossBound := c.readPageAllocator.Get(int(alignedReadSize))
-
-	if crossBound {
-		log.Warn().Msg("Cache: Crossed bound")
-	}
-	log.Debug().Msgf("Read params: fileOffset: %d, length: %d, alignedStartOffset: %d, endAlignedOffset: %d, alignedReadSize: %d", fileOffset, length, alignedStartOffset, endAlignedOffset, alignedReadSize)
-	n, err := syscall.Pread(c.readFD, page.Buf, alignedStartOffset)
-	if err != nil {
-		return err
-	}
-	if n < int(alignedReadSize) {
-		return fmt.Errorf("read size mismatch: %d != %d", n, alignedReadSize)
-	}
-	start := fileOffset - alignedStartOffset
-	copy(buf, page.Buf[start:start+int64(length)])
-	log.Debug().Msgf("Read data: %s", string(buf))
-	c.readPageAllocator.Put(page)
+func (wc *WrapCache) Put(key string, value []byte, exptime uint64) error {
+	shardIdx := hash(key) % uint32(len(wc.shards))
+	wc.shardLocks[shardIdx].Lock()
+	defer wc.shardLocks[shardIdx].Unlock()
+	wc.shards[shardIdx].Put(key, value, exptime)
 	return nil
 }
 
-func createWriteFileDescriptor(filename string) (int, *os.File, error) {
-
-	// Open file with DIRECT_IO, WRITE_ONLY, CREAT flags
-	flags := O_DIRECT | O_WRONLY | O_CREAT | O_DSYNC
-	fd, err := syscall.Open(filename, flags, FILE_MODE)
-	if err != nil {
-		// If DIRECT_IO is not supported, fall back to regular flags
-		log.Warn().Msgf("DIRECT_IO not supported, falling back to regular flags: %v", err)
-		flags = O_WRONLY | O_CREAT | O_DSYNC
-		fd, err = syscall.Open(filename, flags, FILE_MODE)
-		if err != nil {
-			return 0, nil, err
-		}
+func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
+	shardIdx := hash(key) % uint32(len(wc.shards))
+	wc.shardLocks[shardIdx].RLock()
+	val, exptime, keyFound, expired, shouldReWrite := wc.shards[shardIdx].Get(key)
+	wc.shardLocks[shardIdx].RUnlock()
+	if shouldReWrite {
+		wc.Put(key, val, exptime)
 	}
-	file := os.NewFile(uintptr(fd), filename)
-	if file == nil {
-		return 0, nil, fmt.Errorf("failed to create file from fd")
-	}
-
-	return fd, file, nil
+	return val, keyFound, expired
 }
 
-func createReadFileDescriptor(filename string) (int, *os.File, error) {
-	flags := O_DIRECT | O_RDONLY
-	fd, err := syscall.Open(filename, flags, 0)
-	if err != nil {
-		return 0, nil, err
-	}
-	file := os.NewFile(uintptr(fd), filename)
-	if file == nil {
-		return 0, nil, fmt.Errorf("failed to create file from fd")
-	}
-
-	return fd, file, nil
+func hash(key string) uint32 {
+	nKey := key + Seed
+	return uint32(xxhash.Sum64String(nKey))
 }

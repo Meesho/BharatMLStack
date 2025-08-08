@@ -8,7 +8,7 @@ import (
 
 type MemtableManager struct {
 	file     *fs.WrapAppendFile
-	capacity int32
+	Capacity int32
 
 	memtable1      *Memtable
 	memtable2      *Memtable
@@ -55,7 +55,7 @@ func NewMemtableManager(file *fs.WrapAppendFile, capacity int32) (*MemtableManag
 	}
 	memtableManager := &MemtableManager{
 		file:           file,
-		capacity:       capacity,
+		Capacity:       capacity,
 		memtable1:      memtable1,
 		memtable2:      memtable2,
 		activeMemtable: memtable1,
@@ -68,7 +68,7 @@ func NewMemtableManager(file *fs.WrapAppendFile, capacity int32) (*MemtableManag
 }
 
 func (mm *MemtableManager) GetMemtable() (*Memtable, uint32, uint64) {
-	return mm.activeMemtable, mm.activeMemtable.Id, uint64(mm.activeMemtable.Id) * uint64(mm.capacity)
+	return mm.activeMemtable, mm.activeMemtable.Id, uint64(mm.activeMemtable.Id) * uint64(mm.Capacity)
 }
 
 func (mm *MemtableManager) GetMemtableById(id uint32) *Memtable {
@@ -83,7 +83,7 @@ func (mm *MemtableManager) GetMemtableById(id uint32) *Memtable {
 
 func (mm *MemtableManager) flushConsumer(memtable *Memtable) {
 	n, fileOffset, err := memtable.Flush()
-	if n != int(mm.capacity) {
+	if n != int(mm.Capacity) {
 		log.Error().Msgf("Flush size mismatch: memId:%d fileOffset:%d nextFileOffset:%d n:%d err:%v", memtable.Id, fileOffset, mm.nextFileOffset, n, err)
 	}
 	if err != nil {

@@ -42,8 +42,8 @@ func TestNewMemtableManager_Success(t *testing.T) {
 	if manager.file != file {
 		t.Errorf("Expected file to be set correctly")
 	}
-	if manager.capacity != capacity {
-		t.Errorf("Expected capacity %d, got %d", capacity, manager.capacity)
+	if manager.Capacity != capacity {
+		t.Errorf("Expected capacity %d, got %d", capacity, manager.Capacity)
 	}
 	if manager.memtable1 == nil {
 		t.Errorf("Expected memtable1 to be initialized")

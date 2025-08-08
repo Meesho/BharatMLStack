@@ -51,6 +51,10 @@ func Hash10(data string) uint64 {
 	return uint64(xxh3.HashString(data) & 0x3FF) // mask 10 bits
 }
 
+func Hash64(data string) uint64 {
+	return xxhash.Sum64String(data)
+}
+
 type RoundMap struct {
 	bitmaps []*FlatBitmap
 }
@@ -79,13 +83,18 @@ func (rm *RoundMap) Add(key string, idx uint32) bool {
 }
 
 func (rm *RoundMap) AddV2(key string, idx uint32, h64, h10 uint64) bool {
-	first12bits := (h64 >> 52) & _LO_12BIT_IN_32BIT // Bits 63–52
-	next24bits := (h64 >> 28) & _LO_24BIT_IN_32BIT  // Bits 51–28
-	last28bits := h64 & _LO_28BIT_IN_32BIT          // Bits 27–0
+	first12bits, next24bits, last28bits := extractHashSegments(h64) // Bits 27–0
 
 	round := first12bits % uint64(len(rm.bitmaps))
 	rm.bitmaps[round].SetV2(uint64(next24bits), uint64(last28bits), h10, idx)
 	return true
+}
+
+func extractHashSegments(h64 uint64) (uint64, uint64, uint64) {
+	first12bits := (h64 >> 52) & _LO_12BIT_IN_32BIT // Bits 63–52
+	next24bits := (h64 >> 28) & _LO_24BIT_IN_32BIT  // Bits 51–28
+	last28bits := h64 & _LO_28BIT_IN_32BIT
+	return first12bits, next24bits, last28bits
 }
 
 func (rm *RoundMap) Get(key string) (uint32, bool) {
@@ -102,9 +111,7 @@ func (rm *RoundMap) Get(key string) (uint32, bool) {
 
 func (rm *RoundMap) GetV2(h64, h10 uint64) (uint32, bool) {
 
-	first12bits := (h64 >> 52) & _LO_12BIT_IN_32BIT // Bits 63–52
-	next24bits := (h64 >> 28) & _LO_24BIT_IN_32BIT  // Bits 51–28
-	last28bits := h64 & _LO_28BIT_IN_32BIT          // Bits 27–0
+	first12bits, next24bits, last28bits := extractHashSegments(h64) // Bits 27–0
 
 	round := first12bits % uint64(len(rm.bitmaps))
 	return rm.bitmaps[round].GetV2(uint64(next24bits), uint64(last28bits), h10)
@@ -124,9 +131,7 @@ func (rm *RoundMap) Remove(key string) (uint32, bool) {
 
 func (rm *RoundMap) RemoveV2(h64, h10 uint64) (uint32, bool) {
 
-	first12bits := (h64 >> 52) & _LO_12BIT_IN_32BIT // Bits 63–52
-	next24bits := (h64 >> 28) & _LO_24BIT_IN_32BIT  // Bits 51–28
-	last28bits := h64 & _LO_28BIT_IN_32BIT          // Bits 27–0
+	first12bits, next24bits, last28bits := extractHashSegments(h64) // Bits 27–0
 
 	round := first12bits % uint64(len(rm.bitmaps))
 	return rm.bitmaps[round].Remove(uint64(next24bits), uint64(last28bits), h10)

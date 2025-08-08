@@ -75,7 +75,8 @@ func (m *Memtable) Put(buf []byte) (offset int, length uint16, readyForFlush boo
 	return offset, uint16(len(buf)), false
 }
 
-func (m *Memtable) GetBuf(size uint16) (bbuf []byte, offset int, length uint16, readyForFlush bool) {
+// Efforts to make zero copy
+func (m *Memtable) GetBufForAppend(size uint16) (bbuf []byte, offset int, length uint16, readyForFlush bool) {
 	offset = m.currentOffset
 	if offset+int(size) > m.capacity {
 		m.readyForFlush = true
@@ -84,6 +85,13 @@ func (m *Memtable) GetBuf(size uint16) (bbuf []byte, offset int, length uint16, 
 	bbuf = m.page.Buf[offset : offset+int(size)]
 	m.currentOffset += int(size)
 	return bbuf, offset, size, false
+}
+
+func (m *Memtable) GetBufForRead(offset int, length uint16) (bbuf []byte, exists bool) {
+	if offset+int(length) > m.capacity {
+		return nil, false
+	}
+	return m.page.Buf[offset : offset+int(length)], true
 }
 
 func (m *Memtable) Flush() (n int, fileOffset int64, err error) {
