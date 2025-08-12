@@ -100,7 +100,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 	reqDbFGIds := retrieveData.ReqDbFGIds
 	allDistFGIds := retrieveData.AllDistCachedFGIds
 
-	isP2PEnabled := rand.Intn(100) < h.config.GetP2PEnabledPercentage()
+	isP2PEnabled := h.isP2PCacheEnabled(retrieveData.EntityLabel)
 
 	if ReqInMemEmpty && ReqDistEmpty {
 		_, err = h.retrieveFromDB(allKeys, retrieveData, reqDbFGIds, fgDataChan)
@@ -248,6 +248,14 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
 		return nil, errors.New("invalid state ReqInMemEmpty ReqDistEmpty")
 	}
+}
+
+func (h *RetrieveHandler) isP2PCacheEnabled(entityLabel string) bool {
+	if h.p2pCacheProvider == nil {
+		return false
+	}
+	// If cache is setup, then enable based on percentage
+	return rand.Intn(100) < h.config.GetP2PEnabledPercentage()
 }
 
 func (h *RetrieveHandler) retrieveFromInMemoryCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int], fgDataChan chan *FGData, isP2PEnabled bool) ([]*retrieve.Keys, error) {

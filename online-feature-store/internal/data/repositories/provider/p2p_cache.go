@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	P2PCacheProviderImpl *P2PCacheProvider
+	P2PCacheProviderImpl CacheProvider
 )
 
 const (
@@ -67,10 +67,6 @@ func InitializeP2PCacheProvider(configManager config.Manager, etcD etcd.Etcd) er
 }
 
 func createEntityP2PCacheMap(configManager config.Manager, confIdCacheMap map[int]caches.Cache, entityCacheMap map[string]int) error {
-	if configManager.GetP2PEnabledPercentage() <= 0 {
-		return nil
-	}
-
 	for _, entity := range configManager.GetAllEntities() {
 		// TODO: fetch from p2p cache config while scaling p2p cache. Doing this to maintain backward compatibility with in memory configs.
 		dc, err := configManager.GetInMemoryCacheConfForEntity(entity.Label)
@@ -102,7 +98,7 @@ func createEntityP2PCacheMap(configManager config.Manager, confIdCacheMap map[in
 }
 
 func getDefaultP2PCacheConfigId(confIdCacheMap map[int]caches.Cache) int {
-	confId := 0
+	confId := -1
 	for confId = range confIdCacheMap {
 		break
 	}
