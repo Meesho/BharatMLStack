@@ -1,127 +1,186 @@
 package p2pcache
 
 import (
+	"fmt"
+	"hash/fnv"
+	"maps"
+
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache/clustermanager"
-	"github.com/coocood/freecache"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache/network"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache/storage"
 	"github.com/rs/zerolog/log"
 )
 
-func NewP2PCache(name string, ownPartitionSizeInBytes int, globalSizeInBytes int) *P2PCache {
-	cm := clustermanager.NewEtcdBasedClusterManager(name)
-	return &P2PCache{
-		cm:                cm,
-		ownPartitionCache: freecache.NewCache(ownPartitionSizeInBytes),
-		globalCache:       freecache.NewCache(globalSizeInBytes),
-	}
+type P2PCacheConfig struct {
+	ClusterName             string
+	Name                    string
+	OwnPartitionSizeInBytes int
+	GlobalSizeInBytes       int
+	GlobalCacheTTLInSeconds int
+	NumClients              int
+	ServerPort              int
 }
 
 type P2PCache struct {
-	cm                clustermanager.ClusterManager
-	ownPartitionCache *freecache.Cache
-	globalCache       *freecache.Cache
+	cm                      clustermanager.ClusterManager
+	cacheStore              *storage.CacheStore
+	clients                 []*network.ClientManager
+	server                  *network.Server
+	globalCacheTTLInSeconds int
 }
 
-func (c *P2PCache) MultiGet(keys []string) (map[string][]byte, error) {
-	podIdToKeysMap, err := c.cm.GetPodIdToKeysMap(keys)
+func NewP2PCache(config P2PCacheConfig) (*P2PCache, error) {
+	err := validateConfig(config)
 	if err != nil {
+		log.Error().Err(err).Msgf("Error validating p2p cache config %+v", config)
 		return nil, err
 	}
 
-	kvMap := make(map[string][]byte)
-	currentPodId := c.cm.GetCurrentPodId()
-
-	if _, ok := podIdToKeysMap[currentPodId]; ok {
-		c.fillFromOwnPartition(podIdToKeysMap[currentPodId], kvMap)
+	cacheStore := storage.NewCacheStore(config.OwnPartitionSizeInBytes, config.GlobalSizeInBytes)
+	clients := make([]*network.ClientManager, config.NumClients)
+	for i := 0; i < config.NumClients; i++ {
+		clients[i] = network.NewClientManager(config.ServerPort)
 	}
-	delete(podIdToKeysMap, currentPodId)
-
-	c.fillFromOtherPartitions(podIdToKeysMap, kvMap)
-	return kvMap, nil
+	return &P2PCache{
+		cm:                      clustermanager.NewEtcdBasedClusterManager(config.ClusterName, config.Name),
+		cacheStore:              cacheStore,
+		clients:                 clients,
+		server:                  network.NewServer(config.ServerPort, cacheStore),
+		globalCacheTTLInSeconds: config.GlobalCacheTTLInSeconds,
+	}, nil
 }
 
-func (c *P2PCache) MultiSet(kvMap map[string][]byte, ttlInSeconds int) error {
-	// Get the node mapping for all keys
-	keyToPodIdMap, err := c.cm.GetKeyToPodIdMap(c.getKeys(kvMap))
-	if err != nil {
-		return err
+func validateConfig(config P2PCacheConfig) error {
+	if config.ClusterName == "" {
+		return fmt.Errorf("p2p cache cluster name must be set")
 	}
-
-	currentPodId := c.cm.GetCurrentPodId()
-	for k, v := range kvMap {
-		if keyToPodIdMap[k] == currentPodId {
-			_ = c.ownPartitionCache.Set([]byte(k), v, ttlInSeconds)
-		} else {
-			_ = c.globalCache.Set([]byte(k), v, ttlInSeconds)
-		}
+	if config.OwnPartitionSizeInBytes <= 0 {
+		return fmt.Errorf("p2p cache own partition size in bytes must be greater than 0")
 	}
-	return nil
-}
-
-func (c *P2PCache) MultiDelete(keys []string) error {
-	for _, k := range keys {
-		c.ownPartitionCache.Del([]byte(k))
-		c.globalCache.Del([]byte(k))
+	if config.GlobalSizeInBytes <= 0 {
+		return fmt.Errorf("p2p cache global size in bytes must be greater than 0")
+	}
+	if config.Name == "" {
+		return fmt.Errorf("p2p cache name must be set")
+	}
+	if config.NumClients <= 0 {
+		return fmt.Errorf("p2p cache num clients must be greater than 0")
+	}
+	if config.ServerPort <= 0 {
+		return fmt.Errorf("p2p cache server port must be greater than 0")
 	}
 	return nil
 }
 
-func (c *P2PCache) GetClusterTopology() clustermanager.ClusterTopology {
-	return c.cm.GetClusterTopology()
-}
+func (p *P2PCache) MultiGet(keys []string) (map[string][]byte, error) {
+	log.Debug().Msgf("MultiGet called with keys %v", keys)
 
-func (c *P2PCache) getKeys(kvMap map[string][]byte) []string {
-	keys := make([]string, 0, len(kvMap))
-	for k := range kvMap {
-		keys = append(keys, k)
-	}
-	return keys
-}
+	kvResponse := make(map[string][]byte)
+	missingKeys := make([]string, 0)
 
-func (c *P2PCache) fillFromOwnPartition(keys []string, kvMap map[string][]byte) {
+	metric.Count("p2p.cache.keys.total", int64(len(keys)), []string{})
 	for _, key := range keys {
-		value, err := c.ownPartitionCache.Get([]byte(key))
+		value, err := p.cacheStore.Get(key)
 		if err == nil {
-			kvMap[key] = value
+			kvResponse[key] = value
+		} else {
+			missingKeys = append(missingKeys, key)
 		}
 	}
+	log.Debug().Msgf("MultiGet: kvResponse found from local cache %v", kvResponse)
+
+	if len(missingKeys) > 0 {
+		maps.Copy(kvResponse, p.fetchKeysFromOtherPods(missingKeys))
+	}
+	log.Debug().Msgf("MultiGet: kvResponse found from other pods %v", kvResponse)
+
+	metric.Count("p2p.cache.keys.global.miss", int64(len(keys)-len(kvResponse)), []string{})
+	return kvResponse, nil
 }
 
-func (c *P2PCache) fillFromOtherPartitions(podIdToKeysMap map[string][]string, kvMap map[string][]byte) {
-	missingKeysInGlobalCache := make(map[string][]string)
-	for podId, keys := range podIdToKeysMap {
-		for _, key := range keys {
-			value, err := c.globalCache.Get([]byte(key))
-			if err == nil {
-				kvMap[key] = value
-			} else {
-				missingKeysInGlobalCache[podId] = append(missingKeysInGlobalCache[podId], key)
-			}
+func (p *P2PCache) MultiSet(kvMap map[string][]byte, ttlInSeconds int) error {
+	if len(kvMap) == 0 {
+		return nil
+	}
+	currentPodId := p.cm.GetCurrentPodId()
+	for key, value := range kvMap {
+		podId := p.cm.GetPodIdForKey(key)
+		if podId == currentPodId {
+			p.cacheStore.SetIntoOwnPartitionCache(key, value, ttlInSeconds)
+		} else {
+			p.cacheStore.SetIntoGlobalCache(key, value, ttlInSeconds)
 		}
 	}
+	return nil
+}
 
-	for podId, keys := range missingKeysInGlobalCache {
-		podData, err := c.cm.GetPodDataForPodId(podId)
+func (p *P2PCache) MultiDelete(keys []string) error {
+	return p.cacheStore.MultiDelete(keys)
+}
+
+func (p *P2PCache) GetClusterTopology() clustermanager.ClusterTopology {
+	return p.cm.GetClusterTopology()
+}
+
+func (p *P2PCache) fetchKeysFromOtherPods(missingKeys []string) map[string][]byte {
+	log.Debug().Msgf("fetchKeysFromOtherPods called with keys %v", missingKeys)
+
+	podIdToKeysMap := p.cm.GetPodIdToKeysMap(missingKeys)
+	currentPodKeysCount := len(podIdToKeysMap[p.cm.GetCurrentPodId()])
+	log.Debug().Msgf("fetchKeysFromOtherPods: current pod id %s, podIdToKeysMap %v, currentPodKeysCount %d", p.cm.GetCurrentPodId(), podIdToKeysMap, currentPodKeysCount)
+
+	// Remove keys from the current pod from the map
+	metric.Count("p2p.cache.keys.local.miss", int64(currentPodKeysCount), []string{"partition", "own"})
+	delete(podIdToKeysMap, p.cm.GetCurrentPodId())
+
+	totalKeysToFetch := len(missingKeys) - currentPodKeysCount
+	kvResponse := make(map[string][]byte)
+	if totalKeysToFetch == 0 {
+		log.Debug().Msgf("fetchKeysFromOtherPods: no keys to fetch")
+		return kvResponse
+	}
+	metric.Count("p2p.cache.keys.local.miss", int64(totalKeysToFetch), []string{"partition", "global"})
+
+	dataChannel := make(chan *network.ResponseMessage, totalKeysToFetch)
+	currentPodData, _ := p.cm.GetPodDataForPodId(p.cm.GetCurrentPodId())
+
+	actualKeysFetched := 0
+	for podId, keys := range podIdToKeysMap {
+		podData, err := p.cm.GetPodDataForPodId(podId)
 		if err != nil {
 			log.Error().Err(err).Msgf("Error getting pod data for pod id %s", podId)
 			continue
 		}
-		valuesFromOtherPartitions := c.fetchValuesFromOtherPartitions(podData, keys)
-		for key, value := range valuesFromOtherPartitions {
-			kvMap[key] = value
+
+		log.Debug().Msgf("fetchKeysFromOtherPods: fetching keys %v from pod %s", keys, podData.PodIP)
+		metric.Count("p2p.cache.network.keys.sent", int64(len(keys)), []string{"fromPod", currentPodData.PodIP, "toPod", podData.PodIP})
+
+		actualKeysFetched += len(keys)
+		// TODO: Multiple keys belonging to the same pod can be merged and sent in a single packet
+		for _, key := range keys {
+			go p.fetchKeyFromPod(key, podData, dataChannel)
 		}
-		c.loadIntoGlobalCache(valuesFromOtherPartitions)
 	}
+
+	for range actualKeysFetched {
+		data := <-dataChannel
+		if data != nil && data.Data != nil {
+			kvResponse[data.Key] = data.Data
+		}
+	}
+
+	p.cacheStore.MultiSetIntoGlobalCache(kvResponse, p.globalCacheTTLInSeconds)
+	return kvResponse
 }
 
-func (c *P2PCache) fetchValuesFromOtherPartitions(podData *clustermanager.PodData, keys []string) map[string][]byte {
-	// TODO: Implement calling other pods to fetch values
-	kvMap := make(map[string][]byte)
-	return kvMap
+func (p *P2PCache) fetchKeyFromPod(key string, podData *clustermanager.PodData, dataChannel chan *network.ResponseMessage) {
+	dataChannel <- p.clients[p.getClientIdx(key)].GetData(key, podData.PodIP)
 }
 
-func (c *P2PCache) loadIntoGlobalCache(kvMap map[string][]byte) {
-	for key, value := range kvMap {
-		// TODO: Figure out the ttl for the key
-		_ = c.globalCache.Set([]byte(key), value, 0)
-	}
+func (p *P2PCache) getClientIdx(key string) int {
+	hash := fnv.New32()
+	hash.Write([]byte(key))
+	hashValue := hash.Sum32()
+	return int(hashValue % uint32(len(p.clients)))
 }

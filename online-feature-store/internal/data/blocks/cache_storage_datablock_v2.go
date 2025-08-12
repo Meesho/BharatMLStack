@@ -17,6 +17,7 @@ const (
 	CacheTypeInMemory CacheType = iota
 	CacheTypeDistributed
 	CacheTypeStorage
+
 	csdbPrefixLen      = 4
 	CSDBLayoutVersion1 = 1
 )

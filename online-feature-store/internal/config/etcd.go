@@ -137,6 +137,10 @@ func (e *Etcd) GetP2PCacheConfForEntity(entityLabel string) (*Cache, error) {
 	return &entity.P2PCache, nil
 }
 
+func (e *Etcd) GetP2PEnabledPercentage() int {
+	return e.GetEtcdInstance().P2PEnabledPercentage
+}
+
 func (e *Etcd) GetStores() (*map[string]Store, error) {
 	instance := e.GetEtcdInstance()
 	return &instance.Storage.Stores, nil

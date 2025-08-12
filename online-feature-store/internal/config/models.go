@@ -7,9 +7,10 @@ import (
 type _version int
 
 type FeatureRegistry struct {
-	Entities map[string]Entity `json:"entities"`
-	Storage  Storage           `json:"storage"`
-	Security Security          `json:"security"`
+	Entities             map[string]Entity `json:"entities"`
+	Storage              Storage           `json:"storage"`
+	Security             Security          `json:"security"`
+	P2PEnabledPercentage int               `json:"p2p-enabled-percentage"`
 }
 
 type Security struct {

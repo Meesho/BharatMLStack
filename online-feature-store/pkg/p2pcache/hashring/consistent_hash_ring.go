@@ -40,19 +40,15 @@ func (h *ConsistentHashRing) RemoveNode(node string) {
 	h.refreshSortedKeys()
 }
 
-func (h *ConsistentHashRing) GetNodeMap(keys []string) map[string]string {
-	nodeMap := make(map[string]string)
-	for _, key := range keys {
-		hash := h.getHash(key)
-		idx := sort.Search(len(h.sortedKeys), func(i int) bool {
-			return h.sortedKeys[i] >= hash
-		})
-		if idx == len(h.sortedKeys) {
-			idx = 0
-		}
-		nodeMap[key] = h.ring[h.sortedKeys[idx]]
+func (h *ConsistentHashRing) GetNodeForKey(key string) string {
+	hash := h.getHash(key)
+	idx := sort.Search(len(h.sortedKeys), func(i int) bool {
+		return h.sortedKeys[i] >= hash
+	})
+	if idx == len(h.sortedKeys) {
+		idx = 0
 	}
-	return nodeMap
+	return h.ring[h.sortedKeys[idx]]
 }
 
 func (h *ConsistentHashRing) refreshSortedKeys() {

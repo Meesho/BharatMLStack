@@ -82,7 +82,19 @@ func initP2PCacheConns() {
 		}
 		ConfIdDBTypeMap[confId] = DBTypeP2P
 		P2PCacheLoadedConfigIds = append(P2PCacheLoadedConfigIds, confId)
-		client := p2pcache.NewP2PCache(conf.Name, conf.OwnPartitionSizeInBytes, conf.GlobalSizeInBytes)
+		client, err := p2pcache.NewP2PCache(p2pcache.P2PCacheConfig{
+			ClusterName:             conf.ClusterName,
+			Name:                    conf.Name,
+			OwnPartitionSizeInBytes: conf.OwnPartitionSizeInBytes,
+			GlobalSizeInBytes:       conf.GlobalSizeInBytes,
+			GlobalCacheTTLInSeconds: conf.GlobalCacheTTLInSeconds,
+			NumClients:              conf.NumClients,
+			ServerPort:              conf.ServerPort,
+		})
+		if err != nil {
+			log.Error().Err(err).Msg("Error creating p2p cache")
+			panic(err)
+		}
 		meta := map[string]interface{}{
 			"enabled": conf.Enabled,
 			"name":    conf.Name,

@@ -67,8 +67,14 @@ func InitializeP2PCacheProvider(configManager config.Manager, etcD etcd.Etcd) er
 }
 
 func createEntityP2PCacheMap(configManager config.Manager, confIdCacheMap map[int]caches.Cache, entityCacheMap map[string]int) error {
+	if configManager.GetP2PEnabledPercentage() <= 0 {
+		return nil
+	}
+
 	for _, entity := range configManager.GetAllEntities() {
-		dc, err := configManager.GetP2PCacheConfForEntity(entity.Label)
+		// TODO: fetch from p2p cache config while scaling p2p cache. Doing this to maintain backward compatibility with in memory configs.
+		dc, err := configManager.GetInMemoryCacheConfForEntity(entity.Label)
+		// dc, err := configManager.GetP2PCacheConfForEntity(entity.Label)
 		if err != nil {
 			log.Error().Err(err).Msgf("Error getting p2p cache conf for entity %s", entity.Label)
 			return err
@@ -80,16 +86,27 @@ func createEntityP2PCacheMap(configManager config.Manager, confIdCacheMap map[in
 			}
 			continue
 		}
-		if confIdCacheMap[dc.ConfId] == nil {
+
+		// TODO: read from dc.ConfId instead of default confId
+		if confIdCacheMap[getDefaultP2PCacheConfigId(confIdCacheMap)] == nil {
 			log.Error().Msgf("P2P Cache not found for entity %s", entity.Label)
 			return fmt.Errorf("P2P cache not found for entity %s", entity.Label)
 		}
 
 		if !entityCacheMapped || (entityCacheMapped && confId != dc.ConfId) {
-			entityCacheMap[entity.Label] = dc.ConfId
+			// TODO: set from dc.ConfId instead of default confId
+			entityCacheMap[entity.Label] = getDefaultP2PCacheConfigId(confIdCacheMap)
 		}
 	}
 	return nil
+}
+
+func getDefaultP2PCacheConfigId(confIdCacheMap map[int]caches.Cache) int {
+	confId := 0
+	for confId = range confIdCacheMap {
+		break
+	}
+	return confId
 }
 
 func loadP2PCache(cacheMap map[int]caches.Cache) error {
