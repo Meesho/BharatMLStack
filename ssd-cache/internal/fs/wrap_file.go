@@ -127,6 +127,8 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 	}
 
 	n, err := syscall.Pread(r.ReadFd, buf, fileOffset)
+	// flags := unix.RWF_HIPRI // optionally: | unix.RWF_NOWAIT
+	// n, err := preadv2(r.ReadFd, buf, fileOffset, flags)
 	if err != nil {
 		return 0, err
 	}
@@ -157,4 +159,16 @@ func (r *WrapAppendFile) Close() {
 	syscall.Close(r.ReadFd)
 	os.Remove(r.WriteFile.Name())
 	os.Remove(r.ReadFile.Name())
+}
+
+func preadv2(fd int, buf []byte, off int64, flags int) (int, error) {
+	if len(buf) == 0 {
+		return 0, nil
+	}
+	n, err := unix.Preadv2(fd, [][]byte{buf}, off, flags)
+	// Kernel or FS may not support preadv2/flags; fall back
+	if err == unix.ENOSYS || err == unix.EOPNOTSUPP || err == unix.EINVAL {
+		return unix.Pread(fd, buf, off)
+	}
+	return n, err
 }

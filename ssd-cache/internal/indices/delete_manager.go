@@ -62,7 +62,10 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 	if trimNeeded || nextAddNeedsDelete {
 		dm.deleteInProgress = true
 		dm.deleteCount = int(dm.memtableData[dm.toBeDeletedMemId] / dm.deleteAmortizedStep)
-		memIdAtHead := dm.keyIndex.PeekMemIdAtHead()
+		memIdAtHead, err := dm.keyIndex.PeekMemIdAtHead()
+		if err != nil {
+			return err
+		}
 		if memIdAtHead != dm.toBeDeletedMemId {
 			return fmt.Errorf("memIdAtHead: %d, toBeDeletedMemId: %d", memIdAtHead, dm.toBeDeletedMemId)
 		}

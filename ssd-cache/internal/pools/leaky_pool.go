@@ -1,5 +1,7 @@
 package pools
 
+import "sync"
+
 type LeakyPool struct {
 	availabilityList []interface{}
 	Meta             interface{}
@@ -8,6 +10,7 @@ type LeakyPool struct {
 	capacity         int
 	usage            int
 	idx              int
+	lock             sync.RWMutex
 	stats            *Stats
 }
 
@@ -40,6 +43,8 @@ func (p *LeakyPool) RegisterPreDrefHook(hook func(obj interface{})) {
 }
 
 func (p *LeakyPool) Get() interface{} {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	p.usage++
 	if p.idx == -1 && p.usage > p.capacity {
 		return p.createFunc()
@@ -52,6 +57,8 @@ func (p *LeakyPool) Get() interface{} {
 }
 
 func (p *LeakyPool) Put(obj interface{}) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	p.usage--
 	p.idx++
 	if p.idx == p.capacity {

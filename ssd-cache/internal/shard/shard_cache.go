@@ -14,14 +14,15 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type FileCache struct {
+type ShardCache struct {
 	keyIndex          *indices.KeyIndex
 	file              *fs.WrapAppendFile
 	mm                *memtables.MemtableManager
 	readPageAllocator *allocators.SlabAlignedPageAllocator
 	dm                *indices.DeleteManager
 	predictor         *maths.Predictor
-	Stats             Stats
+	startAt           int64
+	Stats             *Stats
 }
 
 type Stats struct {
@@ -37,7 +38,7 @@ type Stats struct {
 	BadKeyMemIds     map[uint32]int
 }
 
-type FileCacheConfig struct {
+type ShardCacheConfig struct {
 	Rounds              int
 	RbInitial           int
 	RbMax               int
@@ -46,10 +47,12 @@ type FileCacheConfig struct {
 	MaxFileSize         int64
 	BlockSize           int
 	Directory           string
+	AsyncReadWorkers    int
+	AsyncQueueDepth     int
 	Predictor           *maths.Predictor
 }
 
-func NewFileCache(config FileCacheConfig) *FileCache {
+func NewShardCache(config ShardCacheConfig) *ShardCache {
 	filename := fmt.Sprintf("%s/%d.bin", config.Directory, time.Now().UnixNano())
 	punchHoleSize := config.MemtableSize
 	fsConf := fs.FileConfig{
@@ -79,14 +82,15 @@ func NewFileCache(config FileCacheConfig) *FileCache {
 		log.Panic().Err(err).Msg("Failed to create read page allocator")
 	}
 	dm := indices.NewDeleteManager(ki, file, config.DeleteAmortizedStep)
-	return &FileCache{
+	return &ShardCache{
 		keyIndex:          ki,
 		mm:                memtableManager,
 		file:              file,
 		readPageAllocator: readPageAllocator,
 		dm:                dm,
 		predictor:         config.Predictor,
-		Stats: Stats{
+		startAt:           time.Now().Unix(),
+		Stats: &Stats{
 			MemIdCount:   make(map[uint32]int),
 			BadCRCMemIds: make(map[uint32]int),
 			BadKeyMemIds: make(map[uint32]int),
@@ -94,32 +98,9 @@ func NewFileCache(config FileCacheConfig) *FileCache {
 	}
 }
 
-func (fc *FileCache) Put(key string, value []byte, exptime uint64) error {
-	size := 4 + len(key) + len(value)
-	mt, mtId, _ := fc.mm.GetMemtable()
-	buf, offset, length, readyForFlush := mt.GetBufForAppend(uint16(size))
-	if readyForFlush {
-		trimmedHead := fc.file.TrimHeadIfNeeded()
-		if trimmedHead {
-			fc.Stats.DeletedKeyCount += fc.Stats.MemIdCount[fc.Stats.LastDeletedMemId]
-			fc.Stats.LastDeletedMemId++
-			log.Info().Msg("trimmed head")
-			fc.keyIndex.StartTrim()
-		}
-		fc.mm.Flush()
-		mt, mtId, _ = fc.mm.GetMemtable()
-		buf, offset, length, _ = mt.GetBufForAppend(uint16(size))
-	}
-	copy(buf[4:], key)
-	copy(buf[4+len(key):], value)
-	crc := crc32.ChecksumIEEE(buf[4:])
-	indices.ByteOrder.PutUint32(buf[0:4], crc)
-	fc.keyIndex.Put(key, length, mtId, uint32(offset), exptime)
-	fc.Stats.MemIdCount[mtId]++
-	return nil
-}
-
-func (fc *FileCache) PutV2(key string, value []byte, exptime uint64) error {
+func (fc *ShardCache) Put(key string, value []byte, exptime uint64) error {
+	deltaExptime := exptime - uint64(fc.startAt)
+	deltaExptimeInMin := deltaExptime / 60
 	size := 4 + len(key) + len(value)
 	mt, mtId, _ := fc.mm.GetMemtable()
 	err := fc.dm.ExecuteDeleteIfNeeded()
@@ -128,13 +109,6 @@ func (fc *FileCache) PutV2(key string, value []byte, exptime uint64) error {
 	}
 	buf, offset, length, readyForFlush := mt.GetBufForAppend(uint16(size))
 	if readyForFlush {
-		// trimmedHead := fc.file.TrimHeadIfNeeded()
-		// if trimmedHead {
-		// 	fc.Stats.DeletedKeyCount += fc.Stats.MemIdCount[fc.Stats.LastDeletedMemId]
-		// 	fc.Stats.LastDeletedMemId++
-		// 	log.Info().Msg("trimmed head")
-		// 	fc.keyIndex.StartTrim()
-		// }
 		fc.mm.Flush()
 		mt, mtId, _ = fc.mm.GetMemtable()
 		buf, offset, length, _ = mt.GetBufForAppend(uint16(size))
@@ -143,14 +117,14 @@ func (fc *FileCache) PutV2(key string, value []byte, exptime uint64) error {
 	copy(buf[4+len(key):], value)
 	crc := crc32.ChecksumIEEE(buf[4:])
 	indices.ByteOrder.PutUint32(buf[0:4], crc)
-	fc.keyIndex.PutV2(key, length, mtId, uint32(offset), exptime)
+	fc.keyIndex.Put(key, length, mtId, uint32(offset), deltaExptimeInMin)
 	fc.dm.IncMemtableKeyCount(mtId)
 	fc.Stats.MemIdCount[mtId]++
 	return nil
 }
 
-func (fc *FileCache) Get(key string) ([]byte, uint64, bool, bool, bool) {
-	memId, length, offset, lastAccess, freq, exptime, idx, found := fc.keyIndex.GetMetaV2(key)
+func (fc *ShardCache) Get(key string) ([]byte, uint64, bool, bool, bool) {
+	memId, length, offset, lastAccess, freq, exptime, idx, found := fc.keyIndex.Get(key)
 	_, mtId, _ := fc.mm.GetMemtable()
 	shouldReWrite := fc.predictor.Predict(freq, uint64(lastAccess), memId, mtId)
 
@@ -162,7 +136,8 @@ func (fc *FileCache) Get(key string) ([]byte, uint64, bool, bool, bool) {
 	if !strings.Contains(key, idxs) {
 		fc.Stats.BadDataCount++
 	}
-	if exptime < uint64(time.Now().Unix()) {
+	deltaCurTimeFromStart := deltaCurrTimeFromStartInMin(fc.startAt)
+	if exptime < deltaCurTimeFromStart {
 		return nil, 0, false, true, shouldReWrite
 	}
 	exists := true
@@ -200,12 +175,10 @@ func (fc *FileCache) Get(key string) ([]byte, uint64, bool, bool, bool) {
 		return nil, 0, false, false, shouldReWrite
 	}
 	valLen := int(length) - 4 - len(key)
-	valBuf := make([]byte, valLen)
-	copy(valBuf, buf[4+len(key):])
-	return valBuf, exptime, true, false, shouldReWrite
+	return buf[4+len(key) : 4+len(key)+valLen], exptime, true, false, shouldReWrite
 }
 
-func (fc *FileCache) readFromDisk(fileOffset int64, length uint16, buf []byte) int {
+func (fc *ShardCache) readFromDisk(fileOffset int64, length uint16, buf []byte) int {
 	alignedStartOffset := (fileOffset / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
 	endndOffset := fileOffset + int64(length)
 	endAlignedOffset := ((endndOffset + fs.BLOCK_SIZE - 1) / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
@@ -219,14 +192,22 @@ func (fc *FileCache) readFromDisk(fileOffset int64, length uint16, buf []byte) i
 }
 
 // Debug methods to expose ring buffer state
-func (fc *FileCache) GetRingBufferNextIndex() int {
+func (fc *ShardCache) GetRingBufferNextIndex() int {
 	return fc.keyIndex.GetRingBufferNextIndex()
 }
 
-func (fc *FileCache) GetRingBufferSize() int {
+func (fc *ShardCache) GetRingBufferSize() int {
 	return fc.keyIndex.GetRingBufferSize()
 }
 
-func (fc *FileCache) GetRingBufferCapacity() int {
+func (fc *ShardCache) GetRingBufferCapacity() int {
 	return fc.keyIndex.GetRingBufferCapacity()
+}
+
+func (fc *ShardCache) GetRingBufferActiveEntries() int {
+	return fc.keyIndex.GetRingBufferActiveEntries()
+}
+
+func deltaCurrTimeFromStartInMin(startAt int64) uint64 {
+	return uint64(time.Now().Unix()-startAt) / 60
 }

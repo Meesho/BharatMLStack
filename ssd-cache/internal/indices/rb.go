@@ -1,7 +1,7 @@
 package indices
 
 // Entry represents a 32-byte value. Adjust fields as needed.
-type Entry [32]byte
+type Entry [24]byte
 
 // RingBuffer is a fixed-size circular queue that wraps around when full.
 // It maintains a sliding window of the most recent entries. Add returns an
@@ -84,4 +84,7 @@ func (rb *RingBuffer) Delete() (*Entry, *Entry) {
 // TailIndex returns the absolute index that will be assigned to the next Add.
 func (rb *RingBuffer) TailIndex() int {
 	return rb.nextIndex
+}
+func (rb *RingBuffer) ActiveEntries() int {
+	return (rb.nextIndex - rb.head + rb.capacity) % rb.capacity
 }

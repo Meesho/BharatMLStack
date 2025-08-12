@@ -1,197 +1,302 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"math/rand"
-	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/Meesho/BharatMLStack/ssd-cache/internal"
+	cachepkg "github.com/Meesho/BharatMLStack/ssd-cache/internal/cache"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
-type LoadTestConfig struct {
-	Duration       time.Duration
-	NumWorkers     int
-	WriteRatio     float64 // 0.0 = all reads, 1.0 = all writes
-	KeyRange       int     // keys will be key_0 to key_(KeyRange-1)
-	ValueSizeBytes int
-	ExpTime        uint64
-}
-
-type LoadTestMetrics struct {
-	totalReads     int64
-	totalWrites    int64
-	totalHits      int64
-	totalMisses    int64
-	readLatencyNs  int64
-	writeLatencyNs int64
-}
-
 func main() {
+	// Flags to parameterize load tests
+	var (
+		mountPoint   string
+		numShards    int
+		keysPerShard int
+		memtableMB   int
+		fileSizeGB   int
+		readWorkers  int
+		writeWorkers int
+		sampleSecs   int
+		logStats     bool
+	)
+
+	flag.StringVar(&mountPoint, "mount", "/tmp/ssd-cache", "data directory for shard files")
+	flag.IntVar(&numShards, "shards", 1, "number of shards")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 50_000_000, "keys per shard")
+	flag.IntVar(&memtableMB, "memtable-mb", 10, "memtable size in MiB")
+	flag.IntVar(&fileSizeGB, "file-gb", 5, "file size in GiB per shard")
+	flag.IntVar(&readWorkers, "readers", 0, "number of read workers")
+	flag.IntVar(&writeWorkers, "writers", 1, "number of write workers")
+	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
+	flag.BoolVar(&logStats, "log-stats", true, "periodically log cache stats")
+	flag.Parse()
+
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
-	// Cache configuration
-	cacheConfig := internal.WrapCacheConfig{
-		NumShards:    4,
-		KeysPerShard: 1000000,
-		FileSize:     1 * 1024 * 1024 * 1024,
-		MemtableSize: 1 * 1024 * 1024,
+	cfg := cachepkg.WrapCacheConfig{
+		NumShards:             numShards,
+		KeysPerShard:          keysPerShard,
+		FileSize:              int64(fileSizeGB) * 1024 * 1024 * 1024,
+		MemtableSize:          int32(memtableMB) * 1024 * 1024,
+		ReWriteScoreThreshold: 0.8,
+		GridSearchEpsilon:     0.0001,
+		SampleDuration:        time.Duration(sampleSecs) * time.Second,
 	}
 
-	// Load test configuration
-	loadTestConfig := LoadTestConfig{
-		Duration:       30 * time.Second,
-		NumWorkers:     10,
-		WriteRatio:     0.3, // 30% writes, 70% reads
-		KeyRange:       100000,
-		ValueSizeBytes: 1024,
-		ExpTime:        uint64(time.Now().Add(time.Hour).Unix()),
-	}
-
-	cache, err := internal.NewWrapCache(cacheConfig, "/tmp")
+	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, logStats)
 	if err != nil {
-		log.Error().Msgf("Error creating cache: %v\n", err)
-		return
+		panic(err)
 	}
 
-	log.Info().Msg("Starting load test...")
-	runLoadTest(cache, loadTestConfig)
-}
+	totalKeys := keysPerShard * numShards
 
-func runLoadTest(cache *internal.WrapCache, config LoadTestConfig) {
-	metrics := &LoadTestMetrics{}
+	// Prepopulate for read-only or read-heavy workloads: 80% of total keys
+	if readWorkers > 0 && (writeWorkers == 0 || readWorkers >= 2*writeWorkers) {
+		preN := int(float64(totalKeys) * 0.8)
+		for i := 0; i < preN; i++ {
+			key := fmt.Sprintf("key%d", i)
+			val := []byte(fmt.Sprintf("value%d", i))
+			if err := pc.Put(key, val, uint64(time.Now().Unix()+3600)); err != nil {
+				panic(err)
+			}
+		}
+	}
+
 	var wg sync.WaitGroup
 
-	startTime := time.Now()
-	endTime := startTime.Add(config.Duration)
-
-	// Start worker goroutines
-	for i := 0; i < config.NumWorkers; i++ {
-		wg.Add(1)
-		go worker(cache, config, metrics, endTime, &wg, i)
+	// Spawn writers: each writer covers a disjoint partition of the keyspace
+	if writeWorkers > 0 {
+		wg.Add(writeWorkers)
+		keysPerWriter := totalKeys / writeWorkers
+		for w := 0; w < writeWorkers; w++ {
+			start := w * keysPerWriter
+			end := start + keysPerWriter
+			// last worker takes any remainder
+			if w == writeWorkers-1 {
+				end = totalKeys
+			}
+			go func(wid, s, e int) {
+				defer wg.Done()
+				for i := s; i < e; i++ {
+					key := fmt.Sprintf("key%d", i)
+					val := []byte(fmt.Sprintf("value%d", i))
+					if err := pc.Put(key, val, uint64(time.Now().Unix()+3600)); err != nil {
+						panic(err)
+					}
+				}
+			}(w, start, end)
+		}
 	}
 
-	// Monitor progress
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			elapsed := time.Since(startTime)
-			if elapsed >= config.Duration {
-				return
-			}
-			printProgress(metrics, elapsed)
+	// Spawn readers: each reader covers a disjoint partition
+	if readWorkers > 0 {
+		wg.Add(readWorkers)
+		readSpan := totalKeys
+		// If we prepopulated, constrain readers to prepopulated range
+		if writeWorkers == 0 || readWorkers >= 2*writeWorkers {
+			readSpan = int(float64(totalKeys) * 0.8)
 		}
-	}()
+		keysPerReader := readSpan / readWorkers
+		for r := 0; r < readWorkers; r++ {
+			start := r * keysPerReader
+			end := start + keysPerReader
+			if r == readWorkers-1 {
+				end = readSpan
+			}
+			go func(rid, s, e int) {
+				defer wg.Done()
+				for i := s; i < e; i++ {
+					key := fmt.Sprintf("key%d", i)
+					val, found, expired := pc.Get(key)
+					if !found {
+						panic("key not found")
+					}
+					if expired {
+						panic("key expired")
+					}
+					if string(val) != fmt.Sprintf("value%d", i) {
+						panic("value mismatch")
+					}
+				}
+			}(r, start, end)
+		}
+	}
 
-	// Wait for all workers to complete
 	wg.Wait()
-
-	elapsed := time.Since(startTime)
-	printFinalResults(metrics, elapsed)
 }
 
-func worker(cache *internal.WrapCache, config LoadTestConfig, metrics *LoadTestMetrics, endTime time.Time, wg *sync.WaitGroup, workerID int) {
-	defer wg.Done()
+// 	var (
+// 		mountPoint string
+// 		writers    int
+// 		readers    int
+// 		putCount   int64
+// 		getCount   int64
+// 		valSize    int
+// 		logEvery   time.Duration
+// 	)
+// 	flag.StringVar(&mountPoint, "mount", "/tmp/ssd-cache", "data directory for shard files")
+// 	flag.IntVar(&writers, "writers", 4, "number of writer goroutines")
+// 	flag.IntVar(&readers, "readers", 8, "number of reader goroutines")
+// 	flag.Int64Var(&putCount, "puts", 100_000_000, "total puts")
+// 	flag.Int64Var(&getCount, "gets", 500_000_000, "total gets")
+// 	flag.IntVar(&valSize, "valsize", 64, "value size in bytes")
+// 	flag.DurationVar(&logEvery, "log-every", 5*time.Second, "progress log interval")
+// 	flag.Parse()
 
-	rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
-	value := make([]byte, config.ValueSizeBytes)
-	for i := range value {
-		value[i] = byte(rng.Intn(256))
-	}
+// 	runtime.GOMAXPROCS(runtime.NumCPU())
+// 	debug.SetGCPercent(100)
 
-	for time.Now().Before(endTime) {
-		// Generate probabilistic key
-		keyID := rng.Intn(config.KeyRange)
-		key := fmt.Sprintf("key_%d", keyID)
+// 	cfg := cachepkg.WrapCacheConfig{
+// 		NumShards:             2,
+// 		KeysPerShard:          50_000_000,
+// 		FileSize:              5 * 1024 * 1024 * 1024, // 5G
+// 		MemtableSize:          5 * 1024 * 1024,        // 5MB
+// 		ReWriteScoreThreshold: 0.8,
+// 		GridSearchEpsilon:     0.0001,
+// 		SampleDuration:        30 * time.Second,
+// 	}
 
-		// Decide operation type based on write ratio
-		if rng.Float64() < config.WriteRatio {
-			// Write operation
-			start := time.Now()
-			err := cache.Put(key, value, config.ExpTime)
-			latency := time.Since(start).Nanoseconds()
+// 	pc, err := cachepkg.NewPerCoreWrapCache(cfg, mountPoint, false)
+// 	if err != nil {
+// 		panic(err)
+// 	}
 
-			if err != nil {
-				log.Error().Msgf("Write error for key %s: %v", key, err)
-			} else {
-				atomic.AddInt64(&metrics.totalWrites, 1)
-				atomic.AddInt64(&metrics.writeLatencyNs, latency)
-			}
-		} else {
-			// Read operation
-			start := time.Now()
-			_, found, expired := cache.Get(key)
-			latency := time.Since(start).Nanoseconds()
+// 	// Metrics
+// 	var putDone int64
+// 	var getDone int64
+// 	var putBytes int64
+// 	var getBytes int64
+// 	var getHits int64
 
-			atomic.AddInt64(&metrics.totalReads, 1)
-			atomic.AddInt64(&metrics.readLatencyNs, latency)
+// 	// Payload generator (deterministic, small)
+// 	baseVal := make([]byte, valSize)
+// 	for i := range baseVal {
+// 		baseVal[i] = byte(i)
+// 	}
 
-			if found && !expired {
-				atomic.AddInt64(&metrics.totalHits, 1)
-			} else {
-				atomic.AddInt64(&metrics.totalMisses, 1)
-			}
-		}
-	}
-}
+// 	// Writer workers
+// 	var wg sync.WaitGroup
+// 	start := time.Now()
 
-func printProgress(metrics *LoadTestMetrics, elapsed time.Duration) {
-	reads := atomic.LoadInt64(&metrics.totalReads)
-	writes := atomic.LoadInt64(&metrics.totalWrites)
-	hits := atomic.LoadInt64(&metrics.totalHits)
+// 	wg.Add(writers)
+// 	for w := 0; w < writers; w++ {
+// 		go func(id int) {
+// 			defer wg.Done()
+// 			// Interleave ranges per worker to avoid contention on counters
+// 			for i := int64(id); i < putCount; i += int64(writers) {
+// 				key := fmt.Sprintf("key_%d", i)
+// 				if err := pc.Put(key, baseVal, 0); err == nil {
+// 					atomic.AddInt64(&putDone, 1)
+// 					atomic.AddInt64(&putBytes, int64(len(baseVal)))
+// 				}
+// 			}
+// 		}(w)
+// 	}
 
-	total := reads + writes
-	if total == 0 {
-		return
-	}
+// 	// Reader workers
+// 	wg.Add(readers)
+// 	for r := 0; r < readers; r++ {
+// 		go func(id int) {
+// 			defer wg.Done()
+// 			// Spread key space; avoid keeping keys in memory
+// 			// Readers probe uniformly in [0, putCount)
+// 			rnd := newXorShift64(uint64(0x9e3779b97f4a7c15) + uint64(id))
+// 			for i := int64(id); i < getCount; i += int64(readers) {
+// 				k := int64(rnd.next() % uint64(putCount))
+// 				key := fmt.Sprintf("key_%d", k)
+// 				val, found, expired := pc.Get(key)
+// 				if found && !expired {
+// 					atomic.AddInt64(&getHits, 1)
+// 					atomic.AddInt64(&getBytes, int64(len(val)))
+// 				}
+// 				atomic.AddInt64(&getDone, 1)
+// 			}
+// 		}(r)
+// 	}
 
-	opsPerSec := float64(total) / elapsed.Seconds()
-	hitRate := float64(hits) / float64(reads) * 100
+// 	// Progress logger
+// 	doneCh := make(chan struct{})
+// 	go func() {
+// 		ticker := time.NewTicker(logEvery)
+// 		defer ticker.Stop()
+// 		for {
+// 			select {
+// 			case <-ticker.C:
+// 				elapsed := time.Since(start)
+// 				pd := atomic.LoadInt64(&putDone)
+// 				gd := atomic.LoadInt64(&getDone)
+// 				pb := atomic.LoadInt64(&putBytes)
+// 				gb := atomic.LoadInt64(&getBytes)
+// 				gh := atomic.LoadInt64(&getHits)
+// 				putNsOp := float64(0)
+// 				getNsOp := float64(0)
+// 				if pd > 0 {
+// 					putNsOp = float64(elapsed.Nanoseconds()) / float64(pd)
+// 				}
+// 				if gd > 0 {
+// 					getNsOp = float64(elapsed.Nanoseconds()) / float64(gd)
+// 				}
+// 				sec := elapsed.Seconds()
+// 				putBps := float64(pb) / sec
+// 				getBps := float64(gb) / sec
+// 				hitRate := float64(0)
+// 				if gd > 0 {
+// 					hitRate = float64(gh) / float64(gd)
+// 				}
+// 				fmt.Printf("prog: puts=%d gets=%d hitRate=%.4f put_ns/op=%.0f get_ns/op=%.0f put_MBps=%.2f get_MBps=%.2f\n",
+// 					pd, gd, hitRate, putNsOp, getNsOp, putBps/1e6, getBps/1e6)
+// 			case <-doneCh:
+// 				return
+// 			}
+// 		}
+// 	}()
 
-	log.Info().Msgf("Progress [%v]: Total ops: %d, Ops/sec: %.2f, Reads: %d, Writes: %d, Hit rate: %.2f%%",
-		elapsed.Truncate(time.Second), total, opsPerSec, reads, writes, hitRate)
-}
+// 	wg.Wait()
+// 	close(doneCh)
 
-func printFinalResults(metrics *LoadTestMetrics, elapsed time.Duration) {
-	reads := atomic.LoadInt64(&metrics.totalReads)
-	writes := atomic.LoadInt64(&metrics.totalWrites)
-	hits := atomic.LoadInt64(&metrics.totalHits)
-	misses := atomic.LoadInt64(&metrics.totalMisses)
-	readLatencyNs := atomic.LoadInt64(&metrics.readLatencyNs)
-	writeLatencyNs := atomic.LoadInt64(&metrics.writeLatencyNs)
+// 	elapsed := time.Since(start)
+// 	pd := atomic.LoadInt64(&putDone)
+// 	gd := atomic.LoadInt64(&getDone)
+// 	pb := atomic.LoadInt64(&putBytes)
+// 	gb := atomic.LoadInt64(&getBytes)
+// 	gh := atomic.LoadInt64(&getHits)
+// 	putNsOp := float64(0)
+// 	getNsOp := float64(0)
+// 	if pd > 0 {
+// 		putNsOp = float64(elapsed.Nanoseconds()) / float64(pd)
+// 	}
+// 	if gd > 0 {
+// 		getNsOp = float64(elapsed.Nanoseconds()) / float64(gd)
+// 	}
+// 	sec := elapsed.Seconds()
+// 	putBps := float64(pb) / sec
+// 	getBps := float64(gb) / sec
+// 	hitRate := float64(0)
+// 	if gd > 0 {
+// 		hitRate = float64(gh) / float64(gd)
+// 	}
+// 	fmt.Printf("done: took=%s puts=%d gets=%d hitRate=%.4f put_ns/op=%.0f get_ns/op=%.0f put_MBps=%.2f get_MBps=%.2f\n",
+// 		elapsed.String(), pd, gd, hitRate, putNsOp, getNsOp, putBps/1e6, getBps/1e6)
+// }
 
-	total := reads + writes
+// // Simple lock-free PRNG for readers
+// type xorShift64 struct{ x uint64 }
 
-	fmt.Printf("\n%s\n", strings.Repeat("=", 60))
-	fmt.Println("LOAD TEST RESULTS")
-	fmt.Printf("%s\n", strings.Repeat("=", 60))
-	fmt.Printf("Test Duration: %v\n", elapsed.Truncate(time.Millisecond))
-	fmt.Printf("Total Operations: %d\n", total)
-	fmt.Printf("Operations/sec: %.2f\n", float64(total)/elapsed.Seconds())
-	fmt.Println()
-
-	fmt.Printf("Read Operations: %d\n", reads)
-	fmt.Printf("Write Operations: %d\n", writes)
-	fmt.Printf("Cache Hits: %d\n", hits)
-	fmt.Printf("Cache Misses: %d\n", misses)
-
-	if reads > 0 {
-		hitRate := float64(hits) / float64(reads) * 100
-		avgReadLatency := time.Duration(readLatencyNs / reads)
-		fmt.Printf("Hit Rate: %.2f%%\n", hitRate)
-		fmt.Printf("Average Read Latency: %v\n", avgReadLatency)
-	}
-
-	if writes > 0 {
-		avgWriteLatency := time.Duration(writeLatencyNs / writes)
-		fmt.Printf("Average Write Latency: %v\n", avgWriteLatency)
-	}
-
-	fmt.Printf("%s\n", strings.Repeat("=", 60))
-}
+// func newXorShift64(seed uint64) *xorShift64 {
+// 	if seed == 0 {
+// 		seed = 1
+// 	}
+// 	return &xorShift64{x: seed}
+// }
+// func (r *xorShift64) next() uint64 {
+// 	x := r.x
+// 	x ^= x << 13
+// 	x ^= x >> 7
+// 	x ^= x << 17
+// 	r.x = x
+// 	return x
+// }

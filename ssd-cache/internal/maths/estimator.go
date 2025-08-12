@@ -172,3 +172,7 @@ func (g *GridSearchEstimator) RestartGridSearch() {
 	g.StartTime = time.Now()
 	g.bestHitRate = 0
 }
+
+func (g *GridSearchEstimator) IsGridSearchActive() bool {
+	return !g.stopGridSearch
+}
