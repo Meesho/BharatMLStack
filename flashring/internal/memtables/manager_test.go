@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Meesho/BharatMLStack/ssd-cache/internal/fs"
+	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
 )
 
 // Helper function to create a mock file for testing

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/Meesho/BharatMLStack/ssd-cache/internal/pools"
+	"github.com/Meesho/BharatMLStack/flashring/internal/pools"
 	"github.com/rs/zerolog/log"
 )
 

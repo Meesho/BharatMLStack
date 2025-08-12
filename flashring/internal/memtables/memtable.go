@@ -3,7 +3,7 @@ package memtables
 import (
 	"errors"
 
-	"github.com/Meesho/BharatMLStack/ssd-cache/internal/fs"
+	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
 	"github.com/rs/zerolog/log"
 )
 

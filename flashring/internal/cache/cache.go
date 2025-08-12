@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Meesho/BharatMLStack/ssd-cache/internal/maths"
-	filecache "github.com/Meesho/BharatMLStack/ssd-cache/internal/shard"
+	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
+	filecache "github.com/Meesho/BharatMLStack/flashring/internal/shard"
 	"github.com/cespare/xxhash/v2"
 	"github.com/rs/zerolog/log"
 )

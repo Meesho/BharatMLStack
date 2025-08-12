@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Meesho/BharatMLStack/ssd-cache/internal/fs"
+	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
 )
 
 const (

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Meesho/BharatMLStack/ssd-cache/internal/maths"
+	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
 )
 
 var (
