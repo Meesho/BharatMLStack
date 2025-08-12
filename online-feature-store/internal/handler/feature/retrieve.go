@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/quantization"
 
@@ -44,20 +46,22 @@ type FGData struct {
 }
 
 type RetrieveHandler struct {
-	config      config.Manager
-	imcProvider provider.CacheProvider
-	dcProvider  provider.CacheProvider
-	dbProvider  provider.StoreProvider
+	config           config.Manager
+	imcProvider      provider.CacheProvider
+	dcProvider       provider.CacheProvider
+	dbProvider       provider.StoreProvider
+	p2pCacheProvider provider.CacheProvider
 }
 
 func InitRetrieveHandler(configManager config.Manager) *RetrieveHandler {
 	if frHandler == nil {
 		frOnce.Do(func() {
 			frHandler = &RetrieveHandler{
-				config:      configManager,
-				imcProvider: provider.InMemoryCacheProviderImpl,
-				dcProvider:  provider.DistributedCacheProviderImpl,
-				dbProvider:  provider.StorageProviderImpl,
+				config:           configManager,
+				imcProvider:      provider.InMemoryCacheProviderImpl,
+				dcProvider:       provider.DistributedCacheProviderImpl,
+				dbProvider:       provider.StorageProviderImpl,
+				p2pCacheProvider: provider.P2PCacheProviderImpl,
 			}
 		})
 	}
@@ -95,6 +99,8 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 	reqDistCachedFGIds := retrieveData.ReqDistCachedFGIds
 	reqDbFGIds := retrieveData.ReqDbFGIds
 	allDistFGIds := retrieveData.AllDistCachedFGIds
+
+	isP2PEnabled := h.isP2PCacheEnabled(retrieveData.EntityLabel)
 
 	if ReqInMemEmpty && ReqDistEmpty {
 		_, err = h.retrieveFromDB(allKeys, retrieveData, reqDbFGIds, fgDataChan)
@@ -137,7 +143,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		}
 		return retrieveData.Result, nil
 	} else if !ReqInMemEmpty && ReqDistEmpty {
-		missingInMemKeys, err := h.retrieveFromInMemoryCache(allKeys, retrieveData, retrieveData.ReqInMemCachedFGIds, fgDataChan)
+		missingInMemKeys, err := h.retrieveFromInMemoryCache(allKeys, retrieveData, retrieveData.ReqInMemCachedFGIds, fgDataChan, isP2PEnabled)
 		if err != nil {
 			h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
 			return nil, err
@@ -165,12 +171,12 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 			return nil, err
 		}
 		if len(missingInMemKeys) > 0 {
-			go h.persistToInMemoryCache(retrieveData.EntityLabel, retrieveData, retrieveData.ReqInMemCachedFGIds, missingInMemKeys)
+			go h.persistToInMemoryCache(retrieveData.EntityLabel, retrieveData, retrieveData.ReqInMemCachedFGIds, missingInMemKeys, isP2PEnabled)
 		}
 		return retrieveData.Result, nil
 	} else if !ReqInMemEmpty && !ReqDistEmpty {
 		reqDbFGIdsExists := !reqDbFGIds.IsEmpty()
-		missingInMemKeys, err := h.retrieveFromInMemoryCache(allKeys, retrieveData, retrieveData.ReqInMemCachedFGIds, fgDataChan)
+		missingInMemKeys, err := h.retrieveFromInMemoryCache(allKeys, retrieveData, retrieveData.ReqInMemCachedFGIds, fgDataChan, isP2PEnabled)
 		if err != nil {
 			h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
 			return nil, err
@@ -231,7 +237,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 			return nil, err
 		}
 		if len(missingInMemKeys) > 0 {
-			go h.persistToInMemoryCache(retrieveData.EntityLabel, retrieveData, retrieveData.ReqInMemCachedFGIds, missingInMemKeys)
+			go h.persistToInMemoryCache(retrieveData.EntityLabel, retrieveData, retrieveData.ReqInMemCachedFGIds, missingInMemKeys, isP2PEnabled)
 		}
 		if len(missingDistKeys) > 0 {
 			go h.persistToDistributedCache(retrieveData.EntityLabel, retrieveData, allDistFGIds, missingDistKeys)
@@ -244,7 +250,19 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 	}
 }
 
-func (h *RetrieveHandler) retrieveFromInMemoryCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int], fgDataChan chan *FGData) ([]*retrieve.Keys, error) {
+func (h *RetrieveHandler) isP2PCacheEnabled(entityLabel string) bool {
+	if h.p2pCacheProvider == nil {
+		return false
+	}
+	// If cache is setup, then enable based on percentage
+	return rand.Intn(100) < h.config.GetP2PEnabledPercentage()
+}
+
+func (h *RetrieveHandler) retrieveFromInMemoryCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int], fgDataChan chan *FGData, isP2PEnabled bool) ([]*retrieve.Keys, error) {
+	// TODO: Remove once fully scaled
+	if isP2PEnabled {
+		return h.retrieveFromP2PCache(keys, retrieveData, fgIds, fgDataChan)
+	}
 	entityLabel := retrieveData.EntityLabel
 	cache, err := h.imcProvider.GetCache(entityLabel)
 	if err != nil {
@@ -274,6 +292,53 @@ func (h *RetrieveHandler) retrieveFromInMemoryCache(keys []*retrieve.Keys, retri
 			missingDataKeys = append(missingDataKeys, key)
 		}
 	}
+	return missingDataKeys, nil
+}
+
+func (h *RetrieveHandler) retrieveFromP2PCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int], fgDataChan chan *FGData) ([]*retrieve.Keys, error) {
+	entityLabel := retrieveData.EntityLabel
+	metric.Count("feature.retrieve.cache.requests.total", 1, []string{"entity_name", entityLabel, "cache_type", "p2p"})
+
+	startTime := time.Now()
+	log.Debug().Msgf("Retrieving features from P2P cache for keys %v", keys)
+
+	cache, err := h.p2pCacheProvider.GetCache(entityLabel)
+	if err != nil {
+		return nil, err
+	}
+	metric.Count("feature.retrieve.cache.total", int64(len(keys)), []string{"entity_name", entityLabel, "cache_type", "p2p"})
+
+	cacheData, err := cache.MultiGetV2(entityLabel, keys)
+	log.Debug().Msgf("Retrieved features from P2P cache for keys %v, cacheData: %v", keys, cacheData)
+	if err != nil {
+		log.Error().Err(err).Msgf("Error while retrieving features from P2P cache for keys %v", keys)
+		return nil, err
+	}
+	missingDataKeys := make([]*retrieve.Keys, 0)
+	for i, key := range keys {
+		keyIdx := retrieveData.ReqKeyToIdx[getKeyString(key)]
+		serData := cacheData[i]
+		if len(serData) == 0 {
+			missingDataKeys = append(missingDataKeys, key)
+			continue
+		}
+		csdb, _ := blocks.CreateCSDBForInMemory(serData)
+		fgIdToDDB, _ := csdb.GetDeserializedPSDBForFGIds(retrieveData.ReqInMemCachedFGIds)
+		if fgIdToDDB != nil {
+			fgDataChan <- &FGData{
+				data:    retrieveData,
+				fgToDDB: fgIdToDDB,
+				keyIdx:  keyIdx,
+				opClose: false,
+			}
+		} else {
+			missingDataKeys = append(missingDataKeys, key)
+		}
+	}
+	metric.Count("feature.retrieve.cache.hit", int64(len(keys)-len(missingDataKeys)), []string{"entity_name", entityLabel, "cache_type", "p2p"})
+	metric.Count("feature.retrieve.cache.miss", int64(len(missingDataKeys)), []string{"entity_name", entityLabel, "cache_type", "p2p"})
+	log.Debug().Msgf("Missing data keys from P2P cache: %v", missingDataKeys)
+	metric.Timing("feature.retrieve.cache.latency", time.Since(startTime), []string{"entity_name", entityLabel, "cache_type", "p2p"})
 	return missingDataKeys, nil
 }
 
@@ -766,11 +831,13 @@ func (h *RetrieveHandler) closeFeatureDataChannel(fgDataChan chan *FGData, retri
 	close(fgDataChan)
 }
 
-func (h *RetrieveHandler) persistToCache(entityLabel string, retrieveData *RetrieveData, fgIds ds.Set[int], missingKeys []*retrieve.Keys, isDistributed bool) {
+func (h *RetrieveHandler) persistToCache(entityLabel string, retrieveData *RetrieveData, fgIds ds.Set[int], missingKeys []*retrieve.Keys, isDistributed bool, isP2PEnabled bool) {
 	var cache caches.Cache
 	var err error
 
-	if isDistributed {
+	if isP2PEnabled {
+		cache, err = h.p2pCacheProvider.GetCache(entityLabel)
+	} else if isDistributed {
 		cache, err = h.dcProvider.GetCache(entityLabel)
 	} else {
 		cache, err = h.imcProvider.GetCache(entityLabel)
@@ -825,14 +892,14 @@ func (h *RetrieveHandler) persistToCache(entityLabel string, retrieveData *Retri
 	}
 }
 
-func (h *RetrieveHandler) persistToInMemoryCache(entityLabel string, retrieveData *RetrieveData, fgIds ds.Set[int], missingInMemKeys []*retrieve.Keys) {
+func (h *RetrieveHandler) persistToInMemoryCache(entityLabel string, retrieveData *RetrieveData, fgIds ds.Set[int], missingInMemKeys []*retrieve.Keys, isP2PEnabled bool) {
 	log.Debug().Msgf("Persisting to in memory cache for entity %s, fgIds %v, missingInMemKeys %v", entityLabel, fgIds, missingInMemKeys)
-	h.persistToCache(entityLabel, retrieveData, fgIds, missingInMemKeys, false)
+	h.persistToCache(entityLabel, retrieveData, fgIds, missingInMemKeys, false, isP2PEnabled)
 }
 
 func (h *RetrieveHandler) persistToDistributedCache(entityLabel string, retrieveData *RetrieveData, fgIds ds.Set[int], missingDistKeys []*retrieve.Keys) {
 	log.Debug().Msgf("Persisting to distributed cache for entity %s, fgIds %v, missingDistKeys %v", entityLabel, fgIds, missingDistKeys)
-	h.persistToCache(entityLabel, retrieveData, fgIds, missingDistKeys, true)
+	h.persistToCache(entityLabel, retrieveData, fgIds, missingDistKeys, true, false)
 }
 
 // ... existing code ...

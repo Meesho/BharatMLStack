@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.6
 // 	protoc        v5.29.3
-// source: pkg/proto/p2p.proto
+// source: p2p.proto
 
 package p2p
 
@@ -21,27 +21,28 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type Empty struct {
+type Query struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	EntityLabel   string                 `protobuf:"bytes,1,opt,name=entity_label,json=entityLabel,proto3" json:"entity_label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Empty) Reset() {
-	*x = Empty{}
-	mi := &file_pkg_proto_p2p_proto_msgTypes[0]
+func (x *Query) Reset() {
+	*x = Query{}
+	mi := &file_p2p_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Empty) String() string {
+func (x *Query) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Empty) ProtoMessage() {}
+func (*Query) ProtoMessage() {}
 
-func (x *Empty) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_proto_p2p_proto_msgTypes[0]
+func (x *Query) ProtoReflect() protoreflect.Message {
+	mi := &file_p2p_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -52,9 +53,112 @@ func (x *Empty) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Empty.ProtoReflect.Descriptor instead.
-func (*Empty) Descriptor() ([]byte, []int) {
-	return file_pkg_proto_p2p_proto_rawDescGZIP(), []int{0}
+// Deprecated: Use Query.ProtoReflect.Descriptor instead.
+func (*Query) Descriptor() ([]byte, []int) {
+	return file_p2p_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Query) GetEntityLabel() string {
+	if x != nil {
+		return x.EntityLabel
+	}
+	return ""
+}
+
+type CacheQuery struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EntityLabel   string                 `protobuf:"bytes,1,opt,name=entity_label,json=entityLabel,proto3" json:"entity_label,omitempty"`
+	Keys          []string               `protobuf:"bytes,2,rep,name=keys,proto3" json:"keys,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CacheQuery) Reset() {
+	*x = CacheQuery{}
+	mi := &file_p2p_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CacheQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CacheQuery) ProtoMessage() {}
+
+func (x *CacheQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_p2p_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CacheQuery.ProtoReflect.Descriptor instead.
+func (*CacheQuery) Descriptor() ([]byte, []int) {
+	return file_p2p_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *CacheQuery) GetEntityLabel() string {
+	if x != nil {
+		return x.EntityLabel
+	}
+	return ""
+}
+
+func (x *CacheQuery) GetKeys() []string {
+	if x != nil {
+		return x.Keys
+	}
+	return nil
+}
+
+type CacheResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyValue      map[string]string      `protobuf:"bytes,1,rep,name=keyValue,proto3" json:"keyValue,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CacheResponse) Reset() {
+	*x = CacheResponse{}
+	mi := &file_p2p_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CacheResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CacheResponse) ProtoMessage() {}
+
+func (x *CacheResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_p2p_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CacheResponse.ProtoReflect.Descriptor instead.
+func (*CacheResponse) Descriptor() ([]byte, []int) {
+	return file_p2p_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CacheResponse) GetKeyValue() map[string]string {
+	if x != nil {
+		return x.KeyValue
+	}
+	return nil
 }
 
 type ClusterTopology struct {
@@ -67,7 +171,7 @@ type ClusterTopology struct {
 
 func (x *ClusterTopology) Reset() {
 	*x = ClusterTopology{}
-	mi := &file_pkg_proto_p2p_proto_msgTypes[1]
+	mi := &file_p2p_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -79,7 +183,7 @@ func (x *ClusterTopology) String() string {
 func (*ClusterTopology) ProtoMessage() {}
 
 func (x *ClusterTopology) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_proto_p2p_proto_msgTypes[1]
+	mi := &file_p2p_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -92,7 +196,7 @@ func (x *ClusterTopology) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClusterTopology.ProtoReflect.Descriptor instead.
 func (*ClusterTopology) Descriptor() ([]byte, []int) {
-	return file_pkg_proto_p2p_proto_rawDescGZIP(), []int{1}
+	return file_p2p_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ClusterTopology) GetRingTopology() map[uint32]string {
@@ -119,7 +223,7 @@ type PodData struct {
 
 func (x *PodData) Reset() {
 	*x = PodData{}
-	mi := &file_pkg_proto_p2p_proto_msgTypes[2]
+	mi := &file_p2p_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -131,7 +235,7 @@ func (x *PodData) String() string {
 func (*PodData) ProtoMessage() {}
 
 func (x *PodData) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_proto_p2p_proto_msgTypes[2]
+	mi := &file_p2p_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -144,7 +248,7 @@ func (x *PodData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PodData.ProtoReflect.Descriptor instead.
 func (*PodData) Descriptor() ([]byte, []int) {
-	return file_pkg_proto_p2p_proto_rawDescGZIP(), []int{2}
+	return file_p2p_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *PodData) GetNodeIp() string {
@@ -161,12 +265,22 @@ func (x *PodData) GetPodIp() string {
 	return ""
 }
 
-var File_pkg_proto_p2p_proto protoreflect.FileDescriptor
+var File_p2p_proto protoreflect.FileDescriptor
 
-const file_pkg_proto_p2p_proto_rawDesc = "" +
+const file_p2p_proto_rawDesc = "" +
 	"\n" +
-	"\x13pkg/proto/p2p.proto\x12\x03p2p\"\a\n" +
-	"\x05Empty\"\xc3\x02\n" +
+	"\tp2p.proto\x12\x03p2p\"*\n" +
+	"\x05Query\x12!\n" +
+	"\fentity_label\x18\x01 \x01(\tR\ventityLabel\"C\n" +
+	"\n" +
+	"CacheQuery\x12!\n" +
+	"\fentity_label\x18\x01 \x01(\tR\ventityLabel\x12\x12\n" +
+	"\x04keys\x18\x02 \x03(\tR\x04keys\"\x8a\x01\n" +
+	"\rCacheResponse\x12<\n" +
+	"\bkeyValue\x18\x01 \x03(\v2 .p2p.CacheResponse.KeyValueEntryR\bkeyValue\x1a;\n" +
+	"\rKeyValueEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc3\x02\n" +
 	"\x0fClusterTopology\x12K\n" +
 	"\rring_topology\x18\x01 \x03(\v2&.p2p.ClusterTopology.RingTopologyEntryR\fringTopology\x12Q\n" +
 	"\x0fcluster_members\x18\x02 \x03(\v2(.p2p.ClusterTopology.ClusterMembersEntryR\x0eclusterMembers\x1a?\n" +
@@ -178,64 +292,71 @@ const file_pkg_proto_p2p_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\f.p2p.PodDataR\x05value:\x028\x01\"9\n" +
 	"\aPodData\x12\x17\n" +
 	"\anode_ip\x18\x01 \x01(\tR\x06nodeIp\x12\x15\n" +
-	"\x06pod_ip\x18\x02 \x01(\tR\x05podIp2J\n" +
+	"\x06pod_ip\x18\x02 \x01(\tR\x05podIp2\x86\x01\n" +
 	"\x0fP2PCacheService\x127\n" +
 	"\x11GetClusterConfigs\x12\n" +
-	".p2p.Empty\x1a\x14.p2p.ClusterTopology\"\x00B\bZ\x06../p2pb\x06proto3"
+	".p2p.Query\x1a\x14.p2p.ClusterTopology\"\x00\x12:\n" +
+	"\x11GetP2PCacheValues\x12\x0f.p2p.CacheQuery\x1a\x12.p2p.CacheResponse\"\x00B\bZ\x06../p2pb\x06proto3"
 
 var (
-	file_pkg_proto_p2p_proto_rawDescOnce sync.Once
-	file_pkg_proto_p2p_proto_rawDescData []byte
+	file_p2p_proto_rawDescOnce sync.Once
+	file_p2p_proto_rawDescData []byte
 )
 
-func file_pkg_proto_p2p_proto_rawDescGZIP() []byte {
-	file_pkg_proto_p2p_proto_rawDescOnce.Do(func() {
-		file_pkg_proto_p2p_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_pkg_proto_p2p_proto_rawDesc), len(file_pkg_proto_p2p_proto_rawDesc)))
+func file_p2p_proto_rawDescGZIP() []byte {
+	file_p2p_proto_rawDescOnce.Do(func() {
+		file_p2p_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_p2p_proto_rawDesc), len(file_p2p_proto_rawDesc)))
 	})
-	return file_pkg_proto_p2p_proto_rawDescData
+	return file_p2p_proto_rawDescData
 }
 
-var file_pkg_proto_p2p_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
-var file_pkg_proto_p2p_proto_goTypes = []any{
-	(*Empty)(nil),           // 0: p2p.Empty
-	(*ClusterTopology)(nil), // 1: p2p.ClusterTopology
-	(*PodData)(nil),         // 2: p2p.PodData
-	nil,                     // 3: p2p.ClusterTopology.RingTopologyEntry
-	nil,                     // 4: p2p.ClusterTopology.ClusterMembersEntry
+var file_p2p_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_p2p_proto_goTypes = []any{
+	(*Query)(nil),           // 0: p2p.Query
+	(*CacheQuery)(nil),      // 1: p2p.CacheQuery
+	(*CacheResponse)(nil),   // 2: p2p.CacheResponse
+	(*ClusterTopology)(nil), // 3: p2p.ClusterTopology
+	(*PodData)(nil),         // 4: p2p.PodData
+	nil,                     // 5: p2p.CacheResponse.KeyValueEntry
+	nil,                     // 6: p2p.ClusterTopology.RingTopologyEntry
+	nil,                     // 7: p2p.ClusterTopology.ClusterMembersEntry
 }
-var file_pkg_proto_p2p_proto_depIdxs = []int32{
-	3, // 0: p2p.ClusterTopology.ring_topology:type_name -> p2p.ClusterTopology.RingTopologyEntry
-	4, // 1: p2p.ClusterTopology.cluster_members:type_name -> p2p.ClusterTopology.ClusterMembersEntry
-	2, // 2: p2p.ClusterTopology.ClusterMembersEntry.value:type_name -> p2p.PodData
-	0, // 3: p2p.P2PCacheService.GetClusterConfigs:input_type -> p2p.Empty
-	1, // 4: p2p.P2PCacheService.GetClusterConfigs:output_type -> p2p.ClusterTopology
-	4, // [4:5] is the sub-list for method output_type
-	3, // [3:4] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+var file_p2p_proto_depIdxs = []int32{
+	5, // 0: p2p.CacheResponse.keyValue:type_name -> p2p.CacheResponse.KeyValueEntry
+	6, // 1: p2p.ClusterTopology.ring_topology:type_name -> p2p.ClusterTopology.RingTopologyEntry
+	7, // 2: p2p.ClusterTopology.cluster_members:type_name -> p2p.ClusterTopology.ClusterMembersEntry
+	4, // 3: p2p.ClusterTopology.ClusterMembersEntry.value:type_name -> p2p.PodData
+	0, // 4: p2p.P2PCacheService.GetClusterConfigs:input_type -> p2p.Query
+	1, // 5: p2p.P2PCacheService.GetP2PCacheValues:input_type -> p2p.CacheQuery
+	3, // 6: p2p.P2PCacheService.GetClusterConfigs:output_type -> p2p.ClusterTopology
+	2, // 7: p2p.P2PCacheService.GetP2PCacheValues:output_type -> p2p.CacheResponse
+	6, // [6:8] is the sub-list for method output_type
+	4, // [4:6] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
-func init() { file_pkg_proto_p2p_proto_init() }
-func file_pkg_proto_p2p_proto_init() {
-	if File_pkg_proto_p2p_proto != nil {
+func init() { file_p2p_proto_init() }
+func file_p2p_proto_init() {
+	if File_p2p_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_proto_p2p_proto_rawDesc), len(file_pkg_proto_p2p_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_p2p_proto_rawDesc), len(file_p2p_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_pkg_proto_p2p_proto_goTypes,
-		DependencyIndexes: file_pkg_proto_p2p_proto_depIdxs,
-		MessageInfos:      file_pkg_proto_p2p_proto_msgTypes,
+		GoTypes:           file_p2p_proto_goTypes,
+		DependencyIndexes: file_p2p_proto_depIdxs,
+		MessageInfos:      file_p2p_proto_msgTypes,
 	}.Build()
-	File_pkg_proto_p2p_proto = out.File
-	file_pkg_proto_p2p_proto_goTypes = nil
-	file_pkg_proto_p2p_proto_depIdxs = nil
+	File_p2p_proto = out.File
+	file_p2p_proto_goTypes = nil
+	file_p2p_proto_depIdxs = nil
 }

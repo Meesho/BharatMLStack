@@ -111,8 +111,8 @@ services:
       - APP_NAME=onfs
       - APP_PORT=8089
       - AUTH_TOKEN=test
-      - POD_IP=127.0.0.1
-      - NODE_IP=127.0.0.1
+      - POD_IP=onfs-api-server
+      - NODE_IP=onfs-api-server
       - STORAGE_REDIS_STANDALONE_2_ADDR=redis:6379
       - STORAGE_REDIS_STANDALONE_2_DB=0
       - STORAGE_REDIS_STANDALONE_2_DISABLE_IDENTITY=true
@@ -144,9 +144,13 @@ services:
       - STORAGE_SCYLLA_1_PASSWORD=
       - STORAGE_SCYLLA_ACTIVE_CONFIG_IDS=1
       - P2P_CACHE_5_ENABLED=true
+      - P2P_CACHE_5_CLUSTER_NAME=onfs-cluster
       - P2P_CACHE_5_NAME=p2p-onfs
       - P2P_CACHE_5_OWN_PARTITION_SIZE_IN_BYTES=100000
       - P2P_CACHE_5_GLOBAL_SIZE_IN_BYTES=1000
+      - P2P_CACHE_5_GLOBAL_CACHE_TTL_IN_SECONDS=3600
+      - P2P_CACHE_5_NUM_CLIENTS=2
+      - P2P_CACHE_5_SERVER_PORT=8088
       - P2P_CACHE_ACTIVE_CONFIG_IDS=5
     networks:
       - onfs-network

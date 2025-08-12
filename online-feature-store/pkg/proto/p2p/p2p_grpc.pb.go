@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v5.29.3
-// source: pkg/proto/p2p.proto
+// source: p2p.proto
 
 package p2p
 
@@ -20,13 +20,15 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	P2PCacheService_GetClusterConfigs_FullMethodName = "/p2p.P2PCacheService/GetClusterConfigs"
+	P2PCacheService_GetP2PCacheValues_FullMethodName = "/p2p.P2PCacheService/GetP2PCacheValues"
 )
 
 // P2PCacheServiceClient is the client API for P2PCacheService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type P2PCacheServiceClient interface {
-	GetClusterConfigs(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ClusterTopology, error)
+	GetClusterConfigs(ctx context.Context, in *Query, opts ...grpc.CallOption) (*ClusterTopology, error)
+	GetP2PCacheValues(ctx context.Context, in *CacheQuery, opts ...grpc.CallOption) (*CacheResponse, error)
 }
 
 type p2PCacheServiceClient struct {
@@ -37,10 +39,20 @@ func NewP2PCacheServiceClient(cc grpc.ClientConnInterface) P2PCacheServiceClient
 	return &p2PCacheServiceClient{cc}
 }
 
-func (c *p2PCacheServiceClient) GetClusterConfigs(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ClusterTopology, error) {
+func (c *p2PCacheServiceClient) GetClusterConfigs(ctx context.Context, in *Query, opts ...grpc.CallOption) (*ClusterTopology, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ClusterTopology)
 	err := c.cc.Invoke(ctx, P2PCacheService_GetClusterConfigs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *p2PCacheServiceClient) GetP2PCacheValues(ctx context.Context, in *CacheQuery, opts ...grpc.CallOption) (*CacheResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CacheResponse)
+	err := c.cc.Invoke(ctx, P2PCacheService_GetP2PCacheValues_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +63,8 @@ func (c *p2PCacheServiceClient) GetClusterConfigs(ctx context.Context, in *Empty
 // All implementations must embed UnimplementedP2PCacheServiceServer
 // for forward compatibility.
 type P2PCacheServiceServer interface {
-	GetClusterConfigs(context.Context, *Empty) (*ClusterTopology, error)
+	GetClusterConfigs(context.Context, *Query) (*ClusterTopology, error)
+	GetP2PCacheValues(context.Context, *CacheQuery) (*CacheResponse, error)
 	mustEmbedUnimplementedP2PCacheServiceServer()
 }
 
@@ -62,8 +75,11 @@ type P2PCacheServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedP2PCacheServiceServer struct{}
 
-func (UnimplementedP2PCacheServiceServer) GetClusterConfigs(context.Context, *Empty) (*ClusterTopology, error) {
+func (UnimplementedP2PCacheServiceServer) GetClusterConfigs(context.Context, *Query) (*ClusterTopology, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetClusterConfigs not implemented")
+}
+func (UnimplementedP2PCacheServiceServer) GetP2PCacheValues(context.Context, *CacheQuery) (*CacheResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetP2PCacheValues not implemented")
 }
 func (UnimplementedP2PCacheServiceServer) mustEmbedUnimplementedP2PCacheServiceServer() {}
 func (UnimplementedP2PCacheServiceServer) testEmbeddedByValue()                         {}
@@ -87,7 +103,7 @@ func RegisterP2PCacheServiceServer(s grpc.ServiceRegistrar, srv P2PCacheServiceS
 }
 
 func _P2PCacheService_GetClusterConfigs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
+	in := new(Query)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -99,7 +115,25 @@ func _P2PCacheService_GetClusterConfigs_Handler(srv interface{}, ctx context.Con
 		FullMethod: P2PCacheService_GetClusterConfigs_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(P2PCacheServiceServer).GetClusterConfigs(ctx, req.(*Empty))
+		return srv.(P2PCacheServiceServer).GetClusterConfigs(ctx, req.(*Query))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _P2PCacheService_GetP2PCacheValues_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CacheQuery)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(P2PCacheServiceServer).GetP2PCacheValues(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: P2PCacheService_GetP2PCacheValues_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(P2PCacheServiceServer).GetP2PCacheValues(ctx, req.(*CacheQuery))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -115,7 +149,11 @@ var P2PCacheService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetClusterConfigs",
 			Handler:    _P2PCacheService_GetClusterConfigs_Handler,
 		},
+		{
+			MethodName: "GetP2PCacheValues",
+			Handler:    _P2PCacheService_GetP2PCacheValues_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "pkg/proto/p2p.proto",
+	Metadata: "p2p.proto",
 }

@@ -36,17 +36,14 @@ type EtcdBasedClusterManager struct {
 	name           string
 }
 
-func NewEtcdBasedClusterManager(name string) *EtcdBasedClusterManager {
+func NewEtcdBasedClusterManager(clusterName string, name string) *EtcdBasedClusterManager {
 	if !viper.IsSet(envPodIP) || !viper.IsSet(envNodeIP) {
 		log.Panic().Msgf("%s or %s is not set", envPodIP, envNodeIP)
 	}
 	if !viper.IsSet(envEtcdServer) {
 		log.Panic().Msgf("%s is not set", envEtcdServer)
 	}
-	if !viper.IsSet(appName) {
-		log.Panic().Msgf("%s is not set", appName)
-	}
-	log.Debug().Msgf("Initializing cluster manager with pod IP %s and node IP %s", viper.GetString(envPodIP), viper.GetString(envNodeIP))
+	log.Debug().Msgf("Initializing cluster manager with cluster name %s and pod IP %s and node IP %s", clusterName, viper.GetString(envPodIP), viper.GetString(envNodeIP))
 
 	etcdServers := strings.Split(viper.GetString(envEtcdServer), ",")
 	var username, password string
@@ -67,7 +64,7 @@ func NewEtcdBasedClusterManager(name string) *EtcdBasedClusterManager {
 	clusterManager := &EtcdBasedClusterManager{
 		hashRing:     hashring.NewConsistentHashRing(),
 		conn:         conn,
-		etcdBasePath: fmt.Sprintf(configPathFmt, viper.GetString(appName), name),
+		etcdBasePath: fmt.Sprintf(configPathFmt, clusterName, name),
 		currentPodId: currentPodData.GetUniqueId(),
 		name:         name,
 	}
@@ -107,7 +104,7 @@ func (c *EtcdBasedClusterManager) loadClusterMembers() (int64, error) {
 			return 0, fmt.Errorf("failed to unmarshal pod data: %v", err)
 		}
 
-		c.addMember(string(kv.Key), podData)
+		c.addMember(c.getUniqueIdFromFullConfigKey(string(kv.Key)), podData)
 	}
 
 	return resp.Header.Revision, nil
@@ -129,6 +126,11 @@ func (c *EtcdBasedClusterManager) removeMember(key string) {
 	c.hashRing.RemoveNode(key)
 }
 
+func (c *EtcdBasedClusterManager) getUniqueIdFromFullConfigKey(key string) string {
+	parts := strings.Split(key, "/")
+	return parts[len(parts)-1]
+}
+
 func (c *EtcdBasedClusterManager) watchEvents(watchChan clientv3.WatchChan) {
 	for watchResp := range watchChan {
 		for _, event := range watchResp.Events {
@@ -141,10 +143,10 @@ func (c *EtcdBasedClusterManager) watchEvents(watchChan clientv3.WatchChan) {
 					log.Error().Err(err).Msgf("Failed to unmarshal updated pod data for key: %s with value: %s", key, string(event.Kv.Value))
 					continue
 				}
-				c.addMember(key, podData)
+				c.addMember(c.getUniqueIdFromFullConfigKey(key), podData)
 
 			case clientv3.EventTypeDelete:
-				c.removeMember(key)
+				c.removeMember(c.getUniqueIdFromFullConfigKey(key))
 			}
 			log.Debug().Msgf("Updated after eventType: %s for key: %s , cluster members: %v", event.Type, key, c.clusterMembers)
 		}
@@ -190,26 +192,17 @@ func (c *EtcdBasedClusterManager) joinCluster(podData PodData) error {
 	return nil
 }
 
-func (c *EtcdBasedClusterManager) LeaveCluster(podData PodData) error {
-	key := fmt.Sprintf("%s/%s", c.etcdBasePath, podData.GetUniqueId())
-	_, err := c.conn.Delete(context.Background(), key)
-	if err != nil {
-		return fmt.Errorf("failed to delete pod data from etcd: %v", err)
-	}
-	return nil
-}
-
-func (c *EtcdBasedClusterManager) GetKeyToPodIdMap(keys []string) (map[string]string, error) {
-	return c.hashRing.GetNodeMap(keys), nil
-}
-
-func (c *EtcdBasedClusterManager) GetPodIdToKeysMap(keys []string) (map[string][]string, error) {
-	keysToPodIdMap := c.hashRing.GetNodeMap(keys)
+func (c *EtcdBasedClusterManager) GetPodIdToKeysMap(keys []string) map[string][]string {
 	podIdToKeysMap := make(map[string][]string)
-	for key, podId := range keysToPodIdMap {
+	for _, key := range keys {
+		podId := c.GetPodIdForKey(key)
 		podIdToKeysMap[podId] = append(podIdToKeysMap[podId], key)
 	}
-	return podIdToKeysMap, nil
+	return podIdToKeysMap
+}
+
+func (c *EtcdBasedClusterManager) GetPodIdForKey(key string) string {
+	return c.hashRing.GetNodeForKey(key)
 }
 
 func (c *EtcdBasedClusterManager) GetCurrentPodId() string {
