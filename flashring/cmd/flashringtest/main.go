@@ -58,14 +58,12 @@ func main() {
 	str1kb = str1kb + "%d"
 
 	// Prepopulate for read-only or read-heavy workloads: 80% of total keys
-	if readWorkers > 0 && (writeWorkers == 0 || readWorkers >= int(1.2*float64(writeWorkers))) {
-		preN := int(float64(totalKeys) * 0.8)
-		for i := 0; i < preN; i++ {
-			key := fmt.Sprintf("key%d", i)
-			val := []byte(fmt.Sprintf(str1kb, i))
-			if err := pc.Put(key, val, uint64(time.Now().Unix()+3600)); err != nil {
-				panic(err)
-			}
+	preN := int(float64(totalKeys) * 0.8)
+	for i := 0; i < preN; i++ {
+		key := fmt.Sprintf("key%d", i)
+		val := []byte(fmt.Sprintf(str1kb, i))
+		if err := pc.Put(key, val, uint64(time.Now().Unix()+3600)); err != nil {
+			panic(err)
 		}
 	}
 
@@ -98,11 +96,7 @@ func main() {
 	// Spawn readers: each reader covers a disjoint partition
 	if readWorkers > 0 {
 		wg.Add(readWorkers)
-		readSpan := totalKeys
-		// If we prepopulated, constrain readers to prepopulated range
-		if writeWorkers == 0 || readWorkers >= int(1.2*float64(writeWorkers)) {
-			readSpan = int(float64(totalKeys) * 0.8)
-		}
+		readSpan := preN
 		keysPerReader := readSpan / readWorkers
 		for r := 0; r < readWorkers; r++ {
 			start := r * keysPerReader
