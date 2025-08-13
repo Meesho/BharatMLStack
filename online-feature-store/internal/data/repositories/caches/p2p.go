@@ -2,12 +2,19 @@ package caches
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/infra"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache/clustermanager"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
+	"github.com/rs/zerolog/log"
+)
+
+var (
+	p2pMetricUpdateInterval = 10 * time.Minute
 )
 
 type P2PCache struct {
@@ -22,6 +29,8 @@ func NewP2PCache(conn *infra.P2PCacheConnection) (Cache, error) {
 		return nil, err
 	}
 	configManager := config.Instance(config.DefaultVersion)
+
+	go publishP2PCacheMetric(conn.Client, meta["name"].(string))
 	return &P2PCache{
 		cache:     conn.Client,
 		cacheName: meta["name"].(string),
@@ -93,4 +102,18 @@ func (c *P2PCache) MultiSetV2(entityLabel string, bulkKeys []*retrieve.Keys, bul
 
 func (c *P2PCache) GetClusterTopology() clustermanager.ClusterTopology {
 	return c.cache.GetClusterTopology()
+}
+
+func publishP2PCacheMetric(cache *p2pcache.P2PCache, cacheName string) {
+	ticker := time.NewTicker(p2pMetricUpdateInterval)
+	defer func() {
+		ticker.Stop()
+		if r := recover(); r != nil {
+			log.Error().Msgf("Panic recovered in publishP2PCacheMetric: %v", r)
+			metric.Count("online-feature-store.p2p.panic.count", 1, []string{"cache_name", cacheName})
+		}
+	}()
+	for range ticker.C {
+		cache.PublishMetrics(cacheName)
+	}
 }

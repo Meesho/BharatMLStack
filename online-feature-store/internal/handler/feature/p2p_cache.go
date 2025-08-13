@@ -50,7 +50,7 @@ func (h *P2PCacheHandler) GetClusterConfigs(ctx context.Context, query *p2p.Quer
 	}, nil
 }
 
-func (h *P2PCacheHandler) GetP2PCacheValues(ctx context.Context, query *p2p.CacheQuery) (*p2p.CacheResponse, error) {
+func (h *P2PCacheHandler) GetP2PCacheValues(ctx context.Context, query *p2p.CacheQuery) (*p2p.CacheKeyValue, error) {
 	p2pCache, err := h.getP2PCacheForEntity(query.EntityLabel)
 	if err != nil {
 		log.Error().Err(err).Msgf("Error getting p2p cache for entity %s", query.EntityLabel)
@@ -71,8 +71,32 @@ func (h *P2PCacheHandler) GetP2PCacheValues(ctx context.Context, query *p2p.Cach
 	for i, key := range query.Keys {
 		responseMap[key] = string(response[i])
 	}
-	return &p2p.CacheResponse{
-		KeyValue: responseMap,
+	return &p2p.CacheKeyValue{
+		EntityLabel: query.EntityLabel,
+		KeyValue:    responseMap,
+	}, nil
+}
+
+func (h *P2PCacheHandler) SetP2PCacheValues(ctx context.Context, query *p2p.CacheKeyValue) (*p2p.CacheKeyValue, error) {
+	p2pCache, err := h.getP2PCacheForEntity(query.EntityLabel)
+	if err != nil {
+		log.Error().Err(err).Msgf("Error getting p2p cache for entity %s", query.EntityLabel)
+		return nil, err
+	}
+	keys := make([]*retrieve.Keys, 0)
+	for key := range query.KeyValue {
+		keys = append(keys, &retrieve.Keys{
+			Cols: []string{key},
+		})
+	}
+	values := make([][]byte, 0)
+	for _, key := range keys {
+		values = append(values, []byte(query.KeyValue[key.Cols[0]]))
+	}
+	p2pCache.MultiSetV2(query.EntityLabel, keys, values)
+	return &p2p.CacheKeyValue{
+		EntityLabel: query.EntityLabel,
+		KeyValue:    query.KeyValue,
 	}, nil
 }
 
