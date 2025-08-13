@@ -70,12 +70,12 @@ func (s *Server) handleGetDataPacket(c gnet.Conn, buf []byte) gnet.Action {
 
 	// Let the client know if the value is not found or if the response is too large
 	if err != nil {
-		metric.Count("p2p.cache.server.keys", 1, []string{"type", "miss"})
+		metric.Count("p2p.cache.server.keys", 1, []string{"reason", "miss"})
 		response = append(response, VALUE_NOT_FOUND_RESPONSE)
 	} else if len(value)+len(response) > MAX_PACKET_SIZE_IN_BYTES {
-		metric.Count("p2p.cache.server.keys", 1, []string{"type", "too_large"})
+		metric.Count("p2p.cache.server.keys", 1, []string{"reason", "too_large"})
 	} else {
-		metric.Count("p2p.cache.server.keys", 1, []string{"type", "hit"})
+		metric.Count("p2p.cache.server.keys", 1, []string{"reason", "hit"})
 		// TODO: Compress the value sent over network
 		response = append(response, value...)
 	}
