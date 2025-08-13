@@ -62,11 +62,11 @@ environment:
     as_min: 2
     as_max: 200
     minCanaryReplicas: 5
-    maxCanaryReplicas: 8
+    maxCanaryReplicas: 15
     cpu_limit: 12
     cpu_request: 9
-    memory_limit: 24G
-    memory_request: 18500M
+    memory_limit: 36G
+    memory_request: 26500M
     deploymentStrategy: canary
     appMetrics: true
     deployment_args: false
