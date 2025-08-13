@@ -160,7 +160,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 	}
 	if logStats {
 		go func() {
-			sleepDuration := 5 * time.Second
+			sleepDuration := 10 * time.Second
 			perShardPrevTotalGets := make([]uint64, config.NumShards)
 			perShardPrevTotalPuts := make([]uint64, config.NumShards)
 			for {
