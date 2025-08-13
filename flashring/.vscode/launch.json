@@ -6,11 +6,11 @@
     "configurations": [
 
         {
-            "name": "Cache",
+            "name": "Flashring",
             "type": "go",
             "request": "launch",
             "mode": "debug",
-            "program": "/home/a0d00kc/Desktop/BharatMLStack/ssd-cache/cmd/cachetest/main.go",
+            "program": "/home/a0d00kc/Desktop/BharatMLStack/flashring/cmd/flashringtest/main.go",
             "env": {
                 "GODEBUG": "asyncpreemptoff=1"
             }

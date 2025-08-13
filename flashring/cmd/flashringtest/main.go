@@ -24,13 +24,13 @@ func main() {
 		logStats     bool
 	)
 
-	flag.StringVar(&mountPoint, "mount", "/tmp/ssd-cache", "data directory for shard files")
-	flag.IntVar(&numShards, "shards", 1, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 50_000_000, "keys per shard")
-	flag.IntVar(&memtableMB, "memtable-mb", 10, "memtable size in MiB")
-	flag.IntVar(&fileSizeGB, "file-gb", 5, "file size in GiB per shard")
-	flag.IntVar(&readWorkers, "readers", 0, "number of read workers")
-	flag.IntVar(&writeWorkers, "writers", 1, "number of write workers")
+	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul", "data directory for shard files")
+	flag.IntVar(&numShards, "shards", 3, "number of shards")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 30_000_000, "keys per shard")
+	flag.IntVar(&memtableMB, "memtable-mb", 128, "memtable size in MiB")
+	flag.IntVar(&fileSizeGB, "file-gb", 50, "file size in GiB per shard")
+	flag.IntVar(&readWorkers, "readers", 20, "number of read workers")
+	flag.IntVar(&writeWorkers, "writers", 15, "number of write workers")
 	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
 	flag.BoolVar(&logStats, "log-stats", true, "periodically log cache stats")
 	flag.Parse()
@@ -55,7 +55,7 @@ func main() {
 	totalKeys := keysPerShard * numShards
 
 	// Prepopulate for read-only or read-heavy workloads: 80% of total keys
-	if readWorkers > 0 && (writeWorkers == 0 || readWorkers >= 2*writeWorkers) {
+	if readWorkers > 0 && (writeWorkers == 0 || readWorkers >= int(1.2*float64(writeWorkers))) {
 		preN := int(float64(totalKeys) * 0.8)
 		for i := 0; i < preN; i++ {
 			key := fmt.Sprintf("key%d", i)
@@ -97,7 +97,7 @@ func main() {
 		wg.Add(readWorkers)
 		readSpan := totalKeys
 		// If we prepopulated, constrain readers to prepopulated range
-		if writeWorkers == 0 || readWorkers >= 2*writeWorkers {
+		if writeWorkers == 0 || readWorkers >= int(1.2*float64(writeWorkers)) {
 			readSpan = int(float64(totalKeys) * 0.8)
 		}
 		keysPerReader := readSpan / readWorkers
