@@ -3,6 +3,7 @@
 package client
 
 import (
+	"fmt"
 	"net"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
@@ -15,16 +16,18 @@ const (
 )
 
 type LinuxUDPClient struct {
-	outputChannel chan []byte
-	fd            int
-	epfd          int
-	serverPort    int
+	outputChannel        chan []byte
+	fd                   int
+	epfd                 int
+	serverPort           int
+	maxPacketSizeInBytes int
 }
 
 func NewUDPClient(maxPacketSizeInBytes int, serverPort int, outputChannel chan []byte) Client {
 	udpClient := &LinuxUDPClient{
-		outputChannel: outputChannel,
-		serverPort:    serverPort,
+		outputChannel:        outputChannel,
+		serverPort:           serverPort,
+		maxPacketSizeInBytes: maxPacketSizeInBytes,
 	}
 	fd, err := udpClient.createSocket()
 	if err != nil {
@@ -38,7 +41,7 @@ func NewUDPClient(maxPacketSizeInBytes int, serverPort int, outputChannel chan [
 	}
 	udpClient.epfd = epfd
 
-	go udpClient.startReceiver(maxPacketSizeInBytes)
+	go udpClient.startReceiver()
 	return udpClient
 }
 
@@ -90,9 +93,9 @@ func (c *LinuxUDPClient) createEpoll(fd int) (int, error) {
 	return epfd, nil
 }
 
-func (c *LinuxUDPClient) startReceiver(maxPacketSizeInBytes int) {
+func (c *LinuxUDPClient) startReceiver() {
 	// Buffer to hold incoming single packet of data
-	buf := make([]byte, maxPacketSizeInBytes)
+	buf := make([]byte, c.maxPacketSizeInBytes)
 
 	// Buffer to hold epoll events. EpollWait returns up to EVENTS_BUFFER_SIZE events per call.
 	// If more than EVENTS_BUFFER_SIZE file descriptors are ready, remaining events are returned on subsequent EpollWait calls.
@@ -145,9 +148,40 @@ func (c *LinuxUDPClient) startReceiver(maxPacketSizeInBytes int) {
 }
 
 func (c *LinuxUDPClient) SendMessage(message []byte, ip string) error {
+	if len(message) > c.maxPacketSizeInBytes {
+		metric.Count("p2p.cache.store.values.error", 1, []string{"reason", "send_message_greater_than_max_packet_size"})
+		return fmt.Errorf("message size is greater than max packet size: %d > %d", len(message), c.maxPacketSizeInBytes)
+	}
+
+	ipv4, err := c.resolveIp(ip)
+	if err != nil {
+		log.Error().Msgf("Error resolving ip: %v", err)
+		return err
+	}
+
 	serverAddress := &unix.SockaddrInet4{Port: c.serverPort}
-	copy(serverAddress.Addr[:], net.ParseIP(ip).To4())
+	copy(serverAddress.Addr[:], ipv4)
 	return unix.Sendto(c.fd, message, 0, serverAddress)
+}
+
+func (c *LinuxUDPClient) resolveIp(ip string) ([]byte, error) {
+	if parsed := net.ParseIP(ip); parsed != nil {
+		if v4 := parsed.To4(); v4 != nil {
+			return v4, nil
+		}
+	}
+
+	// resolve dns if ip is not an ipv4 address, useful for resolving ip for local testing using docker dns
+	addrs, err := net.LookupIP(ip)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve host %s: %w", ip, err)
+	}
+	for _, a := range addrs {
+		if v4 := a.To4(); v4 != nil {
+			return v4, nil
+		}
+	}
+	return nil, fmt.Errorf("no IPv4 address found for host %s", ip)
 }
 
 func (c *LinuxUDPClient) Close() error {

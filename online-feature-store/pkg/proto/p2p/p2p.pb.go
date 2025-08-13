@@ -117,27 +117,28 @@ func (x *CacheQuery) GetKeys() []string {
 	return nil
 }
 
-type CacheResponse struct {
+type CacheKeyValue struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	KeyValue      map[string]string      `protobuf:"bytes,1,rep,name=keyValue,proto3" json:"keyValue,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	EntityLabel   string                 `protobuf:"bytes,1,opt,name=entity_label,json=entityLabel,proto3" json:"entity_label,omitempty"`
+	KeyValue      map[string]string      `protobuf:"bytes,2,rep,name=key_value,json=keyValue,proto3" json:"key_value,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CacheResponse) Reset() {
-	*x = CacheResponse{}
+func (x *CacheKeyValue) Reset() {
+	*x = CacheKeyValue{}
 	mi := &file_p2p_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CacheResponse) String() string {
+func (x *CacheKeyValue) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CacheResponse) ProtoMessage() {}
+func (*CacheKeyValue) ProtoMessage() {}
 
-func (x *CacheResponse) ProtoReflect() protoreflect.Message {
+func (x *CacheKeyValue) ProtoReflect() protoreflect.Message {
 	mi := &file_p2p_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -149,12 +150,19 @@ func (x *CacheResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CacheResponse.ProtoReflect.Descriptor instead.
-func (*CacheResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use CacheKeyValue.ProtoReflect.Descriptor instead.
+func (*CacheKeyValue) Descriptor() ([]byte, []int) {
 	return file_p2p_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *CacheResponse) GetKeyValue() map[string]string {
+func (x *CacheKeyValue) GetEntityLabel() string {
+	if x != nil {
+		return x.EntityLabel
+	}
+	return ""
+}
+
+func (x *CacheKeyValue) GetKeyValue() map[string]string {
 	if x != nil {
 		return x.KeyValue
 	}
@@ -275,9 +283,10 @@ const file_p2p_proto_rawDesc = "" +
 	"\n" +
 	"CacheQuery\x12!\n" +
 	"\fentity_label\x18\x01 \x01(\tR\ventityLabel\x12\x12\n" +
-	"\x04keys\x18\x02 \x03(\tR\x04keys\"\x8a\x01\n" +
-	"\rCacheResponse\x12<\n" +
-	"\bkeyValue\x18\x01 \x03(\v2 .p2p.CacheResponse.KeyValueEntryR\bkeyValue\x1a;\n" +
+	"\x04keys\x18\x02 \x03(\tR\x04keys\"\xae\x01\n" +
+	"\rCacheKeyValue\x12!\n" +
+	"\fentity_label\x18\x01 \x01(\tR\ventityLabel\x12=\n" +
+	"\tkey_value\x18\x02 \x03(\v2 .p2p.CacheKeyValue.KeyValueEntryR\bkeyValue\x1a;\n" +
 	"\rKeyValueEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc3\x02\n" +
@@ -292,11 +301,12 @@ const file_p2p_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\f.p2p.PodDataR\x05value:\x028\x01\"9\n" +
 	"\aPodData\x12\x17\n" +
 	"\anode_ip\x18\x01 \x01(\tR\x06nodeIp\x12\x15\n" +
-	"\x06pod_ip\x18\x02 \x01(\tR\x05podIp2\x86\x01\n" +
+	"\x06pod_ip\x18\x02 \x01(\tR\x05podIp2\xc5\x01\n" +
 	"\x0fP2PCacheService\x127\n" +
 	"\x11GetClusterConfigs\x12\n" +
 	".p2p.Query\x1a\x14.p2p.ClusterTopology\"\x00\x12:\n" +
-	"\x11GetP2PCacheValues\x12\x0f.p2p.CacheQuery\x1a\x12.p2p.CacheResponse\"\x00B\bZ\x06../p2pb\x06proto3"
+	"\x11GetP2PCacheValues\x12\x0f.p2p.CacheQuery\x1a\x12.p2p.CacheKeyValue\"\x00\x12=\n" +
+	"\x11SetP2PCacheValues\x12\x12.p2p.CacheKeyValue\x1a\x12.p2p.CacheKeyValue\"\x00B\bZ\x06../p2pb\x06proto3"
 
 var (
 	file_p2p_proto_rawDescOnce sync.Once
@@ -314,24 +324,26 @@ var file_p2p_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_p2p_proto_goTypes = []any{
 	(*Query)(nil),           // 0: p2p.Query
 	(*CacheQuery)(nil),      // 1: p2p.CacheQuery
-	(*CacheResponse)(nil),   // 2: p2p.CacheResponse
+	(*CacheKeyValue)(nil),   // 2: p2p.CacheKeyValue
 	(*ClusterTopology)(nil), // 3: p2p.ClusterTopology
 	(*PodData)(nil),         // 4: p2p.PodData
-	nil,                     // 5: p2p.CacheResponse.KeyValueEntry
+	nil,                     // 5: p2p.CacheKeyValue.KeyValueEntry
 	nil,                     // 6: p2p.ClusterTopology.RingTopologyEntry
 	nil,                     // 7: p2p.ClusterTopology.ClusterMembersEntry
 }
 var file_p2p_proto_depIdxs = []int32{
-	5, // 0: p2p.CacheResponse.keyValue:type_name -> p2p.CacheResponse.KeyValueEntry
+	5, // 0: p2p.CacheKeyValue.key_value:type_name -> p2p.CacheKeyValue.KeyValueEntry
 	6, // 1: p2p.ClusterTopology.ring_topology:type_name -> p2p.ClusterTopology.RingTopologyEntry
 	7, // 2: p2p.ClusterTopology.cluster_members:type_name -> p2p.ClusterTopology.ClusterMembersEntry
 	4, // 3: p2p.ClusterTopology.ClusterMembersEntry.value:type_name -> p2p.PodData
 	0, // 4: p2p.P2PCacheService.GetClusterConfigs:input_type -> p2p.Query
 	1, // 5: p2p.P2PCacheService.GetP2PCacheValues:input_type -> p2p.CacheQuery
-	3, // 6: p2p.P2PCacheService.GetClusterConfigs:output_type -> p2p.ClusterTopology
-	2, // 7: p2p.P2PCacheService.GetP2PCacheValues:output_type -> p2p.CacheResponse
-	6, // [6:8] is the sub-list for method output_type
-	4, // [4:6] is the sub-list for method input_type
+	2, // 6: p2p.P2PCacheService.SetP2PCacheValues:input_type -> p2p.CacheKeyValue
+	3, // 7: p2p.P2PCacheService.GetClusterConfigs:output_type -> p2p.ClusterTopology
+	2, // 8: p2p.P2PCacheService.GetP2PCacheValues:output_type -> p2p.CacheKeyValue
+	2, // 9: p2p.P2PCacheService.SetP2PCacheValues:output_type -> p2p.CacheKeyValue
+	7, // [7:10] is the sub-list for method output_type
+	4, // [4:7] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name
 	4, // [4:4] is the sub-list for extension extendee
 	0, // [0:4] is the sub-list for field type_name

@@ -2,6 +2,7 @@ package network
 
 import (
 	"bytes"
+	"encoding/binary"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
@@ -162,6 +163,25 @@ func (c *ClientManager) GetData(key string, ip string) *ResponseMessage {
 		go c.CancelRequest(key, responseChan)
 		return nil
 	}
+}
+
+func (c *ClientManager) SetData(key string, value []byte, ttlInSeconds int, ip string) {
+
+	// follows the message structure of [0 <key> 0 <ttl in secs for 8 bytes> <value>]
+	// Given that the key is a string, it will never have a zero byte in it. So, safe to use it as a delimiter.
+	message := []byte{}
+	message = append(message, SET_DATA_PACKET_START_BYTE_IDENTIFIER)
+	message = append(message, key...)
+
+	message = append(message, SET_DATA_PACKET_KEY_TTL_SEPARATOR)
+	ttlBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(ttlBytes, uint64(ttlInSeconds))
+	message = append(message, ttlBytes...)
+
+	message = append(message, value...)
+
+	log.Debug().Msgf("Sending key %s with ttl %d in seconds with value %v, final message: %v", key, ttlInSeconds, value, message)
+	go c.client.SendMessage(message, ip)
 }
 
 func (c *ClientManager) CancelRequest(key string, responseChan chan ResponseMessage) {

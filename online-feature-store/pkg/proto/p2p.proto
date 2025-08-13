@@ -11,8 +11,9 @@ message CacheQuery {
   repeated string keys = 2;
 }
 
-message CacheResponse {
-  map<string, string> keyValue = 1;
+message CacheKeyValue {
+  string entity_label = 1;
+  map<string, string> key_value = 2;
 }
 
 message ClusterTopology {
@@ -27,5 +28,6 @@ message PodData {
 
 service P2PCacheService {
     rpc GetClusterConfigs(Query) returns (ClusterTopology) {};
-    rpc GetP2PCacheValues(CacheQuery) returns (CacheResponse) {};
+    rpc GetP2PCacheValues(CacheQuery) returns (CacheKeyValue) {};
+    rpc SetP2PCacheValues(CacheKeyValue) returns (CacheKeyValue) {};
 }

@@ -91,9 +91,10 @@ func (p *P2PCache) MultiGet(keys []string) (map[string][]byte, error) {
 	log.Debug().Msgf("MultiGet: kvResponse found from local cache %v", kvResponse)
 
 	if len(missingKeys) > 0 {
-		maps.Copy(kvResponse, p.fetchKeysFromOtherPods(missingKeys))
+		otherPodResponse := p.fetchKeysFromOtherPods(missingKeys)
+		maps.Copy(kvResponse, otherPodResponse)
+		log.Debug().Msgf("MultiGet: kvResponse found from other pods %v", otherPodResponse)
 	}
-	log.Debug().Msgf("MultiGet: kvResponse found from other pods %v", kvResponse)
 
 	metric.Count("p2p.cache.keys.global.miss", int64(len(keys)-len(kvResponse)), []string{})
 	return kvResponse, nil
@@ -110,6 +111,7 @@ func (p *P2PCache) MultiSet(kvMap map[string][]byte, ttlInSeconds int) error {
 			p.cacheStore.SetIntoOwnPartitionCache(key, value, ttlInSeconds)
 		} else {
 			p.cacheStore.SetIntoGlobalCache(key, value, ttlInSeconds)
+			p.sendDataToOtherPod(key, value, ttlInSeconds, podId)
 		}
 	}
 	return nil
@@ -121,6 +123,10 @@ func (p *P2PCache) MultiDelete(keys []string) error {
 
 func (p *P2PCache) GetClusterTopology() clustermanager.ClusterTopology {
 	return p.cm.GetClusterTopology()
+}
+
+func (p *P2PCache) PublishMetrics(cacheName string) {
+	p.cacheStore.PublishMetrics(cacheName)
 }
 
 func (p *P2PCache) fetchKeysFromOtherPods(missingKeys []string) map[string][]byte {
@@ -183,4 +189,13 @@ func (p *P2PCache) getClientIdx(key string) int {
 	hash.Write([]byte(key))
 	hashValue := hash.Sum32()
 	return int(hashValue % uint32(len(p.clients)))
+}
+
+func (p *P2PCache) sendDataToOtherPod(key string, value []byte, ttlInSeconds int, podId string) {
+	podData, err := p.cm.GetPodDataForPodId(podId)
+	if err != nil {
+		log.Error().Err(err).Msgf("Error getting pod data for pod id %s", podId)
+		return
+	}
+	p.clients[p.getClientIdx(key)].SetData(key, value, ttlInSeconds, podData.PodIP)
 }
