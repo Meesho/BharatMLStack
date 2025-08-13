@@ -65,6 +65,10 @@ func main() {
 		if err := pc.Put(key, val, uint64(time.Now().Unix()+3600)); err != nil {
 			panic(err)
 		}
+
+		if i%5000000 == 0 {
+			fmt.Printf("----------------------------------------------prepopulated %d keys\n", i)
+		}
 	}
 
 	var wg sync.WaitGroup
@@ -73,9 +77,10 @@ func main() {
 	if writeWorkers > 0 {
 		wg.Add(writeWorkers)
 		keysPerWriter := totalKeys / writeWorkers
+		fmt.Printf("----------------------------------------------writing %d keys\n", keysPerWriter)
 		for w := 0; w < writeWorkers; w++ {
-			start := w * keysPerWriter
-			end := start + keysPerWriter
+			start := w*keysPerWriter + preN
+			end := start + keysPerWriter + preN
 			// last worker takes any remainder
 			if w == writeWorkers-1 {
 				end = totalKeys
@@ -84,9 +89,12 @@ func main() {
 				defer wg.Done()
 				for i := s; i < e; i++ {
 					key := fmt.Sprintf("key%d", i)
-					val := []byte(fmt.Sprintf("value%d", i))
+					val := []byte(fmt.Sprintf(str1kb, i))
 					if err := pc.Put(key, val, uint64(time.Now().Unix()+3600)); err != nil {
 						panic(err)
+					}
+					if i%5000000 == 0 {
+						fmt.Printf("----------------------------------------------wrote %d keys from writerId %d\n", i, wid)
 					}
 				}
 			}(w, start, end)
@@ -95,6 +103,7 @@ func main() {
 
 	// Spawn readers: each reader covers a disjoint partition
 	if readWorkers > 0 {
+		fmt.Printf("----------------------------------------------reading keys\n")
 		wg.Add(readWorkers)
 		readSpan := preN
 		keysPerReader := readSpan / readWorkers
@@ -115,8 +124,11 @@ func main() {
 					if expired {
 						panic("key expired")
 					}
-					if string(val) != fmt.Sprintf("value%d", i) {
+					if string(val) != fmt.Sprintf(str1kb, i) {
 						panic("value mismatch")
+					}
+					if i%5000000 == 0 {
+						fmt.Printf("----------------------------------------------read %d keys from readerId %d\n", i, rid)
 					}
 				}
 			}(r, start, end)
