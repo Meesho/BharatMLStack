@@ -1,0 +1,10 @@
+[package]
+name = "rust-caller"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rust-sdk = { path = "../rust-sdk" }
+tokio = { version = "1", features = ["full"] }
+tonic = "0.11"
+tower = "0.4"
