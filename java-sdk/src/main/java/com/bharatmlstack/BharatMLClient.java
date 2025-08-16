@@ -3,6 +3,8 @@ package com.bharatmlstack;
 import com.bharatmlstack.persist.FeatureServiceGrpc;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Metadata;
+import io.grpc.stub.MetadataUtils;
 
 public class BharatMLClient {
 
@@ -14,8 +16,18 @@ public class BharatMLClient {
         this.channel = ManagedChannelBuilder.forAddress(host, port)
                 .usePlaintext()
                 .build();
-        this.persistClient = com.bharatmlstack.persist.FeatureServiceGrpc.newBlockingStub(channel);
-        this.retrieveClient = com.bharatmlstack.retrieve.FeatureServiceGrpc.newBlockingStub(channel);
+        
+        // Create metadata with required headers
+        Metadata metadata = new Metadata();
+        Metadata.Key<String> authTokenKey = Metadata.Key.of("online-feature-store-auth-token", Metadata.ASCII_STRING_MARSHALLER);
+        Metadata.Key<String> callerIdKey = Metadata.Key.of("online-feature-store-caller-id", Metadata.ASCII_STRING_MARSHALLER);
+        metadata.put(authTokenKey, "test");
+        metadata.put(callerIdKey, "model-proxy-service-experiment");
+        
+        this.persistClient = MetadataUtils.attachHeaders(
+            com.bharatmlstack.persist.FeatureServiceGrpc.newBlockingStub(channel), metadata);
+        this.retrieveClient = MetadataUtils.attachHeaders(
+            com.bharatmlstack.retrieve.FeatureServiceGrpc.newBlockingStub(channel), metadata);
     }
 
     public void shutdown() throws InterruptedException {
