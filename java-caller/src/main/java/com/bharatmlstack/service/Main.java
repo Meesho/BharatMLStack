@@ -14,11 +14,12 @@ public class Main {
     public static void main(String[] args) {
         System.out.println("Hello, feature-store-java!");
 
-        Map<String, String> metadata = new HashMap<>();
-        metadata.put("online-feature-store-auth-token", "test");
-        metadata.put("online-feature-store-caller-id", "model-proxy-service-experiment");
+        // Metadata will be handled by the client internally
+        // Map<String, String> metadata = new HashMap<>();
+        // metadata.put("online-feature-store-auth-token", "test");
+        // metadata.put("online-feature-store-caller-id", "model-proxy-service-experiment");
 
-        BharatMLClient client = new BharatMLClient("online-feature-store-api-mp.prd.meesho.int", 80, metadata);
+        BharatMLClient client = new BharatMLClient("online-feature-store-api-mp.prd.meesho.int", 80);
 
         try {
             Query request = Query.newBuilder()
