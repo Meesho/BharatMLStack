@@ -3,7 +3,7 @@ package allocators
 import (
 	"testing"
 
-	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
+	"github.com/Meesho/BharatMLStack/flashring/external/fs"
 )
 
 func TestNewSlabAlignedPageAllocator(t *testing.T) {

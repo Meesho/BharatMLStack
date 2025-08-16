@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
+	"github.com/Meesho/BharatMLStack/flashring/external/fs"
 )
 
 // Helper function to create a test file for benchmarks

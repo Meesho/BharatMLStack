@@ -1,8 +1,8 @@
 package memtables
 
 import (
-	"github.com/Meesho/BharatMLStack/flashring/internal/allocators"
-	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
+	"github.com/Meesho/BharatMLStack/flashring/external/allocators"
+	"github.com/Meesho/BharatMLStack/flashring/external/fs"
 	"github.com/rs/zerolog/log"
 )
 
