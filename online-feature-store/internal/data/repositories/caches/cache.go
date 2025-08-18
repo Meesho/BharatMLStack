@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
+	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
+	"math/rand"
 )
 
 const (
