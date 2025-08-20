@@ -270,7 +270,8 @@ func (e *Etcd) GetSequenceNo(entityLabel string, fgId int, version int, featureL
 
 	sequence, ok := sequences[featureLabel]
 	if !ok {
-		return 0, fmt.Errorf("feature %s not found", featureLabel)
+		log.Error().Msgf("feature %s not found", featureLabel)
+		return -1, nil
 	}
 
 	return sequence, nil

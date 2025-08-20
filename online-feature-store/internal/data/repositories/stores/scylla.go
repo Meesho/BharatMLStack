@@ -2,6 +2,10 @@ package stores
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/blocks"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/models"
@@ -10,9 +14,6 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/gocql/gocql"
 	"github.com/rs/zerolog/log"
-	"strconv"
-	"strings"
-	"time"
 )
 
 const (
