@@ -169,7 +169,7 @@ func (c *ClientManager) SetData(key string, value []byte, ttlInSeconds int, ip s
 
 	// follows the message structure of [0 <key> 0 <ttl in secs for 8 bytes> <value>]
 	// Given that the key is a string, it will never have a zero byte in it. So, safe to use it as a delimiter.
-	message := []byte{}
+	message := make([]byte, 0, 1+len(key)+1+8+len(value))
 	message = append(message, SET_DATA_PACKET_START_BYTE_IDENTIFIER)
 	message = append(message, key...)
 
@@ -181,7 +181,7 @@ func (c *ClientManager) SetData(key string, value []byte, ttlInSeconds int, ip s
 	message = append(message, value...)
 
 	log.Debug().Msgf("Sending key %s with ttl %d in seconds with value %v, final message: %v", key, ttlInSeconds, value, message)
-	go c.client.SendMessage(message, ip)
+	c.client.SendMessage(message, ip)
 }
 
 func (c *ClientManager) CancelRequest(key string, responseChan chan ResponseMessage) {

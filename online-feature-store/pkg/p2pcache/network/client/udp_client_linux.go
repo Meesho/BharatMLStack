@@ -4,8 +4,12 @@ package client
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
+	"strconv"
+	"time"
 
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/ds"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sys/unix"
@@ -21,7 +25,12 @@ type LinuxUDPClient struct {
 	epfd                 int
 	serverPort           int
 	maxPacketSizeInBytes int
+	addrCache            *ds.SyncMapWithTtl[string, *unix.SockaddrInet4]
 }
+
+const (
+	addrTTL = 5 * time.Hour
+)
 
 func NewUDPClient(maxPacketSizeInBytes int, serverPort int, outputChannel chan []byte) Client {
 	udpClient := &LinuxUDPClient{
@@ -40,6 +49,8 @@ func NewUDPClient(maxPacketSizeInBytes int, serverPort int, outputChannel chan [
 		panic(err)
 	}
 	udpClient.epfd = epfd
+
+	udpClient.addrCache = ds.NewSyncMapWithTtl[string, *unix.SockaddrInet4]()
 
 	go udpClient.startReceiver()
 	return udpClient
@@ -153,14 +164,11 @@ func (c *LinuxUDPClient) SendMessage(message []byte, ip string) error {
 		return fmt.Errorf("message size is greater than max packet size: %d > %d", len(message), c.maxPacketSizeInBytes)
 	}
 
-	ipv4, err := c.resolveIp(ip)
+	serverAddress, err := c.getAddr(ip)
 	if err != nil {
-		log.Error().Msgf("Error resolving ip: %v", err)
+		log.Error().Msgf("Error getting destination addr: %v", err)
 		return err
 	}
-
-	serverAddress := &unix.SockaddrInet4{Port: c.serverPort}
-	copy(serverAddress.Addr[:], ipv4)
 	return unix.Sendto(c.fd, message, 0, serverAddress)
 }
 
@@ -189,4 +197,23 @@ func (c *LinuxUDPClient) Close() error {
 		return unix.Close(c.fd)
 	}
 	return nil
+}
+
+func (c *LinuxUDPClient) getAddr(host string) (*unix.SockaddrInet4, error) {
+	key := host + ":" + strconv.Itoa(c.serverPort)
+
+	addr, ok := c.addrCache.Get(key)
+	if ok {
+		return addr, nil
+	}
+
+	ipv4, err := c.resolveIp(host)
+	if err != nil {
+		return nil, err
+	}
+	sa := &unix.SockaddrInet4{Port: c.serverPort}
+	copy(sa.Addr[:], ipv4)
+
+	c.addrCache.Set(key, sa, addrTTL+time.Duration(rand.Intn(1000))*time.Second)
+	return sa, nil
 }

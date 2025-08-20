@@ -5,11 +5,17 @@ import (
 	"encoding/binary"
 	"fmt"
 	"runtime"
+	"sync"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache/storage"
 	"github.com/panjf2000/gnet/v2"
 	"github.com/rs/zerolog/log"
+)
+
+const (
+	TOTAL_READ_BUFFER_CAP_BYTES  = 1024 * 1024 * 100
+	TOTAL_WRITE_BUFFER_CAP_BYTES = 1024 * 1024 * 1000
 )
 
 func NewServer(port int, cacheStore *storage.CacheStore) *Server {
@@ -26,6 +32,13 @@ type Server struct {
 	cacheStore *storage.CacheStore
 }
 
+var packetPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, MAX_PACKET_SIZE_IN_BYTES)
+		return &b
+	},
+}
+
 func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	buf, err := c.Next(-1)
 	if err != nil {
@@ -33,23 +46,19 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	}
 
 	if buf[0] == SET_DATA_PACKET_START_BYTE_IDENTIFIER {
-		// create copy of buf as it is reused for next message
-		bufCopy := make([]byte, len(buf))
-		copy(bufCopy, buf)
-		go s.handleSetDataPacket(bufCopy)
-		return gnet.None
+		return s.handleSetDataPacket(buf)
 	} else {
 		return s.handleGetDataPacket(c, buf)
 	}
 }
 
-func (s *Server) handleSetDataPacket(buf []byte) {
+func (s *Server) handleSetDataPacket(buf []byte) gnet.Action {
 	// message structure: [0 <key> 0 <ttl in secs for 8 bytes> <value>]
 	keyIndex := bytes.IndexByte(buf[1:], SET_DATA_PACKET_KEY_TTL_SEPARATOR) + 1
-	if keyIndex == -1 {
+	if keyIndex == 0 {
 		// drop invalid packets
 		metric.Count("p2p.cache.server.keys.error", 1, []string{"reason", "invalid_set_data_packet"})
-		return
+		return gnet.None
 	}
 
 	key := string(buf[1:keyIndex])
@@ -58,11 +67,16 @@ func (s *Server) handleSetDataPacket(buf []byte) {
 
 	log.Debug().Msgf("Received key %s with ttl %d in seconds with value %v, buf: %v", key, ttl, value, buf)
 	s.cacheStore.SetIntoOwnPartitionCache(key, value, int(ttl))
+	return gnet.None
 }
 
 func (s *Server) handleGetDataPacket(c gnet.Conn, buf []byte) gnet.Action {
-	response := append([]byte{}, buf...)
-	response = append(response, RESPONSE_PACKET_KEY_VALUE_SEPARATOR)
+	responseBuf := *(packetPool.Get().(*[]byte))
+	defer packetPool.Put(&responseBuf)
+
+	n := copy(responseBuf, buf)
+	responseBuf[n] = RESPONSE_PACKET_KEY_VALUE_SEPARATOR
+	n++
 
 	key := string(buf)
 	value, err := s.cacheStore.Get(key)
@@ -70,17 +84,20 @@ func (s *Server) handleGetDataPacket(c gnet.Conn, buf []byte) gnet.Action {
 
 	// Let the client know if the value is not found or if the response is too large
 	if err != nil {
-		metric.Count("p2p.cache.server.keys", 1, []string{"type", "miss"})
-		response = append(response, VALUE_NOT_FOUND_RESPONSE)
-	} else if len(value)+len(response) > MAX_PACKET_SIZE_IN_BYTES {
-		metric.Count("p2p.cache.server.keys", 1, []string{"type", "too_large"})
+		metric.Count("p2p.cache.server.keys", 1, []string{"reason", "miss"})
+		responseBuf[n] = VALUE_NOT_FOUND_RESPONSE
+		n++
+	} else if len(value)+n > MAX_PACKET_SIZE_IN_BYTES {
+		metric.Count("p2p.cache.server.keys", 1, []string{"reason", "too_large"})
+		responseBuf[n] = VALUE_NOT_FOUND_RESPONSE
+		n++
 	} else {
-		metric.Count("p2p.cache.server.keys", 1, []string{"type", "hit"})
+		metric.Count("p2p.cache.server.keys", 1, []string{"reason", "hit"})
 		// TODO: Compress the value sent over network
-		response = append(response, value...)
+		n += copy(responseBuf[n:], value)
 	}
 
-	c.Write(response)
+	c.Write(responseBuf[:n])
 	return gnet.None
 }
 
@@ -90,8 +107,8 @@ func (s *Server) start(port int) {
 		gnet.WithMulticore(true),
 		gnet.WithReusePort(true),
 		gnet.WithLockOSThread(false),
-		gnet.WithReadBufferCap(1024*1024*100),
-		gnet.WithWriteBufferCap(1024*1024*1000),
+		gnet.WithReadBufferCap(TOTAL_READ_BUFFER_CAP_BYTES/runtime.NumCPU()),
+		gnet.WithWriteBufferCap(TOTAL_WRITE_BUFFER_CAP_BYTES/runtime.NumCPU()),
 		gnet.WithNumEventLoop(runtime.NumCPU()))
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start P2P cache server")
