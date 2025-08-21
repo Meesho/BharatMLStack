@@ -134,7 +134,8 @@ func (e *Etcd) GetP2PCacheConfForEntity(entityLabel string) (*Cache, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &entity.P2PCache, nil
+	// TODO: use inmemory config until scaled up
+	return &entity.InMemoryCache, nil
 }
 
 func (e *Etcd) GetP2PEnabledPercentage() int {
