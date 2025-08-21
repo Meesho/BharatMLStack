@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache/storage"
@@ -18,18 +19,27 @@ const (
 	TOTAL_WRITE_BUFFER_CAP_BYTES = 1024 * 1024 * 1000
 )
 
-func NewServer(port int, cacheStore *storage.CacheStore) *Server {
+func NewServer(port int, cacheStore *storage.CacheStore) (*Server, error) {
 	server := &Server{
 		cacheStore: cacheStore,
+		ready:      make(chan struct{}),
 	}
 	go server.start(port)
-	return server
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-server.ready:
+		return server, nil
+	case <-timer.C:
+		return nil, fmt.Errorf("failed to start server in 5 seconds")
+	}
 }
 
 type Server struct {
 	gnet.BuiltinEventEngine
 
 	cacheStore *storage.CacheStore
+	ready      chan struct{}
 }
 
 var packetPool = sync.Pool{
@@ -37,6 +47,11 @@ var packetPool = sync.Pool{
 		b := make([]byte, MAX_PACKET_SIZE_IN_BYTES)
 		return &b
 	},
+}
+
+func (s *Server) OnBoot(eng gnet.Engine) gnet.Action {
+	close(s.ready)
+	return gnet.None
 }
 
 func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
@@ -102,7 +117,6 @@ func (s *Server) handleGetDataPacket(c gnet.Conn, buf []byte) gnet.Action {
 }
 
 func (s *Server) start(port int) {
-	// TODO: Tune buffer sizes
 	err := gnet.Run(s, fmt.Sprintf("udp://:%d", port),
 		gnet.WithMulticore(true),
 		gnet.WithReusePort(true),

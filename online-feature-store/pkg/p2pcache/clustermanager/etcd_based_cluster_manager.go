@@ -43,7 +43,7 @@ func NewEtcdBasedClusterManager(clusterName string, name string) *EtcdBasedClust
 	if !viper.IsSet(envEtcdServer) {
 		log.Panic().Msgf("%s is not set", envEtcdServer)
 	}
-	log.Debug().Msgf("Initializing cluster manager with cluster name %s and pod IP %s and node IP %s", clusterName, viper.GetString(envPodIP), viper.GetString(envNodeIP))
+	log.Info().Msgf("Initializing cluster manager with cluster name %s and pod IP %s and node IP %s", clusterName, viper.GetString(envPodIP), viper.GetString(envNodeIP))
 
 	etcdServers := strings.Split(viper.GetString(envEtcdServer), ",")
 	var username, password string

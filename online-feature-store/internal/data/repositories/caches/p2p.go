@@ -97,7 +97,7 @@ func (c *P2PCache) MultiSetV2(entityLabel string, bulkKeys []*retrieve.Keys, bul
 	for i, key := range bulkKeys {
 		kvMap[buildCacheKeyForPersist(key.Cols, entityLabel)] = bulkData[i]
 	}
-	return c.cache.MultiSet(kvMap, cacheConfig.TtlInSeconds)
+	return c.cache.MultiSet(kvMap, getFinalTTLWithJitter(cacheConfig))
 }
 
 func (c *P2PCache) GetClusterTopology() clustermanager.ClusterTopology {

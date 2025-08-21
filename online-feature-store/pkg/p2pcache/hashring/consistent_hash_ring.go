@@ -9,7 +9,7 @@ import (
 
 const (
 	nodeKeyFmt   = "%s:%d"
-	nodeReplicas = 100
+	nodeReplicas = 500
 )
 
 type ConsistentHashRing struct {
