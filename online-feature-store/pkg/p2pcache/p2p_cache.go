@@ -86,6 +86,12 @@ func validateConfig(config P2PCacheConfig) error {
 	return nil
 }
 
+func (p *P2PCache) Close() {
+	if p.cm != nil {
+		_ = p.cm.LeaveCluster()
+	}
+}
+
 func (p *P2PCache) MultiGet(keys []string) (map[string][]byte, error) {
 	log.Debug().Msgf("MultiGet called with keys %v", keys)
 
