@@ -113,7 +113,7 @@ func NewPerCoreWrapCache(config WrapCacheConfig, mountPoint string, logStats boo
 	for i := 0; i < config.NumShards; i++ {
 		shards[i] = filecache.NewShardCache(filecache.ShardCacheConfig{
 			MemtableSize:        config.MemtableSize,
-			Rounds:              ROUNDS,
+			Rounds:              config.Rounds,
 			RbInitial:           config.KeysPerShard,
 			RbMax:               config.KeysPerShard,
 			DeleteAmortizedStep: 1000,

@@ -32,7 +32,6 @@ var (
 )
 
 const (
-	ROUNDS         = 1
 	KEYS_PER_SHARD = (1 << 26)
 	BLOCK_SIZE     = 4096
 )

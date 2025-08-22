@@ -19,7 +19,6 @@ import (
 */
 
 const (
-	ROUNDS         = 1
 	KEYS_PER_SHARD = (1 << 26)
 	BLOCK_SIZE     = 4096
 )
@@ -63,6 +62,7 @@ type WrapCacheConfig struct {
 	GridSearchEpsilon     float64
 	SampleDuration        time.Duration
 	MaxConcurrentReads    int64 // Maximum concurrent read operations
+	Rounds                int
 }
 
 func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*WrapCache, error) {
@@ -140,7 +140,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 	for i := 0; i < config.NumShards; i++ {
 		shards[i] = filecache.NewShardCache(filecache.ShardCacheConfig{
 			MemtableSize:        config.MemtableSize,
-			Rounds:              ROUNDS,
+			Rounds:              config.Rounds,
 			RbInitial:           config.KeysPerShard,
 			RbMax:               config.KeysPerShard,
 			DeleteAmortizedStep: 1000,
