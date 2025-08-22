@@ -33,4 +33,5 @@ type ClusterManager interface {
 	GetCurrentPodId() string
 	GetPodDataForPodId(podId string) (*PodData, error)
 	GetClusterTopology() ClusterTopology
+	LeaveCluster() error
 }
