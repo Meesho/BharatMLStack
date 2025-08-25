@@ -9,6 +9,7 @@ import (
 
 	"github.com/Meesho/BharatMLStack/flashring/external/maths"
 	filecache "github.com/Meesho/BharatMLStack/flashring/external/shard"
+	"github.com/Meesho/go-core/metric"
 	"github.com/cespare/xxhash/v2"
 	"github.com/rs/zerolog/log"
 )
@@ -185,19 +186,19 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 			for {
 				time.Sleep(sleepDuration)
 				for i := 0; i < config.NumShards; i++ {
-					log.Info().Msgf("Shard %d has %d active entries", i, wc.stats[i].ShardWiseActiveEntries.Load())
+					metric.Gauge("shard.active.entries", float64(wc.shards[i].GetRingBufferActiveEntries()), []string{"shard_name", strconv.Itoa(i)})
 					total := wc.stats[i].TotalGets.Load()
 					hits := wc.stats[i].Hits.Load()
 					hitRate := float64(0)
 					if total > 0 {
 						hitRate = float64(hits) / float64(total)
 					}
-					log.Info().Msgf("Shard %d HitRate: %v", i, hitRate)
-					log.Info().Msgf("Shard %d ReWrites: %v", i, wc.stats[i].ReWrites.Load())
-					log.Info().Msgf("Shard %d Expired: %v", i, wc.stats[i].Expired.Load())
-					log.Info().Msgf("Shard %d Total: %v", i, total)
-					log.Info().Msgf("Gets/sec: %v", float64(total-perShardPrevTotalGets[i])/float64(sleepDuration.Seconds()))
-					log.Info().Msgf("Puts/sec: %v", float64(wc.stats[i].TotalPuts.Load()-perShardPrevTotalPuts[i])/float64(sleepDuration.Seconds()))
+					metric.Gauge("shard.hit.rate", hitRate, []string{"shard_name", strconv.Itoa(i)})
+					metric.Counter("shard.re.writes", wc.stats[i].ReWrites.Load(), []string{"shard_name", strconv.Itoa(i)})
+					metric.Counter("shard.expired", wc.stats[i].Expired.Load(), []string{"shard_name", strconv.Itoa(i)})
+					metric.Counter("shard.total", total, []string{"shard_name", strconv.Itoa(i)})
+					metric.Gauge("shard.gets.sec", float64(total-perShardPrevTotalGets[i])/float64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
+					metric.Gauge("shard.puts.sec", float64(wc.stats[i].TotalPuts.Load()-perShardPrevTotalPuts[i])/float64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
 					perShardPrevTotalGets[i] = total
 					perShardPrevTotalPuts[i] = wc.stats[i].TotalPuts.Load()
 				}
