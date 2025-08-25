@@ -1,14 +1,46 @@
+use axum::{
+    http::StatusCode,
+    response::Json,
+    routing::post,
+    Router,
+};
 use rust_sdk::retrieve::{
     feature_service_client::FeatureServiceClient as RetrieveClient, FeatureGroup, Keys, Query,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
 use tonic::metadata::MetadataValue;
 use tonic::transport::Channel;
 use tower::ServiceBuilder;
+use tower_http::cors::CorsLayer;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[derive(Serialize, Deserialize)]
+struct ApiResponse {
+    success: bool,
+    data: Option<String>,
+    error: Option<String>,
+    message: String,
+}
+
+async fn retrieve_features() -> Result<Json<ApiResponse>, StatusCode> {
+    match retrieve_features_internal().await {
+        Ok(result) => Ok(Json(ApiResponse {
+            success: true,
+            data: Some(format!("{:?}", result)),
+            error: None,
+            message: "Features retrieved successfully".to_string(),
+        })),
+        Err(e) => Ok(Json(ApiResponse {
+            success: false,
+            data: None,
+            error: Some(e.to_string()),
+            message: "Failed to retrieve features".to_string(),
+        })),
+    }
+}
+
+async fn retrieve_features_internal() -> Result<rust_sdk::retrieve::Result, Box<dyn std::error::Error>> {
     println!("Attempting to connect to the feature store...");
 
     let mut metadata = HashMap::new();
@@ -69,18 +101,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         metadata: HashMap::new(),
     });
 
-    let response = match client.retrieve_features(request).await {
-        Ok(response) => response,
-        Err(e) => {
-            eprintln!("Failed to retrieve features: {}", e);
-            return Err(e.into());
-        }
-    };
+    let response = client.retrieve_features(request).await?;
+    Ok(response.into_inner())
+}
 
-    println!(
-        "Successfully retrieved features: {:?}",
-        response.into_inner()
-    );
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create the application with routes
+    let app = Router::new()
+        .route("/retrieve-features", post(retrieve_features))
+        .layer(CorsLayer::permissive());
+
+    // Run the server
+    println!("Starting Rust Feature Store API server on http://0.0.0.0:8080");
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
+    axum::serve(listener, app).await?;
 
     Ok(())
 }
