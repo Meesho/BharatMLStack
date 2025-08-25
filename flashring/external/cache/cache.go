@@ -194,9 +194,9 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 						hitRate = float64(hits) / float64(total)
 					}
 					metric.Gauge("shard.hit.rate", hitRate, []string{"shard_name", strconv.Itoa(i)})
-					metric.Counter("shard.re.writes", wc.stats[i].ReWrites.Load(), []string{"shard_name", strconv.Itoa(i)})
-					metric.Counter("shard.expired", wc.stats[i].Expired.Load(), []string{"shard_name", strconv.Itoa(i)})
-					metric.Counter("shard.total", total, []string{"shard_name", strconv.Itoa(i)})
+					metric.Count("shard.re.writes", int64(wc.stats[i].ReWrites.Load()), []string{"shard_name", strconv.Itoa(i)})
+					metric.Count("shard.expired", int64(wc.stats[i].Expired.Load()), []string{"shard_name", strconv.Itoa(i)})
+					metric.Count("shard.total", int64(total), []string{"shard_name", strconv.Itoa(i)})
 					metric.Gauge("shard.gets.sec", float64(total-perShardPrevTotalGets[i])/float64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
 					metric.Gauge("shard.puts.sec", float64(wc.stats[i].TotalPuts.Load()-perShardPrevTotalPuts[i])/float64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
 					perShardPrevTotalGets[i] = total
