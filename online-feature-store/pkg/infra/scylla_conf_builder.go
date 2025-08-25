@@ -2,8 +2,6 @@ package infra
 
 import (
 	"errors"
-	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -17,13 +15,13 @@ import (
 // <STORAGE_SCYLLA_1_CONTACT_POINTS> =
 // <STORAGE_SCYLLA_1_PORT> =
 // <STORAGE_SCYLLA_1_KEYSPACE> =
-// <STORAGE_SCYLLA_1_VERSION> = Scylla version (e.g., 5.0, 6.0)
+// <STORAGE_SCYLLA_1_MAJOR_VERSION> = Scylla major version (e.g., 5, 6)
 const (
 	storageScyllaPrefix          = "STORAGE_SCYLLA_"
 	contactPointsSuffix          = "_CONTACT_POINTS"
 	portSuffix                   = "_PORT"
 	keyspaceSuffix               = "_KEYSPACE"
-	versionSuffix                = "_VERSION"
+	majorVersionSuffix           = "_MAJOR_VERSION"
 	timeoutSuffix                = "_TIMEOUT_IN_MS"
 	connectTimeoutSuffix         = "_CONNECT_TIMEOUT_IN_MS"
 	numConnsSuffix               = "_NUM_CONNS"
@@ -40,7 +38,7 @@ const (
 // ScyllaClusterConfig wraps the cluster config with type information
 type ScyllaClusterConfig struct {
 	Config   interface{} // Will hold either gocql or gocql_v2 config
-	Version  string
+	Version  int         // Major version number (e.g., 5, 6)
 	Keyspace string
 }
 
@@ -146,19 +144,6 @@ func buildGocqlV2ClusterConfig(hosts []string, envPrefix string, keyspace string
 	return cfg, nil
 }
 
-// parseVersion parses the version string and returns the major version number
-func parseVersion(versionStr string) (int, error) {
-	parts := strings.Split(versionStr, ".")
-	if len(parts) == 0 {
-		return 0, errors.New("invalid version format")
-	}
-	major, err := strconv.Atoi(parts[0])
-	if err != nil {
-		return 0, errors.New("invalid major version number")
-	}
-	return major, nil
-}
-
 // BuildClusterConfigFromEnv constructs a ScyllaDB cluster configuration
 // using environment variables with the specified prefix.
 //
@@ -170,7 +155,7 @@ func parseVersion(versionStr string) (int, error) {
 //   - <envPrefix>_CONTACT_POINTS: Comma-separated list of Scylla nodes
 //   - <envPrefix>_PORT: Scylla port
 //   - <envPrefix>_KEYSPACE: Keyspace to connect to
-//   - <envPrefix>_VERSION: Scylla version (e.g., 5.0, 6.0)
+//   - <envPrefix>_MAJOR_VERSION: Scylla major version (e.g., 5, 6)
 //
 // Optional environment variables:
 //   - <envPrefix>_TIMEOUT_IN_MS: Request timeout (milliseconds)
@@ -190,13 +175,12 @@ func BuildClusterConfigFromEnv(envPrefix string) (*ScyllaClusterConfig, error) {
 	log.Debug().Msgf("building scylla cluster config from env, env prefix - %s", envPrefix)
 
 	// Check for version first - this determines which gocql library to use
-	if !viper.IsSet(envPrefix + versionSuffix) {
-		return nil, errors.New(envPrefix + versionSuffix + " not set")
+	if !viper.IsSet(envPrefix + majorVersionSuffix) {
+		return nil, errors.New(envPrefix + majorVersionSuffix + " not set")
 	}
-	versionStr := viper.GetString(envPrefix + versionSuffix)
-	majorVersion, err := parseVersion(versionStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid version format: %v", err)
+	majorVersion := viper.GetInt(envPrefix + majorVersionSuffix)
+	if majorVersion <= 0 {
+		return nil, errors.New(envPrefix + majorVersionSuffix + " must be a positive integer")
 	}
 
 	if !viper.IsSet(envPrefix + contactPointsSuffix) {
@@ -214,25 +198,26 @@ func BuildClusterConfigFromEnv(envPrefix string) (*ScyllaClusterConfig, error) {
 	// Use the appropriate gocql library based on version
 	// Version >= 6 uses gocql_v2, else uses standard gocql
 	var cfg interface{}
+	var err error
 	if majorVersion >= 6 {
 		// Use gocql_v2 for Scylla 6.0+
 		cfg, err = buildGocqlV2ClusterConfig(hosts, envPrefix, keyspace)
 		if err != nil {
 			return nil, err
 		}
-		log.Debug().Msgf("Using gocql_v2 library for Scylla version: %s (major: %d)", versionStr, majorVersion)
+		log.Debug().Msgf("Using gocql_v2 library for Scylla version: %d (major: %d)", majorVersion, majorVersion)
 	} else {
 		// Use standard gocql for Scylla < 6.0
 		cfg, err = buildGocqlClusterConfig(hosts, envPrefix, keyspace)
 		if err != nil {
 			return nil, err
 		}
-		log.Debug().Msgf("Using standard gocql library for Scylla version: %s (major: %d)", versionStr, majorVersion)
+		log.Debug().Msgf("Using standard gocql library for Scylla version: %d (major: %d)", majorVersion, majorVersion)
 	}
 
 	return &ScyllaClusterConfig{
 		Config:   cfg,
-		Version:  versionStr,
+		Version:  majorVersion,
 		Keyspace: keyspace,
 	}, nil
 }
