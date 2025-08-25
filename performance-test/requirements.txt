@@ -1,0 +1,7 @@
+locust>=2.15.0
+requests>=2.30.0
+matplotlib>=3.6.0
+pandas>=1.5.0
+seaborn>=0.11.0
+psutil>=5.8.0
+numpy>=1.21.0
