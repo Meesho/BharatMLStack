@@ -69,7 +69,7 @@ echo
 
 # Start Java service (Port 8082)
 echo -e "${BLUE}🔵 Starting Java Spring Boot service...${NC}"
-cd /Users/mananbajaj/IdeaProjects/BharatMLStack/java-caller
+cd ../java-caller
 if [ ! -f "target/java-caller-1.0.0.jar" ]; then
     echo -e "${YELLOW}📦 Building Java application...${NC}"
     mvn clean package -q
@@ -80,19 +80,19 @@ echo "Java PID: $JAVA_PID"
 
 # Start Rust service (Port 8080)
 echo -e "${BLUE}🦀 Starting Rust Axum service...${NC}"
-cd /Users/mananbajaj/IdeaProjects/BharatMLStack/rust-caller
+cd ../rust-caller
 nohup cargo run --release > ../performance-test/logs/rust.log 2>&1 &
 RUST_PID=$!
 echo "Rust PID: $RUST_PID"
 
 # Start Go service (Port 8081)
 echo -e "${BLUE}🐹 Starting Go Gin service...${NC}"
-cd /Users/mananbajaj/IdeaProjects/BharatMLStack/go-caller
+cd ../go-caller
 nohup go run main.go > ../performance-test/logs/go.log 2>&1 &
 GO_PID=$!
 echo "Go PID: $GO_PID"
 
-cd /Users/mananbajaj/IdeaProjects/BharatMLStack/performance-test
+cd ../performance-test
 
 echo
 echo -e "${BLUE}⏳ Waiting for all services to become ready...${NC}"
