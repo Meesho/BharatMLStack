@@ -30,7 +30,7 @@ check_port() {
 wait_for_service() {
     local port=$1
     local service=$2
-    local max_attempts=30
+    local max_attempts=90
     local attempt=1
     
     echo -e "${BLUE}⏳ Waiting for $service to start on port $port...${NC}"
