@@ -9,7 +9,7 @@ import (
 
 	"github.com/Meesho/BharatMLStack/flashring/external/maths"
 	filecache "github.com/Meesho/BharatMLStack/flashring/external/shard"
-	"github.com/Meesho/go-core/metric"
+	"github.com/Meesho/BharatMLStack/flashring/pkg/metric"
 	"github.com/cespare/xxhash/v2"
 	"github.com/rs/zerolog/log"
 )
