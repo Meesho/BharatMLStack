@@ -29,6 +29,7 @@ const (
 type EtcdBasedClusterManager struct {
 	mutex          sync.Mutex
 	conn           *clientv3.Client
+	leaseID        clientv3.LeaseID
 	etcdBasePath   string
 	clusterMembers map[string]PodData
 	hashRing       *hashring.ConsistentHashRing
@@ -43,7 +44,7 @@ func NewEtcdBasedClusterManager(clusterName string, name string) *EtcdBasedClust
 	if !viper.IsSet(envEtcdServer) {
 		log.Panic().Msgf("%s is not set", envEtcdServer)
 	}
-	log.Debug().Msgf("Initializing cluster manager with cluster name %s and pod IP %s and node IP %s", clusterName, viper.GetString(envPodIP), viper.GetString(envNodeIP))
+	log.Info().Msgf("Initializing cluster manager with cluster name %s and pod IP %s and node IP %s", clusterName, viper.GetString(envPodIP), viper.GetString(envNodeIP))
 
 	etcdServers := strings.Split(viper.GetString(envEtcdServer), ",")
 	var username, password string
@@ -155,10 +156,13 @@ func (c *EtcdBasedClusterManager) watchEvents(watchChan clientv3.WatchChan) {
 
 func (c *EtcdBasedClusterManager) joinCluster(podData PodData) error {
 	// Grant a lease for this pod
-	lease, err := c.conn.Grant(context.Background(), 5) // 5 second TTL
+	grantCtx, grantCancel := context.WithTimeout(context.Background(), timeout)
+	defer grantCancel()
+	lease, err := c.conn.Grant(grantCtx, 5)
 	if err != nil {
 		return fmt.Errorf("failed to grant lease: %v", err)
 	}
+	c.leaseID = lease.ID
 
 	// Start keepalive for the lease
 	keepAliveChan, err := c.conn.KeepAlive(context.Background(), lease.ID)
@@ -183,8 +187,10 @@ func (c *EtcdBasedClusterManager) joinCluster(podData PodData) error {
 	}
 
 	// Put the pod data with lease
+	putCtx, putCancel := context.WithTimeout(context.Background(), timeout)
+	defer putCancel()
 	key := fmt.Sprintf("%s/%s", c.etcdBasePath, podData.GetUniqueId())
-	_, err = c.conn.Put(context.Background(), key, string(podDataBytes), clientv3.WithLease(lease.ID))
+	_, err = c.conn.Put(putCtx, key, string(podDataBytes), clientv3.WithLease(lease.ID))
 	if err != nil {
 		return fmt.Errorf("failed to put pod data in etcd: %v", err)
 	}
@@ -226,4 +232,30 @@ func (c *EtcdBasedClusterManager) GetClusterTopology() ClusterTopology {
 		RingTopology:   c.hashRing.GetRingTopology(),
 		ClusterMembers: clusterMembers,
 	}
+}
+
+func (c *EtcdBasedClusterManager) LeaveCluster() error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Delete our key so other pods see us leave immediately
+	key := fmt.Sprintf("%s/%s", c.etcdBasePath, c.currentPodId)
+	_, err := c.conn.Delete(ctx, key)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to delete pod key from etcd during LeaveCluster")
+	}
+
+	// Revoke lease if present to speed up cleanup
+	if c.leaseID != 0 {
+		_, err := c.conn.Lease.Revoke(ctx, c.leaseID)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to revoke lease during LeaveCluster")
+		}
+	}
+
+	// Close etcd client
+	if err := c.conn.Close(); err != nil {
+		log.Error().Err(err).Msg("Failed to close etcd client during LeaveCluster")
+	}
+	return nil
 }

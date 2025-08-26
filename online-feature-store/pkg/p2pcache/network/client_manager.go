@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	RETRY_AFTER_N_REQUESTS = 10
+	RETRY_AFTER_N_REQUESTS = 50
 )
 
 // Message types for the unified channel
@@ -41,7 +41,7 @@ type ClientManager struct {
 
 func NewClientManager(serverPort int) *ClientManager {
 	// TODO: Tune the buffer sizes
-	messageChannel := make(chan Message, 10000)
+	messageChannel := make(chan Message, 50000)
 	clientResponseChannel := make(chan []byte, 10000)
 
 	client := &ClientManager{
@@ -93,6 +93,7 @@ func (c *ClientManager) handleResponse(msg ResponseMessage) {
 		case responseChan <- msg:
 		default:
 			// Channel is full or closed, skip
+			metric.Count("p2p.cache.store.values.error", 1, []string{"reason", "response_channel_closed"})
 		}
 	}
 	delete(c.responseChannels, msg.Key)
@@ -154,10 +155,12 @@ func (c *ClientManager) GetData(key string, ip string) *ResponseMessage {
 		return nil
 	}
 
+	timer := time.NewTimer(REQUEST_TIMEOUT)
+	defer timer.Stop()
 	select {
 	case value := <-responseChan:
 		return &value
-	case <-time.After(REQUEST_TIMEOUT):
+	case <-timer.C:
 		log.Error().Msgf("GetData: request timed out for key %s from pod %s", key, ip)
 		metric.Count("p2p.cache.store.keys.dropped", 1, []string{"sendTo", ip, "reason", "timeout"})
 		go c.CancelRequest(key, responseChan)
@@ -169,7 +172,7 @@ func (c *ClientManager) SetData(key string, value []byte, ttlInSeconds int, ip s
 
 	// follows the message structure of [0 <key> 0 <ttl in secs for 8 bytes> <value>]
 	// Given that the key is a string, it will never have a zero byte in it. So, safe to use it as a delimiter.
-	message := []byte{}
+	message := make([]byte, 0, 1+len(key)+1+8+len(value))
 	message = append(message, SET_DATA_PACKET_START_BYTE_IDENTIFIER)
 	message = append(message, key...)
 
@@ -181,7 +184,7 @@ func (c *ClientManager) SetData(key string, value []byte, ttlInSeconds int, ip s
 	message = append(message, value...)
 
 	log.Debug().Msgf("Sending key %s with ttl %d in seconds with value %v, final message: %v", key, ttlInSeconds, value, message)
-	go c.client.SendMessage(message, ip)
+	c.client.SendMessage(message, ip)
 }
 
 func (c *ClientManager) CancelRequest(key string, responseChan chan ResponseMessage) {

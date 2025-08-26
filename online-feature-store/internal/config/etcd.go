@@ -135,7 +135,8 @@ func (e *Etcd) GetP2PCacheConfForEntity(entityLabel string) (*Cache, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &entity.P2PCache, nil
+	// TODO: use inmemory config until scaled up
+	return &entity.InMemoryCache, nil
 }
 
 func (e *Etcd) GetP2PEnabledPercentage() int {
@@ -271,7 +272,8 @@ func (e *Etcd) GetSequenceNo(entityLabel string, fgId int, version int, featureL
 
 	sequence, ok := sequences[featureLabel]
 	if !ok {
-		return 0, fmt.Errorf("feature %s not found", featureLabel)
+		log.Error().Msgf("feature %s not found", featureLabel)
+		return -1, nil
 	}
 
 	return sequence, nil

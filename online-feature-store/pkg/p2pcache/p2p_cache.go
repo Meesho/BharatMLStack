@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"maps"
+	"math/rand"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache/clustermanager"
@@ -21,6 +22,10 @@ type P2PCacheConfig struct {
 	NumClients              int
 	ServerPort              int
 }
+
+const (
+	jitterTtlInSeconds = 3600
+)
 
 type P2PCache struct {
 	cm                      clustermanager.ClusterManager
@@ -42,11 +47,19 @@ func NewP2PCache(config P2PCacheConfig) (*P2PCache, error) {
 	for i := 0; i < config.NumClients; i++ {
 		clients[i] = network.NewClientManager(config.ServerPort)
 	}
+
+	server, err := network.NewServer(config.ServerPort, cacheStore)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create and join cluster after server is ready
+	cm := clustermanager.NewEtcdBasedClusterManager(config.ClusterName, config.Name)
 	return &P2PCache{
-		cm:                      clustermanager.NewEtcdBasedClusterManager(config.ClusterName, config.Name),
+		cm:                      cm,
 		cacheStore:              cacheStore,
 		clients:                 clients,
-		server:                  network.NewServer(config.ServerPort, cacheStore),
+		server:                  server,
 		globalCacheTTLInSeconds: config.GlobalCacheTTLInSeconds,
 	}, nil
 }
@@ -71,6 +84,12 @@ func validateConfig(config P2PCacheConfig) error {
 		return fmt.Errorf("p2p cache server port must be greater than 0")
 	}
 	return nil
+}
+
+func (p *P2PCache) Close() {
+	if p.cm != nil {
+		_ = p.cm.LeaveCluster()
+	}
 }
 
 func (p *P2PCache) MultiGet(keys []string) (map[string][]byte, error) {
@@ -176,7 +195,7 @@ func (p *P2PCache) fetchKeysFromOtherPods(missingKeys []string) map[string][]byt
 		}
 	}
 
-	p.cacheStore.MultiSetIntoGlobalCache(kvResponse, p.globalCacheTTLInSeconds)
+	p.cacheStore.MultiSetIntoGlobalCache(kvResponse, p.globalCacheTTLInSeconds+rand.Intn(jitterTtlInSeconds))
 	return kvResponse
 }
 

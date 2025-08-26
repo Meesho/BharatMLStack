@@ -79,7 +79,8 @@ func (c *P2PCache) SetV2(entityLabel string, keys []string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	return c.cache.MultiSet(map[string][]byte{k: data}, cacheConfig.TtlInSeconds)
+	// TODO: Remove hardcoded TTL addition once it starts picking configs from p2p cache
+	return c.cache.MultiSet(map[string][]byte{k: data}, getFinalTTLWithJitter(cacheConfig)+1800)
 }
 
 func (c *P2PCache) MultiSetV2(entityLabel string, bulkKeys []*retrieve.Keys, bulkData [][]byte) error {
@@ -97,7 +98,8 @@ func (c *P2PCache) MultiSetV2(entityLabel string, bulkKeys []*retrieve.Keys, bul
 	for i, key := range bulkKeys {
 		kvMap[buildCacheKeyForPersist(key.Cols, entityLabel)] = bulkData[i]
 	}
-	return c.cache.MultiSet(kvMap, cacheConfig.TtlInSeconds)
+	// TODO: Remove hardcoded TTL addition once it starts picking configs from p2p cache
+	return c.cache.MultiSet(kvMap, getFinalTTLWithJitter(cacheConfig)+1800)
 }
 
 func (c *P2PCache) GetClusterTopology() clustermanager.ClusterTopology {
