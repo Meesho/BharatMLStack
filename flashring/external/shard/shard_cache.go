@@ -114,7 +114,7 @@ func (fc *ShardCache) Put(key string, value []byte, exptime uint64) error {
 		buf, offset, length, _ = mt.GetBufForAppend(uint16(size))
 	}
 	copy(buf[4:], key)
-	copy(buf[4+len(key):], value)
+	copy(buf[4+len(key):], value) 
 	crc := crc32.ChecksumIEEE(buf[4:])
 	indices.ByteOrder.PutUint32(buf[0:4], crc)
 	fc.keyIndex.Put(key, length, mtId, uint32(offset), deltaExptimeInMin)
