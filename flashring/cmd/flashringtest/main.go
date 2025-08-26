@@ -62,7 +62,7 @@ func main() {
 	for i := 0; i < preN; i++ {
 		key := fmt.Sprintf("key%d", i)
 		val := []byte(fmt.Sprintf(str1kb, i))
-		if err := pc.Put(key, val, uint64(time.Now().Unix()+3600)); err != nil {
+		if err := pc.Put(key, val, 3600); err != nil {
 			panic(err)
 		}
 

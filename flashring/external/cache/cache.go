@@ -188,7 +188,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 			for {
 				time.Sleep(sleepDuration)
 				for i := 0; i < config.NumShards; i++ {
-					metric.Count("shard.active.entries", int64(wc.shards[i].GetRingBufferActiveEntries()), []string{"shard_name", strconv.Itoa(i)})
+					metric.Gauge("shard.active.entries", float64(wc.shards[i].GetRingBufferActiveEntries()), []string{"shard_name", strconv.Itoa(i)})
 					total := wc.stats[i].TotalGets.Load()
 					hits := wc.stats[i].Hits.Load()
 					hitRate := float64(0)
@@ -196,10 +196,10 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 						hitRate = float64(hits) / float64(total)
 					}
 					metric.Gauge("shard.hit.rate", hitRate, []string{"shard_name", strconv.Itoa(i)})
-					metric.Count("shard.re.writes.sec", int64(wc.stats[i].ReWrites.Load()-perShardPrevReWrites[i])/int64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
-					metric.Count("shard.expired.sec", int64(wc.stats[i].Expired.Load()-perShardPrevExpired[i])/int64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
-					metric.Count("shard.gets.sec", int64(total-perShardPrevTotalGets[i])/int64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
-					metric.Count("shard.puts.sec", int64(wc.stats[i].TotalPuts.Load()-perShardPrevTotalPuts[i])/int64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
+					metric.Gauge("shard.re.writes.sec", float64(wc.stats[i].ReWrites.Load()-perShardPrevReWrites[i])/float64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
+					metric.Gauge("shard.expired.sec", float64(wc.stats[i].Expired.Load()-perShardPrevExpired[i])/float64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
+					metric.Gauge("shard.gets.sec", float64(total-perShardPrevTotalGets[i])/float64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
+					metric.Gauge("shard.puts.sec", float64(wc.stats[i].TotalPuts.Load()-perShardPrevTotalPuts[i])/float64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
 					perShardPrevTotalGets[i] = total
 					perShardPrevTotalPuts[i] = wc.stats[i].TotalPuts.Load()
 					perShardPrevReWrites[i] = wc.stats[i].ReWrites.Load()
@@ -236,7 +236,7 @@ func (wc *WrapCache) Put(key string, value []byte, exptime uint64) error {
 	if h32%100 < 10 {
 		wc.stats[shardIdx].ShardWiseActiveEntries.Store(uint64(wc.shards[shardIdx].GetRingBufferActiveEntries()))
 	}
-	metric.Timing("shard.put.latency", time.Since(start), []string{"shard_name", strconv.Itoa(int(shardIdx))})
+	metric.Timing("shard_put_latency", time.Since(start), []string{"shard_name", strconv.Itoa(int(shardIdx))})
 	return nil
 }
 
@@ -260,7 +260,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 		// Read semaphore full, block until available
 		wc.readSemaphore <- 1
 	}
-	metric.Timing("shard.get.queue_wait", time.Since(queueStart), []string{"shard_name", strconv.Itoa(int(shardIdx))})
+	metric.Timing("shard_get_queue_wait", time.Since(queueStart), []string{"shard_name", strconv.Itoa(int(shardIdx))})
 
 	val, exptime, keyFound, expired, shouldReWrite := wc.shards[shardIdx].Get(key)
 	<-wc.readSemaphore // Release read semaphore immediately after read
@@ -282,7 +282,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	if h32%100 < 10 {
 		wc.predictor.Observe(float64(wc.stats[shardIdx].Hits.Load()) / float64(wc.stats[shardIdx].TotalGets.Load()))
 	}
-	metric.Timing("shard.get.latency", time.Since(start), []string{"shard_name", strconv.Itoa(int(shardIdx))})
+	metric.Timing("shard_get_latency", time.Since(start), []string{"shard_name", strconv.Itoa(int(shardIdx))})
 	return val, keyFound, expired
 }
 
