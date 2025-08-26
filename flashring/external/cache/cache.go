@@ -196,7 +196,6 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 					metric.Gauge("shard.hit.rate", hitRate, []string{"shard_name", strconv.Itoa(i)})
 					metric.Count("shard.re.writes", int64(wc.stats[i].ReWrites.Load()), []string{"shard_name", strconv.Itoa(i)})
 					metric.Count("shard.expired", int64(wc.stats[i].Expired.Load()), []string{"shard_name", strconv.Itoa(i)})
-					metric.Count("shard.total", int64(total), []string{"shard_name", strconv.Itoa(i)})
 					metric.Gauge("shard.gets.sec", float64(total-perShardPrevTotalGets[i])/float64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
 					metric.Gauge("shard.puts.sec", float64(wc.stats[i].TotalPuts.Load()-perShardPrevTotalPuts[i])/float64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
 					perShardPrevTotalGets[i] = total
@@ -227,7 +226,7 @@ func (wc *WrapCache) Put(key string, value []byte, exptime uint64) error {
 
 	wc.shardLocks[shardIdx].Lock()
 	defer wc.shardLocks[shardIdx].Unlock()
-	wc.shards[shardIdx].Put(key, value, exptime)
+	wc.shards[shardIdx].Put(key, value, uint64(time.Now().Unix())+exptime)
 	wc.stats[shardIdx].TotalPuts.Add(1)
 	if h32%100 < 10 {
 		wc.stats[shardIdx].ShardWiseActiveEntries.Store(uint64(wc.shards[shardIdx].GetRingBufferActiveEntries()))
