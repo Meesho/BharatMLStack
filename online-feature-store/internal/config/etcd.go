@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/circuitbreaker"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/etcd"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -500,4 +501,28 @@ func (e *Etcd) GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error) {
 	}
 
 	return allFGIds, nil
+}
+
+func (e *Etcd) GetCircuitBreakerConfigs() map[string]circuitbreaker.Config {
+	instance := e.GetEtcdInstance()
+	return instance.CircuitBreaker
+}
+
+func (e *Etcd) UpdateCBConfigs() error {
+	cbConfigs := e.GetCircuitBreakerConfigs()
+	for cbManagerName, cbConfig := range cbConfigs {
+		activeCBs := make([]string, 0)
+		inactiveCBs := make([]string, 0)
+		for cbName, enabled := range cbConfig.ActiveCBs {
+			if enabled {
+				activeCBs = append(activeCBs, cbName)
+			} else {
+				inactiveCBs = append(inactiveCBs, cbName)
+			}
+		}
+		circuitbreaker.GetManager(cbManagerName).ActivateCBKey(activeCBs)
+		circuitbreaker.GetManager(cbManagerName).DeactivateCBKey(inactiveCBs)
+		circuitbreaker.GetManager(cbManagerName).UpdateCBConfig(cbConfig)
+	}
+	return nil
 }

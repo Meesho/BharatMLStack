@@ -17,7 +17,9 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/repositories/caches"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/repositories/provider"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/repositories/stores"
+	handler "github.com/Meesho/BharatMLStack/online-feature-store/internal/handler/circuitbreaker"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/types"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/circuitbreaker"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/ds"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
@@ -31,6 +33,7 @@ var (
 
 const (
 	featurePartsSeparator = "@"
+	distributedCacheCBKey = "distributed_cache_retrieval"
 )
 
 type FGData struct {
@@ -46,22 +49,25 @@ type FGData struct {
 }
 
 type RetrieveHandler struct {
-	config           config.Manager
-	imcProvider      provider.CacheProvider
-	dcProvider       provider.CacheProvider
-	dbProvider       provider.StoreProvider
-	p2pCacheProvider provider.CacheProvider
+	config                     config.Manager
+	imcProvider                provider.CacheProvider
+	dcProvider                 provider.CacheProvider
+	dbProvider                 provider.StoreProvider
+	p2pCacheProvider           provider.CacheProvider
+	distributedCacheCBProvider *handler.DFCircuitBreakerHandler
 }
 
 func InitRetrieveHandler(configManager config.Manager) *RetrieveHandler {
+	distributedCacheCBManager := circuitbreaker.GetManager("distributed_cache")
 	if frHandler == nil {
 		frOnce.Do(func() {
 			frHandler = &RetrieveHandler{
-				config:           configManager,
-				imcProvider:      provider.InMemoryCacheProviderImpl,
-				dcProvider:       provider.DistributedCacheProviderImpl,
-				dbProvider:       provider.StorageProviderImpl,
-				p2pCacheProvider: provider.P2PCacheProviderImpl,
+				config:                     configManager,
+				imcProvider:                provider.InMemoryCacheProviderImpl,
+				dcProvider:                 provider.DistributedCacheProviderImpl,
+				dbProvider:                 provider.StorageProviderImpl,
+				p2pCacheProvider:           provider.P2PCacheProviderImpl,
+				distributedCacheCBProvider: handler.NewDFCircuitBreakerHandler(distributedCacheCBManager),
 			}
 		})
 	}
@@ -350,11 +356,36 @@ func (h *RetrieveHandler) retrieveFromDistributedCache(keys []*retrieve.Keys, re
 		return nil, err
 	}
 	var cacheData [][]byte
+	if h.distributedCacheCBProvider.IsCBEnabled(distributedCacheCBKey) && !h.distributedCacheCBProvider.IsCallAllowed(distributedCacheCBKey) {
+		log.Debug().Msgf("Circuit breaker is open, returning negative cache for all fgIds")
+		metric.Count("feature.retrieve.distributed.cache.cb.open", 1, []string{"entity_name", entityLabel, "cache_type", "distributed"})
+		for _, key := range keys {
+			keyIdx := retrieveData.ReqKeyToIdx[getKeyString(key)]
+			fgIdToDDB := make(map[int]*blocks.DeserializedPSDB)
+			fgIds.KeyIterator(func(fgId int) bool {
+				fgIdToDDB[fgId] = blocks.NegativeCacheDeserializePSDB()
+				return true
+			})
+			fgDataChan <- &FGData{
+				data:    retrieveData,
+				fgToDDB: fgIdToDDB,
+				keyIdx:  keyIdx,
+				opClose: false,
+			}
+		}
+		return nil, nil
+	}
 	cacheData, err = cache.MultiGetV2(entityLabel, keys)
 	log.Debug().Msgf("Retrieved features from distributed cache for keys %v and fgIds %v, cacheData: %v", keys, fgIds, cacheData)
 	if err != nil {
+		if h.distributedCacheCBProvider.IsCBEnabled(distributedCacheCBKey) {
+			h.distributedCacheCBProvider.RecordFailure(distributedCacheCBKey)
+		}
 		log.Error().Err(err).Msgf("Error while retrieving features from distributed cache for keys %v and fgIds %v", keys, fgIds)
 		return nil, err
+	}
+	if h.distributedCacheCBProvider.IsCBEnabled(distributedCacheCBKey) {
+		h.distributedCacheCBProvider.RecordSuccess(distributedCacheCBKey)
 	}
 	missingDataKeys := make([]*retrieve.Keys, 0)
 	for i, key := range keys {
