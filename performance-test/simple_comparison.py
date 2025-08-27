@@ -36,7 +36,7 @@ def find_service_pids():
     
     return pids
 
-def run_single_test(service_name, port, target_rps, users, duration=60):
+def run_single_test(service_name, port, target_rps, users, duration=60, error_threshold=5.0):
     """Run test for one service and return key metrics"""
     print(f"🔥 Testing {service_name}...")
     
@@ -77,6 +77,7 @@ def run_single_test(service_name, port, target_rps, users, duration=60):
     # Track progress
     last_update = 0
     print(f"⏳ Running {duration}s test with periodic updates...")
+    print(f"🔍 DEBUG: Process PID: {process.pid}, Service PID: {service_pid}")
     
     while process.poll() is None and (time.time() - start_time) < duration + 10:
         try:
@@ -97,16 +98,48 @@ def run_single_test(service_name, port, target_rps, users, duration=60):
                 print(f"   📊 {elapsed:.0f}s | CPU: {cpu_percent:.1f}% (avg: {avg_cpu_so_far:.1f}%) | Memory: {memory_mb:.1f}MB (avg: {avg_mem_so_far:.1f}MB) | {remaining:.0f}s remaining")
                 last_update = elapsed
             
-        except:
+        except Exception as e:
+            print(f"⚠️  DEBUG: Exception in monitoring loop: {e}")
             break
     
-    process.communicate()
+    elapsed_total = time.time() - start_time
+    print(f"🔍 DEBUG: Monitoring loop ended after {elapsed_total:.1f}s")
+    print(f"🔍 DEBUG: Process poll status: {process.poll()}")
+    
+    stdout, stderr = process.communicate()
     
     print(f"✅ {service_name} test execution completed!")
+    print(f"🔍 DEBUG: Process return code: {process.returncode}")
+    
+    if stdout:
+        print(f"📝 DEBUG: Locust stdout output:")
+        for line in stdout.split('\n')[-10:]:  # Show last 10 lines
+            if line.strip():
+                print(f"   STDOUT: {line}")
+    
+    if stderr:
+        print(f"⚠️  DEBUG: Locust stderr output:")
+        for line in stderr.split('\n')[-10:]:  # Show last 10 lines
+            if line.strip():
+                print(f"   STDERR: {line}")
+    
+    # Check if output files were created
+    stats_file = f"{output_prefix}_stats.csv"
+    if os.path.exists(stats_file):
+        print(f"✅ DEBUG: Stats file created: {stats_file}")
+        with open(stats_file, 'r') as f:
+            lines = f.readlines()
+            print(f"📊 DEBUG: CSV has {len(lines)} lines")
+            if len(lines) > 0:
+                print(f"   Header: {lines[0].strip()}")
+            if len(lines) > 1:
+                print(f"   Data: {lines[1].strip()}")
+    else:
+        print(f"❌ DEBUG: Stats file missing: {stats_file}")
     
     if process.returncode != 0:
-        print(f"❌ {service_name} test failed")
-        return None
+        print(f"⚠️  {service_name} test completed with return code {process.returncode} (likely due to some failures)")
+        print(f"🔍 DEBUG: Will continue processing results to check error rate...")
     
     # Calculate averages
     avg_cpu = sum(cpu_readings) / len(cpu_readings) if cpu_readings else 0
@@ -115,46 +148,99 @@ def run_single_test(service_name, port, target_rps, users, duration=60):
     # Parse results
     stats_file = f"{output_prefix}_stats.csv"
     
+    print(f"🔍 DEBUG: Starting to parse results from {stats_file}")
+    
     try:
         with open(stats_file, 'r') as f:
             lines = f.readlines()
+            print(f"📊 DEBUG: File has {len(lines)} lines")
+            
             if len(lines) > 1:
+                print(f"🔍 DEBUG: Looking for aggregated row...")
+                data = None
+                
                 # Find aggregated row
-                for line in lines[1:]:
+                for i, line in enumerate(lines[1:], 1):
                     fields = line.strip().split(',')
+                    print(f"   Line {i}: {len(fields)} fields, Type='{fields[0] if len(fields) > 0 else 'N/A'}', Name='{fields[1] if len(fields) > 1 else 'N/A'}'")
+                    
                     if len(fields) > 10 and fields[1] == 'Aggregated':
                         data = fields
+                        print(f"✅ DEBUG: Found Aggregated row at line {i}")
                         break
-                else:
+                
+                if not data:
+                    print(f"⚠️  DEBUG: No Aggregated row found, looking for valid data rows...")
                     # Use first valid data row
-                    for line in lines[1:]:
+                    for i, line in enumerate(lines[1:], 1):
                         fields = line.strip().split(',')
                         if len(fields) > 10:
                             try:
-                                float(fields[9])  # Test RPS parsing
+                                rps_test = float(fields[9])  # Test RPS parsing
                                 data = fields
+                                print(f"✅ DEBUG: Using valid data row at line {i} (RPS: {rps_test})")
                                 break
-                            except:
+                            except Exception as e:
+                                print(f"   Line {i} invalid: {e}")
                                 continue
-                    else:
-                        print(f"❌ {service_name}: No valid data found")
+                    
+                    if not data:
+                        print(f"❌ DEBUG: No valid data found in any row")
                         return None
                 
                 # Extract key metrics
-                actual_rps = float(data[9])
-                total_requests = int(float(data[2]))
-                failures = int(float(data[3]))
-                avg_response = float(data[5])
-                min_response = float(data[6])
-                max_response = float(data[7])
-                p95_response = float(data[15]) if len(data) > 15 and data[15] else 0
-                p99_response = float(data[16]) if len(data) > 16 and data[16] else 0
+                print(f"🔍 DEBUG: Extracting metrics from {len(data)} fields...")
+                
+                try:
+                    actual_rps = float(data[9])
+                    print(f"   RPS: {actual_rps}")
+                except Exception as e:
+                    print(f"❌ DEBUG: Failed to parse RPS from field 9 '{data[9]}': {e}")
+                    return None
+                
+                try:
+                    total_requests = int(float(data[2]))
+                    failures = int(float(data[3]))
+                    print(f"   Requests: {total_requests}, Failures: {failures}")
+                except Exception as e:
+                    print(f"❌ DEBUG: Failed to parse request counts: {e}")
+                    return None
+                
+                try:
+                    avg_response = float(data[5])
+                    min_response = float(data[6])
+                    max_response = float(data[7])
+                    print(f"   Latency: min={min_response}, avg={avg_response}, max={max_response}")
+                except Exception as e:
+                    print(f"❌ DEBUG: Failed to parse basic latency metrics: {e}")
+                    return None
+                
+                try:
+                    p95_response = float(data[15]) if len(data) > 15 and data[15] else 0
+                    p99_response = float(data[16]) if len(data) > 16 and data[16] else 0
+                    print(f"   Percentiles: P95={p95_response}, P99={p99_response}")
+                except Exception as e:
+                    print(f"⚠️  DEBUG: Failed to parse percentiles (non-critical): {e}")
+                    p95_response = p99_response = 0
                 
                 # Calculate derived metrics
                 error_rate = (failures / total_requests * 100) if total_requests > 0 else 0
                 rps_achievement = (actual_rps / target_rps * 100) if target_rps > 0 else 0
                 cpu_efficiency = actual_rps / avg_cpu if avg_cpu > 0 else 0
                 memory_efficiency = actual_rps / avg_memory if avg_memory > 0 else 0
+                
+                print(f"✅ DEBUG: Successfully extracted all metrics")
+                print(f"📊 DEBUG: Error rate: {error_rate:.3f}% ({failures}/{total_requests})")
+                
+                # Check if error rate is acceptable
+                if process.returncode != 0 and error_rate > error_threshold:
+                    print(f"❌ {service_name} test rejected: Error rate {error_rate:.2f}% exceeds threshold {error_threshold}%")
+                    return None
+                elif process.returncode != 0:
+                    print(f"✅ {service_name} test accepted: Error rate {error_rate:.3f}% is within acceptable threshold ({error_threshold}%)")
+                
+                test_quality = "Excellent" if error_rate < 0.1 else "Good" if error_rate < 1.0 else "Fair" if error_rate < 5.0 else "Poor"
+                print(f"🎯 DEBUG: Test quality assessment: {test_quality}")
                 
                 return {
                     'service': service_name,
@@ -164,6 +250,7 @@ def run_single_test(service_name, port, target_rps, users, duration=60):
                     'total_requests': total_requests,
                     'failures': failures,
                     'error_rate': error_rate,
+                    'test_quality': test_quality,
                     'avg_response_ms': avg_response,
                     'p95_response_ms': p95_response,
                     'p99_response_ms': p99_response,
@@ -174,11 +261,16 @@ def run_single_test(service_name, port, target_rps, users, duration=60):
                     'cpu_efficiency': cpu_efficiency,
                     'memory_efficiency': memory_efficiency,
                     'users': users,
-                    'duration': duration
+                    'duration': duration,
+                    'process_return_code': process.returncode
                 }
                 
     except Exception as e:
-        print(f"❌ {service_name}: Error parsing results - {e}")
+        print(f"❌ DEBUG: Unexpected error parsing results for {service_name}: {e}")
+        print(f"❌ DEBUG: Exception type: {type(e).__name__}")
+        import traceback
+        print(f"❌ DEBUG: Full traceback:")
+        traceback.print_exc()
         return None
 
 def print_service_result(result):
@@ -187,14 +279,21 @@ def print_service_result(result):
         return
     
     r = result
-    print(f"\n📋 {r['service'].upper()} TEST COMPLETED")
-    print("=" * 60)
+    quality_emoji = {"Excellent": "🟢", "Good": "🟡", "Fair": "🟠", "Poor": "🔴"}
+    emoji = quality_emoji.get(r['test_quality'], "⚪")
+    
+    print(f"\n📋 {r['service'].upper()} TEST COMPLETED - {emoji} {r['test_quality'].upper()}")
+    print("=" * 70)
     print(f"🎯 Target: {r['target_rps']} RPS | ✅ Achieved: {r['actual_rps']:.1f} RPS ({r['rps_achievement']:.1f}%)")
-    print(f"📊 Requests: {r['total_requests']} total | ❌ Failures: {r['failures']} ({r['error_rate']:.1f}%)")
+    print(f"📊 Requests: {r['total_requests']} total | ❌ Failures: {r['failures']} ({r['error_rate']:.3f}%)")
     print(f"⏱️  Latency: Avg {r['avg_response_ms']:.1f}ms | P95 {r['p95_response_ms']:.1f}ms | P99 {r['p99_response_ms']:.1f}ms")
     print(f"💻 Resources: CPU {r['avg_cpu']:.1f}% | Memory {r['avg_memory']:.1f}MB")
     print(f"⚡ Efficiency: {r['cpu_efficiency']:.2f} RPS/CPU% | {r['memory_efficiency']:.2f} RPS/MB")
-    print("=" * 60)
+    
+    if r.get('process_return_code', 0) != 0:
+        print(f"⚠️  Note: Some failures detected but error rate is acceptable")
+    
+    print("=" * 70)
 
 def print_comparison(results, target_rps):
     """Print comprehensive comparison table"""
@@ -203,14 +302,16 @@ def print_comparison(results, target_rps):
     print(f"{'='*140}")
     
     # Main metrics table
-    print(f"{'Service':<8} | {'Target':<6} | {'Actual':<6} | {'Achievement':<11} | {'Errors%':<7} | {'Requests':<8} | {'Users':<5} | {'Duration':<8}")
-    print("-" * 80)
+    print(f"{'Service':<8} | {'Target':<6} | {'Actual':<6} | {'Achievement':<11} | {'Errors%':<8} | {'Quality':<9} | {'Requests':<8} | {'Duration':<8}")
+    print("-" * 90)
     
     # Sort by actual RPS
     results.sort(key=lambda x: x['actual_rps'], reverse=True)
     
     for r in results:
-        print(f"{r['service']:<8} | {r['target_rps']:6.0f} | {r['actual_rps']:6.1f} | {r['rps_achievement']:9.1f}% | {r['error_rate']:6.1f} | {r['total_requests']:8.0f} | {r['users']:5.0f} | {r['duration']:8.0f}s")
+        quality_emoji = {"Excellent": "🟢", "Good": "🟡", "Fair": "🟠", "Poor": "🔴"}
+        emoji = quality_emoji.get(r['test_quality'], "⚪")
+        print(f"{r['service']:<8} | {r['target_rps']:6.0f} | {r['actual_rps']:6.1f} | {r['rps_achievement']:9.1f}% | {r['error_rate']:7.3f} | {emoji}{r['test_quality']:<8} | {r['total_requests']:8.0f} | {r['duration']:8.0f}s")
     
     # Latency details
     print(f"\n📊 LATENCY BREAKDOWN (milliseconds)")
@@ -273,6 +374,7 @@ def main():
     parser.add_argument('target_rps', type=int, help='Target RPS for all services')
     parser.add_argument('--duration', type=int, default=60, help='Test duration in seconds (default: 60)')
     parser.add_argument('--cooldown', type=int, default=120, help='Cooldown between services in seconds (default: 120)')
+    parser.add_argument('--error-threshold', type=float, default=5.0, help='Acceptable error rate percentage (default: 5.0)')
     
     args = parser.parse_args()
     
@@ -280,9 +382,11 @@ def main():
     target_rps = args.target_rps
     duration = args.duration
     cooldown = args.cooldown
+    error_threshold = args.error_threshold
     users = max(int(target_rps * 0.3), 3)  # Simple user calculation
     
     print(f"🚀 Starting comparison test: {target_rps} RPS target, {duration}s duration, {users} users, {cooldown}s cooldown")
+    print(f"⚠️  Accepting error rates up to {error_threshold}%")
     
     services = [
         ("Java", 8082),
@@ -293,7 +397,7 @@ def main():
     results = []
     
     for i, (service_name, port) in enumerate(services):
-        result = run_single_test(service_name, port, target_rps, users, duration)
+        result = run_single_test(service_name, port, target_rps, users, duration, error_threshold)
         if result:
             results.append(result)
             print_service_result(result)  # Show immediate results
