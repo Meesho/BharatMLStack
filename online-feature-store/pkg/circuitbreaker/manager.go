@@ -109,6 +109,6 @@ func (m *manager) IsCBEnabled(key string) bool {
 			return enabled
 		}
 	}
-	log.Info().Msgf("No value found for key %s, returning false", key)
+	log.Debug().Msgf("No value found for key %s, returning false", key)
 	return false
 }
