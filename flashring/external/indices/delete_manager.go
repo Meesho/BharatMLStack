@@ -3,7 +3,7 @@ package indices
 import (
 	"fmt"
 
-	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
+	"github.com/Meesho/BharatMLStack/flashring/external/fs"
 	"github.com/rs/zerolog/log"
 )
 

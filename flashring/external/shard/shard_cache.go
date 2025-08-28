@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Meesho/BharatMLStack/flashring/internal/allocators"
-	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
-	"github.com/Meesho/BharatMLStack/flashring/internal/indices"
-	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
-	"github.com/Meesho/BharatMLStack/flashring/internal/memtables"
+	"github.com/Meesho/BharatMLStack/flashring/external/allocators"
+	"github.com/Meesho/BharatMLStack/flashring/external/fs"
+	"github.com/Meesho/BharatMLStack/flashring/external/indices"
+	"github.com/Meesho/BharatMLStack/flashring/external/maths"
+	"github.com/Meesho/BharatMLStack/flashring/external/memtables"
 	"github.com/rs/zerolog/log"
 )
 
@@ -114,7 +114,7 @@ func (fc *ShardCache) Put(key string, value []byte, exptime uint64) error {
 		buf, offset, length, _ = mt.GetBufForAppend(uint16(size))
 	}
 	copy(buf[4:], key)
-	copy(buf[4+len(key):], value)
+	copy(buf[4+len(key):], value) 
 	crc := crc32.ChecksumIEEE(buf[4:])
 	indices.ByteOrder.PutUint32(buf[0:4], crc)
 	fc.keyIndex.Put(key, length, mtId, uint32(offset), deltaExptimeInMin)

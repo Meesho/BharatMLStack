@@ -7,8 +7,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
-	filecache "github.com/Meesho/BharatMLStack/flashring/internal/shard"
+	"github.com/Meesho/BharatMLStack/flashring/external/maths"
+	filecache "github.com/Meesho/BharatMLStack/flashring/external/shard"
+	"github.com/Meesho/BharatMLStack/flashring/pkg/metric"
 	"github.com/cespare/xxhash/v2"
 	"github.com/rs/zerolog/log"
 )
@@ -19,7 +20,6 @@ import (
 */
 
 const (
-	ROUNDS         = 1
 	KEYS_PER_SHARD = (1 << 26)
 	BLOCK_SIZE     = 4096
 )
@@ -60,6 +60,8 @@ type WrapCacheConfig struct {
 	ReWriteScoreThreshold float32
 	GridSearchEpsilon     float64
 	SampleDuration        time.Duration
+	MaxConcurrentReads    int64 // Maximum concurrent read operations
+	Rounds                int
 }
 
 func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*WrapCache, error) {
@@ -137,7 +139,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 	for i := 0; i < config.NumShards; i++ {
 		shards[i] = filecache.NewShardCache(filecache.ShardCacheConfig{
 			MemtableSize:        config.MemtableSize,
-			Rounds:              ROUNDS,
+			Rounds:              config.Rounds,
 			RbInitial:           config.KeysPerShard,
 			RbMax:               config.KeysPerShard,
 			DeleteAmortizedStep: 1000,
@@ -152,6 +154,13 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 	for i := 0; i < config.NumShards; i++ {
 		stats[i] = &CacheStats{}
 	}
+
+	// Initialize semaphores using channels
+	maxReads := config.MaxConcurrentReads
+	if maxReads <= 0 {
+		maxReads = int64(config.NumShards * 10) // Default: 10x the number of shards
+	}
+
 	wc := &WrapCache{
 		shards:     shards,
 		shardLocks: shardLocks,
@@ -163,24 +172,27 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 			sleepDuration := 10 * time.Second
 			perShardPrevTotalGets := make([]uint64, config.NumShards)
 			perShardPrevTotalPuts := make([]uint64, config.NumShards)
+			perShardPrevReWrites := make([]uint64, config.NumShards)
+			perShardPrevExpired := make([]uint64, config.NumShards)
 			for {
 				time.Sleep(sleepDuration)
 				for i := 0; i < config.NumShards; i++ {
-					log.Info().Msgf("Shard %d has %d active entries", i, wc.stats[i].ShardWiseActiveEntries.Load())
+					metric.Gauge("shard.active.entries", float64(wc.shards[i].GetRingBufferActiveEntries()), []string{"shard_name", strconv.Itoa(i)})
 					total := wc.stats[i].TotalGets.Load()
 					hits := wc.stats[i].Hits.Load()
 					hitRate := float64(0)
 					if total > 0 {
 						hitRate = float64(hits) / float64(total)
 					}
-					log.Info().Msgf("Shard %d HitRate: %v", i, hitRate)
-					log.Info().Msgf("Shard %d ReWrites: %v", i, wc.stats[i].ReWrites.Load())
-					log.Info().Msgf("Shard %d Expired: %v", i, wc.stats[i].Expired.Load())
-					log.Info().Msgf("Shard %d Total: %v", i, total)
-					log.Info().Msgf("Gets/sec: %v", float64(total-perShardPrevTotalGets[i])/float64(sleepDuration.Seconds()))
-					log.Info().Msgf("Puts/sec: %v", float64(wc.stats[i].TotalPuts.Load()-perShardPrevTotalPuts[i])/float64(sleepDuration.Seconds()))
+					metric.Gauge("shard.hit.rate", hitRate, []string{"shard_name", strconv.Itoa(i)})
+					metric.Gauge("shard.re.writes.sec", float64(wc.stats[i].ReWrites.Load()-perShardPrevReWrites[i])/float64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
+					metric.Gauge("shard.expired.sec", float64(wc.stats[i].Expired.Load()-perShardPrevExpired[i])/float64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
+					metric.Gauge("shard.gets.sec", float64(total-perShardPrevTotalGets[i])/float64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
+					metric.Gauge("shard.puts.sec", float64(wc.stats[i].TotalPuts.Load()-perShardPrevTotalPuts[i])/float64(sleepDuration.Seconds()), []string{"shard_name", strconv.Itoa(i)})
 					perShardPrevTotalGets[i] = total
 					perShardPrevTotalPuts[i] = wc.stats[i].TotalPuts.Load()
+					perShardPrevReWrites[i] = wc.stats[i].ReWrites.Load()
+					perShardPrevExpired[i] = wc.stats[i].Expired.Load()
 				}
 				log.Info().Msgf("GridSearchActive: %v", wc.predictor.GridSearchEstimator.IsGridSearchActive())
 			}
@@ -190,24 +202,30 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 }
 
 func (wc *WrapCache) Put(key string, value []byte, exptime uint64) error {
+	start := time.Now()
 	h32 := hash(key)
 	shardIdx := h32 % uint32(len(wc.shards))
 	wc.shardLocks[shardIdx].Lock()
 	defer wc.shardLocks[shardIdx].Unlock()
-	wc.shards[shardIdx].Put(key, value, exptime)
+	wc.shards[shardIdx].Put(key, value, uint64(time.Now().Unix())+exptime)
 	wc.stats[shardIdx].TotalPuts.Add(1)
 	if h32%100 < 10 {
 		wc.stats[shardIdx].ShardWiseActiveEntries.Store(uint64(wc.shards[shardIdx].GetRingBufferActiveEntries()))
 	}
+	metric.Timing("flashring.put", time.Since(start), []string{"shard_name", strconv.Itoa(int(shardIdx))})
 	return nil
 }
 
 func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
+	start := time.Now()
 	h32 := hash(key)
 	shardIdx := h32 % uint32(len(wc.shards))
+
+	// Use RLock for read operations - this will naturally wait for any exclusive writes to complete
 	wc.shardLocks[shardIdx].RLock()
 	val, exptime, keyFound, expired, shouldReWrite := wc.shards[shardIdx].Get(key)
 	wc.shardLocks[shardIdx].RUnlock()
+
 	if keyFound && !expired {
 		wc.stats[shardIdx].Hits.Add(1)
 	}
@@ -217,12 +235,39 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	wc.stats[shardIdx].TotalGets.Add(1)
 	if shouldReWrite {
 		wc.stats[shardIdx].ReWrites.Add(1)
-		wc.Put(key, val, exptime)
+		valCopy := make([]byte, len(val))
+		copy(valCopy, val)
+		go wc.Put(key, valCopy, exptime)
 	}
 	if h32%100 < 10 {
 		wc.predictor.Observe(float64(wc.stats[shardIdx].Hits.Load()) / float64(wc.stats[shardIdx].TotalGets.Load()))
 	}
+	metric.Timing("flashring.get", time.Since(start), []string{"shard_name", strconv.Itoa(int(shardIdx))})
 	return val, keyFound, expired
+}
+
+// MGet retrieves multiple keys in one call, preserving the input order.
+// It returns parallel slices of values, found flags, and expired flags.
+func (wc *WrapCache) MGet(keys []string) ([][]byte, []bool, []bool) {
+	start := time.Now()
+	values := make([][]byte, len(keys))
+	found := make([]bool, len(keys))
+	expired := make([]bool, len(keys))
+	var wg sync.WaitGroup
+	wg.Add(len(keys))
+	for i, key := range keys {
+		i, key := i, key
+		go func() {
+			defer wg.Done()
+			v, f, e := wc.Get(key)
+			values[i] = v
+			found[i] = f
+			expired[i] = e
+		}()
+	}
+	wg.Wait()
+	metric.Timing("flashring.mget", time.Since(start), []string{})
+	return values, found, expired
 }
 
 func hash(key string) uint32 {

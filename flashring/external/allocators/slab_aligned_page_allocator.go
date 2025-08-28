@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
-	"github.com/Meesho/BharatMLStack/flashring/internal/pools"
+	"github.com/Meesho/BharatMLStack/flashring/external/fs"
+	"github.com/Meesho/BharatMLStack/flashring/external/pools"
 	"github.com/rs/zerolog/log"
 )
 

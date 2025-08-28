@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Meesho/BharatMLStack/flashring/internal/allocators"
-	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
-	"github.com/Meesho/BharatMLStack/flashring/internal/indices"
-	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
-	"github.com/Meesho/BharatMLStack/flashring/internal/memtables"
+	"github.com/Meesho/BharatMLStack/flashring/external/allocators"
+	"github.com/Meesho/BharatMLStack/flashring/external/fs"
+	"github.com/Meesho/BharatMLStack/flashring/external/indices"
+	"github.com/Meesho/BharatMLStack/flashring/external/maths"
+	"github.com/Meesho/BharatMLStack/flashring/external/memtables"
 	"github.com/rs/zerolog/log"
 )
 
