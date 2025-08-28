@@ -37,12 +37,10 @@ var (
 )
 
 type WrapCache struct {
-	shards          []*filecache.ShardCache
-	shardLocks      []sync.RWMutex
-	predictor       *maths.Predictor
-	stats           []*CacheStats
-	readSemaphore   chan int
-	writeSemaphores []chan int // Per-shard write semaphores
+	shards     []*filecache.ShardCache
+	shardLocks []sync.RWMutex
+	predictor  *maths.Predictor
+	stats      []*CacheStats
 }
 
 type CacheStats struct {
@@ -162,21 +160,12 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 	if maxReads <= 0 {
 		maxReads = int64(config.NumShards * 10) // Default: 10x the number of shards
 	}
-	readSemaphore := make(chan int, maxReads)
-
-	// Create per-shard write semaphores - 1 concurrent write per shard
-	writeSemaphores := make([]chan int, config.NumShards)
-	for i := 0; i < config.NumShards; i++ {
-		writeSemaphores[i] = make(chan int, 1) // Only 1 concurrent write per shard
-	}
 
 	wc := &WrapCache{
-		shards:          shards,
-		shardLocks:      shardLocks,
-		predictor:       predictor,
-		stats:           stats,
-		readSemaphore:   readSemaphore,
-		writeSemaphores: writeSemaphores,
+		shards:     shards,
+		shardLocks: shardLocks,
+		predictor:  predictor,
+		stats:      stats,
 	}
 	if logStats {
 		go func() {
@@ -216,19 +205,6 @@ func (wc *WrapCache) Put(key string, value []byte, exptime uint64) error {
 	start := time.Now()
 	h32 := hash(key)
 	shardIdx := h32 % uint32(len(wc.shards))
-
-	// Acquire per-shard write semaphore to limit concurrent writes per shard
-	select {
-	case wc.writeSemaphores[shardIdx] <- 1:
-		// Successfully acquired write semaphore for this shard
-	default:
-		// Write semaphore full for this shard, block until available
-		wc.writeSemaphores[shardIdx] <- 1
-	}
-	defer func() { <-wc.writeSemaphores[shardIdx] }() // Release write semaphore for this shard
-
-	// Write semaphore acquired, proceed with write operation
-
 	wc.shardLocks[shardIdx].Lock()
 	defer wc.shardLocks[shardIdx].Unlock()
 	wc.shards[shardIdx].Put(key, value, uint64(time.Now().Unix())+exptime)
@@ -236,7 +212,7 @@ func (wc *WrapCache) Put(key string, value []byte, exptime uint64) error {
 	if h32%100 < 10 {
 		wc.stats[shardIdx].ShardWiseActiveEntries.Store(uint64(wc.shards[shardIdx].GetRingBufferActiveEntries()))
 	}
-	metric.Timing("shard_put_latency", time.Since(start), []string{"shard_name", strconv.Itoa(int(shardIdx))})
+	metric.Timing("flashring.put", time.Since(start), []string{"shard_name", strconv.Itoa(int(shardIdx))})
 	return nil
 }
 
@@ -247,23 +223,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 
 	// Use RLock for read operations - this will naturally wait for any exclusive writes to complete
 	wc.shardLocks[shardIdx].RLock()
-
-	// Acquire read semaphore to limit concurrent reads only during the actual read
-	queueStart := time.Now()
-	immediate := false
-	select {
-	case wc.readSemaphore <- 1:
-		immediate = true
-	default:
-	}
-	if !immediate {
-		// Read semaphore full, block until available
-		wc.readSemaphore <- 1
-	}
-	metric.Timing("shard.get.queue_wait", time.Since(queueStart), []string{"shard_name", strconv.Itoa(int(shardIdx))})
-
 	val, exptime, keyFound, expired, shouldReWrite := wc.shards[shardIdx].Get(key)
-	<-wc.readSemaphore // Release read semaphore immediately after read
 	wc.shardLocks[shardIdx].RUnlock()
 
 	if keyFound && !expired {
@@ -282,7 +242,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	if h32%100 < 10 {
 		wc.predictor.Observe(float64(wc.stats[shardIdx].Hits.Load()) / float64(wc.stats[shardIdx].TotalGets.Load()))
 	}
-	metric.Timing("shard.get.latency", time.Since(start), []string{"shard_name", strconv.Itoa(int(shardIdx))})
+	metric.Timing("flashring.get", time.Since(start), []string{"shard_name", strconv.Itoa(int(shardIdx))})
 	return val, keyFound, expired
 }
 
@@ -306,7 +266,7 @@ func (wc *WrapCache) MGet(keys []string) ([][]byte, []bool, []bool) {
 		}()
 	}
 	wg.Wait()
-	metric.Timing("shard.mget.latency", time.Since(start), []string{})
+	metric.Timing("flashring.mget", time.Since(start), []string{})
 	return values, found, expired
 }
 
