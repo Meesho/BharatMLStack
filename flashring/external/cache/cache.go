@@ -260,7 +260,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 		// Read semaphore full, block until available
 		wc.readSemaphore <- 1
 	}
-	metric.Timing("shard_get_queue_wait", time.Since(queueStart), []string{"shard_name", strconv.Itoa(int(shardIdx))})
+	metric.Timing("shard.get.queue_wait", time.Since(queueStart), []string{"shard_name", strconv.Itoa(int(shardIdx))})
 
 	val, exptime, keyFound, expired, shouldReWrite := wc.shards[shardIdx].Get(key)
 	<-wc.readSemaphore // Release read semaphore immediately after read
@@ -282,8 +282,32 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	if h32%100 < 10 {
 		wc.predictor.Observe(float64(wc.stats[shardIdx].Hits.Load()) / float64(wc.stats[shardIdx].TotalGets.Load()))
 	}
-	metric.Timing("shard_get_latency", time.Since(start), []string{"shard_name", strconv.Itoa(int(shardIdx))})
+	metric.Timing("shard.get.latency", time.Since(start), []string{"shard_name", strconv.Itoa(int(shardIdx))})
 	return val, keyFound, expired
+}
+
+// MGet retrieves multiple keys in one call, preserving the input order.
+// It returns parallel slices of values, found flags, and expired flags.
+func (wc *WrapCache) MGet(keys []string) ([][]byte, []bool, []bool) {
+	start := time.Now()
+	values := make([][]byte, len(keys))
+	found := make([]bool, len(keys))
+	expired := make([]bool, len(keys))
+	var wg sync.WaitGroup
+	wg.Add(len(keys))
+	for i, key := range keys {
+		i, key := i, key
+		go func() {
+			defer wg.Done()
+			v, f, e := wc.Get(key)
+			values[i] = v
+			found[i] = f
+			expired[i] = e
+		}()
+	}
+	wg.Wait()
+	metric.Timing("shard.mget.latency", time.Since(start), []string{})
+	return values, found, expired
 }
 
 func hash(key string) uint32 {
