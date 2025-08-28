@@ -1,5 +1,7 @@
 package config
 
+import "github.com/Meesho/BharatMLStack/online-feature-store/pkg/circuitbreaker"
+
 type Manager interface {
 	GetEntity(entityLabel string) (*Entity, error)
 	GetAllEntities() []Entity
@@ -25,4 +27,6 @@ type Manager interface {
 	RegisterClients() error
 	GetAllRegisteredClients() map[string]string
 	GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error)
+	GetCircuitBreakerConfigs() map[string]circuitbreaker.Config
+	UpdateCBConfigs() error
 }
