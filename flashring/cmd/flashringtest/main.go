@@ -4,9 +4,15 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"net/http"
+	"os"
+	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"time"
+
+	_ "net/http/pprof"
 
 	cachepkg "github.com/Meesho/BharatMLStack/flashring/internal/cache"
 	"github.com/rs/zerolog"
@@ -26,21 +32,48 @@ func main() {
 		iterations         int64
 		aVal               float64
 		logStats           bool
+		memProfile         string
+		cpuProfile         string
 	)
 
 	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul", "data directory for shard files")
 	flag.IntVar(&numShards, "shards", 128, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 100_000, "keys per shard")
-	flag.IntVar(&memtableMB, "memtable-mb", 128, "memtable size in MiB")
-	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 5, "file size in GiB per shard")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 1000_000, "keys per shard")
+	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
+	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 40, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 6, "number of read workers")
 	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
 	flag.Int64Var(&iterations, "iterations", 100_000_000, "number of iterations")
 	flag.Float64Var(&aVal, "a", 0.4, "a value for the predictor")
 	flag.BoolVar(&logStats, "log-stats", true, "periodically log cache stats")
+	flag.StringVar(&memProfile, "memprofile", "mem.prof", "write memory profile to this file")
+	flag.StringVar(&cpuProfile, "cpuprofile", "", "write cpu profile to this file")
 	flag.Parse()
 
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	go func() {
+		log.Info().Msg("Starting pprof server on :8080")
+		log.Info().Msg("Access profiles at: http://localhost:8080/debug/pprof/")
+		log.Info().Msg("Memory profile: http://localhost:8080/debug/pprof/heap")
+		log.Info().Msg("Goroutine profile: http://localhost:8080/debug/pprof/goroutine")
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			log.Error().Err(err).Msg("pprof server failed")
+		}
+	}()
+
+	// CPU profiling
+	if cpuProfile != "" {
+		f, err := os.Create(cpuProfile)
+		if err != nil {
+			log.Fatal().Err(err).Msg("could not create CPU profile")
+		}
+		defer f.Close()
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal().Err(err).Msg("could not start CPU profile")
+		}
+		defer pprof.StopCPUProfile()
+	}
+
 	memtableSizeInBytes := int32(memtableMB) * 1024 * 1024
 	fileSizeInBytes := int64(fileSizeMultiplier) * int64(memtableSizeInBytes)
 
@@ -71,11 +104,40 @@ func main() {
 				key := fmt.Sprintf("key_%d", i)
 				val := fmt.Sprintf(str1kb, i)
 				pc.Put(key, []byte(val), 60)
+				//pc.Put(key, []byte(val), 60)
 			}
 		}(j)
 	}
+	// Start pprof HTTP server for runtime profiling
+
 	wg.Wait()
 	log.Info().Msgf("done putting")
+
+	// Memory profiling
+	if memProfile != "" {
+		runtime.GC() // get up-to-date statistics
+		f, err := os.Create(memProfile)
+		if err != nil {
+			log.Fatal().Err(err).Msg("could not create memory profile")
+		}
+		defer f.Close()
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			log.Fatal().Err(err).Msg("could not write memory profile")
+		}
+		log.Info().Msgf("Memory profile written to %s", memProfile)
+	}
+
+	// Print memory stats
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	log.Info().
+		Str("alloc", fmt.Sprintf("%.2f MB", float64(m.Alloc)/1024/1024)).
+		Str("total_alloc", fmt.Sprintf("%.2f MB", float64(m.TotalAlloc)/1024/1024)).
+		Str("sys", fmt.Sprintf("%.2f MB", float64(m.Sys)/1024/1024)).
+		Uint32("num_gc", m.NumGC).
+		Msg("Memory statistics")
+	wg.Add(1)
+	wg.Wait()
 }
 
 func BucketsByWidth(a float64, n int) []float64 {

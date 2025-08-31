@@ -7,18 +7,18 @@ import (
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/allocators"
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
-	indicesv2 "github.com/Meesho/BharatMLStack/flashring/internal/indicesV2"
+	indices "github.com/Meesho/BharatMLStack/flashring/internal/indicesV3"
 	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
 	"github.com/Meesho/BharatMLStack/flashring/internal/memtables"
 	"github.com/rs/zerolog/log"
 )
 
 type ShardCache struct {
-	keyIndex          *indicesv2.Index
+	keyIndex          *indices.Index
 	file              *fs.WrapAppendFile
 	mm                *memtables.MemtableManager
 	readPageAllocator *allocators.SlabAlignedPageAllocator
-	dm                *indicesv2.DeleteManager
+	dm                *indices.DeleteManager
 	predictor         *maths.Predictor
 	startAt           int64
 	Stats             *Stats
@@ -69,7 +69,7 @@ func NewShardCache(config ShardCacheConfig) *ShardCache {
 	if err != nil {
 		log.Panic().Err(err).Msg("Failed to create memtable manager")
 	}
-	ki := indicesv2.NewIndex(0, config.RbInitial, config.RbMax, config.DeleteAmortizedStep)
+	ki := indices.NewIndex(0, config.RbInitial, config.RbMax, config.DeleteAmortizedStep)
 	sizeClasses := make([]allocators.SizeClass, 0)
 	i := fs.BLOCK_SIZE
 	iMax := (1 << 16)
@@ -81,7 +81,7 @@ func NewShardCache(config ShardCacheConfig) *ShardCache {
 	if err != nil {
 		log.Panic().Err(err).Msg("Failed to create read page allocator")
 	}
-	dm := indicesv2.NewDeleteManager(ki, file, config.DeleteAmortizedStep)
+	dm := indices.NewDeleteManager(ki, file, config.DeleteAmortizedStep)
 	return &ShardCache{
 		keyIndex:          ki,
 		mm:                memtableManager,
@@ -115,7 +115,7 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	copy(buf[4:], key)
 	copy(buf[4+len(key):], value)
 	crc := crc32.ChecksumIEEE(buf[4:])
-	indicesv2.ByteOrder.PutUint32(buf[0:4], crc)
+	indices.ByteOrder.PutUint32(buf[0:4], crc)
 	fc.keyIndex.Put(key, length, ttlMinutes, mtId, uint32(offset))
 	fc.dm.IncMemtableKeyCount(mtId)
 	fc.Stats.MemIdCount[mtId]++
@@ -125,12 +125,12 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 
-	if status != indicesv2.StatusNotFound {
+	if status != indices.StatusNotFound {
 		fc.Stats.KeyNotFoundCount++
 		return false, nil, 0, false, false
 	}
 
-	if status == indicesv2.StatusExpired {
+	if status == indices.StatusExpired {
 		fc.Stats.KeyExpiredCount++
 		return false, nil, 0, true, false
 	}
@@ -159,7 +159,7 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 			panic("memtable exists but buf not found")
 		}
 	}
-	gotCR32 := indicesv2.ByteOrder.Uint32(buf[0:4])
+	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
 	computedCR32 := crc32.ChecksumIEEE(buf[4:])
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotCR32 != computedCR32 {
