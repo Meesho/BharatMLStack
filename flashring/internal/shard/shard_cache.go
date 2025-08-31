@@ -3,23 +3,22 @@ package filecache
 import (
 	"fmt"
 	"hash/crc32"
-	"strings"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/allocators"
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
-	"github.com/Meesho/BharatMLStack/flashring/internal/indices"
+	indicesv2 "github.com/Meesho/BharatMLStack/flashring/internal/indicesV2"
 	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
 	"github.com/Meesho/BharatMLStack/flashring/internal/memtables"
 	"github.com/rs/zerolog/log"
 )
 
 type ShardCache struct {
-	keyIndex          *indices.KeyIndex
+	keyIndex          *indicesv2.Index
 	file              *fs.WrapAppendFile
 	mm                *memtables.MemtableManager
 	readPageAllocator *allocators.SlabAlignedPageAllocator
-	dm                *indices.DeleteManager
+	dm                *indicesv2.DeleteManager
 	predictor         *maths.Predictor
 	startAt           int64
 	Stats             *Stats
@@ -27,6 +26,7 @@ type ShardCache struct {
 
 type Stats struct {
 	KeyNotFoundCount int
+	KeyExpiredCount  int
 	BadDataCount     int
 	BadLengthCount   int
 	BadCR32Count     int
@@ -69,7 +69,7 @@ func NewShardCache(config ShardCacheConfig) *ShardCache {
 	if err != nil {
 		log.Panic().Err(err).Msg("Failed to create memtable manager")
 	}
-	ki := indices.NewKeyIndex(config.Rounds, config.RbInitial, config.RbMax, config.DeleteAmortizedStep)
+	ki := indicesv2.NewIndex(0, config.RbInitial, config.RbMax, config.DeleteAmortizedStep)
 	sizeClasses := make([]allocators.SizeClass, 0)
 	i := fs.BLOCK_SIZE
 	iMax := (1 << 16)
@@ -81,7 +81,7 @@ func NewShardCache(config ShardCacheConfig) *ShardCache {
 	if err != nil {
 		log.Panic().Err(err).Msg("Failed to create read page allocator")
 	}
-	dm := indices.NewDeleteManager(ki, file, config.DeleteAmortizedStep)
+	dm := indicesv2.NewDeleteManager(ki, file, config.DeleteAmortizedStep)
 	return &ShardCache{
 		keyIndex:          ki,
 		mm:                memtableManager,
@@ -98,9 +98,8 @@ func NewShardCache(config ShardCacheConfig) *ShardCache {
 	}
 }
 
-func (fc *ShardCache) Put(key string, value []byte, exptime uint64) error {
-	deltaExptime := exptime - uint64(fc.startAt)
-	deltaExptimeInMin := deltaExptime / 60
+func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
+
 	size := 4 + len(key) + len(value)
 	mt, mtId, _ := fc.mm.GetMemtable()
 	err := fc.dm.ExecuteDeleteIfNeeded()
@@ -116,30 +115,29 @@ func (fc *ShardCache) Put(key string, value []byte, exptime uint64) error {
 	copy(buf[4:], key)
 	copy(buf[4+len(key):], value)
 	crc := crc32.ChecksumIEEE(buf[4:])
-	indices.ByteOrder.PutUint32(buf[0:4], crc)
-	fc.keyIndex.Put(key, length, mtId, uint32(offset), deltaExptimeInMin)
+	indicesv2.ByteOrder.PutUint32(buf[0:4], crc)
+	fc.keyIndex.Put(key, length, ttlMinutes, mtId, uint32(offset))
 	fc.dm.IncMemtableKeyCount(mtId)
 	fc.Stats.MemIdCount[mtId]++
 	return nil
 }
 
-func (fc *ShardCache) Get(key string) ([]byte, uint64, bool, bool, bool) {
-	memId, length, offset, lastAccess, freq, exptime, idx, found := fc.keyIndex.Get(key)
-	_, mtId, _ := fc.mm.GetMemtable()
-	shouldReWrite := fc.predictor.Predict(freq, uint64(lastAccess), memId, mtId)
+func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
+	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 
-	if !found {
+	if status != indicesv2.StatusNotFound {
 		fc.Stats.KeyNotFoundCount++
-		return nil, 0, false, false, shouldReWrite
+		return false, nil, 0, false, false
 	}
-	idxs := fmt.Sprintf("%d", idx)
-	if !strings.Contains(key, idxs) {
-		fc.Stats.BadDataCount++
+
+	if status == indicesv2.StatusExpired {
+		fc.Stats.KeyExpiredCount++
+		return false, nil, 0, true, false
 	}
-	deltaCurTimeFromStart := deltaCurrTimeFromStartInMin(fc.startAt)
-	if exptime < deltaCurTimeFromStart {
-		return nil, 0, false, true, shouldReWrite
-	}
+
+	_, currMemId, _ := fc.mm.GetMemtable()
+	shouldReWrite := fc.predictor.Predict(uint64(freq), uint64(lastAccess), memId, currMemId)
+
 	exists := true
 	var buf []byte
 	memtableExists := true
@@ -153,7 +151,7 @@ func (fc *ShardCache) Get(key string) ([]byte, uint64, bool, bool, bool) {
 		n := fc.readFromDisk(int64(fileOffset), length, buf)
 		if n != int(length) {
 			fc.Stats.BadLengthCount++
-			return nil, 0, false, false, shouldReWrite
+			return false, nil, 0, false, shouldReWrite
 		}
 	} else {
 		buf, exists = mt.GetBufForRead(int(offset), length)
@@ -161,21 +159,21 @@ func (fc *ShardCache) Get(key string) ([]byte, uint64, bool, bool, bool) {
 			panic("memtable exists but buf not found")
 		}
 	}
-	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
+	gotCR32 := indicesv2.ByteOrder.Uint32(buf[0:4])
 	computedCR32 := crc32.ChecksumIEEE(buf[4:])
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotCR32 != computedCR32 {
 		fc.Stats.BadCR32Count++
 		fc.Stats.BadCRCMemIds[memId]++
-		return nil, 0, false, false, shouldReWrite
+		return false, nil, 0, false, shouldReWrite
 	}
 	if gotKey != key {
 		fc.Stats.BadKeyCount++
 		fc.Stats.BadKeyMemIds[memId]++
-		return nil, 0, false, false, shouldReWrite
+		return false, nil, 0, false, shouldReWrite
 	}
 	valLen := int(length) - 4 - len(key)
-	return buf[4+len(key) : 4+len(key)+valLen], exptime, true, false, shouldReWrite
+	return true, buf[4+len(key) : 4+len(key)+valLen], remainingTTL, false, shouldReWrite
 }
 
 func (fc *ShardCache) readFromDisk(fileOffset int64, length uint16, buf []byte) int {
@@ -191,23 +189,6 @@ func (fc *ShardCache) readFromDisk(fileOffset int64, length uint16, buf []byte) 
 	return n
 }
 
-// Debug methods to expose ring buffer state
-func (fc *ShardCache) GetRingBufferNextIndex() int {
-	return fc.keyIndex.GetRingBufferNextIndex()
-}
-
-func (fc *ShardCache) GetRingBufferSize() int {
-	return fc.keyIndex.GetRingBufferSize()
-}
-
-func (fc *ShardCache) GetRingBufferCapacity() int {
-	return fc.keyIndex.GetRingBufferCapacity()
-}
-
 func (fc *ShardCache) GetRingBufferActiveEntries() int {
-	return fc.keyIndex.GetRingBufferActiveEntries()
-}
-
-func deltaCurrTimeFromStartInMin(startAt int64) uint64 {
-	return uint64(time.Now().Unix()-startAt) / 60
+	return fc.keyIndex.GetRB().ActiveEntries()
 }

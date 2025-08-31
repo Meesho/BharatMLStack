@@ -140,7 +140,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 			Rounds:              ROUNDS,
 			RbInitial:           config.KeysPerShard,
 			RbMax:               config.KeysPerShard,
-			DeleteAmortizedStep: 1000,
+			DeleteAmortizedStep: 10000,
 			MaxFileSize:         int64(config.FileSize),
 			BlockSize:           BLOCK_SIZE,
 			Directory:           mountPoint,
@@ -189,12 +189,12 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 	return wc, nil
 }
 
-func (wc *WrapCache) Put(key string, value []byte, exptime uint64) error {
+func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) error {
 	h32 := hash(key)
 	shardIdx := h32 % uint32(len(wc.shards))
 	wc.shardLocks[shardIdx].Lock()
 	defer wc.shardLocks[shardIdx].Unlock()
-	wc.shards[shardIdx].Put(key, value, exptime)
+	wc.shards[shardIdx].Put(key, value, exptimeInMinutes)
 	wc.stats[shardIdx].TotalPuts.Add(1)
 	if h32%100 < 10 {
 		wc.stats[shardIdx].ShardWiseActiveEntries.Store(uint64(wc.shards[shardIdx].GetRingBufferActiveEntries()))
@@ -205,9 +205,9 @@ func (wc *WrapCache) Put(key string, value []byte, exptime uint64) error {
 func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	h32 := hash(key)
 	shardIdx := h32 % uint32(len(wc.shards))
-	wc.shardLocks[shardIdx].RLock()
-	val, exptime, keyFound, expired, shouldReWrite := wc.shards[shardIdx].Get(key)
-	wc.shardLocks[shardIdx].RUnlock()
+	wc.shardLocks[shardIdx].Lock()
+	defer wc.shardLocks[shardIdx].Unlock()
+	keyFound, val, remainingTTL, expired, shouldReWrite := wc.shards[shardIdx].Get(key)
 	if keyFound && !expired {
 		wc.stats[shardIdx].Hits.Add(1)
 	}
@@ -217,11 +217,9 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	wc.stats[shardIdx].TotalGets.Add(1)
 	if shouldReWrite {
 		wc.stats[shardIdx].ReWrites.Add(1)
-		wc.Put(key, val, exptime)
+		wc.Put(key, val, remainingTTL)
 	}
-	if h32%100 < 10 {
-		wc.predictor.Observe(float64(wc.stats[shardIdx].Hits.Load()) / float64(wc.stats[shardIdx].TotalGets.Load()))
-	}
+	wc.predictor.Observe(float64(wc.stats[shardIdx].Hits.Load()) / float64(wc.stats[shardIdx].TotalGets.Load()))
 	return val, keyFound, expired
 }
 
