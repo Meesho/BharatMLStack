@@ -151,7 +151,7 @@ func (c *ClientManager) GetData(key string, ip string) *ResponseMessage {
 	}:
 	default:
 		metric.Count("p2p.cache.store.keys.dropped", 1, []string{"sendTo", ip, "reason", "request_channel_full"})
-		log.Error().Msgf("GetData: request channel is full for key %s from pod %s", key, ip)
+		log.Debug().Msgf("GetData: request channel is full for key %s from pod %s", key, ip)
 		return nil
 	}
 
@@ -161,7 +161,7 @@ func (c *ClientManager) GetData(key string, ip string) *ResponseMessage {
 	case value := <-responseChan:
 		return &value
 	case <-timer.C:
-		log.Error().Msgf("GetData: request timed out for key %s from pod %s", key, ip)
+		log.Debug().Msgf("GetData: request timed out for key %s from pod %s", key, ip)
 		metric.Count("p2p.cache.store.keys.dropped", 1, []string{"sendTo", ip, "reason", "timeout"})
 		go c.CancelRequest(key, responseChan)
 		return nil
