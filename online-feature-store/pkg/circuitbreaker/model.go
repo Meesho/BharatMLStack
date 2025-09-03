@@ -64,6 +64,10 @@ type Config struct {
 	// ActiveCBs maps circuit breaker names to their enabled status
 	// Example: {"retrieve_from_distributed_cache": true, "write_to_cache": false}
 	ActiveCBs map[string]bool `json:"active-cbs"`
+
+	// ForceOpenCB specifies whether the circuit breaker is forced open.
+	// This is used to force the circuit breaker to be open regardless of the configuration.
+	ForceOpenCB bool `json:"force-open-cb"`
 }
 
 func BuildConfig(serviceName string) *Config {
