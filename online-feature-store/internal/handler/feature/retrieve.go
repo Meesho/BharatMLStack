@@ -356,7 +356,7 @@ func (h *RetrieveHandler) retrieveFromDistributedCache(keys []*retrieve.Keys, re
 		return nil, err
 	}
 	var cacheData [][]byte
-	if h.distributedCacheCBProvider.IsForcedOpen() || (h.distributedCacheCBProvider.IsCBEnabled(distributedCacheCBKey) && !h.distributedCacheCBProvider.IsCallAllowed(distributedCacheCBKey)) {
+	if h.distributedCacheCBProvider.IsForcedOpen(distributedCacheCBKey) || (h.distributedCacheCBProvider.IsCBEnabled(distributedCacheCBKey) && !h.distributedCacheCBProvider.IsCallAllowed(distributedCacheCBKey)) {
 		log.Debug().Msgf("Circuit breaker is open, returning negative cache for all fgIds")
 		metric.Count("feature.retrieve.distributed.cache.cb.open", 1, []string{"entity_name", entityLabel, "cache_type", "distributed"})
 		for _, key := range keys {

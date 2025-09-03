@@ -23,7 +23,7 @@ type Manager interface {
 	UpdateCBConfig(Config) error
 	GetCBConfig() Config
 	IsCBEnabled(key string) bool
-	IsForcedOpen() bool
+	IsForcedOpen(key string) bool
 }
 
 type manager struct {
@@ -114,6 +114,6 @@ func (m *manager) IsCBEnabled(key string) bool {
 	return false
 }
 
-func (m *manager) IsForcedOpen() bool {
-	return m.cbConfig.ForceOpenCB
+func (m *manager) IsForcedOpen(key string) bool {
+	return m.cbConfig.ActiveCBs[key].ForceOpen
 }

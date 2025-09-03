@@ -515,8 +515,8 @@ func (e *Etcd) UpdateCBConfigs() error {
 	for cbManagerName, cbConfig := range cbConfigs {
 		activeCBs := make([]string, 0)
 		inactiveCBs := make([]string, 0)
-		for cbName, enabled := range cbConfig.ActiveCBs {
-			if enabled {
+		for cbName, activeCBConfig := range cbConfig.ActiveCBs {
+			if activeCBConfig.Enabled {
 				activeCBs = append(activeCBs, cbName)
 			} else {
 				inactiveCBs = append(inactiveCBs, cbName)
