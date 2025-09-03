@@ -1,3 +1,5 @@
+---
+
 app_name: online-feature-store-api-nrt
 app_port: 9700
 health_check: /health/self
@@ -15,27 +17,28 @@ service_type:
 environment:
     ftr:
         as_enabled: true
-        replica_count: 1
-        as_min: 1
+        replica_count: 2
+        as_min: 2
         as_max: 40
-        cpu_limit: 3
-        cpu_request: 2
-        memory_limit: 7G
-        memory_request: 5G
-        deploymentStrategy: rollingUpdate
+        cpu_limit: 4
+        cpu_request: 4
+        memory_limit: 16G
+        memory_request: 8500M
+        deploymentStrategy: canary
         appMetrics: true
         deployment_args: false
         command: /app/server
+
     dev:
         as_enabled: true
-        replica_count: 1
-        as_min: 1
+        replica_count: 2
+        as_min: 2
         as_max: 40
-        cpu_limit: 3
-        cpu_request: 2
-        memory_limit: 7G
-        memory_request: 5G
-        deploymentStrategy: rollingUpdate
+        cpu_limit: 4
+        cpu_request: 4
+        memory_limit: 16G
+        memory_request: 8500M
+        deploymentStrategy: canary
         appMetrics: true
         deployment_args: false
         command: /app/server
@@ -44,20 +47,23 @@ environment:
         replica_count: 0
         as_min: 1
         as_max: 40
-        cpu_limit: 3
-        cpu_request: 2
-        memory_limit: 7G
-        memory_request: 5G
+        cpu_limit: 12
+        cpu_request: 10
+        memory_limit: 24G
+        memory_request: 19500M
         deploymentStrategy: rollingUpdate
         appMetrics: true
         deployment_args: false
         command: /app/server
     prd:
         as_enabled: true
+        enableManualPromotion: true
         replica_count: 1
-        as_min: 1
-        as_max: 400
-        cpu_limit: 3
+        as_min: 2
+        as_max: 200
+        minCanaryReplicas: 5
+        maxCanaryReplicas: 8
+        cpu_limit: 4
         cpu_request: 2
         memory_limit: 7G
         memory_request: 5G
