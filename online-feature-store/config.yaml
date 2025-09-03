@@ -21,6 +21,7 @@ environment:
             - online-feature-store-consumer-realtime
             - online-feature-store-consumer-v5
             - online-feature-store-api-secondary-p2p-test
+            - online-feature-store-api-nrt
     stg:
         deployment_order:
             - online-feature-store-api
