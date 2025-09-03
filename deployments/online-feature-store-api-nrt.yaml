@@ -1,72 +1,68 @@
 app_name: online-feature-store-api-nrt
 app_port: 9700
-appConfigEnabled: true
-bu: datascience
-environment:
-    dev:
-        appMetrics: false
-        as_enabled: true
-        as_max: 400
-        as_min: 2
-        cpu_limit: 3
-        cpu_request: 2
-        deployment_args: false
-        deploymentStrategy: rollingUpdate
-        memory_limit: 7G
-        memory_request: 5G
-    ftr:
-        appMetrics: false
-        as_enabled: true
-        as_max: 400
-        as_min: 2
-        cpu_limit: 3
-        cpu_request: 2
-        deployment_args: false
-        deploymentStrategy: rollingUpdate
-        memory_limit: 7G
-        memory_request: 5G
-    int:
-        appMetrics: false
-        as_enabled: true
-        as_max: 400
-        as_min: 2
-        cpu_limit: 3
-        cpu_request: 2
-        deployment_args: false
-        deploymentStrategy: rollingUpdate
-        memory_limit: 7G
-        memory_request: 5G
-    prd:
-        appMetrics: false
-        as_enabled: true
-        as_max: 400
-        as_min: 2
-        cpu_limit: 3
-        cpu_request: 2
-        deployment_args: false
-        deploymentStrategy: canary
-        memory_limit: 7G
-        memory_request: 5G
-    stg:
-        appMetrics: false
-        as_enabled: true
-        as_max: 400
-        as_min: 2
-        cpu_limit: 3
-        cpu_request: 2
-        deployment_args: false
-        deploymentStrategy: rollingUpdate
-        memory_limit: 7G
-        memory_request: 5G
 health_check: /health/self
-initialDelaySeconds: 60
-module: module_less
-primary_owner: mohit.kumar@meesho.com
-priority: p1
+module: api-server
+bu: datascience
 priority_v2: up1
-replica_count: 1
+primary_owner: mohit.kumar@meesho.com
 secondary_owner: ansh.agrawal@meesho.com
-service_type:
-    - database
-    - grpc
 team: ml-platform
+priority: p0
+initialDelaySeconds: 60
+service_type:
+    - grpc
+    - database
+environment:
+    ftr:
+        as_enabled: true
+        replica_count: 1
+        as_min: 1
+        as_max: 40
+        cpu_limit: 3
+        cpu_request: 2
+        memory_limit: 7G
+        memory_request: 5G
+        deploymentStrategy: rollingUpdate
+        appMetrics: true
+        deployment_args: false
+        command: /app/server
+    dev:
+        as_enabled: true
+        replica_count: 1
+        as_min: 1
+        as_max: 40
+        cpu_limit: 3
+        cpu_request: 2
+        memory_limit: 7G
+        memory_request: 5G
+        deploymentStrategy: rollingUpdate
+        appMetrics: true
+        deployment_args: false
+        command: /app/server
+    int:
+        as_enabled: true
+        replica_count: 0
+        as_min: 1
+        as_max: 40
+        cpu_limit: 3
+        cpu_request: 2
+        memory_limit: 7G
+        memory_request: 5G
+        deploymentStrategy: rollingUpdate
+        appMetrics: true
+        deployment_args: false
+        command: /app/server
+    prd:
+        as_enabled: true
+        replica_count: 1
+        as_min: 1
+        as_max: 400
+        cpu_limit: 3
+        cpu_request: 2
+        memory_limit: 7G
+        memory_request: 5G
+        deploymentStrategy: rollingUpdate
+        appMetrics: true
+        deployment_args: false
+        command: /app/server
+        otel_enabled: false
