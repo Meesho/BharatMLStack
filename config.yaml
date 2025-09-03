@@ -1,0 +1,20 @@
+arch: amd64
+bu: datascience
+build_tool: docker
+deployArgo: true
+dockerBuildVersion: go-1.22
+environment:
+    ftr:
+        deployment_order: null
+    int:
+        deployment_order: null
+    prd:
+        deployment_order: null
+    stg:
+        deployment_order: null
+maintainer: mohit.kumar@meesho.com
+modules:
+    - module_less
+repo_name: BharatMLStack-internal
+skip_sonar: true
+team: ml-platform
