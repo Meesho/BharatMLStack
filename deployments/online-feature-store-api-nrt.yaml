@@ -61,7 +61,7 @@ environment:
         cpu_request: 2
         memory_limit: 7G
         memory_request: 5G
-        deploymentStrategy: rollingUpdate
+        deploymentStrategy: canary
         appMetrics: true
         deployment_args: false
         command: /app/server
