@@ -707,6 +707,32 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 				log.Error().Err(err).Msgf("Error while getting sequence no for feature %s", featureLabel)
 				return
 			}
+			// Handle missing features (seq = -1)
+			if seq == -1 {
+				log.Warn().Msgf("Feature %s not found in version %d, switching to active version for default value", featureLabel, version)
+				
+				// Get active version
+				version, err = h.config.GetActiveVersion(data.EntityLabel, fgId)
+				if err != nil {
+					log.Error().Err(err).Msgf("Error while getting active version for missing feature %s", featureLabel)
+					return
+				}
+				// Try to get sequence from active version
+				activeSeq, err := h.config.GetSequenceNo(data.EntityLabel, fgId, version, featureLabel)
+				if err != nil {
+					log.Error().Err(err).Msgf("Error while getting sequence no from active version for feature %s", featureLabel)
+					return
+				}
+				// if feature is not present in active version just return 
+				if activeSeq == -1 {
+				    log.Warn().Msgf("Feature %s is not available in active version", featureLabel)
+				    return  
+				}
+				// Feature exists in active version
+				seq = activeSeq
+				ddb.NegativeCache = true
+				metric.Count("online.feature.store.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel})
+			}
 			stringLengths, err := h.config.GetStringLengths(data.EntityLabel, fgId, int(version))
 			if err != nil {
 				log.Error().Err(err).Msgf("Error while getting string lengths for feature %s", featureLabel)
