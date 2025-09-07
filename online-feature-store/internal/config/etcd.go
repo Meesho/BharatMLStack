@@ -478,6 +478,20 @@ func (e *Etcd) GetNormalizedEntities() error {
 	return nil
 }
 
+func (e *Etcd) GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error) {
+	entity, err := e.GetEntity(entityLabel)
+	if err != nil {
+		return nil, err
+	}
+
+	allFGIds := make(map[int]bool)
+	for _, fg := range entity.FeatureGroups {
+		allFGIds[fg.Id] = true
+	}
+
+	return allFGIds, nil
+}
+
 func isEntityValid(entity *Entity) bool {
 	if entity == nil || entity.Label == "" || entity.Keys == nil || len(entity.Keys) == 0 {
 		return false
