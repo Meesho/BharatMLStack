@@ -115,5 +115,5 @@ func (m *manager) IsCBEnabled(key string) bool {
 }
 
 func (m *manager) IsForcedOpen(key string) bool {
-	return m.cbConfig.ActiveCBs[key].ForceOpen
+	return m.cbConfig.ActiveCBKeys[key].ForceOpen
 }

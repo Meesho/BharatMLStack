@@ -61,9 +61,9 @@ type Config struct {
 	// Example: Setting this to 1,000 introduces a 1-second delay before retrying after a state change.
 	WithDelayInMS int `json:"with-delay-in-ms"`
 
-	// ActiveCBs maps circuit breaker names to their enabled and force open status
+	// ActiveCBKeys maps circuit breaker keys to their enabled and force open status
 	// Example: {"retrieve_from_distributed_cache":{"enabled": true, "force-open": false}}
-	ActiveCBs map[string]CBKeyConfigs `json:"active-cbs"`
+	ActiveCBKeys map[string]CBKeyConfigs `json:"active-cb-keys"`
 }
 
 type CBKeyConfigs struct {
