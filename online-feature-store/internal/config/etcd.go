@@ -525,6 +525,19 @@ func (e *Etcd) UpdateCBConfigs() error {
 		circuitbreaker.GetManager(cbManagerName).ActivateCBKey(activeCBs)
 		circuitbreaker.GetManager(cbManagerName).DeactivateCBKey(inactiveCBs)
 		circuitbreaker.GetManager(cbManagerName).UpdateCBConfig(cbConfig)
+
+		// Handle force open/close based on etcd config
+		for cbName, activeCBConfig := range cbConfig.ActiveCBKeys {
+			if activeCBConfig.Enabled {
+				if activeCBConfig.ForcedState == 1 {
+					circuitbreaker.GetManager(cbManagerName).ForceOpenCB(cbName)
+				} else if activeCBConfig.ForcedState == -1 {
+					circuitbreaker.GetManager(cbManagerName).ForceCloseCB(cbName)
+				} else {
+					circuitbreaker.GetManager(cbManagerName).NormalExecutionModeCB(cbName)
+				}
+			}
+		}
 	}
 	return nil
 }

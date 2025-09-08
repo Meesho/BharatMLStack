@@ -18,3 +18,12 @@ func (nb *passThroughBreaker) RecordSuccess() {}
 
 // RecordFailure does nothing.
 func (nb *passThroughBreaker) RecordFailure() {}
+
+// ForceOpen does nothing for pass-through breaker.
+func (nb *passThroughBreaker) ForceOpen() {}
+
+// ForceClose does nothing for pass-through breaker.
+func (nb *passThroughBreaker) ForceClose() {}
+
+// Execute does nothing for pass-through breaker.
+func (nb *passThroughBreaker) NormalExecutionMode() {}

@@ -23,10 +23,6 @@ func (h *DFCircuitBreakerHandler) IsCBEnabled(cbKey string) bool {
 	return h.CBManager.IsCBEnabled(cbKey)
 }
 
-func (h *DFCircuitBreakerHandler) IsForcedOpen(cbKey string) bool {
-	return h.CBManager.IsForcedOpen(cbKey)
-}
-
 func (h *DFCircuitBreakerHandler) RecordFailure(cbKey string) {
 	cb, cbErr := h.GetCB(cbKey)
 	if cbErr != nil {

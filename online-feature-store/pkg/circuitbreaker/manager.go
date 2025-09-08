@@ -23,7 +23,9 @@ type Manager interface {
 	UpdateCBConfig(Config) error
 	GetCBConfig() Config
 	IsCBEnabled(key string) bool
-	IsForcedOpen(key string) bool
+	ForceOpenCB(key string) error
+	ForceCloseCB(key string) error
+	NormalExecutionModeCB(key string) error
 }
 
 type manager struct {
@@ -114,6 +116,32 @@ func (m *manager) IsCBEnabled(key string) bool {
 	return false
 }
 
-func (m *manager) IsForcedOpen(key string) bool {
-	return m.cbConfig.ActiveCBKeys[key].ForceOpen
+// ForceOpenCB brings the circuit breaker to force open state
+func (m *manager) ForceOpenCB(key string) error {
+	breaker, err := m.GetOrCreateManualCB(key)
+	if err != nil {
+		return fmt.Errorf("failed to get circuit breaker for key %s: %w", key, err)
+	}
+	breaker.ForceOpen()
+	return nil
+}
+
+// ForceCloseCB brings the circuit breaker to force close state
+func (m *manager) ForceCloseCB(key string) error {
+	breaker, err := m.GetOrCreateManualCB(key)
+	if err != nil {
+		return fmt.Errorf("failed to get circuit breaker for key %s: %w", key, err)
+	}
+	breaker.ForceClose()
+	return nil
+}
+
+// NormalExecutionModeCB brings the circuit breaker to normal execution mode
+func (m *manager) NormalExecutionModeCB(key string) error {
+	breaker, err := m.GetOrCreateManualCB(key)
+	if err != nil {
+		return fmt.Errorf("failed to get circuit breaker for key %s: %w", key, err)
+	}
+	breaker.NormalExecutionMode()
+	return nil
 }
