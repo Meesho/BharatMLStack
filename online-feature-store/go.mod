@@ -6,7 +6,7 @@ toolchain go1.22.8
 
 require (
 	github.com/DataDog/datadog-go/v5 v5.5.0
-	github.com/Meesho/gocql v1.0.0-dev
+	github.com/Meesho/gocql v1.15.3
 	github.com/apache/arrow/go/v17 v17.0.0
 	github.com/confluentinc/confluent-kafka-go/v2 v2.6.1
 	github.com/coocood/freecache v1.2.4
