@@ -117,31 +117,31 @@ func (m *manager) IsCBEnabled(key string) bool {
 }
 
 // ForceOpenCB brings the circuit breaker to force open state
-func (m *manager) ForceOpenCB(key string) error {
+func (m *manager) ForceOpenCB(key string) {
 	breaker, err := m.GetOrCreateManualCB(key)
 	if err != nil {
-		return fmt.Errorf("failed to get circuit breaker for key %s: %w", key, err)
+		log.Error().Err(err).Msgf("failed to get circuit breaker for key %s", key)
+		return
 	}
 	breaker.ForceOpen()
-	return nil
 }
 
 // ForceCloseCB brings the circuit breaker to force close state
-func (m *manager) ForceCloseCB(key string) error {
+func (m *manager) ForceCloseCB(key string) {
 	breaker, err := m.GetOrCreateManualCB(key)
 	if err != nil {
-		return fmt.Errorf("failed to get circuit breaker for key %s: %w", key, err)
+		log.Error().Err(err).Msgf("failed to get circuit breaker for key %s", key)
+		return
 	}
 	breaker.ForceClose()
-	return nil
 }
 
 // NormalExecutionModeCB brings the circuit breaker to normal execution mode
-func (m *manager) NormalExecutionModeCB(key string) error {
+func (m *manager) NormalExecutionModeCB(key string) {
 	breaker, err := m.GetOrCreateManualCB(key)
 	if err != nil {
-		return fmt.Errorf("failed to get circuit breaker for key %s: %w", key, err)
+		log.Error().Err(err).Msgf("failed to get circuit breaker for key %s", key)
+		return
 	}
 	breaker.NormalExecutionMode()
-	return nil
 }
