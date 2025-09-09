@@ -61,9 +61,17 @@ type Config struct {
 	// Example: Setting this to 1,000 introduces a 1-second delay before retrying after a state change.
 	WithDelayInMS int `json:"with-delay-in-ms"`
 
-	// ActiveCBs maps circuit breaker names to their enabled status
-	// Example: {"retrieve_from_distributed_cache": true, "write_to_cache": false}
-	ActiveCBs map[string]bool `json:"active-cbs"`
+	// ActiveCBKeys maps circuit breaker keys to their enabled and forced state
+	// Example: {"retrieve_from_distributed_cache":{"enabled": true, "forced-state": 0}}
+	// if forced-state is 1, the circuit breaker state will be changed to opened permanently until it is set to 0 or -1
+	// if forced-state is -1, the circuit breaker state will be changed to closed permanently until it is set to 0 or 1
+	// if forced-state is 0, the circuit breaker will switch to normal execution mode
+	ActiveCBKeys map[string]CBKeyConfigs `json:"active-cb-keys"`
+}
+
+type CBKeyConfigs struct {
+	Enabled     bool `json:"enabled"`
+	ForcedState int  `json:"forced-state"`
 }
 
 func BuildConfig(serviceName string) *Config {

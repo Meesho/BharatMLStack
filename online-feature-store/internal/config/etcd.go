@@ -515,16 +515,34 @@ func (e *Etcd) UpdateCBConfigs() error {
 	for cbManagerName, cbConfig := range cbConfigs {
 		activeCBs := make([]string, 0)
 		inactiveCBs := make([]string, 0)
-		for cbName, enabled := range cbConfig.ActiveCBs {
-			if enabled {
+		for cbName, activeCBConfig := range cbConfig.ActiveCBKeys {
+			if activeCBConfig.Enabled {
 				activeCBs = append(activeCBs, cbName)
 			} else {
 				inactiveCBs = append(inactiveCBs, cbName)
 			}
 		}
-		circuitbreaker.GetManager(cbManagerName).ActivateCBKey(activeCBs)
-		circuitbreaker.GetManager(cbManagerName).DeactivateCBKey(inactiveCBs)
-		circuitbreaker.GetManager(cbManagerName).UpdateCBConfig(cbConfig)
+		cbManager := circuitbreaker.GetManager(cbManagerName)
+		cbManager.ActivateCBKey(activeCBs)
+		cbManager.DeactivateCBKey(inactiveCBs)
+		cbManager.UpdateCBConfig(cbConfig)
+
+		// Handle force open/close based on etcd config
+		for cbName, activeCBConfig := range cbConfig.ActiveCBKeys {
+			if activeCBConfig.Enabled {
+				switch activeCBConfig.ForcedState {
+				case 1:
+					cbManager.ForceOpenCB(cbName)
+				case -1:
+					cbManager.ForceCloseCB(cbName)
+				case 0:
+					cbManager.NormalExecutionModeCB(cbName)
+				default:
+					log.Error().Msgf("invalid forced state for circuit breaker %s. switching to normal execution mode", cbName)
+					cbManager.NormalExecutionModeCB(cbName)
+				}
+			}
+		}
 	}
 	return nil
 }
