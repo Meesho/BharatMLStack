@@ -522,23 +522,24 @@ func (e *Etcd) UpdateCBConfigs() error {
 				inactiveCBs = append(inactiveCBs, cbName)
 			}
 		}
-		circuitbreaker.GetManager(cbManagerName).ActivateCBKey(activeCBs)
-		circuitbreaker.GetManager(cbManagerName).DeactivateCBKey(inactiveCBs)
-		circuitbreaker.GetManager(cbManagerName).UpdateCBConfig(cbConfig)
+		cbManager := circuitbreaker.GetManager(cbManagerName)
+		cbManager.ActivateCBKey(activeCBs)
+		cbManager.DeactivateCBKey(inactiveCBs)
+		cbManager.UpdateCBConfig(cbConfig)
 
 		// Handle force open/close based on etcd config
 		for cbName, activeCBConfig := range cbConfig.ActiveCBKeys {
 			if activeCBConfig.Enabled {
 				switch activeCBConfig.ForcedState {
 				case 1:
-					circuitbreaker.GetManager(cbManagerName).ForceOpenCB(cbName)
+					cbManager.ForceOpenCB(cbName)
 				case -1:
-					circuitbreaker.GetManager(cbManagerName).ForceCloseCB(cbName)
+					cbManager.ForceCloseCB(cbName)
 				case 0:
-					circuitbreaker.GetManager(cbManagerName).NormalExecutionModeCB(cbName)
+					cbManager.NormalExecutionModeCB(cbName)
 				default:
 					log.Error().Msgf("invalid forced state for circuit breaker %s. switching to normal execution mode", cbName)
-					circuitbreaker.GetManager(cbManagerName).NormalExecutionModeCB(cbName)
+					cbManager.NormalExecutionModeCB(cbName)
 				}
 			}
 		}
