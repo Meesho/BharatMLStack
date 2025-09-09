@@ -358,7 +358,7 @@ func (h *RetrieveHandler) retrieveFromDistributedCache(keys []*retrieve.Keys, re
 	var cacheData [][]byte
 	if h.distributedCacheCBProvider.IsCBEnabled(distributedCacheCBKey) && !h.distributedCacheCBProvider.IsCallAllowed(distributedCacheCBKey) {
 		log.Debug().Msgf("Circuit breaker is open, returning negative cache for all fgIds")
-		metric.Gauge("feature.retrieve.distributed.cache.cb.open", 1, []string{"entity_name", entityLabel, "cache_type", "distributed"})
+		metric.Gauge("feature.retrieve.cb.open", 1, []string{"entity_name", entityLabel, "cb_key", distributedCacheCBKey})
 		for _, key := range keys {
 			keyIdx := retrieveData.ReqKeyToIdx[getKeyString(key)]
 			fgIdToDDB := make(map[int]*blocks.DeserializedPSDB)
@@ -375,7 +375,7 @@ func (h *RetrieveHandler) retrieveFromDistributedCache(keys []*retrieve.Keys, re
 		}
 		return nil, nil
 	}
-	metric.Gauge("feature.retrieve.distributed.cache.cb.open", 0, []string{"entity_name", entityLabel, "cache_type", "distributed"})
+	metric.Gauge("feature.retrieve.cb.open", 0, []string{"entity_name", entityLabel, "cb_key", distributedCacheCBKey})
 	cacheData, err = cache.MultiGetV2(entityLabel, keys)
 	log.Debug().Msgf("Retrieved features from distributed cache for keys %v and fgIds %v, cacheData: %v", keys, fgIds, cacheData)
 	if err != nil {
