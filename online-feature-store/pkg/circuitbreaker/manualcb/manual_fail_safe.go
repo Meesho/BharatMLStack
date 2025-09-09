@@ -63,7 +63,6 @@ func (b *failsafeBreaker) ForceOpen() {
 	defer b.forceStateMu.Unlock()
 	b.breaker.Open()
 	b.stateChangeAllowed = false
-	log.Info().Msg("Circuit breaker force opened")
 }
 
 // ForceClose forces the circuit breaker to closed state, allowing all requests.
@@ -72,7 +71,6 @@ func (b *failsafeBreaker) ForceClose() {
 	defer b.forceStateMu.Unlock()
 	b.breaker.Close()
 	b.stateChangeAllowed = false
-	log.Info().Msg("Circuit breaker force closed")
 }
 
 // NormalExecutionMode removes any forced state and allows normal circuit breaker operation.
@@ -81,5 +79,4 @@ func (b *failsafeBreaker) NormalExecutionMode() {
 	defer b.forceStateMu.Unlock()
 	b.breaker.Close()
 	b.stateChangeAllowed = true
-	log.Info().Msg("Circuit breaker in normal execution mode")
 }

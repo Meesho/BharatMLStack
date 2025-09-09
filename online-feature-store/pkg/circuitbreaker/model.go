@@ -63,9 +63,9 @@ type Config struct {
 
 	// ActiveCBKeys maps circuit breaker keys to their enabled and forced state
 	// Example: {"retrieve_from_distributed_cache":{"enabled": true, "forced-state": 0}}
-	// if forced-state is 1, the circuit breaker state will be changed to opened permanently until it is set to 0 or forced-state is set to -1
-	// if forced-state is -1, the circuit breaker state will be changed to closed permanently until it is set to 0 or forced-state is set to 1
-	// if forced-state is 0, the circuit breaker state will be changed to normal cb execution
+	// if forced-state is 1, the circuit breaker state will be changed to opened permanently until it is set to 0 or -1
+	// if forced-state is -1, the circuit breaker state will be changed to closed permanently until it is set to 0 or 1
+	// if forced-state is 0, the circuit breaker will switch to normal execution mode
 	ActiveCBKeys map[string]CBKeyConfigs `json:"active-cb-keys"`
 }
 
