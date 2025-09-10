@@ -21,7 +21,7 @@ public class FeatureStoreController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            BharatMLClient client = new BharatMLClient("online-feature-store-api.int.meesho.int ", 80);
+            BharatMLClient client = new BharatMLClient("online-feature-store-api.int.meesho.int", 80);
 
             Query request = Query.newBuilder()
                     .setEntityLabel("catalog")
