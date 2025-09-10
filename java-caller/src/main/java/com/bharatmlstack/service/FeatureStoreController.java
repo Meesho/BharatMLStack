@@ -21,21 +21,14 @@ public class FeatureStoreController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            BharatMLClient client = new BharatMLClient("online-feature-store-api-mp.prd.meesho.int", 80);
+            BharatMLClient client = new BharatMLClient("online-feature-store-api.int.meesho.int ", 80);
 
             Query request = Query.newBuilder()
                     .setEntityLabel("catalog")
                     .addFeatureGroups(
                             FeatureGroup.newBuilder()
-                                    .setLabel("derived_2_fp32")
-                                    .addFeatureLabels("sbid_value")
-                                    .build()
-                    )
-                    .addFeatureGroups(
-                            FeatureGroup.newBuilder()
-                                    .setLabel("derived_fp16")
-                                    .addFeatureLabels("search__organic_clicks_by_views_3_days_percentile")
-                                    .addFeatureLabels("search__organic_clicks_by_views_5_days_percentile")
+                                    .setLabel("derived_fp32")
+                                    .addFeatureLabels("clicks_by_views_3_days")
                                     .build()
                     )
                     .addKeysSchema("catalog_id")
@@ -65,3 +58,4 @@ public class FeatureStoreController {
         }
     }
 }
+

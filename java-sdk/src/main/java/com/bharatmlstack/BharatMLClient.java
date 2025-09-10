@@ -21,8 +21,8 @@ public class BharatMLClient {
         Metadata metadata = new Metadata();
         Metadata.Key<String> authTokenKey = Metadata.Key.of("online-feature-store-auth-token", Metadata.ASCII_STRING_MARSHALLER);
         Metadata.Key<String> callerIdKey = Metadata.Key.of("online-feature-store-caller-id", Metadata.ASCII_STRING_MARSHALLER);
-        metadata.put(authTokenKey, "test");
-        metadata.put(callerIdKey, "model-proxy-service-experiment");
+        metadata.put(authTokenKey, "atishay");
+        metadata.put(callerIdKey, "test-3");
         
         this.persistClient = MetadataUtils.attachHeaders(
             com.bharatmlstack.persist.FeatureServiceGrpc.newBlockingStub(channel), metadata);
