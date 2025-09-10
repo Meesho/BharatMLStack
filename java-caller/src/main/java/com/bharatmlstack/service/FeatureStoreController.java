@@ -16,12 +16,17 @@ import java.util.Map;
 @RestController
 public class FeatureStoreController {
 
+        private final BharatMLClient client;
+
+    public FeatureStoreController(BharatMLClient client) {
+        this.client = client;
+    }
+
     @PostMapping("/retrieve-features")
     public ResponseEntity<Map<String, Object>> retrieveFeatures() {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            BharatMLClient client = new BharatMLClient("online-feature-store-api.int.meesho.int", 80);
 
             Query request = Query.newBuilder()
                     .setEntityLabel("catalog")
@@ -45,8 +50,6 @@ public class FeatureStoreController {
             response.put("success", true);
             response.put("data", result.toString());
             response.put("message", "Features retrieved successfully");
-            
-            client.shutdown();
             
             return ResponseEntity.ok(response);
             
