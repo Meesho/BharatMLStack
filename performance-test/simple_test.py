@@ -9,6 +9,8 @@ import time
 import psutil
 import requests
 import json
+import os
+import argparse
 from datetime import datetime
 
 def check_services():
@@ -46,14 +48,14 @@ def find_service_pids():
                 java_pids.append(proc.info['pid'])
             
             # Rust: compiled binary (preferred) or cargo process
-            elif 'rust-caller' in cmdline:
+            elif 'rust-caller-new' in cmdline or 'rust-caller' in cmdline:
                 if 'target/release' in cmdline:
                     rust_pids.insert(0, proc.info['pid'])  # Prefer compiled binary
                 elif 'cargo' in cmdline:
                     rust_pids.append(proc.info['pid'])
             
             # Go: compiled binary (preferred) or go run wrapper
-            elif '/go-build/' in cmdline and '/main' in cmdline:
+            elif '/go-build/' in cmdline and cmdline.endswith('/main'):
                 go_pids.insert(0, proc.info['pid'])  # Prefer compiled binary
             elif 'go run main.go' in cmdline:
                 go_pids.append(proc.info['pid'])
@@ -101,6 +103,8 @@ def run_locust_test(service_name, port, users=20, duration=60, spawn_rate=5):
     if service_pid:
         # Start test
         print(f"⏳ Starting {duration}s test...")
+        print(f"💾 Monitoring CPU usage every 5 seconds...")
+        print(f"⚙️  Test config: {users} users, {spawn_rate} spawn rate")
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
         # Monitor CPU usage during test
@@ -136,11 +140,17 @@ def run_locust_test(service_name, port, users=20, duration=60, spawn_rate=5):
                 break
         
         # Wait for locust to finish
+        print(f"⏳ Waiting for Locust to finish and generate reports...")
         stdout, stderr = process.communicate()
+        
+        print(f"✅ Locust test completed successfully!")
         
         # Calculate averages
         avg_cpu = sum(cpu_readings) / len(cpu_readings) if cpu_readings else 0
         avg_memory = sum(memory_readings) / len(memory_readings) if memory_readings else 0
+        
+        print(f"📊 Processing results...")
+        print(f"   Average CPU: {avg_cpu:.1f}% | Average Memory: {avg_memory:.1f}MB")
         
         return {
             'avg_cpu': avg_cpu,
@@ -152,7 +162,7 @@ def run_locust_test(service_name, port, users=20, duration=60, spawn_rate=5):
         return None
 
 def analyze_results(service_name, resource_data, output_prefix):
-    """Analyze results and show CPU efficiency + latency"""
+    """Analyze results and show comprehensive throughput + efficiency metrics"""
     stats_file = f"{output_prefix}_stats.csv"
     
     try:
@@ -160,31 +170,86 @@ def analyze_results(service_name, resource_data, output_prefix):
         with open(stats_file, 'r') as f:
             lines = f.readlines()
             if len(lines) > 1:
-                # Parse the main results line (skip header)
-                data = lines[1].split(',')
+                # Find the data line (skip headers and endpoint-specific lines)
+                data_line = None
+                for line in lines[1:]:  # Skip header
+                    fields = line.strip().split(',')
+                    if len(fields) > 10 and fields[1] == 'Aggregated':  # Look for Aggregated row (Name column)
+                        data_line = fields
+                        break
                 
+                if not data_line:
+                    # If no Aggregated row found, use the first non-header line with valid data
+                    for line in lines[1:]:
+                        fields = line.strip().split(',')
+                        if len(fields) > 10:
+                            try:
+                                # Test if we can parse key numeric fields
+                                float(fields[9])  # RPS
+                                float(fields[5])  # Avg response time
+                                data_line = fields
+                                break
+                            except (ValueError, IndexError):
+                                continue
+                
+                if not data_line:
+                    print(f"❌ Could not find valid data row in {stats_file}")
+                    return None
+                
+                print(f"✅ Using CSV row: {data_line[1]} ({data_line[0]})")
+                data = data_line
+                
+                # Core throughput metrics
                 rps = float(data[9])  # Requests/s (column 9)
-                avg_response = float(data[5])  # Average Response Time
-                p95_response = float(data[15]) if len(data) > 15 else 0  # 95%
-                max_response = float(data[7])  # Max Response Time
+                total_requests = int(float(data[2]))  # Request Count
+                failures = int(float(data[3]))  # Failure Count
                 
-                # Calculate efficiency
+                # Latency metrics
+                avg_response = float(data[5])  # Average Response Time
+                min_response = float(data[6])  # Min Response Time
+                max_response = float(data[7])  # Max Response Time
+                p95_response = float(data[15]) if len(data) > 15 and data[15] else 0  # 95%
+                p99_response = float(data[16]) if len(data) > 16 and data[16] else 0  # 99%
+                
+                # Calculate throughput quality metrics
+                error_rate = (failures / total_requests * 100) if total_requests > 0 else 0
+                
+                # Calculate efficiency ratios
                 cpu_efficiency = rps / resource_data['avg_cpu'] if resource_data['avg_cpu'] > 0 else 0
+                memory_efficiency = rps / resource_data['avg_memory'] if resource_data['avg_memory'] > 0 else 0
+                
+                # Throughput assessment
+                throughput_quality = "Excellent" if error_rate < 1 and p95_response < 500 else \
+                                   "Good" if error_rate < 5 and p95_response < 1000 else \
+                                   "Poor" if error_rate > 10 or p95_response > 2000 else "Fair"
                 
                 return {
                     'service': service_name,
                     'rps': rps,
+                    'total_requests': total_requests,
+                    'failures': failures,
+                    'error_rate': error_rate,
                     'avg_cpu': resource_data['avg_cpu'],
                     'avg_memory': resource_data['avg_memory'],
                     'cpu_efficiency': cpu_efficiency,
+                    'memory_efficiency': memory_efficiency,
                     'avg_response_ms': avg_response,
+                    'min_response_ms': min_response,
+                    'max_response_ms': max_response,
                     'p95_response_ms': p95_response,
-                    'max_response_ms': max_response
+                    'p99_response_ms': p99_response,
+                    'throughput_quality': throughput_quality
                 }
     except Exception as e:
-        print(f"Error analyzing {service_name}: {e}")
-    
-    return None
+        print(f"❌ Error analyzing {service_name}: {e}")
+        # Debug: Show the contents of the CSV file
+        if os.path.exists(stats_file):
+            print(f"📄 Debug - CSV contents of {stats_file}:")
+            with open(stats_file, 'r') as f:
+                lines = f.readlines()
+                for i, line in enumerate(lines[:5]):  # Show first 5 lines
+                    print(f"  Line {i}: {line.strip()}")
+        return None
 
 def calculate_load_config(target_rps):
     """Calculate users and spawn rate for target RPS"""
@@ -215,30 +280,53 @@ def calculate_load_config(target_rps):
 
 def main():
     """Run the complete test"""
-    import sys
+    parser = argparse.ArgumentParser(description='Simple CPU + Latency Performance Test')
+    parser.add_argument('rps', nargs='?', type=int, default=30, 
+                       help='Target RPS (default: 30)')
+    parser.add_argument('--service', choices=['java', 'rust', 'go'], 
+                       help='Test only a specific service (default: test all)')
+    parser.add_argument('--duration', type=int, 
+                       help='Override test duration in seconds')
     
-    # Parse command line arguments for target RPS
-    if len(sys.argv) > 1:
-        try:
-            target_rps = int(sys.argv[1])
-            if target_rps <= 0:
-                raise ValueError("RPS must be positive")
-        except ValueError:
-            print("❌ Error: Please provide a valid RPS number")
-            print("📖 Usage examples:")
-            print("   python3 simple_test.py 50    # Target 50 RPS")
-            print("   python3 simple_test.py 200   # Target 200 RPS") 
-            print("   python3 simple_test.py 500   # Target 500 RPS")
-            print("   python3 simple_test.py       # Default 30 RPS")
-            return
-    else:
-        target_rps = 30  # Default target RPS
+    args = parser.parse_args()
+    
+    # Validate RPS
+    if args.rps <= 0:
+        print("❌ Error: RPS must be positive")
+        print("📖 Usage examples:")
+        print("   python3 simple_test.py 50                    # Target 50 RPS (all services)")
+        print("   python3 simple_test.py 200 --service rust    # Target 200 RPS (Rust only)")
+        print("   python3 simple_test.py 500 --service java    # Target 500 RPS (Java only)") 
+        print("   python3 simple_test.py 100 --duration 120    # Target 100 RPS, 120s duration")
+        return
+    
+    target_rps = args.rps
     
     # Calculate load configuration
     test_config = calculate_load_config(target_rps)
     
+    # Override duration if specified
+    if args.duration:
+        test_config['duration'] = args.duration
+    
+    # Filter services based on --service flag
+    all_services = [
+        ("Java", 8082),
+        ("Rust", 8080), 
+        ("Go", 8081)
+    ]
+    
+    if args.service:
+        service_map = {"java": ("Java", 8082), "rust": ("Rust", 8080), "go": ("Go", 8081)}
+        services = [service_map[args.service]]
+        test_mode = f"Single Service ({args.service.capitalize()})"
+    else:
+        services = all_services
+        test_mode = "All Services"
+    
     print(f"🔬 Simple CPU + Latency Performance Test")
     print(f"🎯 Target: {test_config['target_rps']} RPS")
+    print(f"🔧 Mode: {test_mode}")
     print(f"📊 Configuration: {test_config['users']} users, {test_config['duration']}s, spawn rate {test_config['spawn_rate']}/s")
     print("=" * 80)
     
@@ -248,18 +336,11 @@ def main():
     # Create results directory
     subprocess.run(["mkdir", "-p", "results"], check=False)
     
-    # Test each service
-    services = [
-        ("Java", 8082),
-        ("Rust", 8080), 
-        ("Go", 8081)
-    ]
-    
     results = []
     
     for i, (service_name, port) in enumerate(services):
-        # Add 1-minute delay between services (except for the first one)
-        if i > 0:
+        # Add 1-minute delay between services (except for the first one and single service mode)
+        if i > 0 and not args.service:
             print(f"\n⏰ Waiting 60 seconds before testing {service_name} (cooldown period)...")
             for countdown in range(60, 0, -10):
                 print(f"   ⏳ {countdown} seconds remaining...")
@@ -278,43 +359,110 @@ def main():
     
     # Show comparison
     if results:
-        print("\n" + "=" * 80)
-        print("📊 PERFORMANCE COMPARISON - CPU EFFICIENCY + LATENCY")
-        print("=" * 80)
+        print("\n" + "=" * 90)
+        if args.service:
+            print(f"📊 SINGLE SERVICE PERFORMANCE ANALYSIS - {args.service.upper()}")
+        else:
+            print("📊 COMPREHENSIVE THROUGHPUT & EFFICIENCY ANALYSIS")
+        print("=" * 90)
         
-        print(f"{'Service':<8} | {'RPS':<6} | {'CPU%':<6} | {'RPS/CPU%':<8} | {'Avg(ms)':<8} | {'P95(ms)':<8} | {'Memory':<8}")
-        print("-" * 80)
+        # Throughput Quality Overview
+        print(f"\n🎯 THROUGHPUT QUALITY at {test_config['target_rps']} RPS target:")
+        print("-" * 65)
+        for r in results:
+            quality_emoji = {"Excellent": "🟢", "Good": "🟡", "Fair": "🟠", "Poor": "🔴"}
+            emoji = quality_emoji.get(r['throughput_quality'], "⚪")
+            print(f"   {r['service']:<6}: {emoji} {r['throughput_quality']:<9} | "
+                  f"{r['rps']:5.1f} RPS | {r['error_rate']:4.1f}% errors | "
+                  f"P95: {r['p95_response_ms']:5.1f}ms")
         
-        # Sort by CPU efficiency
-        results.sort(key=lambda x: x['cpu_efficiency'], reverse=True)
+        # Main Performance Table
+        print(f"\n📈 PERFORMANCE METRICS")
+        print("-" * 90)
+        print(f"{'Service':<8} | {'RPS':<6} | {'Errors%':<7} | {'Avg(ms)':<7} | {'P95(ms)':<7} | {'Mem(MB)':<7} | {'RPS/MB':<6}")
+        print("-" * 90)
+        
+        # Sort by effective throughput (RPS adjusted for errors)
+        results.sort(key=lambda x: x['rps'] * (1 - x['error_rate']/100), reverse=True)
         
         for r in results:
-            print(f"{r['service']:<8} | {r['rps']:5.1f} | {r['avg_cpu']:5.1f} | "
-                  f"{r['cpu_efficiency']:6.2f} | {r['avg_response_ms']:6.1f} | "
-                  f"{r['p95_response_ms']:6.1f} | {r['avg_memory']:6.1f}MB")
+            print(f"{r['service']:<8} | {r['rps']:5.1f} | {r['error_rate']:6.1f} | "
+                  f"{r['avg_response_ms']:6.1f} | {r['p95_response_ms']:6.1f} | "
+                  f"{r['avg_memory']:6.1f} | {r['memory_efficiency']:5.2f}")
         
-        # Summary  
-        best_cpu = results[0]
-        best_latency = min(results, key=lambda x: x['avg_response_ms'])
+        # Resource Efficiency
+        print(f"\n⚡ RESOURCE EFFICIENCY")
+        print("-" * 70)
+        print(f"{'Service':<8} | {'CPU%':<6} | {'RPS/CPU%':<8} | {'Memory(MB)':<10} | {'CPU Efficiency':<12}")
+        print("-" * 70)
         
-        print(f"\n🏆 WINNERS at {test_config['target_rps']} RPS target:")
-        print(f"  CPU Efficiency: {best_cpu['service']} ({best_cpu['cpu_efficiency']:.2f} RPS/CPU%)")
-        print(f"  Lowest Latency: {best_latency['service']} ({best_latency['avg_response_ms']:.1f}ms avg)")
-        
-        print(f"\n💡 CPU EFFICIENCY INSIGHTS:")
-        print(f"  • At 10% CPU: {best_cpu['service']} could handle ~{best_cpu['cpu_efficiency'] * 10:.0f} RPS")
-        print(f"  • At 20% CPU: {best_cpu['service']} could handle ~{best_cpu['cpu_efficiency'] * 20:.0f} RPS")
-        print(f"  • At 50% CPU: {best_cpu['service']} could handle ~{best_cpu['cpu_efficiency'] * 50:.0f} RPS")
-        
-        print(f"\n📈 SCALING RECOMMENDATIONS:")
         for r in results:
-            max_sustainable_rps = r['cpu_efficiency'] * 70  # Assuming 70% CPU max for stability
-            print(f"  • {r['service']}: Max sustainable ~{max_sustainable_rps:.0f} RPS (at 70% CPU)")
+            print(f"{r['service']:<8} | {r['avg_cpu']:5.1f} | {r['cpu_efficiency']:7.2f} | "
+                  f"{r['avg_memory']:9.1f} | {'High' if r['cpu_efficiency'] > 1.0 else 'Medium' if r['cpu_efficiency'] > 0.5 else 'Low':<12}")
         
-        print(f"\n🎯 TO TEST DIFFERENT LOADS:")
-        print(f"  python3 simple_test.py 100   # Test at 100 RPS")
-        print(f"  python3 simple_test.py 500   # Test at 500 RPS")
-        print(f"  python3 simple_test.py 1000  # Test at 1000 RPS")
+        # Winners Analysis (only for multi-service comparison)
+        if len(results) > 1:
+            best_throughput = max(results, key=lambda x: x['rps'])
+            best_latency = min(results, key=lambda x: x['p95_response_ms'])
+            best_memory = max(results, key=lambda x: x['memory_efficiency'])
+            best_quality = max(results, key=lambda x: {"Excellent": 4, "Good": 3, "Fair": 2, "Poor": 1}[r['throughput_quality']])
+            
+            print(f"\n🏆 PERFORMANCE LEADERS:")
+            print(f"   🚀 Highest Throughput: {best_throughput['service']} ({best_throughput['rps']:.1f} RPS)")
+            print(f"   ⚡ Best Latency (P95): {best_latency['service']} ({best_latency['p95_response_ms']:.1f}ms)")
+            print(f"   💾 Memory Champion: {best_memory['service']} ({best_memory['memory_efficiency']:.2f} RPS/MB)")
+            print(f"   🎯 Best Overall Quality: {best_quality['service']} ({best_quality['throughput_quality']})")
+        else:
+            # Single service summary
+            r = results[0]
+            print(f"\n🎯 {r['service'].upper()} PERFORMANCE SUMMARY:")
+            print(f"   🚀 Throughput: {r['rps']:.1f} RPS")
+            print(f"   ⚡ Latency (P95): {r['p95_response_ms']:.1f}ms")
+            print(f"   💾 Memory Efficiency: {r['memory_efficiency']:.2f} RPS/MB")
+            print(f"   🎯 Quality: {r['throughput_quality']}")
+            print(f"   🔥 CPU Usage: {r['avg_cpu']:.1f}%")
+            print(f"   📈 CPU Efficiency: {r['cpu_efficiency']:.2f} RPS/CPU%")
+        
+        # I/O Efficiency insights (adjusted for single vs multi-service)
+        if len(results) > 1:
+            print(f"\n💡 I/O EFFICIENCY INSIGHTS:")
+            best_cpu = max(results, key=lambda x: x['cpu_efficiency'])
+            best_memory = max(results, key=lambda x: x['memory_efficiency'])
+            print(f"   • {best_cpu['service']} shows best CPU efficiency for I/O workloads")
+            print(f"   • Memory winner ({best_memory['service']}) uses {best_memory['avg_memory']:.0f}MB vs others")
+            print(f"   • At 50% CPU load: {best_cpu['service']} could handle ~{best_cpu['cpu_efficiency'] * 50:.0f} RPS")
+        else:
+            r = results[0]
+            print(f"\n💡 I/O EFFICIENCY INSIGHTS:")
+            print(f"   • {r['service']} CPU efficiency: {r['cpu_efficiency']:.2f} RPS per CPU%")
+            print(f"   • Memory usage: {r['avg_memory']:.0f}MB for {r['rps']:.1f} RPS")
+            print(f"   • Scaling potential: ~{r['cpu_efficiency'] * 50:.0f} RPS at 50% CPU")
+        
+        print(f"\n📈 SCALING RECOMMENDATIONS FOR I/O WORKLOADS:")
+        for r in results:
+            if r['memory_efficiency'] > 1.0 and r['error_rate'] < 1:
+                rec = "🚀 Ideal for high-scale I/O (efficient + reliable)"
+            elif r['memory_efficiency'] > 0.5 and r['p95_response_ms'] < 500:
+                rec = "⚡ Good for medium-scale, low-latency I/O"
+            elif r['error_rate'] < 1:
+                rec = "✅ Reliable for production I/O workloads"
+            else:
+                rec = "⚠️  Needs optimization before I/O scaling"
+            print(f"   • {r['service']}: {rec}")
+        
+        print(f"\n🎯 FOR ADDITIONAL TESTING:")
+        if args.service:
+            # Single service mode suggestions
+            print(f"   python3 simple_test.py 200 --service {args.service}     # Test different load")
+            print(f"   python3 simple_test.py 500 --service {args.service}     # Test higher load") 
+            print(f"   python3 throughput_test.py --single-rps 100 --services {args.service.capitalize()}  # Throughput curve")
+            print(f"   python3 simple_test.py 100                # Compare all services")
+        else:
+            # Multi-service mode suggestions
+            print(f"   python3 throughput_test.py              # Full load curve analysis")
+            print(f"   python3 throughput_test.py --single-rps 100   # Test specific RPS")
+            print(f"   python3 simple_test.py 500 --service rust    # Test single service")
+            print(f"   python3 simple_test.py 500             # Test higher load")
 
 if __name__ == "__main__":
     main()

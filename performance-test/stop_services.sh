@@ -38,6 +38,7 @@ kill_by_port 8081 "Go service"
 echo -e "${YELLOW}🧹 Cleaning up any remaining processes...${NC}"
 
 pkill -f "java-caller" 2>/dev/null && echo -e "${GREEN}✅ Java processes cleaned${NC}" || true
+pkill -f "rust-caller-new" 2>/dev/null && echo -e "${GREEN}✅ Rust (new) processes cleaned${NC}" || true
 pkill -f "rust-caller" 2>/dev/null && echo -e "${GREEN}✅ Rust processes cleaned${NC}" || true
 pkill -f "go-caller" 2>/dev/null && echo -e "${GREEN}✅ Go processes cleaned${NC}" || true
 
