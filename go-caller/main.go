@@ -126,7 +126,7 @@ func main() {
 
 	router.POST("/retrieve-features", state.retrieveFeatures)
 
-	port := "8080"
+	port := "8081"
 	if os.Getenv("PORT") != "" {
 		port = os.Getenv("PORT")
 	}
