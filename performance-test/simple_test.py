@@ -12,6 +12,7 @@ import json
 import os
 import argparse
 from datetime import datetime
+import shutil
 
 def check_services():
     """Quick health check"""
@@ -30,51 +31,59 @@ def check_services():
         except:
             print(f"❌ {name}: Not responding")
 
-def find_service_pids():
-    """Find process IDs for monitoring CPU"""
-    pids = {}
-    
-    # First pass: look for actual binaries (preferred)
-    java_pids = []
-    rust_pids = []
-    go_pids = []
-    
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+def _pid_listening_on_port(port: int):
+    """Return PID listening on the given port: psutil (inet/tcp) then lsof fallback."""
+    # Check IPv4/IPv6 via psutil
+    for kind in ("inet", "tcp"):
         try:
-            cmdline = ' '.join(proc.info['cmdline'])
-            
-            # Java: java -jar target/java-caller-1.0.0.jar
-            if 'java-caller' in cmdline and 'java' in cmdline:
-                java_pids.append(proc.info['pid'])
-            
-            # Rust: compiled binary (preferred) or cargo process
-            elif 'rust-caller-new' in cmdline or 'rust-caller' in cmdline:
-                if 'target/release' in cmdline:
-                    rust_pids.insert(0, proc.info['pid'])  # Prefer compiled binary
-                elif 'cargo' in cmdline:
-                    rust_pids.append(proc.info['pid'])
-            
-            # Go: compiled binary (preferred) or go run wrapper
-            elif '/go-build/' in cmdline and cmdline.endswith('/main'):
-                go_pids.insert(0, proc.info['pid'])  # Prefer compiled binary
-            elif 'go run main.go' in cmdline:
-                go_pids.append(proc.info['pid'])
-                
-        except:
+            for conn in psutil.net_connections(kind=kind):
+                try:
+                    if conn.laddr and conn.laddr.port == port and conn.status == psutil.CONN_LISTEN and conn.pid:
+                        return conn.pid
+                except Exception:
+                    continue
+        except Exception:
             continue
-    
-    # Take the first (preferred) PID for each service
-    if java_pids:
-        pids['java'] = java_pids[0]
-    if rust_pids:
-        pids['rust'] = rust_pids[0]
-    if go_pids:
-        pids['go'] = go_pids[0]
-    
+
+    # Minimal fallback: lsof by port
+    try:
+        if shutil.which('lsof'):
+            proc = subprocess.run(
+                ['lsof', '-nP', f'-iTCP:{port}', '-sTCP:LISTEN', '-t'],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=False
+            )
+            for line in proc.stdout.splitlines():
+                line = line.strip()
+                if line.isdigit():
+                    return int(line)
+    except Exception:
+        pass
+
+    return None
+
+
+def find_service_pids():
+    """Find process IDs for monitoring CPU using listening ports (robust for 'go run')."""
+    pids = {}
+    port_map = {
+        'java': 8082,
+        'rust': 8080,
+        'go': 8081,
+    }
+
+    for name, port in port_map.items():
+        pid = _pid_listening_on_port(port)
+        if pid:
+            pids[name] = pid
+
     print("📍 Found service PIDs:")
     for service, pid in pids.items():
-        print(f"  {service.capitalize()}: {pid}")
-    
+        try:
+            cmd = ' '.join(psutil.Process(pid).cmdline())
+        except Exception:
+            cmd = "<unknown>"
+        print(f"  {service.capitalize()}: {pid} | {cmd}")
+
     return pids
 
 def run_locust_test(service_name, port, users=20, duration=60, spawn_rate=5):
@@ -83,6 +92,9 @@ def run_locust_test(service_name, port, users=20, duration=60, spawn_rate=5):
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_prefix = f"results/{service_name}_{timestamp}"
+    
+    # Ensure results directory exists
+    os.makedirs("results", exist_ok=True)
     
     # Create simple locust command for individual service
     cmd = [
@@ -96,70 +108,53 @@ def run_locust_test(service_name, port, users=20, duration=60, spawn_rate=5):
         "--csv", f"{output_prefix}"
     ]
     
-    # Monitor CPU during test
-    pids = find_service_pids()
-    service_pid = pids.get(service_name.lower())
-    
-    if service_pid:
-        # Start test
-        print(f"⏳ Starting {duration}s test...")
-        print(f"💾 Monitoring CPU usage every 5 seconds...")
-        print(f"⚙️  Test config: {users} users, {spawn_rate} spawn rate")
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-        # Monitor CPU usage during test
-        cpu_readings = []
-        memory_readings = []
-        
-        # Initial CPU reading to "prime" the measurement
+    # Start test
+    print(f"⏳ Starting {duration}s test...")
+    print(f"💾 Monitoring SYSTEM CPU usage every 5 seconds...")
+    print(f"⚙️  Test config: {users} users, {spawn_rate} spawn rate")
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # Monitor system-wide CPU and memory during test
+    cpu_readings = []
+    memory_readings = []
+
+    # Prime CPU measurement
+    psutil.cpu_percent(interval=None)
+    time.sleep(0.1)
+
+    for i in range(duration):
         try:
-            proc = psutil.Process(service_pid)
-            proc.cpu_percent()  # First call to initialize
-            time.sleep(0.1)  # Small delay
-        except:
-            print(f"   ⚠️  Could not initialize CPU monitoring for PID {service_pid}")
-        
-        print(f"   💾 Monitoring CPU usage every 5 seconds...")
-        
-        for i in range(duration):
-            try:
-                proc = psutil.Process(service_pid)
-                cpu_percent = proc.cpu_percent(interval=1.0)  # 1-second interval for accuracy
-                memory_mb = proc.memory_info().rss / (1024 * 1024)
-                
-                if cpu_percent > 0:  # Only record non-zero CPU readings
-                    cpu_readings.append(cpu_percent)
-                memory_readings.append(memory_mb)
-                
-                if i % 5 == 0:  # Print every 5 seconds
-                    print(f"   {i:3d}s: CPU {cpu_percent:5.1f}%, Memory {memory_mb:6.1f}MB")
-                
-                # Don't sleep here since cpu_percent(interval=1.0) already waits 1 second
-            except Exception as e:
-                print(f"   ⚠️  Error monitoring PID {service_pid}: {e}")
-                break
-        
-        # Wait for locust to finish
-        print(f"⏳ Waiting for Locust to finish and generate reports...")
-        stdout, stderr = process.communicate()
-        
-        print(f"✅ Locust test completed successfully!")
-        
-        # Calculate averages
-        avg_cpu = sum(cpu_readings) / len(cpu_readings) if cpu_readings else 0
-        avg_memory = sum(memory_readings) / len(memory_readings) if memory_readings else 0
-        
-        print(f"📊 Processing results...")
-        print(f"   Average CPU: {avg_cpu:.1f}% | Average Memory: {avg_memory:.1f}MB")
-        
-        return {
-            'avg_cpu': avg_cpu,
-            'avg_memory': avg_memory,
-            'output_prefix': output_prefix
-        }
-    else:
-        print(f"❌ Could not find PID for {service_name}")
-        return None
+            cpu_percent = psutil.cpu_percent(interval=1.0)
+            mem = psutil.virtual_memory()
+            memory_mb = mem.used / (1024 * 1024)
+
+            cpu_readings.append(cpu_percent)
+            memory_readings.append(memory_mb)
+
+            if i % 5 == 0:
+                print(f"   {i:3d}s: CPU {cpu_percent:5.1f}%, Memory {memory_mb:6.1f}MB")
+        except Exception as e:
+            print(f"   ⚠️  Error monitoring system resources: {e}")
+            break
+
+    # Wait for locust to finish
+    print(f"⏳ Waiting for Locust to finish and generate reports...")
+    stdout, stderr = process.communicate()
+
+    print(f"✅ Locust test completed successfully!")
+
+    # Calculate averages
+    avg_cpu = sum(cpu_readings) / len(cpu_readings) if cpu_readings else 0
+    avg_memory = sum(memory_readings) / len(memory_readings) if memory_readings else 0
+
+    print(f"📊 Processing results...")
+    print(f"   Average CPU: {avg_cpu:.1f}% | Average Memory: {avg_memory:.1f}MB")
+
+    return {
+        'avg_cpu': avg_cpu,
+        'avg_memory': avg_memory,
+        'output_prefix': output_prefix
+    }
 
 def analyze_results(service_name, resource_data, output_prefix):
     """Analyze results and show comprehensive throughput + efficiency metrics"""
