@@ -110,7 +110,7 @@ def run_locust_test(service_name, port, users=20, duration=60, spawn_rate=5):
     
     # Start test
     print(f"⏳ Starting {duration}s test...")
-    print(f"💾 Monitoring SYSTEM CPU usage every 5 seconds...")
+    print(f"💾 Monitoring SYSTEM CPU usage every 5 seconds (process RSS for memory)...")
     print(f"⚙️  Test config: {users} users, {spawn_rate} spawn rate")
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -118,15 +118,43 @@ def run_locust_test(service_name, port, users=20, duration=60, spawn_rate=5):
     cpu_readings = []
     memory_readings = []
 
+    # Try to resolve service PID for process RSS memory tracking
+    service_pid = None
+    try:
+        pids = find_service_pids()
+        service_pid = pids.get(service_name.lower())
+        if service_pid:
+            # Validate process exists
+            psutil.Process(service_pid)
+    except Exception:
+        service_pid = None
+
     # Prime CPU measurement
     psutil.cpu_percent(interval=None)
     time.sleep(0.1)
 
+    warned_memory_fallback = False
+
     for i in range(duration):
         try:
             cpu_percent = psutil.cpu_percent(interval=1.0)
-            mem = psutil.virtual_memory()
-            memory_mb = mem.used / (1024 * 1024)
+            # Memory: prefer process RSS if PID found; otherwise, system memory used
+            if service_pid:
+                try:
+                    proc = psutil.Process(service_pid)
+                    memory_mb = proc.memory_info().rss / (1024 * 1024)
+                except Exception as e:
+                    if not warned_memory_fallback:
+                        print(f"   ⚠️  Falling back to system memory: RSS read failed for PID {service_pid}: {e}")
+                        warned_memory_fallback = True
+                    mem = psutil.virtual_memory()
+                    memory_mb = mem.used / (1024 * 1024)
+            else:
+                if not warned_memory_fallback:
+                    print(f"   ⚠️  Using system memory fallback: could not determine PID for {service_name}")
+                    warned_memory_fallback = True
+                mem = psutil.virtual_memory()
+                memory_mb = mem.used / (1024 * 1024)
 
             cpu_readings.append(cpu_percent)
             memory_readings.append(memory_mb)
