@@ -2,16 +2,86 @@
 
 # Performance Test Service Starter
 # This script starts all three API services for performance testing
-# Usage: ./start_services.sh [--console]
-#   --console: Start Rust with tokio-console support
+# Usage: ./start_services.sh [--console] [--limit-cpus[=CPUSET]]
+#   --console              Start Rust with tokio-console support
+#   --limit-cpus           Pin all services to CPUs 0-1 and tune threads (default)
+#   --limit-cpus=CPUSET    Pin to explicit CPU set (e.g. 0-1,0,2)
 
 set -e
 
-# Check for console mode
+# Parse flags
 CONSOLE_MODE=false
-if [[ "$1" == "--console" ]]; then
-    CONSOLE_MODE=true
-    echo "🔍 Console mode enabled for Rust service"
+LIMIT_CPUS=false
+CPUSET="0-1"
+
+for arg in "$@"; do
+    case "$arg" in
+        --console)
+            CONSOLE_MODE=true
+            echo "🔍 Console mode enabled for Rust service"
+            ;;
+        --limit-cpus)
+            LIMIT_CPUS=true
+            CPUSET="0-1"
+            ;;
+        --limit-cpus=*)
+            LIMIT_CPUS=true
+            CPUSET="${arg#*=}"
+            ;;
+    esac
+done
+
+# Derive CPU count from CPUSET when limiting CPUs
+cpu_count_from_cpuset() {
+    local cpuset="$1"
+    local total=0
+    local IFS=','
+    read -ra parts <<< "$cpuset"
+    for part in "${parts[@]}"; do
+        if [[ "$part" =~ ^[0-9]+-[0-9]+$ ]]; then
+            local IFS='-'
+            read -r start end <<< "$part"
+            if [[ -n "$start" && -n "$end" && $end -ge $start ]]; then
+                total=$(( total + end - start + 1 ))
+            fi
+        elif [[ "$part" =~ ^[0-9]+$ ]]; then
+            total=$(( total + 1 ))
+        fi
+    done
+    echo "$total"
+}
+
+if [ "$LIMIT_CPUS" = true ]; then
+    CPU_COUNT=$(cpu_count_from_cpuset "$CPUSET")
+    if [ -z "$CPU_COUNT" ] || [ "$CPU_COUNT" -le 0 ]; then
+        CPU_COUNT=2
+    fi
+    echo -e "${YELLOW}⚙️  CPU pinning enabled: cpuset=${CPUSET} (count=${CPU_COUNT})${NC}"
+
+    # Decide pinning mechanism: prefer cgroups cpuset via cgcreate/cgexec, fallback to taskset
+    CPU_PIN_PREFIX=""
+    if command -v cgcreate >/dev/null 2>&1 && [ -d "/sys/fs/cgroup/cpuset" ]; then
+        CGROUP_NAME="bench_${CPUSET//[^0-9a-zA-Z_-]/_}"
+        echo -e "${YELLOW}🧰 Using cgroups cpuset via cgexec (cgroup=${CGROUP_NAME})${NC}"
+        # Create cpuset cgroup and configure
+        cgcreate -g cpuset:"$CGROUP_NAME" || true
+        # Determine mems
+        DEFAULT_MEMS="0"
+        if [ -r "/sys/fs/cgroup/cpuset/cpuset.mems" ]; then
+            DEFAULT_MEMS=$(cat /sys/fs/cgroup/cpuset/cpuset.mems)
+        fi
+        cgset -r cpuset.cpus="${CPUSET}" "$CGROUP_NAME" || true
+        cgset -r cpuset.mems="${DEFAULT_MEMS}" "$CGROUP_NAME" || true
+        CPU_PIN_PREFIX="cgexec -g cpuset:${CGROUP_NAME}"
+    else
+        if command -v taskset >/dev/null 2>&1; then
+            echo -e "${YELLOW}🧰 Using taskset for CPU pinning${NC}"
+            CPU_PIN_PREFIX="taskset -c $CPUSET"
+        else
+            echo -e "${YELLOW}⚠️  Neither cgcreate nor taskset found; CPU pinning will be skipped${NC}"
+            CPU_PIN_PREFIX=""
+        fi
+    fi
 fi
 
 # Colors for output
@@ -84,7 +154,13 @@ if [ ! -f "target/java-caller-1.0.0.jar" ]; then
     echo -e "${YELLOW}📦 Building Java application...${NC}"
     mvn clean package -q
 fi
-nohup java -jar target/java-caller-1.0.0.jar > ../performance-test/logs/java.log 2>&1 &
+
+JAVA_JVM_ARGS=""
+if [ "$LIMIT_CPUS" = true ]; then
+    JAVA_JVM_ARGS="-XX:ActiveProcessorCount=${CPU_COUNT} -XX:ParallelGCThreads=${CPU_COUNT} -XX:ConcGCThreads=${CPU_COUNT}"
+fi
+
+nohup $CPU_PIN_PREFIX java $JAVA_JVM_ARGS -jar target/java-caller-1.0.0.jar > ../performance-test/logs/java.log 2>&1 &
 JAVA_PID=$!
 echo "Java PID: $JAVA_PID"
 
@@ -95,13 +171,17 @@ cd ../rust-caller-new
 if [ "$CONSOLE_MODE" = true ]; then
     echo -e "${YELLOW}🔍 Starting Rust with tokio-console support...${NC}"
     echo -e "${YELLOW}💡 Connect with: tokio-console${NC}"
-    TOKIO_CONSOLE=1 RUSTFLAGS="--cfg tokio_unstable" nohup cargo run --release > ../performance-test/logs/rust_console.log 2>&1 &
+    TOKIO_CONSOLE=1 RUSTFLAGS="--cfg tokio_unstable" nohup $CPU_PIN_PREFIX cargo run --release > ../performance-test/logs/rust_console.log 2>&1 &
     RUST_PID=$!
     echo "Rust PID: $RUST_PID (with console support on port 6669)"
 else
     echo -e "${YELLOW}📊 Starting Rust in normal mode...${NC}"
     echo -e "${YELLOW}💡 For console mode, use: ./start_services.sh --console${NC}"
-    nohup cargo run --release > ../performance-test/logs/rust.log 2>&1 &
+    RUST_ENV=""
+    if [ "$LIMIT_CPUS" = true ]; then
+        RUST_ENV="RAYON_NUM_THREADS=${CPU_COUNT} TOKIO_WORKER_THREADS=${CPU_COUNT}"
+    fi
+    nohup $CPU_PIN_PREFIX env $RUST_ENV cargo run --release > ../performance-test/logs/rust.log 2>&1 &
     RUST_PID=$!
     echo "Rust PID: $RUST_PID"
 fi
@@ -109,7 +189,11 @@ fi
 # Start Go service (Port 8081)
 echo -e "${BLUE}🐹 Starting Go Gin service...${NC}"
 cd ../go-caller
-nohup go run main.go > ../performance-test/logs/go.log 2>&1 &
+GO_ENV=""
+if [ "$LIMIT_CPUS" = true ]; then
+    GO_ENV="GOMAXPROCS=${CPU_COUNT}"
+fi
+nohup $CPU_PIN_PREFIX env $GO_ENV go run main.go > ../performance-test/logs/go.log 2>&1 &
 GO_PID=$!
 echo "Go PID: $GO_PID"
 
