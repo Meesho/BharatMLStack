@@ -1,34 +1,45 @@
+#[cfg(not(test))]
 use crate::logger;
+#[cfg(not(test))]
 use crate::pkg::config::config::get_config;
+#[cfg(not(test))]
 use etcd_client::EventType;
+#[cfg(not(test))]
 use etcd_client::{Client, ConnectOptions, WatchOptions};
+#[cfg(not(test))]
 use regex::Regex;
+#[cfg(not(test))]
 use serde_json::Value;
 use std::collections::HashMap;
+#[cfg(not(test))]
 use std::collections::HashSet;
 use std::error::Error as StdError;
+#[cfg(not(test))]
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::RwLock;
 use std::time::Duration;
+#[cfg(not(test))]
 use tokio::sync::Mutex;
 
+#[cfg(not(test))]
 static ETCD_CLIENT: OnceLock<Arc<Mutex<Client>>> = OnceLock::new();
 static ETCD_APP_PATH: OnceLock<String> = OnceLock::new();
 static ETCD_TIMEOUT: OnceLock<Duration> = OnceLock::new();
+#[cfg(not(test))]
 static BASE_PATH: &str = "/config/";
+#[cfg(not(test))]
 static EMPTY_RESPONSE: &str = "";
 
+#[cfg(test)]
 pub async fn init_etcd_connection() {
-    #[cfg(test)]
-    {
-        // In tests, skip real etcd connection; seed minimal state
-        let _ = ETCD_TIMEOUT.set(Duration::from_millis(100));
-        let _ = ETCD_APP_PATH.set("/config/test".to_string());
-        // Use a dummy client by connecting to an empty list (will error but we ignore in tests)
-        return;
-    }
+    let _ = ETCD_TIMEOUT.set(Duration::from_millis(100));
+    let _ = ETCD_APP_PATH.set("/config/test".to_string());
+}
+
+#[cfg(not(test))]
+pub async fn init_etcd_connection() {
     match ETCD_TIMEOUT.set(Duration::from_secs(5)) {
         Ok(_) => (),
         Err(e) => logger::fatal(
@@ -97,14 +108,17 @@ pub async fn init_etcd_connection() {
     }
 }
 
+#[cfg(test)]
+pub async fn get_child_nodes(
+    _etcd_path: &str,
+) -> Result<(HashMap<String, String>, HashMap<String, Vec<String>>), Box<dyn StdError>> {
+    Ok((HashMap::new(), HashMap::new()))
+}
+
+#[cfg(not(test))]
 pub async fn get_child_nodes(
     etcd_path: &str,
 ) -> Result<(HashMap<String, String>, HashMap<String, Vec<String>>), Box<dyn StdError>> {
-    #[cfg(test)]
-    {
-        // Return seeded empty maps in tests (etcd disabled)
-        return Ok((HashMap::new(), HashMap::new()));
-    }
     let etcd_absolute_path = format!("{}{}/", ETCD_APP_PATH.get().unwrap(), etcd_path);
     let client_arc = ETCD_CLIENT.get().unwrap();
 
@@ -147,6 +161,7 @@ pub async fn get_child_nodes(
     Ok((expressions, expression_meta_map))
 }
 
+#[cfg(not(test))]
 fn meta_data_from_expression<T>(expression: &str) -> Vec<String>
 where
     T: FromStr + Copy + Default,
@@ -177,16 +192,20 @@ where
     unique_numbers
 }
 
+#[cfg(test)]
+pub async fn watch_etcd_path(
+    _etcd_path: &str,
+    _expression_map: Arc<RwLock<HashMap<String, String>>>,
+    _expression_meta_map: Arc<RwLock<HashMap<String, Vec<String>>>>,
+) {
+}
+
+#[cfg(not(test))]
 pub async fn watch_etcd_path(
     etcd_path: &str,
     expression_map: Arc<RwLock<HashMap<String, String>>>,
     expression_meta_map: Arc<RwLock<HashMap<String, Vec<String>>>>,
 ) {
-    #[cfg(test)]
-    {
-        // No-op during tests
-        return;
-    }
     let etcd_absolute_path = format!("{}{}/", ETCD_APP_PATH.get().unwrap(), etcd_path);
     let client_arc = ETCD_CLIENT.get().unwrap().clone();
 

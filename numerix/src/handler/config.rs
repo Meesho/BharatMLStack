@@ -1,4 +1,5 @@
 use crate::logger;
+#[cfg(not(test))]
 use crate::pkg::etcd::etcd;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -21,6 +22,7 @@ pub async fn init_config() {
         logger::error("EXPRESSION_CONFIG_ETCD_PATH was already initialized", None);
     }
 
+    #[allow(unused_variables)]
     let etcd_path = match EXPRESSION_CONFIG_ETCD_PATH.get() {
         Some(path) => path,
         None => logger::fatal(

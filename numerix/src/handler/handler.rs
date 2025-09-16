@@ -242,7 +242,11 @@ where
                     Some(proto::score::MatrixFormat::ByteData(data)) => data,
                     _ => continue,
                 };
-                let start_at = if byte_data.values.len() == cols + 1 { 1 } else { 0 };
+                let start_at = if byte_data.values.len() == cols + 1 {
+                    1
+                } else {
+                    0
+                };
                 for (value_pos, value) in byte_data.values.iter().enumerate().skip(start_at) {
                     let col_idx = value_pos - start_at;
                     if col_idx < cols && row_idx < rows {
@@ -263,7 +267,11 @@ where
                     Some(proto::score::MatrixFormat::StringData(data)) => data,
                     _ => continue,
                 };
-                let start_at = if string_data.values.len() == cols + 1 { 1 } else { 0 };
+                let start_at = if string_data.values.len() == cols + 1 {
+                    1
+                } else {
+                    0
+                };
                 for (value_pos, value) in string_data.values.iter().enumerate().skip(start_at) {
                     let col_idx = value_pos - start_at;
                     if col_idx < cols && row_idx < rows {
