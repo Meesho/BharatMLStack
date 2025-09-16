@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+option go_package = "../../numerix/proto";
+
+package numerix;
+
+service Numerix {
+    rpc Compute(NumerixRequestProto) returns (NumerixResponseProto);
+}
+
+message NumerixRequestProto {
+    EntityScoreData entity_score_data = 1;
+}
+
+message EntityScoreData {
+    repeated string schema = 1;
+    repeated Score entity_scores = 2;
+    string compute_id = 3;
+    optional string data_type = 4;
+}
+
+message Score {
+    oneof matrix_format {
+        StringList string_data = 1;
+        ByteList byte_data = 2;
+    }
+}
+
+message StringList {
+    repeated string values = 1;
+}
+
+message ByteList {
+    repeated bytes values = 1;
+}
+
+message NumerixResponseProto {
+    oneof response {  
+        ComputationScoreData computation_score_data = 1;
+        Error error = 2;
+    }
+}
+
+message ComputationScoreData {
+    repeated string schema = 1;
+    repeated Score computation_scores = 2;
+}
+
+message Error {
+    string message = 1;
+}
+

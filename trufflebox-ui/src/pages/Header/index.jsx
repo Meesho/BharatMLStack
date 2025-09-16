@@ -1,35 +1,56 @@
 import React, { useState } from 'react';
-import { Navbar, Accordion, Offcanvas, ListGroup, Dropdown } from 'react-bootstrap';
+import { Navbar, Offcanvas, Dropdown } from 'react-bootstrap';
 import MenuIcon from '@mui/icons-material/Menu';
 import StorageIcon from '@mui/icons-material/Storage';
-import { Link, useNavigate } from 'react-router-dom';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import FolderIcon from '@mui/icons-material/Folder';
+// import SettingsIcon from '@mui/icons-material/Settings';
+import ApprovalIcon from '@mui/icons-material/TaskAlt';
+import BugReportIcon from '@mui/icons-material/BugReport';
+import PersonIcon from '@mui/icons-material/Person';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import LogoutIcon from '@mui/icons-material/Logout';
 import PropTypes from 'prop-types';
 import './Header.css';
 import { useAuth } from '../Auth/AuthContext';
+import { requiresPermissionCheck, getPermissionInfo } from '../../constants/serviceMapping';
 
 function Header({ onMenuItemClick }) {
   const [show, setShow] = useState(false);
-  const { user, logout } = useAuth(); // Get user and logout function from AuthContext
+  const [expandedItems, setExpandedItems] = useState({});
+  const [currentPath, setCurrentPath] = useState([]); // used in renderBreadcrumb
+  const { user, logout, hasScreenAccess } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const handleShow = () => setShow(true);
-  const handleClose = () => setShow(false);
+  const isActivePath = (path) => {
+    return location.pathname === path;
+  };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const getMenuIcon = (key) => {
+    const iconMap = {
+      'FeatureStore': <StorageIcon />,
+      'Numerix': <FolderIcon />,
+      'UserManagement': <PersonIcon />,
+      'Discovery': <FolderIcon />,
+      'FeatureRegistry': <StorageIcon />,
+      'FeatureApproval': <ApprovalIcon />,
+      'NumerixApproval': <ApprovalIcon />,
+      'Testing': <BugReportIcon />
+    };
+    return iconMap[key] || <StorageIcon />;
   };
 
   const menuItems = [
-    // Parent: Online Feature Store
     {
       key: 'FeatureStore',
       label: 'Online Feature Store',
       subItems: null,
       roles: ['user', 'admin'],
       children: [
-        // Feature Store Discovery
         {
           key: 'Discovery',
           label: 'Discovery',
@@ -39,9 +60,8 @@ function Header({ onMenuItemClick }) {
             { key: 'JobDiscovery', label: 'Jobs', path: '/job-discovery' },
             { key: 'ClientDiscovery', label: 'Clients', path: '/client-discovery' },
           ],
-          roles: ['user', 'admin'], // Accessible by both roles
+          roles: ['user', 'admin'],
         },
-        // Feature Registry
         {
           key: 'FeatureRegistry',
           label: 'Registry',
@@ -54,7 +74,6 @@ function Header({ onMenuItemClick }) {
           ],
           roles: ['user', 'admin'],
         },
-        // Feature Approval
         {
           key: 'FeatureApproval',
           label: 'Approval',
@@ -65,7 +84,24 @@ function Header({ onMenuItemClick }) {
             { key: 'FeatureGroups', label: 'Feature Groups', path: '/feature-approval/feature-group' },
             { key: 'Features', label: 'Features', path: '/feature-approval/features' },
           ],
-          roles: ['admin'], // Accessible by admins only
+          roles: ['admin'],
+        },
+      ]
+    },
+    {
+      key: 'Numerix',
+      label: 'Numerix',
+      roles: null,
+      subItems: [
+        {
+          key: 'Config',
+          label: 'Config',
+          path: '/numerix/config'
+        },
+        {
+          key: 'Approval',
+          label: 'Approval',
+          path: '/numerix/config-approval'
         },
       ]
     },
@@ -74,122 +110,329 @@ function Header({ onMenuItemClick }) {
       label: 'User Management',
       path: '/user-management',
       roles: ['admin'],
-    }
+    },
   ];
 
+  const hasMenuAccess = (menuKey, parentKey = null) => {
+    if (!requiresPermissionCheck(menuKey)) {
+      return true;
+    }
+    
+    let permissionInfo = getPermissionInfo(menuKey);
+    
+    if (permissionInfo) {
+      return hasScreenAccess(permissionInfo.service, permissionInfo.screenType);
+    }
+    
+    return false;
+  };
+
+  const toggleExpanded = (key) => {
+    setExpandedItems(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const handleNavigation = (path, breadcrumb) => {
+    if (path) {
+      setCurrentPath(breadcrumb);
+      navigate(path);
+      onMenuItemClick && onMenuItemClick(breadcrumb[breadcrumb.length - 1]);
+      handleClose();
+    }
+  };
+
+  const initializeExpandedState = () => {
+    const expanded = {};
+    let breadcrumbPath = [];
+
+    // Find the current active path and set expanded states
+    menuItems.forEach((parentItem) => {
+      // Check role permissions for parent item
+      if (parentItem.roles && !parentItem.roles.includes(user?.role)) {
+        return;
+      }
+
+      if (parentItem.path && isActivePath(parentItem.path)) {
+        breadcrumbPath = [parentItem.label];
+        return;
+      }
+
+      if (parentItem.subItems) {
+        const activeSubItem = parentItem.subItems.find(subItem => {
+          const hasAccess = hasMenuAccess(subItem.key, parentItem.key);
+          return isActivePath(subItem.path) && (!requiresPermissionCheck(subItem.key) || hasAccess);
+        });
+        if (activeSubItem) {
+          expanded[parentItem.key] = true;
+          breadcrumbPath = [parentItem.label, activeSubItem.label];
+        }
+      }
+
+      if (parentItem.children) {
+        parentItem.children.forEach((childItem) => {
+          // Check role permissions for child item
+          if (childItem.roles && !childItem.roles.includes(user?.role)) {
+            return;
+          }
+
+          if (childItem.subItems) {
+            const activeSubItem = childItem.subItems.find(subItem => {
+              const hasAccess = hasMenuAccess(subItem.key, parentItem.key);
+              return isActivePath(subItem.path) && (!requiresPermissionCheck(subItem.key) || hasAccess);
+            });
+            if (activeSubItem) {
+              expanded[parentItem.key] = true;
+              expanded[`${parentItem.key}-${childItem.key}`] = true;
+              breadcrumbPath = [parentItem.label, childItem.label, activeSubItem.label];
+            }
+          }
+        });
+      }
+    });
+
+    setExpandedItems(expanded);
+    setCurrentPath(breadcrumbPath);
+  };
+
+  // Initialize expanded state when component mounts or location changes
+  React.useEffect(() => {
+    initializeExpandedState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, user?.role]);
+
+  const handleShow = () => {
+    // Reset expanded state to only show current page path when sidebar opens
+    initializeExpandedState();
+    setShow(true);
+  };
+  const handleClose = () => setShow(false);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const renderBreadcrumb = () => {
+    if (currentPath.length === 0) return null;
+    
+    return (
+      <div className="breadcrumb-container">
+        <div className="breadcrumb-path">
+          {currentPath.map((item, index) => (
+            <span key={index} className="breadcrumb-item">
+              {item}
+              {index < currentPath.length - 1 && <ChevronRightIcon className="breadcrumb-separator" />}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div>
+    <div className="header-creative">
       {/* Top Navbar */}
-      <Navbar bg="primary" expand="lg" className="px-3">
-        <MenuIcon
-          onClick={handleShow}
-          style={{ cursor: 'pointer', color: '#ffffff', marginRight: '10px' }}
-        />
-        <Navbar.Brand href="#home" className="fw-bold text-white d-flex flex-column">
-          <div className="fs-5">TruffleBox</div>
-          <div className="small fw-bold" style={{ fontSize: '0.7rem' }}>(Powered by <span style={{ fontSize: '0.9rem' }}>Meesho</span>)</div>
-        </Navbar.Brand>
+      <Navbar className="navbar-creative px-4 py-3" expand="lg">
+        <div className="d-flex align-items-center">
+          <div className="menu-toggle-creative" onClick={handleShow}>
+            <MenuIcon />
+          </div>
+          
+          <Navbar.Brand className="brand-creative ms-3">
+            <div className="brand-main-creative">TruffleBox</div>
+            <div className="brand-powered-creative">
+              Powered by <span className="brand-meesho-creative">Meesho</span>
+            </div>
+          </Navbar.Brand>
+        </div>
+
         <Navbar.Collapse className="justify-content-end">
           <Dropdown align="end">
-            <Dropdown.Toggle
-              variant="link"
-              id="dropdown-profile"
-              className="text-white d-flex align-items-center"
-              style={{ textDecoration: 'none', cursor: 'pointer' }}
-            >
-              <AccountCircleIcon style={{ marginRight: '8px' }} />
-              {user?.email || 'User'}
+            <Dropdown.Toggle className="profile-dropdown-creative">
+              <div className="profile-avatar-creative">
+                <AccountCircleIcon />
+              </div>
+              <div className="profile-info-creative">
+                <span className="profile-name-creative">{user?.email || 'User'}</span>
+                <span className="profile-role-creative">{user?.role || 'Member'}</span>
+              </div>
             </Dropdown.Toggle>
-            <Dropdown.Menu>
-              <Dropdown.Item onClick={handleLogout}>Logout</Dropdown.Item>
+            <Dropdown.Menu className="profile-menu-creative">
+              <Dropdown.Item onClick={handleLogout} className="logout-item-creative">
+                <LogoutIcon className="me-2" />
+                Logout
+              </Dropdown.Item>
             </Dropdown.Menu>
           </Dropdown>
         </Navbar.Collapse>
       </Navbar>
 
-      {/* Offcanvas Sidebar */}
-      <Offcanvas show={show} onHide={handleClose} placement="start" className="offcanvas-custom">
-        <Offcanvas.Header closeButton>
-          <Offcanvas.Title className="fw-bold text-dark">
+      {/* Creative Sidebar */}
+      <Offcanvas show={show} onHide={handleClose} placement="start" className="sidebar-creative">
+        <Offcanvas.Header closeButton className="sidebar-header-creative">
+          <Offcanvas.Title className="sidebar-title-creative">
+            <DashboardIcon className="me-2" />
             Control Center
           </Offcanvas.Title>
         </Offcanvas.Header>
-        <Offcanvas.Body>
-          <div>
-            {menuItems?.map((parentItem) =>
-              // Check if the current user has access to the parent item
-              parentItem.roles.includes(user?.role) ? (
-                // Check if it's a direct menu item (has path) or nested item (has children)
-                parentItem.path ? (
-                  // Direct menu item - render as a simple link
-                  <ListGroup key={parentItem.key} variant="flush">
-                    <ListGroup.Item
-                      as={Link}
+        
+        <Offcanvas.Body className="sidebar-body-creative">
+          {renderBreadcrumb()}
+          
+          <div className="navigation-creative">
+            {menuItems?.map((parentItem) => {
+              if (parentItem.roles && !parentItem.roles.includes(user?.role)) {
+                return null;
+              }
+
+              // Check access for parent items
+              if (parentItem.subItems && !parentItem.path) {
+                const accessibleSubItems = parentItem.subItems.filter(subItem => {
+                  const hasAccess = hasMenuAccess(subItem.key, parentItem.key);
+                  return !requiresPermissionCheck(subItem.key) || hasAccess;
+                });
+                if (accessibleSubItems.length === 0) return null;
+              }
+
+              if (parentItem.children && !parentItem.path) {
+                const hasAccessibleChildren = parentItem.children.some(childItem => {
+                  if (childItem.roles && !childItem.roles.includes(user?.role)) {
+                    return false;
+                  }
+                  if (childItem.subItems) {
+                    const accessibleSubItems = childItem.subItems.filter(subItem => {
+                      const hasAccess = hasMenuAccess(subItem.key, parentItem.key);
+                      return !requiresPermissionCheck(subItem.key) || hasAccess;
+                    });
+                    return accessibleSubItems.length > 0;
+                  }
+                  return true;
+                });
+                if (!hasAccessibleChildren) return null;
+              }
+
+              return (
+                <div key={parentItem.key} className="nav-section-creative">
+                  {parentItem.path ? (
+                    <Link
                       to={parentItem.path}
-                      onClick={() => {
-                        onMenuItemClick && onMenuItemClick(parentItem.key);
-                        handleClose();
-                      }}
-                      className="offcanvas-link fs-6"
-                      style={{ 
-                        paddingLeft: '20px', 
-                        paddingTop: '12px', 
-                        paddingBottom: '12px',
-                        borderBottom: '1px solid #e9ecef'
-                      }}
+                      onClick={() => handleNavigation(parentItem.path, [parentItem.label])}
+                      className={`nav-main-item-creative ${isActivePath(parentItem.path) ? 'active' : ''}`}
                     >
-                      <StorageIcon style={{ marginRight: '10px', color: '#000' }} />
-                      {parentItem.label}
-                    </ListGroup.Item>
-                  </ListGroup>
-                ) : (
-                  // Nested menu item - render with accordion
-                  <Accordion key={parentItem.key} defaultActiveKey="0" flush>
-                    <Accordion.Item eventKey={parentItem.key}>
-                      <Accordion.Header>
-                        <StorageIcon style={{ marginRight: '10px', color: '#000' }} />
-                        {parentItem.label}
-                      </Accordion.Header>
-                      <Accordion.Body>
-                        <Accordion flush className="nested-accordion">
-                          {parentItem.children?.map((childItem) =>
-                            // Check if user has access to this child item
-                            childItem.roles.includes(user?.role) ? (
-                              <Accordion.Item key={childItem.key} eventKey={`${parentItem.key}-${childItem.key}`}>
-                                <Accordion.Header>
-                                  {childItem.label}
-                                </Accordion.Header>
-                                <Accordion.Body>
-                                  {childItem.subItems && (
-                                    <ListGroup variant="flush">
-                                      {childItem.subItems?.map((subItem) => (
-                                        <ListGroup.Item
+                      <div className="nav-item-content-creative">
+                        <div className="nav-icon-creative">
+                          {getMenuIcon(parentItem.key)}
+                        </div>
+                        <span className="nav-label-creative">{parentItem.label}</span>
+                      </div>
+                    </Link>
+                  ) : (
+                    <>
+                      <div 
+                        className={`nav-main-item-creative expandable ${expandedItems[parentItem.key] ? 'expanded' : ''}`}
+                        onClick={() => toggleExpanded(parentItem.key)}
+                      >
+                        <div className="nav-item-content-creative">
+                          <div className="nav-icon-creative">
+                            {getMenuIcon(parentItem.key)}
+                          </div>
+                          <span className="nav-label-creative">{parentItem.label}</span>
+                          <div className="expand-icon-creative">
+                            {expandedItems[parentItem.key] ? <ExpandMoreIcon /> : <ChevronRightIcon />}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {expandedItems[parentItem.key] && (
+                        <div className="nav-children-creative">
+                          {parentItem.subItems ? (
+                            <div className="nav-sub-items-creative">
+                              {parentItem.subItems
+                                .filter((subItem) => {
+                                  const hasAccess = hasMenuAccess(subItem.key, parentItem.key);
+                                  return !requiresPermissionCheck(subItem.key) || hasAccess;
+                                })
+                                .map((subItem) => (
+                                  <Link
+                                    key={subItem.key}
+                                    to={subItem.path}
+                                    onClick={() => handleNavigation(subItem.path, [parentItem.label, subItem.label])}
+                                    className={`nav-sub-item-creative ${isActivePath(subItem.path) ? 'active' : ''}`}
+                                  >
+                                    <div className="nav-connection-line-creative"></div>
+                                    <div className="nav-sub-content-creative">
+                                      <div className="nav-sub-dot-creative"></div>
+                                      <span className="nav-sub-label-creative">{subItem.label}</span>
+                                    </div>
+                                  </Link>
+                                ))}
+                            </div>
+                          ) : (
+                            parentItem.children?.map((childItem) => {
+                              if (childItem.roles && !childItem.roles.includes(user?.role)) {
+                                return null;
+                              }
+
+                              const accessibleSubItems = childItem.subItems?.filter((subItem) => {
+                                const hasAccess = hasMenuAccess(subItem.key, parentItem.key);
+                                return !requiresPermissionCheck(subItem.key) || hasAccess;
+                              }) || [];
+
+                              if (childItem.subItems && accessibleSubItems.length === 0) {
+                                return null;
+                              }
+
+                              const childKey = `${parentItem.key}-${childItem.key}`;
+
+                              return (
+                                <div key={childItem.key} className="nav-child-section-creative">
+                                  <div 
+                                    className={`nav-child-item-creative expandable ${expandedItems[childKey] ? 'expanded' : ''}`}
+                                    onClick={() => toggleExpanded(childKey)}
+                                  >
+                                    <div className="nav-connection-line-creative"></div>
+                                    <div className="nav-child-content-creative">
+                                      <div className="nav-child-icon-creative">
+                                        {getMenuIcon(childItem.key)}
+                                      </div>
+                                      <span className="nav-child-label-creative">{childItem.label}</span>
+                                      <div className="expand-icon-creative">
+                                        {expandedItems[childKey] ? <ExpandMoreIcon /> : <ChevronRightIcon />}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  {expandedItems[childKey] && childItem.subItems && (
+                                    <div className="nav-grandchildren-creative">
+                                      {accessibleSubItems.map((subItem) => (
+                                        <Link
                                           key={subItem.key}
-                                          as={Link}
                                           to={subItem.path}
-                                          onClick={() => {
-                                            onMenuItemClick && onMenuItemClick(subItem.key);
-                                            handleClose();
-                                          }}
-                                          className="offcanvas-link fw-bold fs-6"
-                                          style={{ paddingLeft: '20px' }}
+                                          onClick={() => handleNavigation(subItem.path, [parentItem.label, childItem.label, subItem.label])}
+                                          className={`nav-grandchild-item-creative ${isActivePath(subItem.path) ? 'active' : ''}`}
                                         >
-                                          {subItem.label}
-                                        </ListGroup.Item>
+                                          <div className="nav-grandchild-connection-creative"></div>
+                                          <div className="nav-grandchild-content-creative">
+                                            <div className="nav-grandchild-dot-creative"></div>
+                                            <span className="nav-grandchild-label-creative">{subItem.label}</span>
+                                          </div>
+                                        </Link>
                                       ))}
-                                    </ListGroup>
+                                    </div>
                                   )}
-                                </Accordion.Body>
-                              </Accordion.Item>
-                            ) : null
+                                </div>
+                              );
+                            })
                           )}
-                        </Accordion>
-                      </Accordion.Body>
-                    </Accordion.Item>
-                  </Accordion>
-                )
-              ) : null
-            )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </Offcanvas.Body>
       </Offcanvas>
@@ -201,4 +444,4 @@ Header.propTypes = {
   onMenuItemClick: PropTypes.func,
 };
 
-export default Header;
+export default Header; 

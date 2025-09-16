@@ -24,11 +24,15 @@ BharatMLStack is a comprehensive, production-ready machine learning infrastructu
 
 ## Our Vision
 
-🎯 **Democratize Machine Learning**: Make advanced ML infrastructure accessible to organizations of all sizes
-🚀 **Scale Without Limits**: Built to handle millions of requests per second with enterprise-grade reliability
-🇮🇳 **India-First Approach**: Optimized for Indian market needs while maintaining global standards
-⚡ **Real-Time Intelligence**: Enable instant decision-making with sub-millisecond feature serving
-🔧 **Developer-Friendly**: Intuitive APIs and interfaces that accelerate ML development cycles
+- 🎯 **Democratize Machine Learning**: Make advanced ML infrastructure accessible to organizations of all sizes
+- 🚀 **Scale Without Limits**: Built to handle millions of requests per second with enterprise-grade reliability
+- 🇮🇳 **Bharat-First Approach**: Optimized for Indian market needs while maintaining global standards
+- ⚡ **Real-Time Intelligence**: Enable instant decision-making with sub-millisecond feature serving
+- 🔧 **Developer-Friendly**: Intuitive APIs and interfaces that accelerate ML development cycles
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Meesho/BharatMLStack&type=Date)](https://www.star-history.com/#Meesho/BharatMLStack&Date)
 
 ## Running at Million Scale
 

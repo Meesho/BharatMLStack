@@ -87,7 +87,7 @@ func (i *InMemoryCache) SetV2(entityLabel string, keys []string, data []byte) er
 	if err != nil {
 		return err
 	}
-	ttlInSeconds := cacheConfig.TtlInSeconds
+	ttlInSeconds := getFinalTTLWithJitter(cacheConfig)
 	err = i.cache.Set([]byte(k), data, ttlInSeconds)
 	log.Debug().Msgf("Set key: %s, data: %s, ttl: %d", k, data, ttlInSeconds)
 	if err != nil {
