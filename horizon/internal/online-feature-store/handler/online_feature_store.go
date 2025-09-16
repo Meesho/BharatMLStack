@@ -755,13 +755,7 @@ func (o *OnlineFeatureStore) ProcessDeleteFeatures(request *ProcessDeleteFeature
 
 func (o *OnlineFeatureStore) RetrieveEntities() (*[]RetrieveEntityResponse, error) {
 	entities, err := o.Config.GetEntities()
-	if err != nil {
-		log.Error().Msgf("Error Retrieving Entities")
-		return nil, err
-	}
-
-	response := make([]RetrieveEntityResponse, 0)
-
+	var response []RetrieveEntityResponse
 	for entityLabel, entity := range entities {
 		response = append(response, RetrieveEntityResponse{
 			EntityLabel:      entityLabel,
@@ -770,7 +764,10 @@ func (o *OnlineFeatureStore) RetrieveEntities() (*[]RetrieveEntityResponse, erro
 			DistributedCache: entity.DistributedCache,
 		})
 	}
-
+	if err != nil {
+		log.Error().Msgf("Error Retrieving Entities")
+		return nil, err
+	}
 	return &response, nil
 }
 
@@ -1052,7 +1049,7 @@ func splitOnCommaOutsideBrackets(input string) ([]string, error) {
 }
 
 func (o *OnlineFeatureStore) GetOnlineFeatureMapping(request GetOnlineFeatureMappingRequest) (GetOnlineFeatureMappingResponse, error) {
-	onlineFeatureList := make([]string, 0)
+	onlineFeatureList := make(map[string]string)
 
 	sourceData, err := o.Config.GetSource()
 	if err != nil {
@@ -1085,10 +1082,10 @@ func (o *OnlineFeatureStore) GetOnlineFeatureMapping(request GetOnlineFeatureMap
 		prefix := strings.ToLower(parts[0])
 		if slices.Contains(FeatureList, parts[0]) {
 			if sourceDataMap[strings.Join(parts[1:], "|")] != "" {
-				onlineFeatureList = append(onlineFeatureList, prefix+":"+sourceDataMap[strings.Join(parts[1:], "|")])
+				onlineFeatureList[feature] = prefix + ":" + sourceDataMap[strings.Join(parts[1:], "|")]
 			}
 		} else if sourceDataMap[feature] != "" {
-			onlineFeatureList = append(onlineFeatureList, sourceDataMap[feature])
+			onlineFeatureList[feature] = sourceDataMap[feature]
 		}
 	}
 	return GetOnlineFeatureMappingResponse{
