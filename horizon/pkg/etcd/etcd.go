@@ -26,6 +26,4 @@ type Etcd interface {
 	IsNodeExist(path string) (bool, error)
 	IsLeafNodeExist(path string) (bool, error)
 	RegisterWatchPathCallback(path string, callback func() error) error
-	DeleteValue(path string) error
-	DeleteValues(paths []string) error
 }
