@@ -78,13 +78,13 @@ High-performance feature store for real-time ML inference and training.
 - **Feature Backward Compatible Versioning**: Track and manage feature evolution
 - **Multi-source integration**: Push from stream, batch and real-time sources
 
-// TODO
 ### 🗄️ Numerix - Mathematical Compute Engine
 High-performance feature store for real-time ML inference and training.
-- **Real-time serving**: Sub-10ms feature retrieval at scale  
-- **Streaming ingestion**: Process millions of feature updates per second
-- **Feature Backward Compatible Versioning**: Track and manage feature evolution
-- **Multi-source integration**: Push from stream, batch and real-time sources
+- **Matrix Operations**: High-performance matrix computations and transformations
+- **gRPC API**: Fast binary protocol for efficient data transfer
+- **Multi-format Support**: String and byte-based matrix formats
+- **Optimized Performance**: Built with Rust for maximum efficiency
+- **Scalable Architecture**: Designed for distributed processing
 
 ## Key Differentiators
 
