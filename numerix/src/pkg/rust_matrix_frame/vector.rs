@@ -6,17 +6,17 @@ pub struct Vector<T> {
 }
 
 impl<T> Vector<T> {
-    pub fn new(size: usize) -> Self 
-    where T: Default + Clone {
+    pub fn new(size: usize) -> Self
+    where
+        T: Default + Clone,
+    {
         Vector {
             data: vec![T::default(); size],
         }
     }
 
     pub fn from_vec(data: Vec<T>) -> Self {
-        Vector {
-            data
-        }
+        Vector { data }
     }
 
     pub fn len(&self) -> usize {
@@ -37,11 +37,9 @@ impl<T> Index<usize> for Vector<T> {
 }
 
 impl<T> IndexMut<usize> for Vector<T> {
-
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.data[index]
     }
-
 }
 
 impl<'a, T> IntoIterator for &'a Vector<T> {
