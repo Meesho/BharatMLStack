@@ -60,6 +60,25 @@ fn init_config() -> AppConfig {
         ),
     }
 
+    #[cfg(test)]
+    {
+        // Provide sane defaults in tests to avoid deserialization panics
+        builder = builder
+            .set_default("application_port", 0u32)
+            .and_then(|b| b.set_default("telegraf_udp_host", "127.0.0.1"))
+            .and_then(|b| b.set_default("telegraf_udp_port", 8125u32))
+            .and_then(|b| b.set_default("metric_sampling_rate", 1.0f64))
+            .and_then(|b| b.set_default("log_sampling_rate", 1.0f64))
+            .and_then(|b| b.set_default("app_env", "test"))
+            .and_then(|b| b.set_default("app_name", "numerix-test"))
+            .and_then(|b| b.set_default("etcd_servers", "127.0.0.1:2379"))
+            .and_then(|b| b.set_default("app_log_level", "ERROR"))
+            .and_then(|b| b.set_default("channel_buffer_size", 1024u32))
+            .unwrap_or_else(|e| {
+                logger::fatal("Failed to set test defaults in config builder", Some(&e))
+            });
+    }
+
     let settings = match builder.add_source(Environment::default()).build() {
         Ok(cfg) => cfg,
         Err(e) => logger::fatal(

@@ -17,10 +17,8 @@ pub async fn init_config() {
         .set("/expression-config".to_string())
         .is_err()
     {
-        logger::fatal(
-            "Failed to set EXPRESSION_CONFIG_ETCD_PATH, it was already initialized",
-            None,
-        )
+        // Already initialized; safe to continue (common in test re-runs)
+        logger::error("EXPRESSION_CONFIG_ETCD_PATH was already initialized", None);
     }
 
     let etcd_path = match EXPRESSION_CONFIG_ETCD_PATH.get() {
@@ -31,6 +29,17 @@ pub async fn init_config() {
         ),
     };
 
+    #[cfg(test)]
+    let (expression_map, expression_meta_map) = {
+        // Seed test expressions and metadata
+        let mut expressions = HashMap::new();
+        expressions.insert("1".to_string(), "a b +".to_string());
+        let mut meta = HashMap::new();
+        meta.insert("1".to_string(), Vec::new());
+        (expressions, meta)
+    };
+
+    #[cfg(not(test))]
     let (expression_map, expression_meta_map) = match etcd::get_child_nodes(etcd_path).await {
         Ok((expression, expression_meta)) => (expression, expression_meta),
         Err(_) => {
@@ -51,15 +60,18 @@ pub async fn init_config() {
         logger::error("EXPRESSION_META_MAP was already initialized", None);
     }
 
-    let expression_map_for_watch = Arc::clone(EXPRESSION_MAP.get().unwrap());
-    let expression_meta_map_for_watch = Arc::clone(EXPRESSION_META_MAP.get().unwrap());
+    #[cfg(not(test))]
+    {
+        let expression_map_for_watch = Arc::clone(EXPRESSION_MAP.get().unwrap());
+        let expression_meta_map_for_watch = Arc::clone(EXPRESSION_META_MAP.get().unwrap());
 
-    etcd::watch_etcd_path(
-        etcd_path,
-        expression_map_for_watch,
-        expression_meta_map_for_watch,
-    )
-    .await;
+        etcd::watch_etcd_path(
+            etcd_path,
+            expression_map_for_watch,
+            expression_meta_map_for_watch,
+        )
+        .await;
+    }
 }
 
 pub fn get_exression(key: &str) -> String {

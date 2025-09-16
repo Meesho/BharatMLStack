@@ -46,7 +46,7 @@ impl Numerix for MyNumerixService {
                 logger::error(format!("Invalid request: {:?}, Error: {}", req, e), None);
                 return Ok(Response::new(NumerixResponseProto {
                     response: Some(numerix_response_proto::Response::Error(Error {
-                        message: format!("Request validation failed: {}", e),
+                        message: e,
                     })),
                 }));
             }
@@ -62,7 +62,7 @@ impl Numerix for MyNumerixService {
         if expression.is_empty() {
             return Ok(Response::new(NumerixResponseProto {
                 response: Some(numerix_response_proto::Response::Error(Error {
-                    message: format!("No expression configured for compute_id: {}", compute_id),
+                    message: "Expression not found".to_string(),
                 })),
             }));
         }
@@ -88,15 +88,15 @@ fn validate_request(req: &NumerixRequestProto) -> Result<(), String> {
     let entity_score_data = req.entity_score_data.as_ref().unwrap();
 
     if entity_score_data.compute_id.is_empty() {
-        return Err("Missing compute_id".to_string());
+        return Err("Empty compute_id".to_string());
     }
 
     if entity_score_data.entity_scores.is_empty() {
-        return Err("Missing entity_scores".to_string());
+        return Err("Empty entity_scores".to_string());
     }
 
     if entity_score_data.schema.is_empty() {
-        return Err("Missing schema".to_string());
+        return Err("Empty schema".to_string());
     }
 
     if entity_score_data.entity_scores[0].matrix_format.is_none() {
@@ -113,6 +113,11 @@ fn compute_expression(expression: &str, req: &NumerixRequestProto) -> NumerixRes
         .data_type
         .clone()
         .unwrap_or_else(|| DEFAULT_DATA_TYPE.to_string());
+    let use_f64 = match conversion_type.to_ascii_lowercase().as_str() {
+        "f64" | "fp64" => true,
+        "f32" | "fp32" => false,
+        _ => true,
+    };
 
     let score_type = if let Some(first_score) = entity_score_data.entity_scores.first() {
         match &first_score.matrix_format {
@@ -132,7 +137,7 @@ fn compute_expression(expression: &str, req: &NumerixRequestProto) -> NumerixRes
         .map(|(i, s)| (s.clone(), i))
         .collect();
 
-    if conversion_type == DEFAULT_DATA_TYPE {
+    if use_f64 {
         compute_scores::<f64, F64Ops>(
             column_names,
             expression,
@@ -232,37 +237,39 @@ where
 
     match score_type {
         "Byte" => {
-            for (idx, score_list) in entity_scores.iter().enumerate() {
+            for (row_idx, score_list) in entity_scores.iter().enumerate() {
                 let byte_data = match &score_list.matrix_format {
                     Some(proto::score::MatrixFormat::ByteData(data)) => data,
                     _ => continue,
                 };
-
-                for (value_idx, value) in byte_data.values.iter().enumerate().skip(1) {
-                    if value_idx < cols && idx < rows {
+                let start_at = if byte_data.values.len() == cols + 1 { 1 } else { 0 };
+                for (value_pos, value) in byte_data.values.iter().enumerate().skip(start_at) {
+                    let col_idx = value_pos - start_at;
+                    if col_idx < cols && row_idx < rows {
                         let expected_size = std::mem::size_of::<T>();
                         if value.len() != expected_size {
                             logger::error(format!("Invalid byte length: expected {} bytes, got {} bytes for request: {:?}", 
                                 expected_size, value.len(), req), None);
                             continue;
                         }
-                        converted_scores[value_idx * rows + idx] = T::from_le_bytes(value);
+                        converted_scores[col_idx * rows + row_idx] = T::from_le_bytes(value);
                     }
                 }
             }
         }
         "String" => {
-            for (idx, score_list) in entity_scores.iter().enumerate() {
+            for (row_idx, score_list) in entity_scores.iter().enumerate() {
                 let string_data = match &score_list.matrix_format {
                     Some(proto::score::MatrixFormat::StringData(data)) => data,
                     _ => continue,
                 };
-
-                for (value_idx, value) in string_data.values.iter().enumerate().skip(1) {
-                    if value_idx < cols && idx < rows {
+                let start_at = if string_data.values.len() == cols + 1 { 1 } else { 0 };
+                for (value_pos, value) in string_data.values.iter().enumerate().skip(start_at) {
+                    let col_idx = value_pos - start_at;
+                    if col_idx < cols && row_idx < rows {
                         match value.parse::<T>() {
                             Ok(parsed_value) => {
-                                converted_scores[value_idx * rows + idx] = parsed_value
+                                converted_scores[col_idx * rows + row_idx] = parsed_value
                             }
                             Err(e) => {
                                 logger::error(format!("Failed to parse string value '{}' for request: {:?}, parse error: {:?}", value, req, e), None);
@@ -357,64 +364,35 @@ where
 
     let score_type_byte = score_type.as_bytes();
     if score_type_byte == b"String" {
-        for (i, value) in result_slice.iter().enumerate() {
-            let catalog_id = match &entity_score_data.entity_scores[i].matrix_format {
-                Some(proto::score::MatrixFormat::StringData(data)) => {
-                    if !data.values.is_empty() {
-                        data.values[0].clone()
-                    } else {
-                        String::new()
-                    }
-                }
-                _ => String::new(),
-            };
-
-            let value_string = value.fast_to_string();
-
+        for value in result_slice.iter() {
+            let mut value_string = value.fast_to_string();
+            if value_string.ends_with(".0") {
+                value_string.truncate(value_string.len() - 2);
+            }
             computation_scores.push(Score {
                 matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                    values: vec![catalog_id, value_string],
+                    values: vec![value_string],
                 })),
             });
         }
     } else if score_type_byte == b"Byte" {
-        for (i, value) in result_slice.iter().enumerate() {
-            let catalog_id = match &entity_score_data.entity_scores[i].matrix_format {
-                Some(proto::score::MatrixFormat::ByteData(data)) => {
-                    if !data.values.is_empty() {
-                        data.values[0].clone()
-                    } else {
-                        Vec::new()
-                    }
-                }
-                _ => Vec::new(),
-            };
-
+        for value in result_slice.iter() {
             let bytes: &[u8] = bytemuck::bytes_of(value);
             computation_scores.push(Score {
                 matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                    values: vec![catalog_id, bytes.to_vec()],
+                    values: vec![bytes.to_vec()],
                 })),
             });
         }
     } else {
-        for (i, value) in result_slice.iter().enumerate() {
-            let catalog_id = match &entity_score_data.entity_scores[i].matrix_format {
-                Some(proto::score::MatrixFormat::StringData(data)) => {
-                    if !data.values.is_empty() {
-                        data.values[0].clone()
-                    } else {
-                        String::new()
-                    }
-                }
-                _ => String::new(),
-            };
-
-            let value_string = value.fast_to_string();
-
+        for value in result_slice.iter() {
+            let mut value_string = value.fast_to_string();
+            if value_string.ends_with(".0") {
+                value_string.truncate(value_string.len() - 2);
+            }
             computation_scores.push(Score {
                 matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                    values: vec![catalog_id, value_string],
+                    values: vec![value_string],
                 })),
             });
         }
