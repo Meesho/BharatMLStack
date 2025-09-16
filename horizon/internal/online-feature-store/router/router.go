@@ -19,7 +19,6 @@ func Init() {
 			model.POST("/register-feature-group", controller.NewConfigController().RegisterFeatureGroup)
 			model.POST("/edit-feature-group", controller.NewConfigController().EditFeatureGroup)
 			model.POST("/add-features", controller.NewConfigController().AddFeatures)
-			model.DELETE("/delete-features", controller.NewConfigController().DeleteFeatures)
 			model.POST("/edit-features", controller.NewConfigController().EditFeatures)
 			model.POST("/register-job", controller.NewConfigController().RegisterJob)
 
@@ -38,7 +37,6 @@ func Init() {
 			model.POST("/process-feature-group", controller.NewConfigController().ProcessFeatureGroup)
 			model.POST("/process-job", controller.NewConfigController().ProcessJob)
 			model.POST("/process-add-features", controller.NewConfigController().ProcessAddFeatures)
-			model.POST("/process-delete-features", controller.NewConfigController().ProcessDeleteFeatures)
 
 			// Get Requests APIs
 			model.GET("/get-store-requests", controller.NewConfigController().GetAllStoresRequestForUser)
