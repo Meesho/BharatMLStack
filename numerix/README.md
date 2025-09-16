@@ -4,7 +4,7 @@
 
 # Numerix
 
-High-performance matrix operations service for BharatML Stack. Provides optimized mathematical computations and matrix operations for machine learning workloads with gRPC/HTTP APIs.
+High-performance matrix operations service for BharatML Stack. Provides optimized mathematical computations and matrix operations for machine learning workloads with gRPC APIs.
 
 ## Overview
 
@@ -12,25 +12,9 @@ Numerix serves as the computational engine for BharatML Stack, offering:
 
 - **Matrix Operations**: High-performance matrix computations and transformations
 - **gRPC API**: Fast binary protocol for efficient data transfer
-- **HTTP API**: RESTful endpoints for web integration
 - **Multi-format Support**: String and byte-based matrix formats
 - **Optimized Performance**: Built with Rust for maximum efficiency
 - **Scalable Architecture**: Designed for distributed processing
-
-## Architecture
-
-```
-┌─────────────────┐    gRPC/HTTP     ┌─────────────────┐
-│  Client Apps    │ ◄─────────────► │    Numerix      │
-│ (ML Workloads)  │                 │ (Matrix Engine) │
-└─────────────────┘                 └─────────────────┘
-                                             │
-                                             ▼
-                                    ┌─────────────────┐
-                                    │ BharatML Stack  │
-                                    │   Components    │
-                                    └─────────────────┘
-```
 
 ## Features
 
@@ -39,21 +23,18 @@ Numerix serves as the computational engine for BharatML Stack, offering:
 - **Protocol Buffers**: Efficient serialization for fast data transfer
 - **Multi-format Support**: String and byte-based matrix representations
 - **Distributed Ready**: Designed for horizontal scaling
-- **gRPC & HTTP**: Dual protocol support for different use cases
 - **Docker Ready**: Containerized for easy deployment
 - **Configuration Management**: etcd integration for distributed configuration
 
 ## API Endpoints
 
-Numerix provides both gRPC and HTTP APIs for matrix operations:
+Numerix provides gRPC APIs for matrix operations:
 
 ### gRPC Service
 - `Compute(NumerixRequestProto) returns (NumerixResponseProto)` - Matrix computation service
 
 ### HTTP Endpoints
 - `/health` - Health check endpoint
-- `/compute` - HTTP interface for matrix operations
-- `/metrics` - Monitoring and performance metrics
 
 ## Development
 
@@ -176,7 +157,6 @@ Numerix supports various matrix operations and data formats:
 
 - **String Lists**: Text-based matrix representations
 - **Byte Arrays**: Binary matrix data for optimal performance
-- **Mixed Formats**: Combination of string and byte data
 
 ### Example Usage
 
@@ -189,7 +169,7 @@ let request = NumerixRequestProto {
         schema: vec!["feature1".to_string(), "feature2".to_string()],
         entity_scores: vec![/* matrix data */],
         compute_id: "computation_123".to_string(),
-        data_type: "float32".to_string(),
+        data_type: "fp32".to_string(),
     }),
 };
 
@@ -205,17 +185,21 @@ curl http://localhost:8080/health
 
 ### Matrix Computation
 ```bash
-# HTTP API example
-curl -X POST http://localhost:8080/compute \
-  -H "Content-Type: application/json" \
+# gRPC call example (using grpcurl, run from numerix/ directory)
+grpcurl -plaintext \
+  -import-path ./src/protos/proto \
+  -proto numerix.proto \
   -d '{
-    "entity_score_data": {
+    "entityScoreData": {
       "schema": ["feature1", "feature2"],
-      "entity_scores": [...],
-      "compute_id": "test_computation",
-      "data_type": "float32"
+      "entityScores": [
+        { "stringData": { "values": ["1.0", "2.0"] } }
+      ],
+      "computeId": "test_computation",
+      "dataType": "fp32"
     }
-  }'
+  }' \
+  localhost:8080 numerix.Numerix/Compute
 ```
 
 ### Metrics
