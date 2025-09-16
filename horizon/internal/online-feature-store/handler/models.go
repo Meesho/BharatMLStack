@@ -109,15 +109,6 @@ type EditFeatureRequest struct {
 	Features          []Features `json:"features"`
 }
 
-// DeleteFeaturesRequest is the request payload for DeleteFeatures
-type DeleteFeaturesRequest struct {
-	UserId            string   `json:"user-id"`
-	Role              string   `json:"role"`
-	EntityLabel       string   `json:"entity-label"`
-	FeatureGroupLabel string   `json:"feature-group-label"`
-	FeatureLabels     []string `json:"feature-labels"`
-}
-
 type RetrieveEntityResponse struct {
 	EntityLabel      string                   `json:"entity-label"`
 	Keys             map[string]ofsConfig.Key `json:"keys"`
@@ -174,14 +165,6 @@ type ProcessStoreRequest struct {
 }
 
 type ProcessAddFeatureRequest struct {
-	ApproverId   string `json:"approver-id"`
-	Role         string `json:"role"`
-	RequestId    int    `json:"request-id"`
-	Status       string `json:"status"`
-	RejectReason string `json:"reject-reason"`
-}
-
-type ProcessDeleteFeaturesRequest struct {
 	ApproverId   string `json:"approver-id"`
 	Role         string `json:"role"`
 	RequestId    int    `json:"request-id"`

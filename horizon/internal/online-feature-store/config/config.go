@@ -15,7 +15,6 @@ type Manager interface {
 	AddFeatures(entityLabel, featureGroupLabel string, labels, defaultValues, storageProvider, sourceBasePath, sourceDataPath, stringLength, vectorLength []string) ([]string, Store, map[string]interface{}, map[string]interface{}, error)
 	CreateAddFeaturesNodes(paths map[string]interface{}, pathsToUpdate map[string]interface{}) error
 	EditFeatures(entityLabel, fgLabel string, featureLabels, defaultValues, storageProvider, sourceBasePath, sourceDataPath, stringLength, vectorLength []string) error
-	DeleteFeatures(entityLabel, fgLabel string, featureLabels []string) error
 	RegisterJob(jobType, jobId, token string) error
 	GetEntities() (map[string]Entity, error)
 	GetFeatureGroups(entityLabel string) (map[string]FeatureGroup, error)
