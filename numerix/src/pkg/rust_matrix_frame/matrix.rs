@@ -196,7 +196,7 @@ where
         }
         stack
             .pop()
-            .ok_or_else(|| Mat2DError::EmptyStack)
+            .ok_or(Mat2DError::EmptyStack)
             .map(|cow| cow.into_owned())
     }
 }

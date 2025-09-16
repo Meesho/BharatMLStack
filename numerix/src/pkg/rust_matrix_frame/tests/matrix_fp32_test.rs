@@ -81,7 +81,7 @@ fn test_divide_vectors_error() {
 fn test_power_vectors() {
     let mat = setup();
     let result = mat.calculate("pctr pcvr ^", HashMap::new()).unwrap();
-    let expected = vec![0.6309573444801932, 0.0, 0.6309573444801932, 0.0];
+    let expected = vec![0.630_957_37, 0.0, 0.630_957_37, 0.0];
     assert!(vectors_are_equal(&result, &expected));
 }
 
@@ -89,12 +89,7 @@ fn test_power_vectors() {
 fn test_log_vector() {
     let mat = setup();
     let result = mat.calculate("pcvr log", HashMap::new()).unwrap();
-    let expected = vec![
-        -1.6094379124341003,
-        -2.302585092994046,
-        -1.6094379124341003,
-        -0.6931471805599453,
-    ];
+    let expected = vec![-1.609_438, -2.302_585_1, -1.609_438, -0.693_147_2];
     println!("Result: {:?}", result);
     assert!(vectors_are_equal(&result, &expected));
 }
@@ -110,12 +105,7 @@ fn test_log_vector_error() {
 fn test_exp_vector() {
     let mat = setup();
     let result = mat.calculate("pcvr exp", HashMap::new()).unwrap();
-    let expected = vec![
-        1.2214027581601699,
-        1.1051709180756477,
-        1.2214027581601699,
-        1.6487212707001282,
-    ];
+    let expected = vec![1.221_402_8, 1.105_171, 1.221_402_8, 1.648_721_2];
     assert!(vectors_are_equal(&result, &expected));
 }
 
@@ -133,7 +123,7 @@ fn test_percentile_rank_operation() {
     let result = mat
         .calculate("nobygo percentile_rank", HashMap::new())
         .unwrap();
-    let expected = vec![0.0, 0.33333333333333, 0.6666666666666, 1.0];
+    let expected = vec![0.0, 0.333_333_34, 0.666_666_7, 1.0];
     assert!(vectors_are_equal(&result, &expected));
 }
 
@@ -216,7 +206,7 @@ fn test_norm_min_max_vector() {
         .calculate("nobygo norm_min_max", HashMap::new())
         .unwrap();
     println!("Result: {:?}", result);
-    let expected = vec![0.28571428571428575, 1.0, 0.0, 0.8571428571428572];
+    let expected = vec![0.285_714_3, 1.0, 0.0, 0.857_142_87];
     assert!(vectors_are_equal(&result, &expected));
 }
 
@@ -226,12 +216,7 @@ fn test_norm_percentile_0_99() {
     let result = mat
         .calculate("nobygo norm_percentile_0_99", HashMap::new())
         .unwrap();
-    let expected = vec![
-        0.2869440459110474,
-        1.0043041606886658,
-        0.0,
-        0.860832137733142,
-    ];
+    let expected = vec![0.286_944_03, 1.004_304_2, 0.0, 0.860_832_15];
     assert!(vectors_are_equal(&result, &expected));
 }
 
@@ -241,12 +226,7 @@ fn test_norm_percentile_5_95() {
     let result = mat
         .calculate("nobygo norm_percentile_5_95", HashMap::new())
         .unwrap();
-    let expected = vec![
-        0.2595419847328244,
-        1.0229007633587786,
-        -0.0458015267175573,
-        0.8702290076335878,
-    ];
+    let expected = vec![0.259_542, 1.022_900_8, -0.045_801_528, 0.870_229];
     assert!(vectors_are_equal(&result, &expected));
 }
 

@@ -9,7 +9,10 @@ static EXPRESSION_CONFIG_ETCD_PATH: OnceLock<String> = OnceLock::new();
 static EXPRESSION_META_MAP: OnceLock<Arc<RwLock<HashMap<String, Vec<String>>>>> = OnceLock::new();
 
 pub async fn init_config() {
-    if let Err(_) = EXPRESSION_CONFIG_ETCD_PATH.set("/expression-config".to_string()) {
+    if EXPRESSION_CONFIG_ETCD_PATH
+        .set("/expression-config".to_string())
+        .is_err()
+    {
         logger::fatal(
             "Failed to set EXPRESSION_CONFIG_ETCD_PATH, it was already initialized",
             None,
@@ -130,7 +133,7 @@ pub fn get_meta_data(compute_id: &str) -> Vec<String> {
                 format!("Meta data not found for compute_id: {}", compute_id),
                 None,
             );
-            return Vec::new();
+            Vec::new()
         }
     }
 }

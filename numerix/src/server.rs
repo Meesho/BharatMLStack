@@ -17,7 +17,7 @@ use tonic::transport::Server;
 
 pub async fn init_server() {
     let configs = config::get_config();
-    let address = format!("0.0.0.0:{}", configs.application_port.to_string());
+    let address = format!("0.0.0.0:{}", configs.application_port);
     let channel_buffer_size = configs.channel_buffer_size as usize;
 
     let listener = TcpListener::bind(&address).await;
@@ -43,8 +43,8 @@ pub async fn init_server() {
             let grpc_max_capacity = grpc_tx_metrics.max_capacity();
             let grpc_used = grpc_max_capacity - grpc_capacity;
 
-            let _ = metrics::count("numerix.channel.grpc.queue_size", grpc_used as u64, &[]);
-            let _ = metrics::count(
+            metrics::count("numerix.channel.grpc.queue_size", grpc_used as u64, &[]);
+            metrics::count(
                 "numerix.channel.grpc.queue_capacity",
                 grpc_max_capacity as u64,
                 &[],
@@ -52,10 +52,10 @@ pub async fn init_server() {
         }
     });
 
-    let numerix_service = MyNumerixService::default();
+    let numerix_service = MyNumerixService;
     let grpc_service = NumerixServer::new(numerix_service);
     let layer = tower::ServiceBuilder::new()
-        .layer(GrpcMiddlewareLayer::default())
+        .layer(GrpcMiddlewareLayer)
         .into_inner();
 
     let grpc_rx_stream =
@@ -136,13 +136,11 @@ pub async fn init_server() {
                                 Some(&e),
                             );
                         }
-                    } else {
-                        if let Err(e) = http_sender.send(stream).await {
-                            logger::error(
-                                format!("Failed to send HTTP stream from {} to server", addr),
-                                Some(&e),
-                            );
-                        }
+                    } else if let Err(e) = http_sender.send(stream).await {
+                        logger::error(
+                            format!("Failed to send HTTP stream from {} to server", addr),
+                            Some(&e),
+                        );
                     }
                 }
                 Ok(bytes_read) => {

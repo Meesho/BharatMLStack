@@ -87,6 +87,6 @@ where
 fn telemetry_middleware(method: &str, duration: Duration, status_code: StatusCode) {
     let tags = vec![("api", method), ("status", status_code.as_str())];
 
-    let _ = metrics::timing("router.api.request.latency", duration, &tags);
-    let _ = metrics::count("router.api.request.total", 1, &tags);
+    metrics::timing("router.api.request.latency", duration, &tags);
+    metrics::count("router.api.request.total", 1, &tags);
 }

@@ -21,7 +21,7 @@ pub struct AppConfig {
     pub channel_buffer_size: u32,
 }
 
-static CONFIG: Lazy<AppConfig> = Lazy::new(|| init_config());
+static CONFIG: Lazy<AppConfig> = Lazy::new(init_config);
 
 static TELEGRAF_UDP_HOST: &str = "telegraf_udp_host";
 static TELEGRAF_UDP_PORT: &str = "telegraf_udp_port";

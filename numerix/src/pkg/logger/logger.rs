@@ -96,7 +96,7 @@ pub fn init_logger() {
     match SAMPLING_RATE.set(config.log_sampling_rate) {
         Ok(_) => (),
         Err(_) => error(
-            "Logger sampling rate already initialized, cannot reinitialize".to_string(),
+            "Logger sampling rate already initialized, cannot reinitialize",
             None,
         ),
     }
@@ -110,7 +110,7 @@ pub fn init_logger() {
         "ERROR" => "error",
         "FATAL" | "PANIC" => "error",
         "DISABLED" => "off",
-        _ => fatal(&format!("Invalid log level '{}' for app '{}', expected: DEBUG/INFO/WARN/ERROR/FATAL/DISABLED", log_level, config.app_name), None),
+        _ => fatal(format!("Invalid log level '{}' for app '{}', expected: DEBUG/INFO/WARN/ERROR/FATAL/DISABLED", log_level, config.app_name), None),
     };
 
     let env_filter = EnvFilter::new(filter_directive);
