@@ -1,5 +1,6 @@
 use crate::pkg::config::config;
 use std::error::Error;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{Level, Subscriber};
@@ -8,7 +9,6 @@ use tracing_subscriber::{
     registry::LookupSpan,
     EnvFilter,
 };
-use std::sync::atomic::{AtomicU64, Ordering};
 
 static APP_NAME: OnceLock<String> = OnceLock::new();
 static SAMPLING_RATE: OnceLock<f64> = OnceLock::new();
@@ -21,11 +21,11 @@ fn should_log() -> bool {
     if sampling_rate >= 1.0 {
         return true;
     }
-    
+
     if sampling_rate <= 0.0 {
         return false;
     }
-    
+
     let count = COUNTER.fetch_add(1, Ordering::Relaxed);
     let threshold = (1.0 / sampling_rate) as u64;
     println!("count: {}, threshold: {}", count, threshold);
@@ -51,10 +51,10 @@ where
         let secs = timestamp.as_secs();
         let millis = timestamp.subsec_millis();
         let time_str = format!("{}.{:03}", secs, millis);
-        
+
         let app_name = match APP_NAME.get() {
             Some(name) => name.as_str(),
-            None => "UNKNOWN_APP"
+            None => "UNKNOWN_APP",
         };
 
         let level = event.metadata().level();
@@ -65,8 +65,12 @@ where
             Level::WARN => "WARN",
             Level::ERROR => "ERROR",
         };
-        
-        write!(writer, "{} {} [, ] [] {} numerix ", app_name, time_str, level_str)?;
+
+        write!(
+            writer,
+            "{} {} [, ] [] {} numerix ",
+            app_name, time_str, level_str
+        )?;
 
         ctx.field_format().format_fields(writer.by_ref(), event)?;
 
@@ -76,23 +80,27 @@ where
 
 pub fn init_logger() {
     let config = config::get_config();
-    
+
     match APP_NAME.set(config.app_name.clone()) {
         Ok(_) => (),
-        Err(_) => {
-            error(format!("Logger already initialized for app '{}', cannot reinitialize", config.app_name), None)
-        }
+        Err(_) => error(
+            format!(
+                "Logger already initialized for app '{}', cannot reinitialize",
+                config.app_name
+            ),
+            None,
+        ),
     }
     println!("SAMPLING_RATE: {}", config.log_sampling_rate);
     // Cache the sampling rate for performance
     match SAMPLING_RATE.set(config.log_sampling_rate) {
         Ok(_) => (),
-        Err(_) => {
-            error("Logger sampling rate already initialized, cannot reinitialize".to_string(), None)
-        }
+        Err(_) => error(
+            "Logger sampling rate already initialized, cannot reinitialize",
+            None,
+        ),
     }
 
-    
     let log_level = config.app_log_level.clone().to_ascii_uppercase();
 
     let filter_directive = match log_level.as_str() {
@@ -102,11 +110,11 @@ pub fn init_logger() {
         "ERROR" => "error",
         "FATAL" | "PANIC" => "error",
         "DISABLED" => "off",
-        _ => fatal(&format!("Invalid log level '{}' for app '{}', expected: DEBUG/INFO/WARN/ERROR/FATAL/DISABLED", log_level, config.app_name), None),
+        _ => fatal(format!("Invalid log level '{}' for app '{}', expected: DEBUG/INFO/WARN/ERROR/FATAL/DISABLED", log_level, config.app_name), None),
     };
-    
+
     let env_filter = EnvFilter::new(filter_directive);
-    
+
     tracing_subscriber::fmt::Subscriber::builder()
         .with_env_filter(env_filter)
         .event_format(CustomFormat)
@@ -141,7 +149,7 @@ pub fn fatal(message: impl AsRef<str>, err: Option<&dyn Error>) -> ! {
         Some(e) => format!("FATAL: {}: {}", message.as_ref(), e),
         None => format!("FATAL: {}", message.as_ref()),
     };
-    
+
     // Log directly to stdout with custom format since it's fatal
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -149,12 +157,15 @@ pub fn fatal(message: impl AsRef<str>, err: Option<&dyn Error>) -> ! {
     let secs = timestamp.as_secs();
     let millis = timestamp.subsec_millis();
     let time_str = format!("{}.{:03}", secs, millis);
-    
+
     let app_name = match APP_NAME.get() {
         Some(name) => name.as_str(),
-        None => "UNKNOWN_APP"
+        None => "UNKNOWN_APP",
     };
-    
-    println!("{} {} [, ] [] FATAL numerix {}", app_name, time_str, full_message);
+
+    println!(
+        "{} {} [, ] [] FATAL numerix {}",
+        app_name, time_str, full_message
+    );
     panic!("{}", full_message);
 }

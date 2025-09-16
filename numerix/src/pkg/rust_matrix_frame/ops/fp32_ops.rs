@@ -1,6 +1,6 @@
-use crate::pkg::rust_matrix_frame::vector::Vector;
-use crate::pkg::rust_matrix_frame::error::Mat2DError;
 use super::VectorOps;
+use crate::pkg::rust_matrix_frame::error::Mat2DError;
+use crate::pkg::rust_matrix_frame::vector::Vector;
 
 pub struct F32Ops;
 
@@ -14,8 +14,11 @@ impl VectorOps for F32Ops {
     fn zeros(size: usize) -> Vector<Self::Scalar> {
         Vector::from_vec(vec![0.0; size])
     }
-    
-    fn add_vector(left: &Vector<Self::Scalar>, right: &Vector<Self::Scalar>) -> Vector<Self::Scalar> {
+
+    fn add_vector(
+        left: &Vector<Self::Scalar>,
+        right: &Vector<Self::Scalar>,
+    ) -> Vector<Self::Scalar> {
         let mut result = Self::new(left.len());
 
         for i in 0..left.len() {
@@ -25,7 +28,10 @@ impl VectorOps for F32Ops {
         result
     }
 
-    fn sub_vector(left: &Vector<Self::Scalar>, right: &Vector<Self::Scalar>) -> Vector<Self::Scalar> {
+    fn sub_vector(
+        left: &Vector<Self::Scalar>,
+        right: &Vector<Self::Scalar>,
+    ) -> Vector<Self::Scalar> {
         let mut result = Self::new(left.len());
 
         for i in 0..left.len() {
@@ -33,10 +39,12 @@ impl VectorOps for F32Ops {
         }
 
         result
-
     }
 
-    fn mul_vector(left: &Vector<Self::Scalar>, right: &Vector<Self::Scalar>) -> Vector<Self::Scalar> {
+    fn mul_vector(
+        left: &Vector<Self::Scalar>,
+        right: &Vector<Self::Scalar>,
+    ) -> Vector<Self::Scalar> {
         let mut result = Self::new(left.len());
 
         for i in 0..left.len() {
@@ -46,7 +54,10 @@ impl VectorOps for F32Ops {
         result
     }
 
-    fn div_vector(left: &Vector<Self::Scalar>, right: &Vector<Self::Scalar>) -> Result<Vector<Self::Scalar>, Mat2DError> {
+    fn div_vector(
+        left: &Vector<Self::Scalar>,
+        right: &Vector<Self::Scalar>,
+    ) -> Result<Vector<Self::Scalar>, Mat2DError> {
         for i in 0..left.len() {
             if right[i] == 0.0 {
                 return Err(Mat2DError::InvalidOperation("Division by zero".to_string()));
@@ -60,7 +71,10 @@ impl VectorOps for F32Ops {
         Ok(result)
     }
 
-    fn power_vector(left: &Vector<Self::Scalar>, right: &Vector<Self::Scalar>) -> Vector<Self::Scalar> {
+    fn power_vector(
+        left: &Vector<Self::Scalar>,
+        right: &Vector<Self::Scalar>,
+    ) -> Vector<Self::Scalar> {
         let mut result = Self::zeros(left.len());
         for i in 0..left.len() {
             result[i] = left[i].powf(right[i]);
@@ -68,7 +82,10 @@ impl VectorOps for F32Ops {
         result
     }
 
-    fn min_vector(left: &Vector<Self::Scalar>, right: &Vector<Self::Scalar>) -> Vector<Self::Scalar> {
+    fn min_vector(
+        left: &Vector<Self::Scalar>,
+        right: &Vector<Self::Scalar>,
+    ) -> Vector<Self::Scalar> {
         let mut result = Self::zeros(left.len());
         for i in 0..left.len() {
             result[i] = left[i].min(right[i]);
@@ -76,7 +93,10 @@ impl VectorOps for F32Ops {
         result
     }
 
-    fn max_vector(left: &Vector<Self::Scalar>, right: &Vector<Self::Scalar>) -> Vector<Self::Scalar> {
+    fn max_vector(
+        left: &Vector<Self::Scalar>,
+        right: &Vector<Self::Scalar>,
+    ) -> Vector<Self::Scalar> {
         let mut result = Self::zeros(left.len());
         for i in 0..left.len() {
             result[i] = left[i].max(right[i]);
@@ -84,7 +104,10 @@ impl VectorOps for F32Ops {
         result
     }
 
-    fn greater_than_vector(left: &Vector<Self::Scalar>, right: &Vector<Self::Scalar>) -> Vector<Self::Scalar> {
+    fn greater_than_vector(
+        left: &Vector<Self::Scalar>,
+        right: &Vector<Self::Scalar>,
+    ) -> Vector<Self::Scalar> {
         let mut result = Self::zeros(left.len());
         for i in 0..left.len() {
             result[i] = if left[i] > right[i] { 1.0 } else { 0.0 };
@@ -92,7 +115,10 @@ impl VectorOps for F32Ops {
         result
     }
 
-    fn less_than_vector(left: &Vector<Self::Scalar>, right: &Vector<Self::Scalar>) -> Vector<Self::Scalar> {
+    fn less_than_vector(
+        left: &Vector<Self::Scalar>,
+        right: &Vector<Self::Scalar>,
+    ) -> Vector<Self::Scalar> {
         let mut result = Self::zeros(left.len());
         for i in 0..left.len() {
             result[i] = if left[i] < right[i] { 1.0 } else { 0.0 };
@@ -100,7 +126,10 @@ impl VectorOps for F32Ops {
         result
     }
 
-    fn greater_than_equal_vector(left: &Vector<Self::Scalar>, right: &Vector<Self::Scalar>) -> Vector<Self::Scalar> {
+    fn greater_than_equal_vector(
+        left: &Vector<Self::Scalar>,
+        right: &Vector<Self::Scalar>,
+    ) -> Vector<Self::Scalar> {
         let mut result = Self::zeros(left.len());
         for i in 0..left.len() {
             result[i] = if left[i] >= right[i] { 1.0 } else { 0.0 };
@@ -108,7 +137,10 @@ impl VectorOps for F32Ops {
         result
     }
 
-    fn less_than_equal_vector(left: &Vector<Self::Scalar>, right: &Vector<Self::Scalar>) -> Vector<Self::Scalar> {
+    fn less_than_equal_vector(
+        left: &Vector<Self::Scalar>,
+        right: &Vector<Self::Scalar>,
+    ) -> Vector<Self::Scalar> {
         let mut result = Self::zeros(left.len());
         for i in 0..left.len() {
             result[i] = if left[i] <= right[i] { 1.0 } else { 0.0 };
@@ -116,7 +148,10 @@ impl VectorOps for F32Ops {
         result
     }
 
-    fn equal_vector(left: &Vector<Self::Scalar>, right: &Vector<Self::Scalar>) -> Vector<Self::Scalar> {
+    fn equal_vector(
+        left: &Vector<Self::Scalar>,
+        right: &Vector<Self::Scalar>,
+    ) -> Vector<Self::Scalar> {
         let mut result = Self::zeros(left.len());
         for i in 0..left.len() {
             result[i] = if left[i] == right[i] { 1.0 } else { 0.0 };
@@ -124,27 +159,44 @@ impl VectorOps for F32Ops {
         result
     }
 
-    fn and_vector(left: &Vector<Self::Scalar>, right: &Vector<Self::Scalar>) -> Result<Vector<Self::Scalar>, Mat2DError> {
-
+    fn and_vector(
+        left: &Vector<Self::Scalar>,
+        right: &Vector<Self::Scalar>,
+    ) -> Result<Vector<Self::Scalar>, Mat2DError> {
         let mut result = Self::zeros(left.len());
 
         for i in 0..left.len() {
             if left[i] != 0.0 && left[i] != 1.0 || right[i] != 0.0 && right[i] != 1.0 {
-                return Err(Mat2DError::InvalidOperation("AND operation requires boolean values (0.0 or 1.0)".to_string()));
+                return Err(Mat2DError::InvalidOperation(
+                    "AND operation requires boolean values (0.0 or 1.0)".to_string(),
+                ));
             }
-            result[i] = if left[i] != 0.0 && right[i] != 0.0 { 1.0 } else { 0.0 };
+            result[i] = if left[i] != 0.0 && right[i] != 0.0 {
+                1.0
+            } else {
+                0.0
+            };
         }
 
         Ok(result)
     }
 
-    fn or_vector(left: &Vector<Self::Scalar>, right: &Vector<Self::Scalar>) -> Result<Vector<Self::Scalar>, Mat2DError> {
+    fn or_vector(
+        left: &Vector<Self::Scalar>,
+        right: &Vector<Self::Scalar>,
+    ) -> Result<Vector<Self::Scalar>, Mat2DError> {
         let mut result = Self::zeros(left.len());
         for i in 0..left.len() {
             if left[i] != 0.0 && left[i] != 1.0 || right[i] != 0.0 && right[i] != 1.0 {
-                return Err(Mat2DError::InvalidOperation("OR operation requires boolean values (0.0 or 1.0)".to_string()));
+                return Err(Mat2DError::InvalidOperation(
+                    "OR operation requires boolean values (0.0 or 1.0)".to_string(),
+                ));
             }
-            result[i] = if left[i] != 0.0 || right[i] != 0.0 { 1.0 } else { 0.0 };
+            result[i] = if left[i] != 0.0 || right[i] != 0.0 {
+                1.0
+            } else {
+                0.0
+            };
         }
         Ok(result)
     }
@@ -152,10 +204,12 @@ impl VectorOps for F32Ops {
     fn log_vector(vec: &Vector<Self::Scalar>) -> Result<Vector<Self::Scalar>, Mat2DError> {
         for i in 0..vec.len() {
             if vec[i] <= 0.0 {
-                return Err(Mat2DError::InvalidOperation("Cannot take logarithm of non-positive number".to_string()));
+                return Err(Mat2DError::InvalidOperation(
+                    "Cannot take logarithm of non-positive number".to_string(),
+                ));
             }
         }
-        
+
         let mut result = Self::zeros(vec.len());
         for i in 0..vec.len() {
             result[i] = vec[i].ln();
@@ -189,9 +243,15 @@ impl VectorOps for F32Ops {
         Self::calculate_min_max_norm(vec, min, max)
     }
 
-    fn norm_percentile_p_q(vec: &Vector<Self::Scalar>, p: Self::Scalar, q: Self::Scalar) -> Result<Vector<Self::Scalar>, Mat2DError> {
+    fn norm_percentile_p_q(
+        vec: &Vector<Self::Scalar>,
+        p: Self::Scalar,
+        q: Self::Scalar,
+    ) -> Result<Vector<Self::Scalar>, Mat2DError> {
         if p == q {
-            return Err(Mat2DError::InvalidOperation("p = q => Divided by 0".to_string()));
+            return Err(Mat2DError::InvalidOperation(
+                "p = q => Divided by 0".to_string(),
+            ));
         }
         if vec.len() == 1 {
             return Ok(Vector::from_vec(vec![1.0]));
@@ -215,15 +275,17 @@ impl VectorOps for F32Ops {
     }
 
     fn percentile_rank(vec: &Vector<Self::Scalar>) -> Result<Vector<Self::Scalar>, Mat2DError> {
-        if vec.len() <= 0 {
-            return Err(Mat2DError::InvalidOperation("Vector length cannot be 0 or less".to_string()));
+        if vec.is_empty() {
+            return Err(Mat2DError::InvalidOperation(
+                "Vector length cannot be 0 or less".to_string(),
+            ));
         }
         let mut result = Self::zeros(vec.len());
         let mut is_const_vector = true;
 
         for i in 0..vec.len() {
             result[i] = i as f32 / (vec.len() - 1) as f32;
-            if i > 0 && vec[i] != vec[i-1] {
+            if i > 0 && vec[i] != vec[i - 1] {
                 is_const_vector = false;
             }
         }
@@ -233,15 +295,19 @@ impl VectorOps for F32Ops {
                 result[i] = 1.0;
             }
         }
-        
+
         Ok(result)
     }
 
-    fn norm_percentile_0_99(vec: &Vector<Self::Scalar>) -> Result<Vector<Self::Scalar>, Mat2DError> {
+    fn norm_percentile_0_99(
+        vec: &Vector<Self::Scalar>,
+    ) -> Result<Vector<Self::Scalar>, Mat2DError> {
         Self::norm_percentile_p_q(vec, 0.0, 99.0)
     }
-    
-    fn norm_percentile_5_95(vec: &Vector<Self::Scalar>) -> Result<Vector<Self::Scalar>, Mat2DError> {
+
+    fn norm_percentile_5_95(
+        vec: &Vector<Self::Scalar>,
+    ) -> Result<Vector<Self::Scalar>, Mat2DError> {
         Self::norm_percentile_p_q(vec, 5.0, 95.0)
     }
 }

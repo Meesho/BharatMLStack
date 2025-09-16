@@ -1,33 +1,25 @@
-use tonic::{Request, Response, Status};
-use std::time::Instant;
-use crate::pkg::metrics::metrics;
 use crate::handler::config;
-use std::collections::HashMap;
+use crate::logger;
+use crate::pkg::metrics::metrics;
+use crate::pkg::rust_matrix_frame::error::Mat2DError;
 use crate::pkg::rust_matrix_frame::matrix::Mat2D;
 use crate::pkg::rust_matrix_frame::ops::F32Ops;
 use crate::pkg::rust_matrix_frame::ops::F64Ops;
-use crate::pkg::rust_matrix_frame::vector::Vector;
 use crate::pkg::rust_matrix_frame::ops::VectorOps;
-use crate::pkg::rust_matrix_frame::error::Mat2DError;
+use crate::pkg::rust_matrix_frame::vector::Vector;
 use bytemuck::Pod;
-use std::str::FromStr;
-use crate::logger;
 use ryu;
+use std::collections::HashMap;
+use std::str::FromStr;
+use std::time::Instant;
+use tonic::{Request, Response, Status};
 pub mod proto {
     include!("../protos/proto_gen/numerix.rs");
 }
 
-
 pub use proto::{
-    NumerixRequestProto,
-    NumerixResponseProto,
-    ComputationScoreData,
-    numerix_response_proto,
-    Error,
-    Score,
-    StringList,
-    ByteList,
-    EntityScoreData,
+    numerix_response_proto, ByteList, ComputationScoreData, EntityScoreData, Error,
+    NumerixRequestProto, NumerixResponseProto, Score, StringList,
 };
 
 pub use proto::numerix_server::Numerix;
@@ -36,7 +28,6 @@ static COMPUTE_ID: &str = "compute_id";
 static DEFAULT_DATA_TYPE: &str = "fp64";
 static STRING_SCORE_TYPE: &str = "String";
 static BYTE_SCORE_TYPE: &str = "Byte";
-
 
 #[derive(Debug, Default)]
 pub struct MyNumerixService;
@@ -55,7 +46,7 @@ impl Numerix for MyNumerixService {
                 logger::error(format!("Invalid request: {:?}, Error: {}", req, e), None);
                 return Ok(Response::new(NumerixResponseProto {
                     response: Some(numerix_response_proto::Response::Error(Error {
-                        message: format!("Request validation failed: {}", e),
+                        message: e,
                     })),
                 }));
             }
@@ -71,11 +62,11 @@ impl Numerix for MyNumerixService {
         if expression.is_empty() {
             return Ok(Response::new(NumerixResponseProto {
                 response: Some(numerix_response_proto::Response::Error(Error {
-                    message: format!("No expression configured for compute_id: {}", compute_id),
+                    message: "Expression not found".to_string(),
                 })),
             }));
         }
-        
+
         let result = compute_expression(&expression, &req);
         if let Some(numerix_response_proto::Response::Error(_)) = &result.response {
             let _ = metrics::count("numerix.computation.request.error", 1, &tags);
@@ -97,15 +88,15 @@ fn validate_request(req: &NumerixRequestProto) -> Result<(), String> {
     let entity_score_data = req.entity_score_data.as_ref().unwrap();
 
     if entity_score_data.compute_id.is_empty() {
-        return Err("Missing compute_id".to_string());
+        return Err("Empty compute_id".to_string());
     }
 
     if entity_score_data.entity_scores.is_empty() {
-        return Err("Missing entity_scores".to_string());
+        return Err("Empty entity_scores".to_string());
     }
 
     if entity_score_data.schema.is_empty() {
-        return Err("Missing schema".to_string());
+        return Err("Empty schema".to_string());
     }
 
     if entity_score_data.entity_scores[0].matrix_format.is_none() {
@@ -118,7 +109,15 @@ fn validate_request(req: &NumerixRequestProto) -> Result<(), String> {
 fn compute_expression(expression: &str, req: &NumerixRequestProto) -> NumerixResponseProto {
     let entity_score_data = req.entity_score_data.as_ref().unwrap();
     let compute_id = entity_score_data.compute_id.clone();
-    let conversion_type = entity_score_data.data_type.clone().unwrap_or_else(|| DEFAULT_DATA_TYPE.to_string());
+    let conversion_type = entity_score_data
+        .data_type
+        .clone()
+        .unwrap_or_else(|| DEFAULT_DATA_TYPE.to_string());
+    let use_f64 = match conversion_type.to_ascii_lowercase().as_str() {
+        "f64" | "fp64" => true,
+        "f32" | "fp32" => false,
+        _ => true,
+    };
 
     let score_type = if let Some(first_score) = entity_score_data.entity_scores.first() {
         match &first_score.matrix_format {
@@ -130,22 +129,32 @@ fn compute_expression(expression: &str, req: &NumerixRequestProto) -> NumerixRes
         STRING_SCORE_TYPE
     };
 
-    let column_names: HashMap<String, usize> = entity_score_data.schema.clone()
+    let column_names: HashMap<String, usize> = entity_score_data
+        .schema
+        .clone()
         .iter()
         .enumerate()
         .map(|(i, s)| (s.clone(), i))
         .collect();
 
-
-    if conversion_type == DEFAULT_DATA_TYPE {
-        compute_scores::<f64, F64Ops>(column_names, expression, score_type, req, compute_id.as_str())
-    }
-    else {
-        compute_scores::<f32, F32Ops>(column_names, expression, score_type, req, compute_id.as_str())
+    if use_f64 {
+        compute_scores::<f64, F64Ops>(
+            column_names,
+            expression,
+            score_type,
+            req,
+            compute_id.as_str(),
+        )
+    } else {
+        compute_scores::<f32, F32Ops>(
+            column_names,
+            expression,
+            score_type,
+            req,
+            compute_id.as_str(),
+        )
     }
 }
-
-
 
 fn compute_scores<T, Ops>(
     column_names: HashMap<String, usize>,
@@ -155,14 +164,22 @@ fn compute_scores<T, Ops>(
     compute_id: &str,
 ) -> NumerixResponseProto
 where
-    T: Copy + FromStr + Default + From<u8> + Pod + std::fmt::Display + PartialOrd + std::fmt::Debug + FromBytes + FastToString,
+    T: Copy
+        + FromStr
+        + Default
+        + From<u8>
+        + Pod
+        + std::fmt::Display
+        + PartialOrd
+        + std::fmt::Debug
+        + FromBytes
+        + FastToString,
     <T as FromStr>::Err: std::fmt::Debug,
     Vector<T>: Clone,
     Ops: VectorOps<Scalar = T>,
     Ops::Scalar: Default + Copy + FromStr + std::fmt::Display,
     <Ops::Scalar as FromStr>::Err: std::fmt::Debug,
 {
-
     let cols = column_names.len();
     let rows = req.entity_score_data.as_ref().unwrap().entity_scores.len();
     let converted_scores = convert_scores::<T>(score_type, req, rows, cols);
@@ -171,7 +188,10 @@ where
     let matrix = match matrix {
         Ok(matrix) => matrix,
         Err(e) => {
-            logger::error(format!("Failed to create matrix for request: {:?}", req), Some(&e));
+            logger::error(
+                format!("Failed to create matrix for request: {:?}", req),
+                Some(&e),
+            );
             return NumerixResponseProto {
                 response: Some(numerix_response_proto::Response::Error(Error {
                     message: format!("Matrix setup failed for request: {:?}", req),
@@ -200,7 +220,12 @@ impl FromBytes for f64 {
     }
 }
 
-fn convert_scores<T>(score_type: &str, req: &NumerixRequestProto, rows: usize, cols: usize) -> Vec<T>
+fn convert_scores<T>(
+    score_type: &str,
+    req: &NumerixRequestProto,
+    rows: usize,
+    cols: usize,
+) -> Vec<T>
 where
     T: std::str::FromStr + Copy + Default + From<u8> + FromBytes + std::fmt::Debug,
     <T as std::str::FromStr>::Err: std::fmt::Debug,
@@ -212,36 +237,48 @@ where
 
     match score_type {
         "Byte" => {
-            for (idx, score_list) in entity_scores.iter().enumerate() {
+            for (row_idx, score_list) in entity_scores.iter().enumerate() {
                 let byte_data = match &score_list.matrix_format {
                     Some(proto::score::MatrixFormat::ByteData(data)) => data,
                     _ => continue,
                 };
-                
-                for (value_idx, value) in byte_data.values.iter().enumerate().skip(1) {
-                    if value_idx < cols && idx < rows {
+                let start_at = if byte_data.values.len() == cols + 1 {
+                    1
+                } else {
+                    0
+                };
+                for (value_pos, value) in byte_data.values.iter().enumerate().skip(start_at) {
+                    let col_idx = value_pos - start_at;
+                    if col_idx < cols && row_idx < rows {
                         let expected_size = std::mem::size_of::<T>();
                         if value.len() != expected_size {
                             logger::error(format!("Invalid byte length: expected {} bytes, got {} bytes for request: {:?}", 
                                 expected_size, value.len(), req), None);
                             continue;
                         }
-                        converted_scores[value_idx * rows + idx] = T::from_le_bytes(value);
+                        converted_scores[col_idx * rows + row_idx] = T::from_le_bytes(value);
                     }
                 }
             }
         }
         "String" => {
-            for (idx, score_list) in entity_scores.iter().enumerate() {
+            for (row_idx, score_list) in entity_scores.iter().enumerate() {
                 let string_data = match &score_list.matrix_format {
                     Some(proto::score::MatrixFormat::StringData(data)) => data,
                     _ => continue,
                 };
-                
-                for (value_idx, value) in string_data.values.iter().enumerate().skip(1) {
-                    if value_idx < cols && idx < rows {
+                let start_at = if string_data.values.len() == cols + 1 {
+                    1
+                } else {
+                    0
+                };
+                for (value_pos, value) in string_data.values.iter().enumerate().skip(start_at) {
+                    let col_idx = value_pos - start_at;
+                    if col_idx < cols && row_idx < rows {
                         match value.parse::<T>() {
-                            Ok(parsed_value) => converted_scores[value_idx * rows + idx] = parsed_value,
+                            Ok(parsed_value) => {
+                                converted_scores[col_idx * rows + row_idx] = parsed_value
+                            }
                             Err(e) => {
                                 logger::error(format!("Failed to parse string value '{}' for request: {:?}, parse error: {:?}", value, req, e), None);
                             }
@@ -267,12 +304,17 @@ where
     for number_str in meta_data {
         match number_str.parse::<T>() {
             Ok(number_value) => {
-                numbers_map.entry(number_str).or_insert(Vector::from_vec(vec![number_value; size]));
-            },
+                numbers_map
+                    .entry(number_str)
+                    .or_insert(Vector::from_vec(vec![number_value; size]));
+            }
             Err(e) => {
                 logger::error(
-                    format!("Failed to parse number '{}' in expression for compute_id: {}: {:?}", number_str, compute_id, e),
-                    None
+                    format!(
+                        "Failed to parse number '{}' in expression for compute_id: {}: {:?}",
+                        number_str, compute_id, e
+                    ),
+                    None,
                 );
                 continue;
             }
@@ -311,7 +353,10 @@ where
     let result_vec = match result {
         Ok(result_vec) => result_vec,
         Err(err) => {
-            logger::error(format!("Matrix calculation failed for request: {:?}", req), Some(&err));
+            logger::error(
+                format!("Matrix calculation failed for request: {:?}", req),
+                Some(&err),
+            );
             return NumerixResponseProto {
                 response: Some(numerix_response_proto::Response::Error(Error {
                     message: format!("Calculation failed for request '{:?}' : {}", req, err),
@@ -320,74 +365,42 @@ where
         }
     };
 
-    let schema = vec![
-        entity_score_data.schema[0].clone(),
-        "score".into(),
-    ];
+    let schema = vec![entity_score_data.schema[0].clone(), "score".into()];
 
     let result_slice = result_vec.as_slice();
     let mut computation_scores = Vec::with_capacity(result_slice.len());
 
     let score_type_byte = score_type.as_bytes();
     if score_type_byte == b"String" {
-        for (i, value) in result_slice.iter().enumerate() {
-            let catalog_id = match &entity_score_data.entity_scores[i].matrix_format {
-                Some(proto::score::MatrixFormat::StringData(data)) => {
-                    if !data.values.is_empty() {
-                        data.values[0].clone()
-                    } else {
-                        String::new()
-                    }
-                },
-                _ => String::new(),
-            };
-            
-            let value_string = value.fast_to_string();
-            
+        for value in result_slice.iter() {
+            let mut value_string = value.fast_to_string();
+            if value_string.ends_with(".0") {
+                value_string.truncate(value_string.len() - 2);
+            }
             computation_scores.push(Score {
                 matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                    values: vec![catalog_id, value_string],
+                    values: vec![value_string],
                 })),
             });
         }
     } else if score_type_byte == b"Byte" {
-        for (i, value) in result_slice.iter().enumerate() {
-            let catalog_id = match &entity_score_data.entity_scores[i].matrix_format {
-                Some(proto::score::MatrixFormat::ByteData(data)) => {
-                    if !data.values.is_empty() {
-                        data.values[0].clone()
-                    } else {
-                        Vec::new()
-                    }
-                },
-                _ => Vec::new(),
-            };
-            
+        for value in result_slice.iter() {
             let bytes: &[u8] = bytemuck::bytes_of(value);
             computation_scores.push(Score {
                 matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                    values: vec![catalog_id, bytes.to_vec()],
+                    values: vec![bytes.to_vec()],
                 })),
             });
         }
     } else {
-        for (i, value) in result_slice.iter().enumerate() {
-            let catalog_id = match &entity_score_data.entity_scores[i].matrix_format {
-                Some(proto::score::MatrixFormat::StringData(data)) => {
-                    if !data.values.is_empty() {
-                        data.values[0].clone()
-                    } else {
-                        String::new()
-                    }
-                },
-                _ => String::new(),
-            };
-            
-            let value_string = value.fast_to_string();
-            
+        for value in result_slice.iter() {
+            let mut value_string = value.fast_to_string();
+            if value_string.ends_with(".0") {
+                value_string.truncate(value_string.len() - 2);
+            }
             computation_scores.push(Score {
                 matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                    values: vec![catalog_id, value_string],
+                    values: vec![value_string],
                 })),
             });
         }
@@ -399,10 +412,8 @@ where
     };
 
     NumerixResponseProto {
-        response: Some(numerix_response_proto::Response::ComputationScoreData(entity_score_data)),
+        response: Some(numerix_response_proto::Response::ComputationScoreData(
+            entity_score_data,
+        )),
     }
 }
-
-
-
-
