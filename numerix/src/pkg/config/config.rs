@@ -1,6 +1,6 @@
 use crate::logger;
 use config::{Config, Environment};
-use dotenv;
+use dotenvy as dotenv;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::path::Path;
