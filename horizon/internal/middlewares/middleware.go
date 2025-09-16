@@ -93,7 +93,10 @@ func (m *MiddlewareHandler) AuthMiddleware() gin.HandlerFunc {
 		if strings.HasPrefix(c.Request.URL.Path, "/login") ||
 			strings.HasPrefix(c.Request.URL.Path, "/register") ||
 			strings.HasPrefix(c.Request.URL.Path, "/health") ||
-			strings.HasPrefix(c.Request.URL.Path, "/api/1.0/fs-config") {
+			strings.HasPrefix(c.Request.URL.Path, "/api/1.0/fs-config") ||
+			strings.HasPrefix(c.Request.URL.Path, "/api/v1/online-feature-store/get-source-mapping") ||
+			strings.HasPrefix(c.Request.URL.Path, "/api/v1/online-feature-store/get-online-features-mapping") ||
+			strings.HasPrefix(c.Request.URL.Path, "/api/v1/online-feature-store/retrieve-feature-groups") {
 			c.Next()
 			return
 		}
