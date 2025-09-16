@@ -26,7 +26,7 @@ export const TestConfigModal = ({ open, onClose, selectedConfig, user, showNotif
   const [testingSubmitting, setTestingSubmitting] = useState(false);
   const [executeSubmitting, setExecuteSubmitting] = useState(false);
   const [openExecuteModal, setOpenExecuteModal] = useState(false);
-  const [requestData, setRequestData] = useState(null);
+  // Removed unused state: requestData
   const [editableRequestData, setEditableRequestData] = useState('');
   const [jsonValidationError, setJsonValidationError] = useState('');
   const [responseData, setResponseData] = useState(null);
@@ -59,7 +59,6 @@ export const TestConfigModal = ({ open, onClose, selectedConfig, user, showNotif
       );
 
       if (response.data) {
-        setRequestData(response.data);
         setEditableRequestData(formatJsonForDisplay(response.data));
         setJsonValidationError('');
         handleCloseTestModal();

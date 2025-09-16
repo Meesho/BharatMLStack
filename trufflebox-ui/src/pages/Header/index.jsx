@@ -4,7 +4,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import StorageIcon from '@mui/icons-material/Storage';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import FolderIcon from '@mui/icons-material/Folder';
-import SettingsIcon from '@mui/icons-material/Settings';
+// import SettingsIcon from '@mui/icons-material/Settings';
 import ApprovalIcon from '@mui/icons-material/TaskAlt';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import PersonIcon from '@mui/icons-material/Person';
@@ -21,7 +21,7 @@ import { requiresPermissionCheck, getPermissionInfo } from '../../constants/serv
 function Header({ onMenuItemClick }) {
   const [show, setShow] = useState(false);
   const [expandedItems, setExpandedItems] = useState({});
-  const [currentPath, setCurrentPath] = useState([]);
+  const [currentPath, setCurrentPath] = useState([]); // used in renderBreadcrumb
   const { user, logout, hasScreenAccess } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -144,7 +144,6 @@ function Header({ onMenuItemClick }) {
   };
 
   const initializeExpandedState = () => {
-    const currentPath = location.pathname;
     const expanded = {};
     let breadcrumbPath = [];
 
@@ -200,6 +199,7 @@ function Header({ onMenuItemClick }) {
   // Initialize expanded state when component mounts or location changes
   React.useEffect(() => {
     initializeExpandedState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, user?.role]);
 
   const handleShow = () => {
