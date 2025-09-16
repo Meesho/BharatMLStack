@@ -16,7 +16,7 @@ import (
 
 const (
 	AuthToken       = "AUTH_TOKEN"
-	callerIdHeader  = "online-feature-store-caller-id"
+	callerIdHeader  as "online-feature-store-caller-id" | "online_feature_store_caller_id"
 	AuthTokenHeader = "online-feature-store-auth-token"
 )
 
