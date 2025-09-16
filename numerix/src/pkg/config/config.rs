@@ -31,11 +31,7 @@ static TELEGRAF_UDP_PORT_VALUE: u32 = 8125;
 static LOG_SAMPLING_RATE_VALUE: f64 = 1.0;
 
 fn init_config() -> AppConfig {
-    if cfg!(test) {
-        dotenv::from_path(Path::new(".env")).ok();
-    } else {
-        dotenv::from_path(Path::new(".env")).ok();
-    }
+    dotenv::from_path(Path::new(".env")).ok();
 
     let mut builder = Config::builder();
 

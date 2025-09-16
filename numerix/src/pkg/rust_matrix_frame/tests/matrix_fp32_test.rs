@@ -89,7 +89,12 @@ fn test_power_vectors() {
 fn test_log_vector() {
     let mat = setup();
     let result = mat.calculate("pcvr log", HashMap::new()).unwrap();
-    let expected = vec![-1.609_438, -2.302_585_1, -1.609_438, -0.693_147_2];
+    let expected = vec![
+        -1.609_438,
+        -std::f32::consts::LN_10,
+        -1.609_438,
+        -std::f32::consts::LN_2,
+    ];
     println!("Result: {:?}", result);
     assert!(vectors_are_equal(&result, &expected));
 }

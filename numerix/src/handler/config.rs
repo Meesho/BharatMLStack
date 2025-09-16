@@ -4,9 +4,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::RwLock;
-static EXPRESSION_MAP: OnceLock<Arc<RwLock<HashMap<String, String>>>> = OnceLock::new();
+
+type ExpressionMap = Arc<RwLock<HashMap<String, String>>>;
+type ExpressionMetaMap = Arc<RwLock<HashMap<String, Vec<String>>>>;
+
+static EXPRESSION_MAP: OnceLock<ExpressionMap> = OnceLock::new();
 static EXPRESSION_CONFIG_ETCD_PATH: OnceLock<String> = OnceLock::new();
-static EXPRESSION_META_MAP: OnceLock<Arc<RwLock<HashMap<String, Vec<String>>>>> = OnceLock::new();
+static EXPRESSION_META_MAP: OnceLock<ExpressionMetaMap> = OnceLock::new();
 
 pub async fn init_config() {
     if EXPRESSION_CONFIG_ETCD_PATH

@@ -91,9 +91,9 @@ fn test_log_vector() {
     let result = mat.calculate("pcvr log", HashMap::new()).unwrap();
     let expected = vec![
         -1.6094379124341003,
-        -2.302585092994046,
+        -std::f64::consts::LN_10,
         -1.6094379124341003,
-        -0.6931471805599453,
+        -std::f64::consts::LN_2,
     ];
     println!("Result: {:?}", result);
     assert!(vectors_are_equal(&result, &expected));

@@ -81,7 +81,7 @@ pub async fn init_etcd_connection() {
         );
     }
 
-    if let Err(_) = ETCD_CLIENT.set(Arc::new(Mutex::new(client))) {
+    if ETCD_CLIENT.set(Arc::new(Mutex::new(client))).is_err() {
         logger::error(
             "ETCD_CLIENT already initialized during connection setup",
             None,
