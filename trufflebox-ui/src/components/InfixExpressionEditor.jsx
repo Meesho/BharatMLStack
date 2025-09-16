@@ -50,7 +50,7 @@ const InfixExpressionEditor = ({
   const [inputExpression, setInputExpression] = useState(initialExpression);
   const [outputExpression, setOutputExpression] = useState('');
   const [validation, setValidation] = useState({ isValid: true, errors: [] });
-  const [cursorPosition, setCursorPosition] = useState(0);
+  const [, setCursorPosition] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
   
   const textFieldRef = useRef(null);

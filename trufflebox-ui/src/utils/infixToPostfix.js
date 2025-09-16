@@ -78,7 +78,7 @@ const tokenize = (expression) => {
     // Handle minus separately 
     if (char === '-') {
       // Check if this is a negative number (minus after (, operator, or at start)
-      const prevChar = i > 0 ? expression[i - 1] : null;
+      // prevChar not used; rely on prevNonSpace
       const nextChar = i + 1 < expression.length ? expression[i + 1] : null;
       
       // Look at the actual previous character, not just the previous token

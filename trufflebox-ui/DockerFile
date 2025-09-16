@@ -3,12 +3,12 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install
+COPY package.json yarn.lock ./
+RUN yarn install
 
 COPY . .
 RUN rm -f .env
-RUN npm run build
+RUN yarn run build
 
 # Stage 2: Serve with Nginx
 FROM nginx:alpine

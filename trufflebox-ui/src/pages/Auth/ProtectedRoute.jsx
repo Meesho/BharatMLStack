@@ -48,7 +48,6 @@ const ProtectedRoute = ({
         : requiredActions.some(action => hasPermission(service, screenType, action));
 
       if (!hasRequiredPermissions) {
-        const actionType = requireAllActions ? 'all' : 'any';
         return <Navigate to="/unauthorized" replace />;
       }
     }
