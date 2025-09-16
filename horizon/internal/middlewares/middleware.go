@@ -92,9 +92,8 @@ func (m *MiddlewareHandler) AuthMiddleware() gin.HandlerFunc {
 		// Bypass authentication for login, register, and specific routes
 		if strings.HasPrefix(c.Request.URL.Path, "/login") ||
 			strings.HasPrefix(c.Request.URL.Path, "/register") ||
-			strings.HasPrefix(c.Request.URL.Path, "/api/custodian/health") ||
-			strings.HasPrefix(c.Request.URL.Path, "/api/1.0/fs-config") ||
-			strings.HasPrefix(c.Request.URL.Path, "/api/v1/custodian/predator-config-registry/models/promote") {
+			strings.HasPrefix(c.Request.URL.Path, "/health") ||
+			strings.HasPrefix(c.Request.URL.Path, "/api/1.0/fs-config") {
 			c.Next()
 			return
 		}
