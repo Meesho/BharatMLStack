@@ -27,16 +27,16 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            ~/.yarn
+            ~/.cache/yarn
             trufflebox-ui/node_modules
-          key: ${{ runner.os }}-yarn-${{ hashFiles('trufflebox-ui/package.json') }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('trufflebox-ui/yarn.lock') }}
           restore-keys: |
             ${{ runner.os }}-yarn-
 
       - name: Install dependencies
         run: |
-          if [ -f package-lock.json ]; then
-            yarn ci
+          if [ -f yarn.lock ]; then
+            yarn install --frozen-lockfile
           else
             yarn install
           fi
