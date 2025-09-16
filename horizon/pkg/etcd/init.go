@@ -24,9 +24,10 @@ func Init(config interface{}) {
 func InitFromAppName(config interface{}, appName string) {
 	if instances == nil {
 		instances = make(map[string]Etcd)
-		if instances[appName] == nil {
-			instances[appName] = newV1EtcdFromAppName(config, appName)
-		}
+	}
+
+	if instances[appName] == nil {
+		instances[appName] = newV1EtcdFromAppName(config, appName)
 	}
 }
 
