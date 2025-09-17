@@ -64,7 +64,7 @@ primary_owner: mohit.kumar@meesho.com
 priority: p1
 priority_v2: p1
 replica_count: 1
-secondary_owner: ansh.agrawal@meesho.com
+secondary_owner: ayush.verma@meesho.com
 service_type:
     - database
     - consumer

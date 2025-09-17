@@ -12,6 +12,7 @@ environment:
         deployment_order:
             - online-feature-store-api-experiment
             - online-feature-store-api
+            - online-feature-store-api-v2
             - online-feature-store-api-mp
             - online-feature-store-consumer
             - online-feature-store-consumer-v2

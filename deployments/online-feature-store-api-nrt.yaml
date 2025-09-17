@@ -7,7 +7,7 @@ module: api-server
 bu: datascience
 priority_v2: up1
 primary_owner: mohit.kumar@meesho.com
-secondary_owner: ansh.agrawal@meesho.com
+secondary_owner: ayush.verma@meesho.com
 team: ml-platform
 priority: p0
 initialDelaySeconds: 60
