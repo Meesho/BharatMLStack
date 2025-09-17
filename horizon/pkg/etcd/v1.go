@@ -613,9 +613,13 @@ func (v *V1) SetValues(paths map[string]interface{}) error {
 // CreateNode creates a node at the given path with the given value
 func (v *V1) CreateNode(path string, value interface{}) error {
 	exists, err := v.IsLeafNodeExist(path)
-	if exists || err != nil {
-		log.Warn().Msgf("Node already exist for %s, not creating new node", path)
-		return nil
+	if err != nil {
+		log.Error().Msgf("Error checking if node exists for %s: %v", path, err)
+		return err
+	}
+	if exists {
+		log.Error().Msgf("Node already exist for %s, not creating new node", path)
+		return fmt.Errorf("node already exists at path: %s", path)
 	}
 	response, err := v.conn.Put(context.Background(), path, fmt.Sprintf("%v", value))
 	log.Debug().Msgf("Path Created: %v", response)
@@ -662,6 +666,15 @@ func (v *V1) RegisterWatchPathCallback(path string, callback func() error) error
 		v.WatchPathCallbacks[path] = append(v.WatchPathCallbacks[path], callback)
 	} else {
 		v.WatchPathCallbacks[path] = []interface{}{callback}
+	}
+	return nil
+}
+
+func (v *V1) Delete(path string) error {
+	_, err := v.conn.Delete(context.Background(), path)
+	if err != nil {
+		log.Error().Msgf("Failed to delete node %s: %v", path, err)
+		return err
 	}
 	return nil
 }

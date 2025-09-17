@@ -138,10 +138,10 @@ func serializeInt32VectorAndLess(value string, dataType enums.DataType) ([]byte,
 	unitSize := dataType.Size()
 	var flattened []int32
 	splitRows := strings.Split(value, ",")
-	for _, vv := range splitRows {
-		val, err := strconv.ParseUint(vv, 10, 32)
+	for _, row := range splitRows {
+		val, err := strconv.ParseUint(row, 10, 32)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse value %s to uint32: %w", vv, err)
+			return nil, fmt.Errorf("failed to parse value %s to uint32: %w", row, err)
 		}
 		flattened = append(flattened, int32(val))
 	}
