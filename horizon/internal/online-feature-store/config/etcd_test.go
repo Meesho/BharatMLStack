@@ -443,6 +443,7 @@ func TestEtcd_AddFeatures_WithVectorDataTypes(t *testing.T) {
 		dataType      enums.DataType
 		labels        []string
 		defaultValues []string
+		stringLength  []string
 		vectorLength  []string
 		expectError   bool
 	}{
@@ -451,6 +452,7 @@ func TestEtcd_AddFeatures_WithVectorDataTypes(t *testing.T) {
 			dataType:      enums.DataTypeInt32Vector,
 			labels:        []string{"vector_feature"},
 			defaultValues: []string{"[1,2,3,4]"},
+			stringLength:  []string{"0"},
 			vectorLength:  []string{"4"},
 			expectError:   false,
 		},
@@ -459,6 +461,7 @@ func TestEtcd_AddFeatures_WithVectorDataTypes(t *testing.T) {
 			dataType:      enums.DataTypeStringVector,
 			labels:        []string{"string_vector_feature"},
 			defaultValues: []string{"[hello,world]"},
+			stringLength:  []string{"10"}, // Must be > 0 for string vectors
 			vectorLength:  []string{"2"},
 			expectError:   false,
 		},
@@ -467,6 +470,7 @@ func TestEtcd_AddFeatures_WithVectorDataTypes(t *testing.T) {
 			dataType:      enums.DataTypeFP32Vector,
 			labels:        []string{"float_vector_feature"},
 			defaultValues: []string{"[1.0,2.5,3.7]"},
+			stringLength:  []string{"0"},
 			vectorLength:  []string{"3"},
 			expectError:   false,
 		},
@@ -503,7 +507,7 @@ func TestEtcd_AddFeatures_WithVectorDataTypes(t *testing.T) {
 			_, _, _, _, err := etcdConfig.AddFeatures(
 				"test_entity", "test_fg", tt.labels, tt.defaultValues,
 				[]string{""}, []string{""}, []string{""},
-				[]string{"0"}, tt.vectorLength,
+				tt.stringLength, tt.vectorLength,
 			)
 
 			if tt.expectError {
@@ -542,7 +546,7 @@ func TestEtcd_SegmentSizeManagement(t *testing.T) {
 		columnsToAdd, _, _, _, err := etcdConfig.AddFeatures(
 			"test_entity", "test_fg",
 			[]string{"big_feature1", "big_feature2"},
-			[]string{"123456789012345", "987654321098765"}, // Large values to exceed max column size
+			[]string{"2147483647", "2147483646"}, // Large int32 values to exceed max column size
 			[]string{"", ""}, []string{"", ""}, []string{"", ""},
 			[]string{"0", "0"}, []string{"0", "0"},
 		)
@@ -598,7 +602,7 @@ func TestEtcd_AddFeatures_ValidationTests(t *testing.T) {
 			stringLength:  []string{"10"}, // Configured length is 10, but value is longer
 			vectorLength:  []string{"0"},
 			expectError:   true,
-			expectedError: "default value length (26) exceeds configured string length (10)",
+			expectedError: "default value length (26) exceeds configured string length (10) for feature at index 0",
 		},
 		{
 			name:          "string length validation - value within configured length",
@@ -617,17 +621,17 @@ func TestEtcd_AddFeatures_ValidationTests(t *testing.T) {
 			stringLength:  []string{"10"},
 			vectorLength:  []string{"3"}, // Configured vector length is 3, but we have 5 items
 			expectError:   true,
-			expectedError: "vector size (5) exceeds configured vector length (3)",
+			expectedError: "string vector size (5) must exactly match configured vector length (3) for feature at index 0",
 		},
 		{
 			name:          "string vector validation - individual string exceeds length",
 			dataType:      enums.DataTypeStringVector,
 			labels:        []string{"string_vector_feature"},
-			defaultValues: []string{"[hello,very_long_string_exceeding_lmt]"}, // This is exactly 30 chars
-			stringLength:  []string{"10"},                                     // Each string should be max 10 chars
-			vectorLength:  []string{"3"},
+			defaultValues: []string{"[hello,very_long_string_exceeding_limit]"}, // 32 chars for second string
+			stringLength:  []string{"10"},                                       // Each string should be max 10 chars
+			vectorLength:  []string{"2"},
 			expectError:   true,
-			expectedError: "string at position 1 (length 30) exceeds configured string length (10)", // Fixed to 30
+			expectedError: "string at position 1 (length 32) exceeds configured string length (10) for feature at index 0",
 		},
 		{
 			name:          "string vector validation - valid configuration",
@@ -635,7 +639,7 @@ func TestEtcd_AddFeatures_ValidationTests(t *testing.T) {
 			labels:        []string{"string_vector_feature"},
 			defaultValues: []string{"[hello,world]"},
 			stringLength:  []string{"10"},
-			vectorLength:  []string{"5"},
+			vectorLength:  []string{"2"},
 			expectError:   false,
 		},
 		{

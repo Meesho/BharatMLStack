@@ -137,8 +137,11 @@ func serializeString(value string, dataType enums.DataType) ([]byte, error) {
 func serializeInt32VectorAndLess(value string, dataType enums.DataType) ([]byte, error) {
 	unitSize := dataType.Size()
 	var flattened []int32
-	splitRows := strings.Split(value, ",")
+	// Strip brackets and split by comma
+	cleanValue := strings.Trim(value, "[]")
+	splitRows := strings.Split(cleanValue, ",")
 	for _, row := range splitRows {
+		row = strings.TrimSpace(row) // Trim whitespace
 		val, err := strconv.ParseUint(row, 10, 32)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse value %s to uint32: %w", row, err)
@@ -159,8 +162,11 @@ func serializeInt32VectorAndLess(value string, dataType enums.DataType) ([]byte,
 func serializeInt64Vector(value string, dataType enums.DataType) ([]byte, error) {
 	unitSize := dataType.Size()
 	var flattened []int64
-	splitRows := strings.Split(value, ",")
+	// Strip brackets and split by comma
+	cleanValue := strings.Trim(value, "[]")
+	splitRows := strings.Split(cleanValue, ",")
 	for _, vv := range splitRows {
+		vv = strings.TrimSpace(vv) // Trim whitespace
 		val, err := strconv.ParseInt(vv, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse value %s to int64: %w", vv, err)
@@ -179,8 +185,11 @@ func serializeInt64Vector(value string, dataType enums.DataType) ([]byte, error)
 func serializeUint32VectorAndLess(value string, dataType enums.DataType) ([]byte, error) {
 	unitSize := dataType.Size()
 	var flattened []uint32
-	splitRows := strings.Split(value, ",")
+	// Strip brackets and split by comma
+	cleanValue := strings.Trim(value, "[]")
+	splitRows := strings.Split(cleanValue, ",")
 	for _, vv := range splitRows {
+		vv = strings.TrimSpace(vv) // Trim whitespace
 		val, err := strconv.ParseUint(vv, 10, 32)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse value %s to uint32: %w", vv, err)
@@ -200,8 +209,11 @@ func serializeUint32VectorAndLess(value string, dataType enums.DataType) ([]byte
 func serializeUint64Vector(value string, dataType enums.DataType) ([]byte, error) {
 	unitSize := dataType.Size()
 	var flattened []uint64
-	splitRows := strings.Split(value, ",")
+	// Strip brackets and split by comma
+	cleanValue := strings.Trim(value, "[]")
+	splitRows := strings.Split(cleanValue, ",")
 	for _, vv := range splitRows {
+		vv = strings.TrimSpace(vv) // Trim whitespace
 		val, err := strconv.ParseUint(vv, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse value %s to uint64: %w", vv, err)
@@ -220,8 +232,11 @@ func serializeUint64Vector(value string, dataType enums.DataType) ([]byte, error
 func serializeFP32VectorAndLess(value string, dataType enums.DataType) ([]byte, error) {
 	unitSize := dataType.Size()
 	var flattened []float32
-	splitRows := strings.Split(value, ",")
+	// Strip brackets and split by comma
+	cleanValue := strings.Trim(value, "[]")
+	splitRows := strings.Split(cleanValue, ",")
 	for _, vv := range splitRows {
+		vv = strings.TrimSpace(vv) // Trim whitespace
 		val, err := strconv.ParseFloat(vv, 32)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert value %s to float32: %w", vv, err)
@@ -241,8 +256,11 @@ func serializeFP32VectorAndLess(value string, dataType enums.DataType) ([]byte, 
 func serializeFP64Vector(value string, dataType enums.DataType) ([]byte, error) {
 	unitSize := dataType.Size()
 	var flattened []float64
-	splitRows := strings.Split(value, ",")
+	// Strip brackets and split by comma
+	cleanValue := strings.Trim(value, "[]")
+	splitRows := strings.Split(cleanValue, ",")
 	for _, vv := range splitRows {
+		vv = strings.TrimSpace(vv) // Trim whitespace
 		val, err := strconv.ParseFloat(vv, 64)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert value %s to float64: %w", vv, err)
@@ -276,14 +294,18 @@ func serializeBool(value string) ([]byte, error) {
 }
 
 func serializeBoolVector(value string) ([]byte, error) {
+	// Strip brackets and split by comma
+	cleanValue := strings.Trim(value, "[]")
+	splitRows := strings.Split(cleanValue, ",")
+
 	// Calculate total bits needed
-	totalBits := 0
-	totalBits += len(value)
+	totalBits := len(splitRows)
 	data := make([]byte, (totalBits+7)/8) // Allocate bytes for bits
 	idx := 0
 	shift := 7
-	splitRows := strings.Split(value, ",")
+
 	for _, vv := range splitRows {
+		vv = strings.TrimSpace(vv) // Trim whitespace
 		val, err := strconv.ParseBool(vv)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse value %s to bool: %w", vv, err)
@@ -302,8 +324,11 @@ func serializeBoolVector(value string) ([]byte, error) {
 
 func serializeStringVector(value string) ([]byte, error) {
 	data := make([]byte, binary.MaxVarintLen64)
-	splitRows := strings.Split(value, ",")
+	// Strip brackets and split by comma
+	cleanValue := strings.Trim(value, "[]")
+	splitRows := strings.Split(cleanValue, ",")
 	for _, vv := range splitRows {
+		vv = strings.TrimSpace(vv) // Trim whitespace
 		length := uint64(len(vv))
 		lenBytes := make([]byte, binary.MaxVarintLen64)
 		n := binary.PutUvarint(lenBytes, length)
