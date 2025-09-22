@@ -1,0 +1,10 @@
+[package]
+name = "lv2l"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ndarray = { version = "0.15", features = ["serde"] }
+rand = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+rayon = "1.7"
