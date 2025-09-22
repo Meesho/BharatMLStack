@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/pqread.dir/main.cpp.o -o pqread  /usr/lib/x86_64-linux-gnu/libparquet.so.2100.0.0 /usr/lib/x86_64-linux-gnu/libarrow.so.2100.0.0 -ldl -lrt 

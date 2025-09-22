@@ -1,0 +1,3 @@
+/home/a0d00kc/Desktop/BharatMLStack/lv2l/parquet-reader/build/CMakeFiles/pqread.dir
+/home/a0d00kc/Desktop/BharatMLStack/lv2l/parquet-reader/build/CMakeFiles/edit_cache.dir
+/home/a0d00kc/Desktop/BharatMLStack/lv2l/parquet-reader/build/CMakeFiles/rebuild_cache.dir
