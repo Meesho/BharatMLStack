@@ -1,0 +1,268 @@
+# Default values for trufflebox-ui
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global settings
+global:
+  imageRegistry: "ghcr.io/meesho"
+  imagePullSecrets: []
+  storageClass: ""
+  
+# Container image settings
+image:
+  registry: ""
+  repository: "trufflebox-ui"
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Service account settings
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+# Pod Security Context
+podSecurityContext:
+  fsGroup: 101
+  runAsNonRoot: true
+  runAsUser: 101
+  runAsGroup: 101
+
+# Container Security Context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+    add:
+    - NET_BIND_SERVICE
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 101
+
+# Deployment settings
+replicaCount: 2
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 128Mi
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Vertical Pod Autoscaler
+verticalPodAutoscaler:
+  enabled: false
+  updateMode: "Auto"
+  minAllowed:
+    cpu: 20m
+    memory: 64Mi
+  maxAllowed:
+    cpu: 500m
+    memory: 512Mi
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Service settings
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+  annotations: {}
+
+# Ingress settings (NGINX default)
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: trufflebox.bharatmlstack.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: trufflebox-tls
+      hosts:
+        - trufflebox.bharatmlstack.local
+
+# Gateway API support (production-ready routing)
+gateway:
+  enabled: false
+  className: "istio"
+  gatewayName: "bharatmlstack-gateway"
+  namespace: "bharatml-system"
+  hosts:
+    - "trufflebox.bharatml.prod.com"
+  tls:
+    enabled: true
+    certificateRefs:
+      - name: "bharatml-tls"
+        namespace: "bharatml-system"
+
+# HTTP Route for Gateway API
+httpRoute:
+  enabled: false
+  parentRefs:
+    - name: "bharatmlstack-gateway"
+      namespace: "bharatml-system"
+  hostnames:
+    - "trufflebox.bharatml.prod.com"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: "trufflebox-ui"
+          port: 80
+
+# Network Policies
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: bharatml-system
+        - podSelector: {}  # Allow from all pods in same namespace
+      ports:
+        - protocol: TCP
+          port: 80
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: horizon
+      ports:
+        - protocol: TCP
+          port: 8082
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+
+# Service Monitor for Prometheus
+serviceMonitor:
+  enabled: true
+  namespace: ""
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+  annotations: {}
+  path: /metrics
+  honorLabels: false
+
+# Liveness and readiness probes
+probes:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+    httpGet:
+      path: /
+      port: http
+  readiness:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+    httpGet:
+      path: /
+      port: http
+
+# Application configuration
+config:
+  # Horizon backend URL
+  horizon:
+    baseUrl: "http://horizon.bharatml-system.svc.cluster.local:8082"
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity and anti-affinity
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - trufflebox-ui
+          topologyKey: kubernetes.io/hostname
+
+# Additional labels
+labels: {}
+
+# Additional annotations
+annotations: {}
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod labels
+podLabels: {}
+
+# Volume mounts for nginx and tmp
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+  - name: var-cache-nginx
+    mountPath: /var/cache/nginx
+  - name: var-run
+    mountPath: /var/run
+
+# Volumes
+volumes:
+  - name: tmp
+    emptyDir: {}
+  - name: var-cache-nginx
+    emptyDir: {}
+  - name: var-run
+    emptyDir: {}
+
+# Extra environment variables
+extraEnvVars: []
+
+# Extra environment variables from ConfigMaps/Secrets
+extraEnvVarsFrom: []
+
+# Init containers
+initContainers: []
+
+# Sidecar containers
+sidecars: []
+
+# Additional volumes
+extraVolumes: []
+
+# Additional volume mounts
+extraVolumeMounts: []
