@@ -8,12 +8,14 @@ sidebar_position: 2
 This PoC measures the performance of **vector addition** in Rust **with and without compiler SIMD optimizations**. Requests consist of repeated fixed-size vector addition operations processed in parallel by the CPU. These results provide perspective on **how much faster SIMD makes vectorized computations**, and similar improvements are expected for other vectorized operations in Numerix.
 
 ## System Configuration
-- **Instance Type**: c4a-highcpu-16
-- **Processor**: AMD EPYC (64-bit)
-- **SIMD Extension**: SVE2
-- **OS**: Linux (Ubuntu 22.04)
-- **Rust Version**: rustc 1.80.0
-- **Target Triple**: x86_64-unknown-linux-gnu
+
+- **Instance Type**: c4a-highcpu-16  
+- **Processor**: Google Axion (ARMv9, 64-bit)  
+- **SIMD Extension**: SVE2  
+- **OS**: Linux (Ubuntu 22.04)  
+- **Rust Version**: rustc 1.80.0  
+- **Target Triple**: aarch64-unknown-linux-gnu  
+
 
 ## Vector Addition Performance
 
