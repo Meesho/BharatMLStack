@@ -23,4 +23,5 @@ type Manager interface {
 	GetNormalizedEntities() error
 	RegisterClients() error
 	GetAllRegisteredClients() map[string]string
+	GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error)
 }

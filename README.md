@@ -24,11 +24,15 @@ BharatMLStack is a comprehensive, production-ready machine learning infrastructu
 
 ## Our Vision
 
-🎯 **Democratize Machine Learning**: Make advanced ML infrastructure accessible to organizations of all sizes
-🚀 **Scale Without Limits**: Built to handle millions of requests per second with enterprise-grade reliability
-🇮🇳 **India-First Approach**: Optimized for Indian market needs while maintaining global standards
-⚡ **Real-Time Intelligence**: Enable instant decision-making with sub-millisecond feature serving
-🔧 **Developer-Friendly**: Intuitive APIs and interfaces that accelerate ML development cycles
+- 🎯 **Democratize Machine Learning**: Make advanced ML infrastructure accessible to organizations of all sizes
+- 🚀 **Scale Without Limits**: Built to handle millions of requests per second with enterprise-grade reliability
+- 🇮🇳 **Bharat-First Approach**: Optimized for Indian market needs while maintaining global standards
+- ⚡ **Real-Time Intelligence**: Enable instant decision-making with sub-millisecond feature serving
+- 🔧 **Developer-Friendly**: Intuitive APIs and interfaces that accelerate ML development cycles
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Meesho/BharatMLStack&type=Date)](https://www.star-history.com/#Meesho/BharatMLStack&Date)
 
 ## Running at Million Scale
 
@@ -53,6 +57,7 @@ BharatMLStack is battle-tested in production environments, powering:
 | 🗄️ **Online Feature Store** | `v1.0.0` | Real-Time Features |
 | 🐹 **Go SDK** | `v1.0.0` | Go Client Library |
 | 🐍 **Python SDK** | `v1.0.1` | Python Client Library |
+| 🚀 **Numerix** | `v1.0.0` | Mathematical Compute Engine |
 
 ### 🚀 Horizon - Control Plane & Backend
 The central control plane for BharatMLStack components, serving as the backend for Trufflebox UI.
@@ -72,6 +77,14 @@ High-performance feature store for real-time ML inference and training.
 - **Streaming ingestion**: Process millions of feature updates per second
 - **Feature Backward Compatible Versioning**: Track and manage feature evolution
 - **Multi-source integration**: Push from stream, batch and real-time sources
+
+### 🗄️ Numerix - Mathematical Compute Engine
+High-performance feature store for real-time ML inference and training.
+- **Matrix Operations**: High-performance matrix computations and transformations
+- **gRPC API**: Fast binary protocol for efficient data transfer
+- **Multi-format Support**: String and byte-based matrix formats
+- **Optimized Performance**: Built with Rust for maximum efficiency
+- **Scalable Architecture**: Designed for distributed processing
 
 ## Key Differentiators
 
@@ -100,7 +113,7 @@ For comprehensive setup instructions, examples, and deployment guides, see our d
 # Clone and start the complete stack
 git clone https://github.com/Meesho/BharatMLStack.git
 cd BharatMLStack/quick-start
-ONFS_VERSION=<version> HORIZON_VERSION=<version> TRUFFLEBOX_VERSION=<version> ./start.sh
+ONFS_VERSION=<version> HORIZON_VERSION=<version> TRUFFLEBOX_VERSION=<version> NUMERIX_VERSION=<version> ./start.sh
 ```
 
 Then follow the [Quick Start Guide](./quick-start/README.md) for detailed setup and usage instructions.
@@ -121,6 +134,7 @@ BharatMLStack follows a microservices architecture designed for scalability and 
 | **Go SDK** | [Docs](./go-sdk/README.md) | [Examples](./go-sdk/README.md) |
 | **Python SDK** | [Docs](./py-sdk/README.md) | [Quickstart](./py-sdk/README.md) |
 | **User Guide** | [Docs](https://meesho.github.io/BharatMLStack/trufflebox-ui/v1.0.0/userguide) | [Setup](./quick-start/README.md) |
+| **Numerix** | [Docs](https://meesho.github.io/BharatMLStack/category/numerix) | [Setup](./quick-start/README.md) |
 
 ## Contributing
 

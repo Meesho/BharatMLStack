@@ -266,7 +266,8 @@ func (e *Etcd) GetSequenceNo(entityLabel string, fgId int, version int, featureL
 
 	sequence, ok := sequences[featureLabel]
 	if !ok {
-		return 0, fmt.Errorf("feature %s not found", featureLabel)
+		log.Error().Msgf("feature %s not found", featureLabel)
+		return -1, nil
 	}
 
 	return sequence, nil
@@ -475,6 +476,20 @@ func (e *Etcd) GetNormalizedEntities() error {
 	entities = tmpEntities
 	log.Debug().Msg("Normalized entities parsed")
 	return nil
+}
+
+func (e *Etcd) GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error) {
+	entity, err := e.GetEntity(entityLabel)
+	if err != nil {
+		return nil, err
+	}
+
+	allFGIds := make(map[int]bool)
+	for _, fg := range entity.FeatureGroups {
+		allFGIds[fg.Id] = true
+	}
+
+	return allFGIds, nil
 }
 
 func isEntityValid(entity *Entity) bool {
