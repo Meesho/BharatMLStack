@@ -3,64 +3,89 @@ title: Architecture
 sidebar_position: 1
 ---
 
-# Numerix Service - Architecture
+# BharatMLStack - Numerix
 
-## Problem Statement
-We are currently operating a Go-based service that performs computationally intensive matrix calculations and returns the final results. This service runs on multiple pods, leading to significant infrastructure costs.
+---
 
-## Objective of Re-Architecture
-To optimize performance and reduce operational expenses, we aim to rewrite this service in Rust, leveraging SIMD (Single Instruction, Multiple Data) to maximize efficiency and parallel computation capabilities.
+Numerix is a Rust-based compute service in **BharatMLStack** designed for low-latency evaluation of mathematical expressions over feature matrices. Each request carries a compute_id and a matrix of features; Numerix fetches the corresponding postfix expression, maps variables to feature columns (treated as vectors), and evaluates the expression with a stack-based SIMD-optimized runtime.
 
-### Goals
-- **Performance Optimization**: Utilize Rust’s low-level control and memory efficiency to enhance computational speed.
-- **Cost Reduction**: Reduce the number of pods required by improving processing efficiency.
-- **Parallel Computation**: Implement SIMD to execute matrix operations faster by processing multiple data points simultaneously.
-- **Reliability and Safety**: Benefit from Rust’s strong memory safety guarantees while maintaining or improving system stability.
+---
 
-This rewrite will involve analyzing the existing Go implementation and implementing an optimized Rust version that efficiently utilizes SIMD instructions for matrix computations.
+## High-Level Components
 
-## High-Level Design (HLD)
+- **Tonic gRPC server (Rust)**: exposes `Numerix/Compute` for low-latency requests.
+  - Accepts feature data as strings (for ease of use) or byte arrays (for efficient transmission).
+  - All input data is converted internally to fp32 or fp64 vectors for evaluation.
+- **Compute Registry (etcd)**: stores `compute_id (int) → postfix expression` mappings.
+- **Stack-based Evaluator**: Runs postfix expressions in linear time using a stack based approach over aligned vectors.
+- **Vectorized Math Runtime**: No handwritten SIMD intrinsics; relies on **LLVM autovectorization**.  
+  - Operations are intentionally simple and memory-aligned.  
+  - Compiler emits SIMD instructions automatically.  
+  - Portable across CPU architectures (ARM & AMD). 
+- **Metrics and Health**  
+  - Latency, RPS, and error rates via **Datadog/DogStatsD** UDP client.  
+  - Minimal HTTP endpoints (`/health`, optional `/metrics`) for diagnostics.
 
-Numerix is a gRPC service written in Rust (Tonic + Prost) that exposes matrix computation primitives. It fetches computation expressions from `etcd`, validates requests, and executes SIMD-accelerated operations.
+---
 
-### Components
-- **gRPC Service** (Tonic): API layer for `Compute` requests.
-- **Controller/Handler**: Request validation and orchestration.
-- **ConfigStore (etcd)**: Stores expressions and configs.
-- **Rust Matrix Frame**: SIMD-optimized math engine (fp32/fp64).
-- **Error Handler**: Consistent error mapping and propagation.
-- **Observability**: Metrics and traces for latency, RPS, and errors.
+## What is SIMD?
 
-### Request Flow (Sequence)
-1. Client calls gRPC → `Numerix/Compute`.
-2. Controller delegates to Handler.
-3. Handler fetches expression from `etcd` by id.
-4. Request validation; on failure → error returned.
-5. Handler invokes Matrix Frame with expression + scores.
-6. On success → result returned; on failure → error propagated.
+SIMD (Single Instruction, Multiple Data) is a CPU feature that allows a single instruction to operate on multiple data points at once. In Numerix, this means that operations on feature vectors can be executed in parallel, making evaluation of mathematical expressions faster and more predictable.
 
-### Rust Matrix Frame Flow
-1. Parse expression.
-2. Determine data type (fp32/fp64).
-3. Execute SIMD-optimized computation path (fp32/fp64).
-4. Return result or structured error.
+## Why SIMD Matters for Numerix
 
-### Tech Choices
-- **Rust**: Low latency, memory safety, predictable performance.
-- **Tonic**: Native async gRPC server/client.
-- **Prost**: Protobuf types generation.
-- **etcd client**: Config and expression store.
-- **config-rs**: Layered configuration.
-- **OpenTelemetry** (optional): Tracing/metrics integration.
+- Postfix expressions operate on vectors (columns of the input matrix).
+- SIMD allows multiple elements of these vectors to be processed in one CPU instruction, rather than element-by-element.
+- This results in low-latency, high-throughput computation without the need for handwritten intrinsics — the compiler handles the vectorization automatically.
 
-### gRPC Schema (excerpt)
-```protobuf
-service Numerix {
-  rpc Compute(NumerixRequestProto) returns (NumerixResponseProto);
-}
+---
+
+## Why ARM, Why LLVM
+
+During design exploration, we tested SIMD on different architectures and found **ARM (AArch64)** with NEON/SVE/SVE2 provided excellent performance for our workloads.  
+
+Instead of writing custom intrinsics, Numerix **compiles with SIMD flags** and lets LLVM handle vectorization:  
+
+```bash
+RUSTFLAGS="-C target-feature=+neon,+sve,+sve2" \
+cargo build --release --target aarch64-unknown-linux-gnu
 ```
 
-### Example gRPC Call (grpcurl)
+- This approach works well because operations are straightforward, data is aligned, and compiler auto-vectorization is reliable.
+
+- AMD/x86 builds are equally supported — enabling their SIMD extensions is just a matter of changing build flags.
+
+## Request Model and Flow
+
+1. Client calls gRPC `numerix.Numerix/Compute` with:
+   - `schema`: ordered feature names
+   - `entity_scores`: per-entity vectors (string or bytes)
+   - `compute_id`: integer identifier for the expression
+   - `data_type` (optional): e.g., `fp32` or `fp64`
+2. Service fetches the postfix expression for `compute_id` which was pre-fetched from `etcd`.
+3. Request is validated for schema and data shape.
+4. The stack-based evaluator executes the expression in O(n) over tokens, with vectorized inner operations.
+5. Response returns `computation_score_data` or a structured `error`.
+
+---
+
+## Why Postfix Expressions
+
+- **Stored in etcd** as postfix (Reverse Polish) notation.
+- Postfix makes evaluation parser-free and linear time.
+- Execution uses a stack machine:
+  - Push operands (feature vectors).
+  - Pop, compute, and push results for each operator.
+- Benefits: predictable runtime, compiler-friendly loops, cache efficiency.
+
+## gRPC Interface
+
+- **Service:** `numerix.Numerix`
+- **RPC:** `Compute(NumerixRequestProto) → NumerixResponseProto`
+- **Request fields:** `schema`, `entity_scores`, `compute_id`, optional `data_type`
+- **Response fields:** `computation_score_data` or `error`
+
+Example (grpcurl):
 ```bash
 grpcurl -plaintext \
   -import-path ./numerix/src/protos/proto \
@@ -69,7 +94,7 @@ grpcurl -plaintext \
     "entityScoreData": {
       "schema": ["feature1", "feature2"],
       "entityScores": [ { "stringData": { "values": ["1.0", "2.0"] } } ],
-      "computeId": "test_computation",
+      "computeId": "1001",
       "dataType": "fp32"
     }
   }' \
@@ -78,70 +103,51 @@ grpcurl -plaintext \
 
 ---
 
-## Why SIMD?
+## Observability
 
-**SIMD (Single Instruction, Multiple Data)** is a parallel computing technique where a single instruction operates on multiple data points simultaneously, enabling significant speedups in matrix operations.
-
-### Scalar vs SIMD Example (Rust)
-```rust
-fn add_arrays(a: &[i32], b: &[i32]) -> Vec<i32> {
-    let mut result = Vec::new();
-    for i in 0..a.len() {
-        result.push(a[i] + b[i]);
-    }
-    result
-}
-```
-
-```rust
-#[cfg(target_arch = "aarch64")]
-use core::arch::aarch64::*;
-fn add_simd_in_place(a: &[f64], b: &[f64], result: &mut [f64]) {
-    let step = 2;
-    let simd_end = (a.len() / step) * step;
-    unsafe {
-        for i in (0..simd_end).step_by(step) {
-            let a_vec = vld1q_f64(a.as_ptr().add(i));
-            let b_vec = vld1q_f64(b.as_ptr().add(i));
-            let sum = vaddq_f64(a_vec, b_vec);
-            vst1q_f64(result.as_mut_ptr().add(i), sum);
-        }
-    }
-    for i in simd_end..a.len() {
-        result[i] = a[i] + b[i];
-    }
-}
-```
-
-### Architecture SIMD Support
-- x86_64: SSE/AVX/AVX2/AVX-512 via `std::arch::x86_64::*`.
-- AArch64: NEON/SVE via `std::arch::aarch64::*`.
+- **Datadog (DogStatsD)** metrics publication via UDP client:
+  - Latency (P50/P95/P99), error rate, RPS, internal failures
+  - Configurable sampling rate via environment variables
+- Optional `/metrics` HTTP endpoint can be enabled for local debugging.
 
 ---
 
-## Observability & Monitoring
-- Latency per Compute ID (P99.9/P99/P95/P50)
-- Total Latency (P99.9/P99/P95/P50)
-- Error Rate (Computation Failures)
-- Requests Per Second (RPS)
-- Service 5xx Count
-- ETCD 5xx Count
-- ETCD Latency (P99.9/P99/P95/P50)
+## Environments
+
+- Kubernetes (K8s), including GKE and EKS
+- Multi-arch builds: amd64, arm64.
+- ARM builds ship with NEON/SVE/SVE2 enabled.
 
 ---
 
-## Scalability
-The service is deployed on K8s (e.g., GKE) with CPU-based autoscaling.
+## Key Takeaways
+
+- Minimal service surface: **gRPC + etcd**.
+- **No custom intrinsics** — portable across **ARM & AMD** via compiler flags.
+- Supports both string and byte input, internally converted to aligned fp32/fp64 vectors.
+- **Stack-based postfix evaluation** : linear time, cache-friendly.
+- Predictable, ultra-low-latency performance.
+
+## Contributing
+
+We welcome contributions from the community! Please see our [Contributing Guide](https://github.com/Meesho/BharatMLStack/blob/main/CONTRIBUTING.md) for details on how to get started.
+
+## Community & Support
+
+- 💬 **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
+- 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
+- 📧 **Email**: Contact us at [ml-oss@meesho.com](mailto:ml-oss@meesho.com )
+
+## License
+
+BharatMLStack is open-source software licensed under the [BharatMLStack Business Source License 1.1](https://github.com/Meesho/BharatMLStack/blob/main/LICENSE.md).
 
 ---
 
-## Libraries
-- Rust core + `std::simd`
-- Tonic (gRPC)
-- Prost (Protobuf)
-- etcd client
-- config-rs
-- Actix-web (optional HTTP endpoints)
-- OpenTelemetry (optional)
-
+<div align="center">
+  <strong>Built with ❤️ for the ML community from Meesho</strong>
+</div>
+<div align="center">
+  <strong>If you find this useful, ⭐️ the repo — your support means the world to us!</strong>
+</div>
 
