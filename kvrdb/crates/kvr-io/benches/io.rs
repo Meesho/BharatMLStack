@@ -5,7 +5,7 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::{fs::File, io::Write, time::{Duration, Instant}};
 
 const BLOCK: usize = 8192;
-const FILE_SIZE: u64 = 1 * 1024 * 1024 * 1024; // 1 GiB
+const FILE_SIZE: u64 = 16 * 1024 * 1024 * 1024; // 16 GiB
 const N_BLOCKS: u64 = FILE_SIZE / BLOCK as u64;
 
 fn make_file(path: &str) {

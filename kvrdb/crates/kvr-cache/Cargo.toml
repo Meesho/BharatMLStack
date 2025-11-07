@@ -4,3 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+dashmap = "6.1"
+parking_lot = "0.12"
+ahash = "0.8"
+crossbeam-epoch = "0.9"
+
+[dev-dependencies]
+criterion = "0.5"
+rand = "0.8"
+
+[[bench]]
+name = "row_cache"
+harness = false
