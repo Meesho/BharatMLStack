@@ -1,5 +1,7 @@
 package config
 
+import "github.com/Meesho/BharatMLStack/online-feature-store/pkg/circuitbreaker"
+
 type Manager interface {
 	GetEntity(entityLabel string) (*Entity, error)
 	GetAllEntities() []Entity
@@ -9,6 +11,7 @@ type Manager interface {
 	GetDistributedCacheConfForEntity(entityLabel string) (*Cache, error)
 	GetInMemoryCacheConfForEntity(entityLabel string) (*Cache, error)
 	GetP2PCacheConfForEntity(entityLabel string) (*Cache, error)
+	GetP2PEnabledPercentage() int
 	GetStores() (*map[string]Store, error)
 	GetActiveFeatureSchema(entityLabel, fgLabel string) (*FeatureSchema, error)
 	GetColumnsForEntityAndFG(entityLabel string, fgId int) ([]string, error)
@@ -24,4 +27,6 @@ type Manager interface {
 	RegisterClients() error
 	GetAllRegisteredClients() map[string]string
 	GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error)
+	GetCircuitBreakerConfigs() map[string]circuitbreaker.Config
+	UpdateCBConfigs() error
 }

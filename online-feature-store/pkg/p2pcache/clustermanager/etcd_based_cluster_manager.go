@@ -29,6 +29,7 @@ const (
 type EtcdBasedClusterManager struct {
 	mutex          sync.Mutex
 	conn           *clientv3.Client
+	leaseID        clientv3.LeaseID
 	etcdBasePath   string
 	clusterMembers map[string]PodData
 	hashRing       *hashring.ConsistentHashRing
@@ -36,17 +37,14 @@ type EtcdBasedClusterManager struct {
 	name           string
 }
 
-func NewEtcdBasedClusterManager(name string) *EtcdBasedClusterManager {
+func NewEtcdBasedClusterManager(clusterName string, name string) *EtcdBasedClusterManager {
 	if !viper.IsSet(envPodIP) || !viper.IsSet(envNodeIP) {
 		log.Panic().Msgf("%s or %s is not set", envPodIP, envNodeIP)
 	}
 	if !viper.IsSet(envEtcdServer) {
 		log.Panic().Msgf("%s is not set", envEtcdServer)
 	}
-	if !viper.IsSet(appName) {
-		log.Panic().Msgf("%s is not set", appName)
-	}
-	log.Debug().Msgf("Initializing cluster manager with pod IP %s and node IP %s", viper.GetString(envPodIP), viper.GetString(envNodeIP))
+	log.Info().Msgf("Initializing cluster manager with cluster name %s and pod IP %s and node IP %s", clusterName, viper.GetString(envPodIP), viper.GetString(envNodeIP))
 
 	etcdServers := strings.Split(viper.GetString(envEtcdServer), ",")
 	var username, password string
@@ -67,7 +65,7 @@ func NewEtcdBasedClusterManager(name string) *EtcdBasedClusterManager {
 	clusterManager := &EtcdBasedClusterManager{
 		hashRing:     hashring.NewConsistentHashRing(),
 		conn:         conn,
-		etcdBasePath: fmt.Sprintf(configPathFmt, viper.GetString(appName), name),
+		etcdBasePath: fmt.Sprintf(configPathFmt, clusterName, name),
 		currentPodId: currentPodData.GetUniqueId(),
 		name:         name,
 	}
@@ -107,7 +105,7 @@ func (c *EtcdBasedClusterManager) loadClusterMembers() (int64, error) {
 			return 0, fmt.Errorf("failed to unmarshal pod data: %v", err)
 		}
 
-		c.addMember(string(kv.Key), podData)
+		c.addMember(c.getUniqueIdFromFullConfigKey(string(kv.Key)), podData)
 	}
 
 	return resp.Header.Revision, nil
@@ -129,6 +127,11 @@ func (c *EtcdBasedClusterManager) removeMember(key string) {
 	c.hashRing.RemoveNode(key)
 }
 
+func (c *EtcdBasedClusterManager) getUniqueIdFromFullConfigKey(key string) string {
+	parts := strings.Split(key, "/")
+	return parts[len(parts)-1]
+}
+
 func (c *EtcdBasedClusterManager) watchEvents(watchChan clientv3.WatchChan) {
 	for watchResp := range watchChan {
 		for _, event := range watchResp.Events {
@@ -141,10 +144,10 @@ func (c *EtcdBasedClusterManager) watchEvents(watchChan clientv3.WatchChan) {
 					log.Error().Err(err).Msgf("Failed to unmarshal updated pod data for key: %s with value: %s", key, string(event.Kv.Value))
 					continue
 				}
-				c.addMember(key, podData)
+				c.addMember(c.getUniqueIdFromFullConfigKey(key), podData)
 
 			case clientv3.EventTypeDelete:
-				c.removeMember(key)
+				c.removeMember(c.getUniqueIdFromFullConfigKey(key))
 			}
 			log.Debug().Msgf("Updated after eventType: %s for key: %s , cluster members: %v", event.Type, key, c.clusterMembers)
 		}
@@ -153,10 +156,13 @@ func (c *EtcdBasedClusterManager) watchEvents(watchChan clientv3.WatchChan) {
 
 func (c *EtcdBasedClusterManager) joinCluster(podData PodData) error {
 	// Grant a lease for this pod
-	lease, err := c.conn.Grant(context.Background(), 5) // 5 second TTL
+	grantCtx, grantCancel := context.WithTimeout(context.Background(), timeout)
+	defer grantCancel()
+	lease, err := c.conn.Grant(grantCtx, 5)
 	if err != nil {
 		return fmt.Errorf("failed to grant lease: %v", err)
 	}
+	c.leaseID = lease.ID
 
 	// Start keepalive for the lease
 	keepAliveChan, err := c.conn.KeepAlive(context.Background(), lease.ID)
@@ -181,8 +187,10 @@ func (c *EtcdBasedClusterManager) joinCluster(podData PodData) error {
 	}
 
 	// Put the pod data with lease
+	putCtx, putCancel := context.WithTimeout(context.Background(), timeout)
+	defer putCancel()
 	key := fmt.Sprintf("%s/%s", c.etcdBasePath, podData.GetUniqueId())
-	_, err = c.conn.Put(context.Background(), key, string(podDataBytes), clientv3.WithLease(lease.ID))
+	_, err = c.conn.Put(putCtx, key, string(podDataBytes), clientv3.WithLease(lease.ID))
 	if err != nil {
 		return fmt.Errorf("failed to put pod data in etcd: %v", err)
 	}
@@ -190,26 +198,17 @@ func (c *EtcdBasedClusterManager) joinCluster(podData PodData) error {
 	return nil
 }
 
-func (c *EtcdBasedClusterManager) LeaveCluster(podData PodData) error {
-	key := fmt.Sprintf("%s/%s", c.etcdBasePath, podData.GetUniqueId())
-	_, err := c.conn.Delete(context.Background(), key)
-	if err != nil {
-		return fmt.Errorf("failed to delete pod data from etcd: %v", err)
-	}
-	return nil
-}
-
-func (c *EtcdBasedClusterManager) GetKeyToPodIdMap(keys []string) (map[string]string, error) {
-	return c.hashRing.GetNodeMap(keys), nil
-}
-
-func (c *EtcdBasedClusterManager) GetPodIdToKeysMap(keys []string) (map[string][]string, error) {
-	keysToPodIdMap := c.hashRing.GetNodeMap(keys)
+func (c *EtcdBasedClusterManager) GetPodIdToKeysMap(keys []string) map[string][]string {
 	podIdToKeysMap := make(map[string][]string)
-	for key, podId := range keysToPodIdMap {
+	for _, key := range keys {
+		podId := c.GetPodIdForKey(key)
 		podIdToKeysMap[podId] = append(podIdToKeysMap[podId], key)
 	}
-	return podIdToKeysMap, nil
+	return podIdToKeysMap
+}
+
+func (c *EtcdBasedClusterManager) GetPodIdForKey(key string) string {
+	return c.hashRing.GetNodeForKey(key)
 }
 
 func (c *EtcdBasedClusterManager) GetCurrentPodId() string {
@@ -233,4 +232,30 @@ func (c *EtcdBasedClusterManager) GetClusterTopology() ClusterTopology {
 		RingTopology:   c.hashRing.GetRingTopology(),
 		ClusterMembers: clusterMembers,
 	}
+}
+
+func (c *EtcdBasedClusterManager) LeaveCluster() error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Delete our key so other pods see us leave immediately
+	key := fmt.Sprintf("%s/%s", c.etcdBasePath, c.currentPodId)
+	_, err := c.conn.Delete(ctx, key)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to delete pod key from etcd during LeaveCluster")
+	}
+
+	// Revoke lease if present to speed up cleanup
+	if c.leaseID != 0 {
+		_, err := c.conn.Lease.Revoke(ctx, c.leaseID)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to revoke lease during LeaveCluster")
+		}
+	}
+
+	// Close etcd client
+	if err := c.conn.Close(); err != nil {
+		log.Error().Err(err).Msg("Failed to close etcd client during LeaveCluster")
+	}
+	return nil
 }
