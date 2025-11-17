@@ -1,0 +1,71 @@
+app_name: online-feature-store-consumer-realtime
+app_port: 9700
+bu: datascience
+environment:
+    dev:
+        appMetrics: false
+        as_enabled: true
+        as_max: 1
+        as_min: 1
+        cpu_limit: 4
+        cpu_request: 2
+        deployment_args: false
+        deploymentStrategy: rollingUpdate
+        memory_limit: 8G
+        memory_request: 4G
+    ftr:
+        appMetrics: false
+        as_enabled: true
+        as_max: 1
+        as_min: 1
+        cpu_limit: 4
+        cpu_request: 2
+        deployment_args: false
+        deploymentStrategy: rollingUpdate
+        memory_limit: 8G
+        memory_request: 4G
+    int:
+        appMetrics: false
+        as_enabled: true
+        as_max: 1
+        as_min: 1
+        cpu_limit: 4
+        cpu_request: 2
+        deployment_args: false
+        deploymentStrategy: rollingUpdate
+        memory_limit: 8G
+        memory_request: 4G
+    prd:
+        appMetrics: false
+        as_enabled: true
+        as_max: 1
+        as_min: 1
+        cpu_limit: 4
+        cpu_request: 2
+        deployment_args: false
+        deploymentStrategy: rollingUpdate
+        memory_limit: 8G
+        memory_request: 4G
+    stg:
+        appMetrics: false
+        as_enabled: true
+        as_max: 1
+        as_min: 1
+        cpu_limit: 4
+        cpu_request: 2
+        deployment_args: false
+        deploymentStrategy: rollingUpdate
+        memory_limit: 8G
+        memory_request: 4G
+health_check: /health/self
+initialDelaySeconds: 60
+module: consumer
+primary_owner: mohit.kumar@meesho.com
+priority: p1
+priority_v2: p1
+replica_count: 1
+secondary_owner: ayush.verma@meesho.com
+service_type:
+    - database
+    - consumer
+team: ml-platform
