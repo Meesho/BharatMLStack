@@ -1,3 +1,0 @@
-[submodule "online-feature-store/internal_meesho"]
-	path = online-feature-store/internal_meesho
-	url = git@github.com:Meesho/BharatMLStack-internal-configs.git
