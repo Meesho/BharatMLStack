@@ -102,14 +102,14 @@ func BuildClusterConfigFromEnv(envPrefix string) (*ScyllaClusterConfig, error) {
 		if err != nil {
 			return nil, err
 		}
-		log.Debug().Msgf("Using gocql_v2 library for Scylla version: %s (major: %s)", isMeesho, scyllaVersion)
+		log.Debug().Msgf("Using gocql_v2 library for Scylla version: %v (major: %d)", isMeesho, scyllaVersion)
 	} else {
 		// Use standard gocql for non-Meesho version
 		cfg, err = buildGocqlClusterConfig(hosts, envPrefix, keyspace)
 		if err != nil {
 			return nil, err
 		}
-		log.Debug().Msgf("Using standard gocql library for Scylla version: %s (major: %s)", isMeesho, scyllaVersion)
+		log.Debug().Msgf("Using standard gocql library for Scylla version: %v (major: %d)", isMeesho, scyllaVersion)
 	}
 
 	return &ScyllaClusterConfig{
