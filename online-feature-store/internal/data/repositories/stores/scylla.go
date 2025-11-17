@@ -12,8 +12,6 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/ds"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/infra"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
-	gocql_v2 "github.com/Meesho/gocql"
-	"github.com/gocql/gocql"
 	"github.com/rs/zerolog/log"
 )
 
@@ -57,10 +55,10 @@ func NewScyllaStore(table string, connection *infra.ScyllaClusterConnection) (St
 
 	// Determine session type and validate
 	var sessionType string
-	switch session.(type) {
-	case *gocql.Session:
+	switch connection.IsMeeshoVersion {
+	case "false":
 		sessionType = "gocql"
-	case *gocql_v2.Session:
+	case "true":
 		sessionType = "gocql_v2"
 	default:
 		return nil, fmt.Errorf("unsupported session type")
@@ -113,17 +111,9 @@ func (s *ScyllaStore) RetrieveV2(entityLabel string, pkMap map[string]string, fg
 	var rowData []map[string]interface{}
 	switch s.sessionType {
 	case "gocql":
-		if gocqlQuery, ok := query.(*gocql.Query); ok {
-			rowData, err = gocqlQuery.Iter().SliceMap()
-		} else {
-			return nil, fmt.Errorf("invalid gocql query type")
-		}
+		rowData, err = retrieveV1(query)
 	case "gocql_v2":
-		if gocqlV2Query, ok := query.(*gocql_v2.Query); ok {
-			rowData, err = gocqlV2Query.Iter().SliceMap()
-		} else {
-			return nil, fmt.Errorf("invalid gocql_v2 query type")
-		}
+		rowData, err = retrieveV2(query)
 	default:
 		return nil, fmt.Errorf("unknown session type: %s", s.sessionType)
 	}
@@ -204,17 +194,9 @@ func (s *ScyllaStore) PersistV2(storeId string, entityLabel string, pkMap map[st
 	// Execute query based on session type
 	switch s.sessionType {
 	case "gocql":
-		if gocqlQuery, ok := query.(*gocql.Query); ok {
-			err = gocqlQuery.Exec()
-		} else {
-			return fmt.Errorf("invalid gocql query type")
-		}
+		err = persistV1(query)
 	case "gocql_v2":
-		if gocqlV2Query, ok := query.(*gocql_v2.Query); ok {
-			err = gocqlV2Query.Exec()
-		} else {
-			return fmt.Errorf("invalid gocql_v2 query type")
-		}
+		err = persistV2(query)
 	default:
 		return fmt.Errorf("unknown session type: %s", s.sessionType)
 	}
@@ -242,13 +224,17 @@ func (s *ScyllaStore) getPersistPreparedStatement(keyspace, table string, column
 	// Create query based on session type
 	switch s.sessionType {
 	case "gocql":
-		if gocqlSession, ok := session.(*gocql.Session); ok {
-			return gocqlSession.Query(query)
+		query, err := getQueryV1(session, query)
+		if err != nil {
+			return nil
 		}
+		return query
 	case "gocql_v2":
-		if gocqlV2Session, ok := session.(*gocql_v2.Session); ok {
-			return gocqlV2Session.Query(query)
+		query, err := getQueryV2(session, query)
+		if err != nil {
+			return nil
 		}
+		return query
 	}
 	return nil
 }
@@ -265,13 +251,17 @@ func (s *ScyllaStore) getRetrievePreparedStatement(keyspace, table string, fgCol
 	// Create query based on session type
 	switch s.sessionType {
 	case "gocql":
-		if gocqlSession, ok := session.(*gocql.Session); ok {
-			return gocqlSession.Query(query)
+		query, err := getQueryV1(session, query)
+		if err != nil {
+			return nil
 		}
+		return query
 	case "gocql_v2":
-		if gocqlV2Session, ok := session.(*gocql_v2.Session); ok {
-			return gocqlV2Session.Query(query)
+		query, err := getQueryV2(session, query)
+		if err != nil {
+			return nil
 		}
+		return query
 	}
 	return nil
 }
@@ -315,13 +305,11 @@ func prepareRetrieveQueryV2(pkMap map[string]string, colPKMap map[string]string,
 	// Bind and set consistency based on session type
 	switch sessionType {
 	case "gocql":
-		if gocqlQuery, ok := ps.(*gocql.Query); ok {
-			return gocqlQuery.Bind(bindKeys...).Consistency(gocql.One)
-		}
+		query := bindV1(ps, bindKeys)
+		return query
 	case "gocql_v2":
-		if gocqlV2Query, ok := ps.(*gocql_v2.Query); ok {
-			return gocqlV2Query.Bind(bindKeys...).Consistency(gocql_v2.One)
-		}
+		query := bindV2(ps, bindKeys)
+		return query
 	}
 	return nil
 }
@@ -357,13 +345,11 @@ func preparePersistQueryV2(pkMap map[string]string, pkCols []string, columns []s
 	// Bind and set consistency based on session type
 	switch sessionType {
 	case "gocql":
-		if gocqlQuery, ok := ps.(*gocql.Query); ok {
-			return gocqlQuery.Bind(bindValues...).Consistency(gocql.One)
-		}
+		query := bindV1(ps, bindValues)
+		return query
 	case "gocql_v2":
-		if gocqlV2Query, ok := ps.(*gocql_v2.Query); ok {
-			return gocqlV2Query.Bind(bindValues...).Consistency(gocql_v2.One)
-		}
+		query := bindV2(ps, bindValues)
+		return query
 	}
 	return nil
 }
