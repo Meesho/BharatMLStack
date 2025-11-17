@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -165,7 +166,11 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 			perShardPrevTotalPuts := make([]uint64, config.NumShards)
 			for {
 				time.Sleep(sleepDuration)
+
+				logSystemStats()
+
 				for i := 0; i < config.NumShards; i++ {
+					log.Info().Msgf("=== Shard %d Stats ===", i)
 					log.Info().Msgf("Shard %d has %d active entries", i, wc.stats[i].ShardWiseActiveEntries.Load())
 					total := wc.stats[i].TotalGets.Load()
 					hits := wc.stats[i].Hits.Load()
@@ -179,6 +184,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 					log.Info().Msgf("Shard %d Total: %v", i, total)
 					log.Info().Msgf("Gets/sec: %v", float64(total-perShardPrevTotalGets[i])/float64(sleepDuration.Seconds()))
 					log.Info().Msgf("Puts/sec: %v", float64(wc.stats[i].TotalPuts.Load()-perShardPrevTotalPuts[i])/float64(sleepDuration.Seconds()))
+
 					perShardPrevTotalGets[i] = total
 					perShardPrevTotalPuts[i] = wc.stats[i].TotalPuts.Load()
 				}
@@ -187,6 +193,24 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 		}()
 	}
 	return wc, nil
+}
+
+func logSystemStats() {
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+
+	numGoroutines := runtime.NumGoroutine()
+	numCPU := runtime.NumCPU()
+
+	log.Info().Msgf("=== System Stats ===")
+	log.Info().Msgf("Memory Alloc: %.2f MB", float64(memStats.Alloc)/(1024*1024))
+	log.Info().Msgf("Memory TotalAlloc: %.2f MB", float64(memStats.TotalAlloc)/(1024*1024))
+	log.Info().Msgf("Memory Sys: %.2f MB", float64(memStats.Sys)/(1024*1024))
+	log.Info().Msgf("Memory HeapAlloc: %.2f MB", float64(memStats.HeapAlloc)/(1024*1024))
+	log.Info().Msgf("Memory HeapInuse: %.2f MB", float64(memStats.HeapInuse)/(1024*1024))
+	log.Info().Msgf("NumGC: %d", memStats.NumGC)
+	log.Info().Msgf("Goroutines: %d", numGoroutines)
+	log.Info().Msgf("NumCPU: %d", numCPU)
 }
 
 func (wc *WrapCache) Put(key string, value []byte, exptime uint64) error {
