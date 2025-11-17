@@ -1,0 +1,12 @@
+.pre-commit-config.yaml
+trufflehog/
+trufflebox-ui/node_modules/
+dist/
+.env*
+.idea/
+workspace/
+
+# Dev toggle script artifacts
+.internal-configs/
+.dev-toggle-state
+.go.mod.appended
