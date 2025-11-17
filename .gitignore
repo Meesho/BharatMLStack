@@ -5,3 +5,5 @@ dist/
 .env*
 .idea/
 workspace/
+.cursor/
+.vscode/

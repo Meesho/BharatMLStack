@@ -25,7 +25,7 @@ func main() {
 		logStats     bool
 	)
 
-	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul", "data directory for shard files")
+	flag.StringVar(&mountPoint, "mount", "/mnt/disks/nvme/nileshsolanki/", "data directory for shard files")
 	flag.IntVar(&numShards, "shards", 3, "number of shards")
 	flag.IntVar(&keysPerShard, "keys-per-shard", 30_000_000, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 128, "memtable size in MiB")
