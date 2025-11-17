@@ -1,14 +1,24 @@
 # Stage 1: Build React app
+# syntax=docker/dockerfile:1.7
 FROM node:20-slim AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install
+# Improve reliability/perf of yarn install in CI/multi-arch
+ENV YARN_CACHE_FOLDER=/usr/local/share/.cache/yarn \
+    NODE_OPTIONS=--max_old_space_size=4096
+ARG TARGETPLATFORM
+
+COPY package.json yarn.lock ./
+# Set generous network timeout and use cache mount for yarn cache
+RUN yarn config set network-timeout 600000 -g \
+ && yarn config set prefer-offline true -g
+RUN --mount=type=cache,id=yarn-cache-${TARGETPLATFORM},target=${YARN_CACHE_FOLDER} \
+    yarn install --frozen-lockfile --non-interactive --network-timeout 600000 --mutex network --no-progress
 
 COPY . .
 RUN rm -f .env
-RUN npm run build
+RUN yarn run build
 
 # Stage 2: Serve with Nginx
 FROM nginx:alpine
