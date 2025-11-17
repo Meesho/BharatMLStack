@@ -55,10 +55,10 @@ func NewScyllaStore(table string, connection *infra.ScyllaClusterConnection) (St
 
 	// Determine session type and validate
 	var sessionType string
-	switch connection.IsMeeshoVersion {
-	case "false":
+	switch {
+	case connection.ScyllaVersion == 5, connection.ScyllaVersion == 6 && !connection.IsMeesho:
 		sessionType = "gocql"
-	case "true":
+	case connection.ScyllaVersion == 6 && connection.IsMeesho:
 		sessionType = "gocql_v2"
 	default:
 		return nil, fmt.Errorf("unsupported session type")
