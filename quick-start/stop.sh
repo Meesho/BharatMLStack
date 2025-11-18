@@ -15,7 +15,7 @@ stop_services() {
     echo "⚠️  Workspace directory not found, stopping individual containers..."
     
     # Fallback: stop containers individually
-    CONTAINERS=("trufflebox" "horizon" "onfs-api-server" "etcd-workbench" "etcd" "redis" "mysql" "scylla")
+    CONTAINERS=("trufflebox" "trufflebox-healthcheck" "numerix" "numerix-healthcheck" "horizon" "horizon-healthcheck" "onfs-api-server" "onfs-healthcheck" "etcd-workbench" "db-init" "etcd" "redis" "mysql" "scylla")
     
     for container in "${CONTAINERS[@]}"; do
       if docker ps -q -f name="$container" | grep -q .; then
@@ -35,7 +35,7 @@ remove_containers() {
     (cd "$WORKSPACE_DIR" && docker-compose down --volumes --remove-orphans)
   else
     # Fallback: remove containers individually
-    CONTAINERS=("trufflebox" "horizon" "onfs-api-server" "etcd-workbench" "etcd" "redis" "mysql" "scylla")
+    CONTAINERS=("trufflebox" "trufflebox-healthcheck" "numerix" "numerix-healthcheck" "horizon" "horizon-healthcheck" "onfs-api-server" "onfs-healthcheck" "etcd-workbench" "db-init" "etcd" "redis" "mysql" "scylla")
     
     for container in "${CONTAINERS[@]}"; do
       if docker ps -aq -f name="$container" | grep -q .; then
@@ -67,7 +67,7 @@ remove_images() {
   echo "🖼️  Removing Docker images..."
   
   # List of image patterns to remove
-  IMAGES=("ghcr.io/meesho/trufflebox-ui" "ghcr.io/meesho/horizon" "ghcr.io/meesho/onfs-api-server" "quay.io/coreos/etcd" "tzfun/etcd-workbench" "redis" "mysql" "scylladb/scylla" "workspace-db-init" "alpine")
+  IMAGES=("ghcr.io/meesho/trufflebox-ui" "ghcr.io/meesho/numerix" "ghcr.io/meesho/horizon" "ghcr.io/meesho/onfs-api-server" "quay.io/coreos/etcd" "tzfun/etcd-workbench" "redis" "mysql" "scylladb/scylla" "workspace-db-init" "alpine")
   
   for image_pattern in "${IMAGES[@]}"; do
     # Find images that match the pattern
@@ -111,7 +111,7 @@ show_status() {
   echo "📊 Current Status:"
   
   # Check for running containers
-  RUNNING_CONTAINERS=$(docker ps --filter "name=scylla|mysql|redis|etcd|horizon|trufflebox|onfs-api-server" --format "{{.Names}}" 2>/dev/null || true)
+  RUNNING_CONTAINERS=$(docker ps --filter "name=scylla|mysql|redis|etcd|horizon|numerix|trufflebox|onfs-api-server" --format "{{.Names}}" 2>/dev/null || true)
   if [ -n "$RUNNING_CONTAINERS" ]; then
     echo "🟢 Running containers:"
     echo "$RUNNING_CONTAINERS" | sed 's/^/   • /'

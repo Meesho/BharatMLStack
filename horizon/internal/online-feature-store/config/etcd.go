@@ -451,8 +451,8 @@ func (e *Etcd) AddFeatures(entityLabel, fgLabel string, labels, defaultValues, s
 	} else {
 		existingLabels = newLabels
 	}
-	defaultValues, _ = processFeatureDefaultValues(defaultValues, featureGroup.DataType.String())
-	newDefaultValues := strings.Join(defaultValues, ",")
+	processedDefaultValues, _ := processFeatureDefaultValues(defaultValues, featureGroup.DataType.String())
+	newDefaultValues := strings.Join(processedDefaultValues, ",")
 	if existingDefaultValues != "" {
 		existingDefaultValues = existingDefaultValues + "," + newDefaultValues
 	} else {
@@ -466,7 +466,10 @@ func (e *Etcd) AddFeatures(entityLabel, fgLabel string, labels, defaultValues, s
 	}
 	sourceMap := make(map[string]string)
 	for i, featureLabel := range labels {
-		defaultValueInByte, _ := Serialize(defaultValues[i], dataType)
+		defaultValueInByte, err := Serialize(defaultValues[i], dataType)
+		if err != nil {
+			return nil, Store{}, nil, nil, err
+		}
 		stringLengthUint16, err := stringToUint16(stringLength[i])
 		if err != nil {
 			return nil, Store{}, nil, nil, err
