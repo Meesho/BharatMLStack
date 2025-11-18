@@ -18,7 +18,6 @@ import (
 	ofsConfig "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/config"
 	ofsRouter "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/router"
 	predatorRouter "github.com/Meesho/BharatMLStack/horizon/internal/predator/route"
-	"github.com/Meesho/BharatMLStack/horizon/pkg/config"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/etcd"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/httpframework"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
@@ -49,16 +48,15 @@ var (
 
 func main() {
 	cacConfig.InitGlobalConfig(&appConfig)
-	config.InitEnv()
+	horizonConfig.InitAll(appConfig.Configs)
 	infra.InitDBConnectors(appConfig.Configs)
+	logger.Init(appConfig.Configs)
+	metric.Init(appConfig.Configs)
+	httpframework.Init(middleware.NewMiddleware().GetMiddleWares()...)
 	etcd.InitFromAppName(&ofsConfig.FeatureRegistry{}, appConfig.Configs.OnlineFeatureStoreAppName, appConfig.Configs)
 	etcd.InitFromAppName(&numerixConfig.NumerixConfigRegistery{}, appConfig.Configs.NumerixAppName, appConfig.Configs)
 	etcd.InitFromAppName(&inferflowConfig.ModelConfigRegistery{}, appConfig.Configs.InferflowAppName, appConfig.Configs)
 	etcd.InitFromAppName(&inferflowConfig.HorizonRegistry{}, appConfig.Configs.HorizonAppName, appConfig.Configs)
-	horizonConfig.InitAll(appConfig.Configs)
-	logger.Init(appConfig.Configs)
-	metric.Init(appConfig.Configs)
-	httpframework.Init(middleware.NewMiddleware().GetMiddleWares()...)
 	deployableRouter.Init()
 	inferflowRouter.Init()
 	numerixRouter.Init()
