@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/rs/zerolog/log"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -572,13 +571,9 @@ func (v *V1) SetValues(paths map[string]interface{}) error {
 // CreateNode creates a node at the given path with the given value
 func (v *V1) CreateNode(path string, value interface{}) error {
 	exists, err := v.IsLeafNodeExist(path)
-	if err != nil {
-		log.Error().Msgf("Error checking if node exists for %s: %v", path, err)
-		return err
-	}
-	if exists {
-		log.Error().Msgf("Node already exist for %s, not creating new node", path)
-		return fmt.Errorf("node already exists at path: %s", path)
+	if exists || err != nil {
+		log.Warn().Msgf("Node already exist for %s, not creating new node", path)
+		return nil
 	}
 	response, err := v.conn.Put(context.Background(), path, fmt.Sprintf("%v", value))
 	log.Debug().Msgf("Path Created: %v", response)
@@ -636,47 +631,4 @@ func (v *V1) DeleteNode(path string) error {
 		return err
 	}
 	return nil
-}
-
-func newV1EtcdFromCustomPath(config interface{}, basePath string, appName string) Etcd {
-	if len(envEtcdServer) == 0 {
-		log.Panic().Msgf("ETCD_SERVER is not set")
-	}
-	etcdServers := envEtcdServer
-	servers := strings.Split(etcdServers, ",")
-	var username, password string
-	if len(envEtcdUsername) != 0 && len(envEtcdPassword) != 0 {
-		username = envEtcdUsername
-		password = envEtcdPassword
-	}
-
-	conn, err := clientv3.New(clientv3.Config{
-		Endpoints:           servers,
-		Username:            username,
-		Password:            password,
-		DialTimeout:         timeout,
-		DialKeepAliveTime:   timeout,
-		PermitWithoutStream: true,
-	})
-	if err != nil {
-		log.Error().Msgf("failed to create etcd client: %v", err)
-	}
-
-	v1Etcd := &V1{
-		conn:               conn,
-		basePath:           basePath + "/" + appName,
-		config:             config,
-		appName:            appName,
-		WatchPathCallbacks: make(map[string][]interface{}),
-	}
-	err = v1Etcd.updateConfig(config)
-
-	if envWatcherEnabled {
-		v1Etcd.WatchPrefix(context.Background(), basePath, appName)
-	}
-
-	if err != nil {
-		log.Panic().Err(err).Msgf("unable to create config from etcd")
-	}
-	return v1Etcd
 }

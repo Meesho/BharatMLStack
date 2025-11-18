@@ -33,23 +33,6 @@ func InitFromAppName(config interface{}, appName string, appConfig configs.Confi
 	}
 }
 
-func InitMPEtcdFromRegistry(config interface{}, appConfig configs.Configs) {
-	initEtcdOnce.Do(func() {
-		envEtcdServer = appConfig.EtcdServer
-		envEtcdUsername = appConfig.EtcdUsername
-		envEtcdPassword = appConfig.EtcdPassword
-		envWatcherEnabled = appConfig.EtcdWatcherEnabled
-	})
-
-	if instances == nil {
-		instances = make(map[string]Etcd)
-	}
-
-	appName := "inferflow"
-	if instances[appName] == nil {
-		instances[appName] = newV1EtcdFromCustomPath(config, "/config", appName)
-	}
-}
 // Instance returns the Etcd client instance. Ensure that Init is called before calling this function
 func Instance() map[string]Etcd {
 	if instances == nil {

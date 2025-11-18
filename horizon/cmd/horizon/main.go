@@ -53,7 +53,7 @@ func main() {
 	infra.InitDBConnectors(appConfig.Configs)
 	etcd.InitFromAppName(&ofsConfig.FeatureRegistry{}, appConfig.Configs.OnlineFeatureStoreAppName, appConfig.Configs)
 	etcd.InitFromAppName(&numerixConfig.NumerixConfigRegistery{}, appConfig.Configs.NumerixAppName, appConfig.Configs)
-	etcd.InitMPEtcdFromRegistry(&inferflowConfig.ModelConfigRegistery{}, appConfig.Configs)
+	etcd.InitFromAppName(&inferflowConfig.ModelConfigRegistery{}, appConfig.Configs.InferflowAppName, appConfig.Configs)
 	etcd.InitFromAppName(&inferflowConfig.HorizonRegistry{}, appConfig.Configs.HorizonAppName, appConfig.Configs)
 	horizonConfig.InitAll(appConfig.Configs)
 	logger.Init(appConfig.Configs)
