@@ -1,7 +1,7 @@
 package etcd
 
 type ModelConfigRegistery struct {
-	InferflowConfig map[string]InferflowConfigs `json:"inferflow-config"`
+	InferflowConfig map[string]InferflowConfigs `json:"services"`
 }
 
 type HorizonRegistry struct {
