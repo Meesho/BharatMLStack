@@ -11,4 +11,5 @@ func Init(config configs.Configs) {
 	// Initialize feature validation client with config-based URLs
 	InitFeatureValidationClient(config)
 	// Pricing client is initialized in main.go
+	InitRTPClient()
 }

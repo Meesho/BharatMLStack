@@ -1,17 +1,16 @@
 package handler
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
 	ofsHandler "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/handler"
 
 	etcd "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
-	"github.com/Meesho/price-aggregator-go/pricingfeatureretrieval/client"
-	"github.com/Meesho/price-aggregator-go/pricingfeatureretrieval/client/models"
 	mapset "github.com/deckarep/golang-set/v2"
 )
 
@@ -38,11 +37,10 @@ const (
 	featureClassInvalid         = "invalid"
 	COMPONENT_NAME_PREFIX       = "composite_key_gen_"
 	FEATURE_INITIALIZER         = "feature_initializer"
-	rtpClientVersion            = 1
 )
 
 func (m *InferFlow) GetInferflowConfig(request InferflowOnboardRequest, token string) (InferflowConfig, error) {
-	client.Init()
+	externalcall.GetRTPClient().Init()
 	entityIDs := extractEntityIDs(request)
 
 	featureList, featureToDataType, rtpFeatures, pcvrCalibrationFeatures, pctrCalibrationFeatures, predatorAndNumerixOutputsToDataType, offlineToOnlineMapping, err := GetFeatureList(request, m.EtcdConfig, token, entityIDs)
@@ -304,7 +302,7 @@ func fetchMissingDatatypes(
 
 	// Query RTP API once for all RTP datatypes
 	if rtpFeaturesToFetch.Cardinality() > 0 {
-		rtpDataTypeMap, err := GetRTPFeatureGroupDataTypeMap(token)
+		rtpDataTypeMap, err := GetRTPFeatureGroupDataTypeMap()
 		if err == nil {
 			for _, feature := range rtpFeaturesToFetch.ToSlice() {
 				if dataType, exists := rtpDataTypeMap[feature]; exists {
@@ -861,7 +859,10 @@ func GetRTPComponents(request InferflowOnboardRequest, rtpFeatures mapset.Set[st
 		return rtpComponents, nil
 	}
 
-	featureDataTypeMap, err := GetRTPFeatureGroupDataTypeMap(token)
+	featureDataTypeMap, err := GetRTPFeatureGroupDataTypeMap()
+	if err != nil && errors.Is(err, errors.New("RTP client is not supported without meesho build tag")) {
+		return rtpComponents, nil
+	}
 	rtpFeatureComponentsMap := GetRTPFeatureLabelToPrefixToFeatureGroupToFeatureMap(rtpFeatures.ToSlice())
 	for label, prefixToFeatureGroupToFeatureMap := range rtpFeatureComponentsMap {
 		if err != nil {
@@ -1006,22 +1007,8 @@ func GetRTPFeatureLabelToPrefixToFeatureGroupToFeatureMap(featureStrings []strin
 	return featuresMap
 }
 
-func GetRTPFeatureGroupDataTypeMap(token string) (map[string]string, error) {
-	rtpFeatureToDataType := make(map[string]string)
-	clientInstance := client.Instance(rtpClientVersion)
-	rtpStruct, err := clientInstance.GetDataTypes(context.Background(), &models.GetDataTypesRequest{}, map[string]string{})
-	if err != nil {
-		return nil, err
-	}
-	for _, entity := range rtpStruct.Entities {
-		for _, featureGroup := range entity.FeatureGroups {
-			for _, feature := range featureGroup.Features {
-				compositeName := entity.Entity + COLON_DELIMITER + featureGroup.Label + COLON_DELIMITER + feature
-				rtpFeatureToDataType[compositeName] = featureGroup.DataType
-			}
-		}
-	}
-	return rtpFeatureToDataType, nil
+func GetRTPFeatureGroupDataTypeMap() (map[string]string, error) {
+	return externalcall.GetRTPClient().GetFeatureGroupDataTypeMap()
 }
 
 func GetPredatorComponents(request InferflowOnboardRequest, offlineToOnlineMapping map[string]string) ([]PredatorComponent, error) {

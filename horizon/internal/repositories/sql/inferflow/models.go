@@ -97,7 +97,7 @@ type ComponentConfig struct {
 	CacheTTL           int                 `json:"cache_ttl"`
 	CacheVersion       int                 `json:"cache_version"`
 	FeatureComponents  []FeatureComponent  `json:"feature_components"`
-	RTPComponents      []RTPComponent      `json:"real_time_pricing_feature_components"`
+	RTPComponents      []RTPComponent      `json:"real_time_pricing_feature_components,omitempty"`
 	PredatorComponents []PredatorComponent `json:"predator_components"`
 	NumerixComponents  []NumerixComponent  `json:"numerix_components"`
 }
