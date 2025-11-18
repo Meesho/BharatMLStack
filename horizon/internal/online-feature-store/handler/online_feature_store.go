@@ -8,8 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/viper"
-
+	onlinefeaturestore "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/scylla"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 
@@ -47,8 +46,8 @@ var (
 func InitV1ConfigHandler() Config {
 	if config == nil {
 		once.Do(func() {
-			scyllaActiveConfIdsStr := viper.GetString(storageScyllaPrefix + activeConfIds)
-			redisFailoverActiveConfIdsStr := viper.GetString(storageRedisFailoverPrefix + activeConfIds)
+			scyllaActiveConfIdsStr := onlinefeaturestore.ScyllaActiveConfIdsStr
+			redisFailoverActiveConfIdsStr := onlinefeaturestore.RedisFailoverActiveConfIdsStr
 			if scyllaActiveConfIdsStr == "" {
 				return
 			}

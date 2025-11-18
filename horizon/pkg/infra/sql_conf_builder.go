@@ -3,27 +3,7 @@ package infra
 import (
 	"errors"
 
-	"github.com/spf13/viper"
-)
-
-// Mandatory config keys
-// <STORAGE_SQL_1_MASTER_HOST> =
-// <STORAGE_SQL_1_MASTER_PORT> =
-// <STORAGE_SQL_1_DB_NAME> =
-// <STORAGE_SQL_1_MASTER_USERNAME> =
-// <STORAGE_SQL_1_MASTER_PASSWORD> =
-const (
-	masterHost     = "MYSQL_MASTER_HOST"
-	masterPort     = "MYSQL_MASTER_PORT"
-	masterDBName   = "MYSQL_DB_NAME"
-	masterUsername = "MYSQL_MASTER_USERNAME"
-	masterPassword = "MYSQL_MASTER_PASSWORD"
-
-	slaveHost     = "MYSQL_SLAVE_HOST"
-	slavePort     = "MYSQL_SLAVE_PORT"
-	slaveDBName   = "MYSQL_DB_NAME"
-	slaveUsername = "MYSQL_SLAVE_USERNAME"
-	slavePassword = "MYSQL_SLAVE_PASSWORD"
+	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 )
 
 // SQLConfig represents the configuration for a SQL database connection
@@ -35,70 +15,69 @@ type SQLConfig struct {
 	Password string
 }
 
-// BuildSQLConfigFromEnv constructs a SQL configuration for master and slave
-// from environment variables using the specified prefix.
+// BuildSQLConfigFromConfig constructs a SQL configuration for master and slave
+// from the application config struct.
 //
-// The function leverages Viper to read environment variables, ensuring
-// a flexible and configurable setup. It extracts key parameters required
-// for configuring MySQL connections.
+// The function extracts key parameters required for configuring MySQL connections
+// from the provided config struct.
 //
-// Mandatory environment variables:
-//   - MYSQL_MASTER_HOST: Master host
-//   - MYSQL_MASTER_PORT: Master port
-//   - MYSQL_DB_NAME: Database name
-//   - MYSQL_MASTER_USERNAME: Master username
-//   - MYSQL_MASTER_PASSWORD: Master password
+// Mandatory config fields:
+//   - MysqlMasterHost: Master host
+//   - MysqlMasterPort: Master port
+//   - MysqlDbName: Database name
+//   - MysqlMasterUsername: Master username
+//   - MysqlMasterPassword: Master password
 //
-// Optional environment variables for slave:
-//   - MYSQL_SLAVE_HOST: Slave host
-//   - MYSQL_SLAVE_PORT: Slave port
-//   - MYSQL_SLAVE_USERNAME: Slave username
-//   - MYSQL_SLAVE_PASSWORD: Slave password
+// Optional config fields for slave:
+//   - MysqlSlaveHost: Slave host
+//   - MysqlSlavePort: Slave port
+//   - MysqlSlaveUsername: Slave username
+//   - MysqlSlavePassword: Slave password
 //
 // Returns:
-//   - Master and slave SQLConfig instances and an error if mandatory variables are missing
-func BuildSQLConfigFromEnv() (master SQLConfig, slave SQLConfig, err error) {
+//   - Master and slave SQLConfig instances and an error if mandatory fields are missing
+func BuildSQLConfigFromConfig(config configs.Configs) (master SQLConfig, slave SQLConfig, err error) {
 	// Check required master configuration
-	if !viper.IsSet(masterHost) {
-		return master, slave, errors.New(masterHost + " not set")
+	if config.MysqlMasterHost == "" {
+		return master, slave, errors.New("MysqlMasterHost not set")
 	}
-	if !viper.IsSet(masterPort) {
-		return master, slave, errors.New(masterPort + " not set")
+	if config.MysqlMasterPort == 0 {
+		return master, slave, errors.New("MysqlMasterPort not set")
 	}
-	if !viper.IsSet(masterDBName) {
-		return master, slave, errors.New(masterDBName + " not set")
+	if config.MysqlDbName == "" {
+		return master, slave, errors.New("MysqlDbName not set")
 	}
-	if !viper.IsSet(masterUsername) {
-		return master, slave, errors.New(masterUsername + " not set")
+	if config.MysqlMasterUsername == "" {
+		return master, slave, errors.New("MysqlMasterUsername not set")
 	}
 
 	// Set master configuration
 	master = SQLConfig{
-		Host:     viper.GetString(masterHost),
-		Port:     viper.GetInt(masterPort),
-		DBName:   viper.GetString(masterDBName),
-		Username: viper.GetString(masterUsername),
-		Password: viper.GetString(masterPassword),
+		Host:     config.MysqlMasterHost,
+		Port:     config.MysqlMasterPort,
+		DBName:   config.MysqlDbName,
+		Username: config.MysqlMasterUsername,
+		Password: config.MysqlMasterPassword,
 	}
 
 	// Check if slave configuration is provided
-	if viper.IsSet(slaveHost) &&
-		viper.IsSet(slaveUsername) &&
-		viper.IsSet(slavePassword) {
+	if config.MysqlSlaveHost != "" &&
+		config.MysqlSlaveUsername != "" &&
+		config.MysqlSlavePassword != "" {
 
 		// If slave port is not set, use master port
-		slavePortValue := viper.GetInt(masterPort)
-		if viper.IsSet(slavePort) {
-			slavePortValue = viper.GetInt(slavePort)
+		slavePortValue := config.MysqlMasterPort
+		if config.MysqlSlavePort != 0 {
+			slavePortValue = config.MysqlSlavePort
 		}
 
 		// Set slave configuration
 		slave = SQLConfig{
-			Host:     viper.GetString(slaveHost),
+			Host:     config.MysqlSlaveHost,
 			Port:     slavePortValue,
-			DBName:   viper.GetString(masterDBName), // Use master DB name by default
-			Username: viper.GetString(slaveUsername),
-			Password: viper.GetString(slavePassword),
+			DBName:   config.MysqlDbName, // Use master DB name by default
+			Username: config.MysqlSlaveUsername,
+			Password: config.MysqlSlavePassword,
 		}
 	}
 

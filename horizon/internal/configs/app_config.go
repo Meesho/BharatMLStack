@@ -103,7 +103,9 @@ type Configs struct {
 	PricingFeatureRetrievalGrpcPlainText       bool   `mapstructure:"pricing_feature_retrieval_grpc_plain_text"`
 	PricingFeatureRetrievalTimeoutMs           string `mapstructure:"pricing_feature_retrieval_timeout_in_ms"`
 
-	OnlineFeatureStoreAppName string `mapstructure:"online_feature_store_app_name"`
+	OnlineFeatureStoreAppName  string `mapstructure:"online_feature_store_app_name"`
+	ScyllaActiveConfIds        string `mapstructure:"scylla_active_conf_ids"`
+	RedisFailoverActiveConfIds string `mapstructure:"redis_failover_active_conf_ids"`
 }
 
 type DynamicConfigs struct{}

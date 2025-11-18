@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/DataDog/datadog-go/v5/statsd"
+	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 )
 
 const (
@@ -32,16 +32,16 @@ var (
 )
 
 // Init initializes the metrics client
-func Init() {
+func Init(config configs.Configs) {
 	if initialized {
 		log.Debug().Msgf("Metrics already initialized!")
 		return
 	}
 	once.Do(func() {
 		var err error
-		samplingRate = viper.GetFloat64("APP_METRIC_SAMPLING_RATE")
-		appName = viper.GetString("APP_NAME")
-		globalTags := getGlobalTags()
+		samplingRate = config.AppMetricSamplingRate
+		appName = config.AppName
+		globalTags := getGlobalTags(config)
 
 		statsDClient, err = statsd.New(
 			telegrafAddress,
@@ -62,12 +62,12 @@ func getDefaultClient() *statsd.Client {
 	return client
 }
 
-func getGlobalTags() []string {
-	env := viper.GetString("APP_ENV")
+func getGlobalTags(config configs.Configs) []string {
+	env := config.AppEnv
 	if len(env) == 0 {
 		log.Warn().Msg("APP_ENV is not set")
 	}
-	service := viper.GetString("APP_NAME")
+	service := config.AppName
 	if len(service) == 0 {
 		log.Warn().Msg("APP_NAME is not set")
 	}
