@@ -176,17 +176,14 @@ func (m *MiddlewareHandler) CheckScreenPermission(c *gin.Context, claims *handle
 		path = c.Request.URL.Path
 	}
 
-	// Skip resolver check for online feature store APIs since they don't have resolvers defined
-	if strings.HasPrefix(path, "/api/v1/online-feature-store") {
+	apiResolver, err := m.apiResolverRepo.GetResolver(method, path)
+
+	if &apiResolver == nil || apiResolver.ResolverFn == "" {
 		return
 	}
 
-	apiResolver, err := m.apiResolverRepo.GetResolver(method, path)
-
-	if err != nil || apiResolver.ResolverFn == "" {
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{constant.Error: "Unable to resolve API"})
-		}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{constant.Error: "Unable to resolve API"})
 		c.Abort()
 		return
 	}
@@ -220,7 +217,9 @@ func (m *MiddlewareHandler) CheckScreenPermission(c *gin.Context, claims *handle
 	if !isPermit {
 		c.JSON(http.StatusForbidden, gin.H{constant.Error: "Permission Denied"})
 		c.Abort()
+		return
 	}
+	return
 }
 
 func cloneRequestBody(c *gin.Context) ([]byte, bool) {

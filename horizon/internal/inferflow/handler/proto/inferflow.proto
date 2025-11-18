@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+package inferflow;
+
 option go_package = "github.com/meesho/BharatMLStack/horizon/internal/inferflow/handler/proto/protogen";
 
 // Request
@@ -30,7 +32,7 @@ message InferflowResponseProto {
     }
 }
  
-service Inferflow {
+service InferflowService {
   rpc RetrieveModelScore(InferflowRequestProto) returns (InferflowResponseProto) {};
 }
 

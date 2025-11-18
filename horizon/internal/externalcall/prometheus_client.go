@@ -125,7 +125,7 @@ func (p *prometheusClientImpl) GetModelNames(serviceName string) ([]string, erro
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("prometheus call failed, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("Prometheus call failed, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var pr prometheusResponse
@@ -175,7 +175,7 @@ func (p *prometheusClientImpl) GetInferflowConfigNames(serviceName string) ([]st
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("prometheus call failed, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("Prometheus call failed, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var pr prometheusInferflowConfigResponse
@@ -197,7 +197,9 @@ func (p *prometheusClientImpl) GetNumerixConfigNames() ([]string, error) {
 	start := end - int64(daysAgo*24*60*60)
 	step := "1h40m"
 
-	query := "sum by (compute_id)(rate(numerix_numerix_computation_request_total_value[1m]))"
+	query := fmt.Sprintf(
+		"sum by (compute_id)(rate(numerix_numerix_computation_request_total_value[1m]))",
+	)
 
 	url := fmt.Sprintf("%s/select/100/prometheus/api/v1/query_range?query=%s&start=%d&end=%d&step=%s",
 		p.BaseURL,
@@ -222,7 +224,7 @@ func (p *prometheusClientImpl) GetNumerixConfigNames() ([]string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("prometheus call failed, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("Prometheus call failed, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var pr prometheusNumerixConfigResponse

@@ -21,8 +21,6 @@ type Repository interface {
 	DoesConfigIdExistWithRequestType(configID string, requestType string) (bool, error)
 	CurrentRequestStatus(requestID uint) (string, error)
 	Deactivate(configID string) error
-	GetLatestPendingRequestByConfigID(configID string) ([]Table, error)
-	GetApprovedRequestsByConfigID(configID string) ([]Table, error)
 }
 
 type InferflowRequest struct {
@@ -127,20 +125,4 @@ func (g *InferflowRequest) DoesRequestIDExistWithStatus(requestID uint, status s
 
 func (g *InferflowRequest) Deactivate(configID string) error {
 	return g.db.Model(&Table{}).Where("config_id = ?", configID).Update("active", false).Error
-}
-
-func (g *InferflowRequest) GetApprovedRequestsByConfigID(configID string) ([]Table, error) {
-	var tables []Table
-	result := g.db.Where("config_id = ? AND status = ?", configID, "APPROVED").
-		Order("created_at DESC").
-		Find(&tables)
-	return tables, result.Error
-}
-
-func (g *InferflowRequest) GetLatestPendingRequestByConfigID(configID string) ([]Table, error) {
-	var tables []Table
-	result := g.db.Where("config_id = ? AND status NOT IN (?)", configID, []string{"APPROVED", "REJECTED"}).
-		Order("created_at DESC").
-		Find(&tables)
-	return tables, result.Error
 }

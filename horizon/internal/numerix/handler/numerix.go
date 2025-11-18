@@ -45,6 +45,7 @@ const (
 	numerixComputeMethod = "/numerix.Numerix/Compute"
 	defaultPage          = 1
 	defaultPageSize      = 25
+	maxPageSize          = 25
 )
 
 func InitV1ConfigHandler() Config {
@@ -341,6 +342,9 @@ func (i *Numerix) GetAll(request GetAllConfigsRequest) (GetAllConfigsResponse, e
 	}
 	if request.PageSize <= 0 {
 		request.PageSize = defaultPageSize
+	}
+	if request.PageSize > maxPageSize {
+		request.PageSize = maxPageSize
 	}
 
 	tables, totalCount, err := i.NumerixConfigRepo.GetAllPaginated(request.Page, request.PageSize, request.ConfigID)

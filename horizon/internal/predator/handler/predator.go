@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	predclient "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/predator"
 	pred "github.com/Meesho/BharatMLStack/horizon/internal/predator"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/discoveryconfig"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/predatorconfig"
@@ -33,6 +32,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/random"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/serializer"
+	predclient "github.com/Meesho/helix-clients/pkg/clients/predator"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
@@ -232,7 +232,7 @@ func InitV1ConfigHandler() (Config, error) {
 		ringMasterClient := externalcall.GetRingmasterClient()
 
 		predator = &Predator{
-			GcsClient:               externalcall.CreateGCSClient(pred.IsGcsEnabled),
+			GcsClient:               externalcall.CreateGCSClient(),
 			ServiceDeployableRepo:   serviceDeployableRepo,
 			Repo:                    repo,
 			PredatorConfigRepo:      predatorConfigRepo,
@@ -277,11 +277,11 @@ func (p *Predator) HandleModelRequest(req ModelRequest, requestType string) (str
 	predatorConfigList, err := p.PredatorConfigRepo.GetActiveModelByModelNameList(modelNameList)
 
 	if err != nil {
-		log.Error().Err(err).Msg(fmt.Sprintf("failed to fetch predator configs: %v", err))
+		log.Error().Err(err).Msgf(errMsgFetchConfigs, err)
 		return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf(errMsgFetchConfigs, err)
 	}
 
-	if len(predatorConfigList) != 0 {
+	if predatorConfigList != nil && len(predatorConfigList) != 0 {
 		return constant.EmptyString, http.StatusConflict, fmt.Errorf("active model already exists for this request")
 	}
 
@@ -293,7 +293,7 @@ func (p *Predator) HandleModelRequest(req ModelRequest, requestType string) (str
 	for _, payload := range req.Payload {
 		payloadBytes, err := json.Marshal(payload)
 		if err != nil {
-			return constant.EmptyString, http.StatusInternalServerError, errors.New(errMsgProcessPayload)
+			return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf(errMsgProcessPayload)
 		}
 		modelName, _ := payload[fieldModelName].(string)
 		newRequests = append(newRequests, predatorrequest.PredatorRequest{
@@ -319,7 +319,7 @@ func (p *Predator) HandleModelRequest(req ModelRequest, requestType string) (str
 func (p *Predator) HandleDeleteModel(deleteRequest DeleteRequest, createdBy string) (string, uint, int, error) {
 	predatorConfigList, err := p.PredatorConfigRepo.GetActiveModelByIds(deleteRequest.IDs)
 	if err != nil {
-		return constant.EmptyString, 0, http.StatusNotFound, errors.New(errModelNotFound)
+		return constant.EmptyString, 0, http.StatusNotFound, fmt.Errorf(errModelNotFound)
 	}
 	isValid, err := p.ValidateDeleteRequest(predatorConfigList, deleteRequest.IDs)
 	if err != nil {
@@ -338,16 +338,16 @@ func (p *Predator) HandleDeleteModel(deleteRequest DeleteRequest, createdBy stri
 	for _, config := range predatorConfigList {
 		discoveryConfig, err := p.ServiceDiscoveryRepo.GetById(config.DiscoveryConfigID)
 		if err != nil {
-			return constant.EmptyString, 0, http.StatusInternalServerError, errors.New(errFetchDiscoveryConfig)
+			return constant.EmptyString, 0, http.StatusInternalServerError, fmt.Errorf(errFetchDiscoveryConfig)
 		}
 		serviceDeployable, err := p.ServiceDeployableRepo.GetById(discoveryConfig.ServiceDeployableID)
 		if err != nil {
-			return constant.EmptyString, 0, http.StatusInternalServerError, errors.New(errFetchDeployableConfig)
+			return constant.EmptyString, 0, http.StatusInternalServerError, fmt.Errorf(errFetchDeployableConfig)
 		}
 		var deployableConfig PredatorDeployableConfig
 
 		if err := json.Unmarshal(serviceDeployable.Config, &deployableConfig); err != nil {
-			return constant.EmptyString, 0, http.StatusInternalServerError, errors.New(errUnmarshalDeployableConfig)
+			return constant.EmptyString, 0, http.StatusInternalServerError, fmt.Errorf(errUnmarshalDeployableConfig)
 		}
 
 		payload := map[string]interface{}{
@@ -360,7 +360,7 @@ func (p *Predator) HandleDeleteModel(deleteRequest DeleteRequest, createdBy stri
 
 		payloadBytes, err := json.Marshal(payload)
 		if err != nil {
-			return constant.EmptyString, 0, http.StatusInternalServerError, errors.New(errMarshalPayload)
+			return constant.EmptyString, 0, http.StatusInternalServerError, fmt.Errorf(errMarshalPayload)
 		}
 
 		predatorDeleteRequestList = append(predatorDeleteRequestList, predatorrequest.PredatorRequest{
@@ -378,7 +378,7 @@ func (p *Predator) HandleDeleteModel(deleteRequest DeleteRequest, createdBy stri
 	}
 
 	if err := p.Repo.CreateMany(predatorDeleteRequestList); err != nil {
-		return constant.EmptyString, 0, http.StatusInternalServerError, errors.New(errCreateDeleteRequest)
+		return constant.EmptyString, 0, http.StatusInternalServerError, fmt.Errorf(errCreateDeleteRequest)
 	}
 
 	return successDeleteRequestMsg, groupID, http.StatusOK, nil
@@ -387,7 +387,7 @@ func (p *Predator) HandleDeleteModel(deleteRequest DeleteRequest, createdBy stri
 func (p *Predator) ValidateDeleteRequest(predatorConfigList []predatorconfig.PredatorConfig, ids []int) (bool, error) {
 	if len(predatorConfigList) != len(ids) {
 		log.Error().Err(errors.New(errModelNotFound)).Msgf("model not found for ids %v", ids)
-		return false, errors.New(errModelNotFound)
+		return false, fmt.Errorf(errModelNotFound)
 	}
 
 	// Create maps for quick lookup
@@ -438,6 +438,58 @@ func (p *Predator) ValidateDeleteRequest(predatorConfigList []predatorconfig.Pre
 	return true, nil
 }
 
+func (p *Predator) validateNormalModelNotChildOfEnsemble(predatorConfig predatorconfig.PredatorConfig, deployableID int, requestedModelMap map[string]predatorconfig.PredatorConfig) error {
+	// Get all active models to check for ensemble relationships
+	allModels, err := p.PredatorConfigRepo.FindAllActiveConfig()
+	if err != nil {
+		log.Error().Err(err).Msgf("failed to fetch all active models")
+		return fmt.Errorf("failed to fetch all active models: %w", err)
+	}
+
+	// Check if any ensemble model in the same deployable has this model as a child
+	for _, modelInDeployable := range allModels {
+		// Skip if this is the same model we're checking
+		if modelInDeployable.ID == predatorConfig.ID {
+			continue
+		}
+
+		// Skip if this model is already in the delete request
+		if _, exists := requestedModelMap[modelInDeployable.ModelName]; exists {
+			continue
+		}
+
+		// Get discovery config for this model to check if it's in the same deployable
+		discoveryConfig, err := p.ServiceDiscoveryRepo.GetById(modelInDeployable.DiscoveryConfigID)
+		if err != nil {
+			log.Error().Err(err).Msgf("failed to fetch discovery config for model %s", modelInDeployable.ModelName)
+			continue
+		}
+
+		// Only check models in the same deployable
+		if discoveryConfig.ServiceDeployableID != deployableID {
+			continue
+		}
+
+		var metadata MetaData
+		if err := json.Unmarshal(modelInDeployable.MetaData, &metadata); err != nil {
+			log.Error().Err(err).Msgf("failed to unmarshal metadata for model %s", modelInDeployable.ModelName)
+			continue
+		}
+
+		// Check if this is an ensemble model
+		if metadata.Ensembling.Step != nil && len(metadata.Ensembling.Step) > 0 {
+			// Check if the current model is a child of this ensemble
+			for _, step := range metadata.Ensembling.Step {
+				if step.ModelName == predatorConfig.ModelName {
+					return fmt.Errorf(errNormalModelIsChildOfEnsemble, predatorConfig.ModelName, modelInDeployable.ModelName, deployableID)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 func (p *Predator) validateEnsembleChildGroupDeletion(requestedModelMap map[string]predatorconfig.PredatorConfig, deployableModelMap map[int]map[string]predatorconfig.PredatorConfig) error {
 	// Get all active models to check for ensemble relationships
 	allModels, err := p.PredatorConfigRepo.FindAllActiveConfig()
@@ -477,7 +529,7 @@ func (p *Predator) validateEnsembleChildGroupDeletion(requestedModelMap map[stri
 			}
 
 			// Check if this is an ensemble model
-			if len(metadata.Ensembling.Step) > 0 {
+			if metadata.Ensembling.Step != nil && len(metadata.Ensembling.Step) > 0 {
 				// This is an ensemble model
 				isEnsembleInRequest := requestedModelsInDeployable[modelName].ID != 0
 
@@ -555,7 +607,7 @@ func (p *Predator) FetchModelConfig(req FetchModelConfigRequest) (ModelParamsRes
 		outputs = []IO{}
 	}
 
-	return createModelParamsResponse(&modelConfig, objectPath, inputs, outputs), http.StatusOK, nil
+	return createModelParamsResponse(modelConfig, objectPath, inputs, outputs), http.StatusOK, nil
 }
 
 func validateModelPath(modelPath string) error {
@@ -630,7 +682,7 @@ func convertOutput(fields []*ModelOutput) []IO {
 	return ios
 }
 
-func createModelParamsResponse(modelConfig *ModelConfig, objectPath string, inputs, outputs []IO) ModelParamsResponse {
+func createModelParamsResponse(modelConfig ModelConfig, objectPath string, inputs, outputs []IO) ModelParamsResponse {
 	var resp ModelParamsResponse
 
 	if len(modelConfig.InstanceGroup) > 0 {
@@ -650,7 +702,7 @@ func createModelParamsResponse(modelConfig *ModelConfig, objectPath string, inpu
 	}
 
 	if ensembleScheduling := modelConfig.GetEnsembleScheduling(); ensembleScheduling != nil {
-		resp.EnsembleScheduling = ensembleScheduling
+		resp.EnsembleScheduling = *ensembleScheduling
 	}
 
 	resp.Platform = modelConfig.Platform
@@ -668,7 +720,7 @@ func (p *Predator) ProcessRequest(req ApproveRequest) error {
 	}
 	idUint64, err := strconv.ParseUint(req.GroupID, 10, 32)
 	if err != nil {
-		return errors.New(errInvalidRequestIDFormat)
+		return fmt.Errorf(errInvalidRequestIDFormat)
 	}
 
 	groupID := uint(idUint64)
@@ -677,13 +729,14 @@ func (p *Predator) ProcessRequest(req ApproveRequest) error {
 	if err != nil {
 		return fmt.Errorf(errFailedToFetchRequest, fmt.Sprintf("%d", groupID))
 	}
-	if len(predatorRequestList) == 0 {
+	if predatorRequestList == nil || len(predatorRequestList) == 0 {
 		return fmt.Errorf("no request found for group id %s", req.GroupID)
 	}
 
 	requestIdPayloadMap := make(map[uint]*Payload)
 	requestTypeValidationMap := make(map[string]bool)
-	requestTypeCount := 0
+	var requestTypeCount int
+	requestTypeCount = 0
 	for _, predatorRequest := range predatorRequestList {
 		if predatorRequest.Status == statusApproved {
 			return fmt.Errorf("some request already approved for group id %d", groupID)
@@ -694,7 +747,7 @@ func (p *Predator) ProcessRequest(req ApproveRequest) error {
 		// 2. When request type is DeleteRequestType
 		skipValidCheck := req.Status != statusApproved || predatorRequestList[0].RequestType == DeleteRequestType
 
-		if !skipValidCheck && !predatorRequest.IsValid {
+		if !skipValidCheck && predatorRequest.IsValid == false {
 			return fmt.Errorf("some Request is not validated or Request validation failed for group id %d", groupID)
 		}
 
@@ -969,6 +1022,77 @@ func (p *Predator) processEditDBUpdateStage(requestIdPayloadMap map[uint]*Payloa
 	return nil
 }
 
+// processEditRestartStage restarts the target deployable for edit approval
+func (p *Predator) processEditRestartStage(approvedBy string, targetServiceDeployable *servicedeployableconfig.ServiceDeployableConfig) error {
+	log.Info().Msgf("Starting restart stage for deployable: %s", targetServiceDeployable.Name)
+
+	if err := p.ringMasterClient.RestartDeployable(targetServiceDeployable); err != nil {
+		log.Error().Err(err).Msgf("Failed to restart deployable %s for edit approval", targetServiceDeployable.Name)
+		return fmt.Errorf("failed to restart deployable %s: %w", targetServiceDeployable.Name, err)
+	}
+
+	log.Info().Msgf("Successfully restarted deployable %s for edit approval", targetServiceDeployable.Name)
+	return nil
+}
+
+func (p *Predator) getSourceDeployableID(predatorRequestList []predatorrequest.PredatorRequest, requestIdPayloadMap map[uint]*Payload) int {
+	// This method should determine the source deployable ID
+	// For now, assuming it's provided in the payload or can be derived
+	// You might need to adjust this based on your business logic
+	if len(predatorRequestList) > 0 {
+		payload := requestIdPayloadMap[predatorRequestList[0].RequestID]
+		if payload != nil && payload.ConfigMapping.ServiceDeployableID != 0 {
+			// Return the source deployable ID (this might need adjustment)
+			return int(payload.ConfigMapping.ServiceDeployableID)
+		}
+	}
+	return 0
+}
+
+func (p *Predator) copyAllModelsFromSourceToTarget(sourceDeployableID int, targetBucket, targetPath string) error {
+	// Get source deployable config
+	sourceServiceDeployable, err := p.ServiceDeployableRepo.GetById(sourceDeployableID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch source service deployable: %w", err)
+	}
+
+	var sourceDeployableConfig PredatorDeployableConfig
+	if err := json.Unmarshal(sourceServiceDeployable.Config, &sourceDeployableConfig); err != nil {
+		return fmt.Errorf("failed to parse source service deployable config: %w", err)
+	}
+
+	sourceBucket, sourcePath := extractGCSPath(strings.TrimSuffix(sourceDeployableConfig.GCSBucketPath, "/*"))
+
+	// Get all active models for source deployable
+	discoveryConfigs, err := p.ServiceDiscoveryRepo.GetByServiceDeployableID(sourceDeployableID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch discovery configs for source deployable: %w", err)
+	}
+
+	// Copy each model from source to target
+	for _, discoveryConfig := range discoveryConfigs {
+		predatorConfigs, err := p.PredatorConfigRepo.GetByDiscoveryConfigID(discoveryConfig.ID)
+		if err != nil {
+			log.Error().Err(err).Msgf("Failed to fetch predator configs for discovery config %d", discoveryConfig.ID)
+			continue
+		}
+
+		for _, predatorConfig := range predatorConfigs {
+			if predatorConfig.Active {
+				modelName := predatorConfig.ModelName
+				log.Info().Msgf("Copying existing model %s from source deployable %d to target", modelName, sourceDeployableID)
+
+				if err := p.GcsClient.TransferFolder(sourceBucket, sourcePath, modelName, targetBucket, targetPath, modelName); err != nil {
+					log.Error().Err(err).Msgf("Failed to copy existing model %s", modelName)
+					return fmt.Errorf("failed to copy existing model %s: %w", modelName, err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 func (p *Predator) copyAllModelsFromActualToStaging(sourceBucket, sourcePath, targetBucket, targetPath string) error {
 	// List all models in the actual target path and copy them to staging
 	folders, err := p.GcsClient.ListFolders(sourceBucket, sourcePath)
@@ -986,6 +1110,15 @@ func (p *Predator) copyAllModelsFromActualToStaging(sourceBucket, sourcePath, ta
 		}
 	}
 
+	return nil
+}
+
+func (p *Predator) restartTargetDeployable(approvedBy string, targetServiceDeployable *servicedeployableconfig.ServiceDeployableConfig) error {
+	if err := p.ringMasterClient.RestartDeployable(targetServiceDeployable); err != nil {
+		return fmt.Errorf("failed to restart target deployable: %w", err)
+	}
+
+	log.Info().Msgf("Successfully restarted target deployable: %s", targetServiceDeployable.Name)
 	return nil
 }
 
@@ -1273,7 +1406,7 @@ func (p *Predator) checkIfModelsExist(predatorRequestList []predatorrequest.Pred
 
 func (p *Predator) processOnboardFlow(requestIdPayloadMap map[uint]*Payload, predatorRequestList []predatorrequest.PredatorRequest, req ApproveRequest) {
 	if p.checkIfModelsExist(predatorRequestList) {
-		req.RejectReason = "model already exists"
+		req.RejectReason = fmt.Sprintf("model already exists")
 		req.Status = statusRejected
 		p.processRejectRequest(predatorRequestList, req)
 		return
@@ -1876,6 +2009,25 @@ func (p *Predator) releaseLockWithError(lockID uint, groupID, errorMsg string) {
 }
 
 // markModelWithNilData marks a model as having nil data issues
+func (p *Predator) markModelWithNilData(modelName string, hasNilData bool) error {
+	// Get the active model config
+	modelConfig, err := p.PredatorConfigRepo.GetActiveModelByModelName(modelName)
+	if err != nil {
+		return fmt.Errorf("failed to get model config for %s: %w", modelName, err)
+	}
+
+	// Mark as having nil data issues
+	modelConfig.HasNilData = hasNilData
+	modelConfig.UpdatedAt = time.Now()
+
+	// Update the config
+	if err := p.PredatorConfigRepo.Update(modelConfig); err != nil {
+		return fmt.Errorf("failed to update model config with nil data flag: %w", err)
+	}
+
+	log.Info().Msgf("Marked model %s as having nil data issues", modelName)
+	return nil
+}
 
 // getTestDeployableID determines the appropriate test deployable ID based on machine type
 func (p *Predator) getTestDeployableID(payload *Payload) (int, error) {
@@ -2075,7 +2227,7 @@ func (p *Predator) updateRequestValidationStatus(groupID string, success bool) {
 	for _, request := range requests {
 		request.UpdatedAt = time.Now()
 		request.IsValid = success
-		if !success {
+		if success == false {
 			request.RejectReason = "Validation Failed"
 			request.Status = statusRejected
 			request.UpdatedBy = "Validation Job"
@@ -2329,6 +2481,25 @@ func (p *Predator) GenerateFunctionalTestRequest(req RequestGenerationRequest) (
 	return response, nil
 }
 
+func convertStringToBytes(data any) any {
+	switch v := data.(type) {
+	case []string:
+		result := make([][]byte, len(v))
+		for i, f := range v {
+			result[i] = []byte(f)
+		}
+		return result
+	case []any:
+		converted := make([]any, len(v))
+		for i, item := range v {
+			converted[i] = convertStringToBytes(item)
+		}
+		return converted
+	default:
+		return data
+	}
+}
+
 // flattenInputTo3DByteSlice converts input data to 3D byte slice format [batch][feature][bytes]
 // This matches the working adapter's data structure expectations
 func (p *Predator) flattenInputTo3DByteSlice(data any, dataType string) ([][][]byte, error) {
@@ -2405,6 +2576,66 @@ func (p *Predator) flattenInputTo3DByteSlice(data any, dataType string) ([][][]b
 		}
 
 		return nil, fmt.Errorf("unsupported data format: %T for type %s", data, dataType)
+	}
+}
+
+// flatten3DByteSliceToRawBytes converts 3D byte slice to raw bytes following the working adapter pattern
+func (p *Predator) flatten3DByteSliceToRawBytes(data [][][]byte, dataType string, elementSizeMap map[string]int) ([]byte, error) {
+	rowCount := len(data)
+	if rowCount == 0 || len(data[0]) == 0 {
+		return []byte{}, nil
+	}
+
+	numFeatures := len(data[0])
+
+	if dataType == "BYTES" {
+		// For BYTES, use length-prefixed encoding
+		totalSize := 0
+		for rowIdx := 0; rowIdx < rowCount; rowIdx++ {
+			for featureIdx := 0; featureIdx < numFeatures; featureIdx++ {
+				featureSize := len(data[rowIdx][featureIdx])
+				totalSize += 4 + featureSize // 4 bytes for length prefix + data
+			}
+		}
+
+		buffer := make([]byte, totalSize)
+		lengthBytes := make([]byte, 4)
+		offset := 0
+
+		for rowIdx := 0; rowIdx < rowCount; rowIdx++ {
+			for featureIdx := 0; featureIdx < numFeatures; featureIdx++ {
+				stringData := data[rowIdx][featureIdx]
+				binary.LittleEndian.PutUint32(lengthBytes, uint32(len(stringData)))
+
+				// Copy length prefix
+				copy(buffer[offset:offset+4], lengthBytes)
+				offset += 4
+
+				// Copy data
+				copy(buffer[offset:offset+len(stringData)], stringData)
+				offset += len(stringData)
+			}
+		}
+		return buffer, nil
+	} else {
+		// For numeric types, concatenate bytes directly
+		elementSize := elementSizeMap[dataType]
+		if elementSize <= 0 {
+			return nil, fmt.Errorf("unknown element size for type %s", dataType)
+		}
+
+		totalSize := rowCount * numFeatures * elementSize
+		buffer := make([]byte, totalSize)
+		offset := 0
+
+		for rowIdx := 0; rowIdx < rowCount; rowIdx++ {
+			for featureIdx := 0; featureIdx < numFeatures; featureIdx++ {
+				featureData := data[rowIdx][featureIdx]
+				copy(buffer[offset:offset+len(featureData)], featureData)
+				offset += len(featureData)
+			}
+		}
+		return buffer, nil
 	}
 }
 
@@ -2782,10 +3013,10 @@ func (p *Predator) ExecuteFunctionalTestRequest(req ExecuteRequestFunctionalRequ
 	// Convert RawOutputContents to response format
 	convertedOutputs := []Output{}
 
-	if len(helixResp.RawOutputContents) > 0 {
+	if helixResp.RawOutputContents != nil && len(helixResp.RawOutputContents) > 0 {
 		// Convert RawOutputContents to strings based on output data type and dims
 		for i, outputBytes := range helixResp.RawOutputContents {
-			if len(outputBytes) == 0 {
+			if outputBytes == nil || len(outputBytes) == 0 {
 				modelConfig.HasNilData = true
 				p.PredatorConfigRepo.Update(modelConfig)
 				return ExecuteRequestFunctionalResponse{}, fmt.Errorf("functional test failed: empty output %d", i)
@@ -3033,38 +3264,6 @@ func ConvertExecuteRequestToTritonRequest(req ExecuteRequestLoadTest) (TritonInf
 }
 
 func (p *Predator) GetGCSModels() (*GCSFoldersResponse, error) {
-	if pred.IsDummyModelEnabled {
-		// Return dummy model based on predator_config entry in init-mysql.sh
-		// Model: ensemble_personalised_nqd_lgbm_v2_2
-		bucket := pred.GcsModelBucket
-		basePath := pred.GcsModelBasePath
-		if bucket == "" {
-			bucket = "dummy-bucket"
-		}
-		if basePath == "" {
-			basePath = "predator"
-		}
-		basePath = strings.TrimSuffix(basePath, "/")
-
-		dummyModel := GCSFolder{
-			Name: "ensemble_personalised_nqd_lgbm_v2_2",
-			Path: fmt.Sprintf("gcs://%s/%s/%s", bucket, basePath, "ensemble_personalised_nqd_lgbm_v2_2"),
-			Metadata: &FeatureMetadata{
-				Inputs: []InputMeta{
-					{
-						Name: "input__0",
-						Features: []string{
-							"ONLINE_FEATURE|user:derived_2_fp32:user__nqp",
-							"ONLINE_FEATURE|catalog:derived_fp32:nqp",
-							"ONLINE_FEATURE|user:derived_2_string:region",
-						},
-					},
-				},
-			},
-		}
-		return &GCSFoldersResponse{Folders: []GCSFolder{dummyModel}}, nil
-	}
-
 	bucket := pred.GcsModelBucket
 	basePath := pred.GcsModelBasePath
 
@@ -3178,7 +3377,7 @@ func (p *Predator) HandleEditModel(req ModelRequest, createdBy string) (string, 
 	for _, payload := range req.Payload {
 		payloadBytes, err := json.Marshal(payload)
 		if err != nil {
-			return constant.EmptyString, http.StatusInternalServerError, errors.New(errMsgProcessPayload)
+			return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf(errMsgProcessPayload)
 		}
 		modelName, _ := payload[fieldModelName].(string)
 		newRequests = append(newRequests, predatorrequest.PredatorRequest{
@@ -3587,9 +3786,6 @@ func (p *Predator) validateOfflineFeatures(features []string, token string) erro
 
 // validatePricingFeatures validates pricing features for a specific entity
 func (p *Predator) validatePricingFeatures(entity string, features []string) error {
-	if !pred.IsMeeshoEnabled {
-		return nil
-	}
 	response, err := externalcall.PricingClient.GetDataTypes(entity)
 	if err != nil {
 		return fmt.Errorf("failed to call pricing service API: %w", err)
@@ -3603,6 +3799,39 @@ func (p *Predator) validatePricingFeatures(entity string, features []string) err
 	}
 
 	log.Info().Msgf("Successfully validated %d pricing features for entity %s", len(features), entity)
+	return nil
+}
+
+// downloadModelsFromGCSPaths downloads models from provided GCS paths to destination
+func (p *Predator) downloadModelsFromGCSPaths(gcsPaths []string, destBucket, destPath string, partialUpload bool) error {
+	for _, gcsPath := range gcsPaths {
+		log.Info().Msgf("Processing GCS path: %s", gcsPath)
+
+		// Parse the GCS path to extract bucket and object path
+		srcBucket, srcPath := extractGCSPath(gcsPath)
+		if srcBucket == "" || srcPath == "" {
+			return fmt.Errorf("invalid GCS path format: %s", gcsPath)
+		}
+
+		// Extract model name from the path (last segment)
+		pathSegments := strings.Split(strings.TrimSuffix(srcPath, "/"), "/")
+		modelName := pathSegments[len(pathSegments)-1]
+
+		if partialUpload {
+			// For partial upload, only sync config.pbtxt and metadata.json
+			if err := p.syncPartialFiles(gcsPath, destBucket, destPath, modelName); err != nil {
+				return fmt.Errorf("failed to sync partial files for model %s: %w", modelName, err)
+			}
+		} else {
+			// For full upload, sync everything
+			if err := p.GcsClient.TransferFolder(srcBucket, strings.TrimSuffix(srcPath, "/"+modelName), modelName, destBucket, destPath, modelName); err != nil {
+				return fmt.Errorf("failed to transfer full model %s: %w", modelName, err)
+			}
+		}
+
+		log.Info().Msgf("Successfully processed model %s from %s", modelName, gcsPath)
+	}
+
 	return nil
 }
 
@@ -3727,8 +3956,8 @@ func (p *Predator) validateModelConfiguration(gcsPath string) error {
 
 // cleanEnsembleScheduling cleans up ensemble scheduling to avoid storing {"step": null}
 func (p *Predator) cleanEnsembleScheduling(metadata MetaData) MetaData {
-	// If ensemble scheduling step is empty, set to nil so omitempty works
-	if len(metadata.Ensembling.Step) == 0 {
+	// If ensemble scheduling step is nil or empty, set to nil so omitempty works
+	if metadata.Ensembling.Step == nil || len(metadata.Ensembling.Step) == 0 {
 		metadata.Ensembling = Ensembling{Step: nil}
 	}
 	return metadata

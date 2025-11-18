@@ -1,7 +1,7 @@
 package etcd
 
 type ModelConfigRegistery struct {
-	InferflowConfig map[string]InferflowConfigs `json:"services"`
+	InferflowConfig map[string]InferflowConfigs `json:"inferflow-config"`
 }
 
 type HorizonRegistry struct {
@@ -43,12 +43,6 @@ type PredatorOutput struct {
 	DataType        string   `json:"data_type"`
 }
 
-type RoutingConfig struct {
-	ModelName         string  `json:"model_name"`
-	ModelEndpoint     string  `json:"model_endpoint"`
-	RoutingPercentage float32 `json:"routing_percentage"`
-}
-
 type PredatorComponent struct {
 	Component     string           `json:"component"`
 	ComponentID   string           `json:"component_id"`
@@ -59,7 +53,6 @@ type PredatorComponent struct {
 	BatchSize     int              `json:"batch_size"`
 	Inputs        []PredatorInput  `json:"inputs"`
 	Outputs       []PredatorOutput `json:"outputs"`
-	RoutingConfig []RoutingConfig  `json:"route_config,omitempty"`
 }
 
 type RTPComponent struct {
@@ -114,7 +107,7 @@ type ComponentConfig struct {
 	CacheTTL           int                 `json:"cache_ttl"`
 	CacheVersion       int                 `json:"cache_version"`
 	FeatureComponents  []FeatureComponent  `json:"feature_components"`
-	RTPComponents      []RTPComponent      `json:"real_time_pricing_feature_components,omitempty"`
+	RTPComponents      []RTPComponent      `json:"real_time_pricing_feature_components"`
 	PredatorComponents []PredatorComponent `json:"predator_components"`
 	NumerixComponents  []NumerixComponent  `json:"numerix_components"`
 }

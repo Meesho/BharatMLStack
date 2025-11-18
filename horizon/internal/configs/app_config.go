@@ -4,6 +4,7 @@ type Configs struct {
 	// App configuration
 	AppName               string  `mapstructure:"app_name"`
 	AppEnv                string  `mapstructure:"app_env"`
+	AppGcPercentage       int     `mapstructure:"app_gc_percentage"`
 	AppLogLevel           string  `mapstructure:"app_log_level"`
 	AppMetricSamplingRate float64 `mapstructure:"app_metric_sampling_rate"`
 	AppPort               int     `mapstructure:"app_port"`
@@ -47,13 +48,22 @@ type Configs struct {
 	VmselectBaseUrl      string `mapstructure:"vmselect_base_url"`
 	VmselectStartDaysAgo int    `mapstructure:"vmselect_start_days_ago"`
 
+	// Zookeeper configuration
+	ZookeeperBasePath string `mapstructure:"zookeeper_base_path"`
+	ZookeeperServer   string `mapstructure:"zookeeper_server"`
+	ZookeeperWatcher  string `mapstructure:"zookeeper_watcher"`
+
 	// Horizon configuration
 	HorizonAppName string `mapstructure:"horizon_app_name"`
+	HorizonPort    string `mapstructure:"horizon_port"`
+	HorizonServer  string `mapstructure:"horizon_server"`
 
 	// Other configurations
 	DefaultCpuThreshold string `mapstructure:"default_cpu_threshold"`
 	DefaultGpuThreshold string `mapstructure:"default_gpu_threshold"`
 	DefaultModelPath    string `mapstructure:"default_model_path"`
+
+	FeatureGroupDataTypeMappingUrl string `mapstructure:"feature_group_data_type_mapping_url"`
 
 	GcsModelBucket   string `mapstructure:"gcs_model_bucket"`
 	GcsModelBasePath string `mapstructure:"gcs_model_base_path"`
@@ -72,12 +82,26 @@ type Configs struct {
 
 	InferflowAppName string `mapstructure:"inferflow_app_name"`
 
+	OnlineFeatureMappingUrl string `mapstructure:"online_feature_mapping_url"`
+
 	PhoenixServerBaseUrl string `mapstructure:"phoenix_server_base_url"`
 
+	PredatorMonitoringUrl string `mapstructure:"predator_monitoring_url"`
 	ScheduledCronExpression string `mapstructure:"scheduled_cron_expression"`
 
 	TestDeployableID    int `mapstructure:"test_deployable_id"`
 	TestGpuDeployableID int `mapstructure:"test_gpu_deployable_id"`
+
+	// Pricing Feature Retrieval Service configuration
+	PricingFeatureRetrievalBatchSize           string `mapstructure:"pricing_feature_retrieval_batch_size"`
+	PricingFeatureRetrievalDialTimeout         string `mapstructure:"pricing_feature_retrieval_dial_timeout_ms"`
+	PricingFeatureRetrievalHost                string `mapstructure:"pricing_feature_retrieval_host"`
+	PricingFeatureRetrievalIdleConnTimeout     string `mapstructure:"pricing_feature_retrieval_idle_conn_timeout_ms"`
+	PricingFeatureRetrievalMaxIdleConns        string `mapstructure:"pricing_feature_retrieval_max_idle_conns"`
+	PricingFeatureRetrievalMaxIdleConnsPerHost string `mapstructure:"pricing_feature_retrieval_max_idle_conns_per_host"`
+	PricingFeatureRetrievalPort                string `mapstructure:"pricing_feature_retrieval_port"`
+	PricingFeatureRetrievalGrpcPlainText       bool   `mapstructure:"pricing_feature_retrieval_grpc_plain_text"`
+	PricingFeatureRetrievalTimeoutMs           string `mapstructure:"pricing_feature_retrieval_timeout_in_ms"`
 
 	OnlineFeatureStoreAppName     string `mapstructure:"online_feature_store_app_name"`
 	ScyllaActiveConfIds           string `mapstructure:"scylla_active_conf_ids"`

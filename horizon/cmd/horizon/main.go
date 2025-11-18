@@ -9,6 +9,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	connectionConfigRouter "github.com/Meesho/BharatMLStack/horizon/internal/connectionconfig/route"
 	deployableRouter "github.com/Meesho/BharatMLStack/horizon/internal/deployable/router"
+	featureStoreRouter "github.com/Meesho/BharatMLStack/horizon/internal/feature_store/route"
 	inferflowConfig "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
 	inferflowRouter "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/route"
 	"github.com/Meesho/BharatMLStack/horizon/internal/middleware"
@@ -17,12 +18,16 @@ import (
 	ofsConfig "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/config"
 	ofsRouter "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/router"
 	predatorRouter "github.com/Meesho/BharatMLStack/horizon/internal/predator/route"
+	"github.com/Meesho/BharatMLStack/horizon/pkg/config"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/etcd"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/httpframework"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/logger"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/metric"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/scheduler"
+	cacConfig "github.com/Meesho/go-core/config"
+	pricingclient "github.com/Meesho/price-aggregator-go/pricingfeatureretrieval/client"
+	"github.com/spf13/viper"
 )
 
 type AppConfig struct {
@@ -43,11 +48,12 @@ var (
 )
 
 func main() {
-	configs.InitConfig(&appConfig)
+	cacConfig.InitGlobalConfig(&appConfig)
+	config.InitEnv()
 	infra.InitDBConnectors(appConfig.Configs)
 	etcd.InitFromAppName(&ofsConfig.FeatureRegistry{}, appConfig.Configs.OnlineFeatureStoreAppName, appConfig.Configs)
 	etcd.InitFromAppName(&numerixConfig.NumerixConfigRegistery{}, appConfig.Configs.NumerixAppName, appConfig.Configs)
-	etcd.InitFromAppName(&inferflowConfig.ModelConfigRegistery{}, appConfig.Configs.InferflowAppName, appConfig.Configs)
+	etcd.InitMPEtcdFromRegistry(&inferflowConfig.ModelConfigRegistery{}, appConfig.Configs)
 	etcd.InitFromAppName(&inferflowConfig.HorizonRegistry{}, appConfig.Configs.HorizonAppName, appConfig.Configs)
 	horizonConfig.InitAll(appConfig.Configs)
 	logger.Init(appConfig.Configs)
@@ -61,6 +67,8 @@ func main() {
 	predatorRouter.Init()
 	authRouter.Init()
 	ofsRouter.Init()
+	featureStoreRouter.Init(appConfig.Configs)
 	scheduler.Init(appConfig.Configs)
-	httpframework.Instance().Run(":" + strconv.Itoa(appConfig.Configs.AppPort))
+	pricingclient.Init()
+	httpframework.Instance().Run(":" + strconv.Itoa(viper.GetInt("APP_PORT")))
 }

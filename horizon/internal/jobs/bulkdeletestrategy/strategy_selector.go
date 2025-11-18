@@ -59,7 +59,7 @@ func Init(config configs.Configs) StrategySelectorImpl {
 			prometheusClient:    externalcall.GetPrometheusClient(),
 			ringmasterClient:    externalcall.GetRingmasterClient(),
 			slackClient:         externalcall.GetSlackClient(),
-			gcsClient:           externalcall.CreateGCSClient(config.GcsEnabled),
+			gcsClient:           externalcall.CreateGCSClient(),
 			InferflowEtcdClient: inferflowEtcdClient,
 			NumerixEtcdClient:   numerixEtcdClient,
 		}

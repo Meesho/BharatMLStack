@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
 	mainHandler "github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
-	inferflowPkg "github.com/Meesho/BharatMLStack/horizon/internal/inferflow"
 	etcd "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
 	pb "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/handler/proto/protogen"
 	discovery_config "github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/discoveryconfig"
@@ -49,7 +49,7 @@ const (
 	adminRole                         = "ADMIN"
 	activeTrue                        = true
 	activeFalse                       = false
-	inferFlowRetrieveModelScoreMethod = "/Inferflow/RetrieveModelScore"
+	inferFlowRetrieveModelScoreMethod = "/InferFlowService/RetrieveModelScore"
 	setFunctionalTest                 = "FunctionalTest"
 )
 
@@ -99,18 +99,34 @@ func (m *InferFlow) Onboard(request InferflowOnboardRequest, token string) (Resp
 
 	configId := fmt.Sprintf("%s-%s-%s", request.Payload.RealEstate, request.Payload.Tenant, request.Payload.ConfigIdentifier)
 
-	response, err := m.ValidateOnboardRequest(request.Payload)
+	requests, err := m.InferFlowRequestRepo.GetAll()
 	if err != nil {
-		return Response{}, errors.New("failed to validate onboard request: " + err.Error())
-	}
-	if response.Error != emptyResponse {
-		return Response{}, errors.New("model proxy config is invalid: " + response.Error)
+		return Response{}, errors.New("failed to get all requests: " + err.Error())
 	}
 
 	exists := false
+
 	configs, err := m.InferFlowConfigRepo.GetByID(configId)
-	if err == nil {
+	if err != nil {
 		exists = configs.Active
+	}
+	if exists {
+		return Response{}, errors.New("Config ID already exists")
+	}
+
+	for _, request := range requests {
+		if request.ConfigID == configId {
+			if request.RequestType == onboardRequestType || request.RequestType == cloneRequestType {
+				if request.Status == rejected {
+					exists = false
+				} else {
+					exists = true
+				}
+			}
+			if request.RequestType == deleteRequestType && request.Status == approved {
+				exists = false
+			}
+		}
 	}
 	if exists {
 		return Response{}, errors.New("Config ID already exists")
@@ -121,7 +137,7 @@ func (m *InferFlow) Onboard(request InferflowOnboardRequest, token string) (Resp
 		return Response{}, errors.New("failed to generate model proxy config: " + err.Error())
 	}
 
-	response, err = ValidateInferFlowConfig(inferFlowConfig, token)
+	response, err := ValidateInferFlowConfig(inferFlowConfig, token)
 	if err != nil {
 		return Response{}, errors.New("failed to validate model proxy config: " + err.Error())
 	}
@@ -161,7 +177,7 @@ func (m *InferFlow) Promote(request PromoteConfigRequest) (Response, error) {
 	}
 
 	if exists {
-		return Response{}, errors.New("request with this Config Id is already raised")
+		return Response{}, errors.New("Request with this Config Id is already raised")
 	}
 
 	modelNameToEndPointMap := make(map[string]string)
@@ -202,15 +218,6 @@ func (m *InferFlow) Promote(request PromoteConfigRequest) (Response, error) {
 
 func (m *InferFlow) Edit(request EditConfigOrCloneConfigRequest, token string) (Response, error) {
 	configId := fmt.Sprintf("%s-%s-%s", request.Payload.RealEstate, request.Payload.Tenant, request.Payload.ConfigIdentifier)
-
-	response, err := m.ValidateOnboardRequest(request.Payload)
-	if err != nil {
-		return Response{}, errors.New("failed to validate onboard request: " + err.Error())
-	}
-	if response.Error != emptyResponse {
-		return Response{}, errors.New("onboard request is invalid: " + response.Error)
-	}
-
 	exists, err := m.InferFlowConfigRepo.DoesConfigIDExist(configId)
 	if err != nil {
 		return Response{}, errors.New("failed to check if config id exists in db: " + err.Error())
@@ -219,33 +226,29 @@ func (m *InferFlow) Edit(request EditConfigOrCloneConfigRequest, token string) (
 		return Response{}, errors.New("Config ID does not exist")
 	}
 
-	latestUnapprovedRequests, err := m.InferFlowRequestRepo.GetLatestPendingRequestByConfigID(configId)
-	if err == nil {
-		if len(latestUnapprovedRequests) > 0 {
-			if latestUnapprovedRequests[0].RequestType == editRequestType {
-				return Response{}, errors.New("Pending edit request with request ID: " + strconv.Itoa(int(latestUnapprovedRequests[0].RequestID)))
-			}
-		}
-	}
-
-	existingConfigs, err := m.InferFlowRequestRepo.GetApprovedRequestsByConfigID(configId)
+	existingConfigs, err := m.InferFlowRequestRepo.GetAll()
 	if err != nil {
 		return Response{}, errors.New("failed to get existing configs: " + err.Error())
 	}
 
 	newVersion := 1
-	if len(existingConfigs) > 0 {
-		newVersion = existingConfigs[0].Version + 1
+	for _, config := range existingConfigs {
+		if config.ConfigID == configId && config.Status == approved {
+			newVersion = config.Version + 1
+		}
 	}
 
-	onboardRequest := InferflowOnboardRequest(request)
+	onboardRequest := InferflowOnboardRequest{
+		Payload:   request.Payload,
+		CreatedBy: request.CreatedBy,
+	}
 
 	inferFlowConfig, err := m.GetInferflowConfig(onboardRequest, token)
 	if err != nil {
 		return Response{}, errors.New("failed to get infer flow config: " + err.Error())
 	}
 
-	response, err = ValidateInferFlowConfig(inferFlowConfig, token)
+	response, err := ValidateInferFlowConfig(inferFlowConfig, token)
 	if err != nil {
 		return Response{}, errors.New("failed to validate model proxy config: " + err.Error())
 	}
@@ -281,15 +284,6 @@ func (m *InferFlow) Edit(request EditConfigOrCloneConfigRequest, token string) (
 
 func (m *InferFlow) Clone(request EditConfigOrCloneConfigRequest, token string) (Response, error) {
 	configId := fmt.Sprintf("%s-%s-%s", request.Payload.RealEstate, request.Payload.Tenant, request.Payload.ConfigIdentifier)
-
-	response, err := m.ValidateOnboardRequest(request.Payload)
-	if err != nil {
-		return Response{}, errors.New("failed to validate onboard request: " + err.Error())
-	}
-	if response.Error != emptyResponse {
-		return Response{}, errors.New("onboard request is invalid: " + response.Error)
-	}
-
 	exists, err := m.InferFlowRequestRepo.DoesConfigIDExist(configId)
 	if err != nil {
 		return Response{}, errors.New("failed to check if config id exists in db: " + err.Error())
@@ -298,21 +292,17 @@ func (m *InferFlow) Clone(request EditConfigOrCloneConfigRequest, token string) 
 		return Response{}, errors.New("Config ID already exists")
 	}
 
-	// remove routing config from request
-	for _, ranker := range request.Payload.Rankers {
-		if len(ranker.RoutingConfig) > 0 {
-			ranker.RoutingConfig = make([]RoutingConfig, 0)
-		}
+	onboardRequest := InferflowOnboardRequest{
+		Payload:   request.Payload,
+		CreatedBy: request.CreatedBy,
 	}
-
-	onboardRequest := InferflowOnboardRequest(request)
 
 	inferFlowConfig, err := m.GetInferflowConfig(onboardRequest, token)
 	if err != nil {
 		return Response{}, errors.New("failed to get infer flow config: " + err.Error())
 	}
 
-	response, err = ValidateInferFlowConfig(inferFlowConfig, token)
+	response, err := ValidateInferFlowConfig(inferFlowConfig, token)
 	if err != nil {
 		return Response{}, errors.New("failed to validate infer flow config: " + err.Error())
 	}
@@ -364,8 +354,6 @@ func (m *InferFlow) ScaleUp(request ScaleUpConfigRequest) (Response, error) {
 		request.Payload.ConfigValue.ComponentConfig.PredatorComponents[i].ModelEndPoint = modelNameToEndPointMap[modelName].EndPointID
 		request.Payload.ConfigValue.ComponentConfig.PredatorComponents[i].ModelName = modelNameToEndPointMap[modelName].NewModelName
 	}
-
-	request.Payload.ConfigValue.ResponseConfig.LoggingPerc = request.Payload.LoggingPerc
 
 	payload, err := AdaptScaleUpRequestToDBPayload(request)
 	if err != nil {
@@ -440,7 +428,7 @@ func (m *InferFlow) Cancel(request CancelConfigRequest) (Response, error) {
 		return Response{}, errors.New("failed to check if request id exists with status in db: " + err.Error())
 	}
 	if !exists {
-		return Response{}, errors.New("request ID does not exist or is not pending approval")
+		return Response{}, errors.New("Request ID does not exist or is not pending approval")
 	}
 
 	table := &inferflow_request.Table{
@@ -797,7 +785,7 @@ func ValidateInferFlowConfig(config InferflowConfig, token string) (Response, er
 			if entity == "dummy" {
 				continue
 			}
-			response, err := mainHandler.Client.ValidateOnlineFeatures(entity, token)
+			response, err := externalcall.Client.ValidateOnlineFeatures(entity, token)
 			if err != nil {
 				return Response{
 					Error: "failed to validate feature exists: " + err.Error(),
@@ -814,7 +802,7 @@ func ValidateInferFlowConfig(config InferflowConfig, token string) (Response, er
 						}, errors.New("feature " + feature + " is duplicated")
 					}
 					featureMap[feature] = true
-					if !mainHandler.ValidateFeatureExists(fg.Label+COLON_DELIMITER+feature, response) {
+					if !externalcall.ValidateFeatureExists(fg.Label+COLON_DELIMITER+feature, response) {
 						return Response{
 							Error: "feature \"" + entity + COLON_DELIMITER + fg.Label + COLON_DELIMITER + feature + "\" does not exist",
 							Data:  Message{Message: emptyResponse},
@@ -846,61 +834,13 @@ func ValidateInferFlowConfig(config InferflowConfig, token string) (Response, er
 	}, nil
 }
 
-func (m *InferFlow) ValidateOnboardRequest(request OnboardPayload) (Response, error) {
-	for _, ranker := range request.Rankers {
-		if len(ranker.EntityID) == 0 {
-			return Response{
-				Error: "Entity ID is not set for model: " + ranker.ModelName,
-				Data:  Message{Message: emptyResponse},
-			}, errors.New("Entity ID is not set for model: " + ranker.ModelName)
-		}
-		for _, output := range ranker.Outputs {
-			if len(output.ModelScores) != len(output.ModelScoresDims) {
-				return Response{
-					Error: "model scores and model scores dims are not equal for model: " + ranker.ModelName,
-					Data:  Message{Message: emptyResponse},
-				}, errors.New("model scores and model scores dims are not equal for model: " + ranker.ModelName)
-			}
-		}
-	}
-
-	for _, reRanker := range request.ReRankers {
-		if len(reRanker.EntityID) == 0 {
-			return Response{
-				Error: "Entity ID is not set for re ranker: " + reRanker.Score,
-				Data:  Message{Message: emptyResponse},
-			}, errors.New("Entity ID is not set for re ranker: " + reRanker.Score)
-		}
-		for _, value := range reRanker.EqVariables {
-			parts := strings.Split(value, PIPE_DELIMITER)
-			if len(parts) != 2 {
-				return Response{
-					Error: "invalid eq variable: " + value,
-					Data:  Message{Message: emptyResponse},
-				}, errors.New("invalid eq variable: " + value)
-			}
-			if parts[1] == "" {
-				return Response{
-					Error: "invalid eq variable: " + value,
-					Data:  Message{Message: emptyResponse},
-				}, errors.New("invalid eq variable: " + value)
-			}
-		}
-	}
-
-	return Response{
-		Error: emptyResponse,
-		Data:  Message{Message: "Request validated successfully"},
-	}, nil
-}
-
 func (m *InferFlow) GenerateFunctionalTestRequest(request GenerateRequestFunctionalTestingRequest) (GenerateRequestFunctionalTestingResponse, error) {
 
 	response := GenerateRequestFunctionalTestingResponse{
 		RequestBody: RequestBody{
 			Entities: []Entity{
 				{
-					Entity:   request.Entity + "_id",
+					Entity:   "catalog_id",
 					Ids:      []string{},
 					Features: []FeatureValue{},
 				},
@@ -915,7 +855,7 @@ func (m *InferFlow) GenerateFunctionalTestRequest(request GenerateRequestFunctio
 		return response, errors.New("invalid batch size: " + err.Error())
 	}
 
-	response.RequestBody.Entities[0].Entity = request.Entity + "_id"
+	response.RequestBody.Entities[0].Entity = "catalog_id"
 	response.RequestBody.Entities[0].Ids = random.GenerateRandomIntSliceWithRange(batchSize, 100000, 1000000)
 
 	for feature, value := range request.DefaultFeatures {
@@ -945,23 +885,8 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 			ep = strings.TrimPrefix(ep, "https://")
 		}
 		ep = strings.TrimSuffix(ep, "/")
-
-		// Check if endpoint already has a port
-		hasPort := strings.LastIndex(ep, ":") != -1
-
-		// Only add port if it's missing
-		if !hasPort {
-			var port string
-			if !inferflowPkg.IsMeeshoEnabled {
-				port = ":8085"
-			} else {
-				port = ":8080"
-			}
-			env := strings.ToLower(strings.TrimSpace(inferflowPkg.AppEnv))
-			if env == "stg" || env == "int" {
-				port = ":80"
-			}
-			ep = ep + port
+		if !strings.Contains(ep, ":") {
+			ep = ep + ":8080"
 		}
 		return ep
 	}(request.EndPoint)
@@ -971,7 +896,6 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 		response.Error = err.Error()
 		return response, errors.New("failed to get connection: " + err.Error())
 	}
-	defer conn.Close()
 
 	protoRequest := &pb.InferflowRequestProto{}
 	protoRequest.ModelConfigId = request.RequestBody.ModelConfigID
@@ -1006,7 +930,7 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 
 	protoResponse := &pb.InferflowResponseProto{}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
 	defer cancel()
 
@@ -1064,26 +988,25 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 }
 
 func (m *InferFlow) GetLatestRequest(requestID string) (GetLatestRequestResponse, error) {
-	requests, err := m.InferFlowRequestRepo.GetApprovedRequestsByConfigID(requestID)
+	requests, err := m.InferFlowRequestRepo.GetAll()
 	if err != nil {
 		return GetLatestRequestResponse{
 			Error: "failed to get latest request: " + err.Error(),
 			Data:  RequestConfig{},
 		}, err
 	}
-
 	latestRequest := inferflow_request.Table{}
-	if len(requests) > 0 {
-		latestRequest = requests[0]
+	for _, request := range requests {
+		if request.Status == approved && request.ConfigID == requestID {
+			latestRequest = request
+		}
 	}
-
 	if latestRequest.Payload.RequestPayload.ConfigIdentifier == "" {
 		return GetLatestRequestResponse{
 			Error: "failed to find latest request",
 			Data:  RequestConfig{},
 		}, err
 	}
-
 	return GetLatestRequestResponse{
 		Error: emptyResponse,
 		Data: RequestConfig{

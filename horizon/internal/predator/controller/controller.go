@@ -421,7 +421,9 @@ func (p V1) UploadModelFolder(ctx *gin.Context) {
 	}
 
 	// Remove "Bearer " prefix if present
-	authToken = strings.TrimPrefix(authToken, "Bearer ")
+	if strings.HasPrefix(authToken, "Bearer ") {
+		authToken = strings.TrimPrefix(authToken, "Bearer ")
+	}
 
 	// Call handler to process the upload
 	resp, status, err := p.config.UploadModelFolderFromLocal(req, isPartial, authToken)
