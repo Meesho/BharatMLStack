@@ -11,7 +11,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Available modules for release
-AVAILABLE_MODULES=("horizon" "trufflebox-ui" "online-feature-store" "go-sdk" "py-sdk")
+AVAILABLE_MODULES=("horizon" "trufflebox-ui" "numerix" "online-feature-store" "go-sdk" "py-sdk")
 
 # Python SDK subdirectories
 PY_SDK_MODULES=("bharatml_commons" "grpc_feature_client" "spark_feature_push_client")
@@ -157,6 +157,9 @@ trigger_workflow() {
             ;;
         "trufflebox-ui")
             workflow_file="release-trufflebox-ui.yml"
+            ;;
+        "numerix")
+            workflow_file="release-numerix.yml"
             ;;
         "online-feature-store")
             workflow_file="release-online-feature-store.yml"

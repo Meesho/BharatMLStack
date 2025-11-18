@@ -205,8 +205,8 @@ type GetOnlineFeatureMappingRequest struct {
 }
 
 type GetOnlineFeatureMappingResponse struct {
-	Error string   `json:"error"`
-	Data  []string `json:"data"`
+	Error string            `json:"error"`
+	Data  map[string]string `json:"data"`
 }
 
 type FeatureGroupResponse struct {

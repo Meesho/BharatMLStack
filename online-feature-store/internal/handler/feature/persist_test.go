@@ -66,7 +66,7 @@ func TestPersist(t *testing.T) {
 				}, nil)
 				m.On("GetFeatureGroup", "user_sscat", "invalid_fg").Return(nil, fmt.Errorf("feature group not found"))
 			},
-			expectedError: "failed to get feature group invalid_fg: feature group not found",
+			expectedError: "feature group invalid_fg not found for entity : user_sscat",
 		},
 		{
 			name: "Happy path - single feature group, all features",

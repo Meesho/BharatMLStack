@@ -2,7 +2,7 @@ import './App.css';
 import FeatureDiscovery from './pages/OnlineFeatureStore/components/Discovery/FeatureDiscovery';
 import StoreDiscovery from './pages/OnlineFeatureStore/components/Discovery/StoreDiscovery';
 import JobDiscovery from './pages/OnlineFeatureStore/components/Discovery/JobDiscovery';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import StoreRegistry from './pages/OnlineFeatureStore/components/FeatureRegistry/StoreRegistry';
 import JobRegistry from './pages/OnlineFeatureStore/components/FeatureRegistry/JobRegistry';
 import EntityRegistry from './pages/OnlineFeatureStore/components/FeatureRegistry/EntityRegistry';
@@ -13,6 +13,8 @@ import JobApproval from './pages/OnlineFeatureStore/components/FeatureApproval/J
 import EntityApproval from './pages/OnlineFeatureStore/components/FeatureApproval/EntityApproval';
 import FeatureGroupApproval from './pages/OnlineFeatureStore/components/FeatureApproval/FeatureGroupApproval';
 import FeatureAdditionApproval from './pages/OnlineFeatureStore/components/FeatureApproval/FeatureAdditionApproval';
+import NumerixConfigDiscoveryRegistry from './pages/Numerix/DiscoveryRegistry/NumerixConfigDiscoveryRegistry';
+import NumerixConfigApproval from './pages/Numerix/Approval/NumerixConfigApproval';
 import UserManagement from './pages/UserManagement';
 import ErrorBoundary from './common/ErrorBoundary';
 import ClientDiscovery from './pages/OnlineFeatureStore/components/Discovery/ClientDiscovery';
@@ -20,6 +22,7 @@ import { AuthProvider } from './pages/Auth/AuthContext';
 import ProtectedRoute from './pages/Auth/ProtectedRoute';
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
+import Unauthorized from './pages/Auth/Unauthorized';
 import HealthCheck from './Health';
 
 function App() {
@@ -31,6 +34,7 @@ function App() {
               {/* Public Routes */}
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/unauthorized" element={<Unauthorized />} />
     
               {/* Protected Routes */}
               <Route
@@ -145,6 +149,25 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
+            {/* Numerix Routes */}
+            <Route
+              path="/numerix/config"
+              element={
+                <ProtectedRoute service="numerix" screenType="numerix-config">
+                  <NumerixConfigDiscoveryRegistry />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/numerix/config-approval"
+              element={
+                <ProtectedRoute service="numerix" screenType="numerix-config-approval">
+                  <NumerixConfigApproval />
+                </ProtectedRoute>
+              }
+            />
+
             <Route
               path="/user-management"
               element={
@@ -154,8 +177,8 @@ function App() {
               }
             />
     
-              {/* Redirect to Login */}
-              <Route path="*" element={<Login />} />
+              {/* Redirect to Homepage(Feature Discovery) */}
+              <Route path="*" element={<Navigate to="/feature-discovery" replace/>} />
               <Route path="/health" component={HealthCheck} />
             </Routes>
           </Router>

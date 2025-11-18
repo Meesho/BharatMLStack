@@ -576,7 +576,7 @@ func (v *V1) GetOnlineFeatureMapping(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(api.NewInternalServerError(err.Error()).StatusCode, handler.GetOnlineFeatureMappingResponse{
 			Error: err.Error(),
-			Data:  []string{},
+			Data:  map[string]string{},
 		})
 		return
 	}
