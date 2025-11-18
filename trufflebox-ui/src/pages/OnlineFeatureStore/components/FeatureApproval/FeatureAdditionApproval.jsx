@@ -9,7 +9,8 @@ import {
   DialogActions, 
   Box, 
   Typography,
-  Divider
+  Divider,
+  Chip
 } from '@mui/material';
 import './styles.scss';
 import GenericTable from '../../common/GenericTable';
@@ -87,14 +88,15 @@ const FeatureAdditionApproval = () => {
   const handleOpen = (featureAddition = null) => {
     try {
       const data = featureAddition?.Payload || {};
-      setFeatureAdditionData({
-        "request-id": featureAddition?.RequestId || "",
-        "entity-label": data["entity-label"] || "",
-        "feature-group-label": data["feature-group-label"] || "",
-        "status": featureAddition?.Status || "",
-        "request-type": featureAddition?.RequestType || "CREATE",
-        "reject-reason": featureAddition?.RejectReason || "",
-        "features": data["features"]?.map(item => ({
+      const requestType = featureAddition?.RequestType || "CREATE";
+      
+      let features = [];
+      if (requestType === 'DELETE') {
+        // For DELETE requests, feature-labels is an array of strings
+        features = data["feature-labels"]?.map(label => ({ labels: label })) || [];
+      } else {
+        // For CREATE/other requests, features is an array of objects with detailed info
+        features = data["features"]?.map(item => ({
           "labels": item.labels || "",
           "default-values": item["default-values"] || "",
           "source-base-path": item["source-base-path"] || "",
@@ -102,7 +104,17 @@ const FeatureAdditionApproval = () => {
           "storage-provider": item["storage-provider"] || "",
           "string-length": item["string-length"] || "",
           "vector-length": item["vector-length"] || ""
-        })) || [],
+        })) || [];
+      }
+      
+      setFeatureAdditionData({
+        "request-id": featureAddition?.RequestId || "",
+        "entity-label": data["entity-label"] || "",
+        "feature-group-label": data["feature-group-label"] || "",
+        "status": featureAddition?.Status || "",
+        "request-type": requestType,
+        "reject-reason": featureAddition?.RejectReason || "",
+        "features": features,
       });
       setShowModal(true);
     } catch (error) {
@@ -154,7 +166,12 @@ const FeatureAdditionApproval = () => {
         "reject-reason": status.toUpperCase() === 'REJECTED' ? rejectReason : '',
       };
 
-      const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/process-add-features`, {
+      const isDeleteRequest = featureAdditionData["request-type"] === 'DELETE';
+      const apiEndpoint = isDeleteRequest 
+        ? `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/process-delete-features`
+        : `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/process-add-features`;
+
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -201,7 +218,9 @@ const FeatureAdditionApproval = () => {
         centered
       >
         <Modal.Header closeButton>
-          <Modal.Title style={{ fontFamily: "system-ui" }}>Features</Modal.Title>
+          <Modal.Title style={{ fontFamily: "system-ui" }}>
+            {featureAdditionData["request-type"] === 'DELETE' ? 'Feature Deletion Request' : 'Feature Addition Request'}
+          </Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <ListGroup>
@@ -223,36 +242,127 @@ const FeatureAdditionApproval = () => {
               </ListGroup.Item>
             )}
             <ListGroup.Item>
-              <strong>Request Type:</strong> {featureAdditionData["request-type"]}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <strong>Request Type:</strong> 
+                <Chip 
+                  label={featureAdditionData["request-type"]}
+                  variant="filled"
+                  size="small"
+                  sx={{
+                    backgroundColor: featureAdditionData["request-type"] === 'DELETE' 
+                      ? '#ffebee' 
+                      : featureAdditionData["request-type"] === 'CREATE'
+                      ? '#e8f5e8'
+                      : '#f3e5f5',
+                    color: featureAdditionData["request-type"] === 'DELETE' 
+                      ? '#d32f2f' 
+                      : featureAdditionData["request-type"] === 'CREATE'
+                      ? '#2e7d32'
+                      : '#7b1fa2',
+                    fontWeight: 'bold',
+                    fontSize: '12px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                  }}
+                />
+              </div>
             </ListGroup.Item>
-            <ListGroup.Item>
-              <Table bordered hover size="sm" className="mt-2">
-                <thead>
-                  <tr>
-                    <th>Label</th>
-                    <th>Default Value</th>
-                    <th>Source Base Path</th>
-                    <th>Source Data Column</th>
-                    <th>Storage Provider</th>
-                    <th>String Length</th>
-                    <th>Vector Length</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {featureAdditionData.features.map((feature, index) => (
-                    <tr key={index}>
-                    <td style={cellStyle}>{feature.labels}</td>
-                    <td style={cellStyle}>{feature["default-values"]}</td>
-                    <td style={cellStyle}>{feature["source-base-path"]}</td>
-                    <td style={cellStyle}>{feature["source-data-column"]}</td>
-                    <td style={cellStyle}>{feature["storage-provider"]}</td>
-                    <td>{feature["string-length"]}</td>
-                    <td>{feature["vector-length"]}</td>
-                  </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </ListGroup.Item>
+            {featureAdditionData["request-type"] === 'DELETE' ? (
+              <ListGroup.Item>
+                <div style={{ marginBottom: '12px' }}>
+                  <strong>{featureAdditionData["status"] === 'APPROVED' ? 'Deleted Features:' : 'Features to Delete:'}</strong>
+                </div>
+                <Box sx={{ 
+                  backgroundColor: '#ffebee', 
+                  border: '1px solid #ffcdd2', 
+                  borderRadius: '8px', 
+                  padding: '16px',
+                  maxHeight: '300px',
+                  overflowY: 'auto'
+                }}>
+                  {featureAdditionData.features?.length > 0 ? (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {featureAdditionData.features.map((feature, index) => (
+                        <Box 
+                          key={index}
+                          sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center',
+                            backgroundColor: 'white',
+                            padding: '12px 16px',
+                            borderRadius: '6px',
+                            border: '1px solid #ffcdd2',
+                            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+                          }}
+                        >
+                          <Typography variant="body2" sx={{ 
+                            color: '#d32f2f',
+                            fontWeight: 500,
+                            fontSize: '14px',
+                            wordBreak: 'break-word',
+                            flexGrow: 1
+                          }}>
+                            • {feature.labels || feature}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  ) : (
+                    <Typography variant="body2" sx={{ 
+                      color: '#9e9e9e',
+                      fontStyle: 'italic',
+                      textAlign: 'center'
+                    }}>
+                      No features specified for deletion
+                    </Typography>
+                  )}
+                  
+                  <Box sx={{ 
+                    mt: 2, 
+                    pt: 2, 
+                    borderTop: '1px solid #ffcdd2',
+                    textAlign: 'center'
+                  }}>
+                    <Typography variant="caption" sx={{ 
+                      color: '#d32f2f',
+                      fontWeight: 'bold',
+                      fontSize: '12px'
+                    }}>
+                      {featureAdditionData["status"] === 'APPROVED' ? 'These features have been permanently deleted' : '⚠️ These features will be permanently deleted'}
+                    </Typography>
+                  </Box>
+                </Box>
+              </ListGroup.Item>
+            ) : (
+              <ListGroup.Item>
+                <Table bordered hover size="sm" className="mt-2">
+                  <thead>
+                    <tr>
+                      <th>Label</th>
+                      <th>Default Value</th>
+                      <th>Source Base Path</th>
+                      <th>Source Data Column</th>
+                      <th>Storage Provider</th>
+                      <th>String Length</th>
+                      <th>Vector Length</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {featureAdditionData.features.map((feature, index) => (
+                      <tr key={index}>
+                      <td style={cellStyle}>{feature.labels}</td>
+                      <td style={cellStyle}>{feature["default-values"]}</td>
+                      <td style={cellStyle}>{feature["source-base-path"]}</td>
+                      <td style={cellStyle}>{feature["source-data-column"]}</td>
+                      <td style={cellStyle}>{feature["storage-provider"]}</td>
+                      <td>{feature["string-length"]}</td>
+                      <td>{feature["vector-length"]}</td>
+                    </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </ListGroup.Item>
+            )}
           </ListGroup>
         </Modal.Body>
         {shouldShowFooter && (

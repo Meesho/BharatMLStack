@@ -6,6 +6,7 @@ import {
   Alert,
   Typography
 } from '@mui/material';
+import { useSearchParams } from 'react-router-dom';
 import GenericNumerixTable from '../shared/GenericNumerixTable';
 import { useAuth } from '../../Auth/AuthContext';
 import { SERVICES, SCREEN_TYPES, ACTIONS } from '../../../constants/permissions';
@@ -34,6 +35,25 @@ const NumerixConfigDiscoveryRegistry = () => {
   const [selectedRowForEdit, setSelectedRowForEdit] = useState(null);
   const [openTestModal, setOpenTestModal] = useState(false);
   const [selectedRowForTest, setSelectedRowForTest] = useState(null);
+
+  // Initialize state from URL params
+  const [page, setPage] = useState(() => {
+    const pageParam = searchParams.get('page');
+    return pageParam ? parseInt(pageParam, 10) : 1;
+  });
+  const [limit] = useState(25);
+  const [searchQuery, setSearchQuery] = useState(() => {
+    return searchParams.get('config_id') || '';
+  });
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(() => {
+    return searchParams.get('config_id') || '';
+  });
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 25,
+    total_count: 0,
+    total_pages: 0
+  });
   
   const [notification, setNotification] = useState({
     open: false,
@@ -41,11 +61,21 @@ const NumerixConfigDiscoveryRegistry = () => {
     severity: 'success'
   });
 
-  const fetchConfigs = useCallback(async () => {
+  const fetchConfigs = useCallback(async (currentPage, configId) => {
     try {
       setLoading(true);
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: limit.toString()
+      });
+      
+      // Add config_id filter if search query exists
+      if (configId && configId.trim() !== '') {
+        params.append('config_id', configId.trim());
+      }
+
       const response = await axios.get(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/numerix-config-discovery/configs`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/numerix-config-discovery/configs?${params.toString()}`,
         {
           headers: {
             'Authorization': `Bearer ${user.token}`
@@ -70,6 +100,11 @@ const NumerixConfigDiscoveryRegistry = () => {
           deployable_running_status: item.deployable_running_status === "true"
         }));
         setConfigData(transformedData);
+
+        // Update pagination metadata
+        if (response.data.pagination) {
+          setPagination(response.data.pagination);
+        }
       } else {
         showNotification(response.data.error || 'Config Data Loading Error', 'error');
       }
@@ -79,15 +114,100 @@ const NumerixConfigDiscoveryRegistry = () => {
     } finally {
       setLoading(false);
     }
-  }, [user.token, formatDateToIST]);
+  }, [user.token, formatDateToIST, limit]);
+
+  // Track if we're syncing from URL to prevent update loops
+  const isSyncingFromUrl = React.useRef(false);
+
+  // Sync state from URL params (for browser back/forward)
+  useEffect(() => {
+    const pageParam = searchParams.get('page');
+    const configIdParam = searchParams.get('config_id');
+
+    const urlPage = pageParam ? parseInt(pageParam, 10) : 1;
+    const urlConfigId = configIdParam || '';
+
+    // Only update if URL params differ from current state
+    if (urlPage !== page || urlConfigId !== searchQuery) {
+      isSyncingFromUrl.current = true;
+
+      if (urlPage !== page) {
+        setPage(urlPage);
+      }
+
+      if (urlConfigId !== searchQuery) {
+        setSearchQuery(urlConfigId);
+      }
+
+      // Reset sync flag after state updates
+      setTimeout(() => {
+        isSyncingFromUrl.current = false;
+      }, 0);
+    }
+  }, [searchParams]);
+
+  // Update URL when page or search changes (but not on initial mount or during URL sync)
+  const isInitialMount = React.useRef(true);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    // Skip if syncing from URL to prevent loops
+    if (isSyncingFromUrl.current) {
+      return;
+    }
+
+    const params = new URLSearchParams();
+    if (page > 1) {
+      params.set('page', page.toString());
+    }
+
+    if (searchQuery && searchQuery.trim() !== '') {
+      params.set('config_id', searchQuery.trim());
+    }
+
+    // Check if URL already matches what we want to set
+    const currentPage = searchParams.get('page');
+    const currentConfigId = searchParams.get('config_id') || '';
+    const expectedPage = page > 1 ? page.toString() : null;
+    const expectedConfigId = searchQuery.trim() || null;
+
+    // Only update if different
+    if (currentPage !== expectedPage || currentConfigId !== expectedConfigId) {
+      // Use push (not replace) to create proper browser history entries
+      setSearchParams(params, { replace: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchQuery, setSearchParams]); // Note: searchParams NOT in dependencies
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
     if (isPermissionsLoaded && hasPermission(service, screenType, ACTIONS.VIEW)) {
-      fetchConfigs();
+      fetchConfigs(page, debouncedSearchQuery);
     } else if (isPermissionsLoaded) {
       setLoading(false);
     }
-  }, [isPermissionsLoaded, hasPermission, service, screenType, fetchConfigs]);
+  }, [isPermissionsLoaded, hasPermission, service, screenType, page, debouncedSearchQuery, fetchConfigs]);
+
+  const handlePageChange = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleSearchChange = (value) => {
+    setSearchQuery(value);
+    setPage(1); // Reset to first page when searching
+  };
 
   const handleOnboardClick = () => {
     if (!hasPermission(service, screenType, ACTIONS.ONBOARD)) {
@@ -127,7 +247,7 @@ const NumerixConfigDiscoveryRegistry = () => {
       if (response.data && response.data.error === "") {
         showNotification(response.data.data.message || 'Config Successfully Onboarded', 'success');
         handleCloseOnboardModal();
-        fetchConfigs(); // Refresh data
+        fetchConfigs(page, debouncedSearchQuery); // Refresh data
       } else {
         showNotification(response.data.error || 'Config Onboarding Error', 'error');
       }
@@ -184,7 +304,7 @@ const NumerixConfigDiscoveryRegistry = () => {
 
       if (response.data && response.data.error === "") {
         showNotification(response.data.data.message || 'Config Successfully Promoted', 'success');
-        fetchConfigs(); // Refresh data
+        fetchConfigs(page, debouncedSearchQuery); // Refresh data
       } else {
         showNotification(response.data.error || 'Config Promotion Error', 'error');
       }
@@ -251,7 +371,7 @@ const NumerixConfigDiscoveryRegistry = () => {
       if (response.data && response.data.error === "") {
         showNotification(response.data.data.message || 'Config Successfully Updated', 'success');
         handleCloseEditModal();
-        fetchConfigs(); // Refresh data
+        fetchConfigs(page, debouncedSearchQuery); // Refresh data
       } else {
         showNotification(response.data.error || 'Config Update Error', 'error');
       }
@@ -324,8 +444,17 @@ const NumerixConfigDiscoveryRegistry = () => {
         onTestAction={handleTestClick}
         loading={loading}
         pageName="numerix_registry"
-        searchPlaceholder="Search compute Id"
+        searchPlaceholder="Search by compute ID"
         buttonName="Onboard Compute Config"
+        searchQuery={searchQuery}
+        onSearchChange={handleSearchChange}
+        pagination={{
+          page: pagination.page,
+          totalPages: pagination.total_pages,
+          totalCount: pagination.total_count,
+          limit: pagination.limit
+        }}
+        onPageChange={handlePageChange}
         actionButtons={[
           {
             label: "Onboard Compute Config",

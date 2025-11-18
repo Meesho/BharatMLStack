@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Button,
   Dialog,
@@ -10,12 +10,9 @@ import {
   Box,
   Divider,
   Tooltip,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Typography,
   CircularProgress,
+  Autocomplete,
 } from '@mui/material';
 import { Modal, ListGroup, Table } from 'react-bootstrap';
 import { useForm } from 'react-cool-form';
@@ -47,16 +44,18 @@ const EntityRegistry = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    updateNestedState(setEntityData, name, value);
+    const trimmedValue = typeof value === 'string' ? value.trim() : value;
+    updateNestedState(setEntityData, name, trimmedValue);
   };
 
   const handleKeyMapChange = (index, e) => {
     const { name, value } = e.target;
+    const trimmedValue = typeof value === 'string' ? value.trim() : value;
     setEntityData((prevData) => {
       const updatedKeyMap = [...prevData['key-map']];
       updatedKeyMap[index] = {
         ...updatedKeyMap[index],
-        [name.split('.')[2]]: value,
+        [name.split('.')[2]]: trimmedValue,
       };
       return { ...prevData, 'key-map': updatedKeyMap };
     });
@@ -368,56 +367,59 @@ const EntityRegistry = () => {
       <Typography variant="h6" sx={{ mb: 2 }}>{title}</Typography>
       {['enabled', 'conf-id', 'ttl-in-seconds', 'jitter-percentage'].map((field) => (
         field === 'enabled' ? (
-          <FormControl key={field} fullWidth style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-start' }} error={!!validationErrors[`${cacheKey}.${field}`]}>
-            <InputLabel id={`${cacheKey}-${field}-label`} sx={{ left: '0px', '&.Mui-focused': { left: '0px' }}}>
-              Enabled *
-            </InputLabel>
-            <Select
-              labelId={`${cacheKey}-${field}-label`}
-              name={`${cacheKey}.${field}`}
-              value={entityData[cacheKey][field]}
-              onChange={handleChange}
-              label="Enabled *"
-              className="custom-textfield"
-              sx={{ '& .MuiSelect-select': { textAlign: 'left' }}}
-              error={!!validationErrors[`${cacheKey}.${field}`]}
-            >
-              <MenuItem value="true">True</MenuItem>
-              <MenuItem value="false">False</MenuItem>
-            </Select>
-            {validationErrors[`${cacheKey}.${field}`] && (
-              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
-                {validationErrors[`${cacheKey}.${field}`]}
-              </Typography>
+          <Autocomplete
+            key={field}
+            options={['true', 'false']}
+            value={entityData[cacheKey][field]}
+            onChange={(event, newValue) => {
+              const syntheticEvent = {
+                target: {
+                  name: `${cacheKey}.${field}`,
+                  value: newValue || ''
+                }
+              };
+              handleChange(syntheticEvent);
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Enabled *"
+                name={`${cacheKey}.${field}`}
+                fullWidth
+                style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-start' }}
+                className="custom-textfield"
+                error={!!validationErrors[`${cacheKey}.${field}`]}
+                helperText={validationErrors[`${cacheKey}.${field}`]}
+              />
             )}
-          </FormControl>
+          />
         ) : field === 'conf-id' ? (
-          <FormControl key={field} fullWidth style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-start' }} error={!!validationErrors[`${cacheKey}.${field}`]}>
-            <InputLabel id={`${cacheKey}-${field}-label`} sx={{ left: '0px', '&.Mui-focused': { left: '0px' }}}>
-              Config ID *
-            </InputLabel>
-            <Select
-              labelId={`${cacheKey}-${field}-label`}
-              name={`${cacheKey}.${field}`}
-              value={entityData[cacheKey][field]}
-              onChange={handleChange}
-              label="Config ID *"
-              className="custom-textfield"
-              sx={{ '& .MuiSelect-select': { textAlign: 'left' }}}
-              error={!!validationErrors[`${cacheKey}.${field}`]}
-            >
-              {cacheKey === 'distributed-cache' ? (
-                <MenuItem value="2">2</MenuItem>
-              ) : (
-                <MenuItem value="3">3</MenuItem>
-              )}
-            </Select>
-            {validationErrors[`${cacheKey}.${field}`] && (
-              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
-                {validationErrors[`${cacheKey}.${field}`]}
-              </Typography>
+          <Autocomplete
+            key={field}
+            options={cacheKey === 'distributed-cache' ? ['2'] : ['3']}
+            value={entityData[cacheKey][field]}
+            onChange={(event, newValue) => {
+              const syntheticEvent = {
+                target: {
+                  name: `${cacheKey}.${field}`,
+                  value: newValue || ''
+                }
+              };
+              handleChange(syntheticEvent);
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Config ID *"
+                name={`${cacheKey}.${field}`}
+                fullWidth
+                style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-start' }}
+                className="custom-textfield"
+                error={!!validationErrors[`${cacheKey}.${field}`]}
+                helperText={validationErrors[`${cacheKey}.${field}`]}
+              />
             )}
-          </FormControl>
+          />
         ) : (
           <TextField
             key={field}
