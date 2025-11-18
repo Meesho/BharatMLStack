@@ -32,7 +32,7 @@ message InferflowResponseProto {
     }
 }
  
-service InferflowService {
+service Inferflow {
   rpc RetrieveModelScore(InferflowRequestProto) returns (InferflowResponseProto) {};
 }
 

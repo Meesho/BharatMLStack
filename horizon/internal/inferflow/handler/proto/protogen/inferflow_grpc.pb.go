@@ -19,101 +19,101 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	InferflowService_RetrieveModelScore_FullMethodName = "/inferflow.InferflowService/RetrieveModelScore"
+	Inferflow_RetrieveModelScore_FullMethodName = "/inferflow.Inferflow/RetrieveModelScore"
 )
 
-// InferflowServiceClient is the client API for InferflowService service.
+// InferflowClient is the client API for Inferflow service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type InferflowServiceClient interface {
+type InferflowClient interface {
 	RetrieveModelScore(ctx context.Context, in *InferflowRequestProto, opts ...grpc.CallOption) (*InferflowResponseProto, error)
 }
 
-type inferflowServiceClient struct {
+type inferflowClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewInferflowServiceClient(cc grpc.ClientConnInterface) InferflowServiceClient {
-	return &inferflowServiceClient{cc}
+func NewInferflowClient(cc grpc.ClientConnInterface) InferflowClient {
+	return &inferflowClient{cc}
 }
 
-func (c *inferflowServiceClient) RetrieveModelScore(ctx context.Context, in *InferflowRequestProto, opts ...grpc.CallOption) (*InferflowResponseProto, error) {
+func (c *inferflowClient) RetrieveModelScore(ctx context.Context, in *InferflowRequestProto, opts ...grpc.CallOption) (*InferflowResponseProto, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(InferflowResponseProto)
-	err := c.cc.Invoke(ctx, InferflowService_RetrieveModelScore_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Inferflow_RetrieveModelScore_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// InferflowServiceServer is the server API for InferflowService service.
-// All implementations must embed UnimplementedInferflowServiceServer
+// InferflowServer is the server API for Inferflow service.
+// All implementations must embed UnimplementedInferflowServer
 // for forward compatibility.
-type InferflowServiceServer interface {
+type InferflowServer interface {
 	RetrieveModelScore(context.Context, *InferflowRequestProto) (*InferflowResponseProto, error)
-	mustEmbedUnimplementedInferflowServiceServer()
+	mustEmbedUnimplementedInferflowServer()
 }
 
-// UnimplementedInferflowServiceServer must be embedded to have
+// UnimplementedInferflowServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedInferflowServiceServer struct{}
+type UnimplementedInferflowServer struct{}
 
-func (UnimplementedInferflowServiceServer) RetrieveModelScore(context.Context, *InferflowRequestProto) (*InferflowResponseProto, error) {
+func (UnimplementedInferflowServer) RetrieveModelScore(context.Context, *InferflowRequestProto) (*InferflowResponseProto, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RetrieveModelScore not implemented")
 }
-func (UnimplementedInferflowServiceServer) mustEmbedUnimplementedInferflowServiceServer() {}
-func (UnimplementedInferflowServiceServer) testEmbeddedByValue()                          {}
+func (UnimplementedInferflowServer) mustEmbedUnimplementedInferflowServer() {}
+func (UnimplementedInferflowServer) testEmbeddedByValue()                   {}
 
-// UnsafeInferflowServiceServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to InferflowServiceServer will
+// UnsafeInferflowServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to InferflowServer will
 // result in compilation errors.
-type UnsafeInferflowServiceServer interface {
-	mustEmbedUnimplementedInferflowServiceServer()
+type UnsafeInferflowServer interface {
+	mustEmbedUnimplementedInferflowServer()
 }
 
-func RegisterInferflowServiceServer(s grpc.ServiceRegistrar, srv InferflowServiceServer) {
-	// If the following call pancis, it indicates UnimplementedInferflowServiceServer was
+func RegisterInferflowServer(s grpc.ServiceRegistrar, srv InferflowServer) {
+	// If the following call pancis, it indicates UnimplementedInferflowServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&InferflowService_ServiceDesc, srv)
+	s.RegisterService(&Inferflow_ServiceDesc, srv)
 }
 
-func _InferflowService_RetrieveModelScore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Inferflow_RetrieveModelScore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(InferflowRequestProto)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(InferflowServiceServer).RetrieveModelScore(ctx, in)
+		return srv.(InferflowServer).RetrieveModelScore(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: InferflowService_RetrieveModelScore_FullMethodName,
+		FullMethod: Inferflow_RetrieveModelScore_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(InferflowServiceServer).RetrieveModelScore(ctx, req.(*InferflowRequestProto))
+		return srv.(InferflowServer).RetrieveModelScore(ctx, req.(*InferflowRequestProto))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// InferflowService_ServiceDesc is the grpc.ServiceDesc for InferflowService service.
+// Inferflow_ServiceDesc is the grpc.ServiceDesc for Inferflow service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var InferflowService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "inferflow.InferflowService",
-	HandlerType: (*InferflowServiceServer)(nil),
+var Inferflow_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "inferflow.Inferflow",
+	HandlerType: (*InferflowServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "RetrieveModelScore",
-			Handler:    _InferflowService_RetrieveModelScore_Handler,
+			Handler:    _Inferflow_RetrieveModelScore_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

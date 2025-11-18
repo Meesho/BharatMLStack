@@ -358,8 +358,8 @@ const file_inferflow_proto_rawDesc = "" +
 	"\rComponentData\x12\x12\n" +
 	"\x04data\x18\x01 \x03(\tR\x04data\x1a!\n" +
 	"\x05Error\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage2o\n" +
-	"\x10InferflowService\x12[\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage2h\n" +
+	"\tInferflow\x12[\n" +
 	"\x12RetrieveModelScore\x12 .inferflow.InferflowRequestProto\x1a!.inferflow.InferflowResponseProto\"\x00BSZQgithub.com/meesho/BharatMLStack/horizon/internal/inferflow/handler/proto/protogenb\x06proto3"
 
 var (
@@ -388,8 +388,8 @@ var file_inferflow_proto_depIdxs = []int32{
 	4, // 1: inferflow.InferflowResponseProto.component_data:type_name -> inferflow.InferflowResponseProto.ComponentData
 	5, // 2: inferflow.InferflowResponseProto.error:type_name -> inferflow.InferflowResponseProto.Error
 	3, // 3: inferflow.InferflowRequestProto.Entity.features:type_name -> inferflow.InferflowRequestProto.Entity.Feature
-	0, // 4: inferflow.InferflowService.RetrieveModelScore:input_type -> inferflow.InferflowRequestProto
-	1, // 5: inferflow.InferflowService.RetrieveModelScore:output_type -> inferflow.InferflowResponseProto
+	0, // 4: inferflow.Inferflow.RetrieveModelScore:input_type -> inferflow.InferflowRequestProto
+	1, // 5: inferflow.Inferflow.RetrieveModelScore:output_type -> inferflow.InferflowResponseProto
 	5, // [5:6] is the sub-list for method output_type
 	4, // [4:5] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name
