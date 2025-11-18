@@ -82,9 +82,39 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_CREATE_TOPICS: online-feature-store.feature_ingestion:1:1
     networks:
       - onfs-network
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s  
+
+  kafka-init:
+    image: apache/kafka:latest
+    container_name: kafka-init
+    networks:
+      - onfs-network
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ['/bin/sh', '-c']
+    command: |
+      "
+      # Wait for Kafka to be ready
+      echo 'Waiting for Kafka to be ready...'
+      sleep 10
+      
+      # Create the topic
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:29092 --create --if-not-exists --topic online-feature-store.feature_ingestion --partitions 1 --replication-factor 1
+      
+      echo 'Topic created successfully!'
+      "
+    restart: "no"
 
   etcd:
     image: quay.io/coreos/etcd:v3.5.12
@@ -203,7 +233,7 @@ services:
     restart: "no"
 
   onfs-consumer:
-    image: ghcr.io/meesho/onfs-consumer:${ONFS_CONSUMER_VERSION:-v1.0.0-beta-cce73d}
+    image: ghcr.io/meesho/onfs-consumer:${ONFS_CONSUMER_VERSION:-latest}
     container_name: onfs-consumer
     ports:
       - "8090:8090"
@@ -218,7 +248,12 @@ services:
       - KAFKA_CONSUMERS_FEATURE_CONSUMER_AUTO_COMMIT_INTERVAL_MS=5000
       - KAFKA_CONSUMERS_FEATURE_CONSUMER_AUTO_OFFSET_RESET=earliest
       - KAFKA_CONSUMERS_FEATURE_CONSUMER_BATCH_SIZE=100
-      - KAFKA_CONSUMERS_FEATURE_CONSUMER_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_CONSUMERS_FEATURE_CONSUMER_BASIC_AUTH_CREDENTIAL_SOURCE=USER_INFO
+      - KAFKA_CONSUMERS_FEATURE_CONSUMER_SASL_MECHANISM=PLAIN
+      - KAFKA_CONSUMERS_FEATURE_CONSUMER_SASL_PASSWORD=
+      - KAFKA_CONSUMERS_FEATURE_CONSUMER_SASL_USERNAME=
+      - KAFKA_CONSUMERS_FEATURE_CONSUMER_SECURITY_PROTOCOL=SASL_PLAINTEXT
+      - KAFKA_CONSUMERS_FEATURE_CONSUMER_BOOTSTRAP_SERVERS=broker:29092
       - KAFKA_CONSUMERS_FEATURE_CONSUMER_CLIENT_ID=onfs-consumer
       - KAFKA_CONSUMERS_FEATURE_CONSUMER_ENABLE_AUTO_COMMIT=true
       - KAFKA_CONSUMERS_FEATURE_CONSUMER_GROUP_ID=onfs-consumer-group
@@ -242,7 +277,7 @@ services:
       - STORAGE_REDIS_STANDALONE_2_POOL_SIZE=32
       - STORAGE_REDIS_STANDALONE_2_CONN_MAX_IDLE_TIMEOUT_IN_MINUTES=15
       - STORAGE_REDIS_STANDALONE_2_CONN_MAX_AGE_IN_MINUTES=30
-      - STORAGE_REDIS_FAILOVER_ACTIVE_CONFIG_IDS=2
+      - STORAGE_REDIS_STANDALONE_ACTIVE_CONFIG_IDS=2
       # Storage Configuration (Scylla)
       - STORAGE_SCYLLA_1_CONTACT_POINTS=scylla
       - STORAGE_SCYLLA_1_KEYSPACE=onfs
@@ -251,6 +286,7 @@ services:
       - STORAGE_SCYLLA_1_TIMEOUT_IN_MS=300000
       - STORAGE_SCYLLA_1_USERNAME=
       - STORAGE_SCYLLA_1_PASSWORD=
+      - STORAGE_SCYLLA_1_SCYLLA_VERSION=5
       - STORAGE_SCYLLA_ACTIVE_CONFIG_IDS=1
       # Etcd Configuration
       - ETCD_SERVER=http://etcd:2379
@@ -258,6 +294,8 @@ services:
     networks:
       - onfs-network
     depends_on:
+      kafka-init:
+        condition: service_completed_successfully
       db-init:
         condition: service_completed_successfully
     restart: unless-stopped
@@ -340,7 +378,7 @@ services:
     restart: "no"
 
   numerix:
-    image: numerix:latest
+    image: numerix:${NUMERIX_VERSION:-latest}
     container_name: numerix
     ports:
       - "8083:8083"

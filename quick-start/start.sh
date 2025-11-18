@@ -7,7 +7,7 @@ INSTALL_LINK="https://go.dev/doc/install"
 WORKSPACE_DIR="workspace"
 
 # Infrastructure services (always started)
-INFRASTRUCTURE_SERVICES="scylla mysql redis etcd kafka db-init"
+INFRASTRUCTURE_SERVICES="scylla mysql redis etcd kafka kafka-init db-init"
 
 # Application services (user selectable)
 ONFS_SERVICES="onfs-api-server onfs-healthcheck"
@@ -18,6 +18,13 @@ TRUFFLEBOX_SERVICES="trufflebox-ui trufflebox-healthcheck"
 
 # Management tools
 MANAGEMENT_SERVICES="etcd-workbench kafka-ui"
+
+# Capture version variables from environment (default to latest if not set)
+ONFS_VERSION="${ONFS_VERSION:-latest}"
+ONFS_CONSUMER_VERSION="${ONFS_CONSUMER_VERSION:-latest}"
+HORIZON_VERSION="${HORIZON_VERSION:-latest}"
+NUMERIX_VERSION="${NUMERIX_VERSION:-latest}"
+TRUFFLEBOX_VERSION="${TRUFFLEBOX_VERSION:-latest}"
 
 # Global variables for user selection
 SELECTED_SERVICES="$INFRASTRUCTURE_SERVICES $MANAGEMENT_SERVICES"
@@ -116,7 +123,7 @@ custom_selection() {
   echo "🎛️  Custom Service Selection"
   echo "============================"
   echo ""
-  echo "✅ Infrastructure services (always included): ScyllaDB, MySQL, Redis, etcd, Kafka"
+  echo "✅ Infrastructure services (always included): ScyllaDB, MySQL, Redis, etcd, Kafka, kafka-init"
   echo "✅ Management tools (always included): etcd-workbench, kafka-ui"
   echo ""
   
@@ -130,11 +137,6 @@ custom_selection() {
   
   read -p "Include ONFS Consumer (Kafka ingestion)? [y/N]: " include_onfs_consumer
   if [[ $include_onfs_consumer =~ ^[Yy]$ ]]; then
-    if [[ $START_ONFS != true ]]; then
-      echo "⚠️  ONFS Consumer requires ONFS API Server. Adding ONFS API..."
-      SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES"
-      START_ONFS=true
-    fi
     SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_CONSUMER_SERVICES"
     START_ONFS_CONSUMER=true
     echo "✅ Added: ONFS Consumer"
@@ -180,7 +182,7 @@ start_selected_services() {
   echo ""
   echo "📋 Services to start:"
   echo "   Infrastructure:"
-  echo "   • ScyllaDB, MySQL, Redis, etcd, Apache Kafka (KRaft), db-init"
+  echo "   • ScyllaDB, MySQL, Redis, etcd, Apache Kafka (KRaft), kafka-init, db-init"
   echo "   Management Tools:"
   echo "   • etcd-workbench, kafka-ui"
   
@@ -205,25 +207,32 @@ start_selected_services() {
     echo ""
     echo "🏷️  Application versions:"
     if [[ $START_ONFS == true ]]; then
-      echo "   • ONFS API Server: ${ONFS_VERSION:-latest}"
+      echo "   • ONFS API Server: ${ONFS_VERSION}"
     fi
     if [[ $START_ONFS_CONSUMER == true ]]; then
-      echo "   • ONFS Consumer: ${ONFS_VERSION:-latest}"
+      echo "   • ONFS Consumer: ${ONFS_CONSUMER_VERSION}"
     fi
     if [[ $START_HORIZON == true ]]; then
-      echo "   • Horizon Backend: ${HORIZON_VERSION:-latest}"
+      echo "   • Horizon Backend: ${HORIZON_VERSION}"
     fi
     if [[ $START_NUMERIX == true ]]; then
-      echo "   • Numerix Matrix: ${NUMERIX_VERSION:-latest}"
+      echo "   • Numerix Matrix: ${NUMERIX_VERSION}"
     fi
     if [[ $START_TRUFFLEBOX == true ]]; then
-      echo "   • Trufflebox UI: ${TRUFFLEBOX_VERSION:-latest}"
+      echo "   • Trufflebox UI: ${TRUFFLEBOX_VERSION}"
     fi
   else
     echo ""
     echo "🏷️  Infrastructure-only setup (no application services selected)"
   fi
   echo ""
+  
+  # Export version variables for docker-compose (if set in environment)
+  export ONFS_VERSION
+  export ONFS_CONSUMER_VERSION
+  export HORIZON_VERSION
+  export NUMERIX_VERSION
+  export TRUFFLEBOX_VERSION
   
   (cd "$WORKSPACE_DIR" && docker-compose up -d --build $SELECTED_SERVICES)
   
@@ -380,7 +389,7 @@ if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   echo "  ./start.sh --local      # Start services in local mode (build docker images locally)"
   echo "  ./start.sh --help       # Show this help"
   echo ""
-  echo "Infrastructure (ScyllaDB, MySQL, Redis, etcd, Kafka) and Management Tools (etcd-workbench, kafka-ui) are always started."
+  echo "Infrastructure (ScyllaDB, MySQL, Redis, etcd, Kafka, kafka-init) and Management Tools (etcd-workbench, kafka-ui) are always started."
   echo "You can choose which application services to start:"
   echo "  • Online Feature Store API"
   echo "  • ONFS Consumer (Kafka Ingestion)"
