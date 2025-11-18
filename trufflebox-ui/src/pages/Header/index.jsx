@@ -1,15 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Navbar, Offcanvas, Dropdown } from 'react-bootstrap';
 import MenuIcon from '@mui/icons-material/Menu';
 import StorageIcon from '@mui/icons-material/Storage';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import FolderIcon from '@mui/icons-material/Folder';
-// import SettingsIcon from '@mui/icons-material/Settings';
+import SettingsIcon from '@mui/icons-material/Settings';
 import ApprovalIcon from '@mui/icons-material/TaskAlt';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import PersonIcon from '@mui/icons-material/Person';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
+import CategoryIcon from '@mui/icons-material/Category';
+import ModelTrainingIcon from '@mui/icons-material/ModelTraining';
+import ScienceIcon from '@mui/icons-material/Science';
+import FilterAltIcon from '@mui/icons-material/FilterAlt';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -17,11 +24,11 @@ import PropTypes from 'prop-types';
 import './Header.css';
 import { useAuth } from '../Auth/AuthContext';
 import { requiresPermissionCheck, getPermissionInfo } from '../../constants/serviceMapping';
+import { isEmbeddingPlatformEnabled } from '../../config';
 
 function Header({ onMenuItemClick }) {
   const [show, setShow] = useState(false);
   const [expandedItems, setExpandedItems] = useState({});
-  const [currentPath, setCurrentPath] = useState([]); // used in renderBreadcrumb
   const { user, logout, hasScreenAccess } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -33,18 +40,50 @@ function Header({ onMenuItemClick }) {
   const getMenuIcon = (key) => {
     const iconMap = {
       'FeatureStore': <StorageIcon />,
+      'InferFlow': <DashboardIcon />,
       'Numerix': <FolderIcon />,
+      'Predator': <BugReportIcon />,
       'UserManagement': <PersonIcon />,
+      'EmbeddingPlatform': <RocketLaunchIcon />,
       'Discovery': <FolderIcon />,
       'FeatureRegistry': <StorageIcon />,
       'FeatureApproval': <ApprovalIcon />,
-      'NumerixApproval': <ApprovalIcon />,
-      'Testing': <BugReportIcon />
+      'MPDiscovery': <FolderIcon />,
+      'MPApproval': <ApprovalIcon />,
+      'MPTesting': <BugReportIcon />,
+      'DiscoveryRegistry': <FolderIcon />,
+      'IrisApproval': <ApprovalIcon />,
+      'IrisTesting': <BugReportIcon />,
+      'PredatorApproval': <ApprovalIcon />,
+      'Testing': <BugReportIcon />,
+      'EmbeddingDiscovery': <FolderIcon />,
+      'EmbeddingRegistry': <StorageIcon />,
+      'EmbeddingApproval': <ApprovalIcon />,
+      'EmbeddingOperations': <SettingsIcon />,
+      'StoreDiscovery': <StorageIcon />,
+      'EntityDiscovery': <CategoryIcon />,
+      'ModelDiscovery': <ModelTrainingIcon />,
+      'VariantDiscovery': <ScienceIcon />,
+      'FilterDiscovery': <FilterAltIcon />,
+      'JobFrequencyDiscovery': <ScheduleIcon />,
+      'StoreRegistry': <StorageIcon />,
+      'EntityRegistry': <CategoryIcon />,
+      'ModelRegistry': <ModelTrainingIcon />,
+      'VariantRegistry': <ScienceIcon />,
+      'FilterRegistry': <FilterAltIcon />,
+      'JobFrequencyRegistry': <ScheduleIcon />,
+      'EmbeddingStoreApproval': <StorageIcon />,
+      'EmbeddingEntityApproval': <CategoryIcon />,
+      'EmbeddingModelApproval': <ModelTrainingIcon />,
+      'EmbeddingVariantApproval': <ScienceIcon />,
+      'EmbeddingFilterApproval': <FilterAltIcon />,
+      'EmbeddingJobFrequencyApproval': <ScheduleIcon />,
+      'DeploymentOperations': <CloudUploadIcon />,
     };
     return iconMap[key] || <StorageIcon />;
   };
 
-  const menuItems = [
+  const allMenuItems = [
     {
       key: 'FeatureStore',
       label: 'Online Feature Store',
@@ -89,6 +128,32 @@ function Header({ onMenuItemClick }) {
       ]
     },
     {
+      key: 'InferFlow',
+      label: 'InferFlow',
+      subItems: null,
+      roles: null,
+      children: [
+        {
+          key: 'MPDiscovery',
+          label: 'Discovery / Registry',
+          subItems: [
+            { key: 'Deployable', label: 'Deployable', path: '/inferflow/deployable', screenType: 'deployable' },
+            { key: 'MPConfig', label: 'Config', path: '/inferflow/config-registry', screenType: 'mp-config' },
+          ],
+          roles: null,
+        },
+        {
+          key: 'MPApproval',
+          label: 'Approval',
+          subItems: [
+            { key: 'MPConfigApproval', label: 'Config', path: '/inferflow/config-approval', screenType: 'mp-config-approval' },
+          ],
+          roles: null,
+        },
+
+      ]
+    },
+    {
       key: 'Numerix',
       label: 'Numerix',
       roles: null,
@@ -106,6 +171,88 @@ function Header({ onMenuItemClick }) {
       ]
     },
     {
+      key: 'Predator',
+      label: 'Predator',
+      subItems: null,
+      roles: null,
+      children: [
+        {
+          key: 'DiscoveryRegistry',
+          label: 'Discovery/Registry',
+          subItems: [
+            { key: 'Deployable', label: 'Deployable', path: '/predator/discovery-registry/deployable' },
+            { key: 'Model', label: 'Model', path: '/predator/discovery-registry/model' },
+          ],
+          roles: null,
+        },
+        {
+          key: 'PredatorApproval',
+          label: 'Approval',
+          subItems: [
+            { key: 'ModelApproval', label: 'Model Approval', path: '/predator/approval/model' },
+          ],
+          roles: null,
+        },
+      ]
+    },
+    {
+      key: 'EmbeddingPlatform',
+      label: 'Embedding Platform',
+      subItems: null,
+      roles: null,
+      children: [
+        {
+          key: 'EmbeddingDiscovery',
+          label: 'Discovery',
+          subItems: [
+            { key: 'StoreDiscovery', label: 'Store', path: '/embedding-platform/discovery/stores', screenType: 'store-discovery' },
+            { key: 'EntityDiscovery', label: 'Entity', path: '/embedding-platform/discovery/entities', screenType: 'entity-discovery' },
+            { key: 'ModelDiscovery', label: 'Model', path: '/embedding-platform/discovery/models', screenType: 'model-discovery' },
+            { key: 'VariantDiscovery', label: 'Variant', path: '/embedding-platform/discovery/variants', screenType: 'variant-discovery' },
+            { key: 'FilterDiscovery', label: 'Filter', path: '/embedding-platform/discovery/filters', screenType: 'filter-discovery' },
+            { key: 'JobFrequencyDiscovery', label: 'Job Frequency', path: '/embedding-platform/discovery/job-frequencies', screenType: 'job-frequency-discovery' },
+          ],
+          roles: null,
+        },
+        {
+          key: 'EmbeddingRegistry',
+          label: 'Registry',
+          subItems: [
+            { key: 'StoreRegistry', label: 'Store', path: '/embedding-platform/registry/store', screenType: 'store-registry' },
+            { key: 'EntityRegistry', label: 'Entity', path: '/embedding-platform/registry/entity', screenType: 'entity-registry' },
+            { key: 'ModelRegistry', label: 'Model', path: '/embedding-platform/registry/model', screenType: 'model-registry' },
+            { key: 'VariantRegistry', label: 'Variant', path: '/embedding-platform/registry/variant', screenType: 'variant-registry' },
+            { key: 'FilterRegistry', label: 'Filter', path: '/embedding-platform/registry/filter', screenType: 'filter-registry' },
+            { key: 'JobFrequencyRegistry', label: 'Job Frequency', path: '/embedding-platform/registry/job-frequency', screenType: 'job-frequency-registry' },
+          ],
+          roles: null,
+        },
+        {
+          key: 'EmbeddingApproval',
+          label: 'Approval',
+          subItems: [
+            { key: 'EmbeddingStoreApproval', label: 'Store', path: '/embedding-platform/approval/store', screenType: 'store-approval' },
+            { key: 'EmbeddingEntityApproval', label: 'Entity', path: '/embedding-platform/approval/entity', screenType: 'entity-approval' },
+            { key: 'EmbeddingModelApproval', label: 'Model', path: '/embedding-platform/approval/model', screenType: 'model-approval' },
+            { key: 'EmbeddingVariantApproval', label: 'Variant', path: '/embedding-platform/approval/variant', screenType: 'variant-approval' },
+            { key: 'EmbeddingFilterApproval', label: 'Filter', path: '/embedding-platform/approval/filter', screenType: 'filter-approval' },
+            { key: 'EmbeddingJobFrequencyApproval', label: 'Job Frequency', path: '/embedding-platform/approval/job-frequency', screenType: 'job-frequency-approval' },
+          ],
+          roles: ['admin'],
+        },
+        {
+          key: 'EmbeddingOperations',
+          label: 'Operations',
+          subItems: [
+            { key: 'DeploymentOperations', label: 'Deployment', path: '/embedding-platform/deployment-operations', screenType: 'deployment-operations' },
+            { key: 'OnboardVariantToDB', label: 'Onboard to DB', path: '/embedding-platform/onboard-variant-to-db', screenType: 'onboard-variant-to-db' },
+            { key: 'OnboardVariantApproval', label: 'DB Approvals', path: '/embedding-platform/onboard-variant-approval', screenType: 'onboard-variant-approval', roles: ['admin'] },
+          ],
+          roles: null,
+        },
+      ]
+    },
+    {
       key: 'UserManagement',
       label: 'User Management',
       path: '/user-management',
@@ -113,12 +260,29 @@ function Header({ onMenuItemClick }) {
     },
   ];
 
+  // Filter menu items based on feature flags
+  const menuItems = allMenuItems.filter(item => {
+    // Hide Embedding Platform if feature is not enabled
+    if (item.key === 'EmbeddingPlatform' && !isEmbeddingPlatformEnabled()) {
+      return false;
+    }
+    return true;
+  });
+
   const hasMenuAccess = (menuKey, parentKey = null) => {
     if (!requiresPermissionCheck(menuKey)) {
       return true;
     }
     
     let permissionInfo = getPermissionInfo(menuKey);
+    
+    if (menuKey === 'Deployable') {
+      if (parentKey === 'InferFlow') {
+        permissionInfo = { service: 'inferflow', screenType: 'deployable' };
+      } else if (parentKey === 'Predator') {
+        permissionInfo = { service: 'predator', screenType: 'deployable' };
+      }
+    }
     
     if (permissionInfo) {
       return hasScreenAccess(permissionInfo.service, permissionInfo.screenType);
@@ -136,16 +300,15 @@ function Header({ onMenuItemClick }) {
 
   const handleNavigation = (path, breadcrumb) => {
     if (path) {
-      setCurrentPath(breadcrumb);
       navigate(path);
       onMenuItemClick && onMenuItemClick(breadcrumb[breadcrumb.length - 1]);
       handleClose();
     }
   };
 
-  const initializeExpandedState = () => {
+  const initializeExpandedState = useCallback(() => {
+    const currentPath = location.pathname;
     const expanded = {};
-    let breadcrumbPath = [];
 
     // Find the current active path and set expanded states
     menuItems.forEach((parentItem) => {
@@ -155,7 +318,6 @@ function Header({ onMenuItemClick }) {
       }
 
       if (parentItem.path && isActivePath(parentItem.path)) {
-        breadcrumbPath = [parentItem.label];
         return;
       }
 
@@ -166,7 +328,6 @@ function Header({ onMenuItemClick }) {
         });
         if (activeSubItem) {
           expanded[parentItem.key] = true;
-          breadcrumbPath = [parentItem.label, activeSubItem.label];
         }
       }
 
@@ -185,7 +346,6 @@ function Header({ onMenuItemClick }) {
             if (activeSubItem) {
               expanded[parentItem.key] = true;
               expanded[`${parentItem.key}-${childItem.key}`] = true;
-              breadcrumbPath = [parentItem.label, childItem.label, activeSubItem.label];
             }
           }
         });
@@ -193,18 +353,14 @@ function Header({ onMenuItemClick }) {
     });
 
     setExpandedItems(expanded);
-    setCurrentPath(breadcrumbPath);
-  };
+  }, [location.pathname, user?.role, hasScreenAccess]);
 
   // Initialize expanded state when component mounts or location changes
   React.useEffect(() => {
     initializeExpandedState();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, user?.role]);
+  }, [location.pathname, user?.role, initializeExpandedState]);
 
   const handleShow = () => {
-    // Reset expanded state to only show current page path when sidebar opens
-    initializeExpandedState();
     setShow(true);
   };
   const handleClose = () => setShow(false);
@@ -215,15 +371,16 @@ function Header({ onMenuItemClick }) {
   };
 
   const renderBreadcrumb = () => {
-    if (currentPath.length === 0) return null;
+    const pathSegments = location.pathname.split('/').filter(segment => segment);
+    if (pathSegments.length === 0) return null;
     
     return (
       <div className="breadcrumb-container">
         <div className="breadcrumb-path">
-          {currentPath.map((item, index) => (
+          {pathSegments.map((segment, index) => (
             <span key={index} className="breadcrumb-item">
-              {item}
-              {index < currentPath.length - 1 && <ChevronRightIcon className="breadcrumb-separator" />}
+              {segment}
+              {index < pathSegments.length - 1 && <ChevronRightIcon className="breadcrumb-separator" />}
             </span>
           ))}
         </div>
