@@ -28,6 +28,7 @@ func main() {
 		memtableMB         int
 		fileSizeMultiplier int
 		readWorkers        int
+		writeWorkers       int
 		sampleSecs         int
 		iterations         int64
 		aVal               float64
@@ -38,10 +39,11 @@ func main() {
 
 	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul", "data directory for shard files")
 	flag.IntVar(&numShards, "shards", 128, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 1000_000, "keys per shard")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 1_000_000, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 40, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 6, "number of read workers")
+	flag.IntVar(&writeWorkers, "writers", 6, "number of write workers")
 	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
 	flag.Int64Var(&iterations, "iterations", 100_000_000, "number of iterations")
 	flag.Float64Var(&aVal, "a", 0.4, "a value for the predictor")
@@ -74,6 +76,9 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
+	//clear the current mount point
+	os.RemoveAll(mountPoint)
+
 	memtableSizeInBytes := int32(memtableMB) * 1024 * 1024
 	fileSizeInBytes := int64(fileSizeMultiplier) * int64(memtableSizeInBytes)
 
@@ -92,22 +97,88 @@ func main() {
 		panic(err)
 	}
 
-	//totalKeys := keysPerShard * numShards
+	totalKeys := keysPerShard * numShards
 	str1kb := strings.Repeat("a", 1024)
 	str1kb = str1kb + "%d"
-	wg := sync.WaitGroup{}
-	for j := 0; j < numShards; j++ {
-		wg.Add(1)
-		go func(j int) {
-			defer wg.Done()
-			for i := j * keysPerShard; i < (j+1)*keysPerShard; i++ {
-				key := fmt.Sprintf("key_%d", i)
-				val := fmt.Sprintf(str1kb, i)
-				pc.Put(key, []byte(val), 60)
-				//pc.Put(key, []byte(val), 60)
-			}
-		}(j)
+
+	// Prepopulate for read-only or read-heavy workloads: 80% of total keys
+	preN := int(float64(totalKeys) * 0.8)
+	for i := 0; i < preN; i++ {
+		key := fmt.Sprintf("key%d", i)
+		val := []byte(fmt.Sprintf(str1kb, i))
+		if err := pc.Put(key, val, 60); err != nil {
+			panic(err)
+		}
+
+		if i%5000000 == 0 {
+			fmt.Printf("----------------------------------------------prepopulated %d keys\n", i)
+		}
 	}
+
+	var wg sync.WaitGroup
+
+	// Spawn writers: each writer covers a disjoint partition of the keyspace
+	if writeWorkers > 0 {
+		wg.Add(writeWorkers)
+		keysPerWriter := totalKeys / writeWorkers
+		fmt.Printf("----------------------------------------------writing %d keys\n", keysPerWriter)
+		for w := 0; w < writeWorkers; w++ {
+			start := w*keysPerWriter + preN
+			end := start + keysPerWriter + preN
+			// last worker takes any remainder
+			if w == writeWorkers-1 {
+				end = totalKeys
+			}
+			go func(wid, s, e int) {
+				defer wg.Done()
+				for i := s; i < e; i++ {
+					key := fmt.Sprintf("key%d", i)
+					val := []byte(fmt.Sprintf(str1kb, i))
+					if err := pc.Put(key, val, 60); err != nil {
+						panic(err)
+					}
+					if i%5000000 == 0 {
+						fmt.Printf("----------------------------------------------wrote %d keys from writerId %d\n", i, wid)
+					}
+				}
+			}(w, start, end)
+		}
+	}
+
+	// Spawn readers: each reader covers a disjoint partition
+	if readWorkers > 0 {
+		fmt.Printf("----------------------------------------------reading keys\n")
+		wg.Add(readWorkers)
+		readSpan := preN
+		keysPerReader := readSpan / readWorkers
+		for r := 0; r < readWorkers; r++ {
+			start := r * keysPerReader
+			end := start + keysPerReader
+			if r == readWorkers-1 {
+				end = readSpan
+			}
+			go func(rid, s, e int) {
+				defer wg.Done()
+				for i := s; i < e; i++ {
+					key := fmt.Sprintf("key%d", i)
+					val, found, expired := pc.Get(key)
+					// if !found {
+					// 	panic("key not found")
+					// }
+					if expired {
+						panic("key expired")
+					}
+					if found && string(val) != fmt.Sprintf(str1kb, i) {
+						panic("value mismatch")
+					}
+					if i%5000000 == 0 {
+						fmt.Printf("----------------------------------------------read %d keys from readerId %d\n", i, rid)
+					}
+				}
+			}(r, start, end)
+		}
+	}
+
 	// Start pprof HTTP server for runtime profiling
 
 	wg.Wait()

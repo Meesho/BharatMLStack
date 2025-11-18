@@ -1,6 +1,6 @@
 module github.com/Meesho/BharatMLStack/flashring
 
-go 1.24.6
+go 1.24
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
