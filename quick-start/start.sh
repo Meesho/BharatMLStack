@@ -7,20 +7,22 @@ INSTALL_LINK="https://go.dev/doc/install"
 WORKSPACE_DIR="workspace"
 
 # Infrastructure services (always started)
-INFRASTRUCTURE_SERVICES="scylla mysql redis etcd db-init"
+INFRASTRUCTURE_SERVICES="scylla mysql redis etcd kafka db-init"
 
 # Application services (user selectable)
 ONFS_SERVICES="onfs-api-server onfs-healthcheck"
+ONFS_CONSUMER_SERVICES="onfs-consumer onfs-consumer-healthcheck"
 HORIZON_SERVICES="horizon horizon-healthcheck"
 NUMERIX_SERVICES="numerix numerix-healthcheck"
 TRUFFLEBOX_SERVICES="trufflebox-ui trufflebox-healthcheck"
 
 # Management tools
-MANAGEMENT_SERVICES="etcd-workbench"
+MANAGEMENT_SERVICES="etcd-workbench kafka-ui"
 
 # Global variables for user selection
 SELECTED_SERVICES="$INFRASTRUCTURE_SERVICES $MANAGEMENT_SERVICES"
 START_ONFS=false
+START_ONFS_CONSUMER=false
 START_HORIZON=false
 START_NUMERIX=false
 START_TRUFFLEBOX=false
@@ -44,6 +46,7 @@ check_go_version() {
 
 setup_workspace() {
   echo "📁 Setting up workspace in ./$WORKSPACE_DIR"
+  rm -rf "$WORKSPACE_DIR"
   mkdir -p "$WORKSPACE_DIR"
   
   # Copy docker-compose.yml
@@ -63,11 +66,11 @@ show_service_menu() {
   echo "🎯 BharatML Stack Service Selector"
   echo "=================================="
   echo ""
-  echo "Infrastructure (ScyllaDB, MySQL, Redis, etcd) will always be started."
+  echo "Infrastructure (ScyllaDB, MySQL, Redis, etcd, Kafka) and Management Tools (etcd-workbench, kafka-ui) will always be started."
   echo "Choose which application services to start:"
   echo ""
   echo "1) 🚀 All Services"
-  echo "   • Online Feature Store + Horizon + Numerix + TruffleBox UI"
+  echo "   • Online Feature Store + Consumer + Horizon + Numerix + TruffleBox UI"
   echo ""
   echo "2) 🎛️  Custom Selection"
   echo "   • Choose individual services"
@@ -84,8 +87,9 @@ get_user_choice() {
     case $choice in
       1)
         echo "✅ Selected: All Services"
-        SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES"
+        SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES"
         START_ONFS=true
+        START_ONFS_CONSUMER=true
         START_HORIZON=true
         START_NUMERIX=true
         START_TRUFFLEBOX=true
@@ -112,7 +116,8 @@ custom_selection() {
   echo "🎛️  Custom Service Selection"
   echo "============================"
   echo ""
-  echo "✅ Infrastructure services (always included): ScyllaDB, MySQL, Redis, etcd"
+  echo "✅ Infrastructure services (always included): ScyllaDB, MySQL, Redis, etcd, Kafka"
+  echo "✅ Management tools (always included): etcd-workbench, kafka-ui"
   echo ""
   
   # Ask about each service
@@ -121,6 +126,18 @@ custom_selection() {
     SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES"
     START_ONFS=true
     echo "✅ Added: Online Feature Store API"
+  fi
+  
+  read -p "Include ONFS Consumer (Kafka ingestion)? [y/N]: " include_onfs_consumer
+  if [[ $include_onfs_consumer =~ ^[Yy]$ ]]; then
+    if [[ $START_ONFS != true ]]; then
+      echo "⚠️  ONFS Consumer requires ONFS API Server. Adding ONFS API..."
+      SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES"
+      START_ONFS=true
+    fi
+    SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_CONSUMER_SERVICES"
+    START_ONFS_CONSUMER=true
+    echo "✅ Added: ONFS Consumer"
   fi
   
   read -p "Include Horizon Backend? [y/N]: " include_horizon
@@ -150,7 +167,7 @@ custom_selection() {
   fi
   
   echo ""
-  if [[ $START_ONFS == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false ]]; then
+  if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false ]]; then
     echo "🎯 Custom selection complete: Only infrastructure services will be started"
   else
     echo "🎯 Custom selection complete!"
@@ -163,10 +180,15 @@ start_selected_services() {
   echo ""
   echo "📋 Services to start:"
   echo "   Infrastructure:"
-  echo "   • ScyllaDB, MySQL, Redis, etcd, db-init, etcd-workbench"
+  echo "   • ScyllaDB, MySQL, Redis, etcd, Apache Kafka (KRaft), db-init"
+  echo "   Management Tools:"
+  echo "   • etcd-workbench, kafka-ui"
   
   if [[ $START_ONFS == true ]]; then
     echo "   • Online Feature Store API Server"
+  fi
+  if [[ $START_ONFS_CONSUMER == true ]]; then
+    echo "   • ONFS Consumer (Kafka Ingestion)"
   fi
   if [[ $START_HORIZON == true ]]; then
     echo "   • Horizon Backend API"
@@ -179,11 +201,14 @@ start_selected_services() {
   fi
   
   
-  if [[ $START_ONFS == true || $START_HORIZON == true || $START_NUMERIX == true || $START_TRUFFLEBOX == true ]]; then
+  if [[ $START_ONFS == true || $START_ONFS_CONSUMER == true || $START_HORIZON == true || $START_NUMERIX == true || $START_TRUFFLEBOX == true ]]; then
     echo ""
     echo "🏷️  Application versions:"
     if [[ $START_ONFS == true ]]; then
       echo "   • ONFS API Server: ${ONFS_VERSION:-latest}"
+    fi
+    if [[ $START_ONFS_CONSUMER == true ]]; then
+      echo "   • ONFS Consumer: ${ONFS_VERSION:-latest}"
     fi
     if [[ $START_HORIZON == true ]]; then
       echo "   • Horizon Backend: ${HORIZON_VERSION:-latest}"
@@ -200,7 +225,7 @@ start_selected_services() {
   fi
   echo ""
   
-  (cd "$WORKSPACE_DIR" && docker-compose up -d $SELECTED_SERVICES)
+  (cd "$WORKSPACE_DIR" && docker-compose up -d --build $SELECTED_SERVICES)
   
   echo ""
   echo "⏳ Waiting for services to start up..."
@@ -233,7 +258,7 @@ verify_services() {
   echo ""
   
   # If no application services selected, skip health checks
-  if [[ $START_ONFS == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false ]]; then
+  if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false ]]; then
     echo "🏥 Infrastructure-only setup - skipping application health checks..."
     echo "✅ Infrastructure services started successfully!"
     return 0
@@ -250,6 +275,13 @@ verify_services() {
     # Check ONFS API if selected
     if [[ $START_ONFS == true ]]; then
       if ! curl -s http://localhost:8089/health/self > /dev/null 2>&1; then
+        all_healthy=false
+      fi
+    fi
+    
+    # Check ONFS Consumer if selected
+    if [[ $START_ONFS_CONSUMER == true ]]; then
+      if ! curl -s http://localhost:8090/health/self > /dev/null 2>&1; then
         all_healthy=false
       fi
     fi
@@ -290,7 +322,7 @@ verify_services() {
 
 show_access_info() {
   echo ""
-  if [[ $START_ONFS == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false ]]; then
+  if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false ]]; then
     echo "🎉 BharatML Stack infrastructure is now running!"
   else
     echo "🎉 BharatML Stack services are now running!"
@@ -298,9 +330,13 @@ show_access_info() {
   echo ""
   echo "📋 Access Information:"
   echo "   🔧 etcd Workbench:    http://localhost:8081"
+  echo "   📊 Kafka UI:          http://localhost:8084"
   
   if [[ $START_ONFS == true ]]; then
     echo "   🚀 ONFS gRPC API:     http://localhost:8089"
+  fi
+  if [[ $START_ONFS_CONSUMER == true ]]; then
+    echo "   📥 ONFS Consumer:     http://localhost:8090"
   fi
   if [[ $START_HORIZON == true ]]; then
     echo "   📡 Horizon API:       http://localhost:8082"
@@ -332,17 +368,22 @@ show_access_info() {
 }
 
 # Handle command line arguments
+# --help, -h: Show help
+# --all: Start all services (non-interactive)
+# --local: Start services in local mode (build docker images locally)
 if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   echo "BharatML Stack Quick Start"
   echo ""
   echo "Usage:"
   echo "  ./start.sh              # Interactive mode with service selection"
   echo "  ./start.sh --all        # Start all services (non-interactive)"
+  echo "  ./start.sh --local      # Start services in local mode (build docker images locally)"
   echo "  ./start.sh --help       # Show this help"
   echo ""
-  echo "Infrastructure (ScyllaDB, MySQL, Redis, etcd) is always started."
+  echo "Infrastructure (ScyllaDB, MySQL, Redis, etcd, Kafka) and Management Tools (etcd-workbench, kafka-ui) are always started."
   echo "You can choose which application services to start:"
   echo "  • Online Feature Store API"
+  echo "  • ONFS Consumer (Kafka Ingestion)"
   echo "  • Horizon Backend"
   echo "  • Numerix Matrix Operations"
   echo "  • TruffleBox UI"
@@ -358,14 +399,20 @@ setup_workspace
 # Handle non-interactive mode
 if [ "$1" = "--all" ]; then
   echo "🎯 Non-interactive mode: Starting all services"
-  SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES"
+  SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES"
   START_ONFS=true
+  START_ONFS_CONSUMER=true
   START_HORIZON=true
   START_NUMERIX=true
   START_TRUFFLEBOX=true
 else
   # Interactive mode
   get_user_choice
+fi
+
+if [ "$1" = "--local" ]; then
+  echo "🎯 Starting services in local mode"
+  LOCAL_MODE=true
 fi
 
 start_selected_services

@@ -3,9 +3,7 @@ package infra
 import (
 	"errors"
 	"strings"
-	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
@@ -14,11 +12,14 @@ import (
 // <STORAGE_SCYLLA_1_CONTACT_POINTS> =
 // <STORAGE_SCYLLA_1_PORT> =
 // <STORAGE_SCYLLA_1_KEYSPACE> =
+// <STORAGE_SCYLLA_1_MAJOR_VERSION> = Scylla major version (e.g., 5, 6)
 const (
+	ismeeshoEnabled              = "IS_MEESHO_ENABLED"
 	storageScyllaPrefix          = "STORAGE_SCYLLA_"
 	contactPointsSuffix          = "_CONTACT_POINTS"
 	portSuffix                   = "_PORT"
 	keyspaceSuffix               = "_KEYSPACE"
+	scyllaVersionSuffix          = "_SCYLLA_VERSION"
 	timeoutSuffix                = "_TIMEOUT_IN_MS"
 	connectTimeoutSuffix         = "_CONNECT_TIMEOUT_IN_MS"
 	numConnsSuffix               = "_NUM_CONNS"
@@ -32,6 +33,14 @@ const (
 	password                     = "_PASSWORD"
 )
 
+// ScyllaClusterConfig wraps the cluster config with type information
+type ScyllaClusterConfig struct {
+	Config   interface{} // Will hold either gocql or gocql_v2 config
+	Version  int         // Major version number (e.g., 5, 6)
+	Keyspace string
+	IsMeesho bool
+}
+
 // BuildClusterConfigFromEnv constructs a ScyllaDB cluster configuration
 // using environment variables with the specified prefix.
 //
@@ -43,6 +52,7 @@ const (
 //   - <envPrefix>_CONTACT_POINTS: Comma-separated list of Scylla nodes
 //   - <envPrefix>_PORT: Scylla port
 //   - <envPrefix>_KEYSPACE: Keyspace to connect to
+//   - <envPrefix>_MAJOR_VERSION: Scylla major version (e.g., 5, 6)
 //
 // Optional environment variables:
 //   - <envPrefix>_TIMEOUT_IN_MS: Request timeout (milliseconds)
@@ -56,62 +66,56 @@ const (
 //   - <envPrefix>_WRITE_COALESCE_WAIT_TIME_IN_US: Write coalescing wait time (microseconds)
 //
 // Returns:
-//   - A configured `gocql.ClusterConfig` instance or an error if mandatory variables are missing.
-func BuildClusterConfigFromEnv(envPrefix string) (*gocql.ClusterConfig, error) {
+//   - A configured `ScyllaClusterConfig` instance or an error if mandatory variables are missing.
+func BuildClusterConfigFromEnv(envPrefix string) (*ScyllaClusterConfig, error) {
 
 	log.Debug().Msgf("building scylla cluster config from env, env prefix - %s", envPrefix)
+
+	// Check for version first - this determines which gocql library to use
+	if !viper.IsSet(envPrefix + scyllaVersionSuffix) {
+		return nil, errors.New(envPrefix + scyllaVersionSuffix + " not set")
+	}
+	scyllaVersion := viper.GetInt(envPrefix + scyllaVersionSuffix)
+	if scyllaVersion != 5 && scyllaVersion != 6 {
+		return nil, errors.New(envPrefix + scyllaVersionSuffix + " must be 5 or 6")
+	}
+
 	if !viper.IsSet(envPrefix + contactPointsSuffix) {
 		return nil, errors.New(envPrefix + contactPointsSuffix + " not set")
 	}
 	contactPoints := viper.GetString(envPrefix + contactPointsSuffix)
 	hosts := strings.Split(contactPoints, ",")
 
-	cfg := gocql.NewCluster(hosts...)
-	cfg.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
-	cfg.Consistency = gocql.One // Or gocql.Quorum if stronger consistency is needed
-
-	if !viper.IsSet(envPrefix + portSuffix) {
-		return nil, errors.New(envPrefix + portSuffix + " not set")
-	}
-	cfg.Port = viper.GetInt(envPrefix + portSuffix)
-
+	// Get the keyspace first for validation
 	if !viper.IsSet(envPrefix + keyspaceSuffix) {
 		return nil, errors.New(envPrefix + keyspaceSuffix + " not set")
 	}
-	cfg.Keyspace = viper.GetString(envPrefix + keyspaceSuffix)
-
-	if viper.IsSet(envPrefix + timeoutSuffix) {
-		cfg.Timeout = time.Duration(viper.GetInt(envPrefix+timeoutSuffix)) * time.Millisecond
-	}
-	if viper.IsSet(envPrefix + connectTimeoutSuffix) {
-		cfg.ConnectTimeout = time.Duration(viper.GetInt(envPrefix+connectTimeoutSuffix)) * time.Millisecond
-	}
-	if viper.IsSet(envPrefix + numConnsSuffix) {
-		cfg.NumConns = viper.GetInt(envPrefix + numConnsSuffix)
-	}
-	if viper.IsSet(envPrefix + maxPreparedStmtsSuffix) {
-		cfg.MaxPreparedStmts = viper.GetInt(envPrefix + maxPreparedStmtsSuffix)
-	}
-	if viper.IsSet(envPrefix + maxRoutingKeyInfoSuffix) {
-		cfg.MaxRoutingKeyInfo = viper.GetInt(envPrefix + maxRoutingKeyInfoSuffix)
-	}
-	if viper.IsSet(envPrefix + pageSizeSuffix) {
-		cfg.PageSize = viper.GetInt(envPrefix + pageSizeSuffix)
-	}
-	if viper.IsSet(envPrefix + maxWaitSchemaAgreementSuffix) {
-		cfg.MaxWaitSchemaAgreement = time.Duration(viper.GetInt(envPrefix+maxWaitSchemaAgreementSuffix)) * time.Second
-	}
-	if viper.IsSet(envPrefix + reconnectIntervalSuffix) {
-		cfg.ReconnectInterval = time.Duration(viper.GetInt(envPrefix+reconnectIntervalSuffix)) * time.Second
-	}
-	if viper.IsSet(envPrefix + writeCoalesceWaitTimeSuffix) {
-		cfg.WriteCoalesceWaitTime = time.Duration(viper.GetInt(envPrefix+writeCoalesceWaitTimeSuffix)) * time.Microsecond
-	}
-	if viper.IsSet(envPrefix+username) && viper.IsSet(envPrefix+password) {
-		cfg.Authenticator = gocql.PasswordAuthenticator{
-			Username: viper.GetString(envPrefix + username),
-			Password: viper.GetString(envPrefix + password),
+	keyspace := viper.GetString(envPrefix + keyspaceSuffix)
+	isMeesho := viper.GetBool(ismeeshoEnabled)
+	// Use the appropriate gocql library based on version
+	// Version >= 6 uses gocql_v2, else uses standard gocql
+	var cfg interface{}
+	var err error
+	if scyllaVersion == 6 && isMeesho {
+		// Use gocql_v2 for Meesho version
+		cfg, err = buildGocqlV2ClusterConfig(hosts, envPrefix, keyspace)
+		if err != nil {
+			return nil, err
 		}
+		log.Debug().Msgf("Using gocql_v2 library for Scylla version: %v (major: %d)", isMeesho, scyllaVersion)
+	} else {
+		// Use standard gocql for non-Meesho version
+		cfg, err = buildGocqlClusterConfig(hosts, envPrefix, keyspace)
+		if err != nil {
+			return nil, err
+		}
+		log.Debug().Msgf("Using standard gocql library for Scylla version: %v (major: %d)", isMeesho, scyllaVersion)
 	}
-	return cfg, nil
+
+	return &ScyllaClusterConfig{
+		Config:   cfg,
+		Version:  scyllaVersion,
+		IsMeesho: isMeesho,
+		Keyspace: keyspace,
+	}, nil
 }
