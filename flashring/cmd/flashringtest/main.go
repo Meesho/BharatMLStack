@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 	"strings"
@@ -76,8 +77,14 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	//clear the current mount point
-	os.RemoveAll(mountPoint)
+	//remove all files inside the mount point
+	files, err := os.ReadDir(mountPoint)
+	if err != nil {
+		panic(err)
+	}
+	for _, file := range files {
+		os.Remove(filepath.Join(mountPoint, file.Name()))
+	}
 
 	memtableSizeInBytes := int32(memtableMB) * 1024 * 1024
 	fileSizeInBytes := int64(fileSizeMultiplier) * int64(memtableSizeInBytes)
