@@ -3,6 +3,7 @@ package main
 import (
 	"strconv"
 
+	horizonConfig "github.com/Meesho/BharatMLStack/horizon/internal"
 	applicationRouter "github.com/Meesho/BharatMLStack/horizon/internal/application/route"
 	authRouter "github.com/Meesho/BharatMLStack/horizon/internal/auth/router"
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
@@ -17,7 +18,6 @@ import (
 	ofsConfig "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/config"
 	ofsRouter "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/router"
 	predatorRouter "github.com/Meesho/BharatMLStack/horizon/internal/predator/route"
-	"github.com/Meesho/BharatMLStack/horizon/pkg/config"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/etcd"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/httpframework"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
@@ -48,7 +48,7 @@ var (
 
 func main() {
 	cacConfig.InitGlobalConfig(&appConfig)
-	config.InitEnv()
+	horizonConfig.InitAll(appConfig.Configs)
 	infra.InitDBConnectors()
 	logger.Init()
 	metric.Init()
