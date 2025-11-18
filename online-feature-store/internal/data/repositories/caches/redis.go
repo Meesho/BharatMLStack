@@ -126,7 +126,7 @@ func (r *RedisCache) SetV2(entityLabel string, keys []string, data []byte) error
 	if err != nil {
 		return err
 	}
-	ttlInSeconds := cacheConfig.TtlInSeconds
+	ttlInSeconds := getFinalTTLWithJitter(cacheConfig)
 	err = r.conn.Set(context.Background(), k, data, time.Duration(ttlInSeconds)*time.Second).Err()
 	log.Debug().Msgf("Set key: %s, data: %s, ttl: %d", k, data, ttlInSeconds)
 	if err != nil {
@@ -147,7 +147,7 @@ func (r *RedisCache) MultiSetV2(entityLabel string, keys []*retrieve.Keys, value
 	if err != nil {
 		return err
 	}
-	ttlInSeconds := cacheConfig.TtlInSeconds
+	ttlInSeconds := getFinalTTLWithJitter(cacheConfig)
 	pipe := r.conn.Pipeline()
 
 	for i, key := range keys {

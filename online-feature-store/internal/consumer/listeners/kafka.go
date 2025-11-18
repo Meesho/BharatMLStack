@@ -2,10 +2,13 @@ package listeners
 
 import (
 	"context"
+	"errors"
+	"hash/fnv"
+	"math/rand"
 	"os"
 	"os/signal"
-	"runtime/debug"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -43,12 +46,15 @@ var (
 )
 
 type KafkaListener struct {
-	handler              *feature.PersistHandler
-	kafkaConfigGenerator kafkaConf.KafkaConfigGenerator
-	consumers            []*kafka.Consumer
-	kafkaConfig          *kafkaConf.KafkaConfig
-	sigChan              chan os.Signal
-	workerPool           chan struct{} // Semaphore for worker pool
+	handler                       *feature.PersistHandler
+	kafkaConfigGenerator          kafkaConf.KafkaConfigGenerator
+	consumers                     []*kafka.Consumer
+	kafkaConfig                   *kafkaConf.KafkaConfig
+	sigChan                       chan os.Signal
+	workerChannels                []chan *persist.Query // Worker channels
+	resultChannels                []chan bool           // Result channels
+	maxWorkers                    int
+	enableEntityIdBasedProcessing bool
 }
 
 func NewKafkaListener() *KafkaListener {
@@ -58,6 +64,7 @@ func NewKafkaListener() *KafkaListener {
 		if err != nil {
 			log.Panic().Err(err).Msg("Failed to build kafka config")
 		}
+
 		maxWorkers := 0
 		if viper.IsSet("KAFKA_CONSUMERS_FEATURE_CONSUMER_MAX_WORKERS") {
 			maxWorkers = viper.GetInt("KAFKA_CONSUMERS_FEATURE_CONSUMER_MAX_WORKERS")
@@ -66,15 +73,26 @@ func NewKafkaListener() *KafkaListener {
 			panic("KAFKA_CONSUMERS_FEATURE_CONSUMER_MAX_WORKERS is not set")
 		}
 
-		log.Info().
-			Int("max_workers", maxWorkers).
-			Msg("Initializing worker pool")
+		enableEntityIdBasedProcessing := false
+		if viper.IsSet("KAFKA_CONSUMERS_FEATURE_CONSUMER_ENABLE_ENTITY_ID_BASED_PROCESSING") {
+			enableEntityIdBasedProcessing = viper.GetBool("KAFKA_CONSUMERS_FEATURE_CONSUMER_ENABLE_ENTITY_ID_BASED_PROCESSING")
+		}
+
+		workerChannels := make([]chan *persist.Query, maxWorkers)
+		resultChannels := make([]chan bool, maxWorkers)
+		for i := 0; i < maxWorkers; i++ {
+			workerChannels[i] = make(chan *persist.Query, 1)
+			resultChannels[i] = make(chan bool, 1)
+		}
 
 		kafkaListener = &KafkaListener{
-			handler:              feature.InitPersistHandler(),
-			kafkaConfigGenerator: kafkaConfigGenerator,
-			kafkaConfig:          kafkaConfig,
-			workerPool:           make(chan struct{}, maxWorkers), // Initialize worker pool semaphore
+			handler:                       feature.InitPersistHandler(),
+			kafkaConfigGenerator:          kafkaConfigGenerator,
+			kafkaConfig:                   kafkaConfig,
+			workerChannels:                workerChannels,
+			resultChannels:                resultChannels,
+			maxWorkers:                    maxWorkers,
+			enableEntityIdBasedProcessing: enableEntityIdBasedProcessing,
 		}
 	})
 	return kafkaListener
@@ -107,6 +125,9 @@ func (k *KafkaListener) Init() {
 	}
 	k.sigChan = make(chan os.Signal, 1)
 	signal.Notify(k.sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start worker goroutines
+	k.startWorkers()
 }
 
 func (k *KafkaListener) Consume() {
@@ -125,7 +146,8 @@ func (k *KafkaListener) Consume() {
 				}
 			}()
 			run := true
-			messages := make([][]byte, 0, k.kafkaConfig.BatchSize)
+
+			messages := make([]*kafka.Message, 0, k.kafkaConfig.BatchSize)
 			msgCount := 0
 			flushTimer := time.NewTicker(30 * time.Second) // ⏳ Flush every 30 seconds (configurable)
 
@@ -134,10 +156,9 @@ func (k *KafkaListener) Consume() {
 				case <-k.sigChan:
 					log.Info().Msgf("Terminating Instance %v", c)
 
-					// Process remaining messages before shutdown
 					if msgCount > 0 {
-						log.Info().Msgf("Processing remaining %d messages before shutdown", msgCount)
-						k.process(messages)
+						log.Debug().Msgf("Processing remaining %d messages before shutdown", msgCount)
+						k.processBatch(c, messages)
 					}
 
 					if err := c.Unsubscribe(); err != nil {
@@ -150,8 +171,8 @@ func (k *KafkaListener) Consume() {
 
 				case <-flushTimer.C: // ⏳ Flush on timeout even if batch size is not reached
 					if msgCount > 0 {
-						log.Info().Msgf("Processing %d messages due to timeout", msgCount)
-						k.process(messages)
+						log.Debug().Msgf("Processing %d messages due to timeout", msgCount)
+						k.processBatch(c, messages)
 						msgCount = 0
 						messages = messages[:0]
 					}
@@ -169,12 +190,12 @@ func (k *KafkaListener) Consume() {
 							"client:" + k.kafkaConfig.ClientID,
 						})
 
-						messages = append(messages, e.Value)
+						messages = append(messages, e)
 						msgCount++
 
-						// Process batch if it reaches batch size
 						if msgCount == k.kafkaConfig.BatchSize {
-							k.process(messages)
+							log.Debug().Msgf("Processing batch of %d messages", msgCount)
+							k.processBatch(c, messages)
 							msgCount = 0
 							messages = messages[:0]
 						}
@@ -183,10 +204,9 @@ func (k *KafkaListener) Consume() {
 						if e.IsFatal() {
 							log.Error().Err(e).Msg("Fatal Kafka error. Shutting down consumer.")
 
-							// Process remaining messages before shutting down due to fatal error
 							if msgCount > 0 {
 								log.Info().Msgf("Processing remaining %d messages before fatal error", msgCount)
-								k.process(messages)
+								k.processBatch(c, messages)
 							}
 
 							run = false
@@ -203,41 +223,122 @@ func (k *KafkaListener) Consume() {
 	}
 }
 
-func (k *KafkaListener) process(event [][]byte) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Error().Msgf("Panic occurred in method %s: %v\n", r, debug.Stack())
-		}
-	}()
-	// Process each message with worker pool
-	for _, e := range event {
-		e := e // Create new variable for goroutine
-		// Acquire worker from pool (blocks if pool is full)
-		k.workerPool <- struct{}{}
+func (k *KafkaListener) processBatch(consumer *kafka.Consumer, messages []*kafka.Message) {
 
+	partitionsMap := make(map[int32]kafka.TopicPartition)
+	allSuccess := true
+
+	for _, msg := range messages {
+		partition, exists := partitionsMap[msg.TopicPartition.Partition]
+		if !exists || msg.TopicPartition.Offset < partition.Offset {
+			partitionsMap[msg.TopicPartition.Partition] = msg.TopicPartition
+		}
+		value := &persist.Query{}
+		err := proto.Unmarshal(msg.Value, value)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to deserialize FeatureDataEvent")
+			// Treat deserialization error as success, so don't change allSuccess
+			continue
+		}
+		workerId := k.getWorkerId(value, k.enableEntityIdBasedProcessing)
+
+		// Send message to worker
+		k.workerChannels[workerId] <- value
+		success := <-k.resultChannels[workerId]
+		if !success {
+			allSuccess = false
+		}
+	}
+
+	// Check if all messages were processed successfully
+	if !k.kafkaConfig.AutoCommitEnable {
+		if allSuccess {
+			if _, err := consumer.Commit(); err != nil {
+				log.Error().Err(err).Msg("Failed to commit messages")
+			}
+		} else {
+			topicPartitions := make([]kafka.TopicPartition, 0, len(messages))
+			for _, value := range partitionsMap {
+				topicPartitions = append(topicPartitions, value)
+			}
+
+			if _, err := consumer.SeekPartitions(topicPartitions); err != nil {
+				log.Error().Msgf("%v : Failed to seek partitions", consumer)
+			}
+		}
+	}
+}
+
+func (k *KafkaListener) process(value *persist.Query) bool {
+	_, err := k.handler.Persist(context.Background(), value, enums.ConsistencyEventual)
+	if err != nil {
+		var invalidEventErr *feature.InvalidEventError
+		if errors.As(err, &invalidEventErr) {
+			log.Error().Err(err).Msg("Failed to persist features.")
+			k.publishMetrics(value, value.EntityLabel, false, value)
+			return true
+		}
+		k.publishMetrics(value, value.EntityLabel, false, value)
+		return false
+	} else {
+		k.publishMetrics(value, value.EntityLabel, true, value)
+		return true
+	}
+}
+
+func (k *KafkaListener) startWorkers() {
+	for i := 0; i < k.maxWorkers; i++ {
+		workerId := i
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Error().Msgf("Panic occurred in worker: %v\n", r)
+					log.Error().Msgf("Worker %d recovered from panic: %v", workerId, r)
 					metric.Incr("feature_persist_panic_count", []string{})
 				}
-				<-k.workerPool // Release worker back to pool
 			}()
 
-			value := &persist.Query{}
-			err := proto.Unmarshal(e, value)
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to deserialize FeatureDataEvent")
-				return
-			}
-
-			_, err = k.handler.Persist(context.Background(), value, enums.ConsistencyEventual)
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to persist features.")
-				metric.Incr("feature_persist", []string{"success", "false", "entity", value.EntityLabel})
-			} else {
-				metric.Incr("feature_persist", []string{"success", "true", "entity", value.EntityLabel})
+			for msg := range k.workerChannels[workerId] {
+				success := k.process(msg)
+				k.resultChannels[workerId] <- success
 			}
 		}()
+	}
+}
+
+func (k *KafkaListener) getWorkerId(value *persist.Query, enableEntityIdBasedProcessing bool) int {
+	if !enableEntityIdBasedProcessing {
+		return rand.Intn(k.maxWorkers)
+	}
+	if len(value.Data) > 1 {
+		log.Error().Msg("For entityIdBasedProcessing there can't be >1 entity ids, using random index")
+		return rand.Intn(k.maxWorkers)
+	}
+
+	var entityId strings.Builder
+	for i, keyValue := range value.Data[0].KeyValues {
+		if i > 0 {
+			entityId.WriteString("_") // separator between key values
+		}
+		entityId.WriteString(keyValue)
+	}
+	entityIdStr := entityId.String()
+
+	// Hash calculation using FNV-1a
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(entityIdStr))
+	return int(hash.Sum32() % uint32(k.maxWorkers))
+}
+
+func (k *KafkaListener) publishMetrics(persistQuery *persist.Query, entityLabel string, success bool, value *persist.Query) {
+	dataSize := int64(len(persistQuery.Data))
+	successStr := "false"
+	if success {
+		successStr = "true"
+	}
+	baseTags := []string{"success:" + successStr, "entity:" + entityLabel}
+
+	// Publish metric for each feature group
+	for _, fg := range value.FeatureGroupSchema {
+		metric.Count("feature_persist", dataSize, append(baseTags, "feature_group:"+fg.Label))
 	}
 }
