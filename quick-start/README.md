@@ -20,12 +20,18 @@ BharatMLStack's Online Feature Store consists of several interconnected services
 - **MySQL**: Relational database for metadata and configuration
 - **Redis**: In-memory data store for caching
 - **etcd**: Distributed key-value store for service coordination
+- **Apache Kafka**: Message broker for feature ingestion pipeline
 
 **Application Services:**
-- **Horizon**: Backend API service (runs on port 8082)
-- **Trufflebox UI**: Frontend web interface (runs on port 3000)
 - **Online Feature Store gRPC API Server**: High-performance gRPC interface (runs on port 8089)
+- **ONFS Consumer**: Kafka consumer service for real-time feature ingestion from message streams (runs on port 8090)
+- **Horizon**: Backend API service (runs on port 8082)
+- **Numerix**: Matrix operations service (runs on port 8083)
+- **Trufflebox UI**: Frontend web interface (runs on port 3000)
+
+**Management Tools:**
 - **etcd Workbench**: etcd management interface (runs on port 8081)
+- **Kafka UI**: Kafka cluster management interface (runs on port 8084)
 
 All services are orchestrated using Docker Compose with pre-built images from GitHub Container Registry (GHCR).
 
@@ -33,30 +39,87 @@ All services are orchestrated using Docker Compose with pre-built images from Gi
 
 ### Starting the System
 
-Run the start script to set up your workspace and launch all services:
+The start script provides an interactive service selector that allows you to choose which application services to run:
 
 ```bash
 ./start.sh
 ```
 
-### Testing Different Versions
+**Interactive Options:**
+1. **All Services** - Starts all application services (API Server, Consumer, Horizon, Numerix, TruffleBox UI)
+2. **Custom Selection** - Choose individual services to start
+3. **Exit** - Exit without starting
 
-You can easily test different versions of the application services by setting environment variables:
+**Infrastructure services (ScyllaDB, MySQL, Redis, etcd, Kafka) and Management Tools (etcd-workbench, kafka-ui) are always started.**
+
+### Service Independence
+
+Services can run independently based on your needs:
+- **ONFS API Server** - For direct gRPC feature operations
+- **ONFS Consumer** - For real-time Kafka-based feature ingestion (independent of API Server)
+- **Horizon + TruffleBox UI** - For web-based feature store management
+- **Numerix** - For matrix operations
+
+### Specifying Service Versions
+
+You can specify versions for application services using environment variables:
 
 ```bash
-# Test specific versions [Replace with actual versions]
-ONFS_VERSION=v1.2.3 HORIZON_VERSION=v2.1.0 TRUFFLEBOX_VERSION=v1.0.5 ./start.sh
+# Specify individual service versions
+ONFS_VERSION=v1.2.3 ./start.sh
 
-# Or set them in your workspace and run docker-compose directly
-cd workspace
-ONFS_VERSION=main docker-compose up -d onfs-api-server
+# Specify consumer version
+ONFS_CONSUMER_VERSION=v1.0.0-beta-d74137 ./start.sh
+
+# Combine multiple versions
+ONFS_VERSION=v1.2.0 HORIZON_VERSION=v2.1.0 TRUFFLEBOX_VERSION=v1.0.5 ./start.sh
+
+# Start all services with specific versions
+ONFS_VERSION=v1.2.0 ONFS_CONSUMER_VERSION=v1.0.0-beta-d74137 ./start.sh
 ```
 
-Available version formats:
+**Available Environment Variables:**
+- `ONFS_VERSION` - Online Feature Store API Server version
+- `ONFS_CONSUMER_VERSION` - ONFS Consumer version
+- `HORIZON_VERSION` - Horizon Backend version
+- `NUMERIX_VERSION` - Numerix Matrix Operations version
+- `TRUFFLEBOX_VERSION` - TruffleBox UI version
+
+**Version Formats:**
 - `latest` (default) - Latest stable release
 - `main` - Latest development build  
 - `v1.2.3` - Specific version tag
 - `sha-abcd1234` - Specific commit SHA
+
+**Non-interactive Mode:**
+```bash
+# Start all services without prompts
+./start.sh --all
+
+# Start with specific versions non-interactively
+ONFS_VERSION=v1.2.0 ./start.sh --all
+```
+
+**Advanced: Direct docker-compose Usage**
+
+You can also work directly with docker-compose in the workspace directory:
+
+```bash
+# Change to workspace directory
+cd workspace
+
+# Start specific service with version
+ONFS_VERSION=main docker-compose up -d onfs-api-server
+
+# Start multiple services with different versions
+ONFS_VERSION=v1.2.0 HORIZON_VERSION=v2.1.0 docker-compose up -d onfs-api-server horizon
+
+# Restart a service with a different version
+ONFS_CONSUMER_VERSION=v1.0.0-beta-d74137 docker-compose up -d onfs-consumer
+
+# View specific service
+docker-compose ps onfs-api-server
+```
 
 This will:
 1. Check for Go installation (1.22+ required)
@@ -70,7 +133,9 @@ Once complete, you can access:
 - **Trufflebox UI**: http://localhost:3000
 - **Horizon API**: http://localhost:8082
 - **Online Feature Store gRPC API**: http://localhost:8089
+- **ONFS Consumer**: http://localhost:8090 (health check)
 - **etcd Workbench**: http://localhost:8081
+- **Kafka UI**: http://localhost:8084
 
 ### Stopping the System
 
@@ -99,6 +164,10 @@ To stop and completely purge all containers, volumes, and workspace:
   - Health check: http://localhost:8082/health
 - **ONFS gRPC API**: http://localhost:8089
   - Health check: http://localhost:8089/health/self
+- **ONFS Consumer**: http://localhost:8090
+  - Health check: http://localhost:8090/health/self
+- **Numerix**: http://localhost:8083
+  - Health check: http://localhost:8083/health
 
 ### Database Access
 
@@ -121,6 +190,11 @@ To stop and completely purge all containers, volumes, and workspace:
 - **etcd**:
   - Endpoint: http://localhost:2379
   - Workbench: http://localhost:8081
+
+- **Kafka**:
+  - Bootstrap Servers: localhost:9092
+  - Kafka UI: http://localhost:8084
+  - Default Topic: online-feature-store.feature_ingestion
 
 
 
@@ -281,6 +355,79 @@ The following value types are supported:
 - **Retrieve Features (Binary)**: Returns data in binary format for optimal performance and reduced network overhead
 - **Retrieve Features (Decoded)**: Returns data in human-readable string format for easier debugging and development purposes
 
+## Feature Ingestion Flows
+
+BharatMLStack Online Feature Store supports two primary methods for ingesting features:
+
+### 1. Direct gRPC API Ingestion
+
+Use the ONFS API Server for synchronous, request-response feature operations:
+
+```bash
+# Persist features directly via gRPC
+grpcurl -plaintext -H "online-feature-store-caller-id: <caller-id>" \
+  -H "online-feature-store-auth-token: <auth-token>" \
+  -d '<request-body>' localhost:8089 persist.FeatureService/PersistFeatures
+```
+
+**When to use:**
+- Real-time feature updates requiring immediate confirmation
+- Low-latency synchronous operations
+- Direct integration with applications
+
+### 2. Kafka Consumer Ingestion
+
+The ONFS Consumer service provides asynchronous, stream-based feature ingestion:
+
+**Architecture:**
+```
+Producer → Kafka Topic → ONFS Consumer → Redis/Scylla
+```
+
+**How it works:**
+1. Applications publish feature data to Kafka topic: `online-feature-store.feature_ingestion`
+2. ONFS Consumer reads messages from Kafka in batches
+3. Features are persisted to configured storage backends (Redis/Scylla)
+4. Consumer handles retries and error scenarios automatically
+
+**Configuration:**
+- **Kafka Topic**: `online-feature-store.feature_ingestion`
+- **Consumer Port**: 8090
+- **Health Check**: http://localhost:8090/health/self
+- **Bootstrap Servers**: `broker:29092` (internal), `localhost:9092` (external)
+
+**Publishing Features to Kafka:**
+```bash
+# Using kafka-console-producer (for testing)
+docker exec -it broker kafka-console-producer.sh \
+  --bootstrap-server localhost:9092 \
+  --topic online-feature-store.feature_ingestion
+
+# Then paste your feature JSON payload
+```
+
+**Consumer Benefits:**
+- Decouples feature ingestion from application logic
+- High throughput batch processing
+- Automatic retries and error handling
+- Scales independently of API server
+- Supports backpressure and flow control
+
+**Monitoring Consumer:**
+```bash
+# View consumer logs
+cd workspace && docker-compose logs -f onfs-consumer
+
+# Check Kafka UI for consumer lag
+open http://localhost:8084
+```
+
+**When to use:**
+- High-volume feature ingestion
+- Asynchronous batch processing
+- Event-driven architectures
+- When producer and consumer need to scale independently
+
 ## Managing Services
 
 ### Viewing Logs
@@ -293,6 +440,11 @@ cd workspace && docker-compose logs -f
 cd workspace && docker-compose logs -f horizon
 cd workspace && docker-compose logs -f trufflebox-ui
 cd workspace && docker-compose logs -f onfs-api-server
+cd workspace && docker-compose logs -f onfs-consumer
+cd workspace && docker-compose logs -f kafka
+
+# View logs for multiple services
+cd workspace && docker-compose logs -f onfs-api-server onfs-consumer
 ```
 
 ### Service Management
@@ -315,7 +467,24 @@ cd workspace && docker-compose ps
 
 ### Common Issues
 
-1. **Port conflicts**: Ensure ports 3000, 8081, 8082, 8089, 9042, 3306, 6379, and 2379 are not in use by other applications.
+1. **Port conflicts**: The following ports must be available:
+   
+   | Port | Service |
+   |------|---------|
+   | 3000 | TruffleBox UI |
+   | 8081 | etcd Workbench |
+   | 8082 | Horizon API |
+   | 8083 | Numerix |
+   | 8084 | Kafka UI |
+   | 8089 | ONFS gRPC API |
+   | 8090 | ONFS Consumer |
+   | 9092 | Kafka |
+   | 9042 | ScyllaDB |
+   | 3306 | MySQL |
+   | 6379 | Redis |
+   | 2379 | etcd |
+   
+   If any ports are in use, stop conflicting services or modify port mappings in `docker-compose.yml`.
 
 2. **Docker network issues**: If containers can't communicate, try recreating:
    ```bash
@@ -332,15 +501,39 @@ cd workspace && docker-compose ps
    ```bash
    docker login ghcr.io
    ```
-5. [How to use Etcd Workbench ?](https://github.com/tzfun/etcd-workbench/blob/master/README.md)
+
+5. **Kafka consumer not receiving messages**: 
+   ```bash
+   # Check if Kafka topic exists
+   docker exec -it broker kafka-topics.sh --bootstrap-server localhost:9092 --list
+   
+   # Check consumer group status
+   docker exec -it broker kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group onfs-consumer-group --describe
+   
+   # Verify Kafka UI
+   open http://localhost:8084
+   ```
+
+6. **Consumer lag issues**: Monitor consumer performance via Kafka UI (http://localhost:8084) to identify bottlenecks
+
+7. [How to use Etcd Workbench ?](https://github.com/tzfun/etcd-workbench/blob/master/README.md)
 
 ### Service Dependencies
 
 Services start in the following order:
-1. Infrastructure services (ScyllaDB, MySQL, Redis, etcd)
-2. Online Feature Store gRPC API Server
-3. Horizon (depends on databases + ONFS API)
+1. Infrastructure services (ScyllaDB, MySQL, Redis, etcd, Kafka)
+2. kafka-init (creates required Kafka topics)
+3. Application services (can run independently):
+   - **ONFS API Server** - depends on databases (ScyllaDB, MySQL, Redis, etcd)
+   - **ONFS Consumer** - depends on Kafka and databases (independent of API Server)
+   - **Horizon** - depends on databases and ScyllaDB
+   - **Numerix** - depends on etcd
 4. Trufflebox UI (depends on Horizon)
+
+**Key Points:**
+- ONFS Consumer can run without ONFS API Server
+- Services can be started individually based on use case
+- All services depend on their respective infrastructure components
 
 If a service fails to start, check its dependencies are healthy first.
 

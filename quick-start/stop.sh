@@ -15,7 +15,7 @@ stop_services() {
     echo "⚠️  Workspace directory not found, stopping individual containers..."
     
     # Fallback: stop containers individually
-    CONTAINERS=("onfs-consumer" "onfs-consumer-healthcheck" "trufflebox" "trufflebox-healthcheck" "numerix" "numerix-healthcheck" "horizon" "horizon-healthcheck" "onfs-api-server" "onfs-healthcheck" "kafka-ui" "etcd-workbench" "db-init" "kafka" "broker" "zookeeper" "etcd" "redis" "mysql" "scylla")
+    CONTAINERS=("onfs-consumer" "onfs-consumer-healthcheck" "trufflebox" "trufflebox-healthcheck" "numerix" "numerix-healthcheck" "horizon" "horizon-healthcheck" "onfs-api-server" "onfs-healthcheck" "kafka-ui" "etcd-workbench" "db-init" "kafka-init" "kafka" "broker" "zookeeper" "etcd" "redis" "mysql" "scylla")
     
     for container in "${CONTAINERS[@]}"; do
       if docker ps -q -f name="$container" | grep -q .; then
@@ -35,7 +35,7 @@ remove_containers() {
     (cd "$WORKSPACE_DIR" && docker-compose down --volumes --remove-orphans)
   else
     # Fallback: remove containers individually
-    CONTAINERS=("onfs-consumer" "onfs-consumer-healthcheck" "trufflebox" "trufflebox-healthcheck" "numerix" "numerix-healthcheck" "horizon" "horizon-healthcheck" "onfs-api-server" "onfs-healthcheck" "kafka-ui" "etcd-workbench" "db-init" "kafka" "broker" "zookeeper" "etcd" "redis" "mysql" "scylla")
+    CONTAINERS=("onfs-consumer" "onfs-consumer-healthcheck" "trufflebox" "trufflebox-healthcheck" "numerix" "numerix-healthcheck" "horizon" "horizon-healthcheck" "onfs-api-server" "onfs-healthcheck" "kafka-ui" "etcd-workbench" "db-init" "kafka-init" "kafka" "broker" "zookeeper" "etcd" "redis" "mysql" "scylla")
     
     for container in "${CONTAINERS[@]}"; do
       if docker ps -aq -f name="$container" | grep -q .; then
@@ -111,7 +111,7 @@ show_status() {
   echo "📊 Current Status:"
   
   # Check for running containers
-  RUNNING_CONTAINERS=$(docker ps --filter "name=scylla|mysql|redis|etcd|kafka|broker|zookeeper|horizon|numerix|trufflebox|onfs-api-server|onfs-consumer|kafka-ui|etcd-workbench" --format "{{.Names}}" 2>/dev/null || true)
+  RUNNING_CONTAINERS=$(docker ps --filter "name=scylla|mysql|redis|etcd|kafka|kafka-init|broker|zookeeper|horizon|numerix|trufflebox|onfs-api-server|onfs-consumer|kafka-ui|etcd-workbench" --format "{{.Names}}" 2>/dev/null || true)
   if [ -n "$RUNNING_CONTAINERS" ]; then
     echo "🟢 Running containers:"
     echo "$RUNNING_CONTAINERS" | sed 's/^/   • /'
