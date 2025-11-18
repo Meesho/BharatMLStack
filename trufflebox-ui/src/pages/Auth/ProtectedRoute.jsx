@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import Layout from './Layout';
 import { Spinner } from 'react-bootstrap';
+import { REACT_APP_ENVIRONMENT } from '../../config';
 
 const ProtectedRoute = ({
   children,
@@ -14,6 +15,9 @@ const ProtectedRoute = ({
 }) => {
   const { isAuthenticated, hasPermission, hasScreenAccess, permissions, loading } = useAuth();
 
+  // Check if environment is staging
+  const isStaging = REACT_APP_ENVIRONMENT.toLowerCase() === 'staging';
+
   // If still loading auth state, show loading
   if (loading) {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spinner /></div>;
@@ -22,6 +26,11 @@ const ProtectedRoute = ({
   // If not authenticated, redirect to login
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Skip permission checks in staging environment
+  if (isStaging) {
+    return <Layout>{children}</Layout>;
   }
 
   if (permissions === null) {
@@ -48,6 +57,7 @@ const ProtectedRoute = ({
         : requiredActions.some(action => hasPermission(service, screenType, action));
 
       if (!hasRequiredPermissions) {
+        const actionType = requireAllActions ? 'all' : 'any';
         return <Navigate to="/unauthorized" replace />;
       }
     }
