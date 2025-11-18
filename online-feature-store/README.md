@@ -299,11 +299,13 @@ docker build -t onfs-consumer -f cmd/consumer/DockerFile .
 # For api-server
 docker run -p 8080:8080 \
    --env-file ./cmd/api-server/.env \
+   --network onfs-network \
   onfs-api-server
   
 # For consumer
 docker run -p 8080:8080 \
    --env-file ./cmd/consumer/.env \
+   --network onfs-network \
   onfs-consumer
 ```
 

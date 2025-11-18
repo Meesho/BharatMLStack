@@ -91,7 +91,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 	}()
 	ReqInMemEmpty := retrieveData.ReqInMemCachedFGIds.IsEmpty()
 	ReqDistEmpty := retrieveData.ReqDistCachedFGIds.IsEmpty()
-	allKeys := retrieveData.Query.Keys
+	allKeys := retrieveData.UniqueKeys
 	reqDistCachedFGIds := retrieveData.ReqDistCachedFGIds
 	reqDbFGIds := retrieveData.ReqDbFGIds
 	allDistFGIds := retrieveData.AllDistCachedFGIds
@@ -492,6 +492,8 @@ func preProcessForKeys(retrieveData *RetrieveData, configManager config.Manager)
 	query := retrieveData.Query
 	rows := make([]*retrieve.Row, len(query.Keys))
 	reqKeyToIdx := make(map[string]int, len(query.Keys))
+	uniquekeys := make([]*retrieve.Keys, 0)
+	keyToOriginalIndices := make(map[string][]int)
 
 	// Create a map of feature group properties for quick lookup
 	fgProps := make(map[string]struct {
@@ -523,8 +525,13 @@ func preProcessForKeys(retrieveData *RetrieveData, configManager config.Manager)
 	// Process each key
 	for i, key := range query.Keys {
 		keyStr := getKeyString(key)
-		reqKeyToIdx[keyStr] = i
+		if _, exists := keyToOriginalIndices[keyStr]; !exists {
+			uniquekeys = append(uniquekeys, key)
+			reqKeyToIdx[keyStr] = i
+			keyToOriginalIndices[keyStr] = make([]int, 0)
+		}
 
+		keyToOriginalIndices[keyStr] = append(keyToOriginalIndices[keyStr], i)
 		// Create row with pre-allocated columns
 		dt := make([][]byte, retrieveData.ReqColumnCount)
 		rows[i] = &retrieve.Row{
@@ -562,6 +569,8 @@ func preProcessForKeys(retrieveData *RetrieveData, configManager config.Manager)
 		}
 	}
 
+	retrieveData.UniqueKeys = uniquekeys
+	retrieveData.KeyToOriginalIndices = keyToOriginalIndices
 	retrieveData.ReqKeyToIdx = reqKeyToIdx
 	retrieveData.Result.Rows = rows
 	return nil
@@ -664,6 +673,7 @@ func preProcessFGs(retrieveData *RetrieveData, configManager config.Manager) err
 }
 
 func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks.DeserializedPSDB, keyIdx int) {
+	keyStr := getKeyString(data.Query.Keys[keyIdx])
 	for fgId, ddb := range fgToDDB {
 		if _, ok := data.ReqIdxToFgIdToDdb[keyIdx]; !ok {
 			data.ReqIdxToFgIdToDdb[keyIdx] = make(map[int]*blocks.DeserializedPSDB)
@@ -696,6 +706,32 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			if err != nil {
 				log.Error().Err(err).Msgf("Error while getting sequence no for feature %s", featureLabel)
 				return
+			}
+			// Handle missing features (seq = -1)
+			if seq == -1 {
+				log.Warn().Msgf("Feature %s not found in version %d, switching to active version for default value", featureLabel, version)
+				
+				// Get active version
+				version, err = h.config.GetActiveVersion(data.EntityLabel, fgId)
+				if err != nil {
+					log.Error().Err(err).Msgf("Error while getting active version for missing feature %s", featureLabel)
+					return
+				}
+				// Try to get sequence from active version
+				activeSeq, err := h.config.GetSequenceNo(data.EntityLabel, fgId, version, featureLabel)
+				if err != nil {
+					log.Error().Err(err).Msgf("Error while getting sequence no from active version for feature %s", featureLabel)
+					return
+				}
+				// if feature is not present in active version just return 
+				if activeSeq == -1 {
+				    log.Warn().Msgf("Feature %s is not available in active version", featureLabel)
+				    return  
+				}
+				// Feature exists in active version
+				seq = activeSeq
+				ddb.NegativeCache = true
+				metric.Count("online.feature.store.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel})
 			}
 			stringLengths, err := h.config.GetStringLengths(data.EntityLabel, fgId, int(version))
 			if err != nil {
@@ -738,6 +774,9 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			}
 
 			colIdx := meta.(int)
+			for _, idx := range data.KeyToOriginalIndices[keyStr] {
+				data.Result.Rows[idx].Columns[colIdx] = fdata
+			}
 			data.Result.Rows[keyIdx].Columns[colIdx] = fdata
 		})
 	}

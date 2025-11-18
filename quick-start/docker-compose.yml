@@ -2,10 +2,11 @@ version: '3.8'
 
 # BharatML Stack Application Versions
 # To test different versions, set environment variables:
-#   ONFS_VERSION=v1.2.3 HORIZON_VERSION=v2.1.0 TRUFFLEBOX_VERSION=v1.0.5 docker-compose up
+#   ONFS_VERSION=v1.2.3 HORIZON_VERSION=v2.1.0 NUMERIX_VERSION=v1.0.0 TRUFFLEBOX_VERSION=v1.0.5 docker-compose up
 # Or modify the default values below:
 #   ONFS_VERSION: latest
-#   HORIZON_VERSION: latest  
+#   HORIZON_VERSION: latest
+#   NUMERIX_VERSION: latest
 #   TRUFFLEBOX_VERSION: latest
 
 services:
@@ -227,6 +228,44 @@ services:
     command: sh -c "apk add --no-cache curl && sleep infinity"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://horizon:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: "no"
+
+  numerix:
+    image: numerix:latest
+    container_name: numerix
+    ports:
+      - "8083:8083"
+    environment:
+      - APPLICATION_PORT=8083
+      - APP_ENV=prd
+      - APP_LOG_LEVEL=ERROR
+      - APP_NAME=numerix
+      - CHANNEL_BUFFER_SIZE=10000
+      - ETCD_SERVERS=http://etcd:2379
+      - METRIC_SAMPLING_RATE=1
+      - TELEGRAF_UDP_HOST=host.docker.internal
+      - TELEGRAF_UDP_PORT=8125
+    networks:
+      - onfs-network
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  numerix-healthcheck:
+    image: alpine:latest
+    container_name: numerix-healthcheck
+    networks:
+      - onfs-network
+    depends_on:
+      - numerix
+    command: sh -c "apk add --no-cache curl && sleep infinity"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://numerix:8083/health"]
       interval: 30s
       timeout: 10s
       retries: 5

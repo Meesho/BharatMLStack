@@ -9,6 +9,24 @@
           integrity="sha512-5A8nwdMOWrSz20fDsjczgUidUBR8liPYU+WymTZP1lmY9G6Oc7HlZv156XqnsgNUzTyMefFTcsFH/tnJE/+xBg==" 
           crossorigin="anonymous" 
           referrerpolicy="no-referrer">
+    
+    <!-- MathJax Configuration -->
+    <script>
+      MathJax = {
+        tex: {
+          inlineMath: [['\\(', '\\)']],
+          displayMath: [['\\[', '\\]']],
+          processEscapes: true,
+          processEnvironments: true
+        },
+        options: {
+          skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+        }
+      };
+    </script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
     <title>TruffleBox</title>
 </head>
 <body>
@@ -24,5 +42,6 @@
       </noscript>
       <script src="/env.js"></script>
     <div id="root"></div>
+    <script type="module" src="../src/index.jsx"></script>
 </body>
 </html>

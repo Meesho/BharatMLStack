@@ -5,8 +5,6 @@ set -e
 cat <<EOF > /usr/share/nginx/html/env.js
 window.env = {
   REACT_APP_HORIZON_BASE_URL: "${REACT_APP_HORIZON_BASE_URL:-http://localhost:8082}",
-  REACT_APP_SKYE_BASE_URL: "${REACT_APP_SKYE_BASE_URL:-http://localhost:8083}",
-  REACT_APP_MODEL_INFERENCE_BASE_URL: "${REACT_APP_MODEL_INFERENCE_BASE_URL:-http://localhost:8084}"
 };
 EOF
 
