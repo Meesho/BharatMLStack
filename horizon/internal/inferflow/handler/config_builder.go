@@ -601,19 +601,9 @@ func GetOnlineFeatureMapping(offlineFeatureList mapset.Set[string], token string
 		return nil, fmt.Errorf("error from GetOnlineFeatureMapping: %s", response.Error)
 	}
 
-	// Convert the response []string to map[string]string format
-	// The response.Data is a slice of online features mapped from offline features
-	result := make(map[string]string)
-	offlineSlice := offlineFeatureList.ToSlice()
-
-	// Map offline features to their corresponding online features
-	for i, offlineFeature := range offlineSlice {
-		if i < len(response.Data) {
-			result[offlineFeature] = response.Data[i]
-		}
-	}
-
-	return result, nil
+	// response.Data is already a map[string]string mapping offline to online features
+	// Just return it directly
+	return response.Data, nil
 }
 
 func GetFeatureComponents(request InferflowOnboardRequest, featureList mapset.Set[string], featureToDataType map[string]string, pcvrCalibrationFeatures mapset.Set[string], pctrCalibrationFeatures mapset.Set[string], etcdConfig etcd.Manager, token string, entityIDs map[string]bool) ([]FeatureComponent, error) {
