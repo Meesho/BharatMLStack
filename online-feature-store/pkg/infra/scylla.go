@@ -14,9 +14,10 @@ var (
 )
 
 type ScyllaClusterConnection struct {
-	Session         interface{} // Will hold either gocql or gocql_v2 session
-	IsMeeshoVersion string
-	Meta            map[string]interface{}
+	Session       interface{} // Will hold either gocql or gocql_v2 session
+	IsMeesho      bool
+	ScyllaVersion int
+	Meta          map[string]interface{}
 }
 
 func (c *ScyllaClusterConnection) GetConn() (interface{}, error) {
@@ -24,13 +25,12 @@ func (c *ScyllaClusterConnection) GetConn() (interface{}, error) {
 		return nil, errors.New("connection nil")
 	}
 
-	// Check if session is closed based on its type
-	switch c.IsMeeshoVersion {
-	case "false":
+	switch {
+	case c.ScyllaVersion == 5, c.ScyllaVersion == 6 && !c.IsMeesho:
 		if isSessionClosedV1(c.Session) {
 			return nil, errors.New("gocql session closed")
 		}
-	case "true":
+	case c.ScyllaVersion == 6 && c.IsMeesho:
 		if isSessionClosedV2(c.Session) {
 			return nil, errors.New("gocql_v2 session closed")
 		}
@@ -52,10 +52,10 @@ func (c *ScyllaClusterConnection) IsLive() bool {
 	}
 
 	// Check if session is live based on its type
-	switch c.IsMeeshoVersion {
-	case "false":
+	switch {
+	case c.ScyllaVersion == 5, c.ScyllaVersion == 6 && !c.IsMeesho:
 		return !isSessionClosedV1(c.Session)
-	case "true":
+	case c.ScyllaVersion == 6 && c.IsMeesho:
 		return !isSessionClosedV2(c.Session)
 	default:
 		return false
@@ -91,8 +91,8 @@ func initScyllaClusterConns() {
 
 		// Create session based on the config type
 		var session interface{}
-		switch cfg.Version {
-		case "false":
+		switch {
+		case cfg.Version == 5, cfg.Version == 6 && !cfg.IsMeesho:
 			session, err = createSessionV1(cfg.Config)
 			if err != nil {
 				log.Error().Err(err).Msg("Error connecting to gocql scylla db")
@@ -100,7 +100,7 @@ func initScyllaClusterConns() {
 			}
 			log.Debug().Msgf("Created gocql session for config %s", configIdStr)
 
-		case "true":
+		case cfg.Version == 6 && cfg.IsMeesho:
 			session, err = createSessionV2(cfg.Config)
 			if err != nil {
 				log.Error().Err(err).Msg("Error connecting to gocql_v2 scylla db")
@@ -127,8 +127,9 @@ func initScyllaClusterConns() {
 		ConfIdDBTypeMap[confId] = DBTypeScylla
 
 		conn := &ScyllaClusterConnection{
-			Session:         session,
-			IsMeeshoVersion: cfg.Version,
+			Session:       session,
+			ScyllaVersion: cfg.Version,
+			IsMeesho:      cfg.IsMeesho,
 			Meta: map[string]interface{}{
 				"configId": confId,
 				"keyspace": cfg.Keyspace,
