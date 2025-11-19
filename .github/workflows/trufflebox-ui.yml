@@ -35,11 +35,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          if [ -f yarn.lock ]; then
-            yarn install --frozen-lockfile
-          else
-            yarn install
-          fi
+          yarn install
 
       - name: Run linter
         run: yarn run lint --if-present
