@@ -31,7 +31,7 @@ import PendingIcon from '@mui/icons-material/Pending';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import GenericTable from '../../../Orion/common/GenericTable';
+import GenericTable from '../../../OnlineFeatureStore/common/GenericTable';
 import { useAuth } from '../../../Auth/AuthContext';
 import embeddingPlatformAPI from '../../../../services/embeddingPlatform/api';
 import { 
