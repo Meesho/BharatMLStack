@@ -1,3 +1,5 @@
+//go:build !meesho
+
 package configs
 
 import (
@@ -13,25 +15,8 @@ type ConfigHolder interface {
 	GetDynamicConfig() interface{}
 }
 
-const (
-	MeeshoEnabled = "MEESHO_ENABLED"
-)
-
 // InitConfig initializes configuration based on MEESHO_ENABLED flag
 func InitConfig(configHolder ConfigHolder) {
-	viper.AutomaticEnv()
-	isMeeshoEnabled := viper.GetBool(MeeshoEnabled)
-
-	if isMeeshoEnabled {
-		log.Println("Initializing using Meesho cacConfig")
-		initUsingCacConfig(configHolder)
-	} else {
-		log.Println("Initializing using environment variables")
-		initUsingEnvConfig(configHolder)
-	}
-}
-
-func initUsingEnvConfig(configHolder ConfigHolder) {
 	config.InitEnv()
 
 	staticConfig := configHolder.GetStaticConfig()
