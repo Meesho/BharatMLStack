@@ -96,7 +96,7 @@ func (m *InferFlow) GetInferflowConfig(request InferflowOnboardRequest, token st
 // and returns a set of features, a map of feature to data type, a map of offline feature to online feature
 // and an error if any.
 func GetFeatureList(request InferflowOnboardRequest, etcdConfig etcd.Manager, token string, entityIDs map[string]bool) (mapset.Set[string], map[string]string, mapset.Set[string], mapset.Set[string], mapset.Set[string], map[string]string, map[string]string, error) {
-	initialFeatures, featureToDataType, predatorAndNumerixOutputsToDataType := extractFeatures(request, entityIDs)
+	initialFeatures, featureToDataType, predatorAndIrisOutputsToDataType := extractFeatures(request, entityIDs)
 
 	offlineFeatures, onlineFeatures, _, rtpFeatures, pctrCalibrationFeatures, pcvrCalibrationFeatures, newFeatureToDataType, err := classifyFeatures(initialFeatures, featureToDataType)
 	if err != nil {
@@ -122,24 +122,46 @@ func GetFeatureList(request InferflowOnboardRequest, etcdConfig etcd.Manager, to
 		features.Add(f)
 	}
 
-	rtpComponentFeatures, rtpComponentFeatureToDataType, err := fetchRTPComponentFeatures(rtpFeatures, etcdConfig)
+	// Fetch RTP registry once for classification
+	rtpRegistry, err := GetRTPFeatureGroupDataTypeMap()
+	if err != nil && inferflow.IsMeeshoEnabled {
+		return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("failed to get RTP registry: %w", err)
+	}
+
+	// Fetch component features from RTP components
+	rtpComponentFSFeatures, rtpComponentRTPFeatures, rtpComponentFeatureToDataType, err := fetchRTPComponentFeaturesWithClassification(rtpFeatures, etcdConfig, rtpRegistry)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, err
 	}
-	for _, f := range rtpComponentFeatures.ToSlice() {
+
+	// Add FS features to the main features set
+	for _, f := range rtpComponentFSFeatures.ToSlice() {
 		features.Add(f)
+	}
+
+	// Add newly discovered RTP features to rtpFeatures set
+	for _, f := range rtpComponentRTPFeatures.ToSlice() {
+		rtpFeatures.Add(f)
 	}
 
 	for f, dtype := range rtpComponentFeatureToDataType {
 		featureToDataType[f] = dtype
 	}
 
-	componentFeatures, newfeatureToDataType, err := fetchComponentFeatures(features, pctrCalibrationFeatures, pcvrCalibrationFeatures, etcdConfig, request.Payload.RealEstate, token)
+	// Fetch component features from regular FS components
+	componentFSFeatures, componentRTPFeatures, newfeatureToDataType, err := fetchComponentFeaturesWithClassification(features, pctrCalibrationFeatures, pcvrCalibrationFeatures, etcdConfig, request.Payload.RealEstate, token, rtpRegistry)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, err
 	}
-	for _, f := range componentFeatures.ToSlice() {
+
+	// Add FS features to the main features set
+	for _, f := range componentFSFeatures.ToSlice() {
 		features.Add(f)
+	}
+
+	// Add newly discovered RTP features to rtpFeatures set
+	for _, f := range componentRTPFeatures.ToSlice() {
+		rtpFeatures.Add(f)
 	}
 
 	for f, dtype := range newfeatureToDataType {
@@ -154,7 +176,7 @@ func GetFeatureList(request InferflowOnboardRequest, etcdConfig etcd.Manager, to
 		return nil, nil, nil, nil, nil, nil, nil, err
 	}
 
-	return features, featureToDataType, rtpFeatures, pctrCalibrationFeatures, pcvrCalibrationFeatures, predatorAndNumerixOutputsToDataType, offlineToOnlineMapping, nil
+	return features, featureToDataType, rtpFeatures, pctrCalibrationFeatures, pcvrCalibrationFeatures, predatorAndIrisOutputsToDataType, offlineToOnlineMapping, nil
 }
 
 func extractEntityIDs(request InferflowOnboardRequest) map[string]bool {
@@ -371,9 +393,12 @@ func classifyFeatures(
 	pcvrCalibrationFeatures := mapset.NewSet[string]()
 	newFeatureToDataType := make(map[string]string)
 
-	add := func(targetSet mapset.Set[string], name, originalFeature string) {
-		targetSet.Add(name)
+	add := func(name, originalFeature string, featureType string) error {
+		if err := AddFeatureToSet(&defaultFeatures, &onlineFeatures, &offlineFeatures, &rtpFeatures, &pctrCalibrationFeatures, &pcvrCalibrationFeatures, name, featureType); err != nil {
+			return fmt.Errorf("error classifying feature: %w", err)
+		}
 		newFeatureToDataType[name] = featureDataTypes[originalFeature]
+		return nil
 	}
 
 	for feature := range featureList.Iter() {
@@ -382,23 +407,37 @@ func classifyFeatures(
 			return nil, nil, nil, nil, nil, nil, nil, err
 		}
 
-		switch featureType {
-		case featureClassOffline:
-			add(offlineFeatures, transformedFeature, feature)
-		case featureClassOnline:
-			add(onlineFeatures, transformedFeature, feature)
-		case featureClassDefault:
-			add(defaultFeatures, transformedFeature, feature)
-		case featureClassRtp:
-			add(rtpFeatures, transformedFeature, feature)
-		case featureClassPCVRCalibration:
-			add(pcvrCalibrationFeatures, transformedFeature, feature)
-		case featureClassPCTRCalibration:
-			add(pctrCalibrationFeatures, transformedFeature, feature)
+		if err := add(transformedFeature, feature, featureType); err != nil {
+			return nil, nil, nil, nil, nil, nil, nil, err
 		}
 	}
 
 	return offlineFeatures, onlineFeatures, defaultFeatures, rtpFeatures, pctrCalibrationFeatures, pcvrCalibrationFeatures, newFeatureToDataType, nil
+}
+
+func AddFeatureToSet(defaultFeatures, onlineFeatures, offlineFeatures, rtpFeatures, pctrCalibrationFeatures, pcvrCalibrationFeatures *mapset.Set[string], feature string, featureType string) error {
+	allSets := map[string]*mapset.Set[string]{
+		featureClassDefault:         defaultFeatures,
+		featureClassOnline:          onlineFeatures,
+		featureClassOffline:         offlineFeatures,
+		featureClassRtp:             rtpFeatures,
+		featureClassPCTRCalibration: pctrCalibrationFeatures,
+		featureClassPCVRCalibration: pcvrCalibrationFeatures,
+	}
+
+	for setType, set := range allSets {
+		if setType != featureType && (*set).Contains(feature) {
+			return fmt.Errorf("feature '%s' already exists in %s features, cannot add to %s features", feature, setType, featureType)
+		}
+	}
+
+	targetSet, exists := allSets[featureType]
+	if !exists {
+		return fmt.Errorf("invalid feature type '%s' for feature '%s'", featureType, feature)
+	}
+
+	(*targetSet).Add(feature)
+	return nil
 }
 
 // transformFeature transforms the feature to either online, offline or default feature
@@ -473,49 +512,95 @@ func mapOfflineFeatures(offlineFeatureList mapset.Set[string], token string) (ma
 	return GetOnlineFeatureMapping(offlineFeatureList, token)
 }
 
-func fetchRTPComponentFeatures(rtpFeatures mapset.Set[string], etcdConfig etcd.Manager) (mapset.Set[string], map[string]string, error) {
+func fetchRTPComponentFeaturesWithClassification(rtpFeatures mapset.Set[string], etcdConfig etcd.Manager, rtpRegistry map[string]string) (mapset.Set[string], mapset.Set[string], map[string]string, error) {
 	componentList := getComponentList(rtpFeatures, nil, nil)
-	componentFeatures := mapset.NewSet[string]()
+	fsFeatures := mapset.NewSet[string]()
+	newRTPFeatures := mapset.NewSet[string]()
 	featureToDataType := make(map[string]string)
 
 	for _, component := range componentList.ToSlice() {
 		componentData := etcdConfig.GetComponentData(component)
 		if componentData == nil {
-			return nil, nil, fmt.Errorf("RTP Component: componentData for '%s' not found in registry", component)
+			return nil, nil, nil, fmt.Errorf("RTP Component: componentData for '%s' not found in registry", component)
 		}
 
 		for _, pair := range componentData.FSIdSchemaToValueColumns {
 			if strings.Contains(pair.ValueCol, COLON_DELIMITER) {
-				componentFeatures.Add(pair.ValueCol)
+				// Check if this is an RTP feature or FS feature
+				isRTPFeature := false
+
+				// Check direct match in RTP registry
+				if _, exists := rtpRegistry[pair.ValueCol]; exists {
+					isRTPFeature = true
+				} else {
+					// Check with prefix removed (for features like "parent:entity:group:feature")
+					parts := strings.Split(pair.ValueCol, COLON_DELIMITER)
+					if len(parts) == 4 {
+						withoutPrefix := strings.Join(parts[1:], COLON_DELIMITER)
+						if _, exists := rtpRegistry[withoutPrefix]; exists {
+							isRTPFeature = true
+						}
+					}
+				}
+
+				if isRTPFeature {
+					newRTPFeatures.Add(pair.ValueCol)
+				} else {
+					fsFeatures.Add(pair.ValueCol)
+				}
 				featureToDataType[pair.ValueCol] = pair.DataType
 			}
 		}
 	}
 
-	return componentFeatures, featureToDataType, nil
+	return fsFeatures, newRTPFeatures, featureToDataType, nil
 }
 
-// fetchComponentFeatures fetches the component features from the etcd config
-// and returns a set of component features and a map of component feature to data type
-func fetchComponentFeatures(features mapset.Set[string], pctrCalibrationFeatures mapset.Set[string], pcvrCalibrationFeatures mapset.Set[string], etcdConfig etcd.Manager, realEstate string, token string) (mapset.Set[string], map[string]string, error) {
+// fetchComponentFeaturesWithClassification fetches the component features from the etcd config
+// and classifies them as RTP or FS features, returns both sets and a map of feature to data type
+func fetchComponentFeaturesWithClassification(features mapset.Set[string], pctrCalibrationFeatures mapset.Set[string], pcvrCalibrationFeatures mapset.Set[string], etcdConfig etcd.Manager, realEstate string, token string, rtpRegistry map[string]string) (mapset.Set[string], mapset.Set[string], map[string]string, error) {
 	componentList := getComponentList(features, pctrCalibrationFeatures, pcvrCalibrationFeatures)
-	componentFeatures := mapset.NewSet[string]()
+	fsFeatures := mapset.NewSet[string]()
+	newRTPFeatures := mapset.NewSet[string]()
 	featureToDataType := make(map[string]string)
 
 	for _, component := range componentList.ToSlice() {
 		componentData := etcdConfig.GetComponentData(component)
 		if componentData == nil {
-			return nil, nil, fmt.Errorf("Component Data: ComponentData for '%s' not found in registry.\nPlease Contact MLP Team to onboard the component.", component)
+			return nil, nil, nil, fmt.Errorf("Component Data: ComponentData for '%s' not found in registry.\nPlease Contact MLP Team to onboard the component.", component)
 		}
+
 		for _, pair := range componentData.FSIdSchemaToValueColumns {
 			if strings.Contains(pair.ValueCol, COLON_DELIMITER) {
-				componentFeatures.Add(pair.ValueCol)
+				// Check if this is an RTP feature or FS feature
+				isRTPFeature := false
+
+				// Check direct match in RTP registry
+				if _, exists := rtpRegistry[pair.ValueCol]; exists {
+					isRTPFeature = true
+				} else {
+					// Check with prefix removed (for features like "parent:entity:group:feature")
+					parts := strings.Split(pair.ValueCol, COLON_DELIMITER)
+					if len(parts) == 4 {
+						withoutPrefix := strings.Join(parts[1:], COLON_DELIMITER)
+						if _, exists := rtpRegistry[withoutPrefix]; exists {
+							isRTPFeature = true
+						}
+					}
+				}
+
+				if isRTPFeature {
+					newRTPFeatures.Add(pair.ValueCol)
+				} else {
+					fsFeatures.Add(pair.ValueCol)
+				}
 				featureToDataType[pair.ValueCol] = pair.DataType
 			}
 		}
 
 		if override, hasOverride := componentData.Overridecomponent[realEstate]; hasOverride {
-			componentFeatures.Add(override.ComponentId)
+			// Override components are always FS features
+			fsFeatures.Add(override.ComponentId)
 			parts := strings.Split(override.ComponentId, COLON_DELIMITER)
 			var label, group string
 
@@ -524,23 +609,23 @@ func fetchComponentFeatures(features mapset.Set[string], pctrCalibrationFeatures
 			} else if len(parts) == 4 {
 				label, group = parts[1], parts[2]
 			} else {
-				return nil, nil, fmt.Errorf("Component Data: invalid override component id: %s", override.ComponentId)
+				return nil, nil, nil, fmt.Errorf("Component Data: invalid override component id: %s", override.ComponentId)
 			}
 
 			featureGroupDataTypeMap, err := GetFeatureGroupDataTypeMap(label, token)
 			if err != nil {
-				return nil, nil, fmt.Errorf("Component Data: error getting feature group data type map: %w", err)
+				return nil, nil, nil, fmt.Errorf("Component Data: error getting feature group data type map: %w", err)
 			}
 
 			if dataType, exists := featureGroupDataTypeMap[group]; exists {
 				featureToDataType[override.ComponentId] = dataType
 			} else {
-				return nil, nil, fmt.Errorf("Component Data: feature group data type not found for %s: %s", override.ComponentId, group)
+				return nil, nil, nil, fmt.Errorf("Component Data: feature group data type not found for %s: %s", override.ComponentId, group)
 			}
 		}
 	}
 
-	return componentFeatures, featureToDataType, nil
+	return fsFeatures, newRTPFeatures, featureToDataType, nil
 }
 
 // getComponentList gets the component list from the features
@@ -860,7 +945,7 @@ func GetRTPComponents(request InferflowOnboardRequest, rtpFeatures mapset.Set[st
 	}
 
 	featureDataTypeMap, err := GetRTPFeatureGroupDataTypeMap()
-	if err != nil && !inferflow.IsMeeshoEnabled {
+	if err != nil && inferflow.IsMeeshoEnabled {
 		return rtpComponents, nil
 	}
 	rtpFeatureComponentsMap := GetRTPFeatureLabelToPrefixToFeatureGroupToFeatureMap(rtpFeatures.ToSlice())
@@ -1015,15 +1100,44 @@ func GetPredatorComponents(request InferflowOnboardRequest, offlineToOnlineMappi
 	predatorComponents := make([]PredatorComponent, 0, len(request.Payload.Rankers))
 
 	for i, ranker := range request.Payload.Rankers {
+
+		// validate routing config
+		if len(ranker.RoutingConfig) > 0 {
+			totalRoutingPercentage := float32(0)
+			defaultEndPointFallback := false
+			for _, route := range ranker.RoutingConfig {
+				if route.ModelName == "" || route.ModelEndpoint == "" {
+					return nil, fmt.Errorf("Predator Components: model name or model endpoint is missing for routing config")
+				}
+				if route.RoutingPercentage < 0 {
+					return nil, fmt.Errorf("Predator Components: routing percentage is less than 0 for routing config")
+				}
+				totalRoutingPercentage += route.RoutingPercentage
+				if route.ModelEndpoint == ranker.EndPoint {
+					defaultEndPointFallback = true
+				}
+			}
+			if defaultEndPointFallback {
+				if totalRoutingPercentage != 100.0 {
+					return nil, fmt.Errorf("Default endpoint included but total routing percentage is not 100")
+				}
+			} else {
+				if totalRoutingPercentage > 100.0 {
+					return nil, fmt.Errorf("Total routing percentage is greater than 100")
+				}
+			}
+		}
+
 		predatorComponent := PredatorComponent{
 			Component:     "p" + strconv.Itoa(i+1),
 			ComponentID:   strings.Join(ranker.EntityID, COLON_DELIMITER),
 			ModelName:     ranker.ModelName,
 			ModelEndPoint: ranker.EndPoint,
-			Deadline:      110,
-			BatchSize:     250,
+			Deadline:      ranker.Deadline,
+			BatchSize:     ranker.BatchSize,
 			Inputs:        make([]PredatorInput, 0, len(ranker.Inputs)),
 			Outputs:       make([]PredatorOutput, 0, len(ranker.Outputs)),
+			RoutingConfig: ranker.RoutingConfig,
 		}
 
 		if ranker.Calibration != "" {
@@ -1171,7 +1285,7 @@ func GetDagExecutionConfig(request InferflowOnboardRequest, featureComponents []
 	for _, component := range featureComponents {
 		componentName := component.Component
 
-		specificDependencies := findSpecificFeatureDependencies(component, featureComponents, etcdConfig, request)
+		specificDependencies := findSpecificFeatureDependencies(component, featureComponents, rtpComponents)
 
 		if len(specificDependencies) > 0 {
 			dagExecutionConfig.ComponentDependency[componentName] = append(dagExecutionConfig.ComponentDependency[componentName], specificDependencies...)
@@ -1221,7 +1335,7 @@ func GetDagExecutionConfig(request InferflowOnboardRequest, featureComponents []
 	return dagExecutionConfig, nil
 }
 
-func findSpecificFeatureDependencies(featureComp FeatureComponent, featureComponents []FeatureComponent, etcdConfig etcd.Manager, request InferflowOnboardRequest) []string {
+func findSpecificFeatureDependencies(featureComp FeatureComponent, featureComponents []FeatureComponent, rtpComponents []RTPComponent) []string {
 	var dependencies []string
 
 	requiredInputs := make(map[string]struct{})
@@ -1241,6 +1355,23 @@ func findSpecificFeatureDependencies(featureComp FeatureComponent, featureCompon
 				if _, required := requiredInputs[featureKey]; required && !completedComponents[otherComp.Component] {
 					dependencies = append(dependencies, otherComp.Component)
 					completedComponents[otherComp.Component] = true
+					break
+				}
+			}
+		}
+	}
+
+	for _, rtpComp := range rtpComponents {
+		if done, ok := completedComponents[rtpComp.Component]; ok && done {
+			continue
+		}
+		colNamePrefix := rtpComp.ColNamePrefix
+		for _, featureGroup := range rtpComp.FeatureRequest.FeatureGroups {
+			for _, feature := range featureGroup.Features {
+				featureKey := colNamePrefix + rtpComp.FeatureRequest.Label + COLON_DELIMITER + featureGroup.Label + COLON_DELIMITER + feature
+				if _, required := requiredInputs[featureKey]; required && !completedComponents[rtpComp.Component] {
+					dependencies = append(dependencies, rtpComp.Component)
+					completedComponents[rtpComp.Component] = true
 					break
 				}
 			}

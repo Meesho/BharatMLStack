@@ -33,6 +33,12 @@ type PredatorOutput struct {
 	DataType        string   `json:"data_type"`
 }
 
+type RoutingConfig struct {
+	ModelName         string  `json:"model_name"`
+	ModelEndpoint     string  `json:"model_endpoint"`
+	RoutingPercentage float32 `json:"routing_percentage"`
+}
+
 type PredatorComponent struct {
 	Component     string           `json:"component"`
 	ComponentID   string           `json:"component_id"`
@@ -43,6 +49,7 @@ type PredatorComponent struct {
 	BatchSize     int              `json:"batch_size"`
 	Inputs        []PredatorInput  `json:"inputs"`
 	Outputs       []PredatorOutput `json:"outputs"`
+	RoutingConfig []RoutingConfig  `json:"route_config,omitempty"`
 }
 
 type ResponseConfig struct {
@@ -126,12 +133,15 @@ type OnboardPayload struct {
 }
 
 type OnboardRanker struct {
-	ModelName   string           `json:"model_name"`
-	Calibration string           `json:"calibration"`
-	EndPoint    string           `json:"end_point"`
-	Inputs      []PredatorInput  `json:"inputs"`
-	Outputs     []PredatorOutput `json:"outputs"`
-	EntityID    []string         `json:"entity_id"`
+	ModelName     string           `json:"model_name"`
+	BatchSize     int              `json:"batch_size"`
+	Deadline      int              `json:"deadline"`
+	Calibration   string           `json:"calibration"`
+	EndPoint      string           `json:"end_point"`
+	Inputs        []PredatorInput  `json:"inputs"`
+	Outputs       []PredatorOutput `json:"outputs"`
+	EntityID      []string         `json:"entity_id"`
+	RoutingConfig []RoutingConfig  `json:"route_config,omitempty"`
 }
 
 type OnboardReRanker struct {

@@ -20,13 +20,22 @@ type Output struct {
 	DataType        string   `json:"data_type"`
 }
 
+type RoutingConfig struct {
+	ModelName         string  `json:"model_name"`
+	ModelEndpoint     string  `json:"model_endpoint"`
+	RoutingPercentage float32 `json:"routing_percentage"`
+}
+
 type Ranker struct {
-	ModelName   string   `json:"model_name"`
-	Calibration string   `json:"calibration"`
-	EndPoint    string   `json:"end_point"`
-	Inputs      []Input  `json:"inputs"`
-	Outputs     []Output `json:"outputs"`
-	EntityID    []string `json:"entity_id"`
+	ModelName     string          `json:"model_name"`
+	BatchSize     int             `json:"batch_size"`
+	Deadline      int             `json:"deadline"`
+	Calibration   string          `json:"calibration"`
+	EndPoint      string          `json:"end_point"`
+	Inputs        []Input         `json:"inputs"`
+	Outputs       []Output        `json:"outputs"`
+	EntityID      []string        `json:"entity_id"`
+	RoutingConfig []RoutingConfig `json:"route_config"`
 }
 
 type ReRanker struct {
@@ -120,6 +129,7 @@ type PredatorComponent struct {
 	BatchSize     int              `json:"batch_size"`
 	Inputs        []PredatorInput  `json:"inputs"`
 	Outputs       []PredatorOutput `json:"outputs"`
+	RoutingConfig []RoutingConfig  `json:"route_config,omitempty"`
 }
 
 type FinalResponseConfig struct {
@@ -248,6 +258,7 @@ type ScaleUpConfigPayload struct {
 	ConfigID               string                   `json:"config_id"`
 	ConfigValue            InferflowConfig          `json:"config_value"`
 	ConfigMapping          ConfigMapping            `json:"config_mapping"`
+	LoggingPerc            int                      `json:"logging_perc"`
 	ModelNameToEndPointMap []ModelNameToEndPointMap `json:"proposed_model_endpoints"`
 }
 
@@ -377,6 +388,7 @@ type GenerateRequestFunctionalTestingRequest struct {
 	MetaData        map[string]string `json:"meta_data"`
 	DefaultFeatures map[string]string `json:"default_features"`
 	ModelConfigID   string            `json:"model_config_id"`
+	Entity          string            `json:"entity"`
 }
 
 type GenerateRequestFunctionalTestingResponse struct {
