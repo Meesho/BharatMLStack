@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
-	inferflow "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/init"
+	inferflow "github.com/Meesho/BharatMLStack/horizon/internal/inferflow"
 	ofsHandler "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/handler"
 
 	etcd "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
