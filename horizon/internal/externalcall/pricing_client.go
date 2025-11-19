@@ -1,3 +1,5 @@
+//go:build meesho
+
 package externalcall
 
 import (
@@ -15,7 +17,14 @@ import (
 // PricingFeatureClient interface for pricing feature validation
 type PricingFeatureClient interface {
 	GetDataTypes(entity string) (*PricingDataTypesResponse, error)
+	GetFeatureGroupDataTypeMap() (map[string]string, error)
+	InitPricingClient()
 }
+
+const (
+	RTPColonDelimiter      = ":"
+	RTPUnderscoreDelimiter = "_"
+)
 
 // PricingDataTypesResponse represents the response from pricing feature service
 type PricingDataTypesResponse struct {
@@ -32,6 +41,10 @@ type PricingDataTypesResponse struct {
 type pricingFeatureClientImpl struct{}
 
 var PricingClient PricingFeatureClient = &pricingFeatureClientImpl{}
+
+func (p *pricingFeatureClientImpl) InitPricingClient() {
+	pricingclient.Init()
+}
 
 // GetDataTypes calls the pricing service to get data types for features
 func (p *pricingFeatureClientImpl) GetDataTypes(entity string) (*PricingDataTypesResponse, error) {
@@ -84,6 +97,26 @@ func (p *pricingFeatureClientImpl) GetDataTypes(entity string) (*PricingDataType
 
 	log.Info().Msgf("Successfully retrieved pricing data for entity %s with %d entities", entity, len(response.Entities))
 	return response, nil
+}
+
+// GetFeatureGroupDataTypeMap fetches RTP feature group data types in transformed format
+// This method transforms the pricing data into a map with composite keys: "entity:featuregroup:feature" -> dataType
+func (p *pricingFeatureClientImpl) GetFeatureGroupDataTypeMap() (map[string]string, error) {
+	rtpFeatureToDataType := make(map[string]string)
+	clientInstance := pricingclient.Instance(1)
+	rtpStruct, err := clientInstance.GetDataTypes(context.Background(), &models.GetDataTypesRequest{}, map[string]string{})
+	if err != nil {
+		return nil, err
+	}
+	for _, entity := range rtpStruct.Entities {
+		for _, featureGroup := range entity.FeatureGroups {
+			for _, feature := range featureGroup.Features {
+				compositeName := entity.Entity + COLON_DELIMITER + featureGroup.Label + COLON_DELIMITER + feature
+				rtpFeatureToDataType[compositeName] = featureGroup.DataType
+			}
+		}
+	}
+	return rtpFeatureToDataType, nil
 }
 
 // ValidatePricingFeatureExists checks if a pricing feature exists in the response

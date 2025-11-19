@@ -24,7 +24,6 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/pkg/logger"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/metric"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/scheduler"
-	pricingclient "github.com/Meesho/price-aggregator-go/pricingfeatureretrieval/client"
 )
 
 type AppConfig struct {
@@ -65,6 +64,5 @@ func main() {
 	ofsRouter.Init()
 	featureStoreRouter.Init(appConfig.Configs)
 	scheduler.Init(appConfig.Configs)
-	pricingclient.Init()
 	httpframework.Instance().Run(":" + strconv.Itoa(appConfig.Configs.AppPort))
 }

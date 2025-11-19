@@ -3786,6 +3786,9 @@ func (p *Predator) validateOfflineFeatures(features []string, token string) erro
 
 // validatePricingFeatures validates pricing features for a specific entity
 func (p *Predator) validatePricingFeatures(entity string, features []string) error {
+	if !pred.IsMeeshoEnabled {
+		return nil
+	}
 	response, err := externalcall.PricingClient.GetDataTypes(entity)
 	if err != nil {
 		return fmt.Errorf("failed to call pricing service API: %w", err)

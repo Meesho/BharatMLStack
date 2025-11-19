@@ -106,6 +106,8 @@ type Configs struct {
 	OnlineFeatureStoreAppName  string `mapstructure:"online_feature_store_app_name"`
 	ScyllaActiveConfIds        string `mapstructure:"scylla_active_conf_ids"`
 	RedisFailoverActiveConfIds string `mapstructure:"redis_failover_active_conf_ids"`
+
+	IsMeeshoEnabled bool `mapstructure:"is_meesho_enabled"`
 }
 
 type DynamicConfigs struct{}

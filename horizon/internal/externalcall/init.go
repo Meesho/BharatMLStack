@@ -10,6 +10,6 @@ func Init(config configs.Configs) {
 	InitRingmasterClient(config.RingmasterBaseUrl, config.RingmasterMiscSession, config.RingmasterAuthorization, config.RingmasterEnvironment, config.RingmasterApiKey)
 	// Initialize feature validation client with config-based URLs
 	InitFeatureValidationClient(config)
-	// Pricing client is initialized in main.go
-	InitRTPClient()
+	// Initialize pricing client - provides both raw data types and RTP format
+	PricingClient.InitPricingClient()
 }

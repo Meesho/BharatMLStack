@@ -1,13 +1,13 @@
 package handler
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
+	inferflow "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/init"
 	ofsHandler "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/handler"
 
 	etcd "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
@@ -40,7 +40,7 @@ const (
 )
 
 func (m *InferFlow) GetInferflowConfig(request InferflowOnboardRequest, token string) (InferflowConfig, error) {
-	externalcall.GetRTPClient().Init()
+	// RTP client is initialized in externalcall.Init()
 	entityIDs := extractEntityIDs(request)
 
 	featureList, featureToDataType, rtpFeatures, pcvrCalibrationFeatures, pctrCalibrationFeatures, predatorAndNumerixOutputsToDataType, offlineToOnlineMapping, err := GetFeatureList(request, m.EtcdConfig, token, entityIDs)
@@ -860,7 +860,7 @@ func GetRTPComponents(request InferflowOnboardRequest, rtpFeatures mapset.Set[st
 	}
 
 	featureDataTypeMap, err := GetRTPFeatureGroupDataTypeMap()
-	if err != nil && errors.Is(err, errors.New("RTP client is not supported without meesho build tag")) {
+	if err != nil && !inferflow.IsMeeshoEnabled {
 		return rtpComponents, nil
 	}
 	rtpFeatureComponentsMap := GetRTPFeatureLabelToPrefixToFeatureGroupToFeatureMap(rtpFeatures.ToSlice())
@@ -1008,7 +1008,7 @@ func GetRTPFeatureLabelToPrefixToFeatureGroupToFeatureMap(featureStrings []strin
 }
 
 func GetRTPFeatureGroupDataTypeMap() (map[string]string, error) {
-	return externalcall.GetRTPClient().GetFeatureGroupDataTypeMap()
+	return externalcall.PricingClient.GetFeatureGroupDataTypeMap()
 }
 
 func GetPredatorComponents(request InferflowOnboardRequest, offlineToOnlineMapping map[string]string) ([]PredatorComponent, error) {
