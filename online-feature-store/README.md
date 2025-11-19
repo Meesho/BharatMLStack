@@ -37,36 +37,6 @@ Online-feature-store consists of several key components working together:
 
 For detailed setup instructions, see the [**Quick Start Guide**](quick-start/README.md).
 
-The quickest way to get started with Online-feature-store is to use the quick start scripts with **flexible service selection**:
-
-```bash
-# Clone the repository
-git clone https://github.com/Meesho/BharatMLStack.git
-cd BharatMLStack/online-feature-store/quick-start
-
-# Interactive mode - choose which application services to start
-./start.sh
-
-# Or start all services (non-interactive)
-./start.sh --all
-```
-
-### 🎯 Service Selection Options:
-
-**Infrastructure is always started** (ScyllaDB, MySQL, Redis, etcd, etcd-workbench)
-
-Choose which **application services** to start:
-
-1. **🚀 All Services**
-   - Online Feature Store + Horizon + TruffleBox UI
-2. **🎛️ Custom Selection**
-   - Choose individual application services (ONFS API, Horizon, TruffleBox UI)
-
-To stop all services:
-```bash
-./stop.sh
-```
-
 ## 🧰 SDKs
 
 Online-feature-store provides SDKs to interact with the feature store:
@@ -227,8 +197,46 @@ KAFKA_CONSUMERS_FEATURE_CONSUMER_SECURITY_PROTOCOL=SASL_SSL
 KAFKA_CONSUMERS_FEATURE_CONSUMER_TOPIC=online-feature-store.feature_ingestion
 ```
 
+---
+
+## 🧯 Distributed Cache Circuit Breaker - Example Configuration
+
+If you want to activate the circuit breaker over the distributed cache, you can create the following configuration keys in `etcd` to control its behavior (typically at `/config/orion-v2/circuitbreaker/distributed_cache/*`):
+
+```bash
+# Active CB keys for distributed cache retrieval (example JSON value)
+etcdctl put /config/orion-v2/circuitbreaker/distributed_cache/active-cb-keys '{
+  "distributed_cache_retrieval": {
+    "enabled": true,
+    "forced-state": 0
+  }
+}'
+
+# Basic boolean flags and thresholds
+etcdctl put /config/orion-v2/circuitbreaker/distributed_cache/enabled true
+etcdctl put /config/orion-v2/circuitbreaker/distributed_cache/failure-count-threshold 0
+etcdctl put /config/orion-v2/circuitbreaker/distributed_cache/failure-count-window 0
+etcdctl put /config/orion-v2/circuitbreaker/distributed_cache/failure-rate-minimum-window 1000
+etcdctl put /config/orion-v2/circuitbreaker/distributed_cache/failure-rate-threshold 10
+etcdctl put /config/orion-v2/circuitbreaker/distributed_cache/failure-rate-window-in-ms 60000
+etcdctl put /config/orion-v2/circuitbreaker/distributed_cache/name distributed_cache
+etcdctl put /config/orion-v2/circuitbreaker/distributed_cache/success-count-threshold 900
+etcdctl put /config/orion-v2/circuitbreaker/distributed_cache/success-count-window 1000
+etcdctl put /config/orion-v2/circuitbreaker/distributed_cache/version 1
+etcdctl put /config/orion-v2/circuitbreaker/distributed_cache/with-delay-in-ms 10000
+```
+
+> **Note:**  
+> These keys (and values) tell the ONFS platform to enable circuit breaking over usage of distributed cache, and allow you to tune failure/success thresholds, time windows, and fallback state.  
+> 
+> All configuration updates to these keys in etcd are picked up dynamically by ONFS components.
+
+---
+
+
+
 # For Consumer:
-Before running the consumer service, you'll need to set up a Kafka environment. You have two options:
+Before running the consumer service, you can use quickstart to start kafka which is included in infrastructure services.
 
 ### Testing
 
@@ -338,6 +346,303 @@ docker run -d \
   --env-file ./cmd/api-server/.env \
   onfs-consumer:latest
 ```
+
+## Feature Store API Examples
+
+### gRPC API Commands
+
+Use the following `grpcurl` commands to interact with the Online Feature Store gRPC API:
+
+**Persist Features:**
+```bash
+grpcurl -plaintext -H "online-feature-store-caller-id: <caller-id>" -H "online-feature-store-auth-token: <auth-token>" -d '<request-body>' localhost:8089 persist.FeatureService/PersistFeatures
+```
+
+**Retrieve Features (Decoded):**
+```bash
+grpcurl -plaintext -H "online-feature-store-caller-id: <caller-id>" -H "online-feature-store-auth-token: <auth-token>" -d '<request-body>' localhost:8089 retrieve.FeatureService/RetrieveDecodedResult
+```
+
+**Retrieve Features (Binary):**
+```bash
+grpcurl -plaintext -H "online-feature-store-caller-id: <caller-id>" -H "online-feature-store-auth-token: <auth-token>" -d '<request-body>' localhost:8089 retrieve.FeatureService/RetrieveFeatures
+```
+
+### Sample Request Bodies
+
+**Single Feature Group Persist:**
+```json
+{
+    "data": [{
+        "key_values": ["10"],
+        "feature_values": [{
+            "values": {"fp32_values": [123.45]}
+        }]
+    }],
+    "entity_label": "catalog",
+    "feature_group_schema": [{
+        "label": "int_fg",
+        "feature_labels": ["id"]
+    }],
+    "keys_schema": ["catalog_id"]
+}
+```
+
+**Single Feature Group Retrieve:**
+```json
+{
+    "entity_label": "catalog",
+    "feature_groups": [{
+        "label": "int_fg",
+        "feature_labels": ["id"]
+    }],
+    "keys_schema": ["catalog_id"],
+    "keys": [{"cols": ["10"]}]
+}
+```
+
+**Multiple Feature Groups Persist:**
+```json
+{
+    "data": [
+        {
+            "key_values": ["1"],
+            "feature_values": [
+                {"values": {"fp32_values": [28.5]}},
+                {"values": {"string_values": ["Bharat"]}}
+            ]
+        },
+        {
+            "key_values": ["2"],
+            "feature_values": [
+                {"values": {"fp32_values": [32.0]}},
+                {"values": {"string_values": ["India"]}}
+            ]
+        }
+    ],
+    "entity_label": "catalog",
+    "feature_group_schema": [
+        {"label": "int_fg", "feature_labels": ["id"]},
+        {"label": "string_fg", "feature_labels": ["name"]}
+    ],
+    "keys_schema": ["catalog_id"]
+}
+```
+
+**Multiple Feature Groups Retrieve:**
+```json
+{
+    "entity_label": "catalog",
+    "feature_groups": [
+        {"label": "int_fg", "feature_labels": ["id"]},
+        {"label": "string_fg", "feature_labels": ["name"]}
+    ],
+    "keys_schema": ["catalog_id"],
+    "keys": [
+        {"cols": ["1"]},
+        {"cols": ["2"]}
+    ]
+}
+```
+
+**Vector Feature Group Persist:**
+```json
+{
+    "data": [{
+        "key_values": ["123"],
+        "feature_values": [{
+            "values": {
+                "vector": [{
+                    "values": {"fp32_values": [1.0, 2.0, 3.0, 4.0]}
+                }]
+            }
+        }]
+    }],
+    "entity_label": "catalog",
+    "feature_group_schema": [{
+        "label": "vector_fg",
+        "feature_labels": ["embedding"]
+    }],
+    "keys_schema": ["catalog_id"]
+}
+```
+
+**Vector Feature Group Retrieve:**
+```json
+{
+    "entity_label": "catalog",
+    "feature_groups": [{
+        "label": "vector_fg",
+        "feature_labels": ["embedding"]
+    }],
+    "keys_schema": ["catalog_id"],
+    "keys": [{"cols": ["123"]}]
+}
+```
+
+### Key Points
+
+**Only one type per feature value block:**
+- `feature_values` is a list, and each item in the list has only one value type populated
+- For example: one item has only `fp32_values`, another has only `int64_values`
+
+**Field Types:**
+The following value types are supported:
+
+- **fp32_values**: `float32[]`
+- **fp64_values**: `float64[]`
+- **int32_values**: `int32[]`
+- **int64_values**: `string[]` (because JSON doesn't support 64-bit ints directly)
+- **uint32_values**: `uint32[]`
+- **uint64_values**: `string[]`
+- **string_values**: `string[]`
+- **bool_values**: `bool[]`
+- **vector**: list of objects with nested values (used for embedded features)
+
+### Response Format Differences
+
+- **Retrieve Features (Binary)**: Returns data in binary format for optimal performance and reduced network overhead
+- **Retrieve Features (Decoded)**: Returns data in human-readable string format for easier debugging and development purposes
+
+## Feature Ingestion Flows
+
+BharatMLStack Online Feature Store supports two primary methods for ingesting features:
+
+### 1. Direct gRPC API Ingestion
+
+Use the ONFS API Server for synchronous, request-response feature operations:
+
+```bash
+# Persist features directly via gRPC
+grpcurl -plaintext -H "online-feature-store-caller-id: <caller-id>" \
+  -H "online-feature-store-auth-token: <auth-token>" \
+  -d '<request-body>' localhost:8089 persist.FeatureService/PersistFeatures
+```
+
+**When to use:**
+- Real-time feature updates requiring immediate confirmation
+- Low-latency synchronous operations
+- Direct integration with applications
+
+### 2. Kafka Consumer Ingestion
+
+The ONFS Consumer service provides asynchronous, stream-based feature ingestion:
+
+**Architecture:**
+```
+Producer → Kafka Topic → ONFS Consumer → Redis/Scylla
+```
+
+**How it works:**
+1. Applications publish feature data to Kafka topic: `online-feature-store.feature_ingestion`
+2. ONFS Consumer reads messages from Kafka in batches
+3. Features are persisted to configured storage backends (Redis/Scylla)
+4. Consumer handles retries and error scenarios automatically
+
+**Configuration:**
+- **Kafka Topic**: `online-feature-store.feature_ingestion`
+- **Consumer Port**: 8090
+- **Health Check**: http://localhost:8090/health/self
+- **Bootstrap Servers**: `broker:29092` (internal), `localhost:9092` (external)
+
+**Publishing Features to Kafka:**
+
+**Option 1: Using Python Producer Script (Recommended)**
+
+The repository includes a ready-to-use Python script that sends protobuf-encoded messages:
+
+```bash
+# Install dependencies
+pip install kafka-python
+cd ../online-feature-store/py-sdk/bharatml_commons
+pip install -e .
+
+# Navigate to the script directory
+cd ../online-feature-store/examples/notebook
+
+# Send sample data (sub_order example with protobuf encoding)
+python sample_kafka_producer.py --sample
+
+# Send custom data from a JSON file
+python sample_kafka_producer.py --file my_features.json
+
+# Send multiple messages (for load testing)
+python sample_kafka_producer.py --sample --count 100
+
+# Show the data being sent (with JSON and protobuf representation)
+python sample_kafka_producer.py --sample --show-json
+
+# Use a different broker or topic
+python sample_kafka_producer.py --sample --broker localhost:9092 --topic my-custom-topic
+```
+
+**Sample JSON format for custom data file:**
+```json
+{
+  "entity_label": "test",
+  "keys_schema": ["test_id"],
+  "feature_group_schema": [
+    {
+      "label": "test_fg",
+      "feature_labels": ["test_feature"]
+    },
+    {
+      "label": "test_fg_fp32",
+      "feature_labels": ["test_feature1", "test_feature2"]
+    }
+  ],
+  "data": [
+    {
+      "key_values": ["1"],
+      "feature_values": [
+        {
+          "values": {
+            "bool_values": [false]
+          }
+        },
+        {
+          "values": {
+            "fp32_values": [0.010070363990962505, 0.000014061562978895381]
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Option 2: Using kafka-console-producer (for quick testing)**
+
+```bash
+# Using kafka-console-producer
+docker exec -it broker kafka-console-producer.sh \
+  --bootstrap-server localhost:9092 \
+  --topic online-feature-store.feature_ingestion
+
+# Then paste your feature JSON payload (must be single-line JSON)
+```
+
+**Consumer Benefits:**
+- Decouples feature ingestion from application logic
+- High throughput batch processing
+- Automatic retries and error handling
+- Scales independently of API server
+- Supports backpressure and flow control
+
+**Monitoring Consumer:**
+```bash
+# View consumer logs
+cd workspace && docker-compose logs -f onfs-consumer
+
+# Check Kafka UI for consumer lag
+open http://localhost:8084
+```
+
+**When to use:**
+- High-volume feature ingestion
+- Asynchronous batch processing
+- Event-driven architectures
+- When producer and consumer need to scale independently
 
 ### Observability
 
