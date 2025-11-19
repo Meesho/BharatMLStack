@@ -20,7 +20,7 @@ const getBooleanEnv = (key, defaultValue = false) => {
 // Service-wise feature flags
 export const REACT_APP_ONLINE_FEATURE_STORE_ENABLED = getBooleanEnv('REACT_APP_ONLINE_FEATURE_STORE_ENABLED', true);
 export const REACT_APP_INFERFLOW_ENABLED = getBooleanEnv('REACT_APP_INFERFLOW_ENABLED', false);
-export const REACT_APP_NUMERIX_ENABLED = getBooleanEnv('REACT_APP_NUMERIX_ENABLED', true);
+export const REACT_APP_NUMERIX_ENABLED = getBooleanEnv('REACT_APP_NUMERIX_ENABLED', false);
 export const REACT_APP_PREDATOR_ENABLED = getBooleanEnv('REACT_APP_PREDATOR_ENABLED', false);
 export const REACT_APP_EMBEDDING_PLATFORM_ENABLED = getBooleanEnv('REACT_APP_EMBEDDING_PLATFORM_ENABLED', false);
 
