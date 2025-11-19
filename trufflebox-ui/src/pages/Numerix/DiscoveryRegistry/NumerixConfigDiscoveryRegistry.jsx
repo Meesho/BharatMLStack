@@ -21,6 +21,7 @@ import * as URL_CONSTANTS from '../../../config';
 const NumerixConfigDiscoveryRegistry = () => {
   const { user, hasPermission, permissions } = useAuth();
   const { formatDateToIST } = useFormatDate();
+  const [searchParams, setSearchParams] = useSearchParams();
   
   const service = SERVICES.NUMERIX;
   const screenType = SCREEN_TYPES.NUMERIX.CONFIG;

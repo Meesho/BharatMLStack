@@ -11,4 +11,3 @@ __pycache__/
 .internal-configs/
 .dev-toggle-state
 .go.mod.appended
-trufflebox-ui/yarn.lock
