@@ -24,7 +24,13 @@ import PropTypes from 'prop-types';
 import './Header.css';
 import { useAuth } from '../Auth/AuthContext';
 import { requiresPermissionCheck, getPermissionInfo } from '../../constants/serviceMapping';
-import { isEmbeddingPlatformEnabled } from '../../config';
+import { 
+  isOnlineFeatureStoreEnabled, 
+  isInferFlowEnabled, 
+  isNumerixEnabled, 
+  isPredatorEnabled, 
+  isEmbeddingPlatformEnabled 
+} from '../../config';
 
 function Header({ onMenuItemClick }) {
   const [show, setShow] = useState(false);
@@ -262,7 +268,19 @@ function Header({ onMenuItemClick }) {
 
   // Filter menu items based on feature flags
   const menuItems = allMenuItems.filter(item => {
-    // Hide Embedding Platform if feature is not enabled
+    // Hide services if feature flags are not enabled
+    if (item.key === 'FeatureStore' && !isOnlineFeatureStoreEnabled()) {
+      return false;
+    }
+    if (item.key === 'InferFlow' && !isInferFlowEnabled()) {
+      return false;
+    }
+    if (item.key === 'Numerix' && !isNumerixEnabled()) {
+      return false;
+    }
+    if (item.key === 'Predator' && !isPredatorEnabled()) {
+      return false;
+    }
     if (item.key === 'EmbeddingPlatform' && !isEmbeddingPlatformEnabled()) {
       return false;
     }

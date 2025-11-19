@@ -30,7 +30,13 @@ import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 import HealthCheck from './Health';
 import Unauthorized from './pages/Auth/Unauthorized';
-import { isEmbeddingPlatformEnabled } from './config';
+import { 
+  isOnlineFeatureStoreEnabled, 
+  isInferFlowEnabled, 
+  isNumerixEnabled, 
+  isPredatorEnabled, 
+  isEmbeddingPlatformEnabled 
+} from './config';
 
 // Embedding Platform Components
 import DeploymentOperations from './pages/EmbeddingPlatform/components/DeploymentOperations';
@@ -67,118 +73,122 @@ function App() {
             <Route path="/unauthorized" element={<Unauthorized />} />
 
             {/* Online Feature Store Routes */}
-            <Route
-              path="/feature-discovery"
-              element={
-                <ProtectedRoute>
-                  <FeatureDiscovery />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/store-discovery"
-              element={
-                <ProtectedRoute>
-                  <StoreDiscovery />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/job-discovery"
-              element={
-                <ProtectedRoute>
-                  <JobDiscovery />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/client-discovery"
-              element={
-                <ProtectedRoute>
-                  <ClientDiscovery />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/feature-registry/store"
-              element={
-                <ProtectedRoute>
-                  <StoreRegistry />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/feature-registry/job"
-              element={
-                <ProtectedRoute>
-                  <JobRegistry />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/feature-registry/entity"
-              element={
-                <ProtectedRoute>
-                  <EntityRegistry />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/feature-registry/feature-group"
-              element={
-                <ProtectedRoute>
-                  <FeatureGroupRegistry />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/feature-registry/feature"
-              element={
-                <ProtectedRoute>
-                  <FeatureAddition />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/feature-approval/store"
-              element={
-                <ProtectedRoute>
-                  <StoreApproval />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/feature-approval/job"
-              element={
-                <ProtectedRoute>
-                  <JobApproval />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/feature-approval/entity"
-              element={
-                <ProtectedRoute>
-                  <EntityApproval />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/feature-approval/feature-group"
-              element={
-                <ProtectedRoute>
-                  <FeatureGroupApproval />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/feature-approval/features"
-              element={
-                <ProtectedRoute>
-                  <FeatureAdditionApproval />
-                </ProtectedRoute>
-              }
-            />
+            {isOnlineFeatureStoreEnabled() && (
+              <>
+                <Route
+                  path="/feature-discovery"
+                  element={
+                    <ProtectedRoute>
+                      <FeatureDiscovery />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/store-discovery"
+                  element={
+                    <ProtectedRoute>
+                      <StoreDiscovery />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/job-discovery"
+                  element={
+                    <ProtectedRoute>
+                      <JobDiscovery />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/client-discovery"
+                  element={
+                    <ProtectedRoute>
+                      <ClientDiscovery />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/feature-registry/store"
+                  element={
+                    <ProtectedRoute>
+                      <StoreRegistry />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/feature-registry/job"
+                  element={
+                    <ProtectedRoute>
+                      <JobRegistry />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/feature-registry/entity"
+                  element={
+                    <ProtectedRoute>
+                      <EntityRegistry />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/feature-registry/feature-group"
+                  element={
+                    <ProtectedRoute>
+                      <FeatureGroupRegistry />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/feature-registry/feature"
+                  element={
+                    <ProtectedRoute>
+                      <FeatureAddition />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/feature-approval/store"
+                  element={
+                    <ProtectedRoute>
+                      <StoreApproval />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/feature-approval/job"
+                  element={
+                    <ProtectedRoute>
+                      <JobApproval />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/feature-approval/entity"
+                  element={
+                    <ProtectedRoute>
+                      <EntityApproval />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/feature-approval/feature-group"
+                  element={
+                    <ProtectedRoute>
+                      <FeatureGroupApproval />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/feature-approval/features"
+                  element={
+                    <ProtectedRoute>
+                      <FeatureAdditionApproval />
+                    </ProtectedRoute>
+                  }
+                />
+              </>
+            )}
             <Route
               path="/user-management"
               element={
@@ -189,78 +199,89 @@ function App() {
             />
 
             {/* Numerix Routes */}
-            <Route
-              path="/numerix/config"
-              element={
-                <ProtectedRoute service="numerix" screenType="numerix-config">
-                  <NumerixConfigDiscoveryRegistry />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/numerix/config-approval"
-              element={
-                <ProtectedRoute service="numerix" screenType="numerix-config-approval">
-                  <NumerixConfigApproval />
-                </ProtectedRoute>
-              }
-            />
+            {isNumerixEnabled() && (
+              <>
+                <Route
+                  path="/numerix/config"
+                  element={
+                    <ProtectedRoute service="numerix" screenType="numerix-config">
+                      <NumerixConfigDiscoveryRegistry />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/numerix/config-approval"
+                  element={
+                    <ProtectedRoute service="numerix" screenType="numerix-config-approval">
+                      <NumerixConfigApproval />
+                    </ProtectedRoute>
+                  }
+                />
+              </>
+            )}
 
             {/* Predator Routes */}
-            <Route
-              path="/predator/discovery-registry/deployable"
-              element={
-                <ProtectedRoute service="predator" screenType="deployable">
-                  <DeployableRegistry />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/predator/discovery-registry/model"
-              element={
-                <ProtectedRoute service="predator" screenType="model">
-                  <ModelRegistry />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/predator/approval/model"
-              element={
-                <ProtectedRoute service="predator" screenType="model-approval">
-                  <ModelApproval />
-                </ProtectedRoute>
-              }
-            />
+            {isPredatorEnabled() && (
+              <>
+                <Route
+                  path="/predator/discovery-registry/deployable"
+                  element={
+                    <ProtectedRoute service="predator" screenType="deployable">
+                      <DeployableRegistry />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/predator/discovery-registry/model"
+                  element={
+                    <ProtectedRoute service="predator" screenType="model">
+                      <ModelRegistry />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/predator/approval/model"
+                  element={
+                    <ProtectedRoute service="predator" screenType="model-approval">
+                      <ModelApproval />
+                    </ProtectedRoute>
+                  }
+                />
+              </>
+            )}
 
             {/* InferFlow Routes */}
-            <Route
-              path="/inferflow/deployable"
-              element={
-                <ProtectedRoute service="inferflow" screenType="deployable">
-                  <DeployableModelProxyRegistry />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/inferflow/config-registry"
-              element={
-                <ProtectedRoute service="inferflow" screenType="mp-config">
-                  <MPConfigRegistry />
-                </ProtectedRoute>
-              }
-            />
-            
-            <Route
-              path="/inferflow/config-approval"
-              element={
-                <ProtectedRoute service="inferflow" screenType="mp-config-approval">
-                  <ModelConfigApproval />
-                </ProtectedRoute>
-              }
-            />
+            {isInferFlowEnabled() && (
+              <>
+                <Route
+                  path="/inferflow/deployable"
+                  element={
+                    <ProtectedRoute service="inferflow" screenType="deployable">
+                      <DeployableModelProxyRegistry />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/inferflow/config-registry"
+                  element={
+                    <ProtectedRoute service="inferflow" screenType="mp-config">
+                      <MPConfigRegistry />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/inferflow/config-approval"
+                  element={
+                    <ProtectedRoute service="inferflow" screenType="mp-config-approval">
+                      <ModelConfigApproval />
+                    </ProtectedRoute>
+                  }
+                />
+              </>
+            )}
 
             {/* Embedding Platform Routes */}
-            {isEmbeddingPlatformEnabled && (
+            {isEmbeddingPlatformEnabled() && (
             <>
         {/* Embedding Platform Discovery Routes */}
         <Route
