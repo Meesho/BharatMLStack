@@ -76,7 +76,7 @@ const ProductionCredentialModal = ({
           
           if (sessionResponse.ok) {
             const sessionData = await sessionResponse.json();
-            console.log('Production session tracked:', sessionData.sessionId);
+            // console.log('Production session tracked:', sessionData.sessionId);
           }
         } catch (sessionError) {
           console.error('Session tracking failed, but proceeding with promotion:', sessionError);

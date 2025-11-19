@@ -198,6 +198,7 @@ services:
       - STORAGE_SCYLLA_1_TIMEOUT_IN_MS=300000
       - STORAGE_SCYLLA_1_USERNAME=
       - STORAGE_SCYLLA_1_PASSWORD=
+      - STORAGE_SCYLLA_1_SCYLLA_VERSION=5
       - STORAGE_SCYLLA_ACTIVE_CONFIG_IDS=1
       - P2P_CACHE_5_ENABLED=true
       - P2P_CACHE_5_CLUSTER_NAME=onfs-cluster
@@ -421,7 +422,13 @@ services:
     ports:
       - "3000:80"
     environment:
+      - REACT_APP_ENVIRONMENT=staging
       - REACT_APP_HORIZON_BASE_URL=http://localhost:8082
+      - REACT_APP_ONLINE_FEATURE_STORE_ENABLED=true
+      - REACT_APP_INFERFLOW_ENABLED=false
+      - REACT_APP_NUMERIX_ENABLED=false
+      - REACT_APP_PREDATOR_ENABLED=false
+      - REACT_APP_EMBEDDING_PLATFORM_ENABLED=false
     networks:
       - onfs-network
     depends_on:
