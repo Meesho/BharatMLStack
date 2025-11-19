@@ -1,8 +1,6 @@
 module github.com/Meesho/BharatMLStack/online-feature-store
 
-go 1.22.0
-
-toolchain go1.22.8
+go 1.24.4
 
 require (
 	github.com/DataDog/datadog-go/v5 v5.5.0
