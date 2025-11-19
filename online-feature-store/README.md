@@ -353,6 +353,18 @@ docker run -d \
 
 Use the following `grpcurl` commands to interact with the Online Feature Store gRPC API:
 
+**Authentication Headers:**
+
+All gRPC API requests require two authentication headers:
+- `online-feature-store-caller-id`: Identifies the calling service/client
+- `online-feature-store-auth-token`: Authentication token for authorization
+
+**For local development/testing**, you can use:
+- `<caller-id>`: `test`
+- `<auth-token>`: `test`
+
+Replace `<caller-id>` and `<auth-token>` in the commands below with your actual values.
+
 **Persist Features:**
 ```bash
 grpcurl -plaintext -H "online-feature-store-caller-id: <caller-id>" -H "online-feature-store-auth-token: <auth-token>" -d '<request-body>' localhost:8089 persist.FeatureService/PersistFeatures
