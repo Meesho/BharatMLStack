@@ -181,6 +181,12 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 					log.Info().Msgf("Puts/sec: %v", float64(wc.stats[i].TotalPuts.Load()-perShardPrevTotalPuts[i])/float64(sleepDuration.Seconds()))
 					perShardPrevTotalGets[i] = total
 					perShardPrevTotalPuts[i] = wc.stats[i].TotalPuts.Load()
+
+					getP25, getP50, getP99 := wc.shards[i].Stats.GetLatencyPercentiles()
+					putP25, putP50, putP99 := wc.shards[i].Stats.PutLatencyPercentiles()
+					log.Info().Msgf("Get Latencies - P25: %v, P50: %v, P99: %v", getP25, getP50, getP99)
+					log.Info().Msgf("Put Latencies - P25: %v, P50: %v, P99: %v", putP25, putP50, putP99)
+
 				}
 				log.Info().Msgf("GridSearchActive: %v", wc.predictor.GridSearchEstimator.IsGridSearchActive())
 			}

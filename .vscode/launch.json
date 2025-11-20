@@ -18,6 +18,13 @@
             "request": "launch",
             "mode": "debug",
             "program": "${workspaceFolder}/ssd-cache/cmd/cachetest/main.go"
+        },
+        {
+            "name": "Flashring",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/flashring/cmd/flashringtest/main.go"
         }
 
     ]
