@@ -1,0 +1,4 @@
+com/bharatml/featurestore/kafka/ProducerWrapper.class
+com/bharatml/featurestore/kafka/ProducerWrapper$1.class
+com/bharatml/featurestore/kafka/DefaultKafkaProducerFactory.class
+com/bharatml/featurestore/kafka/KafkaProducerFactory.class

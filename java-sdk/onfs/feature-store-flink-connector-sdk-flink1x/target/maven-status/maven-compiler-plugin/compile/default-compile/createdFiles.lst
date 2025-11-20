@@ -1,0 +1,4 @@
+com/bharatml/featurestore/connector/FeatureSinkFactory.class
+com/bharatml/featurestore/connector/FeatureStoreClientConfig.class
+com/bharatml/featurestore/connector/FeatureStoreTransactionalKafkaSink.class
+com/bharatml/featurestore/connector/FeatureStoreKafkaSink.class
