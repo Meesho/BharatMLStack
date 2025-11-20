@@ -40,7 +40,7 @@ func main() {
 
 	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul/", "data directory for shard files")
 	flag.IntVar(&numShards, "shards", 1, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 128_000_000, "keys per shard")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 67_000_000, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 40, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 1, "number of read workers")
