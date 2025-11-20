@@ -38,13 +38,13 @@ func main() {
 		cpuProfile         string
 	)
 
-	flag.StringVar(&mountPoint, "mount", "/mnt/disks/nvme/nileshsolanki/", "data directory for shard files")
-	flag.IntVar(&numShards, "shards", 128, "number of shards")
+	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul/", "data directory for shard files")
+	flag.IntVar(&numShards, "shards", 1, "number of shards")
 	flag.IntVar(&keysPerShard, "keys-per-shard", 1_000_000, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 40, "file size in GiB per shard")
-	flag.IntVar(&readWorkers, "readers", 6, "number of read workers")
-	flag.IntVar(&writeWorkers, "writers", 6, "number of write workers")
+	flag.IntVar(&readWorkers, "readers", 1, "number of read workers")
+	flag.IntVar(&writeWorkers, "writers", 1, "number of write workers")
 	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
 	flag.Int64Var(&iterations, "iterations", 100_000_000, "number of iterations")
 	flag.Float64Var(&aVal, "a", 0.4, "a value for the predictor")
@@ -102,6 +102,22 @@ func main() {
 	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, logStats)
 	if err != nil {
 		panic(err)
+	}
+
+	testKey := "key1"
+	testVal := []byte("value1")
+	if err := pc.Put(testKey, testVal, 60); err != nil {
+		panic(err)
+	}
+	val, found, expired := pc.Get(testKey)
+	if !found {
+		panic("key not found")
+	}
+	if expired {
+		panic("key expired")
+	}
+	if string(val) != string(testVal) {
+		panic("value mismatch")
 	}
 
 	totalKeys := keysPerShard * numShards
