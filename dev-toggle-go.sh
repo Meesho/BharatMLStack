@@ -2,14 +2,8 @@
 
 set -e
 
+# Get the script directory (parent directory where this script lives)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-STATE_FILE="$SCRIPT_DIR/.dev-toggle-state"
-GO_MOD_FILE="$SCRIPT_DIR/go.mod"
-GO_MOD_APPEND_FILE="$SCRIPT_DIR/.go.mod.appended"
-
-INTERNAL_REPO_URL="https://github.com/Meesho/BharatMLStack-internal-configs"
-INTERNAL_REPO_DIR="$SCRIPT_DIR/.internal-configs"
-INTERNAL_OFS_DIR="$INTERNAL_REPO_DIR/online-feature-store"
 
 # Colors for output
 RED='\033[0;31m'
@@ -18,14 +12,168 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+get_available_folders() {
+    local folders=()
+    for dir in "$SCRIPT_DIR"/*; do
+        if [ -d "$dir" ] && [ -f "$dir/go.mod" ]; then
+            local folder_name=$(basename "$dir")
+            folders+=("$folder_name")
+        fi
+    done
+    echo "${folders[@]}"
+}
+
+interactive_select_folder() {
+    local available_folders=($(get_available_folders))
+    
+    if [ ${#available_folders[@]} -eq 0 ]; then
+        log_error "No folders with go.mod found in $SCRIPT_DIR"
+        exit 1
+    fi
+    
+    echo "" >&2
+    echo "==========================================" >&2
+    echo "  Step 1: Select Folder(s)" >&2
+    echo "==========================================" >&2
+    echo "" >&2
+    echo "Available folders:" >&2
+    local index=1
+    for folder in "${available_folders[@]}"; do
+        echo "  [$index] $folder" >&2
+        ((index++))
+    done
+    echo "" >&2
+    echo "You can select:" >&2
+    echo "  • Single folder: Enter a number (e.g., 1)" >&2
+    echo "  • Multiple folders: Enter numbers separated by comma or space (e.g., 1,2 or 1 2 3)" >&2
+    echo "" >&2
+    
+    while true; do
+        read -p "Select folder(s): " selection
+        
+        # Remove any extra spaces
+        selection=$(echo "$selection" | tr -s ' ' | tr ',' ' ')
+        
+        # Validate all selections
+        local valid=true
+        local selected_folders=()
+        local IFS=' '
+        for num in $selection; do
+            if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le ${#available_folders[@]} ]; then
+                selected_folders+=("${available_folders[$((num-1))]}")
+            else
+                valid=false
+                break
+            fi
+        done
+        
+        if [ "$valid" = true ] && [ ${#selected_folders[@]} -gt 0 ]; then
+            # Remove duplicates
+            local unique_folders=()
+            for folder in "${selected_folders[@]}"; do
+                local is_duplicate=false
+                for unique in "${unique_folders[@]}"; do
+                    if [ "$folder" = "$unique" ]; then
+                        is_duplicate=true
+                        break
+                    fi
+                done
+                if [ "$is_duplicate" = false ]; then
+                    unique_folders+=("$folder")
+                fi
+            done
+            
+            # Output folders separated by space (will be captured as array) to stdout
+            echo "${unique_folders[@]}"
+            return 0
+        else
+            echo "Invalid selection. Please enter number(s) between 1 and ${#available_folders[@]}." >&2
+            echo "  Examples: 1  or  1,2  or  1 2 3" >&2
+        fi
+    done
+}
+
+interactive_select_command() {
+    echo "" >&2
+    echo "==========================================" >&2
+    echo "  Step 2: Select Command" >&2
+    echo "==========================================" >&2
+    echo "" >&2
+    echo "Available commands:" >&2
+    echo "  [1] enable   - Enable development mode (clone internal repo, copy files, update go.mod)" >&2
+    echo "  [2] disable  - Disable development mode (remove copied files and go.mod changes)" >&2
+    echo "  [3] status   - Show current development mode status" >&2
+    echo "  [4] update   - Update internal configs (pull latest from internal repo)" >&2
+    echo "" >&2
+    
+    while true; do
+        read -p "Select command (1-4): " selection
+        case "$selection" in
+            1)
+                echo "enable"
+                return 0
+                ;;
+            2)
+                echo "disable"
+                return 0
+                ;;
+            3)
+                echo "status"
+                return 0
+                ;;
+            4)
+                echo "update"
+                return 0
+                ;;
+            *)
+                echo "Invalid selection. Please enter a number between 1 and 4." >&2
+                ;;
+        esac
+    done
+}
+
 print_usage() {
-    echo "Usage: $0 [enable|disable|status|update]"
+    echo "Usage: $0 <folder-name> <command>"
     echo ""
-    echo "Commands:"
-    echo "  enable   - Enable development mode (clone internal repo, copy files, update go.mod)"
-    echo "  disable  - Disable development mode (remove copied files and go.mod changes)"
-    echo "  status   - Show current development mode status"
-    echo "  update   - Update internal configs (pull latest from internal repo)"
+    echo "Parameters:"
+    echo "  1. folder-name  - Name of the folder to operate on"
+    echo ""
+    
+    # Detect and show available folders
+    local available_folders=($(get_available_folders))
+    if [ ${#available_folders[@]} -gt 0 ]; then
+        echo "     Available folders:"
+        for folder in "${available_folders[@]}"; do
+            echo "       • $folder"
+        done
+    else
+        echo "     Available folders: (none found with go.mod)"
+    fi
+    
+    echo ""
+    echo "  2. command      - Action to perform"
+    echo ""
+    echo "     Available commands:"
+    echo "       • enable   - Enable development mode (clone internal repo, copy files, update go.mod)"
+    echo "       • disable  - Disable development mode (remove copied files and go.mod changes)"
+    echo "       • status   - Show current development mode status"
+    echo "       • update   - Update internal configs (pull latest from internal repo)"
+    echo ""
+    echo "Examples:"
+    if [ ${#available_folders[@]} -gt 0 ]; then
+        local first_folder="${available_folders[0]}"
+        echo "  $0 $first_folder enable"
+        if [ ${#available_folders[@]} -gt 1 ]; then
+            local second_folder="${available_folders[1]}"
+            echo "  $0 $second_folder status"
+        fi
+        echo "  $0 $first_folder disable"
+        echo "  $0 $first_folder update"
+    else
+        echo "  $0 online-feature-store enable"
+        echo "  $0 horizon status"
+        echo "  $0 online-feature-store disable"
+    fi
     echo ""
     exit 1
 }
@@ -46,9 +194,53 @@ log_debug() {
     echo -e "${BLUE}[DEBUG]${NC} $1"
 }
 
+# Validate folder name and set up paths
+validate_and_setup() {
+    FOLDER_NAME="${1:-}"
+    COMMAND="${2:-}"
+    
+    if [ -z "$FOLDER_NAME" ]; then
+        log_error "Folder name is required"
+        print_usage
+    fi
+    
+    if [ -z "$COMMAND" ]; then
+        log_error "Command is required"
+        print_usage
+    fi
+    
+    # Set up paths based on folder name
+    TARGET_DIR="$SCRIPT_DIR/$FOLDER_NAME"
+    STATE_FILE="$TARGET_DIR/.dev-toggle-state"
+    GO_MOD_FILE="$TARGET_DIR/go.mod"
+    GO_MOD_APPEND_FILE="$TARGET_DIR/.go.mod.appended"
+    
+    INTERNAL_REPO_URL="https://github.com/Meesho/BharatMLStack-internal-configs"
+    INTERNAL_REPO_DIR="$TARGET_DIR/.internal-configs"
+    INTERNAL_FOLDER_DIR="$INTERNAL_REPO_DIR/$FOLDER_NAME"
+    
+    # Validate that target directory exists
+    if [ ! -d "$TARGET_DIR" ]; then
+        log_error "Target directory does not exist: $TARGET_DIR"
+        exit 1
+    fi
+    
+    # Validate that go.mod exists in target directory
+    if [ ! -f "$GO_MOD_FILE" ]; then
+        log_error "go.mod not found in target directory: $TARGET_DIR"
+        log_error "This script is designed for Go projects with go.mod files"
+        exit 1
+    fi
+    
+    log_debug "Target directory: $TARGET_DIR"
+    log_debug "State file: $STATE_FILE"
+    log_debug "Internal repo directory: $INTERNAL_REPO_DIR"
+    log_debug "Internal folder directory: $INTERNAL_FOLDER_DIR"
+}
+
 check_status() {
     log_info "=========================================="
-    log_info "Development Mode Status"
+    log_info "Development Mode Status for: $FOLDER_NAME"
     log_info "=========================================="
     
     if [ -f "$STATE_FILE" ]; then
@@ -96,7 +288,7 @@ check_status() {
         echo "Status: DISABLED"
         echo ""
         echo "No active development mode configuration found."
-        echo "Run './dev-toggle.sh enable' to enable development mode."
+        echo "Run '$0 $FOLDER_NAME enable' to enable development mode."
         echo ""
         return 1
     fi
@@ -127,7 +319,7 @@ clone_or_update_internal_repo() {
                 log_debug "Found refs/remotes/origin/master"
             else
                 log_error "Could not determine default branch (main or master not found)"
-                cd "$SCRIPT_DIR"
+                cd "$TARGET_DIR"
                 exit 1
             fi
         fi
@@ -151,7 +343,7 @@ clone_or_update_internal_repo() {
         local commit_hash=$(git rev-parse --short HEAD)
         log_info "Updated to commit: $commit_hash"
         
-        cd "$SCRIPT_DIR"
+        cd "$TARGET_DIR"
     else
         log_info "Internal configs repo not found, cloning..."
         log_debug "Cloning from: $INTERNAL_REPO_URL"
@@ -165,50 +357,51 @@ clone_or_update_internal_repo() {
 
 enable_dev_mode() {
     log_info "=========================================="
-    log_info "Starting development mode enablement"
+    log_info "Starting development mode enablement for: $FOLDER_NAME"
     log_info "=========================================="
     
     if [ -f "$STATE_FILE" ]; then
         log_warn "Development mode is already enabled!"
-        echo "Run '$0 disable' first to revert, or delete $STATE_FILE if state is corrupted."
+        echo "Run '$0 $FOLDER_NAME disable' first to revert, or delete $STATE_FILE if state is corrupted."
         exit 1
     fi
 
     log_debug "State file: $STATE_FILE"
-    log_debug "Working directory: $SCRIPT_DIR"
+    log_debug "Working directory: $TARGET_DIR"
 
     # Clone or update the internal repo
     log_info "Step 1: Fetching internal configurations..."
     clone_or_update_internal_repo
 
-    # Check if online-feature-store directory exists in internal repo
+    # Check if folder directory exists in internal repo
     log_info "Step 2: Validating internal repository structure..."
-    log_debug "Looking for: $INTERNAL_OFS_DIR"
-    if [ ! -d "$INTERNAL_OFS_DIR" ]; then
-        log_error "online-feature-store directory not found in internal configs repo!"
-        log_error "Expected path: $INTERNAL_OFS_DIR"
+    log_debug "Looking for: $INTERNAL_FOLDER_DIR"
+    if [ ! -d "$INTERNAL_FOLDER_DIR" ]; then
+        log_error "$FOLDER_NAME directory not found in internal configs repo!"
+        log_error "Expected path: $INTERNAL_FOLDER_DIR"
         exit 1
     fi
-    log_debug "✓ online-feature-store directory found"
+    log_debug "✓ $FOLDER_NAME directory found"
 
     # Initialize state file
     log_info "Step 3: Initializing state tracking..."
     echo "# Dev toggle state - DO NOT EDIT MANUALLY" > "$STATE_FILE"
     echo "# Generated on $(date)" >> "$STATE_FILE"
+    echo "# Folder: $FOLDER_NAME" >> "$STATE_FILE"
     log_debug "Created state file: $STATE_FILE"
 
     # Find and copy all .go files from internal repo
     log_info "Step 4: Searching for .go files to copy..."
-    log_debug "Scanning directory: $INTERNAL_OFS_DIR"
+    log_debug "Scanning directory: $INTERNAL_FOLDER_DIR"
     
     local copied_count=0
-    local file_count=$(find "$INTERNAL_OFS_DIR" -name "*.go" -type f | wc -l)
+    local file_count=$(find "$INTERNAL_FOLDER_DIR" -name "*.go" -type f | wc -l)
     log_info "Found $file_count .go file(s) to copy"
     
     while IFS= read -r -d '' src_file; do
-        # Get relative path from INTERNAL_OFS_DIR
-        rel_path="${src_file#$INTERNAL_OFS_DIR/}"
-        dest_file="$SCRIPT_DIR/$rel_path"
+        # Get relative path from INTERNAL_FOLDER_DIR
+        rel_path="${src_file#$INTERNAL_FOLDER_DIR/}"
+        dest_file="$TARGET_DIR/$rel_path"
         dest_dir="$(dirname "$dest_file")"
 
         # Create destination directory if it doesn't exist
@@ -230,17 +423,17 @@ enable_dev_mode() {
         # Record in state file
         echo "FILE:$rel_path" >> "$STATE_FILE"
         ((copied_count++))
-    done < <(find "$INTERNAL_OFS_DIR" -name "*.go" -type f -print0)
+    done < <(find "$INTERNAL_FOLDER_DIR" -name "*.go" -type f -print0)
 
     log_info "Successfully copied $copied_count file(s)"
 
     # Check if there's a go.mod file in internal repo with replace directives
     log_info "Step 5: Processing go.mod modifications..."
-    if [ -f "$INTERNAL_OFS_DIR/go.mod" ]; then
-        log_debug "Found go.mod in internal configs: $INTERNAL_OFS_DIR/go.mod"
+    if [ -f "$INTERNAL_FOLDER_DIR/go.mod" ]; then
+        log_debug "Found go.mod in internal configs: $INTERNAL_FOLDER_DIR/go.mod"
         
         # Extract lines that start with "replace " from internal go.mod
-        if grep -E "^replace " "$INTERNAL_OFS_DIR/go.mod" > "$GO_MOD_APPEND_FILE"; then
+        if grep -E "^replace " "$INTERNAL_FOLDER_DIR/go.mod" > "$GO_MOD_APPEND_FILE"; then
             local replace_count=$(wc -l < "$GO_MOD_APPEND_FILE")
             log_info "Found $replace_count replace directive(s) to append"
             log_debug "Replace directives:"
@@ -251,7 +444,7 @@ enable_dev_mode() {
             # Append to current go.mod
             log_info "Appending to $GO_MOD_FILE..."
             echo "" >> "$GO_MOD_FILE"
-            echo "// Added by dev-toggle.sh - DO NOT EDIT" >> "$GO_MOD_FILE"
+            echo "// Added by dev-toggle-go.sh - DO NOT EDIT" >> "$GO_MOD_FILE"
             cat "$GO_MOD_APPEND_FILE" >> "$GO_MOD_FILE"
             
             log_info "✓ Successfully appended replace directives to go.mod"
@@ -260,13 +453,13 @@ enable_dev_mode() {
             rm -f "$GO_MOD_APPEND_FILE"
         fi
     else
-        log_warn "No go.mod found in internal configs at: $INTERNAL_OFS_DIR/go.mod"
+        log_warn "No go.mod found in internal configs at: $INTERNAL_FOLDER_DIR/go.mod"
     fi
 
     # Run go mod tidy
     log_info "Step 6: Running go mod tidy..."
-    log_debug "Changing to directory: $SCRIPT_DIR"
-    cd "$SCRIPT_DIR"
+    log_debug "Changing to directory: $TARGET_DIR"
+    cd "$TARGET_DIR"
     log_debug "Executing: go mod tidy"
     go mod tidy
     log_info "✓ go mod tidy completed successfully"
@@ -276,6 +469,7 @@ enable_dev_mode() {
     log_info "=========================================="
     echo ""
     echo "Summary:"
+    echo "  Folder: $FOLDER_NAME"
     echo "  Files copied: $copied_count"
     echo "  go.mod updated: $([ -f "$GO_MOD_APPEND_FILE" ] && echo "YES" || echo "NO")"
     echo "  State file: $STATE_FILE"
@@ -283,7 +477,7 @@ enable_dev_mode() {
 
 disable_dev_mode() {
     log_info "=========================================="
-    log_info "Starting development mode disablement"
+    log_info "Starting development mode disablement for: $FOLDER_NAME"
     log_info "=========================================="
     
     if [ ! -f "$STATE_FILE" ]; then
@@ -294,7 +488,7 @@ disable_dev_mode() {
     fi
 
     log_debug "State file found: $STATE_FILE"
-    log_debug "Working directory: $SCRIPT_DIR"
+    log_debug "Working directory: $TARGET_DIR"
 
     # Remove copied files
     log_info "Step 1: Removing copied files..."
@@ -305,7 +499,7 @@ disable_dev_mode() {
     while IFS= read -r line; do
         if [[ "$line" =~ ^FILE:(.+)$ ]]; then
             rel_path="${BASH_REMATCH[1]}"
-            file="$SCRIPT_DIR/$rel_path"
+            file="$TARGET_DIR/$rel_path"
             
             log_debug "Attempting to remove: $file"
             if [ -f "$file" ]; then
@@ -326,13 +520,13 @@ disable_dev_mode() {
         log_debug "Found append file: $GO_MOD_APPEND_FILE"
         
         # Find the marker line and remove everything from that line onwards
-        if grep -q "// Added by dev-toggle.sh - DO NOT EDIT" "$GO_MOD_FILE"; then
+        if grep -q "// Added by dev-toggle-go.sh - DO NOT EDIT" "$GO_MOD_FILE"; then
             log_debug "Found marker comment in go.mod"
             local lines_before=$(wc -l < "$GO_MOD_FILE")
             
             # Use sed to delete from the marker line to end of file
             log_debug "Removing lines from marker to end of file..."
-            sed -i.bak '/\/\/ Added by dev-toggle.sh - DO NOT EDIT/,$d' "$GO_MOD_FILE"
+            sed -i.bak '/\/\/ Added by dev-toggle-go.sh - DO NOT EDIT/,$d' "$GO_MOD_FILE"
             rm -f "${GO_MOD_FILE}.bak"
             
             # Remove any trailing empty lines that might be left
@@ -367,8 +561,8 @@ disable_dev_mode() {
 
     # Run go mod tidy
     log_info "Step 3: Running go mod tidy..."
-    log_debug "Changing to directory: $SCRIPT_DIR"
-    cd "$SCRIPT_DIR"
+    log_debug "Changing to directory: $TARGET_DIR"
+    cd "$TARGET_DIR"
     log_debug "Executing: go mod tidy"
     go mod tidy
     log_info "✓ go mod tidy completed successfully"
@@ -396,13 +590,13 @@ disable_dev_mode() {
 
 update_internal_configs() {
     log_info "=========================================="
-    log_info "Updating internal configurations"
+    log_info "Updating internal configurations for: $FOLDER_NAME"
     log_info "=========================================="
     
     if [ ! -f "$STATE_FILE" ]; then
         log_error "Development mode is not enabled!"
         log_error "Expected state file: $STATE_FILE"
-        echo "Run '$0 enable' first."
+        echo "Run '$0 $FOLDER_NAME enable' first."
         exit 1
     fi
 
@@ -426,30 +620,98 @@ update_internal_configs() {
 }
 
 # Main script logic
-log_debug "Script started with command: ${1:-<none>}"
-log_debug "Script directory: $SCRIPT_DIR"
-log_debug "Internal repo URL: $INTERNAL_REPO_URL"
-echo ""
+FOLDER_NAME_INPUT="${1:-}"
+COMMAND="${2:-}"
 
-case "${1:-}" in
-    enable)
-        log_debug "Command: enable"
-        enable_dev_mode
-        ;;
-    disable)
-        log_debug "Command: disable"
-        disable_dev_mode
-        ;;
-    status)
-        log_debug "Command: status"
-        check_status
-        ;;
-    update)
-        log_debug "Command: update"
-        update_internal_configs
-        ;;
-    *)
-        log_error "Invalid or missing command"
-        print_usage
-        ;;
-esac
+# Interactive mode: prompt for missing parameters
+if [ -z "$FOLDER_NAME_INPUT" ]; then
+    echo "=========================================="
+    echo "  Development Toggle for Go Projects"
+    echo "=========================================="
+    FOLDER_NAME_INPUT=$(interactive_select_folder)
+fi
+
+if [ -z "$COMMAND" ]; then
+    COMMAND=$(interactive_select_command)
+fi
+
+# Parse folder names (support multiple folders)
+FOLDER_NAMES=($FOLDER_NAME_INPUT)
+
+# If only one folder, process it directly
+if [ ${#FOLDER_NAMES[@]} -eq 1 ]; then
+    FOLDER_NAME="${FOLDER_NAMES[0]}"
+    
+    # Validate and set up paths
+    validate_and_setup "$FOLDER_NAME" "$COMMAND"
+    
+    log_debug "Script started with folder: $FOLDER_NAME, command: $COMMAND"
+    log_debug "Script directory: $SCRIPT_DIR"
+    log_debug "Target directory: $TARGET_DIR"
+    echo ""
+    
+    case "$COMMAND" in
+        enable)
+            log_debug "Command: enable"
+            enable_dev_mode
+            ;;
+        disable)
+            log_debug "Command: disable"
+            disable_dev_mode
+            ;;
+        status)
+            log_debug "Command: status"
+            check_status
+            ;;
+        update)
+            log_debug "Command: update"
+            update_internal_configs
+            ;;
+        *)
+            log_error "Invalid command: $COMMAND"
+            print_usage
+            ;;
+    esac
+else
+    # Multiple folders selected - process each one
+    echo ""
+    log_info "Processing ${#FOLDER_NAMES[@]} folder(s) with command: $COMMAND"
+    echo ""
+    
+    for FOLDER_NAME in "${FOLDER_NAMES[@]}"; do
+        echo ""
+        log_info "=========================================="
+        log_info "Processing: $FOLDER_NAME"
+        log_info "=========================================="
+        echo ""
+        
+        # Validate and set up paths for this folder
+        validate_and_setup "$FOLDER_NAME" "$COMMAND"
+        
+        case "$COMMAND" in
+            enable)
+                enable_dev_mode
+                ;;
+            disable)
+                disable_dev_mode
+                ;;
+            status)
+                check_status
+                ;;
+            update)
+                update_internal_configs
+                ;;
+            *)
+                log_error "Invalid command: $COMMAND"
+                print_usage
+                exit 1
+                ;;
+        esac
+    done
+    
+    echo ""
+    log_info "=========================================="
+    log_info "✓ Completed processing all ${#FOLDER_NAMES[@]} folder(s)"
+    log_info "=========================================="
+fi
+
