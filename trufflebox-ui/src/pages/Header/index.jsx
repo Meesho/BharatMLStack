@@ -58,7 +58,7 @@ function Header({ onMenuItemClick }) {
       'MPApproval': <ApprovalIcon />,
       'MPTesting': <BugReportIcon />,
       'DiscoveryRegistry': <FolderIcon />,
-      'NmerixApproval': <ApprovalIcon />,
+      'NumerixApproval': <ApprovalIcon />,
       'NumerixTesting': <BugReportIcon />,
       'PredatorApproval': <ApprovalIcon />,
       'Testing': <BugReportIcon />,
