@@ -1142,7 +1142,7 @@ func (o *OnlineFeatureStore) GetOnlineFeatureMapping(request GetOnlineFeatureMap
 }
 
 func (o *OnlineFeatureStore) GetCacheConfig(request GetCacheConfigRequest) (GetCacheConfigResponse, error) {
-	cacheConfig := make(map[string]string)
+	var cacheConfig map[string]string
 	if request.CacheType == enums.CacheTypeDistributed {
 		cacheConfig = distributedCacheConfIdToDbTypeMap
 	} else if request.CacheType == enums.CacheTypeInMemory {
