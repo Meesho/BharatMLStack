@@ -38,21 +38,21 @@ var PricingClient PricingFeatureClient = &pricingFeatureClientImpl{}
 
 // GetDataTypes calls the pricing service to get data types for features
 func (p *pricingFeatureClientImpl) GetDataTypes(entity string) (*PricingDataTypesResponse, error) {
-	return nil, errors.New("pricing client GetDataTypes is not supported without meesho build tag")
+	return nil, errors.New("Pricing client GetDataTypes is not supported without meesho build tag")
 }
 
 // GetFeatureGroupDataTypeMap returns an error for stub implementation
 func (p *pricingFeatureClientImpl) GetFeatureGroupDataTypeMap() (map[string]string, error) {
-	log.Warn().Msg("pricing client GetFeatureGroupDataTypeMap is not supported without meesho build tag")
-	return nil, errors.New("pricing client GetFeatureGroupDataTypeMap is not supported without meesho build tag")
+	log.Warn().Msg("Pricing client GetFeatureGroupDataTypeMap is not supported without meesho build tag")
+	return nil, errors.New("Pricing client GetFeatureGroupDataTypeMap is not supported without meesho build tag")
 }
 
 // ValidatePricingFeatureExists checks if a pricing feature exists in the response
 func ValidatePricingFeatureExists(featureName string, response *PricingDataTypesResponse) bool {
-	log.Warn().Msgf("pricing client ValidatePricingFeatureExists is not supported without meesho build tag")
+	log.Warn().Msgf("Pricing client ValidatePricingFeatureExists is not supported without meesho build tag")
 	return false
 }
 
 func (p *pricingFeatureClientImpl) InitPricingClient() {
-	log.Warn().Msgf("pricing client Init is not supported without meesho build tag")
+	log.Warn().Msgf("Pricing client Init is not supported without meesho build tag")
 }

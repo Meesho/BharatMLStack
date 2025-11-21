@@ -34,6 +34,8 @@ func InitConfig(configHolder ConfigHolder) {
 	if err := viper.Unmarshal(cfg); err != nil {
 		log.Fatalf("Failed to unmarshal config from environment: %v", err)
 	}
+
+	log.Println("Configuration loaded from environment variables")
 }
 
 // bindEnvVars explicitly binds environment variables to Viper keys
