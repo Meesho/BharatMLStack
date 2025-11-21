@@ -104,14 +104,3 @@ func (d DataType) Size() int {
 func (d DataType) IsVector() bool {
 	return vectorTypes[d]
 }
-
-type CacheType string
-
-const (
-	CacheTypeDistributed CacheType = "distributed"
-	CacheTypeInMemory    CacheType = "in-memory"
-)
-
-func (c CacheType) String() string {
-	return string(c)
-}
