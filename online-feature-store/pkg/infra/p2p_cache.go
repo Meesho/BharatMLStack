@@ -2,8 +2,12 @@ package infra
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache"
 	"github.com/rs/zerolog/log"
@@ -82,7 +86,19 @@ func initP2PCacheConns() {
 		}
 		ConfIdDBTypeMap[confId] = DBTypeP2P
 		P2PCacheLoadedConfigIds = append(P2PCacheLoadedConfigIds, confId)
-		client := p2pcache.NewP2PCache(conf.Name, conf.OwnPartitionSizeInBytes, conf.GlobalSizeInBytes)
+		client, err := p2pcache.NewP2PCache(p2pcache.P2PCacheConfig{
+			ClusterName:             conf.ClusterName,
+			Name:                    conf.Name,
+			OwnPartitionSizeInBytes: conf.OwnPartitionSizeInBytes,
+			GlobalSizeInBytes:       conf.GlobalSizeInBytes,
+			GlobalCacheTTLInSeconds: conf.GlobalCacheTTLInSeconds,
+			NumClients:              conf.NumClients,
+			ServerPort:              conf.ServerPort,
+		})
+		if err != nil {
+			log.Error().Err(err).Msg("Error creating p2p cache")
+			panic(err)
+		}
 		meta := map[string]interface{}{
 			"enabled": conf.Enabled,
 			"name":    conf.Name,
@@ -94,5 +110,31 @@ func initP2PCacheConns() {
 	}
 	P2PCache = &P2PCacheConnectors{
 		P2PCacheConnections: p2PCacheConnections,
+	}
+
+	handleGracefulShutdown()
+}
+
+func handleGracefulShutdown() {
+	shutdownSignals := make(chan os.Signal, 1)
+	signal.Notify(shutdownSignals, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		<-shutdownSignals
+		shutdownP2PCache()
+		time.Sleep(1 * time.Second)
+	}()
+}
+
+func shutdownP2PCache() {
+	if P2PCache == nil {
+		return
+	}
+	for confId, conn := range P2PCache.P2PCacheConnections {
+		pc, ok := conn.(*P2PCacheConnection)
+		if !ok || pc.Client == nil {
+			continue
+		}
+		log.Info().Msgf("Shutting down P2P cache for config id %d", confId)
+		pc.Client.Close()
 	}
 }

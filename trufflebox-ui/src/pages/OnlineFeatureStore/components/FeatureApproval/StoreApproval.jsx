@@ -48,7 +48,9 @@ const StoreApproval = () => {
           'Authorization': `Bearer ${user.token}`,
         },
       });
-      if (!response.ok) throw new Error('Failed to fetch store requests');
+      if (!response.ok) {
+        throw new Error('Failed to fetch store requests');
+      }
       const data = await response.json();
       setStoreRequests(data);
     } catch (error) {
@@ -126,7 +128,7 @@ const StoreApproval = () => {
       });
 
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to process store');
+      if (!response.ok) console.log(result.error || 'Failed to process store');
       
       setResponseMessage(result.message);
       setShowSuccessModal(true);

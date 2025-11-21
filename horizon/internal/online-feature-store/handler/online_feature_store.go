@@ -373,15 +373,25 @@ func (o *OnlineFeatureStore) ProcessFeatureGroup(request *ProcessFeatureGroupReq
 		if fg.RequestType == "CREATE" {
 			json.Unmarshal(fg.Payload, &registerPayload)
 			var featureLabels, featureDefaultValues, storageProvider, basePaths, dataPaths, stringLength, vectorLength []string
+
+			hasValidFeatures := false
 			for _, feature := range registerPayload.Features {
-				featureLabels = append(featureLabels, feature.Labels)
-				featureDefaultValues = append(featureDefaultValues, feature.DefaultValues)
-				storageProvider = append(storageProvider, feature.StorageProvider)
-				basePaths = append(basePaths, feature.SourceBasePath)
-				dataPaths = append(dataPaths, feature.SourceDataColumn)
-				stringLength = append(stringLength, feature.StringLength)
-				vectorLength = append(vectorLength, feature.VectorLength)
+				if feature.Labels != "" {
+					hasValidFeatures = true
+					featureLabels = append(featureLabels, feature.Labels)
+					featureDefaultValues = append(featureDefaultValues, feature.DefaultValues)
+					storageProvider = append(storageProvider, feature.StorageProvider)
+					basePaths = append(basePaths, feature.SourceBasePath)
+					dataPaths = append(dataPaths, feature.SourceDataColumn)
+					stringLength = append(stringLength, feature.StringLength)
+					vectorLength = append(vectorLength, feature.VectorLength)
+				}
 			}
+
+			if !hasValidFeatures {
+				log.Info().Msgf("Creating feature group %s without features - no valid features provided", registerPayload.FgLabel)
+			}
+
 			columns, store, paths, err := o.Config.RegisterFeatureGroup(registerPayload.EntityLabel, registerPayload.FgLabel, registerPayload.JobId, registerPayload.StoreId, registerPayload.TtlInSeconds, registerPayload.InMemoryCacheEnabled, registerPayload.DistributedCacheEnabled,
 				registerPayload.DataType, featureLabels, featureDefaultValues, storageProvider, basePaths, dataPaths, stringLength, vectorLength, registerPayload.LayoutVersion)
 			if err != nil {
@@ -394,7 +404,17 @@ func (o *OnlineFeatureStore) ProcessFeatureGroup(request *ProcessFeatureGroupReq
 				return err
 			}
 			if store.DbType != "scylla" {
-				// Column creation is not required
+				// Column creation is not required. Still update approval status for non-scylla stores (e.g., redis_failover)
+				err = o.fgRepo.Update(&featuregroup.Table{
+					RequestId:    uint(request.RequestId),
+					ApprovedBy:   request.ApproverId,
+					Status:       request.Status,
+					RejectReason: request.RejectReason,
+				})
+				if err != nil {
+					log.Error().Msg("Error Approving Feature Group")
+					return err
+				}
 				return nil
 			}
 			for _, column := range columns {
@@ -535,6 +555,54 @@ func (o *OnlineFeatureStore) EditFeatures(request *EditFeatureRequest) (uint, er
 	return requestId, nil
 }
 
+func (o *OnlineFeatureStore) DeleteFeatures(request *DeleteFeaturesRequest) (uint, error) {
+	fg, err := o.Config.GetFeatureGroup(request.EntityLabel, request.FeatureGroupLabel)
+	if err != nil {
+		return 0, err
+	}
+
+	featureMetaMap := fg.Features[fg.ActiveVersion].FeatureMeta
+	existingLabelSet := make(map[string]struct{})
+	for key := range featureMetaMap {
+		existingLabelSet[key] = struct{}{}
+	}
+
+	var missingFeatures []string
+	for _, label := range request.FeatureLabels {
+		if _, exists := existingLabelSet[label]; !exists {
+			missingFeatures = append(missingFeatures, label)
+		}
+	}
+
+	if len(missingFeatures) > 0 {
+		return 0, fmt.Errorf("features not found in the active version schema: %s", strings.Join(missingFeatures, ", "))
+	}
+
+	payload, err := json.Marshal(request)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return 0, err
+	}
+
+	requestId, err := o.featureRepo.Create(&features.Table{
+		Payload:           payload,
+		CreatedBy:         request.UserId,
+		EntityLabel:       request.EntityLabel,
+		FeatureGroupLabel: request.FeatureGroupLabel,
+		ApprovedBy:        "",
+		Status:            "PENDING APPROVAL",
+		RequestType:       "DELETE",
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+		Service:           "Online Feature Store",
+	})
+	if err != nil {
+		log.Error().Msgf("Error Deleting Features for %s , %s", request.EntityLabel, request.FeatureGroupLabel)
+		return 0, err
+	}
+	return requestId, nil
+}
+
 func (o *OnlineFeatureStore) ProcessAddFeature(request *ProcessAddFeatureRequest) error {
 	fg, err := o.featureRepo.GetById(request.RequestId)
 	if fg == nil || err != nil {
@@ -574,6 +642,17 @@ func (o *OnlineFeatureStore) ProcessAddFeature(request *ProcessAddFeatureRequest
 
 			if store.DbType != "scylla" {
 				// Column creation is not required
+				err = o.featureRepo.Update(&features.Table{
+					RequestId:    uint(request.RequestId),
+					ApprovedBy:   request.ApproverId,
+					Status:       request.Status,
+					Service:      "Online Feature Store",
+					RejectReason: request.RejectReason,
+				})
+				if err != nil {
+					log.Error().Msg("Error Approving Features")
+					return err
+				}
 				return nil
 			}
 
@@ -595,11 +674,21 @@ func (o *OnlineFeatureStore) ProcessAddFeature(request *ProcessAddFeatureRequest
 				stringLength = append(stringLength, feature.StringLength)
 				vectorLength = append(vectorLength, feature.VectorLength)
 			}
-			err = o.Config.EditFeatures(editPayload.EntityLabel, editPayload.FeatureGroupLabel, featureLabels, featureDefaultValues, storageProvider, basePaths, dataPaths, stringLength, vectorLength)
+			columnsToAdd, store, err := o.Config.EditFeatures(editPayload.EntityLabel, editPayload.FeatureGroupLabel, featureLabels, featureDefaultValues, storageProvider, basePaths, dataPaths, stringLength, vectorLength)
 			if err != nil {
 				log.Error().Msgf("Error Editing Features for %s , %s", editPayload.EntityLabel, editPayload.FeatureGroupLabel)
 				return err
 			}
+			if len(columnsToAdd) > 0 && store.DbType == "scylla" {
+				for _, column := range columnsToAdd {
+					err = o.scyllaStores[store.ConfId].AddColumn(store.Table, column)
+					if err != nil {
+						log.Error().Msgf("Error Adding Column for %s", err)
+						return err
+					}
+				}
+			}
+
 		} else {
 			return fmt.Errorf("invalid request type")
 		}
@@ -613,6 +702,64 @@ func (o *OnlineFeatureStore) ProcessAddFeature(request *ProcessAddFeatureRequest
 	})
 	if err != nil {
 		log.Error().Msg("Error Approving Features")
+		return err
+	}
+	return nil
+}
+
+func (o *OnlineFeatureStore) ProcessDeleteFeatures(request *ProcessDeleteFeaturesRequest) error {
+	fg, err := o.featureRepo.GetById(request.RequestId)
+	if fg == nil || err != nil {
+		log.Error().Msgf("Error Approving Feature Delete for %d", request.RequestId)
+		return err
+	}
+	if fg.Status == "APPROVED" {
+		log.Error().Msgf("Delete features request is already Processed for request id %d", request.RequestId)
+		return fmt.Errorf("delete features request is already Processed for request id %d", request.RequestId)
+	}
+
+	if request.Status != "REJECTED" {
+		var deletePayload DeleteFeaturesRequest
+		json.Unmarshal(fg.Payload, &deletePayload)
+
+		fg, err := o.Config.GetFeatureGroup(deletePayload.EntityLabel, deletePayload.FeatureGroupLabel)
+		if err != nil {
+			return err
+		}
+
+		featureMetaMap := fg.Features[fg.ActiveVersion].FeatureMeta
+		existingLabelSet := make(map[string]struct{})
+		for key := range featureMetaMap {
+			existingLabelSet[key] = struct{}{}
+		}
+
+		var missingFeatures []string
+		for _, label := range deletePayload.FeatureLabels {
+			if _, exists := existingLabelSet[label]; !exists {
+				missingFeatures = append(missingFeatures, label)
+			}
+		}
+
+		if len(missingFeatures) > 0 {
+			return fmt.Errorf("features not found in the active version schema: %s", strings.Join(missingFeatures, ", "))
+		}
+
+		err = o.Config.DeleteFeatures(deletePayload.EntityLabel, deletePayload.FeatureGroupLabel, deletePayload.FeatureLabels)
+		if err != nil {
+			log.Error().Msgf("Error Deleting Features for %s , %s", deletePayload.EntityLabel, deletePayload.FeatureGroupLabel)
+			return err
+		}
+	}
+
+	err = o.featureRepo.Update(&features.Table{
+		RequestId:    uint(request.RequestId),
+		ApprovedBy:   request.ApproverId,
+		Status:       request.Status,
+		Service:      "Online Feature Store",
+		RejectReason: request.RejectReason,
+	})
+	if err != nil {
+		log.Error().Msgf("Error updating delete features request status for request ID %d: %v", request.RequestId, err)
 		return err
 	}
 	return nil
@@ -651,13 +798,13 @@ func (o *OnlineFeatureStore) RetrieveFeatureGroups(entityLabel string) (*[]Retri
 
 	for fgLabel, featureGroup := range featureGroups {
 		features := make(map[string]FeatureResponse)
-		for key, feature := range featureGroup.Features {
+		for version, feature := range featureGroup.Features {
 			var sourceBasePaths []string
 			var sourceDataColumns []string
 			var storageProviders []string
 			var stringLengths []uint16
 			var vectorLengths []uint16
-			if key != featureGroup.ActiveVersion {
+			if version != featureGroup.ActiveVersion {
 				continue
 			}
 			featureResponse := FeatureResponse{
@@ -665,16 +812,26 @@ func (o *OnlineFeatureStore) RetrieveFeatureGroups(entityLabel string) (*[]Retri
 			}
 			featureLabels := strings.Split(feature.Labels, ",")
 			for _, featureLabel := range featureLabels {
-				key := fmt.Sprintf("%s|%s|%s", entityLabel, fgLabel, featureLabel)
-				valueParts := strings.Split(source[key], "|")
-				if len(valueParts) != 4 {
-					continue
-				}
-				storageProviders = append(storageProviders, valueParts[0])
-				sourceBasePaths = append(sourceBasePaths, valueParts[1])
-				sourceDataColumns = append(sourceDataColumns, valueParts[2])
 				stringLengths = append(stringLengths, feature.FeatureMeta[featureLabel].StringLength)
 				vectorLengths = append(vectorLengths, feature.FeatureMeta[featureLabel].VectorLength)
+
+				sourceKey := fmt.Sprintf("%s|%s|%s", entityLabel, fgLabel, featureLabel)
+				sourceValue, exists := source[sourceKey]
+				if exists && sourceValue != "" {
+					valueParts := strings.Split(sourceValue, "|")
+					if len(valueParts) == 4 {
+						storageProviders = append(storageProviders, valueParts[0])
+						sourceBasePaths = append(sourceBasePaths, valueParts[1])
+						sourceDataColumns = append(sourceDataColumns, valueParts[2])
+					} else {
+						// If source data exists but is malformed, add empty values to maintain array alignment
+						storageProviders = append(storageProviders, "")
+						sourceBasePaths = append(sourceBasePaths, "")
+						sourceDataColumns = append(sourceDataColumns, "")
+					}
+				} else {
+					continue
+				}
 			}
 			featureResponse.StorageProviders = storageProviders
 			featureResponse.SourceBasePaths = sourceBasePaths
@@ -682,7 +839,7 @@ func (o *OnlineFeatureStore) RetrieveFeatureGroups(entityLabel string) (*[]Retri
 			featureResponse.DefaultValues, _ = splitOnCommaOutsideBrackets(feature.DefaultValues)
 			featureResponse.StringLengths = stringLengths
 			featureResponse.VectorLengths = vectorLengths
-			features[key] = featureResponse
+			features[version] = featureResponse
 		}
 		response = append(response, RetrieveFeatureGroupResponse{
 			EntityLabel:             entityLabel,

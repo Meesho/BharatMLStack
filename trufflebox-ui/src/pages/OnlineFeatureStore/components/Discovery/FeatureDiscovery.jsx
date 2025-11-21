@@ -32,6 +32,7 @@ function FeatureDiscovery () {
                     activeVersion={selectedFeatureGroup['active-version']} 
                     entityLabel={selectedFeatureGroup['entity-label']} 
                     featureGroupLabel={selectedFeatureGroup['feature-group-label']}
+                    dataType={selectedFeatureGroup['data-type']}
                 />
             )}
         </div>

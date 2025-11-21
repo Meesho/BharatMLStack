@@ -14,7 +14,7 @@ COPY package.json yarn.lock ./
 RUN yarn config set network-timeout 600000 -g \
  && yarn config set prefer-offline true -g
 RUN --mount=type=cache,id=yarn-cache-${TARGETPLATFORM},target=${YARN_CACHE_FOLDER} \
-    yarn install --frozen-lockfile --non-interactive --network-timeout 600000 --mutex network --no-progress
+    yarn install --non-interactive --network-timeout 600000 --mutex network --no-progress
 
 COPY . .
 RUN rm -f .env
