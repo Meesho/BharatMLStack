@@ -41,6 +41,9 @@ const EntityRegistry = () => {
   const [modalMessage, setModalMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
+  const [distributedCacheConfigs, setDistributedCacheConfigs] = useState([]);
+  const [inMemoryCacheConfigs, setInMemoryCacheConfigs] = useState([]);
+  const [isLoadingConfigs, setIsLoadingConfigs] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -220,9 +223,57 @@ const EntityRegistry = () => {
     }
   }, [user.token]);
 
+  const fetchCacheConfigs = useCallback(async () => {
+    setIsLoadingConfigs(true);
+    try {
+      // Fetch distributed cache configs
+      const distributedResponse = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/get-cache-config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ 'cache-type': 'distributed' }),
+      });
+
+      if (distributedResponse.ok) {
+        const distributedData = await distributedResponse.json();
+        if (!distributedData.error && distributedData.data) {
+          // Extract keys from the map to use as options
+          const configIds = Object.keys(distributedData.data);
+          setDistributedCacheConfigs(configIds);
+        }
+      }
+
+      // Fetch in-memory cache configs
+      const inMemoryResponse = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/get-cache-config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ 'cache-type': 'in-memory' }),
+      });
+
+      if (inMemoryResponse.ok) {
+        const inMemoryData = await inMemoryResponse.json();
+        if (!inMemoryData.error && inMemoryData.data) {
+          // Extract keys from the map to use as options
+          const configIds = Object.keys(inMemoryData.data);
+          setInMemoryCacheConfigs(configIds);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching cache configs:', error);
+    } finally {
+      setIsLoadingConfigs(false);
+    }
+  }, [user.token]);
+
   useEffect(() => {
     fetchEntityRequests();
-  }, [fetchEntityRequests]);
+    fetchCacheConfigs();
+  }, [fetchEntityRequests, fetchCacheConfigs]);
 
   const renderEntityModal = () => (
     <Dialog open={open} onClose={handleClose} maxWidth="lg">
@@ -396,8 +447,8 @@ const EntityRegistry = () => {
         ) : field === 'conf-id' ? (
           <Autocomplete
             key={field}
-            options={cacheKey === 'distributed-cache' ? ['2'] : ['3']}
-            value={entityData[cacheKey][field]}
+            options={cacheKey === 'distributed-cache' ? distributedCacheConfigs : inMemoryCacheConfigs}
+            value={entityData[cacheKey][field] || ''}
             onChange={(event, newValue) => {
               const syntheticEvent = {
                 target: {
@@ -407,6 +458,8 @@ const EntityRegistry = () => {
               };
               handleChange(syntheticEvent);
             }}
+            loading={isLoadingConfigs}
+            disabled={isLoadingConfigs}
             renderInput={(params) => (
               <TextField
                 {...params}
