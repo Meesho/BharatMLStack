@@ -244,7 +244,6 @@ log.Logger = log.Logger.Level(zerolog.DebugLevel)
 
 ## Dependencies
 
-- `github.com/Meesho/go-core/grpcclient` - gRPC client utilities
 - `github.com/rs/zerolog` - Structured logging
 - `google.golang.org/grpc` - gRPC framework
 

@@ -1,6 +1,6 @@
 package skye
 
-import "github.com/Meesho/go-core/grpcclient"
+import "github.com/Meesho/BharatMLStack/helix-client/pkg/grpcclient"
 
 type ClientV1 struct {
 	ClientConfigs *ClientConfig

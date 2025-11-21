@@ -5,7 +5,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/Meesho/go-core/datatypeconverter/byteorder"
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/datatypeconverter/byteorder"
 	"github.com/stretchr/testify/assert"
 )
 

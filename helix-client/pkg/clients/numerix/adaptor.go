@@ -6,7 +6,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/Meesho/BharatMLStack/helix-client/pkg/clients/numerix/client/grpc"
-	"github.com/Meesho/go-core/datatypeconverter/typeconverter"
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/datatypeconverter/typeconverter"
 )
 
 type IAdapter interface {

@@ -6,8 +6,8 @@ import (
 	"time"
 
 	triton "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/predator/client/grpc"
-	"github.com/Meesho/go-core/grpcclient"
-	"github.com/Meesho/go-core/metric"
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/grpcclient"
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/metric"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/metadata"
 )

@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	triton "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/predator/client/grpc"
-	"github.com/Meesho/go-core/datatypeconverter/types"
-	"github.com/Meesho/go-core/utils"
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/datatypeconverter/types"
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/utils"
 	"github.com/rs/zerolog/log"
 )
 

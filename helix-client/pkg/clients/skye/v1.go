@@ -7,7 +7,7 @@ import (
 	"time"
 
 	grpc2 "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
-	"github.com/Meesho/go-core/grpcclient"
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/grpcclient"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc/metadata"

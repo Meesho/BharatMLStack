@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/Meesho/BharatMLStack/helix-client/pkg/clients/numerix/client/grpc"
-	"github.com/Meesho/go-core/datatypeconverter/byteorder"
-	"github.com/Meesho/go-core/grpcclient"
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/datatypeconverter/byteorder"
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/grpcclient"
 	"github.com/rs/zerolog/log"
 	metadata "google.golang.org/grpc/metadata"
 )
