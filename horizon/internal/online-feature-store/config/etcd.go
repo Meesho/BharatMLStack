@@ -9,10 +9,10 @@ import (
 	"strconv"
 	"strings"
 
+	onlinefeaturestore "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store"
 	"github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/config/enums"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/etcd"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 )
 
 const (
@@ -28,9 +28,9 @@ type Etcd struct {
 
 func NewEtcdConfig() Manager {
 	return &Etcd{
-		instance: etcd.Instance()[viper.GetString("ONLINE_FEATURE_STORE_APP_NAME")],
-		appName:  viper.GetString("ONLINE_FEATURE_STORE_APP_NAME"),
-		env:      viper.GetString("APP_ENV"),
+		instance: etcd.Instance()[onlinefeaturestore.OnlineFeatureStoreAppName],
+		appName:  onlinefeaturestore.OnlineFeatureStoreAppName,
+		env:      onlinefeaturestore.AppEnv,
 	}
 }
 

@@ -185,6 +185,21 @@ func AdaptToDBPredatorComponent(inferflowConfig InferflowConfig) []dbModel.Preda
 			}
 		}
 
+		routingConfig := make([]dbModel.RoutingConfig, len(ranker.RoutingConfig))
+
+		for i, config := range ranker.RoutingConfig {
+
+			routingConfig[i] = dbModel.RoutingConfig{
+
+				ModelName: config.ModelName,
+
+				ModelEndpoint: config.ModelEndpoint,
+
+				RoutingPercentage: config.RoutingPercentage,
+			}
+
+		}
+
 		predatorComp := dbModel.PredatorComponent{
 			Component:     ranker.Component,
 			ComponentID:   ranker.ComponentID,
@@ -195,6 +210,7 @@ func AdaptToDBPredatorComponent(inferflowConfig InferflowConfig) []dbModel.Preda
 			BatchSize:     ranker.BatchSize,
 			Inputs:        dbInputs,
 			Outputs:       dbOutputs,
+			RoutingConfig: routingConfig,
 		}
 		predatorComponents = append(predatorComponents, predatorComp)
 	}
@@ -349,12 +365,15 @@ func AdaptToDBOnboardPayload(onboardPayload OnboardPayload) dbModel.OnboardPaylo
 
 	for i, ranker := range onboardPayload.Rankers {
 		dbOnboardPayload.Rankers[i] = dbModel.OnboardRanker{
-			ModelName:   ranker.ModelName,
-			Calibration: ranker.Calibration,
-			EndPoint:    ranker.EndPoint,
-			EntityID:    ranker.EntityID,
-			Inputs:      make([]dbModel.PredatorInput, len(ranker.Inputs)),
-			Outputs:     make([]dbModel.PredatorOutput, len(ranker.Outputs)),
+			ModelName:     ranker.ModelName,
+			Calibration:   ranker.Calibration,
+			EndPoint:      ranker.EndPoint,
+			EntityID:      ranker.EntityID,
+			Inputs:        make([]dbModel.PredatorInput, len(ranker.Inputs)),
+			Outputs:       make([]dbModel.PredatorOutput, len(ranker.Outputs)),
+			BatchSize:     ranker.BatchSize,
+			Deadline:      ranker.Deadline,
+			RoutingConfig: make([]dbModel.RoutingConfig, len(ranker.RoutingConfig)),
 		}
 		for j, input := range ranker.Inputs {
 			dbOnboardPayload.Rankers[i].Inputs[j] = dbModel.PredatorInput{
@@ -362,6 +381,14 @@ func AdaptToDBOnboardPayload(onboardPayload OnboardPayload) dbModel.OnboardPaylo
 				Features: input.Features,
 				Dims:     input.Dims,
 				DataType: input.DataType,
+			}
+		}
+
+		for k, config := range ranker.RoutingConfig {
+			dbOnboardPayload.Rankers[i].RoutingConfig[k] = dbModel.RoutingConfig{
+				ModelName:         config.ModelName,
+				ModelEndpoint:     config.ModelEndpoint,
+				RoutingPercentage: config.RoutingPercentage,
 			}
 		}
 		for j, output := range ranker.Outputs {
@@ -417,12 +444,15 @@ func AdaptFromDbToOnboardPayload(dbOnboardPayload dbModel.OnboardPayload) Onboar
 
 	for i, predatorComponent := range dbOnboardPayload.Rankers {
 		onboardPayload.Rankers = append(onboardPayload.Rankers, Ranker{
-			ModelName:   predatorComponent.ModelName,
-			Calibration: predatorComponent.Calibration,
-			EndPoint:    predatorComponent.EndPoint,
-			Inputs:      make([]Input, len(predatorComponent.Inputs)),
-			Outputs:     make([]Output, len(predatorComponent.Outputs)),
-			EntityID:    predatorComponent.EntityID,
+			ModelName:     predatorComponent.ModelName,
+			Calibration:   predatorComponent.Calibration,
+			EndPoint:      predatorComponent.EndPoint,
+			Inputs:        make([]Input, len(predatorComponent.Inputs)),
+			Outputs:       make([]Output, len(predatorComponent.Outputs)),
+			EntityID:      predatorComponent.EntityID,
+			BatchSize:     predatorComponent.BatchSize,
+			Deadline:      predatorComponent.Deadline,
+			RoutingConfig: make([]RoutingConfig, len(predatorComponent.RoutingConfig)),
 		})
 		for j, input := range predatorComponent.Inputs {
 			onboardPayload.Rankers[i].Inputs[j] = Input{
@@ -438,6 +468,14 @@ func AdaptFromDbToOnboardPayload(dbOnboardPayload dbModel.OnboardPayload) Onboar
 				ModelScores:     output.ModelScores,
 				ModelScoresDims: output.ModelScoresDims,
 				DataType:        output.DataType,
+			}
+		}
+
+		for k, config := range predatorComponent.RoutingConfig {
+			onboardPayload.Rankers[i].RoutingConfig[k] = RoutingConfig{
+				ModelName:         config.ModelName,
+				ModelEndpoint:     config.ModelEndpoint,
+				RoutingPercentage: config.RoutingPercentage,
 			}
 		}
 	}
@@ -507,6 +545,16 @@ func AdaptFromDbToPredatorComponent(dbPredatorComponents []dbModel.PredatorCompo
 			}
 		}
 
+		routingConfig := make([]RoutingConfig, len(predatorComponent.RoutingConfig))
+
+		for i, config := range predatorComponent.RoutingConfig {
+			routingConfig[i] = RoutingConfig{
+				ModelName:         config.ModelName,
+				ModelEndpoint:     config.ModelEndpoint,
+				RoutingPercentage: config.RoutingPercentage,
+			}
+		}
+
 		predatorComponent := PredatorComponent{
 			Component:     predatorComponent.Component,
 			ComponentID:   predatorComponent.ComponentID,
@@ -517,6 +565,7 @@ func AdaptFromDbToPredatorComponent(dbPredatorComponents []dbModel.PredatorCompo
 			BatchSize:     predatorComponent.BatchSize,
 			Inputs:        dbInputs,
 			Outputs:       dbOutputs,
+			RoutingConfig: routingConfig,
 		}
 		predatorComponents = append(predatorComponents, predatorComponent)
 	}
@@ -685,6 +734,15 @@ func AdaptToEtcdPredatorComponent(dbPredatorComponents []dbModel.PredatorCompone
 				DataType:        output.DataType,
 			}
 		}
+		routingConfig := make([]etcdModel.RoutingConfig, len(predatorComponent.RoutingConfig))
+
+		for i, config := range predatorComponent.RoutingConfig {
+			routingConfig[i] = etcdModel.RoutingConfig{
+				ModelName:         config.ModelName,
+				ModelEndpoint:     config.ModelEndpoint,
+				RoutingPercentage: config.RoutingPercentage,
+			}
+		}
 
 		predatorComponent := etcdModel.PredatorComponent{
 			Component:     predatorComponent.Component,
@@ -696,6 +754,7 @@ func AdaptToEtcdPredatorComponent(dbPredatorComponents []dbModel.PredatorCompone
 			BatchSize:     predatorComponent.BatchSize,
 			Inputs:        dbInputs,
 			Outputs:       dbOutputs,
+			RoutingConfig: routingConfig,
 		}
 		predatorComponents = append(predatorComponents, predatorComponent)
 	}

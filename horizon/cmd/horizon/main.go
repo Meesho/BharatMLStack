@@ -9,7 +9,6 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	connectionConfigRouter "github.com/Meesho/BharatMLStack/horizon/internal/connectionconfig/route"
 	deployableRouter "github.com/Meesho/BharatMLStack/horizon/internal/deployable/router"
-	featureStoreRouter "github.com/Meesho/BharatMLStack/horizon/internal/feature_store/route"
 	inferflowConfig "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
 	inferflowRouter "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/route"
 	"github.com/Meesho/BharatMLStack/horizon/internal/middleware"
@@ -24,9 +23,6 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/pkg/logger"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/metric"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/scheduler"
-	cacConfig "github.com/Meesho/go-core/config"
-	pricingclient "github.com/Meesho/price-aggregator-go/pricingfeatureretrieval/client"
-	"github.com/spf13/viper"
 )
 
 type AppConfig struct {
@@ -47,11 +43,11 @@ var (
 )
 
 func main() {
-	cacConfig.InitGlobalConfig(&appConfig)
+	configs.InitConfig(&appConfig)
 	horizonConfig.InitAll(appConfig.Configs)
-	infra.InitDBConnectors()
-	logger.Init()
-	metric.Init()
+	infra.InitDBConnectors(appConfig.Configs)
+	logger.Init(appConfig.Configs)
+	metric.Init(appConfig.Configs)
 	httpframework.Init(middleware.NewMiddleware().GetMiddleWares()...)
 	etcd.InitFromAppName(&ofsConfig.FeatureRegistry{}, appConfig.Configs.OnlineFeatureStoreAppName, appConfig.Configs)
 	etcd.InitFromAppName(&numerixConfig.NumerixConfigRegistery{}, appConfig.Configs.NumerixAppName, appConfig.Configs)
@@ -65,8 +61,6 @@ func main() {
 	predatorRouter.Init()
 	authRouter.Init()
 	ofsRouter.Init()
-	featureStoreRouter.Init(appConfig.Configs)
 	scheduler.Init(appConfig.Configs)
-	pricingclient.Init()
-	httpframework.Instance().Run(":" + strconv.Itoa(viper.GetInt("APP_PORT")))
+	httpframework.Instance().Run(":" + strconv.Itoa(appConfig.Configs.AppPort))
 }
