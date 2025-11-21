@@ -2,11 +2,19 @@ package caches
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/infra"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/p2pcache/clustermanager"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
+	"github.com/rs/zerolog/log"
+)
+
+var (
+	p2pMetricUpdateInterval = 10 * time.Minute
 )
 
 type P2PCache struct {
@@ -21,6 +29,8 @@ func NewP2PCache(conn *infra.P2PCacheConnection) (Cache, error) {
 		return nil, err
 	}
 	configManager := config.Instance(config.DefaultVersion)
+
+	go publishP2PCacheMetric(conn.Client, meta["name"].(string))
 	return &P2PCache{
 		cache:     conn.Client,
 		cacheName: meta["name"].(string),
@@ -69,7 +79,8 @@ func (c *P2PCache) SetV2(entityLabel string, keys []string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	return c.cache.MultiSet(map[string][]byte{k: data}, cacheConfig.TtlInSeconds)
+	// TODO: Remove hardcoded TTL addition once it starts picking configs from p2p cache
+	return c.cache.MultiSet(map[string][]byte{k: data}, getFinalTTLWithJitter(cacheConfig)+1800)
 }
 
 func (c *P2PCache) MultiSetV2(entityLabel string, bulkKeys []*retrieve.Keys, bulkData [][]byte) error {
@@ -87,5 +98,24 @@ func (c *P2PCache) MultiSetV2(entityLabel string, bulkKeys []*retrieve.Keys, bul
 	for i, key := range bulkKeys {
 		kvMap[buildCacheKeyForPersist(key.Cols, entityLabel)] = bulkData[i]
 	}
-	return c.cache.MultiSet(kvMap, cacheConfig.TtlInSeconds)
+	// TODO: Remove hardcoded TTL addition once it starts picking configs from p2p cache
+	return c.cache.MultiSet(kvMap, getFinalTTLWithJitter(cacheConfig)+1800)
+}
+
+func (c *P2PCache) GetClusterTopology() clustermanager.ClusterTopology {
+	return c.cache.GetClusterTopology()
+}
+
+func publishP2PCacheMetric(cache *p2pcache.P2PCache, cacheName string) {
+	ticker := time.NewTicker(p2pMetricUpdateInterval)
+	defer func() {
+		ticker.Stop()
+		if r := recover(); r != nil {
+			log.Error().Msgf("Panic recovered in publishP2PCacheMetric: %v", r)
+			metric.Count("online-feature-store.p2p.panic.count", 1, []string{"cache_name", cacheName})
+		}
+	}()
+	for range ticker.C {
+		cache.PublishMetrics(cacheName)
+	}
 }

@@ -54,10 +54,10 @@ const StatusColumnHeader = ({ selectedStatuses, setSelectedStatuses }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   
   const statusOptions = [
-    { value: 'PENDING APPROVAL', label: 'Pending', color: '#FFF8E1', textColor: '#F57C00' },
-    { value: 'APPROVED', label: 'Approved', color: '#E7F6E7', textColor: '#2E7D32' },
+    { value: 'PENDING APPROVAL', label: 'Pending', color: '#FFF3E0', textColor: '#E65100' },
+    { value: 'APPROVED', label: 'Approved', color: '#E8F5E9', textColor: '#2E7D32' },
     { value: 'REJECTED', label: 'Rejected', color: '#FFEBEE', textColor: '#D32F2F' },
-    { value: 'CANCELLED', label: 'Cancelled', color: '#EEEEEE', textColor: '#616161' }
+    { value: 'CANCELLED', label: 'Cancelled', color: '#FAFAFA', textColor: '#757575' }
   ];
 
   const handleClick = (event) => {
@@ -688,9 +688,7 @@ const NumerixApprovalTable = ({ data, loading, onRefresh, onApprove, onReject, o
           fullWidth
           InputProps={{
             startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
+              <SearchIcon sx={{ color: 'action.active', mr: 1 }} />
             ),
           }}
         />

@@ -14,12 +14,13 @@ import {
   Button,
   Skeleton,
   Typography,
+  Pagination,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import KeyboardDoubleArrowUpSharpIcon from '@mui/icons-material/KeyboardDoubleArrowUpSharp';
+import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp';
 import EditIcon from '@mui/icons-material/Edit';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import ActivityIcon from '@mui/icons-material/EventAvailable';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import CloseIcon from '@mui/icons-material/Close';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import InfoIcon from '@mui/icons-material/Info';
@@ -46,13 +47,16 @@ const GenericNumerixTable = ({
   pageName = '',
   searchPlaceholder = '',
   buttonName = '',
+  searchQuery = '',
+  onSearchChange,
+  pagination: paginationProps,
+  onPageChange,
 }) => {
   const { hasPermission } = useAuth();
   
   const service = SERVICES.NUMERIX;
   const screenType = pageName === 'numerix_testing' ? SCREEN_TYPES.NUMERIX.CONFIG_TESTING : SCREEN_TYPES.NUMERIX.CONFIG;
 
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedRow, setSelectedRow] = useState(null);
   const [activityModalOpen, setActivityModalOpen] = useState(false);
   const [expressionModalOpen, setExpressionModalOpen] = useState(false);
@@ -167,7 +171,7 @@ const GenericNumerixTable = ({
               }}
               size="small"
             >
-              <ActivityIcon fontSize="small" />
+              <EventAvailableIcon fontSize="small" />
             </IconButton>
           </Tooltip>
 
@@ -197,7 +201,7 @@ const GenericNumerixTable = ({
           {hasPermission(service, screenType, ACTIONS.PROMOTE) && onRowAction && (
             <Tooltip title="Promote" disableTransition>
               <IconButton onClick={() => onRowAction(row)} size="small">
-                <KeyboardDoubleArrowUpSharpIcon fontSize="small" />
+                <KeyboardDoubleArrowUpIcon fontSize="small" />
               </IconButton>
             </Tooltip>
           )}
@@ -212,22 +216,10 @@ const GenericNumerixTable = ({
     return true;
   });
 
+  // Server-side pagination
   const filteredAndSortedData = useMemo(() => {
-    let filtered = [...data];
-    
-    if (searchQuery) {
-      const searchLower = searchQuery.toLowerCase();
-      filtered = filtered.filter(row => {
-        return (
-          String(row.ComputeId || '').toLowerCase().includes(searchLower) ||
-          String(row.InfixExpression || '').toLowerCase().includes(searchLower) ||
-          String(row.Created_by || '').toLowerCase().includes(searchLower)
-        );
-      });
-    }
-    
-    return filtered.sort((a, b) => new Date(b.Created_at) - new Date(a.Created_at));
-  }, [data, searchQuery]);
+    return data;
+  }, [data]);
 
   // Re-render MathJax when data changes
   useEffect(() => {
@@ -243,7 +235,10 @@ const GenericNumerixTable = ({
   }, [filteredAndSortedData]);
 
   const handleSearchChange = (event) => {
-    setSearchQuery(event.target.value);
+    const value = event.target.value;
+    if (onSearchChange) {
+      onSearchChange(value);
+    }
   };
 
   const handleActivityClick = (row) => {
@@ -321,7 +316,26 @@ const GenericNumerixTable = ({
         </Box>
       </Box>
       
-      <TableContainer>
+      <TableContainer 
+        component={Paper} 
+        elevation={3} 
+        sx={{ 
+          maxHeight: 'calc(100vh - 200px)',
+          overflowX: 'auto',
+          overflowY: 'auto',
+          '& .MuiTable-root': {
+            minWidth: 1200,
+            borderCollapse: 'separate',
+            borderSpacing: 0,
+          },
+          '& .MuiTableHead-root': {
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+            backgroundColor: '#E6EBF2',
+          }
+        }}
+      >
         <Table stickyHeader sx={{ tableLayout: 'fixed' }}>
           <TableHead>
             <TableRow sx={{ backgroundColor: '#E6EBF2' }}>
@@ -330,7 +344,9 @@ const GenericNumerixTable = ({
                   key={column.field}
                   sx={{
                     ...tableCellStyles,
-                    backgroundColor: '#f5f5f5',
+                    backgroundColor: '#E6EBF2',
+                    fontWeight: 'bold',
+                    color: '#031022',
                     width: column.width || 'auto',
                     ...(column.field === 'ComputeId' && { 
                       width: '100px',
@@ -347,7 +363,7 @@ const GenericNumerixTable = ({
                     })
                   }}
                 >
-                  <b>{column.headerName}</b>
+                  {column.headerName}
                 </TableCell>
               ))}
             </TableRow>
@@ -435,6 +451,49 @@ const GenericNumerixTable = ({
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Pagination */}
+      {paginationProps && paginationProps.totalPages > 0 && (
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginTop: '1rem',
+            padding: '1rem',
+            borderTop: '1px solid rgba(224, 224, 224, 1)',
+          }}
+        >
+          <Typography variant="body2" color="textSecondary">
+            Showing {((paginationProps.page - 1) * paginationProps.limit) + 1} to{' '}
+            {Math.min(paginationProps.page * paginationProps.limit, paginationProps.totalCount)} of{' '}
+            {paginationProps.totalCount} results
+          </Typography>
+          <Pagination
+            count={paginationProps.totalPages}
+            page={paginationProps.page}
+            onChange={onPageChange}
+            color="primary"
+            showFirstButton
+            showLastButton
+            sx={{
+              '& .MuiPaginationItem-root': {
+                color: '#450839',
+                '&.Mui-selected': {
+                  backgroundColor: '#450839',
+                  color: 'white',
+                  '&:hover': {
+                    backgroundColor: '#380730',
+                  },
+                },
+                '&:hover': {
+                  backgroundColor: 'rgba(69, 8, 57, 0.08)',
+                },
+              },
+            }}
+          />
+        </Box>
+      )}
 
       {/* Activity Modal */}
       <Modal 

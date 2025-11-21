@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect, useCallback, useMemo, useRef } from 'react';
 import * as URL_CONSTANTS from '../../config';
+import { REACT_APP_ENVIRONMENT } from '../../config';
 import httpInterceptor from '../../services/httpInterceptor';
 
 const AuthContext = createContext();
@@ -16,6 +17,20 @@ export const AuthProvider = ({ children }) => {
   const permissionsTokenRef = useRef(null);
 
   const fetchPermissions = useCallback(async (token) => {
+    // Check if environment is staging
+    const isStaging = REACT_APP_ENVIRONMENT.toLowerCase() === 'staging';
+    
+    // In staging environment, skip API call and return mock permissions
+    if (isStaging) {
+      const mockPermissions = {
+        role: 'admin',
+        permissions: []
+      };
+      setPermissions(mockPermissions);
+      permissionsTokenRef.current = token;
+      return { success: true, data: mockPermissions };
+    }
+
     // Prevent duplicate calls with same token
     if (fetchingPermissionsRef.current && permissionsTokenRef.current === token) {
       return { success: true, data: permissions };
@@ -40,7 +55,7 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (!response.ok) {
-        console.log(`Failed to fetch permissions: ${response.status}`);
+        // console.log(`Failed to fetch permissions: ${response.status}`);
         setPermissions(null);
         // Reset permission tracking refs on failure
         fetchingPermissionsRef.current = false;
@@ -51,7 +66,7 @@ export const AuthProvider = ({ children }) => {
       const result = await response.json();
       if (result.error) {
         setPermissions(null);
-        console.log(`Error fetching permissions: ${result.error}`);
+        // console.log(`Error fetching permissions: ${result.error}`);
         return { success: false, error: result.error };
       }
 
@@ -59,7 +74,7 @@ export const AuthProvider = ({ children }) => {
       return { success: true, data: result };
     } catch (error) {
       setPermissions(null);
-      console.log('Error fetching permissions:', error);
+      // console.log('Error fetching permissions:', error);
       // Reset permission tracking refs on error
       fetchingPermissionsRef.current = false;
       permissionsTokenRef.current = null;
@@ -71,6 +86,12 @@ export const AuthProvider = ({ children }) => {
   }, [permissions]);
 
   const hasPermission = useCallback((service, screenType, action) => {
+    // In staging environment, allow all permissions
+    const isStaging = REACT_APP_ENVIRONMENT.toLowerCase() === 'staging';
+    if (isStaging) {
+      return true;
+    }
+
     if (!permissions || !permissions.permissions) {
       return false;
     }
@@ -87,6 +108,12 @@ export const AuthProvider = ({ children }) => {
   }, [permissions]);
 
   const hasScreenAccess = useCallback((service, screenType) => {
+    // In staging environment, allow access to all screens
+    const isStaging = REACT_APP_ENVIRONMENT.toLowerCase() === 'staging';
+    if (isStaging) {
+      return true;
+    }
+
     if (!permissions || !permissions.permissions) {
       return false;
     }
@@ -129,7 +156,7 @@ export const AuthProvider = ({ children }) => {
         
         // Only logout if it's specifically a 401 unauthorized response (expired token)
         if (!permissionsResult.success && permissionsResult.isUnauthorized) {
-          console.log('Token expired during initialization, logging out');
+          // console.log('Token expired during initialization, logging out');
           setUser(null);
           setPermissions(null);
           localStorage.removeItem('authToken');
@@ -144,7 +171,6 @@ export const AuthProvider = ({ children }) => {
     };
 
     initializeAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = useCallback(async (email, role, token) => {

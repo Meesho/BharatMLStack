@@ -2,14 +2,17 @@ package config
 
 import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config/enums"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/circuitbreaker"
 )
 
 type _version int
 
 type FeatureRegistry struct {
-	Entities map[string]Entity `json:"entities"`
-	Storage  Storage           `json:"storage"`
-	Security Security          `json:"security"`
+	Entities             map[string]Entity                `json:"entities"`
+	Storage              Storage                          `json:"storage"`
+	Security             Security                         `json:"security"`
+	P2PEnabledPercentage int                              `json:"p2p-enabled-percentage"`
+	CircuitBreaker       map[string]circuitbreaker.Config `json:"circuitbreaker"`
 }
 
 type Security struct {

@@ -23,6 +23,7 @@ type Config interface {
 	GetConfig() (map[string]string, error)
 	AddFeatures(*AddFeatureRequest) (uint, error)
 	EditFeatures(*EditFeatureRequest) (uint, error)
+	DeleteFeatures(*DeleteFeaturesRequest) (uint, error)
 	RetrieveEntities() (*[]RetrieveEntityResponse, error)
 	RetrieveFeatureGroups(entityLabel string) (*[]RetrieveFeatureGroupResponse, error)
 	ProcessEntity(*ProcessEntityRequest) error
@@ -30,6 +31,7 @@ type Config interface {
 	ProcessStore(*ProcessStoreRequest) error
 	ProcessJob(*ProcessJobRequest) error
 	ProcessAddFeature(*ProcessAddFeatureRequest) error
+	ProcessDeleteFeatures(*ProcessDeleteFeaturesRequest) error
 	GetAllEntitiesRequest(email, role string) ([]entity.Table, error)
 	GetAllFeatureGroupsRequest(email, role string) ([]featuregroup.Table, error)
 	GetAllJobsRequest(email, role string) ([]job.Table, error)

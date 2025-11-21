@@ -21,7 +21,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '24'
 
       - name: Cache yarn dependencies
         uses: actions/cache@v3
@@ -35,11 +35,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          if [ -f yarn.lock ]; then
-            yarn install --frozen-lockfile
-          else
-            yarn install
-          fi
+          yarn install
 
       - name: Run linter
         run: yarn run lint --if-present

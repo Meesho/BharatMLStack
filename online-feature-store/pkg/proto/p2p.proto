@@ -2,7 +2,19 @@ syntax = "proto3";
 package p2p;
 option go_package = "../p2p";
 
-message Empty {}
+message Query {
+  string entity_label = 1;
+}
+
+message CacheQuery {
+  string entity_label = 1;
+  repeated string keys = 2;
+}
+
+message CacheKeyValue {
+  string entity_label = 1;
+  map<string, string> key_value = 2;
+}
 
 message ClusterTopology {
   map<uint32, string> ring_topology = 1;
@@ -15,5 +27,7 @@ message PodData {
 }
 
 service P2PCacheService {
-    rpc GetClusterConfigs(Empty) returns (ClusterTopology) {};
+    rpc GetClusterConfigs(Query) returns (ClusterTopology) {};
+    rpc GetP2PCacheValues(CacheQuery) returns (CacheKeyValue) {};
+    rpc SetP2PCacheValues(CacheKeyValue) returns (CacheKeyValue) {};
 }

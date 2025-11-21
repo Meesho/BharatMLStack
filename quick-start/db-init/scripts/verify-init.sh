@@ -15,7 +15,7 @@ fi
 
 # Verify MySQL
 echo -n "  🗂️ MySQL admin user... "
-ADMIN_COUNT=$(mysql -hmysql -uroot -proot testdb -sN -e "SELECT COUNT(*) FROM users WHERE email='admin@admin.com';" 2>/dev/null || echo "0")
+ADMIN_COUNT=$(mysql -hmysql -uroot -proot --skip-ssl testdb -sN -e "SELECT COUNT(*) FROM users WHERE email='admin@admin.com';" 2>/dev/null || echo "0")
 if [ "$ADMIN_COUNT" -eq 1 ]; then
   echo "✅"
 else

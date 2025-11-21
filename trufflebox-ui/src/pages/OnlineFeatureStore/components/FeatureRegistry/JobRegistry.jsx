@@ -79,9 +79,10 @@ const JobRegistry = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    const trimmedValue = typeof value === 'string' ? value.trim() : value;
     setJobData((prevData) => ({
       ...prevData,
-      [name]: value,
+      [name]: trimmedValue,
     }));
   };
 

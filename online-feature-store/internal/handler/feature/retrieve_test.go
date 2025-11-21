@@ -2,8 +2,9 @@ package feature
 
 import (
 	"fmt"
-	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config/enums"
 	"testing"
+
+	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config/enums"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/system"

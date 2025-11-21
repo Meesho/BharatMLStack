@@ -6,7 +6,7 @@ echo "🗂️ Initializing MySQL..."
 
 # Database and table creation
 echo "  📋 Creating database and tables..."
-mysql -hmysql -uroot -proot -e "
+mysql -hmysql -uroot -proot --skip-ssl -e "
   DROP DATABASE IF EXISTS testdb;
   CREATE DATABASE testdb;
   USE testdb;
@@ -115,14 +115,14 @@ mysql -hmysql -uroot -proot -e "
 
 # Create default admin user
 echo "  👤 Creating default admin user..."
-mysql -hmysql -uroot -proot testdb -e "
+mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   INSERT INTO users (first_name, last_name, email, password_hash, role, is_active) 
   VALUES ('admin', 'admin', 'admin@admin.com', '\$2a\$10\$kYoMds9IsbvPNhJasKHO7.fTSosfbPhSAf7ElNQJ9pIa0iWBOt97e', 'admin', true);
 "
 
 # Verify initialization
 echo "  🔍 Verifying MySQL initialization..."
-ADMIN_COUNT=$(mysql -hmysql -uroot -proot testdb -sN -e "SELECT COUNT(*) FROM users WHERE email='admin@admin.com';")
+ADMIN_COUNT=$(mysql -hmysql -uroot -proot --skip-ssl testdb -sN -e "SELECT COUNT(*) FROM users WHERE email='admin@admin.com';")
 if [ "$ADMIN_COUNT" -eq 1 ]; then
   echo "  ✅ MySQL database and admin user created successfully"
 else

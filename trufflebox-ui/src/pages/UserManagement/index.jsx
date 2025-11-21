@@ -48,7 +48,7 @@ const UserManagement = () => {
         });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch users');
+        console.log('Failed to fetch users');
       }
 
         const data = await response.json();
@@ -87,7 +87,7 @@ const UserManagement = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update user role');
+        console.log('Failed to update user role');
       }
 
       setUsers(prevUsers =>
@@ -128,7 +128,7 @@ const UserManagement = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update user status');
+        console.log('Failed to update user status');
       }
 
       setUsers(prevUsers =>
@@ -367,7 +367,7 @@ const UserManagement = () => {
         open={updateStatus.show}
         autoHideDuration={4000}
         onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
         <Alert 
           onClose={handleCloseSnackbar} 

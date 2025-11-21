@@ -1,5 +1,5 @@
 # Stage 1: Build the Go binary
-FROM golang:1.22-bullseye AS builder
+FROM golang:1.24.4-bullseye AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -24,7 +24,7 @@ COPY . .
 RUN go build -o online-feature-store-consumer ./cmd/consumer/main.go
 
 # Stage 2: Minimal runtime image
-FROM gcr.io/distroless/static:nonroot
+FROM gcr.io/distroless/base-debian12:nonroot
 
 WORKDIR /
 
@@ -32,6 +32,6 @@ WORKDIR /
 COPY --from=builder /app/online-feature-store-consumer .
 
 # Run the consumer
-EXPOSE 8080
+EXPOSE 8080 8090
 ENTRYPOINT ["/online-feature-store-consumer"]
 

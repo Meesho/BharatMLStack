@@ -1,9 +1,25 @@
 
 export const SERVICES = {
+  PREDATOR: 'predator',
+  InferFlow: 'inferflow',
   NUMERIX: 'numerix',
 };
 
 export const SCREEN_TYPES = {
+  PREDATOR: {
+    DEPLOYABLE: 'deployable',
+    MODEL: 'model',
+    MODEL_APPROVAL: 'model-approval'
+  },
+  
+  InferFlow: {
+    DEPLOYABLE: 'deployable',
+    CONNECTION_CONFIG: 'connection-config',
+    MP_CONFIG: 'mp-config',
+    MP_CONFIG_APPROVAL: 'mp-config-approval',
+
+  },
+  
   NUMERIX: {
     CONFIG: 'numerix-config',
     CONFIG_APPROVAL: 'numerix-config-approval'
@@ -15,16 +31,21 @@ export const ACTIONS = {
   ONBOARD: 'onboard',
   EDIT: 'edit',
   CLONE: 'clone',
-
+  DELETE: 'delete',
+  
+  UPLOAD: 'upload',
+  UPLOAD_EDIT: 'upload_edit',
+  UPLOAD_PARTIAL: 'upload_partial',
+  
   PROMOTE: 'promote',
   SCALE_UP: 'scale_up',
-
+  
   VALIDATE: 'validate',
   APPROVE: 'approve',
   REJECT: 'reject',
   CANCEL: 'cancel',
   DEACTIVATE: 'deactivate',
-
+  
   TEST: 'test'
 };
 
@@ -41,10 +62,14 @@ export const PERMISSION_LEVELS = {
 };
 
 export const ALL_SCREEN_TYPES = {
+  ...SCREEN_TYPES.PREDATOR,
+  ...SCREEN_TYPES.InferFlow,
   ...SCREEN_TYPES.NUMERIX,
 };
 
 export const SERVICE_SCREEN_MAP = {
+  [SERVICES.PREDATOR]: Object.values(SCREEN_TYPES.PREDATOR),
+  [SERVICES.InferFlow]: Object.values(SCREEN_TYPES.InferFlow),
   [SERVICES.NUMERIX]: Object.values(SCREEN_TYPES.NUMERIX),
 };
 
@@ -102,6 +127,8 @@ export const isValidRole = (role) => {
 
 export const getServiceDisplayName = (service) => {
   const names = {
+    [SERVICES.PREDATOR]: 'Predator',
+    [SERVICES.InferFlow]: 'InferFlow',
     [SERVICES.NUMERIX]: 'Numerix',
   };
   return names[service] || service;
@@ -109,6 +136,16 @@ export const getServiceDisplayName = (service) => {
 
 export const getScreenTypeDisplayName = (screenType) => {
   const names = {
+    [SCREEN_TYPES.PREDATOR.DEPLOYABLE]: 'Deployable',
+    [SCREEN_TYPES.PREDATOR.MODEL]: 'Model Management',
+    [SCREEN_TYPES.PREDATOR.MODEL_APPROVAL]: 'Model Approval',
+    
+    [SCREEN_TYPES.InferFlow.DEPLOYABLE]: 'Deployable',
+    [SCREEN_TYPES.InferFlow.CONNECTION_CONFIG]: 'Connection Configuration',
+    [SCREEN_TYPES.InferFlow.MP_CONFIG]: 'InferFlow Configuration',
+    [SCREEN_TYPES.InferFlow.MP_CONFIG_APPROVAL]: 'Configuration Approval',
+    [SCREEN_TYPES.InferFlow.MP_CONFIG_TESTING]: 'Configuration Testing',
+    
     [SCREEN_TYPES.NUMERIX.CONFIG]: 'Numerix Configuration',
     [SCREEN_TYPES.NUMERIX.CONFIG_APPROVAL]: 'Configuration Approval',
   };
@@ -122,6 +159,9 @@ export const getActionDisplayName = (action) => {
     [ACTIONS.EDIT]: 'Edit',
     [ACTIONS.REMOVE]: 'Delete',
     [ACTIONS.CLONE]: 'Clone',
+    [ACTIONS.UPLOAD]: 'Upload',
+    [ACTIONS.UPLOAD_EDIT]: 'Upload Edit',
+    [ACTIONS.UPLOAD_PARTIAL]: 'Upload Partial',
     [ACTIONS.PROMOTE]: 'Promote',
     [ACTIONS.SCALE_UP]: 'Scale Up',
     [ACTIONS.VALIDATE]: 'Validate',
@@ -135,19 +175,19 @@ export const getActionDisplayName = (action) => {
 
 export const validatePermissionRequest = (service, screenType, action) => {
   const errors = [];
-
+  
   if (!isValidService(service)) {
     errors.push(`Invalid service: ${service}`);
   }
-
+  
   if (!isValidScreenType(service, screenType)) {
     errors.push(`Invalid screen type: ${screenType} for service: ${service}`);
   }
-
+  
   if (action && !isValidAction(action)) {
     errors.push(`Invalid action: ${action}`);
   }
-
+  
   return {
     isValid: errors.length === 0,
     errors
@@ -181,7 +221,7 @@ export const comparePermissions = (permissions1, permissions2) => {
 export const mergePermissions = (basePermissions, additionalPermissions) => {
   if (!basePermissions) return additionalPermissions;
   if (!additionalPermissions) return basePermissions;
-
+  
   return {
     ...basePermissions,
     permissions: [

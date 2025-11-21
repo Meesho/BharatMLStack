@@ -3,10 +3,11 @@ package feature
 import (
 	"context"
 	"fmt"
-	"github.com/Meesho/BharatMLStack/online-feature-store/internal/types"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/Meesho/BharatMLStack/online-feature-store/internal/types"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/blocks"
