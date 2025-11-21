@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -126,6 +127,7 @@ func main() {
 
 	// Prepopulate for read-only or read-heavy workloads: 80% of total keys
 	preN := int(float64(totalKeys) * 0.8)
+	preN = 0 // TODO: remove this. do not prepopulate for now.
 	for i := 0; i < preN; i++ {
 		key := fmt.Sprintf("key%d", i)
 		val := []byte(fmt.Sprintf(str1kb, i))
@@ -155,7 +157,11 @@ func main() {
 			go func(wid, s, e int) {
 				defer wg.Done()
 				for i := s; i < e; i++ {
-					key := fmt.Sprintf("key%d", i)
+					//key := fmt.Sprintf("key%d", i)
+
+					//key initialize to any random value from 0 to totalKeys
+					key := fmt.Sprintf("key%d", rand.Intn(totalKeys))
+
 					val := []byte(fmt.Sprintf(str1kb, i))
 					if err := pc.Put(key, val, 60); err != nil {
 						panic(err)
@@ -183,7 +189,8 @@ func main() {
 			go func(rid, s, e int) {
 				defer wg.Done()
 				for i := s; i < e; i++ {
-					key := fmt.Sprintf("key%d", i)
+					//key := fmt.Sprintf("key%d", i)
+					key := fmt.Sprintf("key%d", rand.Intn(totalKeys))
 					val, found, expired := pc.Get(key)
 					// if !found {
 					// 	panic("key not found")
