@@ -127,7 +127,7 @@ func main() {
 
 	// Prepopulate for read-only or read-heavy workloads: 80% of total keys
 	// preN := int(float64(totalKeys) * 0.8)
-	// preN = 0 // TODO: remove this. do not prepopulate for now.
+
 	// for i := 0; i < preN; i++ {
 	// 	key := fmt.Sprintf("key%d", i)
 	// 	val := []byte(fmt.Sprintf(str1kb, i))
@@ -139,7 +139,7 @@ func main() {
 	// 		fmt.Printf("----------------------------------------------prepopulated %d keys\n", i)
 	// 	}
 	// }
-
+	preN := 0 // TODO: remove this. do not prepopulate for now.
 	var wg sync.WaitGroup
 
 	// Spawn writers: each writer covers a disjoint partition of the keyspace
