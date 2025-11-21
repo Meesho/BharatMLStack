@@ -14,6 +14,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 
 	config2 "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/config"
+	"github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/config/enums"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/entity"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/featuregroup"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/features"
@@ -38,10 +39,14 @@ const (
 	storageScyllaPrefix        = "SCYLLA_"
 	activeConfIds              = "ACTIVE_CONFIG_IDS"
 	storageRedisFailoverPrefix = "REDIS_FAILOVER_"
+	distributedCachePrefix     = "DISTRIBUTED_CACHE_"
+	inMemoryCachePrefix        = "IN_MEMORY_CACHE_"
 )
 
 var (
-	confIdToDbTypeMap = make(map[string]string)
+	confIdToDbTypeMap                 = make(map[string]string)
+	distributedCacheConfIdToDbTypeMap = make(map[string]string)
+	inMemoryCacheConfIdToDbTypeMap    = make(map[string]string)
 )
 
 func InitV1ConfigHandler() Config {
@@ -49,7 +54,8 @@ func InitV1ConfigHandler() Config {
 		once.Do(func() {
 			scyllaActiveConfIdsStr := viper.GetString(storageScyllaPrefix + activeConfIds)
 			redisFailoverActiveConfIdsStr := viper.GetString(storageRedisFailoverPrefix + activeConfIds)
-
+			distributedCacheActiveConfIdsStr := viper.GetString(distributedCachePrefix + activeConfIds)
+			inMemoryCacheActiveConfIdsStr := viper.GetString(inMemoryCachePrefix + activeConfIds)
 			scyllaStores := make(map[int]scylla.Store)
 
 			if scyllaActiveConfIdsStr != "" {
@@ -77,6 +83,20 @@ func InitV1ConfigHandler() Config {
 				redisFailoverActiveIds := strings.Split(redisFailoverActiveConfIdsStr, ",")
 				for _, redisFailoverActiveId := range redisFailoverActiveIds {
 					confIdToDbTypeMap[redisFailoverActiveId] = "redis_failover"
+				}
+			}
+
+			if distributedCacheActiveConfIdsStr != "" {
+				distributedCacheActiveIds := strings.Split(distributedCacheActiveConfIdsStr, ",")
+				for _, distributedCacheActiveId := range distributedCacheActiveIds {
+					distributedCacheConfIdToDbTypeMap[distributedCacheActiveId] = "distributed_cache"
+				}
+			}
+
+			if inMemoryCacheActiveConfIdsStr != "" {
+				inMemoryCacheActiveIds := strings.Split(inMemoryCacheActiveConfIdsStr, ",")
+				for _, inMemoryCacheActiveId := range inMemoryCacheActiveIds {
+					inMemoryCacheConfIdToDbTypeMap[inMemoryCacheActiveId] = "in_memory_cache"
 				}
 			}
 
@@ -1118,5 +1138,23 @@ func (o *OnlineFeatureStore) GetOnlineFeatureMapping(request GetOnlineFeatureMap
 	return GetOnlineFeatureMappingResponse{
 		Error: "",
 		Data:  onlineFeatureList,
+	}, nil
+}
+
+func (o *OnlineFeatureStore) GetCacheConfig(request GetCacheConfigRequest) (GetCacheConfigResponse, error) {
+	var cacheConfig map[string]string
+	if request.CacheType == enums.CacheTypeDistributed {
+		cacheConfig = distributedCacheConfIdToDbTypeMap
+	} else if request.CacheType == enums.CacheTypeInMemory {
+		cacheConfig = inMemoryCacheConfIdToDbTypeMap
+	} else {
+		return GetCacheConfigResponse{
+			Error: fmt.Sprintf("invalid cache type: %s, valid types are: distributed, in-memory", request.CacheType),
+			Data:  map[string]string{},
+		}, fmt.Errorf("invalid cache type: %s", request.CacheType)
+	}
+	return GetCacheConfigResponse{
+		Error: "",
+		Data:  cacheConfig,
 	}, nil
 }
