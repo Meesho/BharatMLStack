@@ -275,6 +275,38 @@ const EntityRegistry = () => {
     fetchCacheConfigs();
   }, [fetchEntityRequests, fetchCacheConfigs]);
 
+  // Auto-select conf-id when there's only one option
+  useEffect(() => {
+    if (!isLoadingConfigs && distributedCacheConfigs.length === 1) {
+      setEntityData((prevData) => {
+        if (!prevData['distributed-cache']['conf-id']) {
+          return {
+            ...prevData,
+            'distributed-cache': {
+              ...prevData['distributed-cache'],
+              'conf-id': distributedCacheConfigs[0]
+            }
+          };
+        }
+        return prevData;
+      });
+    }
+    if (!isLoadingConfigs && inMemoryCacheConfigs.length === 1) {
+      setEntityData((prevData) => {
+        if (!prevData['in-memory-cache']['conf-id']) {
+          return {
+            ...prevData,
+            'in-memory-cache': {
+              ...prevData['in-memory-cache'],
+              'conf-id': inMemoryCacheConfigs[0]
+            }
+          };
+        }
+        return prevData;
+      });
+    }
+  }, [distributedCacheConfigs, inMemoryCacheConfigs, isLoadingConfigs]);
+
   const renderEntityModal = () => (
     <Dialog open={open} onClose={handleClose} maxWidth="lg">
       <DialogTitle>Create Entity</DialogTitle>
@@ -413,84 +445,99 @@ const EntityRegistry = () => {
     </Dialog>
   );
 
-  const renderCacheSection = (title, cacheKey) => (
-    <div>
-      <Typography variant="h6" sx={{ mb: 2 }}>{title}</Typography>
-      {['enabled', 'conf-id', 'ttl-in-seconds', 'jitter-percentage'].map((field) => (
-        field === 'enabled' ? (
-          <Autocomplete
-            key={field}
-            options={['true', 'false']}
-            value={entityData[cacheKey][field]}
-            onChange={(event, newValue) => {
-              const syntheticEvent = {
-                target: {
-                  name: `${cacheKey}.${field}`,
-                  value: newValue || ''
-                }
-              };
-              handleChange(syntheticEvent);
-            }}
-            renderInput={(params) => (
+  const renderCacheSection = (title, cacheKey) => {
+    const isEnabled = entityData[cacheKey].enabled === 'true';
+    
+    return (
+      <div>
+        <Typography variant="h6" sx={{ mb: 2 }}>{title}</Typography>
+        {['enabled', 'conf-id', 'ttl-in-seconds', 'jitter-percentage'].map((field) => {
+          // Only show TTL and jitter if enabled is true
+          if ((field === 'ttl-in-seconds' || field === 'jitter-percentage') && !isEnabled) {
+            return null;
+          }
+          
+          if (field === 'enabled') {
+            return (
+              <Autocomplete
+                key={field}
+                options={['true', 'false']}
+                value={entityData[cacheKey][field]}
+                onChange={(event, newValue) => {
+                  const syntheticEvent = {
+                    target: {
+                      name: `${cacheKey}.${field}`,
+                      value: newValue || ''
+                    }
+                  };
+                  handleChange(syntheticEvent);
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Enabled *"
+                    name={`${cacheKey}.${field}`}
+                    fullWidth
+                    style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-start' }}
+                    className="custom-textfield"
+                    error={!!validationErrors[`${cacheKey}.${field}`]}
+                    helperText={validationErrors[`${cacheKey}.${field}`]}
+                  />
+                )}
+              />
+            );
+          } else if (field === 'conf-id') {
+            return (
+              <Autocomplete
+                key={field}
+                options={cacheKey === 'distributed-cache' ? distributedCacheConfigs : inMemoryCacheConfigs}
+                value={entityData[cacheKey][field] || ''}
+                onChange={(event, newValue) => {
+                  const syntheticEvent = {
+                    target: {
+                      name: `${cacheKey}.${field}`,
+                      value: newValue || ''
+                    }
+                  };
+                  handleChange(syntheticEvent);
+                }}
+                loading={isLoadingConfigs}
+                disabled={isLoadingConfigs}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Config ID *"
+                    name={`${cacheKey}.${field}`}
+                    fullWidth
+                    style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-start' }}
+                    className="custom-textfield"
+                    error={!!validationErrors[`${cacheKey}.${field}`]}
+                    helperText={validationErrors[`${cacheKey}.${field}`]}
+                  />
+                )}
+              />
+            );
+          } else {
+            return (
               <TextField
-                {...params}
-                label="Enabled *"
+                key={field}
+                label={`${field.charAt(0).toUpperCase() + field.slice(1).replace(/-/g, ' ')} *`}
                 name={`${cacheKey}.${field}`}
+                value={entityData[cacheKey][field]}
+                onChange={handleChange}
                 fullWidth
-                style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-start' }}
+                placeholder={`Enter ${field.charAt(0).toUpperCase() + field.slice(1).replace(/-/g, ' ')}`}
+                style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '1.5rem' }}
                 className="custom-textfield"
                 error={!!validationErrors[`${cacheKey}.${field}`]}
                 helperText={validationErrors[`${cacheKey}.${field}`]}
               />
-            )}
-          />
-        ) : field === 'conf-id' ? (
-          <Autocomplete
-            key={field}
-            options={cacheKey === 'distributed-cache' ? distributedCacheConfigs : inMemoryCacheConfigs}
-            value={entityData[cacheKey][field] || ''}
-            onChange={(event, newValue) => {
-              const syntheticEvent = {
-                target: {
-                  name: `${cacheKey}.${field}`,
-                  value: newValue || ''
-                }
-              };
-              handleChange(syntheticEvent);
-            }}
-            loading={isLoadingConfigs}
-            disabled={isLoadingConfigs}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Config ID *"
-                name={`${cacheKey}.${field}`}
-                fullWidth
-                style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-start' }}
-                className="custom-textfield"
-                error={!!validationErrors[`${cacheKey}.${field}`]}
-                helperText={validationErrors[`${cacheKey}.${field}`]}
-              />
-            )}
-          />
-        ) : (
-          <TextField
-            key={field}
-            label={`${field.charAt(0).toUpperCase() + field.slice(1).replace(/-/g, ' ')} *`}
-            name={`${cacheKey}.${field}`}
-            value={entityData[cacheKey][field]}
-            onChange={handleChange}
-            fullWidth
-            placeholder={`Enter ${field.charAt(0).toUpperCase() + field.slice(1).replace(/-/g, ' ')}`}
-            style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '1.5rem' }}
-            className="custom-textfield"
-            error={!!validationErrors[`${cacheKey}.${field}`]}
-            helperText={validationErrors[`${cacheKey}.${field}`]}
-          />
-        )
-      ))}
-    </div>
-  );
+            );
+          }
+        })}
+      </div>
+    );
+  };
 
   const validateForm = () => {
     const errors = {};
@@ -527,13 +574,16 @@ const EntityRegistry = () => {
     if (!entityData['distributed-cache']['conf-id']) {
       errors['distributed-cache.conf-id'] = "Distributed Cache Config ID is required";
     }
-    if (!entityData['distributed-cache']['ttl-in-seconds'] || entityData['distributed-cache']['ttl-in-seconds'] === "") {
-      errors['distributed-cache.ttl-in-seconds'] = "Distributed Cache TTL is required";
-    } else if (parseInt(entityData['distributed-cache']['ttl-in-seconds'], 10) <= 0) {
-      errors['distributed-cache.ttl-in-seconds'] = "Distributed Cache TTL must be greater than 0";
-    }
-    if (!entityData['distributed-cache']['jitter-percentage'] || entityData['distributed-cache']['jitter-percentage'] === "") {
-      errors['distributed-cache.jitter-percentage'] = "Distributed Cache Jitter Percentage is required";
+    // Only validate TTL and jitter if enabled is true
+    if (entityData['distributed-cache'].enabled === 'true') {
+      if (!entityData['distributed-cache']['ttl-in-seconds'] || entityData['distributed-cache']['ttl-in-seconds'] === "") {
+        errors['distributed-cache.ttl-in-seconds'] = "Distributed Cache TTL is required";
+      } else if (parseInt(entityData['distributed-cache']['ttl-in-seconds'], 10) <= 0) {
+        errors['distributed-cache.ttl-in-seconds'] = "Distributed Cache TTL must be greater than 0";
+      }
+      if (!entityData['distributed-cache']['jitter-percentage'] || entityData['distributed-cache']['jitter-percentage'] === "") {
+        errors['distributed-cache.jitter-percentage'] = "Distributed Cache Jitter Percentage is required";
+      }
     }
     
     // Validate In-Memory Cache
@@ -543,13 +593,16 @@ const EntityRegistry = () => {
     if (!entityData['in-memory-cache']['conf-id']) {
       errors['in-memory-cache.conf-id'] = "In-Memory Cache Config ID is required";
     }
-    if (!entityData['in-memory-cache']['ttl-in-seconds'] || entityData['in-memory-cache']['ttl-in-seconds'] === "") {
-      errors['in-memory-cache.ttl-in-seconds'] = "In-Memory Cache TTL is required";
-    } else if (parseInt(entityData['in-memory-cache']['ttl-in-seconds'], 10) <= 0) {
-      errors['in-memory-cache.ttl-in-seconds'] = "In-Memory Cache TTL must be greater than 0";
-    }
-    if (!entityData['in-memory-cache']['jitter-percentage'] || entityData['in-memory-cache']['jitter-percentage'] === "") {
-      errors['in-memory-cache.jitter-percentage'] = "In-Memory Cache Jitter Percentage is required";
+    // Only validate TTL and jitter if enabled is true
+    if (entityData['in-memory-cache'].enabled === 'true') {
+      if (!entityData['in-memory-cache']['ttl-in-seconds'] || entityData['in-memory-cache']['ttl-in-seconds'] === "") {
+        errors['in-memory-cache.ttl-in-seconds'] = "In-Memory Cache TTL is required";
+      } else if (parseInt(entityData['in-memory-cache']['ttl-in-seconds'], 10) <= 0) {
+        errors['in-memory-cache.ttl-in-seconds'] = "In-Memory Cache TTL must be greater than 0";
+      }
+      if (!entityData['in-memory-cache']['jitter-percentage'] || entityData['in-memory-cache']['jitter-percentage'] === "") {
+        errors['in-memory-cache.jitter-percentage'] = "In-Memory Cache Jitter Percentage is required";
+      }
     }
     
     setValidationErrors(errors);
