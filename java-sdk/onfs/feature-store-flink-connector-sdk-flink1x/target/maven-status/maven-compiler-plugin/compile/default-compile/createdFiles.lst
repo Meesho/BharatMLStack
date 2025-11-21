@@ -1,0 +1,5 @@
+com/bharatml/featurestore/connector/FeatureStoreClientConfig.class
+com/bharatml/featurestore/connector/FeatureStoreClientConfig$Builder.class
+com/bharatml/featurestore/connector/FeatureEventKeySerialization.class
+com/bharatml/featurestore/connector/KafkaSinkFactory.class
+com/bharatml/featurestore/connector/FeatureEventSerialization.class
