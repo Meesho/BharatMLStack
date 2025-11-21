@@ -23,6 +23,7 @@ import {
   IconButton,
   InputAdornment,
   Tooltip,
+  Autocomplete,
 } from '@mui/material';
 import InfoIcon from '@mui/icons-material/Info';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
@@ -30,12 +31,15 @@ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import CheckBoxIcon from '@mui/icons-material/CheckBox';
+import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import "./styles.scss";
 import GenericTable from '../../common/GenericTable';
 import { useAuth } from '../../../Auth/AuthContext';
 
 import * as URL_CONSTANTS from '../../../../config';
 import { removeDataTypePrefix } from '../../../../constants/dataTypes';
+import { Search } from '@mui/icons-material';
 
 const FeatureAddition = () => {
   const [open, setOpen] = useState(false);
@@ -77,11 +81,22 @@ const FeatureAddition = () => {
     }],
   });
 
-  // Add these state variables
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
+
+  // Delete features state variables
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteValidationErrors, setDeleteValidationErrors] = useState({});
+  const [availableFeatures, setAvailableFeatures] = useState([]);
+  const [deleteFeatureGroups, setDeleteFeatureGroups] = useState([]);
+  const [featureSearchTerm, setFeatureSearchTerm] = useState('');
+  const [deleteFeatureData, setDeleteFeatureData] = useState({
+    "entity-label": "",
+    "feature-group-label": "",
+    "feature-labels": []
+  });
 
   // Memoize fetch functions with useCallback
   const fetchEntities = useCallback(async () => {
@@ -126,6 +141,21 @@ const FeatureAddition = () => {
     }
   }, [user.token]);
 
+  const fetchDeleteFeatureGroups = useCallback(async (entityLabel) => {
+    try {
+      const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/retrieve-feature-groups?entity=${entityLabel}`, {
+        headers: {
+          'Authorization': `Bearer ${user.token}`,
+        },
+      });
+      const data = await response.json();
+      setDeleteFeatureGroups(data);
+    } catch (error) {
+      console.error('Error fetching delete feature groups:', error);
+      setDeleteFeatureGroups([]);
+    }
+  }, [user.token]);
+
   useEffect(() => {
     fetchEntities();
     fetchFeaturesRequests();
@@ -138,6 +168,41 @@ const FeatureAddition = () => {
       fetchFeatureGroups(entityLabel);
     }
   }, [entityLabel, fetchFeatureGroups]);
+
+  const deleteEntityLabel = deleteFeatureData["entity-label"];
+  useEffect(() => {
+    if (deleteEntityLabel) {
+      fetchDeleteFeatureGroups(deleteEntityLabel);
+      // Reset feature group and features when entity changes
+      setDeleteFeatureData(prev => ({
+        ...prev,
+        "feature-group-label": "",
+        "feature-labels": []
+      }));
+      setAvailableFeatures([]);
+    }
+  }, [deleteEntityLabel, fetchDeleteFeatureGroups]);
+
+  useEffect(() => {
+    const selectedDeleteFeatureGroup = deleteFeatureGroups?.find(
+      group => group?.['feature-group-label'] === deleteFeatureData["feature-group-label"]
+    );
+    
+    if (selectedDeleteFeatureGroup?.features) {
+      const activeVersion = selectedDeleteFeatureGroup['active-version'];
+      const versionNumber = parseInt(activeVersion, 10);
+      const featureData = selectedDeleteFeatureGroup.features[versionNumber];
+      
+      if (featureData?.labels) {
+        const labels = featureData.labels.split(',').map(label => label.trim());
+        setAvailableFeatures(labels);
+      } else {
+        setAvailableFeatures([]);
+      }
+    } else {
+      setAvailableFeatures([]);
+    }
+  }, [deleteFeatureData["feature-group-label"], deleteFeatureGroups]);
 
   // Existing handle functions for creation modal
   const handleChange = (e) => {
@@ -154,7 +219,7 @@ const FeatureAddition = () => {
     const updatedFeatures = [...FeatureAdditionData.features];
     updatedFeatures[index] = {
       ...updatedFeatures[index],
-      [name]: value,
+      [name]: typeof value === 'string' ? value.trim() : value,
     };
     setFeatureAdditionData((prevData) => ({
       ...prevData,
@@ -354,6 +419,103 @@ const FeatureAddition = () => {
     setShowErrorModal(false);
   };
 
+  // Delete features handlers
+  const handleDeleteOpen = () => {
+    setDeleteFeatureData({
+      "entity-label": "",
+      "feature-group-label": "",
+      "feature-labels": []
+    });
+    setDeleteValidationErrors({});
+    setAvailableFeatures([]);
+    setDeleteFeatureGroups([]);
+    setFeatureSearchTerm('');
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteClose = () => {
+    setShowDeleteModal(false);
+  };
+
+  const handleDeleteChange = (e) => {
+    const { name, value } = e.target;
+    setDeleteFeatureData((prevData) => ({
+      ...prevData,
+      [name]: value,
+      ...(name === "entity-label" && { "feature-group-label": "", "feature-labels": [] }),
+      ...(name === "feature-group-label" && { "feature-labels": [] }),
+    }));
+    
+    // Clear search term when entity or feature group changes
+    if (name === "entity-label" || name === "feature-group-label") {
+      setFeatureSearchTerm('');
+    }
+  };
+
+  const handleFeatureLabelChange = (e) => {
+    const { value } = e.target;
+    setDeleteFeatureData((prevData) => ({
+      ...prevData,
+      "feature-labels": typeof value === 'string' ? value.split(',').map(label => label.trim()) : value,
+    }));
+  };
+
+
+
+  const validateDeleteForm = () => {
+    const errors = {};
+    
+    if (!deleteFeatureData["entity-label"]) {
+      errors["entity-label"] = "Entity Label is required";
+    }
+
+    if (!deleteFeatureData["feature-group-label"]) {
+      errors["feature-group-label"] = "Feature Group Label is required";
+    }
+
+    if (deleteFeatureData["feature-labels"].length === 0) {
+      errors["feature-labels"] = "At least one feature must be selected for deletion";
+    }
+    
+    setDeleteValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleDeleteSubmit = async () => {
+    setDeleteValidationErrors({});
+    
+    if (!validateDeleteForm()) {
+      setModalMessage('Please fill in all required fields correctly.');
+      setShowErrorModal(true);
+      return;
+    }
+
+    try {
+      const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/online-feature-store/delete-features`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify(deleteFeatureData),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setModalMessage(result.message);
+        setShowSuccessModal(true);
+        setShowDeleteModal(false);
+      } else {
+        const errorData = await response.json();
+        setModalMessage(errorData.error);
+        setShowErrorModal(true);
+      }
+    } catch (error) {
+      setModalMessage('Network error. Please try again.');
+      setShowErrorModal(true);
+    }
+  };
+
   return (
     <div className="p-4">
       <GenericTable
@@ -365,8 +527,37 @@ const FeatureAddition = () => {
             label: "Add Features",
             onClick: handleCreateOpen,
             variant: "contained",
-            color: "#522b4a",
-            hoverColor: "#613a5c"
+            sx: {
+              textTransform: 'none',
+              fontWeight: 'bold',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              backgroundColor: '#522b4a',
+              boxShadow: '0 2px 4px rgba(82, 43, 74, 0.2)',
+              '&:hover': {
+                backgroundColor: '#613a5c',
+                boxShadow: '0 4px 8px rgba(82, 43, 74, 0.3)',
+              }
+            }
+          },
+          {
+            label: "Delete Features",
+            onClick: handleDeleteOpen,
+            variant: "outlined",
+            sx: {
+              textTransform: 'none',
+              fontWeight: 'bold',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: '2px solid #d32f2f',
+              color: '#d32f2f',
+              backgroundColor: 'transparent',
+              '&:hover': {
+                borderColor: '#c62828',
+                backgroundColor: 'rgba(211, 47, 47, 0.04)',
+                color: '#c62828',
+              }
+            }
           }
         ]}
       />
@@ -380,54 +571,56 @@ const FeatureAddition = () => {
       >
         <DialogTitle>Add Features</DialogTitle>
         <DialogContent>
-          <FormControl fullWidth margin="normal" error={!!validationErrors["entity-label"]}>
-            <InputLabel id="entity-label-id">Entity Label *</InputLabel>
-            <Select
-              labelId="entity-label-id"
-              id="entity-label"
-              name="entity-label"
-              value={FeatureAdditionData["entity-label"]}
-              onChange={handleChange}
-              label="Entity Label *"
-              error={!!validationErrors["entity-label"]}
-            >
-              {entities?.map((entity) => (
-                <MenuItem key={entity} value={entity}>
-                  {entity}
-                </MenuItem>
-              ))}
-            </Select>
-            {validationErrors["entity-label"] && (
-              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
-                {validationErrors["entity-label"]}
-              </Typography>
+          <Autocomplete
+            options={[...(entities || [])].sort((a, b) => a.localeCompare(b))}
+            value={FeatureAdditionData["entity-label"]}
+            onChange={(event, newValue) => {
+              const syntheticEvent = {
+                target: {
+                  name: 'entity-label',
+                  value: newValue || ''
+                }
+              };
+              handleChange(syntheticEvent);
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Entity Label *"
+                name="entity-label"
+                fullWidth
+                margin="normal"
+                error={!!validationErrors["entity-label"]}
+                helperText={validationErrors["entity-label"]}
+              />
             )}
-          </FormControl>
+          />
 
-          <FormControl fullWidth margin="normal" error={!!validationErrors["feature-group-label"]}>
-            <InputLabel id="feature-group-label-id">Feature Group Label *</InputLabel>
-            <Select
-              labelId="feature-group-label-id"
-              id="feature-group-label"
-              name="feature-group-label"
-              value={FeatureAdditionData["feature-group-label"]}
-              onChange={handleChange}
-              disabled={!FeatureAdditionData["entity-label"]}
-              label="Feature Group Label *"
-              error={!!validationErrors["feature-group-label"]}
-            >
-              {featureGroups?.map((group) => (
-                <MenuItem key={group?.label} value={group?.label}>
-                  {group?.label}
-                </MenuItem>
-              ))}
-            </Select>
-            {validationErrors["feature-group-label"] && (
-              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
-                {validationErrors["feature-group-label"]}
-              </Typography>
+          <Autocomplete
+            options={[...(featureGroups?.map(group => group?.label) || [])].sort((a, b) => a.localeCompare(b))}
+            value={FeatureAdditionData["feature-group-label"]}
+            onChange={(event, newValue) => {
+              const syntheticEvent = {
+                target: {
+                  name: 'feature-group-label',
+                  value: newValue || ''
+                }
+              };
+              handleChange(syntheticEvent);
+            }}
+            disabled={!FeatureAdditionData["entity-label"]}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Feature Group Label *"
+                name="feature-group-label"
+                fullWidth
+                margin="normal"
+                error={!!validationErrors["feature-group-label"]}
+                helperText={validationErrors["feature-group-label"]}
+              />
             )}
-          </FormControl>
+          />
 
           <h5>Features</h5>
           {FeatureAdditionData?.features?.map((feature, index) => (
@@ -469,53 +662,60 @@ const FeatureAddition = () => {
                     gap: '0px 16px'
                   }}
                 >
-                  <FormControl margin="normal" fullWidth>
-                    <InputLabel id={`source-type-label-${index}`}>
-                      Source Type
-                    </InputLabel>
-                    <Select
-                      labelId={`source-type-label-${index}`}
-                      id={`source-type-${index}`}
-                      name="storage-provider"
-                      value={feature["storage-provider"]}
-                      onChange={(e) => handleFeatureChange(index, e)}
-                      label="Source Type"
-                      endAdornment={
-                        <InputAdornment position="end">
-                          <Tooltip
-                            title="Cloud storage or table"
-                            placement="bottom-end"
-                            slotProps={{
-                              tooltip: {
-                                sx: {
-                                  bgcolor: 'white',
-                                  color: 'black',
-                                  border: '1px solid #cccccc',
-                                  boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
-                                  p: 1,
-                                  width: '280px',
-                                  maxWidth: '300px',
-                                  '& p': {
-                                    my: 0.5,
-                                  }
-                                }
-                              }
-                            }}
-                          >
-                            <InfoIcon style={{ color: '#522b4a', cursor: 'pointer', fontSize: '20px', position: 'absolute', right: '24px' }} />
-                          </Tooltip>
-                        </InputAdornment>
-                      }
-                    >
-                      <MenuItem value="PARQUET_GCS">PARQUET_GCS</MenuItem>
-                      <MenuItem value="PARQUET_S3">PARQUET_S3</MenuItem>
-                      <MenuItem value="PARQUET_ADLS">PARQUET_ADLS</MenuItem>
-                      <MenuItem value="DELTA_GCS">DELTA_GCS</MenuItem>
-                      <MenuItem value="DELTA_S3">DELTA_S3</MenuItem>
-                      <MenuItem value="DELTA_ADLS">DELTA_ADLS</MenuItem>
-                      <MenuItem value="TABLE">TABLE</MenuItem>
-                    </Select>
-                  </FormControl>
+                  <Autocomplete
+                    options={['PARQUET_GCS', 'PARQUET_S3', 'PARQUET_ADLS', 'DELTA_GCS', 'DELTA_S3', 'DELTA_ADLS', 'TABLE']}
+                    value={feature["storage-provider"]}
+                    onChange={(event, newValue) => {
+                      const syntheticEvent = {
+                        target: {
+                          name: 'storage-provider',
+                          value: newValue || ''
+                        }
+                      };
+                      handleFeatureChange(index, syntheticEvent);
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Source Type"
+                        name="storage-provider"
+                        margin="normal"
+                        fullWidth
+                        InputProps={{
+                          ...params.InputProps,
+                          endAdornment: (
+                            <>
+                              {params.InputProps.endAdornment}
+                              <InputAdornment position="end">
+                                <Tooltip
+                                  title="Cloud storage or table"
+                                  placement="bottom-end"
+                                  slotProps={{
+                                    tooltip: {
+                                      sx: {
+                                        bgcolor: 'white',
+                                        color: 'black',
+                                        border: '1px solid #cccccc',
+                                        boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
+                                        p: 1,
+                                        width: '280px',
+                                        maxWidth: '300px',
+                                        '& p': {
+                                          my: 0.5,
+                                        }
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <InfoIcon style={{ color: '#522b4a', cursor: 'pointer', fontSize: '20px' }} />
+                                </Tooltip>
+                              </InputAdornment>
+                            </>
+                          )
+                        }}
+                      />
+                    )}
+                  />
                   <TextField
                     label="Source Base Path"
                     name="source-base-path"
@@ -867,6 +1067,338 @@ const FeatureAddition = () => {
             }}
           >
             OK
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Features Modal */}
+      <Dialog
+        open={showDeleteModal}
+        onClose={handleDeleteClose}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>Delete Features</DialogTitle>
+        <DialogContent>
+          <Autocomplete
+            options={[...(entities || [])].sort((a, b) => a.localeCompare(b))}
+            value={deleteFeatureData["entity-label"]}
+            onChange={(event, newValue) => {
+              const syntheticEvent = {
+                target: {
+                  name: 'entity-label',
+                  value: newValue || ''
+                }
+              };
+              handleDeleteChange(syntheticEvent);
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Entity Label *"
+                name="entity-label"
+                fullWidth
+                margin="normal"
+                error={!!deleteValidationErrors["entity-label"]}
+                helperText={deleteValidationErrors["entity-label"]}
+              />
+            )}
+          />
+
+          <Autocomplete
+            options={[...(deleteFeatureGroups?.map(group => group?.['feature-group-label']) || [])].sort((a, b) => a.localeCompare(b))}
+            value={deleteFeatureData["feature-group-label"]}
+            onChange={(event, newValue) => {
+              const syntheticEvent = {
+                target: {
+                  name: 'feature-group-label',
+                  value: newValue || ''
+                }
+              };
+              handleDeleteChange(syntheticEvent);
+            }}
+            disabled={!deleteFeatureData["entity-label"]}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Feature Group Label *"
+                name="feature-group-label"
+                fullWidth
+                margin="normal"
+                error={!!deleteValidationErrors["feature-group-label"]}
+                helperText={deleteValidationErrors["feature-group-label"]}
+              />
+            )}
+          />
+
+          <FormControl fullWidth margin="normal" error={!!deleteValidationErrors["feature-labels"]}>
+            <InputLabel id="delete-feature-labels-id">Select Features to Delete *</InputLabel>
+            <Select
+              labelId="delete-feature-labels-id"
+              id="delete-feature-labels"
+              multiple
+              value={deleteFeatureData["feature-labels"]}
+              onChange={handleFeatureLabelChange}
+              disabled={!deleteFeatureData["feature-group-label"]}
+              label="Select Features to Delete *"
+              error={!!deleteValidationErrors["feature-labels"]}
+              renderValue={(selected) => selected.join(', ')}
+              MenuProps={{
+                PaperProps: {
+                  sx: { 
+                    maxHeight: 450,
+                    borderRadius: '8px',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
+                    border: '1px solid rgba(211, 47, 47, 0.1)',
+                    marginTop: '4px'
+                  }
+                }
+              }}
+            >
+              <MenuItem 
+                disableRipple 
+                disableTouchRipple
+                value=""
+                sx={{ 
+                  position: 'sticky', 
+                  top: 0, 
+                  backgroundColor: '#fafafa', 
+                  zIndex: 1000,
+                  borderBottom: '2px solid #f0f0f0',
+                  padding: '12px 16px',
+                  '&:hover': { backgroundColor: '#fafafa' },
+                  '&:focus': { backgroundColor: '#fafafa' },
+                  '&.Mui-selected': { backgroundColor: '#fafafa' },
+                  cursor: 'default'
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <Box sx={{ width: '100%' }}>
+                  <TextField
+                    size="small"
+                    placeholder="Type to search features..."
+                    value={featureSearchTerm}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setFeatureSearchTerm(e.target.value.trim());
+                    }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onFocus={(e) => e.stopPropagation()}
+                    fullWidth
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Search sx={{ color: '#d32f2f', fontSize: '20px' }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                    sx={{ 
+                      '& .MuiOutlinedInput-root': {
+                        backgroundColor: 'white',
+                        borderRadius: '8px',
+                        '& fieldset': {
+                          borderColor: '#e0e0e0',
+                        },
+                        '&:hover fieldset': {
+                          borderColor: '#d32f2f',
+                        },
+                        '&.Mui-focused fieldset': {
+                          borderColor: '#d32f2f',
+                          borderWidth: '2px',
+                        },
+                      }
+                    }}
+                  />
+                  {deleteFeatureData["feature-labels"].length > 0 && (
+                    <Typography variant="caption" sx={{ 
+                      color: '#d32f2f', 
+                      fontWeight: 'bold',
+                      marginTop: '4px',
+                      display: 'block'
+                    }}>
+                      {deleteFeatureData["feature-labels"].length} feature{deleteFeatureData["feature-labels"].length !== 1 ? 's' : ''} selected
+                    </Typography>
+                  )}
+                </Box>
+              </MenuItem>
+              {(() => {
+                const filteredFeatures = availableFeatures?.filter(feature => 
+                  feature.toLowerCase().includes(featureSearchTerm.toLowerCase())
+                ) || [];
+                
+                if (availableFeatures?.length === 0) {
+                  return (
+                    <MenuItem disabled sx={{ 
+                      justifyContent: 'center', 
+                      padding: '24px',
+                      fontStyle: 'italic',
+                      color: '#9e9e9e'
+                    }}>
+                      <Typography variant="body2">
+                        No features available for the selected feature group
+                      </Typography>
+                    </MenuItem>
+                  );
+                }
+                
+                if (filteredFeatures.length === 0) {
+                  return (
+                    <MenuItem disabled sx={{ 
+                      justifyContent: 'center', 
+                      padding: '24px',
+                      fontStyle: 'italic'
+                    }}>
+                      <Typography variant="body2" sx={{ color: '#9e9e9e' }}>
+                        🔍 No features found matching "{featureSearchTerm}"
+                      </Typography>
+                    </MenuItem>
+                  );
+                }
+                
+                return filteredFeatures.map((feature) => (
+                <MenuItem 
+                  key={feature} 
+                  value={feature}
+                  sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center',
+                    justifyContent: 'flex-start',
+                    padding: '12px 16px',
+                    minHeight: '56px',
+                    borderBottom: '1px solid #f0f0f0',
+                    transition: 'all 0.2s ease',
+                    cursor: 'pointer',
+                    '&:hover': {
+                      backgroundColor: 'rgba(211, 47, 47, 0.06)',
+                      transform: 'translateX(2px)',
+                    },
+                    '&.Mui-selected': {
+                      backgroundColor: 'rgba(211, 47, 47, 0.12)',
+                      borderLeft: '4px solid #d32f2f',
+                      '&:hover': {
+                        backgroundColor: 'rgba(211, 47, 47, 0.16)',
+                      }
+                    },
+                    '&:last-child': {
+                      borderBottom: 'none',
+                    }
+                  }}
+                >
+                  <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    width: '100%',
+                    gap: '12px'
+                  }}>
+                    {deleteFeatureData["feature-labels"].indexOf(feature) > -1 ? (
+                      <CheckBoxIcon sx={{ 
+                        color: '#d32f2f', 
+                        fontSize: '24px',
+                        flexShrink: 0
+                      }} />
+                    ) : (
+                      <CheckBoxOutlineBlankIcon sx={{ 
+                        color: '#9e9e9e', 
+                        fontSize: '24px',
+                        flexShrink: 0,
+                        '&:hover': {
+                          color: '#d32f2f'
+                        }
+                      }} />
+                    )}
+                    
+                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                      <Typography variant="body1" sx={{ 
+                        fontSize: '14px',
+                        lineHeight: '1.5',
+                        wordBreak: 'break-word',
+                        color: deleteFeatureData["feature-labels"].indexOf(feature) > -1 ? '#d32f2f' : '#424242',
+                        fontWeight: deleteFeatureData["feature-labels"].indexOf(feature) > -1 ? 600 : 400,
+                        transition: 'color 0.2s ease'
+                      }}>
+                        {feature}
+                      </Typography>
+                      
+                      {deleteFeatureData["feature-labels"].indexOf(feature) > -1 && (
+                        <Typography variant="caption" sx={{ 
+                          color: '#d32f2f',
+                          fontWeight: 500,
+                          fontSize: '11px',
+                          display: 'block',
+                          marginTop: '2px',
+                          opacity: 0.8
+                        }}>
+                          ✓ Selected for deletion
+                        </Typography>
+                      )}
+                    </Box>
+                                     </Box>
+                 </MenuItem>
+                ));
+              })()}
+            </Select>
+            {deleteValidationErrors["feature-labels"] && (
+              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
+                {deleteValidationErrors["feature-labels"]}
+              </Typography>
+            )}
+          </FormControl>
+
+          {deleteFeatureData["feature-labels"].length > 0 && (
+            <Box sx={{ mt: 2, p: 2, bgcolor: '#ffebee', borderRadius: 1, border: '1px solid #ffcdd2' }}>
+              <Typography variant="body2" sx={{ color: '#d32f2f', fontWeight: 'bold', mb: 1 }}>
+                ⚠️ Warning: You are about to delete the following features:
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#d32f2f' }}>
+                {deleteFeatureData["feature-labels"].join(', ')}
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#d32f2f', mt: 1, fontStyle: 'italic' }}>
+                This action cannot be undone.
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ padding: '0px 24px 16px 24px', gap: '12px' }}>
+          <Button
+            variant="outlined"
+            onClick={handleDeleteClose}
+            sx={{
+              textTransform: 'none',
+              borderColor: '#522b4a',
+              color: '#522b4a',
+              '&:hover': {
+                borderColor: '#613a5c',
+                backgroundColor: 'rgba(61, 86, 114, 0.04)',
+              },
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={handleDeleteSubmit}
+            sx={{
+              textTransform: 'none',
+              borderColor: '#d32f2f',
+              color: '#d32f2f',
+              fontWeight: 'bold',
+              borderWidth: '2px',
+              '&:hover': {
+                borderColor: '#c62828',
+                backgroundColor: 'rgba(211, 47, 47, 0.04)',
+                borderWidth: '2px',
+              },
+              '&:disabled': {
+                borderColor: '#ccc',
+                color: '#ccc',
+              },
+            }}
+            disabled={deleteFeatureData["feature-labels"].length === 0}
+          >
+            Delete Features
           </Button>
         </DialogActions>
       </Dialog>
