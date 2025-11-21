@@ -9,7 +9,6 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	connectionConfigRouter "github.com/Meesho/BharatMLStack/horizon/internal/connectionconfig/route"
 	deployableRouter "github.com/Meesho/BharatMLStack/horizon/internal/deployable/router"
-	featureStoreRouter "github.com/Meesho/BharatMLStack/horizon/internal/feature_store/route"
 	inferflowConfig "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
 	inferflowRouter "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/route"
 	"github.com/Meesho/BharatMLStack/horizon/internal/middleware"
@@ -62,7 +61,6 @@ func main() {
 	predatorRouter.Init()
 	authRouter.Init()
 	ofsRouter.Init()
-	featureStoreRouter.Init(appConfig.Configs)
 	scheduler.Init(appConfig.Configs)
 	httpframework.Instance().Run(":" + strconv.Itoa(appConfig.Configs.AppPort))
 }
