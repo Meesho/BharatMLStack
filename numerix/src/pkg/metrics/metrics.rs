@@ -76,8 +76,8 @@ pub fn init_config() {
     ));
 
     logger::info(format!(
-        "Metrics client initialized with telegraf address = {}, global tags = {:?}, and sampling rate = {}",
-        format!("{}:{}", config.telegraf_udp_host, config.telegraf_udp_port),
+        "Metrics client initialized with telegraf address = {}:{}, global tags = {:?}, and sampling rate = {}",
+        config.telegraf_udp_host, config.telegraf_udp_port,
         vec![("env", app_env), ("service", app_name)],
         config.metric_sampling_rate));
 }

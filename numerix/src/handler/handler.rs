@@ -264,34 +264,32 @@ where
     };
     let result = matrix.calculate(expression, meta_data);
 
-    if let Err(e) = result.as_ref() {
-        if let Mat2DError::InvalidOperation(e) = e {
-            let error_type = match e {
-                InvalidOperation::DivisionByZero => "division_by_zero",
-                InvalidOperation::AndRequiresBoolean => "and_requires_boolean",
-                InvalidOperation::OrRequiresBoolean => "or_requires_boolean",
-                InvalidOperation::LogNonPositive => "log_non_positive",
-                InvalidOperation::PEqualsQDivByZero => "p_equals_q_divided_by_zero",
-                InvalidOperation::VectorLengthZeroOrLess => "vector_length_zero_or_less",
-            };
-            metrics::count(
-                "numerix.computation.request.invalid_operation",
-                1,
-                &[
-                    (COMPUTE_ID, compute_id),
-                    ("error_type", error_type),
-                    ("caller_id", caller_id),
-                ],
-            );
-            return (
-                NumerixResponseProto {
-                    response: Some(numerix_response_proto::Response::Error(Error {
-                        message: format!("Invalid operation for request '{:?}': {}", req, e),
-                    })),
-                },
-                true,
-            );
-        }
+    if let Err(Mat2DError::InvalidOperation(e)) = result.as_ref() {
+        let error_type = match e {
+            InvalidOperation::DivisionByZero => "division_by_zero",
+            InvalidOperation::AndRequiresBoolean => "and_requires_boolean",
+            InvalidOperation::OrRequiresBoolean => "or_requires_boolean",
+            InvalidOperation::LogNonPositive => "log_non_positive",
+            InvalidOperation::PEqualsQDivByZero => "p_equals_q_divided_by_zero",
+            InvalidOperation::VectorLengthZeroOrLess => "vector_length_zero_or_less",
+        };
+        metrics::count(
+            "numerix.computation.request.invalid_operation",
+            1,
+            &[
+                (COMPUTE_ID, compute_id),
+                ("error_type", error_type),
+                ("caller_id", caller_id),
+            ],
+        );
+        return (
+            NumerixResponseProto {
+                response: Some(numerix_response_proto::Response::Error(Error {
+                    message: format!("Invalid operation for request '{:?}': {}", req, e),
+                })),
+            },
+            true,
+        );
     }
 
     (
