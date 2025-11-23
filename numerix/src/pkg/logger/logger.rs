@@ -1,6 +1,6 @@
 use crate::pkg::config::config;
+use std::cell::RefCell;
 use std::error::Error;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{Level, Subscriber};
@@ -12,12 +12,13 @@ use tracing_subscriber::{
 
 static APP_NAME: OnceLock<String> = OnceLock::new();
 static SAMPLING_RATE: OnceLock<f64> = OnceLock::new();
-static COUNTER: AtomicU64 = AtomicU64::new(0);
+thread_local! {
+    static RNG: RefCell<fastrand::Rng> = RefCell::new(fastrand::Rng::new());
+}
 
 #[inline]
 fn should_log() -> bool {
     let sampling_rate = *SAMPLING_RATE.get().unwrap_or(&1.0);
-    println!("sampling_rate: {}", sampling_rate);
     if sampling_rate >= 1.0 {
         return true;
     }
@@ -26,10 +27,10 @@ fn should_log() -> bool {
         return false;
     }
 
-    let count = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let threshold = (1.0 / sampling_rate) as u64;
-    println!("count: {}, threshold: {}", count, threshold);
-    (count % threshold) == 0
+    RNG.with(|rng_cell| {
+        let mut rng = rng_cell.borrow_mut();
+        rng.f64() < sampling_rate
+    })
 }
 
 struct CustomFormat;
@@ -96,7 +97,7 @@ pub fn init_logger() {
     match SAMPLING_RATE.set(config.log_sampling_rate) {
         Ok(_) => (),
         Err(_) => error(
-            "Logger sampling rate already initialized, cannot reinitialize",
+            "Logger sampling rate already initialized, cannot reinitialize".to_string(),
             None,
         ),
     }
@@ -110,7 +111,7 @@ pub fn init_logger() {
         "ERROR" => "error",
         "FATAL" | "PANIC" => "error",
         "DISABLED" => "off",
-        _ => fatal(format!("Invalid log level '{}' for app '{}', expected: DEBUG/INFO/WARN/ERROR/FATAL/DISABLED", log_level, config.app_name), None),
+        _ => fatal(&format!("Invalid log level '{}' for app '{}', expected: DEBUG/INFO/WARN/ERROR/FATAL/DISABLED", log_level, config.app_name), None),
     };
 
     let env_filter = EnvFilter::new(filter_directive);

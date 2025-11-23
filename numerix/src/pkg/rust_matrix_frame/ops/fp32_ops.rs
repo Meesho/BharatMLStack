@@ -1,6 +1,7 @@
 use super::VectorOps;
 use crate::pkg::rust_matrix_frame::error::Mat2DError;
 use crate::pkg::rust_matrix_frame::vector::Vector;
+use crate::pkg::rust_matrix_frame::error::InvalidOperation;
 
 pub struct F32Ops;
 
@@ -60,7 +61,9 @@ impl VectorOps for F32Ops {
     ) -> Result<Vector<Self::Scalar>, Mat2DError> {
         for i in 0..left.len() {
             if right[i] == 0.0 {
-                return Err(Mat2DError::InvalidOperation("Division by zero".to_string()));
+                return Err(Mat2DError::InvalidOperation(
+                    InvalidOperation::DivisionByZero,
+                ));
             }
         }
 
@@ -168,7 +171,7 @@ impl VectorOps for F32Ops {
         for i in 0..left.len() {
             if left[i] != 0.0 && left[i] != 1.0 || right[i] != 0.0 && right[i] != 1.0 {
                 return Err(Mat2DError::InvalidOperation(
-                    "AND operation requires boolean values (0.0 or 1.0)".to_string(),
+                    InvalidOperation::AndRequiresBoolean,
                 ));
             }
             result[i] = if left[i] != 0.0 && right[i] != 0.0 {
@@ -189,7 +192,7 @@ impl VectorOps for F32Ops {
         for i in 0..left.len() {
             if left[i] != 0.0 && left[i] != 1.0 || right[i] != 0.0 && right[i] != 1.0 {
                 return Err(Mat2DError::InvalidOperation(
-                    "OR operation requires boolean values (0.0 or 1.0)".to_string(),
+                    InvalidOperation::OrRequiresBoolean,
                 ));
             }
             result[i] = if left[i] != 0.0 || right[i] != 0.0 {
@@ -205,7 +208,7 @@ impl VectorOps for F32Ops {
         for i in 0..vec.len() {
             if vec[i] <= 0.0 {
                 return Err(Mat2DError::InvalidOperation(
-                    "Cannot take logarithm of non-positive number".to_string(),
+                    InvalidOperation::LogNonPositive,
                 ));
             }
         }
@@ -250,7 +253,7 @@ impl VectorOps for F32Ops {
     ) -> Result<Vector<Self::Scalar>, Mat2DError> {
         if p == q {
             return Err(Mat2DError::InvalidOperation(
-                "p = q => Divided by 0".to_string(),
+                InvalidOperation::PEqualsQDivByZero,
             ));
         }
         if vec.len() == 1 {
@@ -277,7 +280,7 @@ impl VectorOps for F32Ops {
     fn percentile_rank(vec: &Vector<Self::Scalar>) -> Result<Vector<Self::Scalar>, Mat2DError> {
         if vec.is_empty() {
             return Err(Mat2DError::InvalidOperation(
-                "Vector length cannot be 0 or less".to_string(),
+                InvalidOperation::VectorLengthZeroOrLess,
             ));
         }
         let mut result = Self::zeros(vec.len());

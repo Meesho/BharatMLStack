@@ -18,7 +18,6 @@ pub async fn init_config() {
         .set("/expression-config".to_string())
         .is_err()
     {
-        // Already initialized; safe to continue (common in test re-runs)
         logger::error("EXPRESSION_CONFIG_ETCD_PATH was already initialized", None);
     }
 

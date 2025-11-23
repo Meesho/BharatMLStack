@@ -8,11 +8,36 @@ use std::time::Duration;
 
 static STATSD_CLIENT: OnceLock<Arc<dyn MetricClient + Send + Sync>> = OnceLock::new();
 
-static SAMPLING_RATE: OnceLock<f64> = OnceLock::new();
+use std::cell::RefCell;
+
+static METRIC_SAMPLING_RATE: OnceLock<f64> = OnceLock::new();
+thread_local! {
+    static RNG: RefCell<fastrand::Rng> = RefCell::new(fastrand::Rng::new());
+}
+
+#[inline]
+fn should_send_metric() -> bool {
+    let sampling_rate = *METRIC_SAMPLING_RATE.get().unwrap_or(&1.0);
+    if sampling_rate >= 1.0 {
+        return true;
+    }
+
+    if sampling_rate <= 0.0 {
+        return false;
+    }
+
+    RNG.with(|rng_cell| {
+        let mut rng = rng_cell.borrow_mut();
+        rng.f64() < sampling_rate
+    })
+}
 
 pub fn init_config() {
     let config = get_config();
-    let _ = SAMPLING_RATE.set(config.metric_sampling_rate);
+    let res = METRIC_SAMPLING_RATE.set(config.metric_sampling_rate);
+    if res.is_err() {
+        logger::fatal("Failed to set metric sampling rate", None);
+    }
     let host = (
         config.telegraf_udp_host.clone(),
         config.telegraf_udp_port as u16,
@@ -51,15 +76,17 @@ pub fn init_config() {
     ));
 
     logger::info(format!(
-        "Metrics client initialized with telegraf address = {}:{}, global tags = {:?}, and sampling rate = {}",
-        config.telegraf_udp_host,
-        config.telegraf_udp_port,
+        "Metrics client initialized with telegraf address = {}, global tags = {:?}, and sampling rate = {}",
+        format!("{}:{}", config.telegraf_udp_host, config.telegraf_udp_port),
         vec![("env", app_env), ("service", app_name)],
         config.metric_sampling_rate));
 }
 
 pub fn timing(name: &str, value: Duration, tags: &[(&str, &str)]) {
-    let rate = SAMPLING_RATE.get().unwrap();
+    let rate = METRIC_SAMPLING_RATE.get().unwrap();
+    if !should_send_metric() {
+        return;
+    }
     let client = STATSD_CLIENT.get().unwrap();
 
     let mut metric = client.time_with_tags(name, value * 1000);
@@ -70,7 +97,10 @@ pub fn timing(name: &str, value: Duration, tags: &[(&str, &str)]) {
 }
 
 pub fn count<'a>(name: &'a str, value: u64, tags: &'a [(&'a str, &'a str)]) {
-    let rate = SAMPLING_RATE.get().unwrap();
+    let rate = METRIC_SAMPLING_RATE.get().unwrap();
+    if !should_send_metric() {
+        return;
+    }
     let client = STATSD_CLIENT.get().unwrap();
 
     let mut metric = client.count_with_tags(name, value);
@@ -81,7 +111,10 @@ pub fn count<'a>(name: &'a str, value: u64, tags: &'a [(&'a str, &'a str)]) {
 }
 
 pub fn gauge(name: &str, value: f64, tags: &[(&str, &str)]) {
-    let rate = SAMPLING_RATE.get().unwrap();
+    let rate = METRIC_SAMPLING_RATE.get().unwrap();
+    if !should_send_metric() {
+        return;
+    }
     let client = STATSD_CLIENT.get().unwrap();
 
     let mut metric = client.gauge_with_tags(name, value);

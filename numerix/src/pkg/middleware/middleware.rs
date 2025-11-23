@@ -53,7 +53,12 @@ where
         Box::pin(async move {
             let start = Instant::now();
             let method = req.method().clone();
-
+            let metadata = req.headers().clone();
+            let caller_id = metadata
+            .get("NUMERIX-CALLER-ID")
+            .and_then(|v| v.to_str().ok())     
+            .unwrap_or("unknown-caller")       
+            .to_string();
             let response = inner.call(req).await;
 
             let status_code = match &response {
@@ -77,15 +82,15 @@ where
                 }
             };
 
-            telemetry_middleware(method.as_str(), duration, status_code);
+            telemetry_middleware(method.as_str(), duration, status_code, caller_id);
 
             Ok(response)
         })
     }
 }
 
-fn telemetry_middleware(method: &str, duration: Duration, status_code: StatusCode) {
-    let tags = vec![("api", method), ("status", status_code.as_str())];
+fn telemetry_middleware(method: &str, duration: Duration, status_code: StatusCode, caller_id: String) {
+    let tags = vec![("api", method), ("status", status_code.as_str()), ("caller_id", caller_id.as_str())];
 
     metrics::timing("router.api.request.latency", duration, &tags);
     metrics::count("router.api.request.total", 1, &tags);

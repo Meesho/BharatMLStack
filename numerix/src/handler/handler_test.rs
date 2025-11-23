@@ -69,16 +69,16 @@ mod tests {
         let service = MyNumerixService;
 
         let request = create_test_request(
-            vec!["a".to_string(), "b".to_string()],
+            vec!["id".to_string(), "a".to_string(), "b".to_string()],
             vec![
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                        values: vec!["1.0".to_string(), "2.0".to_string()],
+                        values: vec!["1".to_string(), "1.0".to_string(), "2.0".to_string()],
                     })),
                 },
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                        values: vec!["3.0".to_string(), "4.0".to_string()],
+                        values: vec!["1".to_string(), "3.0".to_string(), "4.0".to_string()],
                     })),
                 },
             ],
@@ -91,19 +91,19 @@ mod tests {
         let response_check = NumerixResponseProto {
             response: Some(numerix_response_proto::Response::ComputationScoreData(
                 ComputationScoreData {
-                    schema: vec!["a".to_string(), "score".to_string()], // The original first column plus "score" column
+                    schema: vec!["id".to_string(), "score".to_string()], // The original first column plus "score" column
                     computation_scores: vec![
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["3".to_string()], // The computed result as a string
+                                    values: vec!["1".to_string(), "3.0".to_string()], // The computed result as a string
                                 },
                             )),
                         },
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["7".to_string()], // The computed result as a string
+                                    values: vec!["1".to_string(), "7.0".to_string()], // The computed result as a string
                                 },
                             )),
                         },
@@ -123,6 +123,7 @@ mod tests {
     async fn test_valid_compute_request_with_byte_data() {
         setup().await;
         let service = MyNumerixService;
+        let id: u64 = 1;
         let num1: f64 = 1.0;
         let num2: f64 = 2.0;
         let num3: f64 = 3.0;
@@ -130,16 +131,16 @@ mod tests {
         let num5: f64 = 3.0;
         let num6: f64 = 7.0;
         let request = create_test_request(
-            vec!["a".to_string(), "b".to_string()],
+            vec!["id".to_string(), "a".to_string(), "b".to_string()],
             vec![
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                        values: vec![num2.to_le_bytes().to_vec(), num1.to_le_bytes().to_vec()], // Representing 1.0 and 2.0 as bytes
+                        values: vec![id.to_le_bytes().to_vec(), num2.to_le_bytes().to_vec(), num1.to_le_bytes().to_vec()], // Representing 1.0 and 2.0 as bytes
                     })),
                 },
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                        values: vec![num4.to_le_bytes().to_vec(), num3.to_le_bytes().to_vec()], // Representing 3.0 and 4.0 as bytes
+                        values: vec![id.to_le_bytes().to_vec(), num4.to_le_bytes().to_vec(), num3.to_le_bytes().to_vec()], // Representing 3.0 and 4.0 as bytes
                     })),
                 },
             ],
@@ -152,16 +153,16 @@ mod tests {
         let response_check = NumerixResponseProto {
             response: Some(numerix_response_proto::Response::ComputationScoreData(
                 ComputationScoreData {
-                    schema: vec!["a".to_string(), "score".to_string()],
+                    schema: vec!["id".to_string(), "score".to_string()],
                     computation_scores: vec![
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                                values: vec![num5.to_le_bytes().to_vec()], // Representing 3.0 as bytes
+                                values: vec![id.to_le_bytes().to_vec(), num5.to_le_bytes().to_vec()], // Representing 3.0 as bytes
                             })),
                         },
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                                values: vec![num6.to_le_bytes().to_vec()], // Representing 7.0 as bytes
+                                values: vec![id.to_le_bytes().to_vec(), num6.to_le_bytes().to_vec()], // Representing 7.0 as bytes
                             })),
                         },
                     ],
@@ -183,16 +184,16 @@ mod tests {
 
         // Create a request with f32 data type
         let request = create_test_request(
-            vec!["a".to_string(), "b".to_string()],
+            vec!["id".to_string(), "a".to_string(), "b".to_string()],
             vec![
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                        values: vec!["1.5".to_string(), "2.5".to_string()],
+                        values: vec!["1".to_string(), "1.5".to_string(), "2.5".to_string()],
                     })),
                 },
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                        values: vec!["3.5".to_string(), "4.5".to_string()],
+                        values: vec!["1".to_string(), "3.5".to_string(), "4.5".to_string()],
                     })),
                 },
             ],
@@ -207,19 +208,19 @@ mod tests {
         let response_check = NumerixResponseProto {
             response: Some(numerix_response_proto::Response::ComputationScoreData(
                 ComputationScoreData {
-                    schema: vec!["a".to_string(), "score".to_string()],
+                    schema: vec!["id".to_string(), "score".to_string()],
                     computation_scores: vec![
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["4".to_string()],
+                                    values: vec!["1".to_string(), "4.0".to_string()],
                                 },
                             )),
                         },
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["8".to_string()],
+                                    values: vec!["1".to_string(), "8.0".to_string()],
                                 },
                             )),
                         },
@@ -243,10 +244,10 @@ mod tests {
 
         // Create request with invalid compute_id
         let request = create_test_request(
-            vec!["a".to_string(), "b".to_string()],
+            vec!["id".to_string(), "a".to_string(), "b".to_string()],
             vec![Score {
                 matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                    values: vec!["1.0".to_string(), "2.0".to_string()],
+                    values: vec!["1".to_string(), "1.0".to_string(), "2.0".to_string()],
                 })),
             }],
             "invalid_compute_id".to_string(), // This ID doesn't exist in config
@@ -259,7 +260,7 @@ mod tests {
         // Expect an error response for invalid compute_id
         match response_inner.response {
             Some(numerix_response_proto::Response::Error(error)) => {
-                assert_eq!(error.message, "Expression not found");
+                assert_eq!(error.message, "No expression configured for compute_id: invalid_compute_id");
             }
             _ => panic!(
                 "Expected error response for invalid compute_id, got: {:?}",
@@ -284,7 +285,7 @@ mod tests {
         // Expect an error response for missing entity_score_data
         match response_inner.response {
             Some(numerix_response_proto::Response::Error(error)) => {
-                assert_eq!(error.message, "Missing entity_score_data");
+                assert_eq!(error.message, "Request validation failed: Missing entity_score_data");
             }
             _ => panic!(
                 "Expected error response for missing entity_score_data, got: {:?}",
@@ -303,7 +304,7 @@ mod tests {
             vec![], // Empty schema
             vec![Score {
                 matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                    values: vec!["1.0".to_string(), "2.0".to_string()],
+                    values: vec!["1".to_string(), "1.0".to_string(), "2.0".to_string()],
                 })),
             }],
             "1".to_string(),
@@ -316,7 +317,7 @@ mod tests {
         // Expect an error response for empty schema
         match response_inner.response {
             Some(numerix_response_proto::Response::Error(error)) => {
-                assert_eq!(error.message, "Empty schema");
+                assert_eq!(error.message, "Request validation failed: Empty schema");
             }
             _ => panic!(
                 "Expected error response for empty schema, got: {:?}",
@@ -332,7 +333,7 @@ mod tests {
 
         // Create a request with empty entity_scores
         let request = create_test_request(
-            vec!["a".to_string(), "b".to_string()],
+            vec!["id".to_string(), "a".to_string(), "b".to_string()],
             vec![], // Empty entity scores
             "1".to_string(),
             Some("f64".to_string()),
@@ -344,7 +345,7 @@ mod tests {
         // Expect an error response for empty entity_scores
         match response_inner.response {
             Some(numerix_response_proto::Response::Error(error)) => {
-                assert_eq!(error.message, "Empty entity_scores");
+                assert_eq!(error.message, "Request validation failed: Empty entity_scores");
             }
             _ => panic!(
                 "Expected error response for empty entity_scores, got: {:?}",
@@ -360,10 +361,10 @@ mod tests {
 
         // Create a request with empty compute_id
         let request = create_test_request(
-            vec!["a".to_string(), "b".to_string()],
+            vec!["id".to_string(), "a".to_string(), "b".to_string()],
             vec![Score {
                 matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                    values: vec!["1.0".to_string(), "2.0".to_string()],
+                    values: vec!["1".to_string(), "1.0".to_string(), "2.0".to_string()],
                 })),
             }],
             "".to_string(), // Empty compute_id
@@ -376,7 +377,7 @@ mod tests {
         // Expect an error response for empty compute_id
         match response_inner.response {
             Some(numerix_response_proto::Response::Error(error)) => {
-                assert_eq!(error.message, "Empty compute_id");
+                assert_eq!(error.message, "Request validation failed: Empty compute_id");
             }
             _ => panic!(
                 "Expected error response for empty compute_id, got: {:?}",
@@ -392,10 +393,10 @@ mod tests {
 
         // Create a request with invalid string data (not parsable as numbers)
         let request = create_test_request(
-            vec!["a".to_string(), "b".to_string()],
+            vec!["id".to_string(), "a".to_string(), "b".to_string()],
             vec![Score {
                 matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                    values: vec!["not_a_number".to_string(), "2.0".to_string()],
+                    values: vec!["1".to_string(), "not_a_number".to_string(), "2.0".to_string()],
                 })),
             }],
             "1".to_string(),
@@ -408,11 +409,12 @@ mod tests {
 
         // The computation should still proceed with default values for unparseable inputs
         match response_inner.response {
-            Some(numerix_response_proto::Response::ComputationScoreData(_)) => {
+            Some(numerix_response_proto::Response::Error(error)) => {
+                assert_eq!(error.message, "Score conversion failed for request 'NumerixRequestProto { entity_score_data: Some(EntityScoreData { schema: [\"id\", \"a\", \"b\"], entity_scores: [Score { matrix_format: Some(StringData(StringList { values: [\"1\", \"not_a_number\", \"2.0\"] })) }], compute_id: \"1\", data_type: Some(\"f64\") }) }': Failed to parse string value 'not_a_number' with error: ParseFloatError { kind: Invalid }");
                 // Test passes if we got computation data instead of an error
             }
             _ => panic!(
-                "Expected computation data with default values, got: {:?}",
+                "Expected error response, got: {:?}",
                 response_inner
             ),
         }
@@ -434,7 +436,7 @@ mod tests {
         }
 
         let request = create_test_request(
-            vec!["a".to_string(), "b".to_string()],
+            vec!["id".to_string(), "a".to_string(), "b".to_string()],
             scores,
             "1".to_string(),
             Some("f64".to_string()),
@@ -463,16 +465,16 @@ mod tests {
 
         // Create a request without specifying data_type (should default to f64)
         let request = create_test_request(
-            vec!["a".to_string(), "b".to_string()],
+            vec!["id".to_string(), "a".to_string(), "b".to_string()],
             vec![
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                        values: vec!["1.0".to_string(), "2.0".to_string()],
+                        values: vec!["1".to_string(), "1.0".to_string(), "2.0".to_string()],
                     })),
                 },
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                        values: vec!["3.0".to_string(), "4.0".to_string()],
+                        values: vec!["1".to_string(), "3.0".to_string(), "4.0".to_string()],
                     })),
                 },
             ],
@@ -487,19 +489,19 @@ mod tests {
         let response_check = NumerixResponseProto {
             response: Some(numerix_response_proto::Response::ComputationScoreData(
                 ComputationScoreData {
-                    schema: vec!["a".to_string(), "score".to_string()],
+                    schema: vec!["id".to_string(), "score".to_string()],
                     computation_scores: vec![
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["3".to_string()],
+                                    values: vec!["1".to_string(), "3.0".to_string()],
                                 },
                             )),
                         },
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["7".to_string()],
+                                    values: vec!["1".to_string(), "7.0".to_string()],
                                 },
                             )),
                         },
@@ -521,16 +523,16 @@ mod tests {
 
         // Create a request with negative values
         let request = create_test_request(
-            vec!["a".to_string(), "b".to_string()],
+            vec!["id".to_string(), "a".to_string(), "b".to_string()],
             vec![
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                        values: vec!["-1.0".to_string(), "-2.0".to_string()],
+                        values: vec!["1".to_string(), "-1.0".to_string(), "-2.0".to_string()],
                     })),
                 },
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                        values: vec!["-3.0".to_string(), "-4.0".to_string()],
+                        values: vec!["1".to_string(), "-3.0".to_string(), "-4.0".to_string()],
                     })),
                 },
             ],
@@ -545,19 +547,19 @@ mod tests {
         let response_check = NumerixResponseProto {
             response: Some(numerix_response_proto::Response::ComputationScoreData(
                 ComputationScoreData {
-                    schema: vec!["a".to_string(), "score".to_string()],
+                    schema: vec!["id".to_string(), "score".to_string()],
                     computation_scores: vec![
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["-3".to_string()],
+                                    values: vec!["1".to_string(), "-3.0".to_string()],
                                 },
                             )),
                         },
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::StringData(
                                 StringList {
-                                    values: vec!["-7".to_string()],
+                                    values: vec!["1".to_string(), "-7.0".to_string()],
                                 },
                             )),
                         },
@@ -579,7 +581,7 @@ mod tests {
 
         // Create a request with a score that has no matrix_format specified
         let request = create_test_request(
-            vec!["a".to_string(), "b".to_string()],
+            vec!["id".to_string(), "a".to_string(), "b".to_string()],
             vec![Score {
                 matrix_format: None, // No matrix format specified
             }],
@@ -612,10 +614,10 @@ mod tests {
 
         // Create a request where schema length doesn't match values length
         let request = create_test_request(
-            vec!["a".to_string(), "b".to_string(), "c".to_string()], // 3 columns in schema
+            vec!["id".to_string(), "a".to_string(), "b".to_string(), "c".to_string()], // 3 columns in schema
             vec![Score {
                 matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                    values: vec!["1.0".to_string(), "2.0".to_string()], // But only 2 values provided
+                    values: vec!["1".to_string(), "1.0".to_string(), "2.0".to_string()], // But only 2 values provided
                 })),
             }],
             "1".to_string(),
@@ -646,21 +648,22 @@ mod tests {
         let service = MyNumerixService;
 
         // Get byte representation of some f64 values
+        let id: u64 = 1;
         let num1: f64 = 1.0;
         let num2: f64 = 2.0;
 
         // Create a request with mixed string and byte data types
         let request = create_test_request(
-            vec!["a".to_string(), "b".to_string()],
+            vec!["id".to_string(), "a".to_string(), "b".to_string()],
             vec![
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                        values: vec!["1.0".to_string(), "2.0".to_string()],
+                        values: vec!["1".to_string(), "1.0".to_string(), "2.0".to_string()],
                     })),
                 },
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                        values: vec![num1.to_le_bytes().to_vec(), num2.to_le_bytes().to_vec()],
+                        values: vec![id.to_le_bytes().to_vec(), num1.to_le_bytes().to_vec(), num2.to_le_bytes().to_vec()],
                     })),
                 },
             ],
