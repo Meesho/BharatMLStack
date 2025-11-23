@@ -135,12 +135,20 @@ mod tests {
             vec![
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                        values: vec![id.to_le_bytes().to_vec(), num2.to_le_bytes().to_vec(), num1.to_le_bytes().to_vec()], // Representing 1.0 and 2.0 as bytes
+                        values: vec![
+                            id.to_le_bytes().to_vec(),
+                            num2.to_le_bytes().to_vec(),
+                            num1.to_le_bytes().to_vec(),
+                        ], // Representing 1.0 and 2.0 as bytes
                     })),
                 },
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                        values: vec![id.to_le_bytes().to_vec(), num4.to_le_bytes().to_vec(), num3.to_le_bytes().to_vec()], // Representing 3.0 and 4.0 as bytes
+                        values: vec![
+                            id.to_le_bytes().to_vec(),
+                            num4.to_le_bytes().to_vec(),
+                            num3.to_le_bytes().to_vec(),
+                        ], // Representing 3.0 and 4.0 as bytes
                     })),
                 },
             ],
@@ -157,12 +165,18 @@ mod tests {
                     computation_scores: vec![
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                                values: vec![id.to_le_bytes().to_vec(), num5.to_le_bytes().to_vec()], // Representing 3.0 as bytes
+                                values: vec![
+                                    id.to_le_bytes().to_vec(),
+                                    num5.to_le_bytes().to_vec(),
+                                ], // Representing 3.0 as bytes
                             })),
                         },
                         Score {
                             matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                                values: vec![id.to_le_bytes().to_vec(), num6.to_le_bytes().to_vec()], // Representing 7.0 as bytes
+                                values: vec![
+                                    id.to_le_bytes().to_vec(),
+                                    num6.to_le_bytes().to_vec(),
+                                ], // Representing 7.0 as bytes
                             })),
                         },
                     ],
@@ -260,7 +274,10 @@ mod tests {
         // Expect an error response for invalid compute_id
         match response_inner.response {
             Some(numerix_response_proto::Response::Error(error)) => {
-                assert_eq!(error.message, "No expression configured for compute_id: invalid_compute_id");
+                assert_eq!(
+                    error.message,
+                    "No expression configured for compute_id: invalid_compute_id"
+                );
             }
             _ => panic!(
                 "Expected error response for invalid compute_id, got: {:?}",
@@ -285,7 +302,10 @@ mod tests {
         // Expect an error response for missing entity_score_data
         match response_inner.response {
             Some(numerix_response_proto::Response::Error(error)) => {
-                assert_eq!(error.message, "Request validation failed: Missing entity_score_data");
+                assert_eq!(
+                    error.message,
+                    "Request validation failed: Missing entity_score_data"
+                );
             }
             _ => panic!(
                 "Expected error response for missing entity_score_data, got: {:?}",
@@ -345,7 +365,10 @@ mod tests {
         // Expect an error response for empty entity_scores
         match response_inner.response {
             Some(numerix_response_proto::Response::Error(error)) => {
-                assert_eq!(error.message, "Request validation failed: Empty entity_scores");
+                assert_eq!(
+                    error.message,
+                    "Request validation failed: Empty entity_scores"
+                );
             }
             _ => panic!(
                 "Expected error response for empty entity_scores, got: {:?}",
@@ -396,7 +419,11 @@ mod tests {
             vec!["id".to_string(), "a".to_string(), "b".to_string()],
             vec![Score {
                 matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                    values: vec!["1".to_string(), "not_a_number".to_string(), "2.0".to_string()],
+                    values: vec![
+                        "1".to_string(),
+                        "not_a_number".to_string(),
+                        "2.0".to_string(),
+                    ],
                 })),
             }],
             "1".to_string(),
@@ -413,10 +440,7 @@ mod tests {
                 assert_eq!(error.message, "Score conversion failed for request 'NumerixRequestProto { entity_score_data: Some(EntityScoreData { schema: [\"id\", \"a\", \"b\"], entity_scores: [Score { matrix_format: Some(StringData(StringList { values: [\"1\", \"not_a_number\", \"2.0\"] })) }], compute_id: \"1\", data_type: Some(\"f64\") }) }': Failed to parse string value 'not_a_number' with error: ParseFloatError { kind: Invalid }");
                 // Test passes if we got computation data instead of an error
             }
-            _ => panic!(
-                "Expected error response, got: {:?}",
-                response_inner
-            ),
+            _ => panic!("Expected error response, got: {:?}", response_inner),
         }
     }
 
@@ -614,7 +638,12 @@ mod tests {
 
         // Create a request where schema length doesn't match values length
         let request = create_test_request(
-            vec!["id".to_string(), "a".to_string(), "b".to_string(), "c".to_string()], // 3 columns in schema
+            vec![
+                "id".to_string(),
+                "a".to_string(),
+                "b".to_string(),
+                "c".to_string(),
+            ], // 3 columns in schema
             vec![Score {
                 matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
                     values: vec!["1".to_string(), "1.0".to_string(), "2.0".to_string()], // But only 2 values provided
@@ -663,7 +692,11 @@ mod tests {
                 },
                 Score {
                     matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                        values: vec![id.to_le_bytes().to_vec(), num1.to_le_bytes().to_vec(), num2.to_le_bytes().to_vec()],
+                        values: vec![
+                            id.to_le_bytes().to_vec(),
+                            num1.to_le_bytes().to_vec(),
+                            num2.to_le_bytes().to_vec(),
+                        ],
                     })),
                 },
             ],
