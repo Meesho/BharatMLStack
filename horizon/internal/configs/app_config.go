@@ -96,9 +96,11 @@ type Configs struct {
 	PricingFeatureRetrievalGrpcPlainText       bool   `mapstructure:"pricing_feature_retrieval_grpc_plain_text"`
 	PricingFeatureRetrievalTimeoutMs           string `mapstructure:"pricing_feature_retrieval_timeout_in_ms"`
 
-	OnlineFeatureStoreAppName  string `mapstructure:"online_feature_store_app_name"`
-	ScyllaActiveConfIds        string `mapstructure:"scylla_active_conf_ids"`
-	RedisFailoverActiveConfIds string `mapstructure:"redis_failover_active_conf_ids"`
+	OnlineFeatureStoreAppName     string `mapstructure:"online_feature_store_app_name"`
+	ScyllaActiveConfIds           string `mapstructure:"scylla_active_conf_ids"`
+	RedisFailoverActiveConfIds    string `mapstructure:"redis_failover_active_conf_ids"`
+	DistributedCacheActiveConfIds string `mapstructure:"distributed_cache_active_conf_ids"`
+	InMemoryCacheActiveConfIds    string `mapstructure:"in_memory_cache_active_conf_ids"`
 
 	IsMeeshoEnabled bool `mapstructure:"is_meesho_enabled"`
 }
