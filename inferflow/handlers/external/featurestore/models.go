@@ -9,11 +9,11 @@ const (
 )
 
 type FSConfig struct {
-	Host        string `koanf:"fsHost"`
-	Port        string `koanf:"fsPort"`
-	CallerId    string `koanf:"fsCallerId"`
-	CallerToken string `koanf:"fsCallerToken"`
-	DeadLine    int    `koanf:"fsdeadLine"`
-	BatchSize   int    `koanf:"fsBatchSize"`
-	PLAIN_TEXT  bool   `koanf:"fsGrpcPlainText"`
+	Host        string `json:"fsHost"`
+	Port        string `json:"fsPort"`
+	CallerId    string `json:"fsCallerId"`
+	CallerToken string `json:"fsCallerToken"`
+	DeadLine    int    `json:"fsdeadLine"`
+	BatchSize   int    `json:"fsBatchSize"`
+	PLAIN_TEXT  bool   `json:"fsGrpcPlainText"`
 }

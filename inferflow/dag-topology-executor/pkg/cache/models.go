@@ -7,8 +7,8 @@ import (
 )
 
 type RistrettoConfig struct {
-	Ttl  int64 `koanf:"ttlSec"`    // Expiration time in seconds
-	Size int64 `koanf:"cacheSize"` // Maximum number of items to be cached
+	Ttl  int64 `json:"ttlSec"`    // Expiration time in seconds
+	Size int64 `json:"cacheSize"` // Maximum number of items to be cached
 }
 
 type Cache struct {
