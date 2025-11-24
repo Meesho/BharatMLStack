@@ -9,7 +9,7 @@ ENV CGO_ENABLED=0 \
 
 WORKDIR /app
 
-# Copy helix-client module first (needed for local replace directive)
+# Copy helix-client module first (needed for replace directive)
 COPY helix-client/ ./helix-client/
 
 # Copy horizon module files
