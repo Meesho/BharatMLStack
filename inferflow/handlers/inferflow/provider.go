@@ -1,12 +1,14 @@
+//go:build !meesho
+
 package inferflow
 
 import (
 	"sync"
 
+	"github.com/Meesho/BharatMLStack/inferflow/dag-topology-executor/handlers/dag"
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/components"
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/config"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/utils"
-	"github.com/Meesho/dag-topology-executor/handlers/dag"
 )
 
 const featureInitComponent = "feature_initializer"
@@ -38,16 +40,6 @@ func (cp *ComponentProviderHandler) RegisterComponent(request interface{}) {
 					if fCompMap.Size() > 0 {
 						for _, k := range fCompMap.Keys() {
 							cp.componentMap[k.(string)] = &components.FeatureComponent{
-								ComponentName: k.(string),
-							}
-						}
-					}
-
-					// populate real time pricing feature component
-					realTimePricingFeatureCompMap := componentConfig.RealTimePricingFeatureComponentConfig
-					if !utils.IsNilOrEmpty(realTimePricingFeatureCompMap) {
-						for _, k := range realTimePricingFeatureCompMap.Keys() {
-							cp.componentMap[k.(string)] = &components.RealTimePricingFeatureComponent{
 								ComponentName: k.(string),
 							}
 						}
