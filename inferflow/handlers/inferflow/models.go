@@ -1,6 +1,6 @@
 package inferflow
 
-import pb "github.com/Meesho/BharatMLStack/inferflow/client/grpc"
+import pb "github.com/Meesho/BharatMLStack/inferflow/server/grpc"
 
 type InferflowRequest struct {
 	Entity        *[]string

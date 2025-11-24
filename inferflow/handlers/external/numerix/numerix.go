@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/helix-clients/pkg/clients/numerix"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/configs"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/logger"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/metrics"
-	"github.com/Meesho/helix-clients/pkg/clients/numerix"
 )
 
 const (

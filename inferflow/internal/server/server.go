@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"os"
 
-	pb "github.com/Meesho/BharatMLStack/inferflow/client/grpc"
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/inferflow"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/configs"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/logger"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/middleware"
+	pb "github.com/Meesho/BharatMLStack/inferflow/server/grpc"
 	"github.com/cockroachdb/cmux"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"

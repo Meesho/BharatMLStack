@@ -1,3 +1,5 @@
+//go:build !meesho
+
 package middleware
 
 import (
@@ -19,20 +21,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const (
-	HEADER_MEESHO_USER_ID      = "meesho-user-id"
-	HEADER_MEESHO_USER_CONTEXT = "meesho-user-context"
-)
-
 var (
 	reqHeadersToLog *set.ThreadSafeSet
 )
 
 func InitGRPCMiddleware() {
-	reqHeadersToLog = set.NewThreadSafeSet(
-		"MEESHO-USER-ID", HEADER_MEESHO_USER_ID,
-		"MEESHO-USER-CONTEXT", HEADER_MEESHO_USER_CONTEXT,
-	)
+	reqHeadersToLog = set.NewThreadSafeSet()
 }
 
 func WrappedGRPCMiddleware(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo,
@@ -95,10 +89,7 @@ func RecoveryInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryS
 }
 
 func authorize(md metadata.MD) error {
-	_, ok := md[HEADER_MEESHO_USER_ID]
-	if !ok {
-		return status.Errorf(codes.InvalidArgument, "Missing user-id in header")
-	}
+	// Add authorization logic here if needed
 	return nil
 }
 

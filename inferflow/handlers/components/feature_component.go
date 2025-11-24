@@ -9,8 +9,8 @@ import (
 
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/models"
 
+	"github.com/Meesho/BharatMLStack/inferflow/pkg/datatypeconverter/typeconverter"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/matrix"
-	"github.com/Meesho/go-core/datatypeconverter/typeconverter"
 	"github.com/rs/zerolog/log"
 
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/config"

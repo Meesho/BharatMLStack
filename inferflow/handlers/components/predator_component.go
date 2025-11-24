@@ -9,9 +9,9 @@ import (
 
 	extPredator "github.com/Meesho/BharatMLStack/inferflow/handlers/external/predator"
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/models"
+	"github.com/Meesho/BharatMLStack/inferflow/pkg/datatypeconverter/typeconverter"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/matrix"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/utils"
-	"github.com/Meesho/go-core/datatypeconverter/typeconverter"
 	"github.com/Meesho/helix-clients/pkg/clients/predator"
 
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/config"

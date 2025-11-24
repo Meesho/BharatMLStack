@@ -7,8 +7,8 @@ import (
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/models"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/matrix"
 
+	"github.com/Meesho/BharatMLStack/helix-clients/pkg/clients/numerix"
 	extNumerix "github.com/Meesho/BharatMLStack/inferflow/handlers/external/numerix"
-	"github.com/Meesho/helix-clients/pkg/clients/numerix"
 
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/config"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/logger"

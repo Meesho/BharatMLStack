@@ -4,7 +4,6 @@ go 1.22.0
 
 require (
 	github.com/DataDog/datadog-go/v5 v5.5.0
-	github.com/Meesho/dag-topology-executor v1.0.9
 	github.com/Meesho/go-core v1.30.4-fp32tofp16fmt
 	github.com/Meesho/helix-clients v0.8.0
 	github.com/Meesho/price-aggregator-go/pricingfeatureretrieval/client v0.0.8
