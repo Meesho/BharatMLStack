@@ -53,6 +53,8 @@ func InitV1ConfigHandler() Config {
 		once.Do(func() {
 			scyllaActiveConfIdsStr := onlinefeaturestore.ScyllaActiveConfIdsStr
 			redisFailoverActiveConfIdsStr := onlinefeaturestore.RedisFailoverActiveConfIdsStr
+			distributedCacheActiveConfIdsStr := onlinefeaturestore.DistributedCacheActiveConfIdsStr
+			inMemoryCacheActiveConfIdsStr := onlinefeaturestore.InMemoryCacheActiveConfIdsStr
 			if scyllaActiveConfIdsStr == "" {
 				return
 			}

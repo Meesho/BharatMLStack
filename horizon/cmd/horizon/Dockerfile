@@ -9,19 +9,27 @@ ENV CGO_ENABLED=0 \
 
 WORKDIR /app
 
-COPY go.mod go.sum ./
+# Copy helix-client (maintains repo structure)
+COPY helix-client/ ./helix-client/
+
+# Copy horizon directory (maintains repo structure so replace directive works)
+COPY horizon/ ./horizon/
+
+# Set working directory to horizon for the build
+WORKDIR /app/horizon
+
+# Download dependencies
 RUN go mod download
 
-COPY . .
-RUN go build -o horizon ./cmd/horizon/main.go
+# Build the binary to a different location to avoid conflict with /app/horizon/ directory
+RUN go build -o /app/horizon-binary ./cmd/horizon/main.go
 
 # Stage 2: Minimal distroless runtime
 FROM gcr.io/distroless/static:nonroot
 
 WORKDIR /
 
-COPY --from=builder /app/horizon .
+COPY --from=builder /app/horizon-binary /horizon
 
 EXPOSE 8082
-
 ENTRYPOINT ["/horizon"]
