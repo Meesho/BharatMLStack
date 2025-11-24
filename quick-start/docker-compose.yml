@@ -324,12 +324,10 @@ services:
       - "8082:8082"
     environment:
       - APP_NAME=horizon
-      - APP_ENVIRONMENT=PROD
-      - APP_ENV=production
+      - APP_ENV=PROD
       - APP_PORT=8082
       - APP_LOG_LEVEL=DEBUG
       - APP_METRIC_SAMPLING_RATE=1
-      - APP_GC_PERCENTAGE=1
       - MYSQL_MASTER_MAX_POOL_SIZE=5
       - MYSQL_MASTER_MIN_POOL_SIZE=2
       - MYSQL_MASTER_PASSWORD=root
@@ -355,6 +353,11 @@ services:
       - SCYLLA_1_PASSWORD=
       - SCYLLA_1_USERNAME=
       - SCYLLA_ACTIVE_CONFIG_IDS=1
+      - DISTRIBUTED_CACHE_ACTIVE_CONFIG_IDS=2
+      - IN_MEMORY_CACHE_ACTIVE_CONFIG_IDS=3
+      - HORIZON_APP_NAME=horizon
+      - NUMERIX_APP_NAME=numerix
+      - INFERFLOW_APP_NAME=inferflow
     networks:
       - onfs-network
     depends_on:

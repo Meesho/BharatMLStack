@@ -7,11 +7,13 @@ import (
 )
 
 var (
-	initOnlineFeatureStoreOnce    sync.Once
-	ScyllaActiveConfIdsStr        string
-	RedisFailoverActiveConfIdsStr string
-	OnlineFeatureStoreAppName     string
-	AppEnv                        string
+	initOnlineFeatureStoreOnce       sync.Once
+	ScyllaActiveConfIdsStr           string
+	RedisFailoverActiveConfIdsStr    string
+	OnlineFeatureStoreAppName        string
+	DistributedCacheActiveConfIdsStr string
+	InMemoryCacheActiveConfIdsStr    string
+	AppEnv                           string
 )
 
 func Init(config configs.Configs) {
@@ -19,6 +21,8 @@ func Init(config configs.Configs) {
 		ScyllaActiveConfIdsStr = config.ScyllaActiveConfIds
 		RedisFailoverActiveConfIdsStr = config.RedisFailoverActiveConfIds
 		OnlineFeatureStoreAppName = config.OnlineFeatureStoreAppName
+		DistributedCacheActiveConfIdsStr = config.DistributedCacheActiveConfIds
+		InMemoryCacheActiveConfIdsStr = config.InMemoryCacheActiveConfIds
 		AppEnv = config.AppEnv
 	})
 }
