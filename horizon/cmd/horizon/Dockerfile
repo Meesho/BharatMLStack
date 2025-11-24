@@ -13,10 +13,10 @@ WORKDIR /app
 COPY helix-client /helix-client
 
 # Copy horizon module files
-COPY horizon/go.mod horizon/go.sum ./
+COPY go.mod go.sum ./
 RUN go mod download
 
-COPY horizon/ ./
+COPY . .
 RUN go build -o horizon ./cmd/horizon/main.go
 
 # Stage 2: Minimal distroless runtime
