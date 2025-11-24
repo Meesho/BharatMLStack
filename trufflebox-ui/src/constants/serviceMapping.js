@@ -20,14 +20,16 @@ export const MENU_PERMISSION_MAP = {
   'ModelApproval': { service: SERVICES.PREDATOR, screenType: 'model-approval' },
   
   // Embedding Platform service mappings
-  'StoreDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'store-discovery' },
+  // Note: StoreDiscovery, StoreRegistry, and EntityRegistry also exist in Online Feature Store
+  // They only require permission check when under EmbeddingPlatform parent
+  'StoreDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'store-discovery', requiredParentKey: 'EmbeddingPlatform' },
   'EntityDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'entity-discovery' },
   'ModelDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'model-discovery' },
   'VariantDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'variant-discovery' },
   'FilterDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'filter-discovery' },
   'JobFrequencyDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'job-frequency-discovery' },
-  'StoreRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'store-registry' },
-  'EntityRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'entity-registry' },
+  'StoreRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'store-registry', requiredParentKey: 'EmbeddingPlatform' },
+  'EntityRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'entity-registry', requiredParentKey: 'EmbeddingPlatform' },
   'ModelRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'model-registry' },
   'VariantRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'variant-registry' },
   'FilterRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'filter-registry' },
@@ -43,12 +45,42 @@ export const MENU_PERMISSION_MAP = {
   'OnboardVariantApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'onboard-variant-approval' },
 };
 
-export const requiresPermissionCheck = (menuKey) => {
-  return MENU_PERMISSION_MAP.hasOwnProperty(menuKey);
+export const requiresPermissionCheck = (menuKey, parentKey = null) => {
+  const permissionInfo = MENU_PERMISSION_MAP[menuKey];
+  
+  if (!permissionInfo) {
+    return false;
+  }
+  
+  // If the permission entry has a requiredParentKey, check if it matches
+  if (permissionInfo.requiredParentKey) {
+    return parentKey === permissionInfo.requiredParentKey;
+  }
+  
+  // No parent requirement, so permission check is required
+  return true;
 };
 
-export const getPermissionInfo = (menuKey) => {
-  return MENU_PERMISSION_MAP[menuKey] || null;
+export const getPermissionInfo = (menuKey, parentKey = null) => {
+  const permissionInfo = MENU_PERMISSION_MAP[menuKey];
+  
+  if (!permissionInfo) {
+    return null;
+  }
+  
+  // If the permission entry has a requiredParentKey, check if it matches
+  if (permissionInfo.requiredParentKey) {
+    if (parentKey === permissionInfo.requiredParentKey) {
+      // Return permission info without the requiredParentKey field
+      const { requiredParentKey, ...info } = permissionInfo;
+      return info;
+    }
+    return null;
+  }
+  
+  // No parent requirement, return the permission info
+  const { requiredParentKey, ...info } = permissionInfo;
+  return info;
 };
 
 export const PERMISSION_CONTROLLED_SERVICES = [
