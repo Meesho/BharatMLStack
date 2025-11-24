@@ -4,7 +4,6 @@ type Configs struct {
 	// App configuration
 	AppName               string  `mapstructure:"app_name"`
 	AppEnv                string  `mapstructure:"app_env"`
-	AppGcPercentage       int     `mapstructure:"app_gc_percentage"`
 	AppLogLevel           string  `mapstructure:"app_log_level"`
 	AppMetricSamplingRate float64 `mapstructure:"app_metric_sampling_rate"`
 	AppPort               int     `mapstructure:"app_port"`
@@ -56,8 +55,6 @@ type Configs struct {
 	DefaultGpuThreshold string `mapstructure:"default_gpu_threshold"`
 	DefaultModelPath    string `mapstructure:"default_model_path"`
 
-	FeatureGroupDataTypeMappingUrl string `mapstructure:"feature_group_data_type_mapping_url"`
-
 	GcsModelBucket   string `mapstructure:"gcs_model_bucket"`
 	GcsModelBasePath string `mapstructure:"gcs_model_base_path"`
 	GcsEnabled       bool   `mapstructure:"gcs_enabled"`
@@ -74,8 +71,6 @@ type Configs struct {
 	MaxPredatorInactiveAge  int `mapstructure:"max_predator_inactive_age"`
 
 	InferflowAppName string `mapstructure:"inferflow_app_name"`
-
-	OnlineFeatureMappingUrl string `mapstructure:"online_feature_mapping_url"`
 
 	PhoenixServerBaseUrl string `mapstructure:"phoenix_server_base_url"`
 
