@@ -48,15 +48,8 @@ type Configs struct {
 	VmselectBaseUrl      string `mapstructure:"vmselect_base_url"`
 	VmselectStartDaysAgo int    `mapstructure:"vmselect_start_days_ago"`
 
-	// Zookeeper configuration
-	ZookeeperBasePath string `mapstructure:"zookeeper_base_path"`
-	ZookeeperServer   string `mapstructure:"zookeeper_server"`
-	ZookeeperWatcher  string `mapstructure:"zookeeper_watcher"`
-
 	// Horizon configuration
 	HorizonAppName string `mapstructure:"horizon_app_name"`
-	HorizonPort    string `mapstructure:"horizon_port"`
-	HorizonServer  string `mapstructure:"horizon_server"`
 
 	// Other configurations
 	DefaultCpuThreshold string `mapstructure:"default_cpu_threshold"`

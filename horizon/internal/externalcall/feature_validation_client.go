@@ -1,15 +1,10 @@
 package externalcall
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
-	"time"
 
-	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
+	ofshandler "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/handler"
 )
 
 type FeatureValidationClient interface {
@@ -18,39 +13,18 @@ type FeatureValidationClient interface {
 }
 
 type featureValidationClientImpl struct {
-	HTTPClient *http.Client
-	BaseURL    string
+	ofsHandler ofshandler.Config
 }
 
 var (
-	Client                  FeatureValidationClient
-	horizonBaseURL          string
-	onlineFeatureMappingURL string
-	featureGroupDataTypeURL string
+	Client FeatureValidationClient
 )
 
-// InitFeatureValidationClient initializes the feature validation client with config-based URLs
-func InitFeatureValidationClient(config configs.Configs) {
-	// Build horizon base URL from config
-	if config.HorizonServer != "" {
-		if config.HorizonPort != "" && config.HorizonPort != "80" {
-			horizonBaseURL = fmt.Sprintf("http://%s:%s", config.HorizonServer, config.HorizonPort)
-		} else {
-			horizonBaseURL = fmt.Sprintf("http://%s", config.HorizonServer)
-		}
-	} else {
-		panic("horizon server is not set")
-	}
-
-	onlineFeatureMappingURL = config.OnlineFeatureMappingUrl
-	featureGroupDataTypeURL = config.FeatureGroupDataTypeMappingUrl
-
-	// Initialize the client directly
+// InitFeatureValidationClient initializes the feature validation client with local OFS handler
+func InitFeatureValidationClient() {
+	// Initialize the client to use local online feature store handler
 	Client = &featureValidationClientImpl{
-		HTTPClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		BaseURL: horizonBaseURL,
+		ofsHandler: ofshandler.InitV1ConfigHandler(),
 	}
 }
 
@@ -80,94 +54,81 @@ type OfflineValidationResponse struct {
 }
 
 func (f *featureValidationClientImpl) ValidateOnlineFeatures(entity string, token string) (*OnlineValidationResponse, error) {
-	// Use configured URL or fallback to default path
-	var url string
-	if featureGroupDataTypeURL != "" {
-		url = fmt.Sprintf("%s/%s?entity=%s", f.BaseURL, featureGroupDataTypeURL, entity)
-	} else {
-		url = fmt.Sprintf("%s/api/v1/orion/retrieve-feature-groups?entity=%s", f.BaseURL, entity)
-	}
-
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	// Call local online feature store handler directly
+	featureGroups, err := f.ofsHandler.RetrieveFeatureGroups(entity)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create online validation request: %w", err)
+		return nil, fmt.Errorf("failed to retrieve feature groups: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36")
-
-	resp, err := f.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to call online validation API: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read online validation response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("online validation API failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
+	// Convert the OFS response to the expected format
 	var response OnlineValidationResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal online validation response: %w", err)
+	for _, fg := range *featureGroups {
+		responseItem := struct {
+			EntityLabel       string `json:"entity-label"`
+			FeatureGroupLabel string `json:"feature-group-label"`
+			ID                int    `json:"id"`
+			ActiveVersion     string `json:"active-version"`
+			Features          map[string]struct {
+				Labels interface{} `json:"labels"`
+			} `json:"features"`
+			StoreID                 string `json:"store-id"`
+			DataType                string `json:"data-type"`
+			TTLInSeconds            int    `json:"ttl-in-seconds"`
+			TTLInEpoch              int    `json:"ttl-in-epoch"`
+			JobID                   string `json:"job-id"`
+			InMemoryCacheEnabled    bool   `json:"in-memory-cache-enabled"`
+			DistributedCacheEnabled bool   `json:"distributed-cache-enabled"`
+			LayoutVersion           int    `json:"layout-version"`
+		}{
+			EntityLabel:             fg.EntityLabel,
+			FeatureGroupLabel:       fg.FeatureGroupLabel,
+			ID:                      fg.Id,
+			ActiveVersion:           fg.ActiveVersion,
+			StoreID:                 fg.StoreId,
+			DataType:                string(fg.DataType),
+			TTLInSeconds:            fg.TtlInSeconds,
+			JobID:                   fg.JobId,
+			InMemoryCacheEnabled:    fg.InMemoryCacheEnabled,
+			DistributedCacheEnabled: fg.DistributedCacheEnabled,
+			LayoutVersion:           fg.LayoutVersion,
+		}
+
+		// Convert features map
+		responseItem.Features = make(map[string]struct {
+			Labels interface{} `json:"labels"`
+		})
+		for version, feature := range fg.Features {
+			responseItem.Features[version] = struct {
+				Labels interface{} `json:"labels"`
+			}{
+				Labels: feature.Labels,
+			}
+		}
+
+		response = append(response, responseItem)
 	}
 
 	return &response, nil
 }
 
 func (f *featureValidationClientImpl) ValidateOfflineFeatures(offlineFeatures []string, token string) (*OfflineValidationResponse, error) {
-	// Use configured URL or fallback to default path
-	var url string
-	if onlineFeatureMappingURL != "" {
-		url = fmt.Sprintf("%s/%s", f.BaseURL, onlineFeatureMappingURL)
-	} else {
-		url = fmt.Sprintf("%s/api/v1/orion/get-online-features-mapping", f.BaseURL)
+	// Call local online feature store handler directly
+	request := ofshandler.GetOnlineFeatureMappingRequest{
+		OfflineFeatureList: offlineFeatures,
 	}
 
-	requestBody := map[string][]string{
-		"offline-feature-list": offlineFeatures,
-	}
-
-	jsonBody, err := json.Marshal(requestBody)
+	mappingResponse, err := f.ofsHandler.GetOnlineFeatureMapping(request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal offline validation request: %w", err)
+		return nil, fmt.Errorf("failed to get online feature mapping: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create offline validation request: %w", err)
+	// Convert the response to the expected format
+	response := &OfflineValidationResponse{
+		Error: mappingResponse.Error,
+		Data:  mappingResponse.Data,
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := f.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to call offline validation API: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read offline validation response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("offline validation API failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var response OfflineValidationResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal offline validation response: %w", err)
-	}
-
-	return &response, nil
+	return response, nil
 }
 
 // ParseFeatureString parses feature strings and determines validation requirements
