@@ -21,6 +21,7 @@ import (
 var AppConfigs configs.AppConfigs
 
 func main() {
+	configs.InitConfig(&AppConfigs)
 	byteorder.Init()
 	logger.InitLogger(&AppConfigs)
 	etcd.Init(1, &handlerConfig.ModelConfig{}, &AppConfigs)
