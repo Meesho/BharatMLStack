@@ -7,7 +7,7 @@ toolchain go1.24.10
 require (
 	cloud.google.com/go/storage v1.57.2
 	github.com/DataDog/datadog-go/v5 v5.6.0
-	github.com/Meesho/BharatMLStack/helix-client v0.0.0
+	github.com/Meesho/BharatMLStack/helix-client v0.0.0-00010101000000-000000000000
 	github.com/deckarep/golang-set/v2 v2.8.0
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/gin-contrib/cors v1.7.3
@@ -127,4 +127,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/Meesho/BharatMLStack/helix-client => ../helix-client
+replace github.com/Meesho/BharatMLStack/helix-client => ./helix-client
