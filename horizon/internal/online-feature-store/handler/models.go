@@ -230,3 +230,12 @@ type FeatureGroupResponse struct {
 	Label    string         `json:"label"`
 	DataType enums.DataType `json:"data-type"`
 }
+
+type GetCacheConfigRequest struct {
+	CacheType enums.CacheType `json:"cache-type"`
+}
+
+type GetCacheConfigResponse struct {
+	Error string            `json:"error"`
+	Data  map[string]string `json:"data"`
+}

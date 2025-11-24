@@ -26,6 +26,7 @@ func Init() {
 			// Get APIs
 			model.GET("/get-entites", controller.NewConfigController().GetEntities)
 			model.GET("/get-config", controller.NewConfigController().GetConfig)
+			model.POST("/get-cache-config", controller.NewConfigController().GetCacheConfig)
 			model.GET("/get-store", controller.NewConfigController().GetStores)
 			model.GET("/get-jobs", controller.NewConfigController().GetJobs)
 			model.GET("/get-feature-groups", controller.NewConfigController().GetFeatureGroup)

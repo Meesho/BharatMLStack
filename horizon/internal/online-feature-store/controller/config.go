@@ -45,6 +45,7 @@ type Config interface {
 	EditFeatureGroup(ctx *gin.Context)
 	EditFeatures(ctx *gin.Context)
 	GetOnlineFeatureMapping(ctx *gin.Context)
+	GetCacheConfig(ctx *gin.Context)
 }
 
 var (
@@ -628,6 +629,25 @@ func (v *V1) GetOnlineFeatureMapping(ctx *gin.Context) {
 	response, err := v.Config.GetOnlineFeatureMapping(request)
 	if err != nil {
 		ctx.JSON(api.NewInternalServerError(err.Error()).StatusCode, handler.GetOnlineFeatureMappingResponse{
+			Error: err.Error(),
+			Data:  map[string]string{},
+		})
+		return
+	}
+	ctx.JSON(200, response)
+}
+
+func (v *V1) GetCacheConfig(ctx *gin.Context) {
+	var request handler.GetCacheConfigRequest
+	if err := ctx.BindJSON(&request); err != nil {
+		log.Error().Err(err).Msg("Error in binding request body")
+		_ = ctx.Error(api.NewBadRequestError(err.Error()))
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	response, err := v.Config.GetCacheConfig(request)
+	if err != nil {
+		ctx.JSON(api.NewInternalServerError(err.Error()).StatusCode, handler.GetCacheConfigResponse{
 			Error: err.Error(),
 			Data:  map[string]string{},
 		})
