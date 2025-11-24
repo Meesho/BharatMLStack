@@ -355,6 +355,8 @@ services:
       - SCYLLA_1_PASSWORD=
       - SCYLLA_1_USERNAME=
       - SCYLLA_ACTIVE_CONFIG_IDS=1
+      - DISTRIBUTED_CACHE_ACTIVE_CONFIG_IDS=2
+      - IN_MEMORY_CACHE_ACTIVE_CONFIG_IDS=3
     networks:
       - onfs-network
     depends_on:
