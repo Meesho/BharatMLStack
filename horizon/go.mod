@@ -127,4 +127,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/Meesho/BharatMLStack/helix-client => ./helix-client
+replace github.com/Meesho/BharatMLStack/helix-client => ../helix-client
