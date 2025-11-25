@@ -51,6 +51,7 @@ func BuildTag(tags ...Tag) []string {
 // normalizeTagValue sanitizes tag values to prevent parsing issues
 func normalizeTagValue(value string) string {
 	// Replace problematic characters that could be misinterpreted by DogStatsD/Telegraf
+	// Note: "/" is kept as-is to preserve URL paths
 	problematicChars := []string{":", " ", "\\", ",", "|", "@", "#"}
 	normalized := value
 	for _, char := range problematicChars {

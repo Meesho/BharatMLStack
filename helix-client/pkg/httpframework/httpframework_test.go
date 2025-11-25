@@ -48,8 +48,8 @@ func TestInit(t *testing.T) {
 
 		Init()
 		assert.NotNil(t, router)
-		// 3 default middlewares: otelgin, httplogger, httprecovery
-		assert.Len(t, router.Handlers, 3)
+		// 2 default middlewares: httplogger, httprecovery
+		assert.Len(t, router.Handlers, 2)
 	})
 
 	t.Run("should initialize with tracer and serve endpoint", func(t *testing.T) {
@@ -105,14 +105,14 @@ func TestInit(t *testing.T) {
 
 		Init()
 		firstInstance := Instance()
-		assert.Len(t, firstInstance.Handlers, 3)
+		assert.Len(t, firstInstance.Handlers, 2)
 
 		// Call Init again with another middleware
 		Init(func(c *gin.Context) {})
 		secondInstance := Instance()
 
 		assert.Same(t, firstInstance, secondInstance)
-		assert.Len(t, secondInstance.Handlers, 3, "Init should not add more middlewares on subsequent calls")
+		assert.Len(t, secondInstance.Handlers, 2, "Init should not add more middlewares on subsequent calls")
 	})
 }
 

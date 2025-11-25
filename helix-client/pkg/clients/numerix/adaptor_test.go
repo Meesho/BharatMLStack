@@ -49,7 +49,7 @@ func Test_ConvertScoreDataFromFP32(t *testing.T) {
 					{0, 0, 0, 64},   // fp32(2)
 				},
 			},
-			dataType: "fp16",
+			dataType: "FP16",
 			expected: [][][]byte{
 				{
 					{0, 60}, // fp16(1) - 2 bytes
@@ -65,7 +65,7 @@ func Test_ConvertScoreDataFromFP32(t *testing.T) {
 					{0, 0, 0, 64},   // fp32(2.0)
 				},
 			},
-			dataType: "int32",
+			dataType: "Int32",
 			expected: [][][]byte{
 				{
 					{1, 0, 0, 0}, // int32(1) - 4 bytes
@@ -76,7 +76,7 @@ func Test_ConvertScoreDataFromFP32(t *testing.T) {
 		{
 			name:     "empty data",
 			data:     [][][]byte{},
-			dataType: "fp16",
+			dataType: "FP16",
 			expected: [][][]byte{},
 		},
 	}
