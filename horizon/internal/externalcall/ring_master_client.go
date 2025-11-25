@@ -184,6 +184,14 @@ func (r *ringmasterClientImpl) GetConfig(serviceName, workflowID, runID string) 
 
 	// Get workflow result to determine running status
 	result, err := r.GetResourceDetail(serviceName)
+	if err != nil {
+		log.Error().Msgf("failed to get resource detail: %s", err)
+		return Config{
+			MinReplica:    strconv.Itoa(respBody.Min),
+			MaxReplica:    strconv.Itoa(respBody.Max),
+			RunningStatus: "false",
+		}
+	}
 	healthyPodCount := 0
 	for _, node := range result.Nodes {
 		if node.Kind == "Pod" && node.Health.Status == "Healthy" {
