@@ -7,7 +7,7 @@ It contains:
 - A framework-agnostic core library
 - A Flink 1.20.x connector (using `KafkaSink`)
 
-## 🎯 Modules Overview
+## Modules Overview
 
 ### 1. `feature-store-core` (Framework-agnostic)
 
@@ -33,7 +33,7 @@ Connector module for Flink 1.20.x.
 
 This simplifies class loading and ensures that Flink controls all Kafka behavior.
 
-## 🛠 Building the SDK
+## Building the SDK
 
 ### Build all modules
 
@@ -54,7 +54,7 @@ mvn -Djava.version=17 clean package
 
 All modules honor the same property.
 
-## 📦 Using the SDK in a Flink Project
+## Using the SDK in a Flink Project
 
 ### Add core dependency:
 
@@ -82,7 +82,7 @@ All modules honor the same property.
 <scope>provided</scope>
 ```
 
-## 🧩 Creating a Kafka Sink
+## Creating a Kafka Sink
 
 ```java
 KafkaSink<FeatureEvent> sink = KafkaSinkFactory.create(
@@ -99,7 +99,7 @@ KafkaSink<FeatureEvent> sink = KafkaSinkFactory.create(
 - If `transactional=true`, the sink uses `EXACTLY_ONCE`
 - Otherwise, defaults to `AT_LEAST_ONCE`
 
-## 🚀 Using It in a Flink Job
+## Using It in a Flink Job
 
 ```java
 DataStream<FeatureEvent> stream = ...;
@@ -113,7 +113,7 @@ stream.sinkTo(sink);
 env.enableCheckpointing(60000);
 ```
 
-## 🧪 Protobuf Schema
+## Protobuf Schema
 
 **Located at:**
 - `java-sdk/onfs/proto/feature.proto`
@@ -121,7 +121,7 @@ env.enableCheckpointing(60000);
 **Generated at:**
 - `target/generated-sources/protobuf/java/persist/`
 
-## 🛡 TODO (Future Work)
+## TODO (Future Work)
 
 ### Feature Mapping Validation
 
