@@ -39,4 +39,5 @@ type Config interface {
 	GetAllFeaturesRequest(email, role string) ([]features.Table, error)
 	RetrieveSourceMapping(jobId, jobToken string) (*RetrieveSourceMappingResponse, error)
 	GetOnlineFeatureMapping(request GetOnlineFeatureMappingRequest) (GetOnlineFeatureMappingResponse, error)
+	GetCacheConfig(request GetCacheConfigRequest) (GetCacheConfigResponse, error)
 }
