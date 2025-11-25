@@ -1,6 +1,6 @@
 use crate::pkg::config::config;
+use std::cell::RefCell;
 use std::error::Error;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{Level, Subscriber};
@@ -12,12 +12,13 @@ use tracing_subscriber::{
 
 static APP_NAME: OnceLock<String> = OnceLock::new();
 static SAMPLING_RATE: OnceLock<f64> = OnceLock::new();
-static COUNTER: AtomicU64 = AtomicU64::new(0);
+thread_local! {
+    static RNG: RefCell<fastrand::Rng> = RefCell::new(fastrand::Rng::new());
+}
 
 #[inline]
 fn should_log() -> bool {
     let sampling_rate = *SAMPLING_RATE.get().unwrap_or(&1.0);
-    println!("sampling_rate: {}", sampling_rate);
     if sampling_rate >= 1.0 {
         return true;
     }
@@ -26,10 +27,10 @@ fn should_log() -> bool {
         return false;
     }
 
-    let count = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let threshold = (1.0 / sampling_rate) as u64;
-    println!("count: {}, threshold: {}", count, threshold);
-    (count % threshold) == 0
+    RNG.with(|rng_cell| {
+        let mut rng = rng_cell.borrow_mut();
+        rng.f64() < sampling_rate
+    })
 }
 
 struct CustomFormat;

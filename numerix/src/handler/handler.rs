@@ -1,6 +1,7 @@
 use crate::handler::config;
 use crate::logger;
 use crate::pkg::metrics::metrics;
+use crate::pkg::rust_matrix_frame::error::InvalidOperation;
 use crate::pkg::rust_matrix_frame::error::Mat2DError;
 use crate::pkg::rust_matrix_frame::matrix::Mat2D;
 use crate::pkg::rust_matrix_frame::ops::F32Ops;
@@ -39,6 +40,12 @@ impl Numerix for MyNumerixService {
         request: Request<NumerixRequestProto>,
     ) -> Result<Response<NumerixResponseProto>, Status> {
         let start = Instant::now();
+        let caller_id = request
+            .metadata()
+            .get("NUMERIX-CALLER-ID")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("unknown-caller")
+            .to_string();
         let req = request.into_inner();
         match validate_request(&req) {
             Ok(_) => (),
@@ -46,7 +53,7 @@ impl Numerix for MyNumerixService {
                 logger::error(format!("Invalid request: {:?}, Error: {}", req, e), None);
                 return Ok(Response::new(NumerixResponseProto {
                     response: Some(numerix_response_proto::Response::Error(Error {
-                        message: e,
+                        message: format!("Request validation failed: {}", e),
                     })),
                 }));
             }
@@ -54,7 +61,10 @@ impl Numerix for MyNumerixService {
 
         let entity_score_data = req.entity_score_data.as_ref().unwrap();
         let compute_id = entity_score_data.compute_id.clone();
-        let tags = vec![(COMPUTE_ID, compute_id.as_str())];
+        let tags = vec![
+            (COMPUTE_ID, compute_id.as_str()),
+            ("caller_id", caller_id.as_str()),
+        ];
 
         let _ = metrics::count("numerix.computation.request.total", 1, &tags);
 
@@ -62,17 +72,18 @@ impl Numerix for MyNumerixService {
         if expression.is_empty() {
             return Ok(Response::new(NumerixResponseProto {
                 response: Some(numerix_response_proto::Response::Error(Error {
-                    message: "Expression not found".to_string(),
+                    message: format!("No expression configured for compute_id: {}", compute_id),
                 })),
             }));
         }
 
-        let result = compute_expression(&expression, &req);
-        if let Some(numerix_response_proto::Response::Error(_)) = &result.response {
-            let _ = metrics::count("numerix.computation.request.error", 1, &tags);
-            return Ok(Response::new(result));
+        let (result, is_invalid_operation) =
+            compute_expression(&expression, &req, caller_id.as_str());
+        if !is_invalid_operation {
+            if let Some(numerix_response_proto::Response::Error(_)) = &result.response {
+                let _ = metrics::count("numerix.computation.request.error", 1, &tags);
+            }
         }
-
         let duration = start.elapsed();
         let _ = metrics::timing("numerix.computation.request.latency", duration, &tags);
 
@@ -106,7 +117,11 @@ fn validate_request(req: &NumerixRequestProto) -> Result<(), String> {
     Ok(())
 }
 
-fn compute_expression(expression: &str, req: &NumerixRequestProto) -> NumerixResponseProto {
+fn compute_expression(
+    expression: &str,
+    req: &NumerixRequestProto,
+    caller_id: &str,
+) -> (NumerixResponseProto, bool) {
     let entity_score_data = req.entity_score_data.as_ref().unwrap();
     let compute_id = entity_score_data.compute_id.clone();
     let conversion_type = entity_score_data
@@ -144,6 +159,7 @@ fn compute_expression(expression: &str, req: &NumerixRequestProto) -> NumerixRes
             score_type,
             req,
             compute_id.as_str(),
+            caller_id,
         )
     } else {
         compute_scores::<f32, F32Ops>(
@@ -152,6 +168,7 @@ fn compute_expression(expression: &str, req: &NumerixRequestProto) -> NumerixRes
             score_type,
             req,
             compute_id.as_str(),
+            caller_id,
         )
     }
 }
@@ -162,7 +179,8 @@ fn compute_scores<T, Ops>(
     score_type: &str,
     req: &NumerixRequestProto,
     compute_id: &str,
-) -> NumerixResponseProto
+    caller_id: &str,
+) -> (NumerixResponseProto, bool)
 where
     T: Copy
         + FromStr
@@ -182,8 +200,50 @@ where
 {
     let cols = column_names.len();
     let rows = req.entity_score_data.as_ref().unwrap().entity_scores.len();
-    let converted_scores = convert_scores::<T>(score_type, req, rows, cols);
-    let meta_data = meta_data_from_compute_id::<T>(compute_id, rows);
+    let converted_scores = match convert_scores::<T>(score_type, req, rows, cols) {
+        Ok(scores) => scores,
+        Err(e) => {
+            logger::error(
+                format!(
+                    "Failed to convert scores for request error : {:?} {:?}",
+                    e, req
+                ),
+                None,
+            );
+            return (
+                NumerixResponseProto {
+                    response: Some(numerix_response_proto::Response::Error(Error {
+                        message: format!("Score conversion failed for request '{:?}': {}", req, e),
+                    })),
+                },
+                false,
+            );
+        }
+    };
+
+    let meta_data = match meta_data_from_compute_id::<T>(compute_id, rows) {
+        Ok(md) => md,
+        Err(e) => {
+            logger::error(
+                format!(
+                    "Failed to parse meta data for compute_id: {} and request error : {:?} {:?}",
+                    compute_id, e, req
+                ),
+                None,
+            );
+            return (
+                NumerixResponseProto {
+                    response: Some(numerix_response_proto::Response::Error(Error {
+                        message: format!(
+                            "Meta data parsing failed for compute_id '{}' : {}",
+                            compute_id, e
+                        ),
+                    })),
+                },
+                false,
+            );
+        }
+    };
     let matrix = Mat2D::<Ops>::from_data(rows, cols, converted_scores, column_names);
     let matrix = match matrix {
         Ok(matrix) => matrix,
@@ -192,32 +252,50 @@ where
                 format!("Failed to create matrix for request: {:?}", req),
                 Some(&e),
             );
-            return NumerixResponseProto {
-                response: Some(numerix_response_proto::Response::Error(Error {
-                    message: format!("Matrix setup failed for request: {:?}", req),
-                })),
-            };
+            return (
+                NumerixResponseProto {
+                    response: Some(numerix_response_proto::Response::Error(Error {
+                        message: format!("Matrix setup failed for request: {:?}", req),
+                    })),
+                },
+                false,
+            );
         }
     };
     let result = matrix.calculate(expression, meta_data);
 
-    convert_to_grpc_response::<T>(result, req, score_type)
-}
-
-trait FromBytes: Sized {
-    fn from_le_bytes(bytes: &[u8]) -> Self;
-}
-
-impl FromBytes for f32 {
-    fn from_le_bytes(bytes: &[u8]) -> Self {
-        f32::from_le_bytes(bytes.try_into().expect("Invalid byte length"))
+    if let Err(Mat2DError::InvalidOperation(e)) = result.as_ref() {
+        let error_type = match e {
+            InvalidOperation::DivisionByZero => "division_by_zero",
+            InvalidOperation::AndRequiresBoolean => "and_requires_boolean",
+            InvalidOperation::OrRequiresBoolean => "or_requires_boolean",
+            InvalidOperation::LogNonPositive => "log_non_positive",
+            InvalidOperation::PEqualsQDivByZero => "p_equals_q_divided_by_zero",
+            InvalidOperation::VectorLengthZeroOrLess => "vector_length_zero_or_less",
+        };
+        metrics::count(
+            "numerix.computation.request.invalid_operation",
+            1,
+            &[
+                (COMPUTE_ID, compute_id),
+                ("error_type", error_type),
+                ("caller_id", caller_id),
+            ],
+        );
+        return (
+            NumerixResponseProto {
+                response: Some(numerix_response_proto::Response::Error(Error {
+                    message: format!("Invalid operation for request '{:?}': {}", req, e),
+                })),
+            },
+            true,
+        );
     }
-}
 
-impl FromBytes for f64 {
-    fn from_le_bytes(bytes: &[u8]) -> Self {
-        f64::from_le_bytes(bytes.try_into().expect("Invalid byte length"))
-    }
+    (
+        convert_to_grpc_response::<T>(result, req, score_type),
+        false,
+    )
 }
 
 fn convert_scores<T>(
@@ -225,7 +303,7 @@ fn convert_scores<T>(
     req: &NumerixRequestProto,
     rows: usize,
     cols: usize,
-) -> Vec<T>
+) -> Result<Vec<T>, String>
 where
     T: std::str::FromStr + Copy + Default + From<u8> + FromBytes + std::fmt::Debug,
     <T as std::str::FromStr>::Err: std::fmt::Debug,
@@ -237,50 +315,45 @@ where
 
     match score_type {
         "Byte" => {
-            for (row_idx, score_list) in entity_scores.iter().enumerate() {
+            for (idx, score_list) in entity_scores.iter().enumerate() {
                 let byte_data = match &score_list.matrix_format {
                     Some(proto::score::MatrixFormat::ByteData(data)) => data,
                     _ => continue,
                 };
-                let start_at = if byte_data.values.len() == cols + 1 {
-                    1
-                } else {
-                    0
-                };
-                for (value_pos, value) in byte_data.values.iter().enumerate().skip(start_at) {
-                    let col_idx = value_pos - start_at;
-                    if col_idx < cols && row_idx < rows {
+
+                for (value_idx, value) in byte_data.values.iter().enumerate().skip(1) {
+                    if value_idx < cols && idx < rows {
                         let expected_size = std::mem::size_of::<T>();
                         if value.len() != expected_size {
-                            logger::error(format!("Invalid byte length: expected {} bytes, got {} bytes for request: {:?}", 
-                                expected_size, value.len(), req), None);
-                            continue;
+                            return Err(format!(
+                                "Invalid byte length: expected {} bytes, got {} bytes",
+                                expected_size,
+                                value.len()
+                            ));
                         }
-                        converted_scores[col_idx * rows + row_idx] = T::from_le_bytes(value);
+                        converted_scores[value_idx * rows + idx] = T::from_le_bytes(value);
                     }
                 }
             }
         }
         "String" => {
-            for (row_idx, score_list) in entity_scores.iter().enumerate() {
+            for (idx, score_list) in entity_scores.iter().enumerate() {
                 let string_data = match &score_list.matrix_format {
                     Some(proto::score::MatrixFormat::StringData(data)) => data,
                     _ => continue,
                 };
-                let start_at = if string_data.values.len() == cols + 1 {
-                    1
-                } else {
-                    0
-                };
-                for (value_pos, value) in string_data.values.iter().enumerate().skip(start_at) {
-                    let col_idx = value_pos - start_at;
-                    if col_idx < cols && row_idx < rows {
+
+                for (value_idx, value) in string_data.values.iter().enumerate().skip(1) {
+                    if value_idx < cols && idx < rows {
                         match value.parse::<T>() {
                             Ok(parsed_value) => {
-                                converted_scores[col_idx * rows + row_idx] = parsed_value
+                                converted_scores[value_idx * rows + idx] = parsed_value
                             }
                             Err(e) => {
-                                logger::error(format!("Failed to parse string value '{}' for request: {:?}, parse error: {:?}", value, req, e), None);
+                                return Err(format!(
+                                    "Failed to parse string value '{}' with error: {:?}",
+                                    value, e
+                                ));
                             }
                         }
                     }
@@ -290,10 +363,13 @@ where
         _ => {}
     }
 
-    converted_scores
+    Ok(converted_scores)
 }
 
-fn meta_data_from_compute_id<T>(compute_id: &str, size: usize) -> HashMap<String, Vector<T>>
+fn meta_data_from_compute_id<T>(
+    compute_id: &str,
+    size: usize,
+) -> Result<HashMap<String, Vector<T>>, String>
 where
     T: FromStr + Copy + Default,
     <T as FromStr>::Err: std::fmt::Debug,
@@ -309,19 +385,30 @@ where
                     .or_insert(Vector::from_vec(vec![number_value; size]));
             }
             Err(e) => {
-                logger::error(
-                    format!(
-                        "Failed to parse number '{}' in expression for compute_id: {}: {:?}",
-                        number_str, compute_id, e
-                    ),
-                    None,
-                );
-                continue;
+                return Err(format!(
+                    "Failed to parse number '{}' for compute_id '{}': {:?}",
+                    number_str, compute_id, e
+                ));
             }
         }
     }
 
-    numbers_map
+    Ok(numbers_map)
+}
+trait FromBytes: Sized {
+    fn from_le_bytes(bytes: &[u8]) -> Self;
+}
+
+impl FromBytes for f32 {
+    fn from_le_bytes(bytes: &[u8]) -> Self {
+        f32::from_le_bytes(bytes.try_into().expect("Invalid byte length"))
+    }
+}
+
+impl FromBytes for f64 {
+    fn from_le_bytes(bytes: &[u8]) -> Self {
+        f64::from_le_bytes(bytes.try_into().expect("Invalid byte length"))
+    }
 }
 
 trait FastToString {
@@ -372,35 +459,64 @@ where
 
     let score_type_byte = score_type.as_bytes();
     if score_type_byte == b"String" {
-        for value in result_slice.iter() {
-            let mut value_string = value.fast_to_string();
-            if value_string.ends_with(".0") {
-                value_string.truncate(value_string.len() - 2);
-            }
+        for (i, value) in result_slice.iter().enumerate() {
+            let catalog_id = match &entity_score_data.entity_scores[i].matrix_format {
+                Some(proto::score::MatrixFormat::StringData(data)) => {
+                    if !data.values.is_empty() {
+                        data.values[0].clone()
+                    } else {
+                        String::new()
+                    }
+                }
+                _ => String::new(),
+            };
+
+            let value_string = value.fast_to_string();
+
             computation_scores.push(Score {
                 matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                    values: vec![value_string],
+                    values: vec![catalog_id, value_string],
                 })),
             });
         }
     } else if score_type_byte == b"Byte" {
-        for value in result_slice.iter() {
+        for (i, value) in result_slice.iter().enumerate() {
+            let catalog_id = match &entity_score_data.entity_scores[i].matrix_format {
+                Some(proto::score::MatrixFormat::ByteData(data)) => {
+                    if !data.values.is_empty() {
+                        data.values[0].clone()
+                    } else {
+                        Vec::new()
+                    }
+                }
+                _ => Vec::new(),
+            };
+
             let bytes: &[u8] = bytemuck::bytes_of(value);
             computation_scores.push(Score {
                 matrix_format: Some(proto::score::MatrixFormat::ByteData(ByteList {
-                    values: vec![bytes.to_vec()],
+                    values: vec![catalog_id, bytes.to_vec()],
                 })),
             });
         }
     } else {
-        for value in result_slice.iter() {
-            let mut value_string = value.fast_to_string();
-            if value_string.ends_with(".0") {
-                value_string.truncate(value_string.len() - 2);
-            }
+        for (i, value) in result_slice.iter().enumerate() {
+            let catalog_id = match &entity_score_data.entity_scores[i].matrix_format {
+                Some(proto::score::MatrixFormat::StringData(data)) => {
+                    if !data.values.is_empty() {
+                        data.values[0].clone()
+                    } else {
+                        String::new()
+                    }
+                }
+                _ => String::new(),
+            };
+
+            let value_string = value.fast_to_string();
+
             computation_scores.push(Score {
                 matrix_format: Some(proto::score::MatrixFormat::StringData(StringList {
-                    values: vec![value_string],
+                    values: vec![catalog_id, value_string],
                 })),
             });
         }
