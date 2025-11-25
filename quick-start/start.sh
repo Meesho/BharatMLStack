@@ -461,7 +461,7 @@ if [[ "$ENABLE_LOCAL_BUILD" = true ]]; then
 
   # Horizon
   if [[ $START_HORIZON == true ]]; then
-    perl -i.bak -pe 's|image: ghcr.io/meesho/horizon:\$\{HORIZON_VERSION:-latest\}|build:\n      context: ../..\n      dockerfile: horizon/cmd/horizon/Dockerfile|' "$compose"
+    perl -i.bak -pe 's|image: ghcr.io/meesho/horizon:\$\{HORIZON_VERSION:-latest\}|build:\n      context: ../../horizon\n      dockerfile: cmd/horizon/Dockerfile|' "$compose"
   fi
 
   # Numerix

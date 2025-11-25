@@ -232,7 +232,7 @@ func InitV1ConfigHandler() (Config, error) {
 		ringMasterClient := externalcall.GetRingmasterClient()
 
 		predator = &Predator{
-			GcsClient:               externalcall.CreateGCSClient(),
+			GcsClient:               externalcall.CreateGCSClient(pred.IsGcsEnabled),
 			ServiceDeployableRepo:   serviceDeployableRepo,
 			Repo:                    repo,
 			PredatorConfigRepo:      predatorConfigRepo,

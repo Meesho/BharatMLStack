@@ -57,6 +57,7 @@ type Configs struct {
 
 	GcsModelBucket   string `mapstructure:"gcs_model_bucket"`
 	GcsModelBasePath string `mapstructure:"gcs_model_base_path"`
+	GcsEnabled       bool   `mapstructure:"gcs_enabled"`
 
 	GrafanaBaseUrl string `mapstructure:"grafana_base_url"`
 
