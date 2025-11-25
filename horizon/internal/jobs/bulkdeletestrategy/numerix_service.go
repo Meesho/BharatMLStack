@@ -68,6 +68,9 @@ func (i *NumerixService) fetchNonActiveNumerixConfigList(numerixConfigRepo numer
 	var allNumerixConfigList []string
 
 	numerixConfigList, err := numerixConfigRepo.FindByCreatedBefore(maxNumerixInactiveAge)
+	if err != nil {
+		return nil, err
+	}
 
 	for _, numerixConfigEntity := range numerixConfigList {
 		allNumerixConfigList = append(allNumerixConfigList, strconv.Itoa(int(numerixConfigEntity.ConfigID)))

@@ -34,14 +34,6 @@ type OnlineFeatureStore struct {
 
 var FeatureList = []string{"PARENT", "PCTR_CALIBRATION", "PCVR_CALIBRATION"}
 
-const (
-	storageScyllaPrefix        = "SCYLLA_"
-	activeConfIds              = "ACTIVE_CONFIG_IDS"
-	storageRedisFailoverPrefix = "REDIS_FAILOVER_"
-	distributedCachePrefix     = "DISTRIBUTED_CACHE_"
-	inMemoryCachePrefix        = "IN_MEMORY_CACHE_"
-)
-
 var (
 	confIdToDbTypeMap                 = make(map[string]string)
 	distributedCacheConfIdToDbTypeMap = make(map[string]string)
