@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/clients/predator"
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/config"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/configs"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/logger"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/metrics"
-	"github.com/Meesho/helix-clients/pkg/clients/predator"
 )
 
 const (

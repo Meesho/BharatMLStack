@@ -7,12 +7,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/clients/predator"
 	extPredator "github.com/Meesho/BharatMLStack/inferflow/handlers/external/predator"
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/models"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/datatypeconverter/typeconverter"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/matrix"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/utils"
-	"github.com/Meesho/helix-clients/pkg/clients/predator"
 
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/config"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/logger"

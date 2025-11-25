@@ -15,7 +15,6 @@ import (
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/inmemorycache"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/logger"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/metrics"
-	"github.com/Meesho/price-aggregator-go/pricingfeatureretrieval/client"
 )
 
 var AppConfigs configs.AppConfigs
@@ -34,7 +33,6 @@ func main() {
 	extPredator.InitPredatorHandler(&AppConfigs)
 	extNumerix.InitNumerixHandler(&AppConfigs)
 	inmemorycache.InitInMemoryCache()
-	client.Init()
 	inferflow.InitInferflowHandler(&AppConfigs)
 	server.InitServer(&AppConfigs)
 }
