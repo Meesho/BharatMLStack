@@ -19,7 +19,7 @@ type LatencyTracker struct {
 
 const defaultMaxSamples = 100000
 
-func newLatencyTracker() *LatencyTracker {
+func NewLatencyTracker() *LatencyTracker {
 	return &LatencyTracker{
 		getLatencies: make([]time.Duration, defaultMaxSamples),
 		putLatencies: make([]time.Duration, defaultMaxSamples),
@@ -27,7 +27,7 @@ func newLatencyTracker() *LatencyTracker {
 	}
 }
 
-func (lt *LatencyTracker) recordGet(duration time.Duration) {
+func (lt *LatencyTracker) RecordGet(duration time.Duration) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 	lt.getLatencies[lt.getIndex] = duration
@@ -35,7 +35,7 @@ func (lt *LatencyTracker) recordGet(duration time.Duration) {
 	lt.getCount++
 }
 
-func (lt *LatencyTracker) recordPut(duration time.Duration) {
+func (lt *LatencyTracker) RecordPut(duration time.Duration) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 	lt.putLatencies[lt.putIndex] = duration
@@ -93,12 +93,4 @@ func (lt *LatencyTracker) PutLatencyPercentiles() (p25, p50, p99 time.Duration) 
 	p99 = latenciesCopy[int(float64(samples)*0.99)]
 
 	return p25, p50, p99
-}
-
-func (s *Stats) GetLatencyPercentiles() (p25, p50, p99 time.Duration) {
-	return s.LatencyTracker.GetLatencyPercentiles()
-}
-
-func (s *Stats) PutLatencyPercentiles() (p25, p50, p99 time.Duration) {
-	return s.LatencyTracker.PutLatencyPercentiles()
 }

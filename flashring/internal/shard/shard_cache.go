@@ -36,7 +36,6 @@ type Stats struct {
 	DeletedKeyCount  int
 	BadCRCMemIds     map[uint32]int
 	BadKeyMemIds     map[uint32]int
-	LatencyTracker   *LatencyTracker
 }
 
 type ShardCacheConfig struct {
@@ -92,20 +91,14 @@ func NewShardCache(config ShardCacheConfig) *ShardCache {
 		predictor:         config.Predictor,
 		startAt:           time.Now().Unix(),
 		Stats: &Stats{
-			MemIdCount:     make(map[uint32]int),
-			BadCRCMemIds:   make(map[uint32]int),
-			BadKeyMemIds:   make(map[uint32]int),
-			LatencyTracker: newLatencyTracker(),
+			MemIdCount:   make(map[uint32]int),
+			BadCRCMemIds: make(map[uint32]int),
+			BadKeyMemIds: make(map[uint32]int),
 		},
 	}
 }
 
 func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
-	start := time.Now()
-	defer func() {
-		fc.Stats.LatencyTracker.recordPut(time.Since(start))
-	}()
-
 	size := 4 + len(key) + len(value)
 	mt, mtId, _ := fc.mm.GetMemtable()
 	err := fc.dm.ExecuteDeleteIfNeeded()
@@ -129,11 +122,6 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 }
 
 func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
-	start := time.Now()
-	defer func() {
-		fc.Stats.LatencyTracker.recordGet(time.Since(start))
-	}()
-
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 
 	if status == indices.StatusNotFound {

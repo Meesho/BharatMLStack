@@ -41,7 +41,7 @@ func main() {
 
 	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul/", "data directory for shard files")
 	flag.IntVar(&numShards, "shards", 1, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 67_000_000, "keys per shard")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 1_000_000, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 40, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 1, "number of read workers")
@@ -105,108 +105,64 @@ func main() {
 		panic(err)
 	}
 
-	testKey := "key1"
-	testVal := []byte("value1")
-	if err := pc.Put(testKey, testVal, 60); err != nil {
-		panic(err)
-	}
-	val, found, expired := pc.Get(testKey)
-	if !found {
-		panic("key not found")
-	}
-	if expired {
-		panic("key expired")
-	}
-	if string(val) != string(testVal) {
-		panic("value mismatch")
-	}
+	MULTIPLIER := 100
 
 	totalKeys := keysPerShard * numShards
 	str1kb := strings.Repeat("a", 1024)
-	str1kb = str1kb + "%d"
+	str1kb = "%d" + str1kb
 
-	// Prepopulate for read-only or read-heavy workloads: 80% of total keys
-	// preN := int(float64(totalKeys) * 0.8)
-
-	// for i := 0; i < preN; i++ {
-	// 	key := fmt.Sprintf("key%d", i)
-	// 	val := []byte(fmt.Sprintf(str1kb, i))
-	// 	if err := pc.Put(key, val, 60); err != nil {
-	// 		panic(err)
-	// 	}
-
-	// 	if i%5000000 == 0 {
-	// 		fmt.Printf("----------------------------------------------prepopulated %d keys\n", i)
-	// 	}
-	// }
-	preN := 0 // TODO: remove this. do not prepopulate for now.
 	var wg sync.WaitGroup
 
-	// Spawn writers: each writer covers a disjoint partition of the keyspace
 	if writeWorkers > 0 {
+		fmt.Printf("----------------------------------------------writing keys\n")
 		wg.Add(writeWorkers)
-		keysPerWriter := totalKeys / writeWorkers
-		fmt.Printf("----------------------------------------------writing %d keys\n", keysPerWriter)
-		for w := 0; w < writeWorkers; w++ {
-			start := w*keysPerWriter + preN
-			end := start + keysPerWriter + preN
-			// last worker takes any remainder
-			if w == writeWorkers-1 {
-				end = totalKeys
-			}
-			go func(wid, s, e int) {
-				defer wg.Done()
-				for i := s; i < e; i++ {
-					//key := fmt.Sprintf("key%d", i)
 
-					//key initialize to any random value from 0 to totalKeys
-					key := fmt.Sprintf("key%d", rand.Intn(totalKeys))
+		go func() {
+			for k := 0; k < totalKeys*MULTIPLIER; k++ {
+				randomval := rand.Intn(totalKeys)
+				key := fmt.Sprintf("key%d", randomval)
 
-					val := []byte(fmt.Sprintf(str1kb, i))
-					if err := pc.Put(key, val, 60); err != nil {
-						panic(err)
-					}
-					if i%5000000 == 0 {
-						fmt.Printf("----------------------------------------------wrote %d keys from writerId %d\n", i, wid)
-					}
+				val := []byte(fmt.Sprintf(str1kb, randomval))
+				if err := pc.Put(key, val, 60); err != nil {
+					panic(err)
 				}
-			}(w, start, end)
-		}
+
+				if k%5000000 == 0 {
+					fmt.Printf("----------------------------------------------wrote %d keys \n", k)
+				}
+			}
+
+			wg.Done()
+		}()
+
 	}
 
-	// Spawn readers: each reader covers a disjoint partition
 	if readWorkers > 0 {
 		fmt.Printf("----------------------------------------------reading keys\n")
 		wg.Add(readWorkers)
-		readSpan := preN
-		keysPerReader := readSpan / readWorkers
-		for r := 0; r < readWorkers; r++ {
-			start := r * keysPerReader
-			end := start + keysPerReader
-			if r == readWorkers-1 {
-				end = readSpan
-			}
-			go func(rid, s, e int) {
-				defer wg.Done()
-				for i := s; i < e; i++ {
-					//key := fmt.Sprintf("key%d", i)
-					key := fmt.Sprintf("key%d", rand.Intn(totalKeys))
-					val, found, expired := pc.Get(key)
-					// if !found {
-					// 	panic("key not found")
-					// }
-					if expired {
-						panic("key expired")
-					}
-					if found && string(val) != fmt.Sprintf(str1kb, i) {
-						panic("value mismatch")
-					}
-					if i%5000000 == 0 {
-						fmt.Printf("----------------------------------------------read %d keys from readerId %d\n", i, rid)
-					}
+
+		go func() {
+			for k := 0; k < totalKeys*MULTIPLIER; k++ {
+
+				randomval := rand.Intn(totalKeys)
+				key := fmt.Sprintf("key%d", randomval)
+				val, found, expired := pc.Get(key)
+
+				if expired {
+					panic("key expired")
 				}
-			}(r, start, end)
-		}
+				if found && string(val) != fmt.Sprintf(str1kb, randomval) {
+
+					panic("value mismatch")
+				}
+				if k%5000000 == 0 {
+					fmt.Printf("----------------------------------------------read %d keys \n", k)
+				}
+			}
+
+			wg.Done()
+
+		}()
 	}
 
 	// Start pprof HTTP server for runtime profiling

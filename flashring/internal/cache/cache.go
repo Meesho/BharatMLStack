@@ -50,6 +50,7 @@ type CacheStats struct {
 	ReWrites               atomic.Uint64
 	Expired                atomic.Uint64
 	ShardWiseActiveEntries atomic.Uint64
+	LatencyTracker         *filecache.LatencyTracker
 }
 
 type WrapCacheConfig struct {
@@ -150,7 +151,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 	shardLocks := make([]sync.RWMutex, config.NumShards)
 	stats := make([]*CacheStats, config.NumShards)
 	for i := 0; i < config.NumShards; i++ {
-		stats[i] = &CacheStats{}
+		stats[i] = &CacheStats{LatencyTracker: filecache.NewLatencyTracker()}
 	}
 	wc := &WrapCache{
 		shards:     shards,
@@ -182,8 +183,11 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 					perShardPrevTotalGets[i] = total
 					perShardPrevTotalPuts[i] = wc.stats[i].TotalPuts.Load()
 
-					getP25, getP50, getP99 := wc.shards[i].Stats.GetLatencyPercentiles()
-					putP25, putP50, putP99 := wc.shards[i].Stats.PutLatencyPercentiles()
+					getP25, getP50, getP99 := wc.stats[i].LatencyTracker.GetLatencyPercentiles()
+					putP25, putP50, putP99 := wc.stats[i].LatencyTracker.PutLatencyPercentiles()
+
+					log.Info().Msgf("Get Count: %v", wc.stats[i].TotalGets.Load())
+					log.Info().Msgf("Put Count: %v", wc.stats[i].TotalPuts.Load())
 					log.Info().Msgf("Get Latencies - P25: %v, P50: %v, P99: %v", getP25, getP50, getP99)
 					log.Info().Msgf("Put Latencies - P25: %v, P50: %v, P99: %v", putP25, putP50, putP99)
 
@@ -196,8 +200,15 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 }
 
 func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) error {
-	h32 := hash(key)
+
+	h32 := wc.Hash(key)
 	shardIdx := h32 % uint32(len(wc.shards))
+
+	start := time.Now()
+	defer func() {
+		wc.stats[shardIdx].LatencyTracker.RecordPut(time.Since(start))
+	}()
+
 	wc.shardLocks[shardIdx].Lock()
 	defer wc.shardLocks[shardIdx].Unlock()
 	wc.shards[shardIdx].Put(key, value, exptimeInMinutes)
@@ -209,8 +220,14 @@ func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) erro
 }
 
 func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
-	h32 := hash(key)
+	h32 := wc.Hash(key)
 	shardIdx := h32 % uint32(len(wc.shards))
+
+	start := time.Now()
+	defer func() {
+		wc.stats[shardIdx].LatencyTracker.RecordGet(time.Since(start))
+	}()
+
 	wc.shardLocks[shardIdx].Lock()
 	defer wc.shardLocks[shardIdx].Unlock()
 	keyFound, val, remainingTTL, expired, shouldReWrite := wc.shards[shardIdx].Get(key)
@@ -229,7 +246,11 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	return val, keyFound, expired
 }
 
-func hash(key string) uint32 {
+func (wc *WrapCache) Hash(key string) uint32 {
 	nKey := key + Seed
 	return uint32(xxhash.Sum64String(nKey))
+}
+
+func (wc *WrapCache) GetShardCache(shardIdx int) *filecache.ShardCache {
+	return wc.shards[shardIdx]
 }
