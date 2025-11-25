@@ -29,16 +29,13 @@ func IsNumber(token string) bool {
 func ExtractVariables(expression string) []string {
 	tokens := strings.Fields(expression)
 	vars := make([]string, 0)
-	varsMap := make(map[string]bool)
 
 	for _, token := range tokens {
 		if IsNumber(token) || IsOp(token) {
 			continue
 		}
-		if _, exists := varsMap[token]; !exists {
-			vars = append(vars, token)
-			varsMap[token] = true
-		}
+		// Preserve all occurrences, including duplicates and parentheses
+		vars = append(vars, token)
 	}
 
 	return vars
