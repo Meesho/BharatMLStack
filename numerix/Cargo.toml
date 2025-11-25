@@ -11,7 +11,6 @@ tokio = { version = "1.0", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["net"] }
 hyper = { version = "0.14", features = ["full"] }
 tower = "0.4"
-tower-http = { version = "0.4", features = ["trace"] }
 config = "0.15.16"
 serde = { version = "1.0.219", features = ["derive"] }
 dotenvy = "0.15"
@@ -21,12 +20,12 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 futures = "0.3.31"
 serde_json = "1.0.140"
 cadence = "1.5.0"
-lazy_static = "1.4.0"
 etcd-client = "0.14"
 regex = "1.11.1"
 bytemuck = "1.14"
 ryu = "1.0"
 thiserror = "2.0.12"
+fastrand = "2"
 
 [build-dependencies]
 tonic-build = "0.10"

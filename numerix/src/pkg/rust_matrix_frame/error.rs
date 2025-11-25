@@ -1,6 +1,27 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+pub enum InvalidOperation {
+    #[error("Division by zero")]
+    DivisionByZero,
+
+    #[error("AND operation requires boolean values (0.0 or 1.0).")]
+    AndRequiresBoolean,
+
+    #[error("OR operation requires boolean values (0.0 or 1.0).")]
+    OrRequiresBoolean,
+
+    #[error("Cannot take logarithm of non-positive number")]
+    LogNonPositive,
+
+    #[error("p = q => Divided by 0")]
+    PEqualsQDivByZero,
+
+    #[error("Vector length cannot be 0 or less")]
+    VectorLengthZeroOrLess,
+}
+
+#[derive(Debug, Error)]
 pub enum Mat2DError {
     #[error("Matrix length mismatch: got {0}, expected {1} elements in matrix ({2}x{3})")]
     MatrixSizeMismatch(usize, usize, usize, usize),
@@ -21,5 +42,5 @@ pub enum Mat2DError {
     ExtraElementsInStack(usize),
 
     #[error("Invalid operation: {0}")]
-    InvalidOperation(String),
+    InvalidOperation(#[from] InvalidOperation),
 }

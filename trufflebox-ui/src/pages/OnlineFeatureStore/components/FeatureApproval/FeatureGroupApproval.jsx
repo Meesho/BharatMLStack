@@ -161,7 +161,7 @@ const FeatureGroupApproval = () => {
         setShowErrorModal(true);
       }
     } catch (error) {
-      setActionMessage('Network error. Please try again.');
+      setActionMessage(`Error in reviewing feature group request: ${error}`);
       setShowErrorModal(true);
     } finally {
       setLoading(false);

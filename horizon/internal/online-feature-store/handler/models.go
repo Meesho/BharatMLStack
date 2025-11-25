@@ -109,6 +109,15 @@ type EditFeatureRequest struct {
 	Features          []Features `json:"features"`
 }
 
+// DeleteFeaturesRequest is the request payload for DeleteFeatures
+type DeleteFeaturesRequest struct {
+	UserId            string   `json:"user-id"`
+	Role              string   `json:"role"`
+	EntityLabel       string   `json:"entity-label"`
+	FeatureGroupLabel string   `json:"feature-group-label"`
+	FeatureLabels     []string `json:"feature-labels"`
+}
+
 type RetrieveEntityResponse struct {
 	EntityLabel      string                   `json:"entity-label"`
 	Keys             map[string]ofsConfig.Key `json:"keys"`
@@ -172,6 +181,14 @@ type ProcessAddFeatureRequest struct {
 	RejectReason string `json:"reject-reason"`
 }
 
+type ProcessDeleteFeaturesRequest struct {
+	ApproverId   string `json:"approver-id"`
+	Role         string `json:"role"`
+	RequestId    int    `json:"request-id"`
+	Status       string `json:"status"`
+	RejectReason string `json:"reject-reason"`
+}
+
 type RetrieveSourceMappingResponse struct {
 	Data []Data              `json:"data"`
 	Keys map[string][]string `json:"keys"`
@@ -212,4 +229,13 @@ type GetOnlineFeatureMappingResponse struct {
 type FeatureGroupResponse struct {
 	Label    string         `json:"label"`
 	DataType enums.DataType `json:"data-type"`
+}
+
+type GetCacheConfigRequest struct {
+	CacheType enums.CacheType `json:"cache-type"`
+}
+
+type GetCacheConfigResponse struct {
+	Error string            `json:"error"`
+	Data  map[string]string `json:"data"`
 }
