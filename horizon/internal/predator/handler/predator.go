@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	predclient "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/predator"
 	pred "github.com/Meesho/BharatMLStack/horizon/internal/predator"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/discoveryconfig"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/predatorconfig"
@@ -32,7 +33,6 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/random"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/serializer"
-	predclient "github.com/Meesho/helix-clients/pkg/clients/predator"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
