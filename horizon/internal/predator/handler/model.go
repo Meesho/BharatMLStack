@@ -158,16 +158,16 @@ type DeleteRequest struct {
 }
 
 type ModelParamsResponse struct {
-	ModelName              string          `json:"model_name"`
-	Inputs                 []IO            `json:"inputs"`
-	Outputs                []IO            `json:"outputs"`
-	InstanceCount          int32           `json:"instance_count"`
-	InstanceType           string          `json:"instance_type"`
-	BatchSize              int32           `json:"batch_size"`
-	Backend                string          `json:"backend"`
-	DynamicBatchingEnabled bool            `json:"dynamic_batching_enabled"`
-	Platform               string          `json:"platform"`
-	EnsembleScheduling     ModelEnsembling `json:"ensemble_scheduling"`
+	ModelName              string           `json:"model_name"`
+	Inputs                 []IO             `json:"inputs"`
+	Outputs                []IO             `json:"outputs"`
+	InstanceCount          int32            `json:"instance_count"`
+	InstanceType           string           `json:"instance_type"`
+	BatchSize              int32            `json:"batch_size"`
+	Backend                string           `json:"backend"`
+	DynamicBatchingEnabled bool             `json:"dynamic_batching_enabled"`
+	Platform               string           `json:"platform"`
+	EnsembleScheduling     *ModelEnsembling `json:"ensemble_scheduling,omitempty"`
 }
 
 type RequestGenerationRequest struct {

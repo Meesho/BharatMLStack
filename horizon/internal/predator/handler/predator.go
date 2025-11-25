@@ -607,7 +607,7 @@ func (p *Predator) FetchModelConfig(req FetchModelConfigRequest) (ModelParamsRes
 		outputs = []IO{}
 	}
 
-	return createModelParamsResponse(modelConfig, objectPath, inputs, outputs), http.StatusOK, nil
+	return createModelParamsResponse(&modelConfig, objectPath, inputs, outputs), http.StatusOK, nil
 }
 
 func validateModelPath(modelPath string) error {
@@ -682,7 +682,7 @@ func convertOutput(fields []*ModelOutput) []IO {
 	return ios
 }
 
-func createModelParamsResponse(modelConfig ModelConfig, objectPath string, inputs, outputs []IO) ModelParamsResponse {
+func createModelParamsResponse(modelConfig *ModelConfig, objectPath string, inputs, outputs []IO) ModelParamsResponse {
 	var resp ModelParamsResponse
 
 	if len(modelConfig.InstanceGroup) > 0 {
@@ -702,7 +702,7 @@ func createModelParamsResponse(modelConfig ModelConfig, objectPath string, input
 	}
 
 	if ensembleScheduling := modelConfig.GetEnsembleScheduling(); ensembleScheduling != nil {
-		resp.EnsembleScheduling = *ensembleScheduling
+		resp.EnsembleScheduling = ensembleScheduling
 	}
 
 	resp.Platform = modelConfig.Platform
