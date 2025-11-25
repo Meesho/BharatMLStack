@@ -176,26 +176,24 @@ func SetupMysqlTables(gormDB *gorm.DB, database string) bool {
 	return true
 }
 
-func SetupScyllaKeyspaceAndTables(scyllaSessions map[string]*gocql.Session, keyspace string) bool {
-	for host, scyllaSession := range scyllaSessions {
-		err := scyllaSession.Query(fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s", keyspace)).Exec()
-		if err != nil {
-			fmt.Println("Error: unable to create keyspace on host", host, err)
-			return false
-		}
-		fmt.Println("Scylla: Keyspace created successfully on host", host)
+func SetupScyllaKeyspaceAndTables(scyllaSession *gocql.Session, keyspace string) bool {
+	defer scyllaSession.Close()
+	err := scyllaSession.Query(fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s", keyspace)).Exec()
+	if err != nil {
+		fmt.Println("Error: unable to create keyspace", err)
+		return false
 	}
+	fmt.Println("Scylla: Keyspace created successfully")
 	return true
 }
 
-func SetupCassandraKeyspaceAndTables(cassandraSessions map[string]*gocql.Session, keyspace string) bool {
-	for host, cassandraSession := range cassandraSessions {
-		err := cassandraSession.Query(fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s", keyspace)).Exec()
-		if err != nil {
-			fmt.Println("Error: unable to create keyspace on host", host, err)
-			return false
-		}
-		fmt.Println("Cassandra: Keyspace created successfully on host", host)
+func SetupCassandraKeyspaceAndTables(cassandraSession *gocql.Session, keyspace string) bool {
+	defer cassandraSession.Close()
+	err := cassandraSession.Query(fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s", keyspace)).Exec()
+	if err != nil {
+		fmt.Println("Error: unable to create keyspace", err)
+		return false
 	}
+	fmt.Println("Cassandra: Keyspace created successfully")
 	return true
 }

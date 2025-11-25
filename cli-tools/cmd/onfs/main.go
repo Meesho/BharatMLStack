@@ -100,7 +100,6 @@ func main() {
 			}
 
 			if *storageType == "scylla" || *storageType == "cassandra" {
-				sessions := make(map[string]*gocql.Session)
 				port, err := strconv.Atoi(*storagePort)
 				if err != nil {
 					fmt.Println("Error: unable to convert storage port to int", err)
@@ -120,8 +119,7 @@ func main() {
 						fmt.Println("Error: unable to create cassandra session", err)
 						return
 					}
-					sessions[*storageType] = cassandraSession
-					if !setup.SetupCassandraKeyspaceAndTables(sessions, *storageKeyspace) {
+					if !setup.SetupCassandraKeyspaceAndTables(cassandraSession, *storageKeyspace) {
 						return
 					}
 				} else {
@@ -130,8 +128,7 @@ func main() {
 						fmt.Println("Error: unable to create scylla session", err)
 						return
 					}
-					sessions[*storageType] = scyllaSession
-					if !setup.SetupScyllaKeyspaceAndTables(sessions, *storageKeyspace) {
+					if !setup.SetupScyllaKeyspaceAndTables(scyllaSession, *storageKeyspace) {
 						return
 					}
 				}
