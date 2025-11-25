@@ -211,12 +211,16 @@ func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) erro
 
 	wc.shardLocks[shardIdx].Lock()
 	defer wc.shardLocks[shardIdx].Unlock()
+	wc.putLocked(shardIdx, h32, key, value, exptimeInMinutes)
+	return nil
+}
+
+func (wc *WrapCache) putLocked(shardIdx uint32, h32 uint32, key string, value []byte, exptimeInMinutes uint16) {
 	wc.shards[shardIdx].Put(key, value, exptimeInMinutes)
 	wc.stats[shardIdx].TotalPuts.Add(1)
 	if h32%100 < 10 {
 		wc.stats[shardIdx].ShardWiseActiveEntries.Store(uint64(wc.shards[shardIdx].GetRingBufferActiveEntries()))
 	}
-	return nil
 }
 
 func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
@@ -240,7 +244,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	wc.stats[shardIdx].TotalGets.Add(1)
 	if shouldReWrite {
 		wc.stats[shardIdx].ReWrites.Add(1)
-		wc.Put(key, val, remainingTTL)
+		wc.putLocked(shardIdx, h32, key, val, remainingTTL)
 	}
 	wc.predictor.Observe(float64(wc.stats[shardIdx].Hits.Load()) / float64(wc.stats[shardIdx].TotalGets.Load()))
 	return val, keyFound, expired

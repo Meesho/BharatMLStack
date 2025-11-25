@@ -41,7 +41,7 @@ func main() {
 
 	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul/", "data directory for shard files")
 	flag.IntVar(&numShards, "shards", 1, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 1_000_000, "keys per shard")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 20_000_000, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 40, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 1, "number of read workers")
@@ -105,7 +105,7 @@ func main() {
 		panic(err)
 	}
 
-	MULTIPLIER := 100
+	MULTIPLIER := 300
 
 	totalKeys := keysPerShard * numShards
 	str1kb := strings.Repeat("a", 1024)
@@ -117,52 +117,50 @@ func main() {
 		fmt.Printf("----------------------------------------------writing keys\n")
 		wg.Add(writeWorkers)
 
-		go func() {
-			for k := 0; k < totalKeys*MULTIPLIER; k++ {
-				randomval := rand.Intn(totalKeys)
-				key := fmt.Sprintf("key%d", randomval)
+		for w := 0; w < writeWorkers; w++ {
+			go func(workerID int) {
+				defer wg.Done()
+				for k := 0; k < totalKeys*MULTIPLIER; k += 1 {
+					randomval := rand.Intn(totalKeys)
+					key := fmt.Sprintf("key%d", randomval)
 
-				val := []byte(fmt.Sprintf(str1kb, randomval))
-				if err := pc.Put(key, val, 60); err != nil {
-					panic(err)
+					val := []byte(fmt.Sprintf(str1kb, randomval))
+					if err := pc.Put(key, val, 60); err != nil {
+						panic(err)
+					}
+
+					if k%5000000 == 0 {
+						fmt.Printf("----------------------------------------------wrote %d keys %d writerid\n", k, workerID)
+					}
 				}
-
-				if k%5000000 == 0 {
-					fmt.Printf("----------------------------------------------wrote %d keys \n", k)
-				}
-			}
-
-			wg.Done()
-		}()
-
+			}(w)
+		}
 	}
 
 	if readWorkers > 0 {
 		fmt.Printf("----------------------------------------------reading keys\n")
 		wg.Add(readWorkers)
 
-		go func() {
-			for k := 0; k < totalKeys*MULTIPLIER; k++ {
+		for r := 0; r < readWorkers; r++ {
+			go func(workerID int) {
+				defer wg.Done()
+				for k := 0; k < totalKeys*MULTIPLIER; k += 1 {
+					randomval := rand.Intn(totalKeys)
+					key := fmt.Sprintf("key%d", randomval)
+					val, found, expired := pc.Get(key)
 
-				randomval := rand.Intn(totalKeys)
-				key := fmt.Sprintf("key%d", randomval)
-				val, found, expired := pc.Get(key)
-
-				if expired {
-					panic("key expired")
+					if expired {
+						panic("key expired")
+					}
+					if found && string(val) != fmt.Sprintf(str1kb, randomval) {
+						panic("value mismatch")
+					}
+					if k%5000000 == 0 {
+						fmt.Printf("----------------------------------------------read %d keys %d readerid\n", k, workerID)
+					}
 				}
-				if found && string(val) != fmt.Sprintf(str1kb, randomval) {
-
-					panic("value mismatch")
-				}
-				if k%5000000 == 0 {
-					fmt.Printf("----------------------------------------------read %d keys \n", k)
-				}
-			}
-
-			wg.Done()
-
-		}()
+			}(r)
+		}
 	}
 
 	// Start pprof HTTP server for runtime profiling
@@ -193,8 +191,6 @@ func main() {
 		Str("sys", fmt.Sprintf("%.2f MB", float64(m.Sys)/1024/1024)).
 		Uint32("num_gc", m.NumGC).
 		Msg("Memory statistics")
-	wg.Add(1)
-	wg.Wait()
 }
 
 func BucketsByWidth(a float64, n int) []float64 {
