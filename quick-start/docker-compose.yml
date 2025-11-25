@@ -2,12 +2,13 @@ version: '3.8'
 
 # BharatML Stack Application Versions
 # To test different versions, set environment variables:
-#   ONFS_VERSION=v1.2.3 HORIZON_VERSION=v2.1.0 NUMERIX_VERSION=v1.0.0 TRUFFLEBOX_VERSION=v1.0.5 docker-compose up
+#   ONFS_VERSION=v1.2.3 HORIZON_VERSION=v2.1.0 NUMERIX_VERSION=v1.0.0 TRUFFLEBOX_VERSION=v1.0.5 INFERFLOW_VERSION=v1.0.0 docker-compose up
 # Or modify the default values below:
 #   ONFS_VERSION: latest
 #   HORIZON_VERSION: latest
 #   NUMERIX_VERSION: latest
 #   TRUFFLEBOX_VERSION: latest
+#   INFERFLOW_VERSION: latest
 
 services:
   # Infrastructure Services
@@ -412,6 +413,56 @@ services:
     command: sh -c "apk add --no-cache curl && sleep infinity"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://numerix:8083/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: "no"
+
+  inferflow:
+    image: ghcr.io/meesho/inferflow:${INFERFLOW_VERSION:-latest}
+    container_name: inferflow
+    ports:
+      - "8085:8085"
+    environment:
+      - APP_NAME=inferflow
+      - APP_ENV=local
+      - APP_LOG_LEVEL=DEBUG
+      - APP_PORT=8085
+      - APP_GC_PERCENTAGE=1
+      - METRICS_SAMPLING_RATE=1
+      - ETCD_WATCHER_ENABLED=true
+      - ETCD_SERVER=http://etcd:2379
+      - EXTERNAL_SERVICE_ONFS_FSHOST=onfs-api-server
+      - EXTERNAL_SERVICE_ONFS_FSPORT=8089
+      - EXTERNAL_SERVICE_ONFS_FSGRPCPLAINTEXT=true
+      - EXTERNAL_SERVICE_ONFS_FSCALLERID=inferflow
+      - EXTERNAL_SERVICE_ONFS_FSCALLERTOKEN=test
+      - EXTERNAL_SERVICE_ONFS_FSDEADLINE=5000
+      - EXTERNAL_SERVICE_ONFS_FSBATCHSIZE=100
+      - NUMERIX_CLIENT_V1_HOST=numerix
+      - NUMERIX_CLIENT_V1_PORT=8083
+      - NUMERIX_CLIENT_V1_DEADLINEMS=5000
+      - NUMERIX_CLIENT_V1_PLAINTEXT=true
+      - NUMERIX_CLIENT_V1_AUTHTOKEN=test
+      - NUMERIX_CLIENT_V1_BATCHSIZE=100
+    networks:
+      - onfs-network
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  inferflow-healthcheck:
+    image: alpine:latest
+    container_name: inferflow-healthcheck
+    networks:
+      - onfs-network
+    depends_on:
+      - inferflow
+    command: sh -c "apk add --no-cache curl && sleep infinity"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://inferflow:8085/health/self"]
       interval: 30s
       timeout: 10s
       retries: 5
