@@ -1,4 +1,4 @@
-name: Release Go SDK
+name: Release Helix Client
 
 on:
   workflow_dispatch:
@@ -40,10 +40,10 @@ jobs:
         with:
           go-version: '1.24'
 
-      - name: Validate Go SDK
+      - name: Validate Helix Client
         run: |
           echo "Current branch: ${{ github.ref }}"
-          cd go-sdk
+          cd helix-client
           go mod tidy
           go test -v ./...
           go build -v ./...
@@ -54,8 +54,8 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          TAG="go-sdk/${{ inputs.version }}"
-          git tag -a "$TAG" -m "Go SDK release ${{ inputs.version }}"
+          TAG="helix-client/${{ inputs.version }}"
+          git tag -a "$TAG" -m "Helix Client release ${{ inputs.version }}"
           git push origin "$TAG"
 
       - name: Create GitHub Release (Production)
@@ -64,24 +64,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: go-sdk/${{ inputs.version }}
-          release_name: Go SDK ${{ inputs.version }}
+          tag_name: helix-client/${{ inputs.version }}
+          release_name: Helix Client ${{ inputs.version }}
           body: |
-            ## Go SDK Release ${{ inputs.version }}
+            ## Helix Client Release ${{ inputs.version }}
             
             ### Installation
             ```bash
-            go get github.com/${{ github.repository }}/go-sdk@${{ inputs.version }}
+            go get github.com/${{ github.repository }}/helix-client@${{ inputs.version }}
             ```
             
             ### Features
-            - Go client libraries for BharatMLStack
-            - Feature store integration
-            - Type-safe API bindings
+            - Go client libraries for BharatMLStack services
+            - Numerix, Predator, and Skye client integrations
+            - Type-safe API bindings and gRPC support
             
             ### Usage
             ```go
-            import "github.com/${{ github.repository }}/go-sdk"
+            import "github.com/${{ github.repository }}/helix-client"
             ```
             
             ### Changes
@@ -100,16 +100,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: go-sdk/${{ inputs.version }}
-          release_name: Go SDK ${{ inputs.version }} (Beta)
+          tag_name: helix-client/${{ inputs.version }}
+          release_name: Helix Client ${{ inputs.version }} (Beta)
           body: |
-            ## Go SDK Beta Release ${{ inputs.version }}
+            ## Helix Client Beta Release ${{ inputs.version }}
             
             ⚠️ **This is a beta release from the develop branch** - Use for testing purposes only.
             
             ### Installation
             ```bash
-            go get github.com/${{ github.repository }}/go-sdk@${{ inputs.version }}
+            go get github.com/${{ github.repository }}/helix-client@${{ inputs.version }}
             ```
             
             ### Changes
@@ -128,16 +128,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: go-sdk/${{ inputs.version }}
-          release_name: Go SDK ${{ inputs.version }} (Alpha)
+          tag_name: helix-client/${{ inputs.version }}
+          release_name: Helix Client ${{ inputs.version }} (Alpha)
           body: |
-            ## Go SDK Alpha Release ${{ inputs.version }}
+            ## Helix Client Alpha Release ${{ inputs.version }}
             
             ⚠️ **This is an alpha release from a feature/fix branch** - Experimental build for development and testing.
             
             ### Installation
             ```bash
-            go get github.com/${{ github.repository }}/go-sdk@${{ inputs.version }}
+            go get github.com/${{ github.repository }}/helix-client@${{ inputs.version }}
             ```
             
             ### Changes
