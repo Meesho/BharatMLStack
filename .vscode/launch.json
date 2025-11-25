@@ -24,7 +24,7 @@
             "type": "go",
             "request": "launch",
             "mode": "debug",
-            "program": "${workspaceFolder}/flashring/cmd/flashringtest/main.go"
+            "program": "${workspaceFolder}/flashring/cmd/flashringtest"
         }
 
     ]
