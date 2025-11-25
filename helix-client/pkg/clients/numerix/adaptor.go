@@ -143,7 +143,7 @@ func (a *Adapter) ConvertScoreDataFromFP32(data [][][]byte, dataType string) err
 			if data[i][j] == nil {
 				continue
 			}
-			data[i][j], err = typeconverter.ConvertBytesToBytes(data[i][j], "fp32", dataType)
+			data[i][j], err = typeconverter.ConvertBytesToBytes(data[i][j], "FP32", dataType)
 			if err != nil {
 				return err
 			}

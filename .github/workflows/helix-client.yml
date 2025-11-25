@@ -1,19 +1,19 @@
-name: Go SDK CI
+name: Helix Client CI
 
 on:
   pull_request:
     branches: [master, develop]
-    paths: ['go-sdk/**']
+    paths: ['helix-client/**']
   push:
     branches: [master, develop]
-    paths: ['go-sdk/**']
+    paths: ['helix-client/**']
 
 jobs:
-  build-go-sdk:
+  build-helix-client:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./go-sdk
+        working-directory: ./helix-client
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,9 +30,9 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ runner.os }}-go-sdk-${{ hashFiles('go-sdk/go.sum') }}
+          key: ${{ runner.os }}-helix-client-${{ hashFiles('helix-client/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-sdk-
+            ${{ runner.os }}-helix-client-
 
       - name: Download dependencies
         run: go mod download

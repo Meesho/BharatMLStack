@@ -20,6 +20,7 @@ jobs:
       online-feature-store-changed: ${{ steps.changes.outputs.online-feature-store }}
       go-sdk-changed: ${{ steps.changes.outputs.go-sdk }}
       py-sdk-changed: ${{ steps.changes.outputs.py-sdk }}
+      helix-client-changed: ${{ steps.changes.outputs.helix-client }}
       multiple-components: ${{ steps.check-multiple.outputs.multiple }}
       any-component: ${{ steps.check-any.outputs.any }}
     steps:
@@ -45,6 +46,8 @@ jobs:
               - 'go-sdk/**'
             py-sdk:
               - 'py-sdk/**'
+            helix-client:
+              - 'helix-client/**'
 
       - name: Check if multiple components changed
         id: check-multiple
@@ -68,6 +71,9 @@ jobs:
           if [ "${{ steps.changes.outputs.py-sdk }}" == "true" ]; then
             changed_count=$((changed_count + 1))
           fi
+          if [ "${{ steps.changes.outputs.helix-client }}" == "true" ]; then
+            changed_count=$((changed_count + 1))
+          fi
           
           if [ $changed_count -gt 1 ]; then
             echo "multiple=true" >> $GITHUB_OUTPUT
@@ -78,7 +84,7 @@ jobs:
       - name: Check if any component changed
         id: check-any
         run: |
-          if [ "${{ steps.changes.outputs.horizon }}" == "true" ] || [ "${{ steps.changes.outputs.trufflebox-ui }}" == "true" ] || [ "${{ steps.changes.outputs.numerix }}" == "true" ] || [ "${{ steps.changes.outputs.online-feature-store }}" == "true" ] || [ "${{ steps.changes.outputs.go-sdk }}" == "true" ] || [ "${{ steps.changes.outputs.py-sdk }}" == "true" ]; then
+          if [ "${{ steps.changes.outputs.horizon }}" == "true" ] || [ "${{ steps.changes.outputs.trufflebox-ui }}" == "true" ] || [ "${{ steps.changes.outputs.numerix }}" == "true" ] || [ "${{ steps.changes.outputs.online-feature-store }}" == "true" ] || [ "${{ steps.changes.outputs.go-sdk }}" == "true" ] || [ "${{ steps.changes.outputs.py-sdk }}" == "true" ] || [ "${{ steps.changes.outputs.helix-client }}" == "true" ]; then
             echo "any=true" >> $GITHUB_OUTPUT
           else
             echo "any=false" >> $GITHUB_OUTPUT
@@ -98,6 +104,7 @@ jobs:
           echo "- Online Feature Store CI: ${{ needs.detect-changes.outputs.online-feature-store-changed }}"
           echo "- Go SDK CI: ${{ needs.detect-changes.outputs.go-sdk-changed }}"
           echo "- Python SDK CI: ${{ needs.detect-changes.outputs.py-sdk-changed }}"
+          echo "- Helix Client CI: ${{ needs.detect-changes.outputs.helix-client-changed }}"
           echo "This workflow will proceed with integration tests..."
 
   integration-tests:
@@ -116,6 +123,7 @@ jobs:
           echo "Testing Numerix matrix operations integration..."
           echo "Testing Go SDK compatibility with backend services..."
           echo "Testing Python SDK compatibility with backend services..."
+          echo "Testing Helix Client compatibility with backend services..."
           # Add actual integration test commands here
 
       - name: Integration Test - Docker Compose
@@ -194,4 +202,5 @@ jobs:
           echo "- Numerix: ${{ needs.detect-changes.outputs.numerix-changed }}" >> $GITHUB_STEP_SUMMARY
           echo "- Online Feature Store: ${{ needs.detect-changes.outputs.online-feature-store-changed }}" >> $GITHUB_STEP_SUMMARY
           echo "- Go SDK: ${{ needs.detect-changes.outputs.go-sdk-changed }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Python SDK: ${{ needs.detect-changes.outputs.py-sdk-changed }}" >> $GITHUB_STEP_SUMMARY 
+          echo "- Python SDK: ${{ needs.detect-changes.outputs.py-sdk-changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Helix Client: ${{ needs.detect-changes.outputs.helix-client-changed }}" >> $GITHUB_STEP_SUMMARY 
