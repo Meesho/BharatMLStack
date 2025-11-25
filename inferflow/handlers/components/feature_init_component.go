@@ -1,3 +1,5 @@
+//go:build !meesho
+
 package components
 
 import (
@@ -74,7 +76,6 @@ func buildStringDataSchema(req ComponentRequest) map[string]matrix.Column {
 	extractFsCompositeColumn(stringColumnIndexMap, req.ComponentConfig)
 	extractByteToStringSchema(stringColumnIndexMap, req.ComponentConfig)
 	extractCalibrationColumns(stringColumnIndexMap, req.ComponentConfig)
-	extractRealTimePricingColumns(stringColumnIndexMap, req.ComponentConfig)
 	return stringColumnIndexMap
 }
 
@@ -84,7 +85,6 @@ func buildByteDataSchema(req ComponentRequest) map[string]matrix.Column {
 	extractFsColumns(byteColumnIndexMap, compConfig)
 	extractPredatorColumns(byteColumnIndexMap, compConfig)
 	extractNumerixColumns(byteColumnIndexMap, compConfig)
-	extractRealTimeBytesPricingColumns(byteColumnIndexMap, compConfig)
 
 	return byteColumnIndexMap
 }
@@ -199,75 +199,6 @@ func extractFsCompositeColumn(stringColumnIndexMap map[string]matrix.Column, com
 		if orionComp.CompositeId {
 			stringColumnIndexMap[orionComp.ComponentId] = matrix.Column{Name: orionComp.ComponentId, DataType: DataTypeString, Index: idx}
 			idx++
-		}
-	}
-}
-
-func extractRealTimePricingColumns(stringColumnIndexMap map[string]matrix.Column, compConfig *config.ComponentConfig) {
-	if compConfig.RealTimePricingFeatureComponentConfig.Size() == 0 {
-		return
-	}
-
-	index := len(stringColumnIndexMap)
-	for _, comp := range compConfig.RealTimePricingFeatureComponentConfig.Values() {
-		pricingComp, ok := comp.(config.RealTimePricingFeatureComponentConfig)
-		if !ok {
-			continue
-		}
-
-		// Add FSKeys columns
-		for _, key := range pricingComp.FSKeys {
-			if _, exists := stringColumnIndexMap[key.Column]; !exists {
-				stringColumnIndexMap[key.Column] = matrix.Column{
-					Name:     key.Column,
-					DataType: DataTypeString,
-					Index:    index,
-				}
-				index++
-			}
-		}
-
-		// Add composite ID column if enabled
-		if pricingComp.CompositeId {
-			if _, exists := stringColumnIndexMap[pricingComp.ComponentId]; !exists {
-				stringColumnIndexMap[pricingComp.ComponentId] = matrix.Column{
-					Name:     pricingComp.ComponentId,
-					DataType: DataTypeString,
-					Index:    index,
-				}
-				index++
-			}
-		}
-	}
-}
-
-// extractRealTimeBytesPricingColumns extracts byte columns for real-time pricing feature components
-func extractRealTimeBytesPricingColumns(byteColumnIndexMap map[string]matrix.Column, compConfig *config.ComponentConfig) {
-	if compConfig.RealTimePricingFeatureComponentConfig.Size() == 0 {
-		return
-	}
-
-	index := len(byteColumnIndexMap)
-	for _, comp := range compConfig.RealTimePricingFeatureComponentConfig.Values() {
-		pricingComp, ok := comp.(config.RealTimePricingFeatureComponentConfig)
-		if !ok {
-			continue
-		}
-
-		// Add feature columns for byte data
-		label := pricingComp.FeatureRequest.Label
-		for _, group := range pricingComp.FeatureRequest.FeatureGroups {
-			for _, feature := range group.Features {
-				col := pricingComp.ColNamePrefix + label + ":" + group.Label + ":" + feature
-				if _, exists := byteColumnIndexMap[col]; !exists {
-					byteColumnIndexMap[col] = matrix.Column{
-						Name:     col,
-						DataType: group.DataType,
-						Index:    index,
-					}
-					index++
-				}
-			}
 		}
 	}
 }

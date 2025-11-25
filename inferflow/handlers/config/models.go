@@ -1,3 +1,5 @@
+//go:build !meesho
+
 package config
 
 import (
@@ -23,14 +25,13 @@ type DAGExecutionConfig struct {
 }
 
 type ComponentConfig struct {
-	CacheEnabled                          bool              `json:"cache_enabled"`
-	CacheVersion                          int               `json:"cache_version"`
-	CacheTtl                              int               `json:"cache_ttl"`
-	ErrorLoggingPercent                   int               `json:"error_logging_percent"`
-	FeatureComponentConfig                linkedhashmap.Map `json:"feature_components"`
-	PredatorComponentConfig               linkedhashmap.Map `json:"predator_components"`
-	NumerixComponentConfig                linkedhashmap.Map `json:"numerix_components"`
-	RealTimePricingFeatureComponentConfig linkedhashmap.Map `json:"real_time_pricing_feature_components"`
+	CacheEnabled            bool              `json:"cache_enabled"`
+	CacheVersion            int               `json:"cache_version"`
+	CacheTtl                int               `json:"cache_ttl"`
+	ErrorLoggingPercent     int               `json:"error_logging_percent"`
+	FeatureComponentConfig  linkedhashmap.Map `json:"feature_components"`
+	PredatorComponentConfig linkedhashmap.Map `json:"predator_components"`
+	NumerixComponentConfig  linkedhashmap.Map `json:"numerix_components"`
 }
 
 type ResponseConfig struct {
@@ -65,19 +66,6 @@ type FeatureComponentConfig struct {
 	CompCacheEnabled  bool           `json:"comp_cache_enabled"`
 	CompCacheTtl      int            `json:"comp_cache_ttl"`
 	ColNamePrefix     string         `json:"col_name_prefix"`
-}
-
-type RealTimePricingFeatureComponentConfig struct {
-	Component         string         `json:"component"`
-	ComponentId       string         `json:"component_id"`
-	CompositeId       bool           `json:"composite_id"`
-	FSKeys            []FSKey        `json:"fs_keys"`
-	FeatureRequest    FeatureRequest `json:"fs_request"`
-	FSFlattenRespKey  string         `json:"fs_flatten_resp_key"`
-	FSFlattenRespKeys []string       `json:"fs_flatten_resp_keys"`
-	ColNamePrefix     string         `json:"col_name_prefix"`
-	CompCacheEnabled  bool           `json:"comp_cache_enabled"`
-	CompCacheTtl      int            `json:"comp_cache_ttl"`
 }
 
 type FSKey struct {
@@ -140,14 +128,13 @@ type NumerixComponentConfig struct {
 func (c *ComponentConfig) UnmarshalJSON(data []byte) error {
 	type Alias ComponentConfig
 	aux := &struct {
-		CacheEnabled                          bool                                    `json:"cache_enabled"`
-		CacheVersion                          int                                     `json:"cache_version"`
-		CacheTtl                              int                                     `json:"cache_ttl"`
-		ErrorLoggingPercent                   int                                     `json:"error_logging_percent"`
-		FeatureComponentConfig                []FeatureComponentConfig                `json:"feature_components"`
-		RealTimePricingFeatureComponentConfig []RealTimePricingFeatureComponentConfig `json:"real_time_pricing_feature_components"`
-		PredatorComponentConfig               []PredatorComponentConfig               `json:"predator_components"`
-		NumerixComponentConfig                []NumerixComponentConfig                `json:"numerix_components"`
+		CacheEnabled            bool                      `json:"cache_enabled"`
+		CacheVersion            int                       `json:"cache_version"`
+		CacheTtl                int                       `json:"cache_ttl"`
+		ErrorLoggingPercent     int                       `json:"error_logging_percent"`
+		FeatureComponentConfig  []FeatureComponentConfig  `json:"feature_components"`
+		PredatorComponentConfig []PredatorComponentConfig `json:"predator_components"`
+		NumerixComponentConfig  []NumerixComponentConfig  `json:"numerix_components"`
 		*Alias
 	}{
 		Alias: (*Alias)(c),
@@ -166,13 +153,6 @@ func (c *ComponentConfig) UnmarshalJSON(data []byte) error {
 	c.CacheVersion = aux.CacheVersion
 	c.CacheTtl = aux.CacheTtl
 	c.ErrorLoggingPercent = aux.ErrorLoggingPercent
-
-	// Initialize the real time pricing feature component linked hashmap.Map fields
-	realTimePricingFeatureComponentMap := linkedhashmap.New()
-	for _, realTimePricingFeatureConfig := range aux.RealTimePricingFeatureComponentConfig {
-		realTimePricingFeatureComponentMap.Put(realTimePricingFeatureConfig.Component, realTimePricingFeatureConfig)
-	}
-	c.RealTimePricingFeatureComponentConfig = *realTimePricingFeatureComponentMap
 
 	// Initialize the ranker component linked hashmap.Map fields
 	predatorComponentMap := linkedhashmap.New()
