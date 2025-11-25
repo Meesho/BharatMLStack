@@ -1,8 +1,6 @@
 module github.com/Meesho/BharatMLStack/go-sdk
 
-go 1.22.0
-
-toolchain go1.22.8
+go 1.24.4
 
 require (
 	github.com/rs/zerolog v1.34.0

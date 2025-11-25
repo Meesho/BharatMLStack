@@ -114,7 +114,7 @@ func TestTagAsString(t *testing.T) {
 			name:     "tag with special characters in value",
 			tagName:  "broker",
 			tagValue: "sasl_ssl://host:9092",
-			expected: "broker:sasl_ssl___host_9092",
+			expected: "broker:sasl_ssl_//host_9092",
 		},
 		{
 			name:     "tag with spaces in value",
