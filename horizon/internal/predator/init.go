@@ -15,6 +15,7 @@ var (
 	TestGpuDeployableID  int
 	initOnce             sync.Once
 	IsMeeshoEnabled      bool
+	IsGcsEnabled         bool
 )
 
 func Init(config configs.Configs) {
@@ -26,6 +27,7 @@ func Init(config configs.Configs) {
 		TestDeployableID = config.TestDeployableID
 		TestGpuDeployableID = config.TestGpuDeployableID
 		IsMeeshoEnabled = config.IsMeeshoEnabled
+		IsGcsEnabled = config.GcsEnabled
 	})
 
 }

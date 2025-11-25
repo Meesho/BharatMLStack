@@ -52,7 +52,14 @@ type GCSClient struct {
 	ctx    context.Context
 }
 
-func CreateGCSClient() GCSClientInterface {
+func CreateGCSClient(isGcsEnabled bool) GCSClientInterface {
+	if !isGcsEnabled {
+		log.Warn().Msg("GCS client is disabled")
+		return &GCSClient{
+			client: nil,
+			ctx:    nil,
+		}
+	}
 	ctx := context.Background()
 	client, err := storage.NewClient(ctx)
 	if err != nil {
