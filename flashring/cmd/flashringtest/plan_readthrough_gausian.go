@@ -35,9 +35,9 @@ func planReadthroughGaussian() {
 	)
 
 	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul/", "data directory for shard files")
-	flag.IntVar(&numShards, "shards", 80, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 3_00_000, "keys per shard")
-	flag.IntVar(&memtableMB, "memtable-mb", 8, "memtable size in MiB")
+	flag.IntVar(&numShards, "shards", 1, "number of shards")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 20_000_000, "keys per shard")
+	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 40, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 1, "number of read workers")
 	flag.IntVar(&writeWorkers, "writers", 1, "number of write workers")
@@ -145,7 +145,8 @@ func planReadthroughGaussian() {
 					val, found, expired := pc.Get(key)
 
 					if !found {
-						missedKeyChanList[workerID] <- randomval
+						writeWorkerid := randomval % writeWorkers
+						missedKeyChanList[writeWorkerid] <- randomval
 					}
 
 					if expired {
