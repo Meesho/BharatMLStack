@@ -1,8 +1,6 @@
 package numerix
 
 import (
-	"encoding/binary"
-	"math"
 	"testing"
 
 	"github.com/Meesho/BharatMLStack/helix-client/pkg/datatypeconverter/byteorder"
@@ -12,24 +10,6 @@ import (
 func init() {
 	// Initialize the byte order system for typeconverter to work
 	byteorder.Init()
-}
-
-func float32ToBytes(f float32) []byte {
-	buf := make([]byte, 4)
-	binary.LittleEndian.PutUint32(buf, math.Float32bits(f))
-	return buf
-}
-
-func float64ToBytes(f float64) []byte {
-	buf := make([]byte, 8)
-	binary.LittleEndian.PutUint64(buf, math.Float64bits(f))
-	return buf
-}
-
-func int32ToBytes(i int32) []byte {
-	buf := make([]byte, 4)
-	binary.LittleEndian.PutUint32(buf, uint32(i))
-	return buf
 }
 
 func Test_ConvertScoreDataFromFP32(t *testing.T) {

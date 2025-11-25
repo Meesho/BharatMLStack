@@ -525,51 +525,6 @@ func convertStringToBytes(stringData [][][]string, dataType string) ([][][]byte,
 	return byteData, nil
 }
 
-// convertBytesToString converts byte data to strings based on the specified data type
-func convertBytesToString(byteData [][]byte, dataType string) ([][]string, error) {
-	stringData := make([][]string, len(byteData))
-
-	for batchIdx, batch := range byteData {
-		switch dataType {
-		case "FP32":
-			strings := make([]string, len(batch)/4)
-			for i := 0; i < len(strings); i++ {
-				bits := binary.LittleEndian.Uint32(batch[i*4 : (i+1)*4])
-				val := math.Float32frombits(bits)
-				strings[i] = strconv.FormatFloat(float64(val), 'f', -1, 32)
-			}
-			stringData[batchIdx] = strings
-		case "INT32":
-			strings := make([]string, len(batch)/4)
-			for i := 0; i < len(strings); i++ {
-				val := int32(binary.LittleEndian.Uint32(batch[i*4 : (i+1)*4]))
-				strings[i] = strconv.FormatInt(int64(val), 10)
-			}
-			stringData[batchIdx] = strings
-		case "INT64":
-			strings := make([]string, len(batch)/8)
-			for i := 0; i < len(strings); i++ {
-				val := int64(binary.LittleEndian.Uint64(batch[i*8 : (i+1)*8]))
-				strings[i] = strconv.FormatInt(val, 10)
-			}
-			stringData[batchIdx] = strings
-		case "BOOL":
-			strings := make([]string, len(batch))
-			for i, b := range batch {
-				strings[i] = strconv.FormatBool(b != 0)
-			}
-			stringData[batchIdx] = strings
-		case "BYTES":
-			// For BYTES type, just convert bytes to string
-			stringData[batchIdx] = []string{string(batch)}
-		default:
-			return nil, fmt.Errorf("unsupported data type for byte conversion: %s", dataType)
-		}
-	}
-
-	return stringData, nil
-}
-
 // convertBytesToStringWithNils converts byte data to strings, handling nil byte slices
 func convertBytesToStringWithNils(byteData [][]byte, dataType string) ([][]string, error) {
 	stringData := make([][]string, len(byteData))
