@@ -35,12 +35,12 @@ func planReadthroughGaussian() {
 	)
 
 	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul/", "data directory for shard files")
-	flag.IntVar(&numShards, "shards", 4, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 10_000_000, "keys per shard")
+	flag.IntVar(&numShards, "shards", 10, "number of shards")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 2_000_000, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 40, "file size in GiB per shard")
-	flag.IntVar(&readWorkers, "readers", 4, "number of read workers")
-	flag.IntVar(&writeWorkers, "writers", 4, "number of write workers")
+	flag.IntVar(&readWorkers, "readers", 10, "number of read workers")
+	flag.IntVar(&writeWorkers, "writers", 10, "number of write workers")
 	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
 	flag.Int64Var(&iterations, "iterations", 100_000_000, "number of iterations")
 	flag.Float64Var(&aVal, "a", 0.4, "a value for the predictor")
@@ -104,7 +104,7 @@ func planReadthroughGaussian() {
 
 	missedKeyChanList := make([]chan int, writeWorkers)
 	for i := 0; i < writeWorkers; i++ {
-		missedKeyChanList[i] = make(chan int, 10000)
+		missedKeyChanList[i] = make(chan int)
 	}
 
 	totalKeys := keysPerShard * numShards
