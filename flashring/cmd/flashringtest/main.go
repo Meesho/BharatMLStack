@@ -21,6 +21,25 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// normalDistInt returns an integer in [0, max) following a normal distribution
+// centered at max/2 with standard deviation = max/6 (so ~99.7% values are in range)
+func normalDistInt(max int) int {
+	if max <= 0 {
+		return 0
+	}
+
+	mean := float64(max) / 2.0
+	stdDev := float64(max) / 6.0
+
+	for {
+		val := rand.NormFloat64()*stdDev + mean
+
+		if val >= 0 && val < float64(max) {
+			return int(val)
+		}
+	}
+}
+
 func main() {
 	// Flags to parameterize load tests
 	var (
@@ -121,7 +140,7 @@ func main() {
 			go func(workerID int) {
 				defer wg.Done()
 				for k := 0; k < totalKeys*MULTIPLIER; k += 1 {
-					randomval := rand.Intn(totalKeys)
+					randomval := normalDistInt(totalKeys)
 					key := fmt.Sprintf("key%d", randomval)
 
 					val := []byte(fmt.Sprintf(str1kb, randomval))
@@ -145,7 +164,7 @@ func main() {
 			go func(workerID int) {
 				defer wg.Done()
 				for k := 0; k < totalKeys*MULTIPLIER; k += 1 {
-					randomval := rand.Intn(totalKeys)
+					randomval := normalDistInt(totalKeys)
 					key := fmt.Sprintf("key%d", randomval)
 					val, found, expired := pc.Get(key)
 
