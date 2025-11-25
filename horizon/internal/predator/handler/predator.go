@@ -277,7 +277,7 @@ func (p *Predator) HandleModelRequest(req ModelRequest, requestType string) (str
 	predatorConfigList, err := p.PredatorConfigRepo.GetActiveModelByModelNameList(modelNameList)
 
 	if err != nil {
-		log.Error().Err(err).Msgf(errMsgFetchConfigs, err)
+		log.Error().Err(err).Msg(fmt.Sprintf("failed to fetch predator configs: %v", err))
 		return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf(errMsgFetchConfigs, err)
 	}
 
