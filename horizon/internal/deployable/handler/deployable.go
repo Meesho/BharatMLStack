@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
 	mainHandler "github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/deployablemetadata"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/serviceconfig"
@@ -157,7 +156,7 @@ func (d *Deployable) RefreshDeployable(appName, serviceType string) (*servicedep
 	return deployable, nil
 }
 
-func (d *Deployable) GetRingMasterConfig(appName, workflowID, runID string) externalcall.Config {
+func (d *Deployable) GetRingMasterConfig(appName, workflowID, runID string) mainHandler.Config {
 	return d.ringMasterClient.GetConfig(appName, workflowID, runID)
 }
 

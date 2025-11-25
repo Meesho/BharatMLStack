@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
 	mainHandler "github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
 	inferflowPkg "github.com/Meesho/BharatMLStack/horizon/internal/inferflow"
 	etcd "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
@@ -162,7 +161,7 @@ func (m *InferFlow) Promote(request PromoteConfigRequest) (Response, error) {
 	}
 
 	if exists {
-		return Response{}, errors.New("Request with this Config Id is already raised")
+		return Response{}, errors.New("request with this Config Id is already raised")
 	}
 
 	modelNameToEndPointMap := make(map[string]string)
@@ -239,10 +238,7 @@ func (m *InferFlow) Edit(request EditConfigOrCloneConfigRequest, token string) (
 		newVersion = existingConfigs[0].Version + 1
 	}
 
-	onboardRequest := InferflowOnboardRequest{
-		Payload:   request.Payload,
-		CreatedBy: request.CreatedBy,
-	}
+	onboardRequest := InferflowOnboardRequest(request)
 
 	inferFlowConfig, err := m.GetInferflowConfig(onboardRequest, token)
 	if err != nil {
@@ -309,10 +305,7 @@ func (m *InferFlow) Clone(request EditConfigOrCloneConfigRequest, token string) 
 		}
 	}
 
-	onboardRequest := InferflowOnboardRequest{
-		Payload:   request.Payload,
-		CreatedBy: request.CreatedBy,
-	}
+	onboardRequest := InferflowOnboardRequest(request)
 
 	inferFlowConfig, err := m.GetInferflowConfig(onboardRequest, token)
 	if err != nil {
@@ -447,7 +440,7 @@ func (m *InferFlow) Cancel(request CancelConfigRequest) (Response, error) {
 		return Response{}, errors.New("failed to check if request id exists with status in db: " + err.Error())
 	}
 	if !exists {
-		return Response{}, errors.New("Request ID does not exist or is not pending approval")
+		return Response{}, errors.New("request ID does not exist or is not pending approval")
 	}
 
 	table := &inferflow_request.Table{
@@ -804,7 +797,7 @@ func ValidateInferFlowConfig(config InferflowConfig, token string) (Response, er
 			if entity == "dummy" {
 				continue
 			}
-			response, err := externalcall.Client.ValidateOnlineFeatures(entity, token)
+			response, err := mainHandler.Client.ValidateOnlineFeatures(entity, token)
 			if err != nil {
 				return Response{
 					Error: "failed to validate feature exists: " + err.Error(),
@@ -821,7 +814,7 @@ func ValidateInferFlowConfig(config InferflowConfig, token string) (Response, er
 						}, errors.New("feature " + feature + " is duplicated")
 					}
 					featureMap[feature] = true
-					if !externalcall.ValidateFeatureExists(fg.Label+COLON_DELIMITER+feature, response) {
+					if !mainHandler.ValidateFeatureExists(fg.Label+COLON_DELIMITER+feature, response) {
 						return Response{
 							Error: "feature \"" + entity + COLON_DELIMITER + fg.Label + COLON_DELIMITER + feature + "\" does not exist",
 							Data:  Message{Message: emptyResponse},

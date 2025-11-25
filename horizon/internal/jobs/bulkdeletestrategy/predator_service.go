@@ -110,6 +110,9 @@ func (p *PredatorService) fetchModelNames(serviceDeployable servicedeployablecon
 	}
 
 	predatorConfigList, err := predatorConfigRepo.FindByDiscoveryIDsAndCreatedBefore(discoveryConfigId, maxPredatorInactiveAge)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 
 	for _, predatorConfigEntity := range predatorConfigList {
 		var metaData handler.MetaData
@@ -117,7 +120,7 @@ func (p *PredatorService) fetchModelNames(serviceDeployable servicedeployablecon
 			continue
 		}
 
-		if (&metaData.Ensembling) != nil && metaData.Ensembling.Step != nil {
+		if metaData.Ensembling.Step != nil {
 			for _, step := range metaData.Ensembling.Step {
 				if step.ModelName != "" {
 					parentToChildMapping[predatorConfigEntity.ModelName] = append(parentToChildMapping[predatorConfigEntity.ModelName], step.ModelName)
