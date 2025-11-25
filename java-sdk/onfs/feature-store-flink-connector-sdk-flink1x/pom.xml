@@ -1,76 +1,76 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project
+	xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
          http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-
-    <groupId>com.bharatml</groupId>
-    <artifactId>feature-store-flink-connector-sdk-flink1x</artifactId>
-    <version>1.0.0</version>
-    <packaging>jar</packaging>
-
-    <name>Feature Store Flink Connector SDK (Flink 1.x)</name>
-    <description>Flink connector module for Flink 1.20.1 with two sink implementations</description>
-
-    <properties>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <java.version>11</java.version>
-        <flink.version>1.20.1</flink.version>
-        <flink-connector-kafka.version>3.3.0-1.20</flink-connector-kafka.version>
-        <kafka.clients.version>3.5.0</kafka.clients.version>
-        <maven.compiler.plugin.version>3.11.0</maven.compiler.plugin.version>
-    </properties>
-
-    <dependencies>
-        <!-- Core module -->
-        <dependency>
-            <groupId>com.bharatml</groupId>
-            <artifactId>feature-store-core</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
-       <!-- Flink API provided -->
-  <dependency>
-    <groupId>org.apache.flink</groupId>
-    <artifactId>flink-streaming-java</artifactId>
-    <version>${flink.version}</version>
-    <scope>provided</scope>
-  </dependency>
-
-  <!-- Flink Kafka connector -->
-  <dependency>
-    <groupId>org.apache.flink</groupId>
-    <artifactId>flink-connector-kafka</artifactId>
-    <version>${flink-connector-kafka.version}</version>
-    <scope>provided</scope> <!-- set to provided for cluster usage; for local testing you can shade it -->
-  </dependency>
-
-
-        <!-- Logging -->
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>1.7.36</version>
-            <scope>provided</scope>
-        </dependency>
-    </dependencies>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>${maven.compiler.plugin.version}</version>
-                <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
-                    <release>${java.version}</release>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
+	<modelVersion>4.0.0</modelVersion>
+	<groupId>com.bharatml</groupId>
+	<artifactId>feature-store-flink-connector-sdk-flink1x</artifactId>
+	<version>1.0.0</version>
+	<packaging>jar</packaging>
+	<name>Feature Store Flink Connector SDK (Flink 1.x)</name>
+	<description>Flink connector module for Flink 1.20.1 with two sink implementations</description>
+	<properties>
+		<maven.compiler.source>11</maven.compiler.source>
+		<maven.compiler.target>11</maven.compiler.target>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<java.version>11</java.version>
+		<flink.version>1.20.1</flink.version>
+		<flink-connector-kafka.version>3.3.0-1.20</flink-connector-kafka.version>
+		<kafka.clients.version>3.5.0</kafka.clients.version>
+		<maven.compiler.plugin.version>3.11.0</maven.compiler.plugin.version>
+	</properties>
+	<dependencies>
+		<!-- Core module -->
+		<dependency>
+			<groupId>com.bharatml</groupId>
+			<artifactId>feature-store-core</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<!-- Flink API provided -->
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-streaming-java</artifactId>
+			<version>${flink.version}</version>
+			<scope>provided</scope>
+		</dependency>
+		<!-- Flink connector base -->
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-connector-base</artifactId>
+			<version>${flink.version}</version>
+			<scope>provided</scope>
+		</dependency>
+		<!-- Flink Kafka connector -->
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-connector-kafka</artifactId>
+			<version>${flink-connector-kafka.version}</version>
+			<scope>provided</scope>
+			<!-- set to provided for cluster usage; for local testing you can shade it -->
+		</dependency>
+		<!-- Logging -->
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+			<version>1.7.36</version>
+			<scope>provided</scope>
+		</dependency>
+	</dependencies>
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>${maven.compiler.plugin.version}</version>
+				<configuration>
+					<source>${java.version}</source>
+					<target>${java.version}</target>
+					<release>${java.version}</release>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
 </project>
 

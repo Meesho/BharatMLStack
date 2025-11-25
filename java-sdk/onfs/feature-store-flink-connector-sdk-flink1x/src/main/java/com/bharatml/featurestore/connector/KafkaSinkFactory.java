@@ -3,8 +3,7 @@ package com.bharatml.featurestore.connector;
 import com.bharatml.featurestore.core.FeatureEvent;
 import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
 import org.apache.flink.connector.kafka.sink.KafkaSink;
-import java.util.HashMap;
-import java.util.Map;
+import org.apache.flink.connector.base.DeliveryGuarantee;
 import java.util.Properties;
 
 /**
@@ -48,8 +47,9 @@ public final class KafkaSinkFactory {
         // use local var to avoid referencing a builder type that may be in a different package
         var builder = KafkaSink.<FeatureEvent>builder()
                 .setBootstrapServers(cfgBootstrapServers)
-                .setRecordSerializer(recordSerializer);
-               // .setDeliverGuarantee(exactlyOnce ? DeliveryGuarantee.EXACTLY_ONCE : DeliveryGuarantee.AT_LEAST_ONCE);
+                .setRecordSerializer(recordSerializer)
+                .setDeliveryGuarantee(exactlyOnce ? DeliveryGuarantee.EXACTLY_ONCE
+                    : DeliveryGuarantee.AT_LEAST_ONCE);
 
         if (producerProps != null && !producerProps.isEmpty()) {
             builder.setKafkaProducerConfig(producerProps);

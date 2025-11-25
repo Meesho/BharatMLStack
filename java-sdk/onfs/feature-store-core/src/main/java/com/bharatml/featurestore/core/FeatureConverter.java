@@ -2,9 +2,7 @@ package com.bharatml.featurestore.core;
 
 import persist.QueryOuterClass;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Converts FeatureEvent POJO to Protobuf Query message.
