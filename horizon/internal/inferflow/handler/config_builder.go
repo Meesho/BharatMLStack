@@ -567,7 +567,7 @@ func fetchComponentFeaturesWithClassification(features mapset.Set[string], pctrC
 	for _, component := range componentList.ToSlice() {
 		componentData := etcdConfig.GetComponentData(component)
 		if componentData == nil {
-			return nil, nil, nil, fmt.Errorf("Component Data: ComponentData for '%s' not found in registry.\nPlease Contact MLP Team to onboard the component.", component)
+			return nil, nil, nil, fmt.Errorf("component data: ComponentData for '%s' not found in registry. Please contact MLP team to onboard the component", component)
 		}
 
 		for _, pair := range componentData.FSIdSchemaToValueColumns {
@@ -609,18 +609,18 @@ func fetchComponentFeaturesWithClassification(features mapset.Set[string], pctrC
 			} else if len(parts) == 4 {
 				label, group = parts[1], parts[2]
 			} else {
-				return nil, nil, nil, fmt.Errorf("Component Data: invalid override component id: %s", override.ComponentId)
+				return nil, nil, nil, fmt.Errorf("component data: invalid override component id: %s", override.ComponentId)
 			}
 
 			featureGroupDataTypeMap, err := GetFeatureGroupDataTypeMap(label, token)
 			if err != nil {
-				return nil, nil, nil, fmt.Errorf("Component Data: error getting feature group data type map: %w", err)
+				return nil, nil, nil, fmt.Errorf("component data: error getting feature group data type map: %w", err)
 			}
 
 			if dataType, exists := featureGroupDataTypeMap[group]; exists {
 				featureToDataType[override.ComponentId] = dataType
 			} else {
-				return nil, nil, nil, fmt.Errorf("Component Data: feature group data type not found for %s: %s", override.ComponentId, group)
+				return nil, nil, nil, fmt.Errorf("component data: feature group data type not found for %s: %s", override.ComponentId, group)
 			}
 		}
 	}
@@ -806,7 +806,7 @@ func FillFeatureComponentFromComponentMap(request InferflowOnboardRequest, featu
 
 			componentData := etcdConfig.GetComponentData(componentName)
 			if componentData == nil {
-				return fmt.Errorf("Feature Components: componentData for '%s' not found in registry", componentName)
+				return fmt.Errorf("feature components: componentData for '%s' not found in registry", componentName)
 			}
 
 			componentID := componentData.ComponentID
@@ -1107,10 +1107,10 @@ func GetPredatorComponents(request InferflowOnboardRequest, offlineToOnlineMappi
 			defaultEndPointFallback := false
 			for _, route := range ranker.RoutingConfig {
 				if route.ModelName == "" || route.ModelEndpoint == "" {
-					return nil, fmt.Errorf("Predator Components: model name or model endpoint is missing for routing config")
+					return nil, fmt.Errorf("predator components: model name or model endpoint is missing for routing config")
 				}
 				if route.RoutingPercentage < 0 {
-					return nil, fmt.Errorf("Predator Components: routing percentage is less than 0 for routing config")
+					return nil, fmt.Errorf("predator components: routing percentage is less than 0 for routing config")
 				}
 				totalRoutingPercentage += route.RoutingPercentage
 				if route.ModelEndpoint == ranker.EndPoint {
@@ -1119,11 +1119,11 @@ func GetPredatorComponents(request InferflowOnboardRequest, offlineToOnlineMappi
 			}
 			if defaultEndPointFallback {
 				if totalRoutingPercentage != 100.0 {
-					return nil, fmt.Errorf("Default endpoint included but total routing percentage is not 100")
+					return nil, fmt.Errorf("default endpoint included but total routing percentage is not 100")
 				}
 			} else {
 				if totalRoutingPercentage > 100.0 {
-					return nil, fmt.Errorf("Total routing percentage is greater than 100")
+					return nil, fmt.Errorf("total routing percentage is greater than 100")
 				}
 			}
 		}
@@ -1157,12 +1157,7 @@ func GetPredatorComponents(request InferflowOnboardRequest, offlineToOnlineMappi
 			})
 		}
 		for _, output := range ranker.Outputs {
-			predatorComponent.Outputs = append(predatorComponent.Outputs, PredatorOutput{
-				Name:            output.Name,
-				ModelScores:     output.ModelScores,
-				ModelScoresDims: output.ModelScoresDims,
-				DataType:        output.DataType,
-			})
+			predatorComponent.Outputs = append(predatorComponent.Outputs, PredatorOutput(output))
 		}
 		predatorComponents = append(predatorComponents, predatorComponent)
 	}
@@ -1175,7 +1170,7 @@ func getPredatorInputFeaturesList(features []string, offlineToOnlineMapping map[
 	for _, feature := range features {
 		transformedFeature, featureType, err := transformFeature(feature)
 		if err != nil {
-			return nil, fmt.Errorf("Predator Input: error transforming feature %s: %w", feature, err)
+			return nil, fmt.Errorf("predator input: error transforming feature %s: %w", feature, err)
 		}
 
 		var featureToAdd string
@@ -1184,7 +1179,7 @@ func getPredatorInputFeaturesList(features []string, offlineToOnlineMapping map[
 			if onlineFeature, ok := offlineToOnlineMapping[transformedFeature]; ok {
 				featureToAdd = onlineFeature
 			} else {
-				return nil, fmt.Errorf("Predator Input: offlineToOnlineMapping for '%s' not found", transformedFeature)
+				return nil, fmt.Errorf("predator input: offlineToOnlineMapping for '%s' not found", transformedFeature)
 			}
 		default:
 			featureToAdd = transformedFeature
@@ -1222,7 +1217,7 @@ func getNumerixScoreMapping(eqVariables map[string]string, offlineToOnlineMappin
 	for key, feature := range eqVariables {
 		transformedFeature, featureType, err := transformFeature(feature)
 		if err != nil {
-			return nil, fmt.Errorf("Numerix Score Mapping: error transforming feature %s: %w", feature, err)
+			return nil, fmt.Errorf("numerix score mapping: error transforming feature %s: %w", feature, err)
 		}
 		keyDataType := featureToDataType[transformedFeature]
 		if keyDataType == "" {
@@ -1239,7 +1234,7 @@ func getNumerixScoreMapping(eqVariables map[string]string, offlineToOnlineMappin
 			if onlineFeature, ok := offlineToOnlineMapping[transformedFeature]; ok {
 				scoremap[key] = onlineFeature
 			} else {
-				return nil, fmt.Errorf("Numerix Score Mapping: offlineToOnlineMapping for '%s' not found", transformedFeature)
+				return nil, fmt.Errorf("numerix score mapping: offlineToOnlineMapping for '%s' not found", transformedFeature)
 			}
 		case featureClassOnline, featureClassDefault, featureClassRtp:
 			scoremap[key] = transformedFeature
