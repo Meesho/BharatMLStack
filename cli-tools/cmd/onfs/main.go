@@ -16,7 +16,6 @@ import (
 
 func main() {
 	setupOnFs := flag.Bool("setup-on-fs", false, "setup on fs")
-	flag.Parse()
 	mysqlHost := flag.String("mysql-host", "", "mysql host")
 	mysqlPort := flag.String("mysql-port", "", "mysql port")
 	mysqlUser := flag.String("mysql-user", "", "mysql user")
@@ -39,6 +38,8 @@ func main() {
 
 	help := flag.Bool("help", false, "help")
 
+	flag.Parse()
+
 	if *help {
 		fmt.Println("Usage:")
 		fmt.Println("  cli-tools --setup-on-fs --mysql-host <mysql-host> --mysql-port <mysql-port> --mysql-user <mysql-user> --mysql-password <mysql-password> --mysql-database <mysql-database> --etcd-host <etcd-host> --etcd-port <etcd-port> --etcd-user <etcd-user> --etcd-password <etcd-password>")
@@ -46,7 +47,7 @@ func main() {
 		return
 	}
 
-	if *setupOnFs {
+	if *setupOnFs && !*setupStorage {
 		if !setup.ValidateOnFsFlags(*mysqlHost, *mysqlPort, *mysqlUser, *mysqlPassword, *mysqlDatabase, *etcdHost, *etcdPort, *etcdUser, *etcdPassword) {
 			return
 		}
@@ -93,48 +94,44 @@ func main() {
 		if !setup.SetupMysqlTables(gormDB, *mysqlDatabase) {
 			return
 		}
+	} else if *setupStorage {
+		if !setup.ValidateStorageFlags(*storageType, *storageHosts, *storagePort, *storageUser, *storagePassword, *storageKeyspace) {
+			return
+		}
 
-		if *setupStorage {
-			if !setup.ValidateStorageFlags(*storageType, *storageHosts, *storagePort, *storageUser, *storagePassword, *storageKeyspace) {
+		if *storageType == "scylla" || *storageType == "cassandra" {
+			port, err := strconv.Atoi(*storagePort)
+			if err != nil {
+				fmt.Println("Error: unable to convert storage port to int", err)
 				return
 			}
 
-			if *storageType == "scylla" || *storageType == "cassandra" {
-				port, err := strconv.Atoi(*storagePort)
+			cluster := gocql.NewCluster(*storageHosts)
+			cluster.Port = port
+			cluster.Authenticator = gocql.PasswordAuthenticator{
+				Username: *storageUser,
+				Password: *storagePassword,
+			}
+
+			if *storageType == "cassandra" {
+				cassandraSession, err := cluster.CreateSession()
 				if err != nil {
-					fmt.Println("Error: unable to convert storage port to int", err)
+					fmt.Println("Error: unable to create cassandra session", err)
 					return
 				}
-
-				cluster := gocql.NewCluster(*storageHosts)
-				cluster.Port = port
-				cluster.Authenticator = gocql.PasswordAuthenticator{
-					Username: *storageUser,
-					Password: *storagePassword,
+				if !setup.SetupCassandraKeyspaceAndTables(cassandraSession, *storageKeyspace) {
+					return
 				}
-
-				if *storageType == "cassandra" {
-					cassandraSession, err := cluster.CreateSession()
-					if err != nil {
-						fmt.Println("Error: unable to create cassandra session", err)
-						return
-					}
-					if !setup.SetupCassandraKeyspaceAndTables(cassandraSession, *storageKeyspace) {
-						return
-					}
-				} else {
-					scyllaSession, err := cluster.CreateSession()
-					if err != nil {
-						fmt.Println("Error: unable to create scylla session", err)
-						return
-					}
-					if !setup.SetupScyllaKeyspaceAndTables(scyllaSession, *storageKeyspace) {
-						return
-					}
+			} else {
+				scyllaSession, err := cluster.CreateSession()
+				if err != nil {
+					fmt.Println("Error: unable to create scylla session", err)
+					return
+				}
+				if !setup.SetupScyllaKeyspaceAndTables(scyllaSession, *storageKeyspace) {
+					return
 				}
 			}
-		} else {
-			fmt.Println("Storage setup is disabled")
 		}
 	}
 }

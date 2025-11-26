@@ -48,6 +48,7 @@ func SetupEtcdPaths(etcdClient *clientv3.Client) bool {
 		fmt.Println("Error: Token set test failed in etcd")
 		return false
 	}
+	fmt.Println("Etcd: Paths setup successfully")
 	return true
 }
 
@@ -68,99 +69,99 @@ func SetupMysqlTables(gormDB *gorm.DB, database string) bool {
 	// Create tables
 	tables := []string{
 		`CREATE TABLE IF NOT EXISTS entity (
-			request_id int NOT NULL AUTO_INCREMENT,
-			payload text NOT NULL,
-			entity_label varchar(255) NOT NULL,
-			created_by varchar(255) NOT NULL,
-			approved_by varchar(255) NOT NULL,
-			status varchar(255) NOT NULL,
-			created_at datetime DEFAULT CURRENT_TIMESTAMP,
-			updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			service varchar(255) NOT NULL,
-			reject_reason varchar(255) NOT NULL,
-			request_type varchar(255) DEFAULT NULL,
-			PRIMARY KEY (request_id)
-		)`,
+                        request_id int NOT NULL AUTO_INCREMENT,
+                        payload text NOT NULL,
+                        entity_label varchar(255) NOT NULL,
+                        created_by varchar(255) NOT NULL,
+                        approved_by varchar(255) NOT NULL,
+                        status varchar(255) NOT NULL,
+                        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        service varchar(255) NOT NULL,
+                        reject_reason varchar(255) NOT NULL,
+                        request_type varchar(255) DEFAULT NULL,
+                        PRIMARY KEY (request_id)
+                )`,
 		`CREATE TABLE IF NOT EXISTS feature_group (
-			request_id int NOT NULL AUTO_INCREMENT,
-			payload text NOT NULL,
-			entity_label varchar(255) NOT NULL,
-			feature_group_label varchar(255) NOT NULL,
-			created_by varchar(255) NOT NULL,
-			approved_by varchar(255) NOT NULL,
-			status varchar(255) NOT NULL,
-			created_at datetime DEFAULT CURRENT_TIMESTAMP,
-			updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			service varchar(255) NOT NULL,
-			reject_reason varchar(255) NOT NULL,
-			request_type varchar(255) DEFAULT NULL,
-			PRIMARY KEY (request_id)
-		)`,
+                        request_id int NOT NULL AUTO_INCREMENT,
+                        payload text NOT NULL,
+                        entity_label varchar(255) NOT NULL,
+                        feature_group_label varchar(255) NOT NULL,
+                        created_by varchar(255) NOT NULL,
+                        approved_by varchar(255) NOT NULL,
+                        status varchar(255) NOT NULL,
+                        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        service varchar(255) NOT NULL,
+                        reject_reason varchar(255) NOT NULL,
+                        request_type varchar(255) DEFAULT NULL,
+                        PRIMARY KEY (request_id)
+                )`,
 		`CREATE TABLE IF NOT EXISTS features (
-			request_id int NOT NULL AUTO_INCREMENT,
-			payload text NOT NULL,
-			entity_label varchar(255) NOT NULL,
-			feature_group_label varchar(255) NOT NULL,
-			created_by varchar(255) NOT NULL,
-			approved_by varchar(255) NOT NULL,
-			status varchar(255) NOT NULL,
-			created_at datetime DEFAULT CURRENT_TIMESTAMP,
-			updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			request_type varchar(255) DEFAULT NULL,
-			service varchar(255) NOT NULL,
-			reject_reason varchar(255) NOT NULL,
-			PRIMARY KEY (request_id)
-		)`,
+                        request_id int NOT NULL AUTO_INCREMENT,
+                        payload text NOT NULL,
+                        entity_label varchar(255) NOT NULL,
+                        feature_group_label varchar(255) NOT NULL,
+                        created_by varchar(255) NOT NULL,
+                        approved_by varchar(255) NOT NULL,
+                        status varchar(255) NOT NULL,
+                        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        request_type varchar(255) DEFAULT NULL,
+                        service varchar(255) NOT NULL,
+                        reject_reason varchar(255) NOT NULL,
+                        PRIMARY KEY (request_id)
+                )`,
 		`CREATE TABLE IF NOT EXISTS job (
-			request_id int NOT NULL AUTO_INCREMENT,
-			payload text NOT NULL,
-			job_id varchar(255) NOT NULL,
-			created_by varchar(255) NOT NULL,
-			approved_by varchar(255) NOT NULL,
-			status varchar(255) NOT NULL,
-			created_at datetime DEFAULT CURRENT_TIMESTAMP,
-			updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			service varchar(255) NOT NULL,
-			reject_reason varchar(255) NOT NULL,
-			PRIMARY KEY (request_id)
-		)`,
+                        request_id int NOT NULL AUTO_INCREMENT,
+                        payload text NOT NULL,
+                        job_id varchar(255) NOT NULL,
+                        created_by varchar(255) NOT NULL,
+                        approved_by varchar(255) NOT NULL,
+                        status varchar(255) NOT NULL,
+                        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        service varchar(255) NOT NULL,
+                        reject_reason varchar(255) NOT NULL,
+                        PRIMARY KEY (request_id)
+                )`,
 		`CREATE TABLE IF NOT EXISTS store (
-			request_id int NOT NULL AUTO_INCREMENT,
-			payload text NOT NULL,
-			created_by varchar(255) NOT NULL,
-			approved_by varchar(255) NOT NULL,
-			status varchar(255) NOT NULL,
-			created_at datetime DEFAULT CURRENT_TIMESTAMP,
-			updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			service varchar(255) NOT NULL,
-			reject_reason varchar(255) NOT NULL,
-			PRIMARY KEY (request_id)
-		)`,
+                        request_id int NOT NULL AUTO_INCREMENT,
+                        payload text NOT NULL,
+                        created_by varchar(255) NOT NULL,
+                        approved_by varchar(255) NOT NULL,
+                        status varchar(255) NOT NULL,
+                        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        service varchar(255) NOT NULL,
+                        reject_reason varchar(255) NOT NULL,
+                        PRIMARY KEY (request_id)
+                )`,
 		`CREATE TABLE IF NOT EXISTS users (
-			id bigint unsigned NOT NULL AUTO_INCREMENT,
-			first_name varchar(50) NOT NULL,
-			last_name varchar(50) NOT NULL,
-			email varchar(100) NOT NULL,
-			password_hash varchar(255) NOT NULL,
-			role varchar(10) DEFAULT 'user',
-			is_active boolean DEFAULT false,
-			created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-			PRIMARY KEY (id),
-			UNIQUE KEY id (id),
-			UNIQUE KEY email (email),
-			CONSTRAINT users_chk_1 CHECK ((role in ('user','admin')))
-		)`,
+                        id bigint unsigned NOT NULL AUTO_INCREMENT,
+                        first_name varchar(50) NOT NULL,
+                        last_name varchar(50) NOT NULL,
+                        email varchar(100) NOT NULL,
+                        password_hash varchar(255) NOT NULL,
+                        role varchar(10) DEFAULT 'user',
+                        is_active boolean DEFAULT false,
+                        created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (id),
+                        UNIQUE KEY id (id),
+                        UNIQUE KEY email (email),
+                        CONSTRAINT users_chk_1 CHECK ((role in ('user','admin')))
+                )`,
 		`CREATE TABLE IF NOT EXISTS user_tokens (
-			id bigint unsigned NOT NULL AUTO_INCREMENT,
-			user_email varchar(255) NOT NULL,
-			token varchar(255) NOT NULL,
-			created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			expires_at timestamp NOT NULL,
-			PRIMARY KEY (id),
-			UNIQUE KEY id (id),
-			UNIQUE KEY token (token)
-		)`,
+                        id bigint unsigned NOT NULL AUTO_INCREMENT,
+                        user_email varchar(255) NOT NULL,
+                        token varchar(255) NOT NULL,
+                        created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        expires_at timestamp NOT NULL,
+                        PRIMARY KEY (id),
+                        UNIQUE KEY id (id),
+                        UNIQUE KEY token (token)
+                )`,
 	}
 
 	for _, tableSQL := range tables {
@@ -178,7 +179,9 @@ func SetupMysqlTables(gormDB *gorm.DB, database string) bool {
 
 func SetupScyllaKeyspaceAndTables(scyllaSession *gocql.Session, keyspace string) bool {
 	defer scyllaSession.Close()
-	err := scyllaSession.Query(fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s", keyspace)).Exec()
+	query := fmt.Sprintf(`CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};`, keyspace)
+
+	err := scyllaSession.Query(query).Exec()
 	if err != nil {
 		fmt.Println("Error: unable to create keyspace", err)
 		return false
@@ -189,7 +192,8 @@ func SetupScyllaKeyspaceAndTables(scyllaSession *gocql.Session, keyspace string)
 
 func SetupCassandraKeyspaceAndTables(cassandraSession *gocql.Session, keyspace string) bool {
 	defer cassandraSession.Close()
-	err := cassandraSession.Query(fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s", keyspace)).Exec()
+	query := fmt.Sprintf(`CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};`, keyspace)
+	err := cassandraSession.Query(query).Exec()
 	if err != nil {
 		fmt.Println("Error: unable to create keyspace", err)
 		return false
