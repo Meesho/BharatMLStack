@@ -15,29 +15,29 @@ import (
 )
 
 func main() {
-	setupOnFs := flag.Bool("--setup-on-fs", false, "setup on fs")
+	setupOnFs := flag.Bool("setup-on-fs", false, "setup on fs")
 	flag.Parse()
-	mysqlHost := flag.String("--mysql-host", "", "mysql host")
-	mysqlPort := flag.String("--mysql-port", "", "mysql port")
-	mysqlUser := flag.String("--mysql-user", "", "mysql user")
-	mysqlPassword := flag.String("--mysql-password", "", "mysql password")
-	mysqlDatabase := flag.String("--mysql-database", "", "mysql database")
+	mysqlHost := flag.String("mysql-host", "", "mysql host")
+	mysqlPort := flag.String("mysql-port", "", "mysql port")
+	mysqlUser := flag.String("mysql-user", "", "mysql user")
+	mysqlPassword := flag.String("mysql-password", "", "mysql password")
+	mysqlDatabase := flag.String("mysql-database", "", "mysql database")
 
-	etcdHost := flag.String("--etcd-host", "", "etcd host")
-	etcdPort := flag.String("--etcd-port", "", "etcd port")
-	etcdUser := flag.String("--etcd-user", "", "etcd user")
-	etcdPassword := flag.String("--etcd-password", "", "etcd password")
+	etcdHost := flag.String("etcd-host", "", "etcd host")
+	etcdPort := flag.String("etcd-port", "", "etcd port")
+	etcdUser := flag.String("etcd-user", "", "etcd user")
+	etcdPassword := flag.String("etcd-password", "", "etcd password")
 
-	setupStorage := flag.Bool("--setup-storage", false, "setup storage")
+	setupStorage := flag.Bool("setup-storage", false, "setup storage")
 
-	storageType := flag.String("--storage-type", "", "storage type")
-	storageHosts := flag.String("--storage-hosts", "", "storage hosts")
-	storagePort := flag.String("--storage-port", "", "storage port")
-	storageUser := flag.String("--storage-user", "", "storage user")
-	storagePassword := flag.String("--storage-password", "", "storage password")
-	storageKeyspace := flag.String("--storage-keyspace", "", "storage keyspace")
+	storageType := flag.String("storage-type", "", "storage type")
+	storageHosts := flag.String("storage-hosts", "", "storage hosts")
+	storagePort := flag.String("storage-port", "", "storage port")
+	storageUser := flag.String("storage-user", "", "storage user")
+	storagePassword := flag.String("storage-password", "", "storage password")
+	storageKeyspace := flag.String("storage-keyspace", "", "storage keyspace")
 
-	help := flag.Bool("--help", false, "help")
+	help := flag.Bool("help", false, "help")
 
 	if *help {
 		fmt.Println("Usage:")
