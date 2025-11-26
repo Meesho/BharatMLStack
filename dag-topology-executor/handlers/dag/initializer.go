@@ -3,9 +3,9 @@ package dag
 import (
 	"fmt"
 
-	"github.com/Meesho/BharatMLStack/inferflow/dag-topology-executor/internal/errors"
-	"github.com/Meesho/BharatMLStack/inferflow/dag-topology-executor/pkg/logger"
-	"github.com/Meesho/BharatMLStack/inferflow/dag-topology-executor/pkg/utils"
+	"github.com/Meesho/BharatMLStack/dag-topology-executor/internal/errors"
+	"github.com/Meesho/BharatMLStack/dag-topology-executor/pkg/logger"
+	"github.com/Meesho/BharatMLStack/dag-topology-executor/pkg/utils"
 )
 
 type ComponentInitializer struct {

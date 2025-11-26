@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"github.com/Meesho/BharatMLStack/inferflow/dag-topology-executor/pkg/logger"
+	"github.com/Meesho/BharatMLStack/dag-topology-executor/pkg/logger"
 )
 
 func InitRistrettoCache(cacheSize, cacheTTL int64) *Cache {

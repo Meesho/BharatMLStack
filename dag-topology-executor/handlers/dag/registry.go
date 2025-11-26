@@ -8,8 +8,8 @@ import (
 
 	"github.com/spaolacci/murmur3"
 
-	"github.com/Meesho/BharatMLStack/inferflow/dag-topology-executor/pkg/cache"
-	"github.com/Meesho/BharatMLStack/inferflow/dag-topology-executor/pkg/logger"
+	"github.com/Meesho/BharatMLStack/dag-topology-executor/pkg/cache"
+	"github.com/Meesho/BharatMLStack/dag-topology-executor/pkg/logger"
 )
 
 type ComponentGraphRegistry struct {
