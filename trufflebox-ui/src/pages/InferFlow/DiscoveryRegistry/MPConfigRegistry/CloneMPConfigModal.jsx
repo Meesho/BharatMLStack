@@ -108,7 +108,7 @@ const CloneMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
     try {
       // Fetch the latest config data from API to get full details
       const response = await axios.get(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/latestRequest/${configData.config_id}`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/latestRequest/${configData.config_id}`,
         {
           headers: {
             Authorization: `Bearer ${user?.token}`,
@@ -787,7 +787,7 @@ const CloneMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
       };
 
       const response = await axios.post(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/clone`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/clone`,
         payload,
         {
           headers: {

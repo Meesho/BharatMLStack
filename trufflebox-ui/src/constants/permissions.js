@@ -15,8 +15,8 @@ export const SCREEN_TYPES = {
   InferFlow: {
     DEPLOYABLE: 'deployable',
     CONNECTION_CONFIG: 'connection-config',
-    MP_CONFIG: 'mp-config',
-    MP_CONFIG_APPROVAL: 'mp-config-approval',
+    MP_CONFIG: 'inferflow-config',
+    MP_CONFIG_APPROVAL: 'inferflow-config-approval',
 
   },
   

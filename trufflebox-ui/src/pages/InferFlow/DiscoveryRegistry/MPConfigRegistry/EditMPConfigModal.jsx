@@ -113,7 +113,7 @@ const EditMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
     setDataLoading(true);
     try {
       const response = await axios.get(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/latestRequest/${configData.config_id}`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/latestRequest/${configData.config_id}`,
         {
           headers: {
             Authorization: `Bearer ${user?.token}`,
@@ -815,7 +815,7 @@ const EditMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
       };
 
       const response = await axios.post(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/edit`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/edit`,
         payload,
         {
           headers: {

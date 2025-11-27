@@ -8,8 +8,8 @@ export const SERVICES = {
 export const MENU_PERMISSION_MAP = {
   // InferFlow service mappings
   'Deployable': { service: SERVICES.InferFlow, screenType: 'deployable' },
-  'MPConfig': { service: SERVICES.InferFlow, screenType: 'mp-config' },
-  'MPConfigApproval': { service: SERVICES.InferFlow, screenType: 'mp-config-approval' },
+  'MPConfig': { service: SERVICES.InferFlow, screenType: 'inferflow-config' },
+  'MPConfigApproval': { service: SERVICES.InferFlow, screenType: 'inferflow-config-approval' },
   
   // Numerix service mappings
   'NumerixConfigDR': { service: SERVICES.NUMERIX, screenType: 'numerix-config' },

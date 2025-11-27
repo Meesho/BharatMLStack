@@ -720,7 +720,7 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
       };
 
       const response = await axios.post(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/onboard`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/onboard`,
         payload,
         {
           headers: {
