@@ -815,7 +815,7 @@ const EditMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
       };
 
       const response = await axios.post(
-        `${URL_CONSTANTS.REACT_APP_CUSTODIAN_BASE_URL}/api/v1/custodian/mp-config-registry/edit`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/edit`,
         payload,
         {
           headers: {

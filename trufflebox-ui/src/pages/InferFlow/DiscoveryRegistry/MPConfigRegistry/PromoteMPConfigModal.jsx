@@ -308,7 +308,7 @@ const PromoteMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
         created_by: prodCredentials.email
       };
       const response = await axios.post(
-        `${URL_CONSTANTS.REACT_APP_CUSTODIAN_PROD_BASE_URL}/api/v1/custodian/mp-config-registry/promote`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_PROD_BASE_URL}/api/v1/horizon/mp-config-registry/promote`,
         payload,
         {
           headers: {
