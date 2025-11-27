@@ -36,7 +36,8 @@ func newV1Etcd(config interface{}, configs *configs.AppConfigs) Etcd {
 	etcdServers := configs.Configs.ETCD_SERVER
 	etcdBasePath := basePath + appName + configPath
 	servers := strings.Split(etcdServers, ",")
-	var username, password string
+	username := configs.Configs.ETCD_USERNAME
+	password := configs.Configs.ETCD_PASSWORD
 
 	conn, err := clientv3.New(clientv3.Config{Endpoints: servers, Username: username, Password: password, DialTimeout: connectionTimeout, DialKeepAliveTime: connectionTimeout, PermitWithoutStream: true})
 	if err != nil {

@@ -5,7 +5,6 @@ package inferflow
 import (
 	"context"
 	"fmt"
-	"hash/crc32"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/configs"
@@ -52,8 +51,8 @@ func InitInferflowHandler(configs *configs.AppConfigs) {
 	}
 
 	InferflowConfig := etcd.Instance().GetConfigInstance().(*config.ModelConfig)
-	updateDrModelConfigId(InferflowConfig)
 	config.SetModelConfigMap(InferflowConfig)
+
 	// register components in config map
 	componentProvider.RegisterComponent(config.GetModelConfigMap())
 
@@ -73,7 +72,6 @@ func InitInferflowHandler(configs *configs.AppConfigs) {
 func ReloadModelConfigMapAndRegisterComponents() error {
 	updatedConfig, ok := etcd.Instance().GetConfigInstance().(*config.ModelConfig)
 	if ok {
-		updateDrModelConfigId(updatedConfig)
 		config.SetModelConfigMap(updatedConfig)
 
 		// register components in config map
@@ -82,27 +80,6 @@ func ReloadModelConfigMapAndRegisterComponents() error {
 		return nil
 	}
 	return &errors.ParsingError{ErrorMsg: "failed to parse model config from etcd"}
-}
-
-func updateDrModelConfigId(modelConfig *config.ModelConfig) {
-	if modelConfig == nil || len(modelConfig.ConfigMap) == 0 {
-		return
-	}
-	for key, conf := range modelConfig.ConfigMap {
-		if !utils.IsNilOrEmpty(conf.DrConfig) && !utils.IsNilOrEmpty(conf.DrConfig.Keys) && conf.DrConfig.Keys.Id != "" && conf.DrConfig.Res != nil && len(conf.DrConfig.Res) > 0 && conf.DrConfig.Version > 0 {
-			if conf.DrConfig.OverrideConfigKey != "" {
-				conf.DrConfig.DrModelConfigId = hashKeyWithCRC32Split(conf.DrConfig.OverrideConfigKey)
-			} else {
-				conf.DrConfig.DrModelConfigId = hashKeyWithCRC32Split(key)
-			}
-		}
-		modelConfig.ConfigMap[key] = conf
-	}
-}
-
-func hashKeyWithCRC32Split(key string) string {
-	hash := crc32.ChecksumIEEE([]byte(key))
-	return fmt.Sprintf("%08x", hash)
 }
 
 func (s *Inferflow) RetrieveModelScore(ctx context.Context, req *pb.InferflowRequestProto) (*pb.InferflowResponseProto, error) {

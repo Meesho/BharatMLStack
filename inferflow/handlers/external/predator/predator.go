@@ -1,7 +1,6 @@
 package predator
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	"github.com/Meesho/BharatMLStack/helix-client/pkg/clients/predator"
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/config"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/configs"
+	"github.com/Meesho/BharatMLStack/inferflow/pkg/etcd"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/logger"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/metrics"
 )
@@ -27,25 +27,46 @@ var (
 
 func InitPredatorHandler(configs *configs.AppConfigs) {
 	predatorClientMap = make(map[string]*predator.Client)
-	predatorConfigs := make([]*predator.Config, 0)
 
-	configStr := configs.Configs.ExternalServicePredator
+	InferflowConfig := etcd.Instance().GetConfigInstance().(*config.ModelConfig)
+	model_endpoints := make(map[string]bool, 0)
+	i := 0
+	for _, modelConfig := range InferflowConfig.ConfigMap {
+		predatorConfigs := modelConfig.ComponentConfig.PredatorComponentConfig.Values()
+		for _, predatorConfig := range predatorConfigs {
+			predatorConfigMap := predatorConfig.(config.PredatorComponentConfig)
+			if predatorConfigMap.ModelEndpoint != "" && !model_endpoints[predatorConfigMap.ModelEndpoint] {
+				model_endpoints[predatorConfigMap.ModelEndpoint] = true
+				config := &predator.Config{
+					Host:        predatorConfigMap.ModelEndpoint,
+					Port:        configs.Configs.ExternalServicePredator_Port,
+					PlainText:   configs.Configs.ExternalServicePredator_GrpcPlainText,
+					CallerId:    configs.Configs.ExternalServicePredator_CallerId,
+					CallerToken: configs.Configs.ExternalServicePredator_CallerToken,
+				}
+				client := predator.InitClient(i, config)
+				predatorClientMap[predatorConfigMap.ModelEndpoint] = &client
+				i++
+			}
+			if len(predatorConfigMap.ModelEndPoints) != 0 {
+				for _, modelEndPoint := range predatorConfigMap.ModelEndPoints {
+					if !model_endpoints[modelEndPoint.EndPoint] {
+						model_endpoints[modelEndPoint.EndPoint] = true
+						config := &predator.Config{
+							Host:        modelEndPoint.EndPoint,
+							Port:        configs.Configs.ExternalServicePredator_Port,
+							PlainText:   configs.Configs.ExternalServicePredator_GrpcPlainText,
+							CallerId:    configs.Configs.ExternalServicePredator_CallerId,
+							CallerToken: configs.Configs.ExternalServicePredator_CallerToken,
+						}
+						client := predator.InitClient(i, config)
+						predatorClientMap[modelEndPoint.EndPoint] = &client
+						i++
+					}
+				}
 
-	if len(configStr) > 0 && configStr[0] == '\'' && configStr[len(configStr)-1] == '\'' {
-		configStr = configStr[1 : len(configStr)-1]
-	}
-
-	configStr = convertToValidJSON(configStr)
-
-	err := json.Unmarshal([]byte(configStr), &predatorConfigs)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Error unmarshaling predator configs: %v", err), err)
-		return
-	}
-
-	for i, value := range predatorConfigs {
-		client := predator.InitClient(i, value)
-		predatorClientMap[value.Host] = &client
+			}
+		}
 	}
 }
 

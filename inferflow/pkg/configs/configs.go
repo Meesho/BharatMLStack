@@ -22,7 +22,10 @@ type Configs struct {
 	Telegraf_Port       string `mapstructure:"telegraf_port"`
 
 	//predator-config
-	ExternalServicePredator string `mapstructure:"externalServicePredator"`
+	ExternalServicePredator_Port          string `mapstructure:"externalServicePredator_Port"`
+	ExternalServicePredator_GrpcPlainText bool   `mapstructure:"externalServicePredator_GrpcPlainText"`
+	ExternalServicePredator_CallerId      string `mapstructure:"externalServicePredator_CallerId"`
+	ExternalServicePredator_CallerToken   string `mapstructure:"externalServicePredator_CallerToken"`
 
 	//onFs
 	ExternalServiceOnFs_Host          string `mapstructure:"externalServiceOnFs_fsHost"`
@@ -35,6 +38,8 @@ type Configs struct {
 
 	ETCD_WATCHER_ENABLED bool   `mapstructure:"etcd_watcherEnabled"`
 	ETCD_SERVER          string `mapstructure:"etcd_server"`
+	ETCD_USERNAME        string `mapstructure:"etcd_username"`
+	ETCD_PASSWORD        string `mapstructure:"etcd_password"`
 
 	NumerixClientV1_Host          string `mapstructure:"numerixClientV1_host"`
 	NumerixClientV1_Port          int    `mapstructure:"numerixClientV1_port"`

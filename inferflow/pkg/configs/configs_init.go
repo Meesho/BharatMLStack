@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-// InitConfig initializes configuration based on MEESHO_ENABLED flag
 func InitConfig(appConfigs *AppConfigs) {
 	InitEnv()
 
