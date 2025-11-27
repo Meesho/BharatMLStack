@@ -30,11 +30,10 @@ func InitPredatorHandler(configs *configs.AppConfigs) {
 
 	InferflowConfig := etcd.Instance().GetConfigInstance().(*config.ModelConfig)
 	model_endpoints := make(map[string]bool, 0)
-
+	i := 0
 	for _, modelConfig := range InferflowConfig.ConfigMap {
 		predatorConfigs := modelConfig.ComponentConfig.PredatorComponentConfig.Values()
 		for _, predatorConfig := range predatorConfigs {
-			i := 0
 			predatorConfigMap := predatorConfig.(config.PredatorComponentConfig)
 			if predatorConfigMap.ModelEndpoint != "" && !model_endpoints[predatorConfigMap.ModelEndpoint] {
 				model_endpoints[predatorConfigMap.ModelEndpoint] = true
