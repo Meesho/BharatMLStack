@@ -85,7 +85,8 @@ type Configs struct {
 	DistributedCacheActiveConfIds string `mapstructure:"distributed_cache_active_conf_ids"`
 	InMemoryCacheActiveConfIds    string `mapstructure:"in_memory_cache_active_conf_ids"`
 
-	IsMeeshoEnabled bool `mapstructure:"is_meesho_enabled"`
+	IsMeeshoEnabled     bool `mapstructure:"is_meesho_enabled"`
+	IsDummyModelEnabled bool `mapstructure:"is_dummy_model_enabled"`
 }
 
 type DynamicConfigs struct{}

@@ -11,11 +11,10 @@ import (
 )
 
 func InitAll(config configs.Configs) {
-
+	onlinefeaturestore.Init(config)
 	externalcall.Init(config)
 	numerix.Init(config)
 	predator.Init(config)
 	deployableHandler.Init(config)
 	inferflow.Init(config)
-	onlinefeaturestore.Init(config)
 }

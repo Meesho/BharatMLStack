@@ -33,6 +33,8 @@ START_ONFS_CONSUMER=false
 START_HORIZON=false
 START_NUMERIX=false
 START_TRUFFLEBOX=false
+ENABLE_LOCAL_BUILD=false
+
 
 check_go_version() {
   if ! command -v go &> /dev/null; then
@@ -380,12 +382,14 @@ show_access_info() {
 # --help, -h: Show help
 # --all: Start all services (non-interactive)
 # --local: Start services in local mode (build docker images locally)
+# --all-local: Start all services in local mode (build docker images locally)
 if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   echo "BharatML Stack Quick Start"
   echo ""
   echo "Usage:"
   echo "  ./start.sh              # Interactive mode with service selection"
   echo "  ./start.sh --all        # Start all services (non-interactive)"
+  echo "  ./start.sh --all-local  # Start all services in local mode (build docker images locally)"
   echo "  ./start.sh --local      # Start services in local mode (build docker images locally)"
   echo "  ./start.sh --help       # Show this help"
   echo ""
@@ -405,23 +409,72 @@ echo "🚀 Starting BharatML Stack Quick Start..."
 check_go_version
 setup_workspace
 
-# Handle non-interactive mode
+# -----------------------------------------
+# NON-INTERACTIVE FLAGS
+# -----------------------------------------
+
 if [ "$1" = "--all" ]; then
-  echo "🎯 Non-interactive mode: Starting all services"
+  echo "🎯 Non-interactive: Starting ALL services (remote images)"
   SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES"
   START_ONFS=true
   START_ONFS_CONSUMER=true
   START_HORIZON=true
   START_NUMERIX=true
   START_TRUFFLEBOX=true
+
+elif [ "$1" = "--all-local" ]; then
+  echo "🎯 Non-interactive: Starting ALL services LOCALLY"
+  SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES"
+  START_ONFS=true
+  START_ONFS_CONSUMER=true
+  START_HORIZON=true
+  START_NUMERIX=true
+  START_TRUFFLEBOX=true
+  ENABLE_LOCAL_BUILD=true
+
 else
   # Interactive mode
   get_user_choice
+  if [ "$1" = "--local" ]; then
+    ENABLE_LOCAL_BUILD=true
+  fi
 fi
 
-if [ "$1" = "--local" ]; then
-  echo "🎯 Starting services in local mode"
-  LOCAL_MODE=true
+# -----------------------------------------
+# APPLY LOCAL BUILD MODE
+# -----------------------------------------
+
+if [[ "$ENABLE_LOCAL_BUILD" = true ]]; then
+  echo "🔨 Local build mode enabled"
+
+  compose="$WORKSPACE_DIR/docker-compose.yml"
+
+  # ONFS API
+  if [[ $START_ONFS == true ]]; then
+    perl -i.bak -pe 's|image: ghcr.io/meesho/onfs-api-server:\$\{ONFS_VERSION:-latest\}|build:\n      context: ../../online-feature-store\n      dockerfile: cmd/api-server/DockerFile|' "$compose"
+  fi
+
+  # ONFS Consumer
+  if [[ $START_ONFS_CONSUMER == true ]]; then
+    perl -i.bak -pe 's|image: ghcr.io/meesho/onfs-consumer:\$\{ONFS_CONSUMER_VERSION:-latest\}|build:\n      context: ../../online-feature-store\n      dockerfile: cmd/consumer/DockerFile|' "$compose"
+  fi
+
+  # Horizon
+  if [[ $START_HORIZON == true ]]; then
+    perl -i.bak -pe 's|image: ghcr.io/meesho/horizon:\$\{HORIZON_VERSION:-latest\}|build:\n      context: ../../horizon\n      dockerfile: cmd/horizon/Dockerfile|' "$compose"
+  fi
+
+  # Numerix
+  if [[ $START_NUMERIX == true ]]; then
+    perl -i.bak -pe 's|image: numerix:\$\{NUMERIX_VERSION:-latest\}|build:\n      context: ../../numerix\n      dockerfile: Dockerfile|' "$compose"
+  fi
+
+  # Trufflebox UI
+  if [[ $START_TRUFFLEBOX == true ]]; then
+    perl -i.bak -pe 's|image: ghcr.io/meesho/trufflebox-ui:\$\{TRUFFLEBOX_VERSION:-latest\}|build:\n      context: ../../trufflebox-ui\n      dockerfile: DockerFile|' "$compose"
+  fi
+
+  rm -f "$compose.bak"
 fi
 
 start_selected_services
