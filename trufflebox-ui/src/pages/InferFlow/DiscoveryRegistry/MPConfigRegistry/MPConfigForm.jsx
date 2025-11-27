@@ -1179,47 +1179,77 @@ const MPConfigForm = ({
           </Grid>
           <Grid item xs={12}>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>Selective Features</Typography>
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
-              {formData.response.response_features?.filter(feature => feature.trim() !== '').map((feature, index) => (
-                <Chip
-                  key={index}
-                  label={feature}
-                  onDelete={() => {
-                    const newFeatures = formData.response.response_features.filter((_, i) => i !== index);
-                    handleResponseChange('response_features', newFeatures);
-                  }}
-                />
-              ))}
+            
+            {/* Entity ID Field - Required, always at 0th position */}
+            <Box sx={{ mb: 2 }}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Entity ID"
+                required
+                value={formData.response.response_features?.[0] || ''}
+                onChange={(e) => {
+                  const entityId = e.target.value.trim();
+                  const otherFeatures = formData.response.response_features?.slice(1) || [];
+                  handleResponseChange('response_features', [entityId, ...otherFeatures]);
+                }}
+                placeholder="Enter entity ID (required)"
+                sx={{ bgcolor: 'white' }}
+              />
             </Box>
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="Add feature(s) and press Enter (comma-separated for multiple)"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && e.target.value.trim()) {
-                  const inputFeatures = e.target.value.split(',').map(v => {
-                    let trimmed = v.trim();
-                    // Remove surrounding double quotes
-                    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-                      trimmed = trimmed.slice(1, -1);
+
+            {/* Other Features */}
+            <Box sx={{ mb: 1 }}>
+              <Typography variant="body2" sx={{ mb: 1, color: '#666' }}>
+                Other Features
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
+                {(formData.response.response_features?.slice(1) || []).filter(feature => feature.trim() !== '').map((feature, index) => (
+                  <Chip
+                    key={index}
+                    label={feature}
+                    onDelete={() => {
+                      const entityId = formData.response.response_features?.[0] || '';
+                      const otherFeatures = formData.response.response_features?.slice(1) || [];
+                      const newOtherFeatures = otherFeatures.filter((_, i) => i !== index);
+                      handleResponseChange('response_features', [entityId, ...newOtherFeatures]);
+                    }}
+                  />
+                ))}
+              </Box>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="Add feature(s) and press Enter (comma-separated for multiple)"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && e.target.value.trim()) {
+                    const inputFeatures = e.target.value.split(',').map(v => {
+                      let trimmed = v.trim();
+                      // Remove surrounding double quotes
+                      if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+                        trimmed = trimmed.slice(1, -1);
+                      }
+                      // Remove surrounding single quotes
+                      else if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+                        trimmed = trimmed.slice(1, -1);
+                      }
+                      return trimmed;
+                    }).filter(v => v !== '');
+                    const entityId = formData.response.response_features?.[0] || '';
+                    const existingOtherFeatures = formData.response.response_features?.slice(1) || [];
+                    const uniqueNewFeatures = inputFeatures.filter(feature => !existingOtherFeatures.includes(feature));
+                    if (uniqueNewFeatures.length > 0) {
+                      handleResponseChange(
+                        'response_features',
+                        [entityId, ...existingOtherFeatures, ...uniqueNewFeatures]
+                      );
                     }
-                    // Remove surrounding single quotes
-                    else if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
-                      trimmed = trimmed.slice(1, -1);
-                    }
-                    return trimmed;
-                  }).filter(v => v !== '');
-                  const uniqueNewFeatures = inputFeatures.filter(feature => !formData.response.response_features.includes(feature));
-                  if (uniqueNewFeatures.length > 0) {
-                    handleResponseChange(
-                      'response_features',
-                      [...formData.response.response_features, ...uniqueNewFeatures]
-                    );
+                    e.target.value = '';
                   }
-                  e.target.value = '';
-                }
-              }}
-            />
+                }}
+                sx={{ bgcolor: 'white' }}
+              />
+            </Box>
           </Grid>
         </Grid>
       </Box>
@@ -1275,3 +1305,4 @@ const MPConfigForm = ({
 };
 
 export default MPConfigForm;
+

@@ -108,7 +108,7 @@ const CloneMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
     try {
       // Fetch the latest config data from API to get full details
       const response = await axios.get(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/latestRequest/${configData.config_id}`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/latestRequest/${configData.config_id}`,
         {
           headers: {
             Authorization: `Bearer ${user?.token}`,
@@ -700,6 +700,12 @@ const CloneMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
       errors.push('InferFlow Host selection is required');
     }
 
+    // Validate response entity ID (must be at 0th position of response_features)
+    const entityId = formData.response.response_features?.[0] || '';
+    if (!entityId.trim()) {
+      errors.push('Entity ID in Selective Features is required');
+    }
+
     return errors;
   };
 
@@ -720,8 +726,17 @@ const CloneMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
         return;
       }
 
+      // Ensure entity ID is at 0th position of response_features
+      const entityId = formData.response.response_features?.[0] || '';
+      const otherFeatures = formData.response.response_features?.slice(1) || [];
+      const responseFeatures = entityId ? [entityId, ...otherFeatures] : otherFeatures;
+
       const processedFormData = {
         ...formData,
+        response: {
+          ...formData.response,
+          response_features: responseFeatures
+        },
         rankers: formData.rankers.map(ranker => {
           const processedRanker = {
             ...ranker,
@@ -772,7 +787,7 @@ const CloneMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
       };
 
       const response = await axios.post(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/clone`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/clone`,
         payload,
         {
           headers: {

@@ -47,6 +47,7 @@ const PromoteMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
   const [models, setModels] = useState([]);
   const [productionModels, setProductionModels] = useState([]);
   const [latestRequest, setLatestRequest] = useState(null);
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   useEffect(() => {
     if (configData) {
@@ -94,7 +95,7 @@ const PromoteMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
   const fetchLatestRequest = async (configId) => {
     try {
       const response = await axios.get(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/latestRequest/${configId}`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/latestRequest/${configId}`,
         {
           headers: {
             Authorization: `Bearer ${user.token}`,
@@ -256,13 +257,26 @@ const PromoteMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
     return errors;
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     const validationErrors = validateForm();
     if (validationErrors.length > 0) {
       setError(validationErrors.join('\n'));
       return;
     }
 
+    const prodCredentials = window.prodCredentials;
+    if (!prodCredentials) {
+      setError('Production credentials not found. Please try again.');
+      return;
+    }
+
+    // Show confirmation modal
+    setShowConfirmation(true);
+  };
+
+  const handleConfirmSubmit = async () => {
+    setShowConfirmation(false);
+    
     const prodCredentials = window.prodCredentials;
     if (!prodCredentials) {
       setError('Production credentials not found. Please try again.');
@@ -294,7 +308,7 @@ const PromoteMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
         created_by: prodCredentials.email
       };
       const response = await axios.post(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_PROD_BASE_URL}/api/v1/horizon/mp-config-registry/promote`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_PROD_BASE_URL}/api/v1/horizon/inferflow-config-registry/promote`,
         payload,
         {
           headers: {
@@ -320,15 +334,19 @@ const PromoteMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
       onClose();
       onSuccess(successMessage);
     } catch (err) {
-      setError(err.response.data.error || 'An error occurred while promoting the configuration');
+      setError(err.response?.data?.error || 'An error occurred while promoting the configuration');
       setSnackbar({
         open: true,
-        message: err.response.data.error || 'An error occurred while promoting the configuration',
+        message: err.response?.data?.error || 'An error occurred while promoting the configuration',
         severity: 'error'
       });
     } finally {
       setLoading(false);
     }
+  };
+
+  const getSelectedHostDetails = () => {
+    return promoteHosts.find(host => host.id === parseInt(formData.selectedHost));
   };
 
 
@@ -509,6 +527,136 @@ const PromoteMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
             }}
           >
             {loading ? 'Promoting...' : 'Promote'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirmation Modal */}
+      <Dialog 
+        open={showConfirmation} 
+        onClose={() => setShowConfirmation(false)} 
+        maxWidth="sm" 
+        fullWidth
+      >
+        <DialogTitle
+          sx={{
+            bgcolor: '#450839',
+            color: 'white',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}
+        >
+          <Typography variant="h6">Confirm Promotion</Typography>
+          <IconButton onClick={() => setShowConfirmation(false)} size="small" sx={{ color: 'white' }}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              Please review the following details before confirming the promotion:
+            </Typography>
+          </Alert>
+
+          {/* Selected Host */}
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: '#450839' }}>
+              InferFlow Production Host:
+            </Typography>
+            {getSelectedHostDetails() ? (
+              <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  {getSelectedHostDetails().name}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Host: {getSelectedHostDetails().host}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  ID: {getSelectedHostDetails().id}
+                </Typography>
+              </Box>
+            ) : (
+              <Typography variant="body2" color="error">
+                No host selected
+              </Typography>
+            )}
+          </Box>
+
+          {/* Model Endpoint Configuration */}
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: '#450839' }}>
+              Model Endpoint Configuration:
+            </Typography>
+            {formData.proposed_model_end_point && formData.proposed_model_end_point.length > 0 ? (
+              <Box sx={{ maxHeight: '300px', overflowY: 'auto' }}>
+                {formData.proposed_model_end_point.map((endpoint, index) => {
+                  const productionHost = getProductionHostForModel(endpoint.model_name);
+                  const isNotFound = isModelNotFoundInProduction(endpoint.model_name);
+                  
+                  return (
+                    <Box 
+                      key={index} 
+                      sx={{ 
+                        mb: 1.5, 
+                        p: 2, 
+                        border: '1px solid #e0e0e0', 
+                        borderRadius: 1,
+                        bgcolor: isNotFound ? '#ffebee' : '#f5f5f5'
+                      }}
+                    >
+                      <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
+                        Model: {endpoint.model_name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Predator Production Host: {productionHost || 'Not found'}
+                      </Typography>
+                      {isNotFound && (
+                        <Alert severity="error" sx={{ mt: 1, py: 0.5 }}>
+                          <Typography variant="caption">
+                            Model not found in production
+                          </Typography>
+                        </Alert>
+                      )}
+                    </Box>
+                  );
+                })}
+              </Box>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                No model endpoints configured
+              </Typography>
+            )}
+          </Box>
+        </DialogContent>
+        <Divider />
+        <DialogActions sx={{ p: 2, bgcolor: '#fafafa' }}>
+          <Button 
+            onClick={() => setShowConfirmation(false)}
+            variant="outlined"
+            sx={{ 
+              mr: 1,
+              color: '#450839',
+              borderColor: '#450839',
+              '&:hover': {
+                borderColor: '#450839',
+                bgcolor: 'rgba(69, 8, 57, 0.04)'
+              }
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmSubmit}
+            variant="contained"
+            sx={{ 
+              bgcolor: '#450839',
+              '&:hover': {
+                bgcolor: '#5a0a4a'
+              }
+            }}
+          >
+            Confirm & Promote
           </Button>
         </DialogActions>
       </Dialog>

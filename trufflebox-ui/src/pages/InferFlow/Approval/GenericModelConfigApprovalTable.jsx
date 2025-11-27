@@ -422,7 +422,7 @@ const GenericModelConfigApprovalTable = ({ onReview }) => {
   const fetchConfigData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-approval/configs`, {
+      const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-approval/configs`, {
         headers: {
           Authorization: `Bearer ${user?.token}`,
           'Content-Type': 'application/json'

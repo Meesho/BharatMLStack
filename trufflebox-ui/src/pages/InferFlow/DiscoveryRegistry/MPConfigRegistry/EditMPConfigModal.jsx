@@ -11,6 +11,7 @@ import {
   Alert,
   CircularProgress,
   Snackbar,
+  Divider,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
@@ -31,6 +32,7 @@ const EditMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastSeverity, setToastSeverity] = useState('error');
+  const [showHostChangeConfirmation, setShowHostChangeConfirmation] = useState(false);
 
   const [formData, setFormData] = useState({
     real_estate: '',
@@ -111,7 +113,7 @@ const EditMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
     setDataLoading(true);
     try {
       const response = await axios.get(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/latestRequest/${configData.config_id}`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/latestRequest/${configData.config_id}`,
         {
           headers: {
             Authorization: `Bearer ${user?.token}`,
@@ -705,28 +707,64 @@ const EditMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
       errors.push('InferFlow Host selection is required');
     }
 
+    // Validate response entity ID (must be at 0th position of response_features)
+    const entityId = formData.response.response_features?.[0] || '';
+    if (!entityId.trim()) {
+      errors.push('Entity ID in Selective Features is required');
+    }
+
     return errors;
   };
 
+  const getHostDetails = (deployableId) => {
+    if (!deployableId) return null;
+    return mpHosts.find(host => host.id === parseInt(deployableId)) || null;
+  };
+
   const handleSubmit = async () => {
+    setError('');
+
+    const validationErrors = validateForm();
+    if (validationErrors.length > 0) {
+      const errorMessage = validationErrors.join('\n');
+      setError(errorMessage);
+      // Show toast notification
+      setToastMessage('There are validation errors. Please scroll down to see the error details in the form.');
+      setToastSeverity('error');
+      setToastOpen(true);
+      return;
+    }
+
+    // Check if InferFlow host has changed
+    const originalDeployableId = originalConfig?.config_mapping?.deployable_id || '';
+    const currentDeployableId = formData.config_mapping.deployable_id || '';
+    
+    if (originalDeployableId !== currentDeployableId) {
+      // Host has changed, show confirmation modal
+      setShowHostChangeConfirmation(true);
+      return;
+    }
+
+    // Host hasn't changed, proceed with submission
+    await performSubmit();
+  };
+
+  const performSubmit = async () => {
     try {
       setLoading(true);
       setError('');
 
-      const validationErrors = validateForm();
-      if (validationErrors.length > 0) {
-        const errorMessage = validationErrors.join('\n');
-        setError(errorMessage);
-        // Show toast notification
-        setToastMessage('There are validation errors. Please scroll down to see the error details in the form.');
-        setToastSeverity('error');
-        setToastOpen(true);
-        setLoading(false);
-        return;
-      }
+      // Ensure entity ID is at 0th position of response_features
+      const entityId = formData.response.response_features?.[0] || '';
+      const otherFeatures = formData.response.response_features?.slice(1) || [];
+      const responseFeatures = entityId ? [entityId, ...otherFeatures] : otherFeatures;
 
       const processedFormData = {
         ...formData,
+        response: {
+          ...formData.response,
+          response_features: responseFeatures
+        },
         rankers: formData.rankers.map(ranker => {
           const processedRanker = {
             ...ranker,
@@ -777,7 +815,7 @@ const EditMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
       };
 
       const response = await axios.post(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/edit`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/edit`,
         payload,
         {
           headers: {
@@ -800,6 +838,11 @@ const EditMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleConfirmHostChange = async () => {
+    setShowHostChangeConfirmation(false);
+    await performSubmit();
   };
 
   if (dataLoading) {
@@ -975,6 +1018,126 @@ const EditMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
           }}
         >
           Close
+        </Button>
+      </DialogActions>
+    </Dialog>
+
+    {/* Host Change Confirmation Modal */}
+    <Dialog 
+      open={showHostChangeConfirmation} 
+      onClose={() => setShowHostChangeConfirmation(false)} 
+      maxWidth="sm" 
+      fullWidth
+    >
+      <DialogTitle
+        sx={{
+          bgcolor: '#450839',
+          color: 'white',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}
+      >
+        <Typography variant="h6">Confirm InferFlow Host Change</Typography>
+        <IconButton onClick={() => setShowHostChangeConfirmation(false)} size="small" sx={{ color: 'white' }}>
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent sx={{ mt: 2 }}>
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            The InferFlow Host has been changed. Please review the details before confirming:
+          </Typography>
+        </Alert>
+
+        {/* Original Host */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: '#450839' }}>
+            Previous InferFlow Host:
+          </Typography>
+          {(() => {
+            const originalDeployableId = originalConfig?.config_mapping?.deployable_id || '';
+            const originalHost = getHostDetails(originalDeployableId);
+            return originalHost ? (
+              <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  {originalHost.name}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Host: {originalHost.host}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  ID: {originalHost.id}
+                </Typography>
+              </Box>
+            ) : (
+              <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  No host selected
+                </Typography>
+              </Box>
+            );
+          })()}
+        </Box>
+
+        {/* New Host */}
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: '#450839' }}>
+            New InferFlow Host:
+          </Typography>
+          {(() => {
+            const currentDeployableId = formData.config_mapping.deployable_id || '';
+            const newHost = getHostDetails(currentDeployableId);
+            return newHost ? (
+              <Box sx={{ p: 2, bgcolor: '#e8f5e9', borderRadius: 1, border: '1px solid #4caf50' }}>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  {newHost.name}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Host: {newHost.host}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  ID: {newHost.id}
+                </Typography>
+              </Box>
+            ) : (
+              <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  No host selected
+                </Typography>
+              </Box>
+            );
+          })()}
+        </Box>
+      </DialogContent>
+      <Divider />
+      <DialogActions sx={{ p: 2, bgcolor: '#fafafa' }}>
+        <Button 
+          onClick={() => setShowHostChangeConfirmation(false)}
+          variant="outlined"
+          sx={{ 
+            mr: 1,
+            color: '#450839',
+            borderColor: '#450839',
+            '&:hover': {
+              borderColor: '#450839',
+              bgcolor: 'rgba(69, 8, 57, 0.04)'
+            }
+          }}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={handleConfirmHostChange}
+          variant="contained"
+          sx={{ 
+            bgcolor: '#450839',
+            '&:hover': {
+              bgcolor: '#5a0a4a'
+            }
+          }}
+        >
+          Confirm & Save Changes
         </Button>
       </DialogActions>
     </Dialog>
