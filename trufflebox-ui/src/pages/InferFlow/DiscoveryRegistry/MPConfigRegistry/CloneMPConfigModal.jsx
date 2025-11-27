@@ -700,6 +700,12 @@ const CloneMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
       errors.push('InferFlow Host selection is required');
     }
 
+    // Validate response entity ID (must be at 0th position of response_features)
+    const entityId = formData.response.response_features?.[0] || '';
+    if (!entityId.trim()) {
+      errors.push('Entity ID in Selective Features is required');
+    }
+
     return errors;
   };
 
@@ -720,8 +726,17 @@ const CloneMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
         return;
       }
 
+      // Ensure entity ID is at 0th position of response_features
+      const entityId = formData.response.response_features?.[0] || '';
+      const otherFeatures = formData.response.response_features?.slice(1) || [];
+      const responseFeatures = entityId ? [entityId, ...otherFeatures] : otherFeatures;
+
       const processedFormData = {
         ...formData,
+        response: {
+          ...formData.response,
+          response_features: responseFeatures
+        },
         rankers: formData.rankers.map(ranker => {
           const processedRanker = {
             ...ranker,
