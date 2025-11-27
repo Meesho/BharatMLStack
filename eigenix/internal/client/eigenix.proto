@@ -1,0 +1,158 @@
+syntax = "proto3";
+
+package eigenix;
+
+option go_package = "internal/client";
+
+message Point {
+  uint64 id = 1;
+  repeated float vector = 2;
+}
+
+message SearchResult {
+  uint64 id = 1;
+  float distance = 2;
+}
+
+message IndexInfo {
+  string name = 1;
+  int32 dimension = 2;
+  string space = 3;
+  int32 max_elements = 4;
+  int32 m = 5;
+  int32 ef_construction = 6;
+  bool allow_replace_deleted = 7;
+  int32 current_count = 8;
+}
+
+message CreateIndexRequest {
+  string name = 1;
+  int32 dimension = 2;
+  string space = 3;
+  int32 max_elements = 4;
+  int32 m = 5;
+  int32 ef_construction = 6;
+  bool allow_replace_deleted = 7;
+}
+
+message CreateIndexResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message GetIndexRequest {
+  string name = 1;
+}
+
+message GetIndexResponse {
+  IndexInfo index = 1;
+}
+
+message DeleteIndexRequest {
+  string name = 1;
+}
+
+message DeleteIndexResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ListIndicesRequest {}
+message ListIndicesResponse {
+  repeated IndexInfo indices = 1;
+}
+
+message IndexOperationRequest {
+  string name = 1;
+}
+
+message IndexOperationResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message PointsRequest {
+  string index_name = 1;
+  repeated Point points = 2;
+}
+
+message PointsResponse {
+  bool success = 1;
+  int32 affected_count = 2;
+  int32 total_count = 3;
+}
+
+message DeletePointsRequest {
+  string index_name = 1;
+  repeated uint64 ids = 2;
+}
+
+message DeletePointsResponse {
+  bool success = 1;
+  int32 deleted_count = 2;
+}
+
+message SearchRequest {
+  string index_name = 1;
+  repeated float vector = 2;
+  int32 limit = 3;
+  SearchParams search_params = 4;
+  DatabaseType database_type = 5;  // Which database backend to use
+}
+
+message SearchResponse {
+  repeated SearchResult results = 1;
+}
+
+// DatabaseType specifies which vector database backend to use
+enum DatabaseType {
+  HNSW_LIB = 0; // Use local HNSW library (in-memory)
+  QDRANT = 1;   // Use Qdrant (remote vector database)
+}
+
+message SearchParams{
+  bool use_ivf = 1;
+  int32 cent_count = 2;  // Number of centroids to search (only for IVF mode)
+  bool search_indexed_only = 3;
+}
+
+message BatchSearchRequest {
+  string index_name = 1;
+  repeated Vector vectors = 2;
+  int32 limit = 3;
+  SearchParams search_params = 4;
+  DatabaseType database_type = 5;  // Which database backend to use
+}
+
+message Vector {
+  repeated float values = 1;
+}
+
+message BatchSearchResponse {
+  repeated SearchResultSet result_sets = 1;
+}
+
+message SearchResultSet {
+  repeated SearchResult results = 1;
+}
+
+service EigenixService {
+
+  // Index management
+  rpc CreateIndex(CreateIndexRequest) returns (CreateIndexResponse);
+  rpc GetIndex(GetIndexRequest) returns (GetIndexResponse);
+  rpc DeleteIndex(DeleteIndexRequest) returns (DeleteIndexResponse);
+  rpc ListIndices(ListIndicesRequest) returns (ListIndicesResponse);
+
+  rpc SaveIndex(IndexOperationRequest) returns (IndexOperationResponse);
+  rpc LoadIndex(IndexOperationRequest) returns (IndexOperationResponse);
+
+  // Points
+  rpc AddPoints(PointsRequest) returns (PointsResponse);
+  rpc UpdatePoints(PointsRequest) returns (PointsResponse);
+  rpc DeletePoints(DeletePointsRequest) returns (DeletePointsResponse);
+
+  // Search
+  rpc Search(SearchRequest) returns (SearchResponse);
+  rpc BatchSearch(BatchSearchRequest) returns (BatchSearchResponse);
+}
