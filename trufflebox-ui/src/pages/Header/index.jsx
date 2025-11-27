@@ -58,8 +58,8 @@ function Header({ onMenuItemClick }) {
       'MPApproval': <ApprovalIcon />,
       'MPTesting': <BugReportIcon />,
       'DiscoveryRegistry': <FolderIcon />,
-      'IrisApproval': <ApprovalIcon />,
-      'IrisTesting': <BugReportIcon />,
+      'NumerixApproval': <ApprovalIcon />,
+      'NumerixTesting': <BugReportIcon />,
       'PredatorApproval': <ApprovalIcon />,
       'Testing': <BugReportIcon />,
       'EmbeddingDiscovery': <FolderIcon />,
@@ -288,11 +288,11 @@ function Header({ onMenuItemClick }) {
   });
 
   const hasMenuAccess = (menuKey, parentKey = null) => {
-    if (!requiresPermissionCheck(menuKey)) {
+    if (!requiresPermissionCheck(menuKey, parentKey)) {
       return true;
     }
     
-    let permissionInfo = getPermissionInfo(menuKey);
+    let permissionInfo = getPermissionInfo(menuKey, parentKey);
     
     if (menuKey === 'Deployable') {
       if (parentKey === 'InferFlow') {
@@ -342,7 +342,7 @@ function Header({ onMenuItemClick }) {
       if (parentItem.subItems) {
         const activeSubItem = parentItem.subItems.find(subItem => {
           const hasAccess = hasMenuAccess(subItem.key, parentItem.key);
-          return isActivePath(subItem.path) && (!requiresPermissionCheck(subItem.key) || hasAccess);
+          return isActivePath(subItem.path) && (!requiresPermissionCheck(subItem.key, parentItem.key) || hasAccess);
         });
         if (activeSubItem) {
           expanded[parentItem.key] = true;
@@ -359,7 +359,7 @@ function Header({ onMenuItemClick }) {
           if (childItem.subItems) {
             const activeSubItem = childItem.subItems.find(subItem => {
               const hasAccess = hasMenuAccess(subItem.key, parentItem.key);
-              return isActivePath(subItem.path) && (!requiresPermissionCheck(subItem.key) || hasAccess);
+              return isActivePath(subItem.path) && (!requiresPermissionCheck(subItem.key, parentItem.key) || hasAccess);
             });
             if (activeSubItem) {
               expanded[parentItem.key] = true;
@@ -466,7 +466,7 @@ function Header({ onMenuItemClick }) {
               if (parentItem.subItems && !parentItem.path) {
                 const accessibleSubItems = parentItem.subItems.filter(subItem => {
                   const hasAccess = hasMenuAccess(subItem.key, parentItem.key);
-                  return !requiresPermissionCheck(subItem.key) || hasAccess;
+                  return !requiresPermissionCheck(subItem.key, parentItem.key) || hasAccess;
                 });
                 if (accessibleSubItems.length === 0) return null;
               }
@@ -479,7 +479,7 @@ function Header({ onMenuItemClick }) {
                   if (childItem.subItems) {
                     const accessibleSubItems = childItem.subItems.filter(subItem => {
                       const hasAccess = hasMenuAccess(subItem.key, parentItem.key);
-                      return !requiresPermissionCheck(subItem.key) || hasAccess;
+                      return !requiresPermissionCheck(subItem.key, parentItem.key) || hasAccess;
                     });
                     return accessibleSubItems.length > 0;
                   }
@@ -527,7 +527,7 @@ function Header({ onMenuItemClick }) {
                               {parentItem.subItems
                                 .filter((subItem) => {
                                   const hasAccess = hasMenuAccess(subItem.key, parentItem.key);
-                                  return !requiresPermissionCheck(subItem.key) || hasAccess;
+                                  return !requiresPermissionCheck(subItem.key, parentItem.key) || hasAccess;
                                 })
                                 .map((subItem) => (
                                   <Link
@@ -552,7 +552,7 @@ function Header({ onMenuItemClick }) {
 
                               const accessibleSubItems = childItem.subItems?.filter((subItem) => {
                                 const hasAccess = hasMenuAccess(subItem.key, parentItem.key);
-                                return !requiresPermissionCheck(subItem.key) || hasAccess;
+                                return !requiresPermissionCheck(subItem.key, parentItem.key) || hasAccess;
                               }) || [];
 
                               if (childItem.subItems && accessibleSubItems.length === 0) {

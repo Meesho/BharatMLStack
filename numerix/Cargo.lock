@@ -714,12 +714,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "http-range-header"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "add0ab9360ddbd88cfeb3bd9574a1d85cfdfa14db10b3e21d3700dbc4328758f"
-
-[[package]]
 name = "httparse"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1004,9 +998,9 @@ dependencies = [
  "config",
  "dotenvy",
  "etcd-client",
+ "fastrand",
  "futures",
  "hyper 0.14.32",
- "lazy_static",
  "once_cell",
  "prost 0.11.9",
  "prost-types 0.11.9",
@@ -1021,7 +1015,6 @@ dependencies = [
  "tonic 0.9.2",
  "tonic-build 0.10.2",
  "tower 0.4.13",
- "tower-http",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1912,25 +1905,6 @@ dependencies = [
  "sync_wrapper 1.0.2",
  "tower-layer",
  "tower-service",
-]
-
-[[package]]
-name = "tower-http"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61c5bb1d698276a2443e5ecfabc1008bf15a36c12e6a7176e7bf089ea9131140"
-dependencies = [
- "bitflags 2.9.4",
- "bytes",
- "futures-core",
- "futures-util",
- "http 0.2.12",
- "http-body 0.4.6",
- "http-range-header",
- "pin-project-lite",
- "tower-layer",
- "tower-service",
- "tracing",
 ]
 
 [[package]]
