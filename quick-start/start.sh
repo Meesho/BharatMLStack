@@ -17,6 +17,7 @@ HORIZON_SERVICES="horizon horizon-healthcheck"
 NUMERIX_SERVICES="numerix numerix-healthcheck"
 TRUFFLEBOX_SERVICES="trufflebox-ui trufflebox-healthcheck"
 INFERFLOW_SERVICES="inferflow inferflow-healthcheck"
+PREDATOR_SERVICES="predator predator-healthcheck"
 
 # Management tools
 MANAGEMENT_SERVICES="etcd-workbench kafka-ui"
@@ -37,6 +38,7 @@ START_HORIZON=false
 START_NUMERIX=false
 START_TRUFFLEBOX=false
 START_INFERFLOW=false
+START_PREDATOR=false
 
 check_go_version() {
   if ! command -v go &> /dev/null; then
@@ -77,6 +79,12 @@ setup_workspace() {
     rm -rf "$WORKSPACE_DIR/db-init"
   fi
   cp -r ./db-init "$WORKSPACE_DIR"/
+  
+  # Copy predator-dummy directory for Docker build
+  if [ -d "$WORKSPACE_DIR/predator-dummy" ]; then
+    rm -rf "$WORKSPACE_DIR/predator-dummy"
+  fi
+  cp -r ./predator-dummy "$WORKSPACE_DIR"/
   
   echo "✅ Workspace setup complete"
 }
@@ -273,7 +281,7 @@ show_service_menu() {
   echo "Choose which application services to start:"
   echo ""
   echo "1) 🚀 All Services"
-  echo "   • Online Feature Store + Consumer + Horizon + Numerix + TruffleBox UI + Inferflow"
+  echo "   • Online Feature Store + Consumer + Horizon + Numerix + TruffleBox UI + Inferflow + Predator"
   echo ""
   echo "2) 🎛️  Custom Selection"
   echo "   • Choose individual services"
@@ -290,13 +298,14 @@ get_user_choice() {
     case $choice in
       1)
         echo "✅ Selected: All Services"
-        SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES $INFERFLOW_SERVICES"
+        SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES $INFERFLOW_SERVICES $PREDATOR_SERVICES"
         START_ONFS=true
         START_ONFS_CONSUMER=true
         START_HORIZON=true
         START_NUMERIX=true
         START_TRUFFLEBOX=true
         START_INFERFLOW=true
+        START_PREDATOR=true
         break
         ;;
       2)
@@ -372,8 +381,15 @@ custom_selection() {
     echo "✅ Added: Inferflow"
   fi
   
+  read -p "Include Predator (Dummy gRPC Inference Server)? [y/N]: " include_predator
+  if [[ $include_predator =~ ^[Yy]$ ]]; then
+    SELECTED_SERVICES="$SELECTED_SERVICES $PREDATOR_SERVICES"
+    START_PREDATOR=true
+    echo "✅ Added: Predator"
+  fi
+  
   echo ""
-  if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false && $START_INFERFLOW == false ]]; then
+  if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false && $START_INFERFLOW == false && $START_PREDATOR == false ]]; then
     echo "🎯 Custom selection complete: Only infrastructure services will be started"
   else
     echo "🎯 Custom selection complete!"
@@ -424,9 +440,12 @@ start_selected_services() {
   if [[ $START_INFERFLOW == true ]]; then
     echo "   • Inferflow"
   fi
+  if [[ $START_PREDATOR == true ]]; then
+    echo "   • Predator (Dummy gRPC Inference Server)"
+  fi
   
   
-  if [[ $START_ONFS == true || $START_ONFS_CONSUMER == true || $START_HORIZON == true || $START_NUMERIX == true || $START_TRUFFLEBOX == true || $START_INFERFLOW == true ]]; then
+  if [[ $START_ONFS == true || $START_ONFS_CONSUMER == true || $START_HORIZON == true || $START_NUMERIX == true || $START_TRUFFLEBOX == true || $START_INFERFLOW == true || $START_PREDATOR == true ]]; then
     echo ""
     echo "🏷️  Application versions:"
     if [[ $START_ONFS == true ]]; then
@@ -575,6 +594,13 @@ verify_services() {
       fi
     fi
     
+    # Check Predator if selected (gRPC service, just check if port is open)
+    if [[ $START_PREDATOR == true ]]; then
+      if ! nc -z localhost 8001 2>/dev/null; then
+        all_healthy=false
+      fi
+    fi
+    
     if [[ $all_healthy == true ]]; then
       echo "✅ All selected application services are healthy!"
       return 0
@@ -590,7 +616,7 @@ verify_services() {
 
 show_access_info() {
   echo ""
-  if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false && $START_INFERFLOW == false ]]; then
+  if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false && $START_INFERFLOW == false && $START_PREDATOR == false ]]; then
     echo "🎉 BharatML Stack infrastructure is now running!"
   else
     echo "🎉 BharatML Stack services are now running!"
@@ -617,6 +643,9 @@ show_access_info() {
   fi
   if [[ $START_INFERFLOW == true ]]; then
     echo "   🔮 Inferflow:         http://localhost:8085"
+  fi
+  if [[ $START_PREDATOR == true ]]; then
+    echo "   🦁 Predator gRPC:     localhost:8001"
   fi
   
   if [[ $START_TRUFFLEBOX == true ]]; then
@@ -685,13 +714,14 @@ setup_workspace
 # Handle non-interactive mode
 if [ "$1" = "--all" ]; then
   echo "🎯 Non-interactive mode: Starting all services"
-  SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES $INFERFLOW_SERVICES"
+  SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES $INFERFLOW_SERVICES $PREDATOR_SERVICES"
   START_ONFS=true
   START_ONFS_CONSUMER=true
   START_HORIZON=true
   START_NUMERIX=true
   START_TRUFFLEBOX=true
   START_INFERFLOW=true
+  START_PREDATOR=true
 else
   # Interactive mode
   get_user_choice
