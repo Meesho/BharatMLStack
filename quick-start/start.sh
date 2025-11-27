@@ -686,6 +686,7 @@ show_access_info() {
 # --help, -h: Show help
 # --all: Start all services (non-interactive)
 # --local: Start services in local mode (build docker images locally)
+# --all-local: Start all services in local mode (build docker images locally)
 if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   echo "BharatML Stack Quick Start"
   echo ""
