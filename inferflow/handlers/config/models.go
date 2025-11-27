@@ -10,14 +10,12 @@ import (
 
 type ModelConfig struct {
 	ConfigMap map[string]Config `json:"model_config_map"`
-	DrPercent int               `json:"dr_percent"`
 }
 
 type Config struct {
 	DAGExecutionConfig DAGExecutionConfig `json:"dag_execution_config"`
 	ComponentConfig    ComponentConfig    `json:"component_config"`
 	ResponseConfig     ResponseConfig     `json:"response_config"`
-	DrConfig           DrConfig           `json:"dr_config"`
 }
 
 type DAGExecutionConfig struct {
@@ -40,20 +38,6 @@ type ResponseConfig struct {
 	LoggingPerc     int      `json:"logging_perc"`
 	LogFeatures     bool     `json:"log_features"`
 	LogBatchSize    int      `json:"log_batch_size"`
-}
-
-type DrConfig struct {
-	Res               []string          `json:"res"`
-	Version           int               `json:"version"`
-	Keys              Keys              `json:"keys"`
-	Override          map[string]string `json:"override"`
-	OverrideConfigKey string            `json:"override_config_key"`
-	DrModelConfigId   string            `json:"dr_model_config_id"`
-}
-
-type Keys struct {
-	HeaderKeys []string `json:"header_keys"`
-	Id         string   `json:"id"`
 }
 
 type FeatureComponentConfig struct {

@@ -7,7 +7,7 @@ require (
 	github.com/Meesho/BharatMLStack/helix-client v1.0.0-alpha-649f13
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/coocood/freecache v1.2.4
-	github.com/dgraph-io/ristretto v0.1.1
+	github.com/dgraph-io/ristretto v0.2.0
 	github.com/emirpasic/gods v1.18.1
 	github.com/h2so5/half v1.0.0
 	github.com/knadh/koanf v1.5.0
@@ -28,10 +28,9 @@ require (
 	github.com/coreos/go-semver v0.3.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/dustin/go-humanize v1.0.0 // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang/glog v1.2.5 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
