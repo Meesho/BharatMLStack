@@ -3033,6 +3033,38 @@ func ConvertExecuteRequestToTritonRequest(req ExecuteRequestLoadTest) (TritonInf
 }
 
 func (p *Predator) GetGCSModels() (*GCSFoldersResponse, error) {
+	if pred.IsDummyModelEnabled {
+		// Return dummy model based on predator_config entry in init-mysql.sh
+		// Model: ensemble_personalised_nqd_lgbm_v2_2
+		bucket := pred.GcsModelBucket
+		basePath := pred.GcsModelBasePath
+		if bucket == "" {
+			bucket = "dummy-bucket"
+		}
+		if basePath == "" {
+			basePath = "predator"
+		}
+		basePath = strings.TrimSuffix(basePath, "/")
+
+		dummyModel := GCSFolder{
+			Name: "ensemble_personalised_nqd_lgbm_v2_2",
+			Path: fmt.Sprintf("gcs://%s/%s/%s", bucket, basePath, "ensemble_personalised_nqd_lgbm_v2_2"),
+			Metadata: &FeatureMetadata{
+				Inputs: []InputMeta{
+					{
+						Name: "input__0",
+						Features: []string{
+							"ONLINE_FEATURE|user:derived_2_fp32:user__nqp",
+							"ONLINE_FEATURE|catalog:derived_fp32:nqp",
+							"ONLINE_FEATURE|user:derived_2_string:region",
+						},
+					},
+				},
+			},
+		}
+		return &GCSFoldersResponse{Folders: []GCSFolder{dummyModel}}, nil
+	}
+
 	bucket := pred.GcsModelBucket
 	basePath := pred.GcsModelBasePath
 

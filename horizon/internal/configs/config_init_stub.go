@@ -126,4 +126,5 @@ func bindEnvVars() {
 
 	// Meesho flag
 	viper.BindEnv("is_meesho_enabled", "MEESHO_ENABLED")
+	viper.BindEnv("is_dummy_model_enabled", "IS_DUMMY_MODEL_ENABLED")
 }
