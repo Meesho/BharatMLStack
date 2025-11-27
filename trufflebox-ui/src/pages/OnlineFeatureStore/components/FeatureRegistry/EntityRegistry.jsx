@@ -43,6 +43,8 @@ const EntityRegistry = () => {
   const [validationErrors, setValidationErrors] = useState({});
   const [distributedCacheConfigs, setDistributedCacheConfigs] = useState([]);
   const [inMemoryCacheConfigs, setInMemoryCacheConfigs] = useState([]);
+  const [distributedCacheConfigMap, setDistributedCacheConfigMap] = useState({});
+  const [inMemoryCacheConfigMap, setInMemoryCacheConfigMap] = useState({});
   const [isLoadingConfigs, setIsLoadingConfigs] = useState(false);
 
   const handleChange = (e) => {
@@ -239,9 +241,14 @@ const EntityRegistry = () => {
       if (distributedResponse.ok) {
         const distributedData = await distributedResponse.json();
         if (!distributedData.error && distributedData.data) {
-          // Extract keys from the map to use as options
-          const configIds = Object.keys(distributedData.data);
-          setDistributedCacheConfigs(configIds);
+          // Store the full mapping for display purposes
+          setDistributedCacheConfigMap(distributedData.data);
+          // Create options array with id and dbType for display
+          const configOptions = Object.keys(distributedData.data).map(id => ({
+            id: id,
+            dbType: distributedData.data[id]
+          }));
+          setDistributedCacheConfigs(configOptions);
         }
       }
 
@@ -258,9 +265,14 @@ const EntityRegistry = () => {
       if (inMemoryResponse.ok) {
         const inMemoryData = await inMemoryResponse.json();
         if (!inMemoryData.error && inMemoryData.data) {
-          // Extract keys from the map to use as options
-          const configIds = Object.keys(inMemoryData.data);
-          setInMemoryCacheConfigs(configIds);
+          // Store the full mapping for display purposes
+          setInMemoryCacheConfigMap(inMemoryData.data);
+          // Create options array with id and dbType for display
+          const configOptions = Object.keys(inMemoryData.data).map(id => ({
+            id: id,
+            dbType: inMemoryData.data[id]
+          }));
+          setInMemoryCacheConfigs(configOptions);
         }
       }
     } catch (error) {
@@ -284,7 +296,7 @@ const EntityRegistry = () => {
             ...prevData,
             'distributed-cache': {
               ...prevData['distributed-cache'],
-              'conf-id': distributedCacheConfigs[0]
+              'conf-id': distributedCacheConfigs[0].id
             }
           };
         }
@@ -298,7 +310,7 @@ const EntityRegistry = () => {
             ...prevData,
             'in-memory-cache': {
               ...prevData['in-memory-cache'],
-              'conf-id': inMemoryCacheConfigs[0]
+              'conf-id': inMemoryCacheConfigs[0].id
             }
           };
         }
@@ -487,16 +499,22 @@ const EntityRegistry = () => {
               />
             );
           } else if (field === 'conf-id') {
+            const configOptions = cacheKey === 'distributed-cache' ? distributedCacheConfigs : inMemoryCacheConfigs;
+            const currentValue = entityData[cacheKey][field] || '';
+            // Find the option object that matches the current value
+            const selectedOption = configOptions.find(opt => opt.id === currentValue.toString()) || null;
+            
             return (
               <Autocomplete
                 key={field}
-                options={cacheKey === 'distributed-cache' ? distributedCacheConfigs : inMemoryCacheConfigs}
-                value={entityData[cacheKey][field] || ''}
+                options={configOptions}
+                getOptionLabel={(option) => `${option.id} - ${option.dbType}`}
+                value={selectedOption}
                 onChange={(event, newValue) => {
                   const syntheticEvent = {
                     target: {
                       name: `${cacheKey}.${field}`,
-                      value: newValue || ''
+                      value: newValue ? newValue.id : ''
                     }
                   };
                   handleChange(syntheticEvent);
@@ -515,6 +533,7 @@ const EntityRegistry = () => {
                     helperText={validationErrors[`${cacheKey}.${field}`]}
                   />
                 )}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
               />
             );
           } else {
