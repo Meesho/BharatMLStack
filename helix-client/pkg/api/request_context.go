@@ -16,23 +16,23 @@ import (
 )
 
 type RequestContext struct {
-	UserId              string
-	UserContext         enum.UserContext
-	AppVersionCode      int
-	ClientId            string
-	UserStateCode       string
-	UserPinCode         string
-	UserCity            string
-	AppSession          string
-	FeedSession         string
-	InstanceId          string
-	SessionId           string
-	MeeshoUserLongitude string
-	MeeshoUserLatitude  string
-	MeeshoUserAddressId string
-	MeeshoUserCountry   string
-	MeeshoUserLanguage  string
-	MeeshoUserLocation  string
+	UserId         string
+	UserContext    enum.UserContext
+	AppVersionCode int
+	ClientId       string
+	UserStateCode  string
+	UserPinCode    string
+	UserCity       string
+	AppSession     string
+	FeedSession    string
+	InstanceId     string
+	SessionId      string
+	UserLongitude  string
+	UserLatitude   string
+	UserAddressId  string
+	UserCountry    string
+	UserLanguage   string
+	UserLocation   string
 }
 
 const (
@@ -47,7 +47,7 @@ func GetRequestContextForGRPC(ctx context.Context) (*RequestContext, error) {
 	}
 
 	// get user id (mandatory)
-	userId, err := getMetadataValue(mdContext, http.HeaderMeeshoUserId)
+	userId, err := getMetadataValue(mdContext, http.HeaderUserId)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func GetRequestContextForGRPC(ctx context.Context) (*RequestContext, error) {
 	requestContext.UserId = userId
 
 	// get user context (mandatory)
-	userContext, err := getMetadataValue(mdContext, http.HeaderMeeshoUserContext)
+	userContext, err := getMetadataValue(mdContext, http.HeaderUserContext)
 	if err != nil {
 		return nil, err
 	}
@@ -85,26 +85,26 @@ func GetRequestContextForGRPC(ctx context.Context) (*RequestContext, error) {
 	}
 
 	// get client id (optional)
-	requestContext.ClientId, _ = getMetadataValue(mdContext, http.HeaderMeeshoClientId)
+	requestContext.ClientId, _ = getMetadataValue(mdContext, http.HeaderClientId)
 
 	// get userStateCode
-	requestContext.UserStateCode, _ = getMetadataValue(mdContext, http.HeaderMeeshoUserStateCode)
+	requestContext.UserStateCode, _ = getMetadataValue(mdContext, http.HeaderUserStateCode)
 
 	// get userPinCode
-	requestContext.UserPinCode, _ = getMetadataValue(mdContext, http.HeaderMeeshoUserPincode)
+	requestContext.UserPinCode, _ = getMetadataValue(mdContext, http.HeaderUserPincode)
 
 	// get userCity
-	requestContext.UserCity, _ = getMetadataValue(mdContext, http.HeaderMeeshoUserCity)
-	requestContext.FeedSession, _ = getMetadataValue(mdContext, http.HeaderMeeshoFeedSession)
+	requestContext.UserCity, _ = getMetadataValue(mdContext, http.HeaderUserCity)
+	requestContext.FeedSession, _ = getMetadataValue(mdContext, http.HeaderFeedSession)
 	requestContext.AppSession, _ = getMetadataValue(mdContext, http.HeaderAppSession)
-	requestContext.InstanceId, _ = getMetadataValue(mdContext, http.HeaderMeeshoInstanceId)
-	requestContext.SessionId, _ = getMetadataValue(mdContext, http.HeaderMeeshoSessionId)
-	requestContext.MeeshoUserLongitude, _ = getMetadataValue(mdContext, http.HeaderMeeshoUserLongitude)
-	requestContext.MeeshoUserLatitude, _ = getMetadataValue(mdContext, http.HeaderMeeshoUserLatitude)
-	requestContext.MeeshoUserAddressId, _ = getMetadataValue(mdContext, http.HeaderMeeshoUserAddressId)
-	requestContext.MeeshoUserCountry, _ = getMetadataValue(mdContext, http.HeaderMeeshoCountry)
-	requestContext.MeeshoUserLanguage, _ = getMetadataValue(mdContext, http.HeaderMeeshoLanguage)
-	requestContext.MeeshoUserLocation, _ = getMetadataValue(mdContext, http.HeaderAppUserLocation)
+	requestContext.InstanceId, _ = getMetadataValue(mdContext, http.HeaderInstanceId)
+	requestContext.SessionId, _ = getMetadataValue(mdContext, http.HeaderSessionId)
+	requestContext.UserLongitude, _ = getMetadataValue(mdContext, http.HeaderUserLongitude)
+	requestContext.UserLatitude, _ = getMetadataValue(mdContext, http.HeaderUserLatitude)
+	requestContext.UserAddressId, _ = getMetadataValue(mdContext, http.HeaderUserAddressId)
+	requestContext.UserCountry, _ = getMetadataValue(mdContext, http.HeaderCountry)
+	requestContext.UserLanguage, _ = getMetadataValue(mdContext, http.HeaderLanguage)
+	requestContext.UserLocation, _ = getMetadataValue(mdContext, http.HeaderAppUserLocation)
 	return &requestContext, nil
 }
 
@@ -118,34 +118,34 @@ func getMetadataValue(md metadata.MD, key string) (string, error) {
 
 // UpdateWithHeaders Update headers from request context
 func UpdateWithGRPCHeaders(headers map[string]string, context *RequestContext) {
-	headers[http.HeaderMeeshoUserId] = context.UserId
-	headers[http.HeaderMeeshoUserContext] = context.UserContext.String()
+	headers[http.HeaderUserId] = context.UserId
+	headers[http.HeaderUserContext] = context.UserContext.String()
 	headers[http.HeaderAppVersionCode] = strconv.Itoa(context.AppVersionCode)
-	headers[http.HeaderMeeshoClientId] = context.ClientId
-	headers[http.HeaderMeeshoUserStateCode] = context.UserStateCode
-	headers[http.HeaderMeeshoUserPincode] = context.UserPinCode
-	headers[http.HeaderMeeshoUserCity] = context.UserCity
-	headers[http.HeaderMeeshoInstanceId] = context.InstanceId
-	headers[http.HeaderMeeshoSessionId] = context.SessionId
-	headers[http.HeaderMeeshoUserLongitude] = context.MeeshoUserLongitude
-	headers[http.HeaderMeeshoUserLatitude] = context.MeeshoUserLatitude
-	headers[http.HeaderMeeshoUserAddressId] = context.MeeshoUserAddressId
-	headers[http.HeaderMeeshoCountry] = context.MeeshoUserCountry
-	headers[http.HeaderMeeshoLanguage] = context.MeeshoUserLanguage
+	headers[http.HeaderClientId] = context.ClientId
+	headers[http.HeaderUserStateCode] = context.UserStateCode
+	headers[http.HeaderUserPincode] = context.UserPinCode
+	headers[http.HeaderUserCity] = context.UserCity
+	headers[http.HeaderInstanceId] = context.InstanceId
+	headers[http.HeaderSessionId] = context.SessionId
+	headers[http.HeaderUserLongitude] = context.UserLongitude
+	headers[http.HeaderUserLatitude] = context.UserLatitude
+	headers[http.HeaderUserAddressId] = context.UserAddressId
+	headers[http.HeaderCountry] = context.UserCountry
+	headers[http.HeaderLanguage] = context.UserLanguage
 }
 
 // GetRequestContext Build RequestContext from gin context
 func GetRequestContext(context *gin.Context) (*RequestContext, error) {
 	requestContext := &RequestContext{}
 	// get user id (mandatory)
-	userId := context.Request.Header.Get(http.HeaderMeeshoUserId)
+	userId := context.Request.Header.Get(http.HeaderUserId)
 	if len(userId) == 0 {
 		return nil, errors.New("user id is missing in headers")
 	}
 
 	requestContext.UserId = userId
 	// get user context (mandatory)
-	userContext := context.Request.Header.Get(http.HeaderMeeshoUserContext)
+	userContext := context.Request.Header.Get(http.HeaderUserContext)
 	if len(userContext) == 0 {
 		return nil, errors.New("user context is missing in headers")
 	} else {
@@ -167,44 +167,44 @@ func GetRequestContext(context *gin.Context) (*RequestContext, error) {
 	}
 
 	// get client id (optional)
-	requestContext.ClientId = context.Request.Header.Get(http.HeaderMeeshoClientId)
+	requestContext.ClientId = context.Request.Header.Get(http.HeaderClientId)
 
 	// get userStateCode
-	requestContext.UserStateCode = context.Request.Header.Get(http.HeaderMeeshoUserStateCode)
+	requestContext.UserStateCode = context.Request.Header.Get(http.HeaderUserStateCode)
 
 	// get userPinCode
-	requestContext.UserPinCode = context.Request.Header.Get(http.HeaderMeeshoUserPincode)
+	requestContext.UserPinCode = context.Request.Header.Get(http.HeaderUserPincode)
 
 	// get userCity
-	requestContext.UserCity = context.Request.Header.Get(http.HeaderMeeshoUserCity)
+	requestContext.UserCity = context.Request.Header.Get(http.HeaderUserCity)
 
-	requestContext.FeedSession = context.Request.Header.Get(http.HeaderMeeshoFeedSession)
+	requestContext.FeedSession = context.Request.Header.Get(http.HeaderFeedSession)
 	requestContext.AppSession = context.Request.Header.Get(http.HeaderAppSession)
-	requestContext.InstanceId = context.Request.Header.Get(http.HeaderMeeshoInstanceId)
-	requestContext.SessionId = context.Request.Header.Get(http.HeaderMeeshoSessionId)
-	requestContext.MeeshoUserLongitude = context.Request.Header.Get(http.HeaderMeeshoUserLongitude)
-	requestContext.MeeshoUserLatitude = context.Request.Header.Get(http.HeaderMeeshoUserLatitude)
-	requestContext.MeeshoUserAddressId = context.Request.Header.Get(http.HeaderMeeshoUserAddressId)
-	requestContext.MeeshoUserCountry = context.Request.Header.Get(http.HeaderMeeshoCountry)
-	requestContext.MeeshoUserLanguage = context.Request.Header.Get(http.HeaderMeeshoLanguage)
-	requestContext.MeeshoUserLocation = context.Request.Header.Get(http.HeaderAppUserLocation)
+	requestContext.InstanceId = context.Request.Header.Get(http.HeaderInstanceId)
+	requestContext.SessionId = context.Request.Header.Get(http.HeaderSessionId)
+	requestContext.UserLongitude = context.Request.Header.Get(http.HeaderUserLongitude)
+	requestContext.UserLatitude = context.Request.Header.Get(http.HeaderUserLatitude)
+	requestContext.UserAddressId = context.Request.Header.Get(http.HeaderUserAddressId)
+	requestContext.UserCountry = context.Request.Header.Get(http.HeaderCountry)
+	requestContext.UserLanguage = context.Request.Header.Get(http.HeaderLanguage)
+	requestContext.UserLocation = context.Request.Header.Get(http.HeaderAppUserLocation)
 	return requestContext, nil
 }
 
 // UpdateWithHeaders Update headers from request context
 func UpdateWithHeaders(header *netHttp.Header, context *RequestContext) {
-	header.Set(http.HeaderMeeshoUserId, context.UserId)
-	header.Set(http.HeaderMeeshoUserContext, context.UserContext.Name())
+	header.Set(http.HeaderUserId, context.UserId)
+	header.Set(http.HeaderUserContext, context.UserContext.Name())
 	header.Set(http.HeaderAppVersionCode, strconv.Itoa(context.AppVersionCode))
-	header.Set(http.HeaderMeeshoClientId, context.ClientId)
-	header.Set(http.HeaderMeeshoUserStateCode, context.UserStateCode)
-	header.Set(http.HeaderMeeshoUserPincode, context.UserPinCode)
-	header.Set(http.HeaderMeeshoUserCity, context.UserCity)
-	header.Set(http.HeaderMeeshoInstanceId, context.InstanceId)
-	header.Set(http.HeaderMeeshoSessionId, context.SessionId)
-	header.Set(http.HeaderMeeshoUserLongitude, context.MeeshoUserLongitude)
-	header.Set(http.HeaderMeeshoUserLatitude, context.MeeshoUserLatitude)
-	header.Set(http.HeaderMeeshoUserAddressId, context.MeeshoUserAddressId)
-	header.Set(http.HeaderMeeshoCountry, context.MeeshoUserCountry)
-	header.Set(http.HeaderMeeshoLanguage, context.MeeshoUserLanguage)
+	header.Set(http.HeaderClientId, context.ClientId)
+	header.Set(http.HeaderUserStateCode, context.UserStateCode)
+	header.Set(http.HeaderUserPincode, context.UserPinCode)
+	header.Set(http.HeaderUserCity, context.UserCity)
+	header.Set(http.HeaderInstanceId, context.InstanceId)
+	header.Set(http.HeaderSessionId, context.SessionId)
+	header.Set(http.HeaderUserLongitude, context.UserLongitude)
+	header.Set(http.HeaderUserLatitude, context.UserLatitude)
+	header.Set(http.HeaderUserAddressId, context.UserAddressId)
+	header.Set(http.HeaderCountry, context.UserCountry)
+	header.Set(http.HeaderLanguage, context.UserLanguage)
 }

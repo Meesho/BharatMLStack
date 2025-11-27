@@ -74,13 +74,19 @@ function EntityDiscovery({ onEntityClick }) {
                 },
             })
             .then((response) => {
-                const formattedEntities = response.data.map((entity) => ({
-                    label: entity['entity-label'],
-                    keys: entity.keys,
-                    inMemoryCache: entity['in-memory-cache'],
-                    distributedCache: entity['distributed-cache'],
-                }));
-                setEntities(formattedEntities);
+                // Handle null or empty response gracefully - if status is 200, treat as success
+                if (response.data && Array.isArray(response.data)) {
+                    const formattedEntities = response.data.map((entity) => ({
+                        label: entity['entity-label'],
+                        keys: entity.keys,
+                        inMemoryCache: entity['in-memory-cache'],
+                        distributedCache: entity['distributed-cache'],
+                    }));
+                    setEntities(formattedEntities);
+                } else {
+                    // Response is 200 but data is null or not an array - treat as empty list
+                    setEntities([]);
+                }
             })
             .catch((error) => {
                 console.error('Error fetching entities:', error);

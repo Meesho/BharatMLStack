@@ -91,9 +91,6 @@ func getGRPCConnections(config Config) (*GRPCClient, error) {
 	if config.Port == "" {
 		return nil, errors.New("port is not set")
 	}
-	if config.DeadLine == 0 || int64(config.DeadLine) < 0 {
-		return nil, errors.New("deadline is not set or is negative")
-	}
 
 	if config.LoadBalancingPolicy == "" {
 		log.Warn().Msgf("Load balancing policy is not set for %s. Setting it to round robin", config.Host)

@@ -128,15 +128,21 @@ const StoreApproval = () => {
       });
 
       const result = await response.json();
-      if (!response.ok) console.log(result.error || 'Failed to process store');
       
-      setResponseMessage(result.message);
-      setShowSuccessModal(true);
-
-      fetchStoreRequests();
-      
-      handleClose();
-      handleRejectModalClose();
+      if (!response.ok) {
+        // Handle error response
+        const errorMessage = result.error || result.message || 'Failed to process store request';
+        setResponseMessage(errorMessage);
+        setShowErrorModal(true);
+        console.error('Error processing store:', errorMessage);
+      } else {
+        // Handle success response
+        setResponseMessage(result.message || 'Store request processed successfully');
+        setShowSuccessModal(true);
+        fetchStoreRequests();
+        handleClose();
+        handleRejectModalClose();
+      }
     } catch (error) {
       setResponseMessage(error.message);
       setShowErrorModal(true);

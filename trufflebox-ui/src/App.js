@@ -264,7 +264,7 @@ function App() {
                 <Route
                   path="/inferflow/config-registry"
                   element={
-                    <ProtectedRoute service="inferflow" screenType="mp-config">
+                    <ProtectedRoute service="inferflow" screenType="inferflow-config">
                       <MPConfigRegistry />
                     </ProtectedRoute>
                   }
@@ -272,7 +272,7 @@ function App() {
                 <Route
                   path="/inferflow/config-approval"
                   element={
-                    <ProtectedRoute service="inferflow" screenType="mp-config-approval">
+                    <ProtectedRoute service="inferflow" screenType="inferflow-config-approval">
                       <ModelConfigApproval />
                     </ProtectedRoute>
                   }

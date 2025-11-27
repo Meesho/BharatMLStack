@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	MetadataMeeshoUserContext = "MEESHO-USER-CONTEXT"
+	MetadataUserContext = "USER-CONTEXT"
 )
 
 func GRPCLogger(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo,
@@ -30,7 +30,7 @@ func GRPCLogger(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo
 	}
 
 	// Extract relevant information from the request
-	userContext := md.Get(MetadataMeeshoUserContext)
+	userContext := md.Get(MetadataUserContext)
 	requestHeaders, _ := json.Marshal(md)
 
 	// Call the gRPC handler to handle the request

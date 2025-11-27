@@ -30,12 +30,12 @@ func TestGetRequestContextForGRPC(t *testing.T) {
 		{
 			name: "Valid headers with all fields",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:        "12345",
-				httpHeaders.HeaderMeeshoUserContext:   "anonymous",
-				httpHeaders.HeaderAppVersionCode:      "2",
-				httpHeaders.HeaderMeeshoClientId:      "client_1",
-				httpHeaders.HeaderMeeshoUserStateCode: "state_1",
-				httpHeaders.HeaderMeeshoUserPincode:   "123456",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserStateCode:  "state_1",
+				httpHeaders.HeaderUserPincode:    "123456",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -50,24 +50,24 @@ func TestGetRequestContextForGRPC(t *testing.T) {
 		{
 			name: "Missing user id",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserContext:   "anonymous",
-				httpHeaders.HeaderAppVersionCode:      "2",
-				httpHeaders.HeaderMeeshoClientId:      "client_1",
-				httpHeaders.HeaderMeeshoUserStateCode: "state_1",
-				httpHeaders.HeaderMeeshoUserPincode:   "123456",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserStateCode:  "state_1",
+				httpHeaders.HeaderUserPincode:    "123456",
 			},
 			expectedResult: nil,
-			expectedError:  "metadata key 'MEESHO-USER-ID' is missing ",
+			expectedError:  "metadata key 'USER-ID' is missing ",
 		},
 		{
 			name: "Empty user id",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:        "",
-				httpHeaders.HeaderMeeshoUserContext:   "anonymous",
-				httpHeaders.HeaderAppVersionCode:      "2",
-				httpHeaders.HeaderMeeshoClientId:      "client_1",
-				httpHeaders.HeaderMeeshoUserStateCode: "state_1",
-				httpHeaders.HeaderMeeshoUserPincode:   "123456",
+				httpHeaders.HeaderUserId:         "",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserStateCode:  "state_1",
+				httpHeaders.HeaderUserPincode:    "123456",
 			},
 			expectedResult: nil,
 			expectedError:  "user id is empty in headers",
@@ -75,12 +75,12 @@ func TestGetRequestContextForGRPC(t *testing.T) {
 		{
 			name: "Empty user context",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:        "123",
-				httpHeaders.HeaderMeeshoUserContext:   "",
-				httpHeaders.HeaderAppVersionCode:      "2",
-				httpHeaders.HeaderMeeshoClientId:      "client_1",
-				httpHeaders.HeaderMeeshoUserStateCode: "state_1",
-				httpHeaders.HeaderMeeshoUserPincode:   "123456",
+				httpHeaders.HeaderUserId:         "123",
+				httpHeaders.HeaderUserContext:    "",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserStateCode:  "state_1",
+				httpHeaders.HeaderUserPincode:    "123456",
 			},
 			expectedResult: nil,
 			expectedError:  "user context is empty in headers",
@@ -88,24 +88,24 @@ func TestGetRequestContextForGRPC(t *testing.T) {
 		{
 			name: "Missing user context",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:        "12345",
-				httpHeaders.HeaderAppVersionCode:      "2",
-				httpHeaders.HeaderMeeshoClientId:      "client_1",
-				httpHeaders.HeaderMeeshoUserStateCode: "state_1",
-				httpHeaders.HeaderMeeshoUserPincode:   "123456",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserStateCode:  "state_1",
+				httpHeaders.HeaderUserPincode:    "123456",
 			},
 			expectedResult: nil,
-			expectedError:  "metadata key 'MEESHO-USER-CONTEXT' is missing ",
+			expectedError:  "metadata key 'USER-CONTEXT' is missing ",
 		},
 		{
 			name: "Invalid user context",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:        "12345",
-				httpHeaders.HeaderMeeshoUserContext:   "invalid_context",
-				httpHeaders.HeaderAppVersionCode:      "2",
-				httpHeaders.HeaderMeeshoClientId:      "client_1",
-				httpHeaders.HeaderMeeshoUserStateCode: "state_1",
-				httpHeaders.HeaderMeeshoUserPincode:   "123456",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "invalid_context",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserStateCode:  "state_1",
+				httpHeaders.HeaderUserPincode:    "123456",
 			},
 			expectedResult: nil,
 			expectedError:  fmt.Sprintf("%q is not a valid UserContext", "invalid_context"),
@@ -113,12 +113,12 @@ func TestGetRequestContextForGRPC(t *testing.T) {
 		{
 			name: "Non-integer app version code",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:        "12345",
-				httpHeaders.HeaderMeeshoUserContext:   "anonymous",
-				httpHeaders.HeaderAppVersionCode:      "non_integer",
-				httpHeaders.HeaderMeeshoClientId:      "client_1",
-				httpHeaders.HeaderMeeshoUserStateCode: "state_1",
-				httpHeaders.HeaderMeeshoUserPincode:   "123456",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "non_integer",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserStateCode:  "state_1",
+				httpHeaders.HeaderUserPincode:    "123456",
 			},
 			expectedResult: nil,
 			expectedError:  "app_version_code should be an integer",
@@ -126,11 +126,11 @@ func TestGetRequestContextForGRPC(t *testing.T) {
 		{
 			name: "Missing user state code",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:      "12345",
-				httpHeaders.HeaderMeeshoUserContext: "anonymous",
-				httpHeaders.HeaderAppVersionCode:    "2",
-				httpHeaders.HeaderMeeshoClientId:    "client_1",
-				httpHeaders.HeaderMeeshoUserPincode: "123456",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserPincode:    "123456",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -145,11 +145,11 @@ func TestGetRequestContextForGRPC(t *testing.T) {
 		{
 			name: "Missing user pin code",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:        "12345",
-				httpHeaders.HeaderMeeshoUserContext:   "anonymous",
-				httpHeaders.HeaderAppVersionCode:      "2",
-				httpHeaders.HeaderMeeshoClientId:      "client_1",
-				httpHeaders.HeaderMeeshoUserStateCode: "state_1",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserStateCode:  "state_1",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -213,13 +213,13 @@ func TestUpdateWithGRPCHeaders(t *testing.T) {
 
 	UpdateWithGRPCHeaders(header, context)
 
-	assert.Equal(t, "12345", header[httpHeaders.HeaderMeeshoUserId])
-	assert.Equal(t, "anonymous", header[httpHeaders.HeaderMeeshoUserContext])
+	assert.Equal(t, "12345", header[httpHeaders.HeaderUserId])
+	assert.Equal(t, "anonymous", header[httpHeaders.HeaderUserContext])
 	assert.Equal(t, "2", header[httpHeaders.HeaderAppVersionCode])
-	assert.Equal(t, "client_1", header[httpHeaders.HeaderMeeshoClientId])
-	assert.Equal(t, "state_1", header[httpHeaders.HeaderMeeshoUserStateCode])
-	assert.Equal(t, "123456", header[httpHeaders.HeaderMeeshoUserPincode])
-	assert.Equal(t, "city_1", header[httpHeaders.HeaderMeeshoUserCity])
+	assert.Equal(t, "client_1", header[httpHeaders.HeaderClientId])
+	assert.Equal(t, "state_1", header[httpHeaders.HeaderUserStateCode])
+	assert.Equal(t, "123456", header[httpHeaders.HeaderUserPincode])
+	assert.Equal(t, "city_1", header[httpHeaders.HeaderUserCity])
 }
 
 // TestGetRequestContext tests the GetRequestContext function
@@ -237,12 +237,12 @@ func TestGetRequestContext(t *testing.T) {
 		{
 			name: "Valid headers with all fields",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:        "12345",
-				httpHeaders.HeaderMeeshoUserContext:   "anonymous",
-				httpHeaders.HeaderAppVersionCode:      "2",
-				httpHeaders.HeaderMeeshoClientId:      "client_1",
-				httpHeaders.HeaderMeeshoUserStateCode: "state_1",
-				httpHeaders.HeaderMeeshoUserPincode:   "123456",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserStateCode:  "state_1",
+				httpHeaders.HeaderUserPincode:    "123456",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -257,11 +257,11 @@ func TestGetRequestContext(t *testing.T) {
 		{
 			name: "Missing user id",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserContext:   "anonymous",
-				httpHeaders.HeaderAppVersionCode:      "2",
-				httpHeaders.HeaderMeeshoClientId:      "client_1",
-				httpHeaders.HeaderMeeshoUserStateCode: "state_1",
-				httpHeaders.HeaderMeeshoUserPincode:   "123456",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserStateCode:  "state_1",
+				httpHeaders.HeaderUserPincode:    "123456",
 			},
 			expectedResult: nil,
 			expectedError:  "user id is missing in headers",
@@ -269,11 +269,11 @@ func TestGetRequestContext(t *testing.T) {
 		{
 			name: "Missing user context",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:        "12345",
-				httpHeaders.HeaderAppVersionCode:      "2",
-				httpHeaders.HeaderMeeshoClientId:      "client_1",
-				httpHeaders.HeaderMeeshoUserStateCode: "state_1",
-				httpHeaders.HeaderMeeshoUserPincode:   "123456",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserStateCode:  "state_1",
+				httpHeaders.HeaderUserPincode:    "123456",
 			},
 			expectedResult: nil,
 			expectedError:  "user context is missing in headers",
@@ -281,12 +281,12 @@ func TestGetRequestContext(t *testing.T) {
 		{
 			name: "Invalid user context",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:        "12345",
-				httpHeaders.HeaderMeeshoUserContext:   "invalid_context",
-				httpHeaders.HeaderAppVersionCode:      "2",
-				httpHeaders.HeaderMeeshoClientId:      "client_1",
-				httpHeaders.HeaderMeeshoUserStateCode: "state_1",
-				httpHeaders.HeaderMeeshoUserPincode:   "123456",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "invalid_context",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserStateCode:  "state_1",
+				httpHeaders.HeaderUserPincode:    "123456",
 			},
 			expectedResult: nil,
 			expectedError:  fmt.Sprintf("%q is not a valid UserContext", "invalid_context"),
@@ -294,12 +294,12 @@ func TestGetRequestContext(t *testing.T) {
 		{
 			name: "Non-integer app version code",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:        "12345",
-				httpHeaders.HeaderMeeshoUserContext:   "anonymous",
-				httpHeaders.HeaderAppVersionCode:      "non_integer",
-				httpHeaders.HeaderMeeshoClientId:      "client_1",
-				httpHeaders.HeaderMeeshoUserStateCode: "state_1",
-				httpHeaders.HeaderMeeshoUserPincode:   "123456",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "non_integer",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserStateCode:  "state_1",
+				httpHeaders.HeaderUserPincode:    "123456",
 			},
 			expectedResult: nil,
 			expectedError:  "app_version_code should be an integer",
@@ -307,11 +307,11 @@ func TestGetRequestContext(t *testing.T) {
 		{
 			name: "Missing user state code",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:      "12345",
-				httpHeaders.HeaderMeeshoUserContext: "anonymous",
-				httpHeaders.HeaderAppVersionCode:    "2",
-				httpHeaders.HeaderMeeshoClientId:    "client_1",
-				httpHeaders.HeaderMeeshoUserPincode: "123456",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserPincode:    "123456",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -326,11 +326,11 @@ func TestGetRequestContext(t *testing.T) {
 		{
 			name: "Missing user pin code",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:        "12345",
-				httpHeaders.HeaderMeeshoUserContext:   "anonymous",
-				httpHeaders.HeaderAppVersionCode:      "2",
-				httpHeaders.HeaderMeeshoClientId:      "client_1",
-				httpHeaders.HeaderMeeshoUserStateCode: "state_1",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserStateCode:  "state_1",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -382,13 +382,13 @@ func TestUpdateWithHTTPHeaders(t *testing.T) {
 
 	UpdateWithHeaders(header, context)
 
-	assert.Equal(t, "12345", header.Get(httpHeaders.HeaderMeeshoUserId))
-	assert.Equal(t, "anonymous", header.Get(httpHeaders.HeaderMeeshoUserContext))
+	assert.Equal(t, "12345", header.Get(httpHeaders.HeaderUserId))
+	assert.Equal(t, "anonymous", header.Get(httpHeaders.HeaderUserContext))
 	assert.Equal(t, "2", header.Get(httpHeaders.HeaderAppVersionCode))
-	assert.Equal(t, "client_1", header.Get(httpHeaders.HeaderMeeshoClientId))
-	assert.Equal(t, "state_1", header.Get(httpHeaders.HeaderMeeshoUserStateCode))
-	assert.Equal(t, "123456", header.Get(httpHeaders.HeaderMeeshoUserPincode))
-	assert.Equal(t, "city_1", header.Get(httpHeaders.HeaderMeeshoUserCity))
+	assert.Equal(t, "client_1", header.Get(httpHeaders.HeaderClientId))
+	assert.Equal(t, "state_1", header.Get(httpHeaders.HeaderUserStateCode))
+	assert.Equal(t, "123456", header.Get(httpHeaders.HeaderUserPincode))
+	assert.Equal(t, "city_1", header.Get(httpHeaders.HeaderUserCity))
 }
 
 // TestGetRequestContextForGRPC_WithFeedAndAppSession tests FeedSession and AppSession fields
@@ -404,13 +404,13 @@ func TestGetRequestContextForGRPC_WithFeedAndAppSession(t *testing.T) {
 		{
 			name: "Valid headers with FeedSession and AppSession",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:      "12345",
-				httpHeaders.HeaderMeeshoUserContext: "anonymous",
-				httpHeaders.HeaderAppVersionCode:    "2",
-				httpHeaders.HeaderMeeshoClientId:    "client_1",
-				httpHeaders.HeaderMeeshoUserCity:    "city_1",
-				httpHeaders.HeaderMeeshoFeedSession: "feed_session_123",
-				httpHeaders.HeaderAppSession:        "app_session_456",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserCity:       "city_1",
+				httpHeaders.HeaderFeedSession:    "feed_session_123",
+				httpHeaders.HeaderAppSession:     "app_session_456",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -426,11 +426,11 @@ func TestGetRequestContextForGRPC_WithFeedAndAppSession(t *testing.T) {
 		{
 			name: "Valid headers without FeedSession and AppSession",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:      "12345",
-				httpHeaders.HeaderMeeshoUserContext: "anonymous",
-				httpHeaders.HeaderAppVersionCode:    "2",
-				httpHeaders.HeaderMeeshoClientId:    "client_1",
-				httpHeaders.HeaderMeeshoUserCity:    "city_1",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserCity:       "city_1",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -446,13 +446,13 @@ func TestGetRequestContextForGRPC_WithFeedAndAppSession(t *testing.T) {
 		{
 			name: "Valid headers with empty FeedSession and AppSession",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:      "12345",
-				httpHeaders.HeaderMeeshoUserContext: "anonymous",
-				httpHeaders.HeaderAppVersionCode:    "2",
-				httpHeaders.HeaderMeeshoClientId:    "client_1",
-				httpHeaders.HeaderMeeshoUserCity:    "city_1",
-				httpHeaders.HeaderMeeshoFeedSession: "",
-				httpHeaders.HeaderAppSession:        "",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserCity:       "city_1",
+				httpHeaders.HeaderFeedSession:    "",
+				httpHeaders.HeaderAppSession:     "",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -502,13 +502,13 @@ func TestGetRequestContext_WithFeedAndAppSession(t *testing.T) {
 		{
 			name: "Valid headers with FeedSession and AppSession",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:      "12345",
-				httpHeaders.HeaderMeeshoUserContext: "anonymous",
-				httpHeaders.HeaderAppVersionCode:    "2",
-				httpHeaders.HeaderMeeshoClientId:    "client_1",
-				httpHeaders.HeaderMeeshoUserCity:    "city_1",
-				httpHeaders.HeaderMeeshoFeedSession: "feed_session_123",
-				httpHeaders.HeaderAppSession:        "app_session_456",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserCity:       "city_1",
+				httpHeaders.HeaderFeedSession:    "feed_session_123",
+				httpHeaders.HeaderAppSession:     "app_session_456",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -524,11 +524,11 @@ func TestGetRequestContext_WithFeedAndAppSession(t *testing.T) {
 		{
 			name: "Valid headers without FeedSession and AppSession",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:      "12345",
-				httpHeaders.HeaderMeeshoUserContext: "anonymous",
-				httpHeaders.HeaderAppVersionCode:    "2",
-				httpHeaders.HeaderMeeshoClientId:    "client_1",
-				httpHeaders.HeaderMeeshoUserCity:    "city_1",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "2",
+				httpHeaders.HeaderClientId:       "client_1",
+				httpHeaders.HeaderUserCity:       "city_1",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -583,13 +583,13 @@ func TestUpdateWithGRPCHeaders_WithAllFields(t *testing.T) {
 
 	UpdateWithGRPCHeaders(header, context)
 
-	assert.Equal(t, "12345", header[httpHeaders.HeaderMeeshoUserId])
-	assert.Equal(t, "anonymous", header[httpHeaders.HeaderMeeshoUserContext])
+	assert.Equal(t, "12345", header[httpHeaders.HeaderUserId])
+	assert.Equal(t, "anonymous", header[httpHeaders.HeaderUserContext])
 	assert.Equal(t, "2", header[httpHeaders.HeaderAppVersionCode])
-	assert.Equal(t, "client_1", header[httpHeaders.HeaderMeeshoClientId])
-	assert.Equal(t, "state_1", header[httpHeaders.HeaderMeeshoUserStateCode])
-	assert.Equal(t, "123456", header[httpHeaders.HeaderMeeshoUserPincode])
-	assert.Equal(t, "city_1", header[httpHeaders.HeaderMeeshoUserCity])
+	assert.Equal(t, "client_1", header[httpHeaders.HeaderClientId])
+	assert.Equal(t, "state_1", header[httpHeaders.HeaderUserStateCode])
+	assert.Equal(t, "123456", header[httpHeaders.HeaderUserPincode])
+	assert.Equal(t, "city_1", header[httpHeaders.HeaderUserCity])
 
 	// Note: FeedSession and AppSession are not included in UpdateWithGRPCHeaders function
 	// This is intentional as per the current implementation
@@ -614,13 +614,13 @@ func TestUpdateWithHTTPHeaders_WithAllFields(t *testing.T) {
 
 	UpdateWithHeaders(header, context)
 
-	assert.Equal(t, "12345", header.Get(httpHeaders.HeaderMeeshoUserId))
-	assert.Equal(t, "anonymous", header.Get(httpHeaders.HeaderMeeshoUserContext))
+	assert.Equal(t, "12345", header.Get(httpHeaders.HeaderUserId))
+	assert.Equal(t, "anonymous", header.Get(httpHeaders.HeaderUserContext))
 	assert.Equal(t, "2", header.Get(httpHeaders.HeaderAppVersionCode))
-	assert.Equal(t, "client_1", header.Get(httpHeaders.HeaderMeeshoClientId))
-	assert.Equal(t, "state_1", header.Get(httpHeaders.HeaderMeeshoUserStateCode))
-	assert.Equal(t, "123456", header.Get(httpHeaders.HeaderMeeshoUserPincode))
-	assert.Equal(t, "city_1", header.Get(httpHeaders.HeaderMeeshoUserCity))
+	assert.Equal(t, "client_1", header.Get(httpHeaders.HeaderClientId))
+	assert.Equal(t, "state_1", header.Get(httpHeaders.HeaderUserStateCode))
+	assert.Equal(t, "123456", header.Get(httpHeaders.HeaderUserPincode))
+	assert.Equal(t, "city_1", header.Get(httpHeaders.HeaderUserCity))
 
 	// Note: FeedSession and AppSession are not included in UpdateWithHeaders function
 	// This is intentional as per the current implementation
@@ -691,10 +691,10 @@ func TestGetRequestContextForGRPC_EdgeCases(t *testing.T) {
 		{
 			name: "Zero app version code",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:      "12345",
-				httpHeaders.HeaderMeeshoUserContext: "anonymous",
-				httpHeaders.HeaderAppVersionCode:    "0",
-				httpHeaders.HeaderMeeshoClientId:    "client_1",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "0",
+				httpHeaders.HeaderClientId:       "client_1",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -707,10 +707,10 @@ func TestGetRequestContextForGRPC_EdgeCases(t *testing.T) {
 		{
 			name: "Negative app version code",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:      "12345",
-				httpHeaders.HeaderMeeshoUserContext: "anonymous",
-				httpHeaders.HeaderAppVersionCode:    "-1",
-				httpHeaders.HeaderMeeshoClientId:    "client_1",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "-1",
+				httpHeaders.HeaderClientId:       "client_1",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -723,10 +723,10 @@ func TestGetRequestContextForGRPC_EdgeCases(t *testing.T) {
 		{
 			name: "Empty string app version code",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:      "12345",
-				httpHeaders.HeaderMeeshoUserContext: "anonymous",
-				httpHeaders.HeaderAppVersionCode:    "",
-				httpHeaders.HeaderMeeshoClientId:    "client_1",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "",
+				httpHeaders.HeaderClientId:       "client_1",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -773,10 +773,10 @@ func TestGetRequestContext_EdgeCases(t *testing.T) {
 		{
 			name: "Zero app version code",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:      "12345",
-				httpHeaders.HeaderMeeshoUserContext: "anonymous",
-				httpHeaders.HeaderAppVersionCode:    "0",
-				httpHeaders.HeaderMeeshoClientId:    "client_1",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "0",
+				httpHeaders.HeaderClientId:       "client_1",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -789,10 +789,10 @@ func TestGetRequestContext_EdgeCases(t *testing.T) {
 		{
 			name: "Empty string app version code",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:      "12345",
-				httpHeaders.HeaderMeeshoUserContext: "anonymous",
-				httpHeaders.HeaderAppVersionCode:    "",
-				httpHeaders.HeaderMeeshoClientId:    "client_1",
+				httpHeaders.HeaderUserId:         "12345",
+				httpHeaders.HeaderUserContext:    "anonymous",
+				httpHeaders.HeaderAppVersionCode: "",
+				httpHeaders.HeaderClientId:       "client_1",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",
@@ -805,8 +805,8 @@ func TestGetRequestContext_EdgeCases(t *testing.T) {
 		{
 			name: "Minimum required headers only",
 			headers: map[string]string{
-				httpHeaders.HeaderMeeshoUserId:      "12345",
-				httpHeaders.HeaderMeeshoUserContext: "anonymous",
+				httpHeaders.HeaderUserId:      "12345",
+				httpHeaders.HeaderUserContext: "anonymous",
 			},
 			expectedResult: &RequestContext{
 				UserId:         "12345",

@@ -109,7 +109,7 @@ const MPConfigTestingModal = ({ open, onClose, configData, onTestComplete }) => 
       };
 
       const response = await axios.post(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-testing/functional-test/generate-request`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-testing/functional-test/generate-request`,
         requestBody,
         {
           headers: {
@@ -169,7 +169,7 @@ const MPConfigTestingModal = ({ open, onClose, configData, onTestComplete }) => 
       }
       
       const response = await axios.post(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-testing/functional-test/execute-request`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-testing/functional-test/execute-request`,
         {
           request_body: requestData,
           end_point: testEndpoint,

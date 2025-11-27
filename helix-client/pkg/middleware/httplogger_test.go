@@ -29,7 +29,7 @@ func TestHTTPLogger(t *testing.T) {
 		})
 
 		req := httptest.NewRequest("GET", "/users/123", nil)
-		req.Header.Set(http2.HeaderMeeshoUserContext, "anonymous")
+		req.Header.Set(http2.HeaderUserContext, "anonymous")
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)
@@ -52,7 +52,7 @@ func TestHTTPLogger(t *testing.T) {
 		})
 
 		req := httptest.NewRequest("GET", "/error", nil)
-		req.Header.Set(http2.HeaderMeeshoUserContext, "anonymous")
+		req.Header.Set(http2.HeaderUserContext, "anonymous")
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)

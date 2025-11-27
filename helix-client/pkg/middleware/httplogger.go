@@ -33,7 +33,7 @@ func HTTPLogger() gin.HandlerFunc {
 		clientIP := c.ClientIP()
 		method := c.Request.Method
 		statusCode := c.Writer.Status()
-		userContext := c.Request.Header.Get(http.HeaderMeeshoUserContext)
+		userContext := c.Request.Header.Get(http.HeaderUserContext)
 
 		metricTags := metric.BuildTag(
 			metric.NewTag(metric.TagPath, route),
