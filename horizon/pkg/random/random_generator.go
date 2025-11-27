@@ -3,6 +3,7 @@ package random
 import (
 	"fmt"
 	"math/rand"
+	"strconv"
 )
 
 func GenerateRandomStringSlice(length int) []string {
@@ -20,14 +21,16 @@ func GenerateRandomStringSlice(length int) []string {
 func GenerateRandomFloat32Slice(length int) []string {
 	values := make([]string, length)
 	for i := 0; i < length; i++ {
-		values[i] = fmt.Sprintf("%.6f", rand.Float32())
+		// Use 'f' format to avoid scientific notation, with 6 decimal places
+		values[i] = strconv.FormatFloat(float64(rand.Float32()), 'f', 7, 32)
 	}
 	return values
 }
 func GenerateRandomFloat64Slice(length int) []string {
 	values := make([]string, length)
 	for i := 0; i < length; i++ {
-		values[i] = fmt.Sprintf("%.6f", rand.Float64())
+		// Use 'f' format to avoid scientific notation, with 6 decimal places
+		values[i] = strconv.FormatFloat(rand.Float64(), 'f', 15, 64)
 	}
 	return values
 }
@@ -200,9 +203,9 @@ func generateRandomBoolMatrixRecursive(dimensions []int, currentDim int) any {
 func generateRandomBytesMatrixRecursive(dimensions []int, currentDim int) any {
 
 	if currentDim == len(dimensions)-1 {
-		values := make([]byte, dimensions[currentDim])
+		values := make([]string, dimensions[currentDim])
 		for i := 0; i < dimensions[currentDim]; i++ {
-			values[i] = byte(rand.Intn(256))
+			values[i] = strconv.FormatFloat(rand.Float64(), 'f', -1, 32)
 		}
 		return values
 	}
@@ -278,23 +281,23 @@ func GenerateRandomBytesMatrix(dimensions []int) any {
 
 func GenerateRandom(dimensions []int, dataType string) any {
 	switch dataType {
-	case "TYPE_FP32", "TYPE_FP16", "TYPE_FP8":
+	case "FP32", "FP16", "FP8":
 		return GenerateRandomFloat32Matrix(dimensions)
-	case "TYPE_FP64":
+	case "FP64":
 		return GenerateRandomFloat64Matrix(dimensions)
-	case "TYPE_INT32", "TYPE_INT16", "TYPE_INT8":
+	case "INT32", "INT16", "INT8":
 		return GenerateRandomInt32Matrix(dimensions)
-	case "TYPE_INT64":
+	case "INT64":
 		return GenerateRandomInt64Matrix(dimensions)
-	case "TYPE_UINT32", "TYPE_UINT16", "TYPE_UINT8":
+	case "UINT32", "UINT16", "UINT8":
 		return GenerateRandomUint32Matrix(dimensions)
-	case "TYPE_UINT64":
+	case "UINT64":
 		return GenerateRandomUint64Matrix(dimensions)
-	case "TYPE_BOOL":
+	case "BOOL":
 		return GenerateRandomBoolMatrix(dimensions)
-	case "TYPE_STRING":
+	case "STRING":
 		return GenerateRandomStringMatrix(dimensions)
-	case "TYPE_BYTES":
+	case "BYTES":
 		return GenerateRandomBytesMatrix(dimensions)
 	default:
 		return nil

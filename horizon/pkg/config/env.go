@@ -1,9 +1,10 @@
 package config
 
 import (
+	"sync"
+
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
-	"sync"
 )
 
 var (
