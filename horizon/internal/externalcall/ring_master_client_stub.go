@@ -11,23 +11,8 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/servicedeployableconfig"
 )
 
-var (
-	initRingmasterOnce      sync.Once
-	ringmasterBaseUrl       string
-	ringmasterMiscSession   string
-	ringmasterAuthorization string
-	ringmasterEnvironment   string
-	ringmasterApiKey        string
-)
-
 func InitRingmasterClient(RingmasterBaseUrl string, RingmasterMiscSession string, RingmasterAuthorization string, RingmasterEnvironment string, RingmasterApiKey string) {
-	initRingmasterOnce.Do(func() {
-		ringmasterBaseUrl = RingmasterBaseUrl
-		ringmasterMiscSession = RingmasterMiscSession
-		ringmasterAuthorization = RingmasterAuthorization
-		ringmasterEnvironment = RingmasterEnvironment
-		ringmasterApiKey = RingmasterApiKey
-	})
+	log.Warn().Msgf("ringmaster client InitRingmasterClient is not supported without meesho build tag")
 }
 
 type RingmasterClient interface {
