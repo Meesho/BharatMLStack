@@ -310,7 +310,7 @@ from grpc_feature_client import GRPCFeatureClient, GRPCClientConfig
 # Configure gRPC client for real-time operations
 grpc_config = GRPCClientConfig(
     server_address="feature-store.example.com:50051",
-    job_id="model-inference-service",
+    job_id="predator",
     job_token="api-token"
 )
 
