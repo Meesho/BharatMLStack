@@ -136,7 +136,7 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
   const fetchComputeConfigs = async () => {
     try {
       const response = await axios.get(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/numerix-config-approval/configs`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/numerix-config-discovery/configs`,
         {
           headers: {
             Authorization: `Bearer ${user?.token}`,
