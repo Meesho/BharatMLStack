@@ -28,7 +28,8 @@ func normalDistInt(max int) int {
 func main() {
 	// Flags to parameterize load tests
 	// planRandomGaussian()
-	planReadthroughGaussian()
+	// planReadthroughGaussian()
+	planFreecache()
 }
 
 // func BucketsByWidth(a float64, n int) []float64 {

@@ -4,21 +4,20 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
-	"net/http"
 	"os"
-	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"runtime/pprof"
 	"strings"
 	"sync"
-	"time"
 
 	cachepkg "github.com/Meesho/BharatMLStack/flashring/internal/cache"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
-func planReadthroughGaussian() {
+func planFreecache() {
+
 	var (
 		mountPoint         string
 		numShards          int
@@ -39,7 +38,7 @@ func planReadthroughGaussian() {
 	flag.IntVar(&numShards, "shards", 10, "number of shards")
 	flag.IntVar(&keysPerShard, "keys-per-shard", 2_000_000, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
-	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 10, "file size in GiB per shard")
+	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 1, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 4, "number of read workers")
 	flag.IntVar(&writeWorkers, "writers", 4, "number of write workers")
 	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
@@ -51,55 +50,17 @@ func planReadthroughGaussian() {
 	flag.Parse()
 
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	go func() {
-		log.Info().Msg("Starting pprof server on :8080")
-		log.Info().Msg("Access profiles at: http://localhost:8080/debug/pprof/")
-		log.Info().Msg("Memory profile: http://localhost:8080/debug/pprof/heap")
-		log.Info().Msg("Goroutine profile: http://localhost:8080/debug/pprof/goroutine")
-		if err := http.ListenAndServe(":8080", nil); err != nil {
-			log.Error().Err(err).Msg("pprof server failed")
-		}
-	}()
-
-	// CPU profiling
-	if cpuProfile != "" {
-		f, err := os.Create(cpuProfile)
-		if err != nil {
-			log.Fatal().Err(err).Msg("could not create CPU profile")
-		}
-		defer f.Close()
-		if err := pprof.StartCPUProfile(f); err != nil {
-			log.Fatal().Err(err).Msg("could not start CPU profile")
-		}
-		defer pprof.StopCPUProfile()
-	}
-
-	//remove all files inside the mount point
-	files, err := os.ReadDir(mountPoint)
-	if err != nil {
-		panic(err)
-	}
-	for _, file := range files {
-		os.Remove(filepath.Join(mountPoint, file.Name()))
-	}
-
-	memtableSizeInBytes := int32(memtableMB) * 1024 * 1024
-	fileSizeInBytes := int64(fileSizeMultiplier) * int64(memtableSizeInBytes)
 
 	cfg := cachepkg.WrapCacheConfig{
-		NumShards:             numShards,
-		KeysPerShard:          keysPerShard,
-		FileSize:              fileSizeInBytes,
-		MemtableSize:          memtableSizeInBytes,
-		ReWriteScoreThreshold: 0.8,
-		GridSearchEpsilon:     0.0001,
-		SampleDuration:        time.Duration(sampleSecs) * time.Second,
+		KeysPerShard: keysPerShard,
+		FileSize:     1 * 1024 * 1024 * 1024,
 	}
 
-	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, logStats)
+	cache, err := cachepkg.NewFreecache(cfg, logStats)
 	if err != nil {
 		panic(err)
 	}
+	debug.SetGCPercent(20)
 
 	MULTIPLIER := 300
 
@@ -125,7 +86,7 @@ func planReadthroughGaussian() {
 
 		key := fmt.Sprintf("key%d", k)
 		val := []byte(fmt.Sprintf(str1kb, k))
-		if err := pc.Put(key, val, 60); err != nil {
+		if err := cache.Put(key, val, 60*60); err != nil {
 			panic(err)
 		}
 		if k%5000000 == 0 {
@@ -144,7 +105,7 @@ func planReadthroughGaussian() {
 				for mk := range missedKeyChanList[workerID] {
 					key := fmt.Sprintf("key%d", mk)
 					val := []byte(fmt.Sprintf(str1kb, mk))
-					if err := pc.Put(key, val, 60); err != nil {
+					if err := cache.Put(key, val, 60*60); err != nil {
 						panic(err)
 					}
 				}
@@ -162,7 +123,7 @@ func planReadthroughGaussian() {
 				for k := 0; k < totalKeys*MULTIPLIER; k += 1 {
 					randomval := normalDistInt(totalKeys)
 					key := fmt.Sprintf("key%d", randomval)
-					val, found, expired := pc.Get(key)
+					_, found, expired := cache.Get(key)
 
 					if !found {
 						writeWorkerid := randomval % writeWorkers
@@ -171,10 +132,6 @@ func planReadthroughGaussian() {
 
 					if expired {
 						panic("key expired")
-
-					}
-					if found && string(val) != fmt.Sprintf(str1kb, randomval) {
-						panic("value mismatch")
 					}
 					if k%5000000 == 0 {
 						fmt.Printf("----------------------------------------------read %d keys %d readerid\n", k, workerID)
