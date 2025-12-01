@@ -135,16 +135,36 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
 
   const fetchComputeConfigs = async () => {
     try {
-      const response = await axios.get(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/numerix-config-approval/configs`,
+      // First request to get pagination info
+      const initialResponse = await axios.get(
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/numerix-config-discovery/configs`,
         {
           headers: {
             Authorization: `Bearer ${user?.token}`,
           },
         }
       );
-      if (!response.data.error) {
-        setComputeConfigs(response.data.data);
+      
+      if (!initialResponse.data.error) {
+        const totalCount = initialResponse.data.pagination?.total_count;
+        
+        // If there are more items than the default limit, fetch all
+        if (totalCount && totalCount > (initialResponse.data.pagination?.limit || 25)) {
+          const allConfigsResponse = await axios.get(
+            `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/numerix-config-discovery/configs?limit=${totalCount}`,
+            {
+              headers: {
+                Authorization: `Bearer ${user?.token}`,
+              },
+            }
+          );
+          if (!allConfigsResponse.data.error) {
+            setComputeConfigs(allConfigsResponse.data.data);
+          }
+        } else {
+          // Use the data from the first request if total_count is within the default limit
+          setComputeConfigs(initialResponse.data.data);
+        }
       }
     } catch (error) {
       console.log('Error fetching compute configs:', error);
