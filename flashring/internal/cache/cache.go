@@ -164,8 +164,50 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 			sleepDuration := 10 * time.Second
 			perShardPrevTotalGets := make([]uint64, config.NumShards)
 			perShardPrevTotalPuts := make([]uint64, config.NumShards)
+			combinedPrevTotalGets := uint64(0)
+			combinedPrevTotalPuts := uint64(0)
 			for {
 				time.Sleep(sleepDuration)
+
+				combinedTotalGets := uint64(0)
+				combinedTotalPuts := uint64(0)
+				combinedHits := uint64(0)
+				combinedReWrites := uint64(0)
+				combinedExpired := uint64(0)
+				combinedShardWiseActiveEntries := uint64(0)
+				for i := 0; i < config.NumShards; i++ {
+					combinedTotalGets += wc.stats[i].TotalGets.Load()
+					combinedTotalPuts += wc.stats[i].TotalPuts.Load()
+					combinedHits += wc.stats[i].Hits.Load()
+					combinedReWrites += wc.stats[i].ReWrites.Load()
+					combinedExpired += wc.stats[i].Expired.Load()
+					combinedShardWiseActiveEntries += wc.stats[i].ShardWiseActiveEntries.Load()
+				}
+
+				combinedHitRate := float64(0)
+				if combinedTotalGets > 0 {
+					combinedHitRate = float64(combinedHits) / float64(combinedTotalGets)
+				}
+
+				log.Info().Msgf("Combined HitRate: %v", combinedHitRate)
+				log.Info().Msgf("Combined ReWrites: %v", combinedReWrites)
+				log.Info().Msgf("Combined Expired: %v", combinedExpired)
+				log.Info().Msgf("Combined Total: %v", combinedTotalGets)
+				log.Info().Msgf("Combined Puts/sec: %v", float64(combinedTotalPuts-combinedPrevTotalPuts)/float64(sleepDuration.Seconds()))
+				log.Info().Msgf("Combined Gets/sec: %v", float64(combinedTotalGets-combinedPrevTotalGets)/float64(sleepDuration.Seconds()))
+				log.Info().Msgf("Combined ShardWiseActiveEntries: %v", combinedShardWiseActiveEntries)
+
+				combinedGetP25, combinedGetP50, combinedGetP99 := wc.stats[0].LatencyTracker.GetLatencyPercentiles()
+				combinedPutP25, combinedPutP50, combinedPutP99 := wc.stats[0].LatencyTracker.PutLatencyPercentiles()
+
+				log.Info().Msgf("Combined Get Count: %v", combinedTotalGets)
+				log.Info().Msgf("Combined Put Count: %v", combinedTotalPuts)
+				log.Info().Msgf("Combined Get Latencies - P25: %v, P50: %v, P99: %v", combinedGetP25, combinedGetP50, combinedGetP99)
+				log.Info().Msgf("Combined Put Latencies - P25: %v, P50: %v, P99: %v", combinedPutP25, combinedPutP50, combinedPutP99)
+
+				combinedPrevTotalGets = combinedTotalGets
+				combinedPrevTotalPuts = combinedTotalPuts
+
 				for i := 0; i < config.NumShards; i++ {
 					log.Info().Msgf("Shard %d has %d active entries", i, wc.stats[i].ShardWiseActiveEntries.Load())
 					total := wc.stats[i].TotalGets.Load()
