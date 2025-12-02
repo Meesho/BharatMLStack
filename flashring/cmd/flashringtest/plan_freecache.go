@@ -53,7 +53,7 @@ func planFreecache() {
 
 	cfg := cachepkg.WrapCacheConfig{
 		KeysPerShard: keysPerShard,
-		FileSize:     1 * 1024 * 1024 * 1024,
+		FileSize:     20 * 1024 * 1024 * 1024,
 	}
 
 	cache, err := cachepkg.NewFreecache(cfg, logStats)
