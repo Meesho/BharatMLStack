@@ -162,8 +162,8 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 	if logStats {
 		go func() {
 			sleepDuration := 10 * time.Second
-			perShardPrevTotalGets := make([]uint64, config.NumShards)
-			perShardPrevTotalPuts := make([]uint64, config.NumShards)
+			// perShardPrevTotalGets := make([]uint64, config.NumShards)
+			// perShardPrevTotalPuts := make([]uint64, config.NumShards)
 			combinedPrevTotalGets := uint64(0)
 			combinedPrevTotalPuts := uint64(0)
 			for {
@@ -208,6 +208,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 				combinedPrevTotalGets = combinedTotalGets
 				combinedPrevTotalPuts = combinedTotalPuts
 
+				/* disabling per shard stats for now
 				for i := 0; i < config.NumShards; i++ {
 					log.Info().Msgf("Shard %d has %d active entries", i, wc.stats[i].ShardWiseActiveEntries.Load())
 					total := wc.stats[i].TotalGets.Load()
@@ -234,6 +235,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 					log.Info().Msgf("Put Latencies - P25: %v, P50: %v, P99: %v", putP25, putP50, putP99)
 
 				}
+				*/
 				log.Info().Msgf("GridSearchActive: %v", wc.predictor.GridSearchEstimator.IsGridSearchActive())
 			}
 		}()
