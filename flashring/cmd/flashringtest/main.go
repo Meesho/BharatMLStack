@@ -2,6 +2,7 @@ package main
 
 import (
 	"math/rand"
+	"os"
 
 	_ "net/http/pprof"
 )
@@ -27,9 +28,17 @@ func normalDistInt(max int) int {
 
 func main() {
 	// Flags to parameterize load tests
-	// planRandomGaussian()
-	// planReadthroughGaussian()
-	planFreecache()
+	//pick plan from the environment variable
+	plan := os.Getenv("PLAN")
+	if plan == "freecache" {
+		planFreecache()
+	} else if plan == "readthrough" {
+		planReadthroughGaussian()
+	} else if plan == "random" {
+		planRandomGaussian()
+	} else {
+		panic("invalid plan")
+	}
 }
 
 // func BucketsByWidth(a float64, n int) []float64 {
