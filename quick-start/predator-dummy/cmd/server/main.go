@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"os"
 
@@ -105,12 +106,22 @@ func (s *server) ModelInfer(ctx context.Context, req *triton.ModelInferRequest) 
 	// Generate deterministic scores
 	scores := generateScores(hash, numCatalogs)
 
+	// Convert FP32 scores to bytes (little-endian format)
+	// This is what RawOutputContents expects
+	rawOutputBytes := make([]byte, len(scores)*4) // FP32 is 4 bytes
+	for i, score := range scores {
+		// Convert float32 to uint32 bits, then to bytes (little-endian)
+		bits := math.Float32bits(score)
+		binary.LittleEndian.PutUint32(rawOutputBytes[i*4:(i+1)*4], bits)
+	}
+
 	// Build response
 	response := &triton.ModelInferResponse{
-		ModelName:    req.ModelName,
-		ModelVersion: req.ModelVersion,
-		Id:           req.Id,
-		Outputs:      make([]*triton.ModelInferResponse_InferOutputTensor, len(req.Outputs)),
+		ModelName:         req.ModelName,
+		ModelVersion:      req.ModelVersion,
+		Id:                req.Id,
+		Outputs:           make([]*triton.ModelInferResponse_InferOutputTensor, 0),
+		RawOutputContents: make([][]byte, 0),
 	}
 
 	// If no outputs specified, create a default output
@@ -120,23 +131,31 @@ func (s *server) ModelInfer(ctx context.Context, req *triton.ModelInferRequest) 
 				Name:     "output",
 				Datatype: "FP32",
 				Shape:    []int64{int64(len(scores))},
-				Contents: &triton.InferTensorContents{
-					Fp32Contents: scores,
-				},
 			},
 		}
+		response.RawOutputContents = [][]byte{rawOutputBytes}
 	} else {
-		// Fill in requested outputs
-		for i, outputReq := range req.Outputs {
-			response.Outputs[i] = &triton.ModelInferResponse_InferOutputTensor{
+		// Fill in requested outputs - each output gets the same scores
+		for _, outputReq := range req.Outputs {
+			response.Outputs = append(response.Outputs, &triton.ModelInferResponse_InferOutputTensor{
 				Name:     outputReq.Name,
 				Datatype: "FP32",
 				Shape:    []int64{int64(len(scores))},
-				Contents: &triton.InferTensorContents{
-					Fp32Contents: scores,
-				},
-			}
+			})
+			response.RawOutputContents = append(response.RawOutputContents, rawOutputBytes)
 		}
+	}
+
+	// Ensure we always return at least one output
+	if len(response.Outputs) == 0 {
+		response.Outputs = []*triton.ModelInferResponse_InferOutputTensor{
+			{
+				Name:     "output",
+				Datatype: "FP32",
+				Shape:    []int64{int64(len(scores))},
+			},
+		}
+		response.RawOutputContents = [][]byte{rawOutputBytes}
 	}
 
 	return response, nil
