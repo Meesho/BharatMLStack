@@ -36,7 +36,7 @@ const ModelConfigApproval = () => {
         reject_reason: reason || ''
       };
 
-      const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-approval/review`, {
+      const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-approval/review`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${user.token}`,

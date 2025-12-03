@@ -95,7 +95,7 @@ const PromoteMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
   const fetchLatestRequest = async (configId) => {
     try {
       const response = await axios.get(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/latestRequest/${configId}`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/latestRequest/${configId}`,
         {
           headers: {
             Authorization: `Bearer ${user.token}`,
@@ -308,7 +308,7 @@ const PromoteMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
         created_by: prodCredentials.email
       };
       const response = await axios.post(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_PROD_BASE_URL}/api/v1/horizon/mp-config-registry/promote`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_PROD_BASE_URL}/api/v1/horizon/inferflow-config-registry/promote`,
         payload,
         {
           headers: {
