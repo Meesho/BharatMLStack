@@ -15,69 +15,71 @@ func BytesToString(data []byte, dataType string) (string, error) {
 		return "", errors.New("data is nil")
 	}
 
-	switch dataType {
+	dt := strings.ToLower(dataType)
+
 	// Handle scalar types
-	case "String", "DataTypeString", "BYTES":
+	switch dt {
+	case "string", "datatypestring":
 		return string(data), nil
-	case "Bool", "DataTypeBool":
+	case "bool", "datatypebool":
 		return boolBytesToString(data)
-	case "Int8", "DataTypeInt8":
+	case "int8", "datatypeint8":
 		return int8BytesToString(data)
-	case "Int16", "DataTypeInt16":
+	case "int16", "datatypeint16":
 		return int16BytesToString(data)
-	case "Int32", "DataTypeInt32":
+	case "int32", "datatypeint32":
 		return int32BytesToString(data)
-	case "Int64", "DataTypeInt64":
+	case "int64", "datatypeint64":
 		return int64BytesToString(data)
-	case "Uint8", "DataTypeUint8":
+	case "uint8", "datatypeuint8":
 		return uint8BytesToString(data)
-	case "Uint16", "DataTypeUint16":
+	case "uint16", "datatypeuint16":
 		return uint16BytesToString(data)
-	case "Uint32", "DataTypeUint32":
+	case "uint32", "datatypeuint32":
 		return uint32BytesToString(data)
-	case "Uint64", "DataTypeUint64":
+	case "uint64", "datatypeuint64":
 		return uint64BytesToString(data)
-	case "FP32", "DataTypeFP32":
+	case "fp32", "datatypefp32":
 		return float32BytesToString(data)
-	case "FP64", "DataTypeFP64":
+	case "fp64", "datatypefp64":
 		return float64BytesToString(data)
-	case "FP16", "DataTypeFP16":
+	case "fp16", "datatypefp16":
 		return float16BytesToString(data)
-	case "FP8E5M2", "DataTypeFP8E5M2":
+	case "fp8e5m2", "datatypefp8e5m2":
 		return float8E5M2BytesToString(data)
-	case "FP8E4M3", "DataTypeFP8E4M3":
+	case "fp8e4m3", "datatypefp8e4m3":
 		return float8E4M3BytesToString(data)
 
 	// Handle vector types
-	case "BoolVector", "DataTypeBoolVector":
+	case "boolvector", "datatypeboolvector":
 		return boolVectorBytesToString(data)
-	case "Int8Vector", "DataTypeInt8Vector":
+	case "int8vector", "datatypeint8vector":
 		return int8VectorBytesToString(data)
-	case "Int16Vector", "DataTypeInt16Vector":
+	case "int16vector", "datatypeint16vector":
 		return int16VectorBytesToString(data)
-	case "Int32Vector", "DataTypeInt32Vector":
+	case "int32vector", "datatypeint32vector":
 		return int32VectorBytesToString(data)
-	case "Int64Vector", "DataTypeInt64Vector":
+	case "int64vector", "datatypeint64vector":
 		return int64VectorBytesToString(data)
-	case "Uint8Vector", "DataTypeUint8Vector":
+	case "uint8vector", "datatypeuint8vector":
 		return uint8VectorBytesToString(data)
-	case "Uint16Vector", "DataTypeUint16Vector":
+	case "uint16vector", "datatypeuint16vector":
 		return uint16VectorBytesToString(data)
-	case "Uint32Vector", "DataTypeUint32Vector":
+	case "uint32vector", "datatypeuint32vector":
 		return uint32VectorBytesToString(data)
-	case "Uint64Vector", "DataTypeUint64Vector":
+	case "uint64vector", "datatypeuint64vector":
 		return uint64VectorBytesToString(data)
-	case "FP32Vector", "DataTypeFP32Vector":
+	case "fp32vector", "datatypefp32vector":
 		return float32VectorBytesToString(data)
-	case "FP64Vector", "DataTypeFP64Vector":
+	case "fp64vector", "datatypefp64vector":
 		return float64VectorBytesToString(data)
-	case "FP16Vector", "DataTypeFP16Vector":
+	case "fp16vector", "datatypefp16vector":
 		return float16VectorBytesToString(data)
-	case "FP8E5M2Vector", "DataTypeFP8E5M2Vector":
+	case "fp8e5m2vector", "datatypefp8e5m2vector":
 		return float8E5M2VectorBytesToString(data)
-	case "FP8E4M3Vector", "DataTypeFP8E4M3Vector":
+	case "fp8e4m3vector", "datatypefp8e4m3vector":
 		return float8E4M3VectorBytesToString(data)
-	case "StringVector", "DataTypeStringVector":
+	case "stringvector", "datatypestringvector":
 		return string(data), nil
 	}
 
@@ -329,69 +331,77 @@ func StringToBytes(value string, dataType string) ([]byte, error) {
 		return nil, errors.New("value is empty")
 	}
 
-	switch dataType {
-	// Scalar types
-	case "String", "DataTypeString", "Bytes":
-		return []byte(value), nil
-	case "Bool", "DataTypeBool":
-		return stringToBoolBytes(value)
-	case "Int8", "DataTypeInt8":
-		return stringToInt8Bytes(value)
-	case "Int16", "DataTypeInt16":
-		return stringToInt16Bytes(value)
-	case "Int32", "DataTypeInt32":
-		return stringToInt32Bytes(value)
-	case "Int64", "DataTypeInt64":
-		return stringToInt64Bytes(value)
-	case "Uint8", "DataTypeUint8":
-		return stringToUint8Bytes(value)
-	case "Uint16", "DataTypeUint16":
-		return stringToUint16Bytes(value)
-	case "Uint32", "DataTypeUint32":
-		return stringToUint32Bytes(value)
-	case "Uint64", "DataTypeUint64":
-		return stringToUint64Bytes(value)
-	case "FP32", "DataTypeFP32":
-		return stringToFloat32Bytes(value)
-	case "FP64", "DataTypeFP64":
-		return stringToFloat64Bytes(value)
-	case "FP16", "DataTypeFP16":
-		return stringToFloat16Bytes(value)
-	case "FP8E5M2", "DataTypeFP8E5M2":
-		return stringToFloat8E5M2Bytes(value)
-	case "FP8E4M3", "DataTypeFP8E4M3":
-		return stringToFloat8E4M3Bytes(value)
-	// Vector types
-	case "BoolVector", "DataTypeBoolVector":
-		return stringToBoolVectorBytes(value)
-	case "Int8Vector", "DataTypeInt8Vector":
-		return stringToInt8VectorBytes(value)
-	case "Int16Vector", "DataTypeInt16Vector":
-		return stringToInt16VectorBytes(value)
-	case "Int32Vector", "DataTypeInt32Vector":
-		return stringToInt32VectorBytes(value)
-	case "Int64Vector", "DataTypeInt64Vector":
-		return stringToInt64VectorBytes(value)
-	case "Uint8Vector", "DataTypeUint8Vector":
-		return stringToUint8VectorBytes(value)
-	case "Uint16Vector", "DataTypeUint16Vector":
-		return stringToUint16VectorBytes(value)
-	case "Uint32Vector", "DataTypeUint32Vector":
-		return stringToUint32VectorBytes(value)
-	case "Uint64Vector", "DataTypeUint64Vector":
-		return stringToUint64VectorBytes(value)
-	case "FP32Vector", "DataTypeFP32Vector":
-		return stringToFloat32VectorBytes(value)
-	case "FP64Vector", "DataTypeFP64Vector":
-		return stringToFloat64VectorBytes(value)
-	case "FP16Vector", "DataTypeFP16Vector":
-		return stringToFloat16VectorBytes(value)
-	case "FP8E5M2Vector", "DataTypeFP8E5M2Vector":
-		return stringToFloat8E5M2VectorBytes(value)
-	case "FP8E4M3Vector", "DataTypeFP8E4M3Vector":
-		return stringToFloat8E4M3VectorBytes(value)
-	case "StringVector", "DataTypeStringVector":
-		return stringToStringVectorBytes(value)
+	dt := strings.ToLower(dataType)
+	isVector := strings.Contains(value, ":")
+
+	if !isVector {
+		// Handle scalar types
+		switch dt {
+		case "string", "datatypestring":
+			return []byte(value), nil
+		case "bool", "datatypebool":
+			return stringToBoolBytes(value)
+		case "int8", "datatypeint8":
+			return stringToInt8Bytes(value)
+		case "int16", "datatypeint16":
+			return stringToInt16Bytes(value)
+		case "int32", "datatypeint32":
+			return stringToInt32Bytes(value)
+		case "int64", "datatypeint64":
+			return stringToInt64Bytes(value)
+		case "uint8", "datatypeuint8":
+			return stringToUint8Bytes(value)
+		case "uint16", "datatypeuint16":
+			return stringToUint16Bytes(value)
+		case "uint32", "datatypeuint32":
+			return stringToUint32Bytes(value)
+		case "uint64", "datatypeuint64":
+			return stringToUint64Bytes(value)
+		case "fp32", "datatypefp32":
+			return stringToFloat32Bytes(value)
+		case "fp64", "datatypefp64":
+			return stringToFloat64Bytes(value)
+		case "fp16", "datatypefp16":
+			return stringToFloat16Bytes(value)
+		case "fp8e5m2", "datatypefp8e5m2":
+			return stringToFloat8E5M2Bytes(value)
+		case "fp8e4m3", "datatypefp8e4m3":
+			return stringToFloat8E4M3Bytes(value)
+		}
+	} else {
+		// Handle vector types
+		switch dt {
+		case "boolvector", "datatypeboolvector":
+			return stringToBoolVectorBytes(value)
+		case "int8vector", "datatypeint8vector":
+			return stringToInt8VectorBytes(value)
+		case "int16vector", "datatypeint16vector":
+			return stringToInt16VectorBytes(value)
+		case "int32vector", "datatypeint32vector":
+			return stringToInt32VectorBytes(value)
+		case "int64vector", "datatypeint64vector":
+			return stringToInt64VectorBytes(value)
+		case "uint8vector", "datatypeuint8vector":
+			return stringToUint8VectorBytes(value)
+		case "uint16vector", "datatypeuint16vector":
+			return stringToUint16VectorBytes(value)
+		case "uint32vector", "datatypeuint32vector":
+			return stringToUint32VectorBytes(value)
+		case "uint64vector", "datatypeuint64vector":
+			return stringToUint64VectorBytes(value)
+		case "fp32vector", "datatypefp32vector":
+			return stringToFloat32VectorBytes(value)
+		case "fp64vector", "datatypefp64vector":
+			return stringToFloat64VectorBytes(value)
+		case "fp16vector", "datatypefp16vector":
+			return stringToFloat16VectorBytes(value)
+		case "fp8e5m2vector", "datatypefp8e5m2vector":
+			return stringToFloat8E5M2VectorBytes(value)
+		case "fp8e4m3vector", "datatypefp8e4m3vector":
+			return stringToFloat8E4M3VectorBytes(value)
+		case "stringvector", "datatypestringvector":
+			return stringToStringVectorBytes(value)
+		}
 	}
 
 	return nil, errors.New("unsupported data type: " + dataType)
@@ -755,6 +765,9 @@ func ConvertBytesToBytes(inputData []byte, inputType string, outputType string) 
 		return nil, errors.New("input data is nil")
 	}
 
+	inputType = strings.ToLower(inputType)
+	outputType = strings.ToLower(outputType)
+
 	// If input and output types are the same, return input data as-is
 	if inputType == outputType {
 		return inputData, nil
@@ -778,79 +791,79 @@ func ConvertBytesToBytes(inputData []byte, inputType string, outputType string) 
 // bytesToNativeType converts byte data to native Go type
 func bytesToNativeType(data []byte, dataType string) (interface{}, error) {
 	switch dataType {
-	case "String", "DataTypeString":
+	case "string", "datatypestring":
 		// If the string represents a number, parse it
 		str := string(data)
 		if f, err := strconv.ParseFloat(str, 64); err == nil {
 			return f, nil
 		}
 		return str, nil
-	case "Bool", "DataTypeBool":
+	case "bool", "datatypebool":
 		if len(data) < 1 {
 			return nil, errors.New("insufficient bytes for bool")
 		}
 		return data[0] != 0, nil
-	case "Int8", "DataTypeInt8":
+	case "int8", "datatypeint8":
 		if len(data) < 1 {
 			return nil, errors.New("insufficient bytes for int8")
 		}
 		return byteorder.ByteOrder.Int8(data), nil
-	case "Int16", "DataTypeInt16":
+	case "int16", "datatypeint16":
 		if len(data) < 2 {
 			return nil, errors.New("insufficient bytes for int16")
 		}
 		return byteorder.ByteOrder.Int16(data), nil
-	case "Int32", "DataTypeInt32":
+	case "int32", "datatypeint32":
 		if len(data) < 4 {
 			return nil, errors.New("insufficient bytes for int32")
 		}
 		return byteorder.ByteOrder.Int32(data), nil
-	case "Int64", "DataTypeInt64":
+	case "int64", "datatypeint64":
 		if len(data) < 8 {
 			return nil, errors.New("insufficient bytes for int64")
 		}
 		return byteorder.ByteOrder.Int64(data), nil
-	case "Uint8", "DataTypeUint8":
+	case "uint8", "datatypeuint8":
 		if len(data) < 1 {
 			return nil, errors.New("insufficient bytes for uint8")
 		}
 		return uint8(data[0]), nil
-	case "Uint16", "DataTypeUint16":
+	case "uint16", "datatypeuint16":
 		if len(data) < 2 {
 			return nil, errors.New("insufficient bytes for uint16")
 		}
 		return byteorder.ByteOrder.Uint16(data), nil
-	case "Uint32", "DataTypeUint32":
+	case "uint32", "datatypeuint32":
 		if len(data) < 4 {
 			return nil, errors.New("insufficient bytes for uint32")
 		}
 		return byteorder.ByteOrder.Uint32(data), nil
-	case "Uint64", "DataTypeUint64":
+	case "uint64", "datatypeuint64":
 		if len(data) < 8 {
 			return nil, errors.New("insufficient bytes for uint64")
 		}
 		return byteorder.ByteOrder.Uint64(data), nil
-	case "FP32", "DataTypeFP32":
+	case "fp32", "datatypefp32":
 		if len(data) < 4 {
 			return nil, errors.New("insufficient bytes for fp32")
 		}
 		return byteorder.ByteOrder.Float32(data), nil
-	case "FP64", "DataTypeFP64":
+	case "fp64", "datatypefp64":
 		if len(data) < 8 {
 			return nil, errors.New("insufficient bytes for fp64")
 		}
 		return byteorder.ByteOrder.Float64(data), nil
-	case "FP16", "DataTypeFP16":
+	case "fp16", "datatypefp16":
 		if len(data) < 2 {
 			return nil, errors.New("insufficient bytes for fp16")
 		}
 		return byteorder.ByteOrder.Float16AsFP32(data), nil
-	case "FP8E5M2", "DataTypeFP8E5M2":
+	case "fp8e5m2", "datatypefp8e5m2":
 		if len(data) < 1 {
 			return nil, errors.New("insufficient bytes for fp8e5m2")
 		}
 		return byteorder.ByteOrder.Float8E5M2AsFP32(data), nil
-	case "FP8E4M3", "DataTypeFP8E4M3":
+	case "fp8e4m3", "datatypefp8e4m3":
 		if len(data) < 1 {
 			return nil, errors.New("insufficient bytes for fp8e4m3")
 		}
@@ -863,7 +876,7 @@ func bytesToNativeType(data []byte, dataType string) (interface{}, error) {
 // nativeTypeToBytes converts native Go type to byte data
 func nativeTypeToBytes(value interface{}, outputType string) ([]byte, error) {
 	switch outputType {
-	case "Bool", "DataTypeBool":
+	case "bool", "datatypebool":
 		var b bool
 		switch v := value.(type) {
 		case bool:
@@ -896,7 +909,7 @@ func nativeTypeToBytes(value interface{}, outputType string) ([]byte, error) {
 		}
 		return []byte{0}, nil
 
-	case "Int8", "DataTypeInt8":
+	case "int8", "datatypeint8":
 		var i8 int8
 		switch v := value.(type) {
 		case bool:
@@ -932,7 +945,7 @@ func nativeTypeToBytes(value interface{}, outputType string) ([]byte, error) {
 		byteorder.ByteOrder.PutInt8FromInt32(buf, int32(i8))
 		return buf, nil
 
-	case "Int16", "DataTypeInt16":
+	case "int16", "datatypeint16":
 		var i16 int16
 		switch v := value.(type) {
 		case bool:
@@ -968,7 +981,7 @@ func nativeTypeToBytes(value interface{}, outputType string) ([]byte, error) {
 		byteorder.ByteOrder.PutInt16FromInt32(buf, int32(i16))
 		return buf, nil
 
-	case "Int32", "DataTypeInt32":
+	case "int32", "datatypeint32":
 		var i32 int32
 		switch v := value.(type) {
 		case bool:
@@ -1004,7 +1017,7 @@ func nativeTypeToBytes(value interface{}, outputType string) ([]byte, error) {
 		byteorder.ByteOrder.PutInt32(buf, i32)
 		return buf, nil
 
-	case "Int64", "DataTypeInt64":
+	case "int64", "datatypeint64":
 		var i64 int64
 		switch v := value.(type) {
 		case bool:
@@ -1040,7 +1053,7 @@ func nativeTypeToBytes(value interface{}, outputType string) ([]byte, error) {
 		byteorder.ByteOrder.PutInt64(buf, i64)
 		return buf, nil
 
-	case "Uint8", "DataTypeUint8":
+	case "uint8", "datatypeuint8":
 		var ui8 uint8
 		switch v := value.(type) {
 		case bool:
@@ -1074,7 +1087,7 @@ func nativeTypeToBytes(value interface{}, outputType string) ([]byte, error) {
 		}
 		return []byte{ui8}, nil
 
-	case "Uint16", "DataTypeUint16":
+	case "uint16", "datatypeuint16":
 		var ui16 uint16
 		switch v := value.(type) {
 		case bool:
@@ -1110,7 +1123,7 @@ func nativeTypeToBytes(value interface{}, outputType string) ([]byte, error) {
 		byteorder.ByteOrder.PutUint16(buf, ui16)
 		return buf, nil
 
-	case "Uint32", "DataTypeUint32":
+	case "uint32", "datatypeuint32":
 		var ui32 uint32
 		switch v := value.(type) {
 		case bool:
@@ -1146,7 +1159,7 @@ func nativeTypeToBytes(value interface{}, outputType string) ([]byte, error) {
 		byteorder.ByteOrder.PutUint32(buf, ui32)
 		return buf, nil
 
-	case "Uint64", "DataTypeUint64":
+	case "uint64", "datatypeuint64":
 		var ui64 uint64
 		switch v := value.(type) {
 		case bool:
@@ -1182,7 +1195,7 @@ func nativeTypeToBytes(value interface{}, outputType string) ([]byte, error) {
 		byteorder.ByteOrder.PutUint64(buf, ui64)
 		return buf, nil
 
-	case "FP32", "DataTypeFP32":
+	case "fp32", "datatypefp32":
 		var f32 float32
 		switch v := value.(type) {
 		case bool:
@@ -1218,7 +1231,7 @@ func nativeTypeToBytes(value interface{}, outputType string) ([]byte, error) {
 		byteorder.ByteOrder.PutFloat32(buf, f32)
 		return buf, nil
 
-	case "FP64", "DataTypeFP64":
+	case "fp64", "datatypefp64":
 		var f64 float64
 		switch v := value.(type) {
 		case bool:
@@ -1254,7 +1267,7 @@ func nativeTypeToBytes(value interface{}, outputType string) ([]byte, error) {
 		byteorder.ByteOrder.PutFloat64(buf, f64)
 		return buf, nil
 
-	case "FP16", "DataTypeFP16":
+	case "fp16", "datatypefp16":
 		var f32 float32
 		switch v := value.(type) {
 		case bool:
@@ -1290,7 +1303,7 @@ func nativeTypeToBytes(value interface{}, outputType string) ([]byte, error) {
 		byteorder.ByteOrder.PutFloat16FromFP32(buf, f32)
 		return buf, nil
 
-	case "FP8E5M2", "DataTypeFP8E5M2":
+	case "fp8e5m2", "datatypefp8e5m2":
 		var f32 float32
 		switch v := value.(type) {
 		case bool:
@@ -1326,7 +1339,7 @@ func nativeTypeToBytes(value interface{}, outputType string) ([]byte, error) {
 		byteorder.ByteOrder.PutFloat8E5M2FromFP32(buf, f32)
 		return buf, nil
 
-	case "FP8E4M3", "DataTypeFP8E4M3":
+	case "fp8e4m3", "datatypefp8e4m3":
 		var f32 float32
 		switch v := value.(type) {
 		case bool:

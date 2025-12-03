@@ -36,6 +36,7 @@ func NewClientV1(config *Config) *ClientV1 {
 	conn := grpcclient.NewConnFromConfig(&grpcclient.Config{
 		Host:      config.Host,
 		Port:      config.Port,
+		DeadLine:  config.DeadLine,
 		PlainText: config.PlainText,
 	}, v1Prefix)
 
