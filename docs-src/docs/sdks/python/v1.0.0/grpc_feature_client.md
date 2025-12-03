@@ -115,7 +115,7 @@ from grpc_feature_client import GRPCFeatureClient, GRPCClientConfig
 
 config = GRPCClientConfig(
     server_address="feature-store.example.com:50051",
-    job_id="model-inference-service",
+    job_id="predator-service",
     job_token="api-token"
 )
 
