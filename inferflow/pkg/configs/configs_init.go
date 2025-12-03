@@ -73,6 +73,7 @@ func bindEnvVars() {
 	viper.BindEnv("externalServicePredator_GrpcPlainText", "EXTERNAL_SERVICE_PREDATOR_GRPC_PLAIN_TEXT")
 	viper.BindEnv("externalServicePredator_CallerId", "EXTERNAL_SERVICE_PREDATOR_CALLER_ID")
 	viper.BindEnv("externalServicePredator_CallerToken", "EXTERNAL_SERVICE_PREDATOR_CALLER_TOKEN")
+	viper.BindEnv("externalServicePredator_Deadline", "EXTERNAL_SERVICE_PREDATOR_DEADLINE")
 
 	// Metrics config
 	viper.BindEnv("metrics_sampling_rate", "METRIC_SAMPLING_RATE")

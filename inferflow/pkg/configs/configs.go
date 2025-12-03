@@ -26,6 +26,7 @@ type Configs struct {
 	ExternalServicePredator_GrpcPlainText bool   `mapstructure:"externalServicePredator_GrpcPlainText"`
 	ExternalServicePredator_CallerId      string `mapstructure:"externalServicePredator_CallerId"`
 	ExternalServicePredator_CallerToken   string `mapstructure:"externalServicePredator_CallerToken"`
+	ExternalServicePredator_Deadline      int    `mapstructure:"externalServicePredator_Deadline"`
 
 	//onFs
 	ExternalServiceOnFs_Host          string `mapstructure:"externalServiceOnFs_fsHost"`
