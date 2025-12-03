@@ -49,7 +49,7 @@ const (
 	adminRole                         = "ADMIN"
 	activeTrue                        = true
 	activeFalse                       = false
-	inferFlowRetrieveModelScoreMethod = "/InferFlowService/RetrieveModelScore"
+	inferFlowRetrieveModelScoreMethod = "/Inferflow/RetrieveModelScore"
 	setFunctionalTest                 = "FunctionalTest"
 )
 
@@ -945,17 +945,24 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 			ep = strings.TrimPrefix(ep, "https://")
 		}
 		ep = strings.TrimSuffix(ep, "/")
-		if idx := strings.LastIndex(ep, ":"); idx != -1 {
-			if idx < len(ep)-1 {
-				ep = ep[:idx]
+
+		// Check if endpoint already has a port
+		hasPort := strings.LastIndex(ep, ":") != -1
+
+		// Only add port if it's missing
+		if !hasPort {
+			var port string
+			if !inferflowPkg.IsMeeshoEnabled {
+				port = ":8085"
+			} else {
+				port = ":8080"
 			}
+			env := strings.ToLower(strings.TrimSpace(inferflowPkg.AppEnv))
+			if env == "stg" || env == "int" {
+				port = ":80"
+			}
+			ep = ep + port
 		}
-		port := ":8080"
-		env := strings.ToLower(strings.TrimSpace(inferflowPkg.AppEnv))
-		if env == "stg" || env == "int" {
-			port = ":80"
-		}
-		ep = ep + port
 		return ep
 	}(request.EndPoint)
 
@@ -964,6 +971,7 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 		response.Error = err.Error()
 		return response, errors.New("failed to get connection: " + err.Error())
 	}
+	defer conn.Close()
 
 	protoRequest := &pb.InferflowRequestProto{}
 	protoRequest.ModelConfigId = request.RequestBody.ModelConfigID
@@ -998,7 +1006,7 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 
 	protoResponse := &pb.InferflowResponseProto{}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 	defer cancel()
 

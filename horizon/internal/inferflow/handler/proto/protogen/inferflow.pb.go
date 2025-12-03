@@ -339,28 +339,28 @@ var File_inferflow_proto protoreflect.FileDescriptor
 
 const file_inferflow_proto_rawDesc = "" +
 	"\n" +
-	"\x0finferflow.proto\x12\tinferflow\"\xf2\x02\n" +
-	"\x15InferflowRequestProto\x12C\n" +
-	"\bentities\x18\x01 \x03(\v2'.inferflow.InferflowRequestProto.EntityR\bentities\x12&\n" +
+	"\x0finferflow.proto\"\xde\x02\n" +
+	"\x15InferflowRequestProto\x129\n" +
+	"\bentities\x18\x01 \x03(\v2\x1d.InferflowRequestProto.EntityR\bentities\x12&\n" +
 	"\x0fmodel_config_id\x18\x02 \x01(\tR\rmodelConfigId\x12\x1f\n" +
 	"\vtracking_id\x18\x03 \x01(\tR\n" +
-	"trackingId\x1a\xca\x01\n" +
+	"trackingId\x1a\xc0\x01\n" +
 	"\x06Entity\x12\x16\n" +
 	"\x06entity\x18\x01 \x01(\tR\x06entity\x12\x10\n" +
-	"\x03ids\x18\x02 \x03(\tR\x03ids\x12K\n" +
-	"\bfeatures\x18\x03 \x03(\v2/.inferflow.InferflowRequestProto.Entity.FeatureR\bfeatures\x1aI\n" +
+	"\x03ids\x18\x02 \x03(\tR\x03ids\x12A\n" +
+	"\bfeatures\x18\x03 \x03(\v2%.InferflowRequestProto.Entity.FeatureR\bfeatures\x1aI\n" +
 	"\aFeature\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12*\n" +
-	"\x11ids_feature_value\x18\x02 \x03(\tR\x0fidsFeatureValue\"\xf7\x01\n" +
-	"\x16InferflowResponseProto\x12V\n" +
-	"\x0ecomponent_data\x18\x01 \x03(\v2/.inferflow.InferflowResponseProto.ComponentDataR\rcomponentData\x12=\n" +
-	"\x05error\x18\x02 \x01(\v2'.inferflow.InferflowResponseProto.ErrorR\x05error\x1a#\n" +
+	"\x11ids_feature_value\x18\x02 \x03(\tR\x0fidsFeatureValue\"\xe3\x01\n" +
+	"\x16InferflowResponseProto\x12L\n" +
+	"\x0ecomponent_data\x18\x01 \x03(\v2%.InferflowResponseProto.ComponentDataR\rcomponentData\x123\n" +
+	"\x05error\x18\x02 \x01(\v2\x1d.InferflowResponseProto.ErrorR\x05error\x1a#\n" +
 	"\rComponentData\x12\x12\n" +
 	"\x04data\x18\x01 \x03(\tR\x04data\x1a!\n" +
 	"\x05Error\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage2h\n" +
-	"\tInferflow\x12[\n" +
-	"\x12RetrieveModelScore\x12 .inferflow.InferflowRequestProto\x1a!.inferflow.InferflowResponseProto\"\x00BSZQgithub.com/meesho/BharatMLStack/horizon/internal/inferflow/handler/proto/protogenb\x06proto3"
+	"\amessage\x18\x01 \x01(\tR\amessage2T\n" +
+	"\tInferflow\x12G\n" +
+	"\x12RetrieveModelScore\x12\x16.InferflowRequestProto\x1a\x17.InferflowResponseProto\"\x00BSZQgithub.com/meesho/BharatMLStack/horizon/internal/inferflow/handler/proto/protogenb\x06proto3"
 
 var (
 	file_inferflow_proto_rawDescOnce sync.Once
@@ -376,20 +376,20 @@ func file_inferflow_proto_rawDescGZIP() []byte {
 
 var file_inferflow_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_inferflow_proto_goTypes = []any{
-	(*InferflowRequestProto)(nil),                // 0: inferflow.InferflowRequestProto
-	(*InferflowResponseProto)(nil),               // 1: inferflow.InferflowResponseProto
-	(*InferflowRequestProto_Entity)(nil),         // 2: inferflow.InferflowRequestProto.Entity
-	(*InferflowRequestProto_Entity_Feature)(nil), // 3: inferflow.InferflowRequestProto.Entity.Feature
-	(*InferflowResponseProto_ComponentData)(nil), // 4: inferflow.InferflowResponseProto.ComponentData
-	(*InferflowResponseProto_Error)(nil),         // 5: inferflow.InferflowResponseProto.Error
+	(*InferflowRequestProto)(nil),                // 0: InferflowRequestProto
+	(*InferflowResponseProto)(nil),               // 1: InferflowResponseProto
+	(*InferflowRequestProto_Entity)(nil),         // 2: InferflowRequestProto.Entity
+	(*InferflowRequestProto_Entity_Feature)(nil), // 3: InferflowRequestProto.Entity.Feature
+	(*InferflowResponseProto_ComponentData)(nil), // 4: InferflowResponseProto.ComponentData
+	(*InferflowResponseProto_Error)(nil),         // 5: InferflowResponseProto.Error
 }
 var file_inferflow_proto_depIdxs = []int32{
-	2, // 0: inferflow.InferflowRequestProto.entities:type_name -> inferflow.InferflowRequestProto.Entity
-	4, // 1: inferflow.InferflowResponseProto.component_data:type_name -> inferflow.InferflowResponseProto.ComponentData
-	5, // 2: inferflow.InferflowResponseProto.error:type_name -> inferflow.InferflowResponseProto.Error
-	3, // 3: inferflow.InferflowRequestProto.Entity.features:type_name -> inferflow.InferflowRequestProto.Entity.Feature
-	0, // 4: inferflow.Inferflow.RetrieveModelScore:input_type -> inferflow.InferflowRequestProto
-	1, // 5: inferflow.Inferflow.RetrieveModelScore:output_type -> inferflow.InferflowResponseProto
+	2, // 0: InferflowRequestProto.entities:type_name -> InferflowRequestProto.Entity
+	4, // 1: InferflowResponseProto.component_data:type_name -> InferflowResponseProto.ComponentData
+	5, // 2: InferflowResponseProto.error:type_name -> InferflowResponseProto.Error
+	3, // 3: InferflowRequestProto.Entity.features:type_name -> InferflowRequestProto.Entity.Feature
+	0, // 4: Inferflow.RetrieveModelScore:input_type -> InferflowRequestProto
+	1, // 5: Inferflow.RetrieveModelScore:output_type -> InferflowResponseProto
 	5, // [5:6] is the sub-list for method output_type
 	4, // [4:5] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name
