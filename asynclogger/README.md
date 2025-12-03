@@ -20,6 +20,7 @@ This package provides a lock-free async logger using a Sharded Double Buffer CAS
 - **Graceful Shutdown**: Ensures all logs are flushed before exit
 - **Statistics**: Built-in metrics for monitoring
 - **Dual API**: Choose between convenience (`Log`) and low-allocation (`LogBytes`)
+- **Multi-Event Logging**: `LoggerManager` manages multiple event-specific loggers with automatic file separation
 
 ## Architecture
 
@@ -387,6 +388,188 @@ go func() {
         }
     }
 }()
+```
+
+## LoggerManager: Multi-Event Logging
+
+The `LoggerManager` provides a convenient way to manage multiple event-specific loggers, where each event type writes to its own log file. This is useful for applications that need to separate logs by event type (e.g., `payment.log`, `login.log`, `order.log`).
+
+### Features
+
+- **Automatic Logger Creation**: Loggers are created lazily on first use
+- **Event Name Sanitization**: Invalid filesystem characters are automatically sanitized
+- **Thread-Safe**: Uses `sync.Map` for lock-free concurrent access
+- **Per-Event Statistics**: Get statistics for individual events or aggregated across all events
+- **Dynamic Management**: Initialize and close event loggers at runtime
+
+### Basic Usage
+
+```go
+package main
+
+import (
+    "log"
+    "github.com/Meesho/BharatMLStack/asynclogger"
+)
+
+func main() {
+    // Create a LoggerManager with base configuration
+    // The base directory is extracted from LogFilePath
+    config := asynclogger.DefaultConfig("/var/log/myapp/base.log")
+    manager, err := asynclogger.NewLoggerManager(config)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer manager.Close() // Closes all event loggers
+
+    // Log to different events (creates loggers automatically)
+    manager.LogWithEvent("payment", "Payment processed: $100")
+    manager.LogWithEvent("login", "User logged in: user123")
+    manager.LogWithEvent("order", "Order created: #12345")
+
+    // Files created:
+    // - /var/log/myapp/payment.log
+    // - /var/log/myapp/login.log
+    // - /var/log/myapp/order.log
+}
+```
+
+### Zero-Allocation Logging
+
+```go
+// Use LogBytesWithEvent for high-performance logging
+data := []byte("Payment processed: $100\n")
+manager.LogBytesWithEvent("payment", data)
+```
+
+### Event Logger Management
+
+```go
+// Initialize a logger explicitly (useful for webhook-driven setup)
+err := manager.InitializeEventLogger("payment")
+if err != nil {
+    log.Printf("Failed to initialize payment logger: %v", err)
+}
+
+// Check if an event logger exists
+if manager.HasEventLogger("payment") {
+    log.Println("Payment logger is active")
+}
+
+// List all active event loggers
+events := manager.ListEventLoggers()
+log.Printf("Active events: %v", events)
+
+// Close a specific event logger
+err = manager.CloseEventLogger("payment")
+if err != nil {
+    log.Printf("Failed to close payment logger: %v", err)
+}
+```
+
+### Statistics and Monitoring
+
+```go
+// Get aggregated statistics across all events
+totalLogs, droppedLogs, bytesWritten, flushes, flushErrors, setSwaps := manager.GetStatsSnapshot()
+log.Printf("Total logs: %d, Dropped: %d, Bytes: %d", totalLogs, droppedLogs, bytesWritten)
+
+// Get statistics for a specific event
+total, dropped, bytes, flushes, errors, swaps, err := manager.GetEventStats("payment")
+if err != nil {
+    log.Printf("Error getting payment stats: %v", err)
+} else {
+    log.Printf("Payment logs: %d, Dropped: %d", total, dropped)
+}
+
+// Get aggregated flush metrics
+metrics := manager.GetAggregatedFlushMetrics()
+log.Printf("Avg flush duration: %v", metrics.AvgFlushDuration)
+```
+
+### Event Name Sanitization
+
+Event names are automatically sanitized to ensure valid filenames:
+
+- Invalid characters (`/`, `\`, `:`, `*`, `?`, `"`, `<`, `>`, `|`) are replaced with `_`
+- Spaces are replaced with `_`
+- Names are truncated to 255 characters
+- Empty names are rejected
+
+```go
+// These event names are automatically sanitized:
+manager.LogWithEvent("payment/event", "test")  // Creates: payment_event.log
+manager.LogWithEvent("login event", "test")    // Creates: login_event.log
+manager.LogWithEvent("order*test", "test")      // Creates: order_test.log
+```
+
+### Complete Example
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
+
+    "github.com/Meesho/BharatMLStack/asynclogger"
+)
+
+func main() {
+    // Create LoggerManager
+    config := asynclogger.DefaultConfig("/var/log/myapp/base.log")
+    manager, err := asynclogger.NewLoggerManager(config)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer manager.Close()
+
+    // Initialize event loggers
+    manager.InitializeEventLogger("payment")
+    manager.InitializeEventLogger("login")
+
+    // Start monitoring
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    go monitorManager(ctx, manager)
+
+    // Log events
+    manager.LogWithEvent("payment", "Payment $100 processed")
+    manager.LogWithEvent("login", "User alice logged in")
+    manager.LogWithEvent("order", "Order #12345 created")
+
+    // Handle graceful shutdown
+    sigChan := make(chan os.Signal, 1)
+    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+    <-sigChan
+}
+
+func monitorManager(ctx context.Context, manager *asynclogger.LoggerManager) {
+    ticker := time.NewTicker(1 * time.Minute)
+    defer ticker.Stop()
+
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-ticker.C:
+            total, dropped, bytesWritten, _, _, _ := manager.GetStatsSnapshot()
+            if total > 0 {
+                dropRate := float64(dropped) / float64(total) * 100
+                log.Printf("Manager stats: total=%d, dropped=%d (%.4f%%), bytes=%d",
+                    total, dropped, dropRate, bytesWritten)
+            }
+
+            // List active events
+            events := manager.ListEventLoggers()
+            log.Printf("Active events: %v", events)
+        }
+    }
+}
 ```
 
 ## Configuration Guide
@@ -760,7 +943,7 @@ go test -bench=. -benchmem
 
 ### Test Coverage
 
-The test suite includes **19 test functions** with comprehensive coverage:
+The test suite includes comprehensive coverage for both `Logger` and `LoggerManager`:
 
 #### Configuration Tests
 - **`TestConfig_Validate`** (4 sub-tests)
@@ -804,6 +987,22 @@ The test suite includes **19 test functions** with comprehensive coverage:
   - ✅ **Data correctness** (what is written matches what is read)
   - ✅ End-to-end file format validation
 
+#### LoggerManager Tests
+- **`TestNewLoggerManager`** (4 sub-tests) - Manager creation and configuration
+- **`TestSanitizeEventName`** (11 sub-tests) - Event name sanitization and validation
+- **`TestLoggerManager_LogBytesWithEvent`** (3 sub-tests) - Logging with event separation
+- **`TestLoggerManager_LogWithEvent`** - String-based event logging
+- **`TestLoggerManager_InitializeEventLogger`** (4 sub-tests) - Explicit logger initialization
+- **`TestLoggerManager_CloseEventLogger`** (4 sub-tests) - Event logger closing
+- **`TestLoggerManager_HasEventLogger`** (3 sub-tests) - Logger existence checks
+- **`TestLoggerManager_ListEventLoggers`** (3 sub-tests) - Listing active loggers
+- **`TestLoggerManager_Close`** (3 sub-tests) - Manager shutdown
+- **`TestLoggerManager_GetStatsSnapshot`** (2 sub-tests) - Aggregated statistics
+- **`TestLoggerManager_GetEventStats`** (3 sub-tests) - Per-event statistics
+- **`TestLoggerManager_ConcurrentAccess`** (3 sub-tests) - Concurrent operations
+- **`TestLoggerManager_EventNameSanitizationInFileNames`** - File name validation
+- **`TestLoggerManager_LoadOrStoreRaceCondition`** - Race condition handling
+
 ### Test Coverage Areas
 
 - ✅ **Configuration validation** - All config scenarios tested
@@ -819,6 +1018,10 @@ The test suite includes **19 test functions** with comprehensive coverage:
 - ✅ **API compatibility** - Log vs LogBytes, mixed usage
 - ✅ **File format correctness** - Header structure, data layout
 - ✅ **Data integrity** - Round-trip verification (write → read)
+- ✅ **LoggerManager functionality** - Multi-event logging, lazy initialization, event management
+- ✅ **Event name sanitization** - Invalid character handling, filename validation
+- ✅ **Concurrent LoggerManager access** - Thread-safe operations, race condition handling
+- ✅ **Per-event statistics** - Individual and aggregated metrics
 
 ## Platform Support
 
@@ -937,7 +1140,7 @@ func main() {
 
 3. **Platform Support**: Production Direct I/O only works on Linux. Non-Linux platforms use standard file I/O (suitable for testing only).
 
-4. **Single File**: Each logger instance writes to a single file. Multiple loggers are needed for multiple files.
+4. **Single File per Logger**: Each `Logger` instance writes to a single file. Use `LoggerManager` for multi-file logging with event separation.
 
 5. **No Compression**: Log files are written uncompressed. Consider post-processing for compression.
 
@@ -963,6 +1166,20 @@ Adjust `BufferSize` based on available memory and logging volume.
 - `GetStatsSnapshot() (totalLogs, droppedLogs, bytesWritten, flushes, flushErrors, setSwaps int64)` - Get current statistics
 - `GetFlushMetrics() FlushMetrics` - Get detailed flush performance metrics
 - `GetShardStats() []ShardStats` - Get per-shard statistics
+
+### LoggerManager Methods
+
+- `NewLoggerManager(config Config) (*LoggerManager, error)` - Create a new logger manager instance
+- `LogWithEvent(eventName string, message string)` - Log a string message to an event-specific logger
+- `LogBytesWithEvent(eventName string, data []byte)` - Log raw bytes to an event-specific logger
+- `InitializeEventLogger(eventName string) error` - Explicitly initialize a logger for an event
+- `CloseEventLogger(eventName string) error` - Close and remove a specific event logger
+- `HasEventLogger(eventName string) bool` - Check if a logger exists for an event
+- `ListEventLoggers() []string` - Get list of all active event logger names
+- `Close() error` - Gracefully shutdown and flush all event loggers
+- `GetStatsSnapshot() (totalLogs, droppedLogs, bytesWritten, flushes, flushErrors, setSwaps int64)` - Get aggregated statistics across all events
+- `GetEventStats(eventName string) (totalLogs, droppedLogs, bytesWritten, flushes, flushErrors, setSwaps int64, error)` - Get statistics for a specific event
+- `GetAggregatedFlushMetrics() FlushMetrics` - Get aggregated flush metrics across all events
 
 ### Configuration
 
