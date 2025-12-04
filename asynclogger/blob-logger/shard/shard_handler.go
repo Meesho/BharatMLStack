@@ -1,8 +1,10 @@
 package shard
 
 import (
+	"fmt"
 	"math/rand/v2"
 	"runtime"
+	"time"
 
 	"github.com/Meesho/BharatMLStack/asynclogger/blob-logger/ssdio"
 )
@@ -114,7 +116,13 @@ func (s *ShardHandler) flush(swapShardId, shardId uint32) {
 			//fmt.Printf("waiting for inflight to be 0 %d %d\n", swapShardId, shardId)
 			runtime.Gosched()
 		}
-		swapShard.writer.Write(flushShard.data)
+		startTime := time.Now()
+		_, err := swapShard.writer.Write(flushShard.data)
+		if err != nil {
+			panic(err)
+		}
+		duration := time.Since(startTime)
+		fmt.Printf("flush duration: %d\n", duration.Nanoseconds())
 		flushShard.Reset()
 	}()
 }

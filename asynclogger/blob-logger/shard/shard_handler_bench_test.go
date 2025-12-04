@@ -13,7 +13,7 @@ func BenchmarkShardHandler_Write_concurrent(b *testing.B) {
 
 	// Allocate enough capacity for ALL writes across ALL goroutines.
 	// RunParallel executes exactly b.N iterations total.
-	shardHandler := NewShardHandler(4, chunkSize*1024)
+	shardHandler := NewShardHandler(4, 256*1024*1024, 10*1024*1024*1024, "/Users/adarsha.das/Desktop/open_source/BharatMLStack/asynclogger")
 
 	b.ResetTimer()
 	// for i := 0; i < b.N; i++ {
