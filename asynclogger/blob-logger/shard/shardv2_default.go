@@ -4,6 +4,8 @@ import (
 	"sync/atomic"
 	"unsafe"
 	_ "unsafe" // required for go:linkname
+
+	"golang.org/x/sys/unix"
 )
 
 // memmove is linked to the Go runtime's highly optimized memmove implementation.
@@ -21,7 +23,7 @@ type ShardV2 struct {
 	capacity      int32  // total capacity in bytes
 	id            uint32
 	inflight      atomic.Int64
-	readyForFlush bool
+	readyForFlush atomic.Uint32
 }
 
 // NewShard allocates a shard with a 64-byte–aligned data slice of the given capacity.
@@ -29,21 +31,36 @@ func NewShardV2(capacity int, id uint32) *ShardV2 {
 	if capacity <= 0 {
 		panic("NewShard: capacity must be > 0")
 	}
+	// Round capacity up to page size (4096)
+	const page = 4096
+	padded := (capacity + page - 1) &^ (page - 1)
 
-	// Allocate a bit extra so that after alignment we still have `capacity` bytes.
-	raw := make([]byte, capacity+64)
+	// Create an anonymous private mapping
+	data, err := unix.Mmap(
+		-1, 0,
+		padded,
+		unix.PROT_READ|unix.PROT_WRITE,
+		unix.MAP_PRIVATE|unix.MAP_ANONYMOUS,
+	)
+	if err != nil {
+		panic(err)
+	}
 
-	base := uintptr(unsafe.Pointer(&raw[0]))
-	aligned := (base + 63) &^ 63 // round up to next multiple of 64
+	// // Allocate a bit extra so that after alignment we still have `capacity` bytes.
+	// raw := make([]byte, capacity+64)
 
-	data := unsafe.Slice((*byte)(unsafe.Pointer(aligned)), capacity)
+	// base := uintptr(unsafe.Pointer(&raw[0]))
+	// aligned := (base + 63) &^ 63 // round up to next multiple of 64
+
+	// data := unsafe.Slice((*byte)(unsafe.Pointer(aligned)), capacity)
 
 	return &ShardV2{
-		data:     data,
-		offset:   0,
-		capacity: int32(capacity),
-		id:       id,
-		inflight: atomic.Int64{},
+		data:          data,
+		offset:        0,
+		capacity:      int32(capacity),
+		id:            id,
+		inflight:      atomic.Int64{},
+		readyForFlush: atomic.Uint32{},
 	}
 }
 
@@ -104,6 +121,6 @@ func (s *ShardV2) Remaining() int32 {
 // no concurrent writers when calling Reset.
 func (s *ShardV2) Reset() {
 	atomic.StoreInt32(&s.offset, 0)
-	s.readyForFlush = false
+	s.readyForFlush.Store(0)
 	s.inflight.Store(0)
 }
