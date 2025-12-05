@@ -1395,58 +1395,59 @@ func convertNativeSlice(inputSlice interface{}, outputType string) (interface{},
 }
 
 func bytesToNativeSlice(data []byte, dataType string) (interface{}, error) {
-	header := (*[2]uintptr)(unsafe.Pointer(&data))
-	dataLen := header[1]
-	dataPtr := header[0]
+	if len(data) == 0 {
+		return nil, errors.New("empty data slice")
+	}
+	dataLen := len(data)
+	// Use pointer to first element of the slice's underlying array
+	dataPtr := unsafe.Pointer(&data[0])
 
 	switch dataType {
 	case "int8", "datatypeint8":
-		if dataLen%1 != 0 {
-			return nil, errors.New("invalid size for int8 slice")
-		}
-		return unsafe.Slice((*int8)(unsafe.Pointer(dataPtr)), dataLen/1), nil
+		// int8 is 1 byte, so any length is valid
+		return unsafe.Slice((*int8)(dataPtr), dataLen), nil
 	case "int16", "datatypeint16":
 		if dataLen%2 != 0 {
 			return nil, errors.New("invalid size for int16 slice")
 		}
-		return unsafe.Slice((*int16)(unsafe.Pointer(dataPtr)), dataLen/2), nil
+		return unsafe.Slice((*int16)(dataPtr), dataLen/2), nil
 	case "int32", "datatypeint32":
 		if dataLen%4 != 0 {
 			return nil, errors.New("invalid size for int32 slice")
 		}
-		return unsafe.Slice((*int32)(unsafe.Pointer(dataPtr)), dataLen/4), nil
+		return unsafe.Slice((*int32)(dataPtr), dataLen/4), nil
 	case "int64", "datatypeint64":
 		if dataLen%8 != 0 {
 			return nil, errors.New("invalid size for int64 slice")
 		}
-		return unsafe.Slice((*int64)(unsafe.Pointer(dataPtr)), dataLen/8), nil
+		return unsafe.Slice((*int64)(dataPtr), dataLen/8), nil
 	case "uint8", "datatypeuint8":
 		return data, nil // A []byte is already a []uint8.
 	case "uint16", "datatypeuint16":
 		if dataLen%2 != 0 {
 			return nil, errors.New("invalid size for uint16 slice")
 		}
-		return unsafe.Slice((*uint16)(unsafe.Pointer(dataPtr)), dataLen/2), nil
+		return unsafe.Slice((*uint16)(dataPtr), dataLen/2), nil
 	case "uint32", "datatypeuint32":
 		if dataLen%4 != 0 {
 			return nil, errors.New("invalid size for uint32 slice")
 		}
-		return unsafe.Slice((*uint32)(unsafe.Pointer(dataPtr)), dataLen/4), nil
+		return unsafe.Slice((*uint32)(dataPtr), dataLen/4), nil
 	case "uint64", "datatypeuint64":
 		if dataLen%8 != 0 {
 			return nil, errors.New("invalid size for uint64 slice")
 		}
-		return unsafe.Slice((*uint64)(unsafe.Pointer(dataPtr)), dataLen/8), nil
+		return unsafe.Slice((*uint64)(dataPtr), dataLen/8), nil
 	case "fp32", "datatypefp32":
 		if dataLen%4 != 0 {
 			return nil, errors.New("invalid size for fp32 slice")
 		}
-		return unsafe.Slice((*float32)(unsafe.Pointer(dataPtr)), dataLen/4), nil
+		return unsafe.Slice((*float32)(dataPtr), dataLen/4), nil
 	case "fp64", "datatypefp64":
 		if dataLen%8 != 0 {
 			return nil, errors.New("invalid size for fp64 slice")
 		}
-		return unsafe.Slice((*float64)(unsafe.Pointer(dataPtr)), dataLen/8), nil
+		return unsafe.Slice((*float64)(dataPtr), dataLen/8), nil
 	default:
 		return nil, errors.New("unsupported input vector data type: " + dataType)
 	}
