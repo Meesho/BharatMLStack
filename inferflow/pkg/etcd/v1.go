@@ -397,7 +397,7 @@ func (v *V1) HandleMap(dataMap, metaMap *map[string]string, output interface{}, 
 			//delete(*dataMap, key)
 			continue
 		} else if v.IsTerminalPathParameter(mKey) {
-			logger.Info(fmt.Sprintf("value type is neither struct nor map and key is terminal path parameter"))
+			logger.Info("value type is neither struct nor map and key is terminal path parameter")
 			switch valueType.Kind() {
 			case reflect.String:
 				val.SetMapIndex(reflect.ValueOf(mapKey), reflect.ValueOf(data))
@@ -480,7 +480,7 @@ func (v *V1) HandleMap(dataMap, metaMap *map[string]string, output interface{}, 
 		} else if !v.IsTerminalPathParameter(mKey) && valueType.Kind() == reflect.Struct { //prefix /config/catalogger
 			mKey = strings.Split(mKey, "/")[0]
 			mapKey = strings.Split(mapKey, "/")[0]
-			logger.Info(fmt.Sprintf("value type is struct and key is not terminal path parameter"))
+			logger.Info("value type is struct and key is not terminal path parameter")
 			newValue := reflect.New(valueType).Elem()
 			if v.HandledPrefix[prefix+"/"+mKey] == prefix+"/"+mKey {
 				continue
@@ -494,7 +494,7 @@ func (v *V1) HandleMap(dataMap, metaMap *map[string]string, output interface{}, 
 		} else if !v.IsTerminalPathParameter(mKey) && valueType.Kind() == reflect.Map {
 			mKey = strings.Split(mKey, "/")[0]
 			mapKey = strings.Split(mapKey, "/")[0]
-			logger.Info(fmt.Sprintf("value type is map and key is not terminal path parameter"))
+			logger.Info("value type is map and key is not terminal path parameter")
 			newValue := reflect.MakeMap(valueType)
 			mapPtr := newValue.Interface()
 			err := v.HandleMap(dataMap, metaMap, &mapPtr, prefix+"/"+mKey)
@@ -558,7 +558,7 @@ func (v *V1) SetValues(paths map[string]interface{}) error {
 func (v *V1) CreateNode(path string, value interface{}) error {
 	exists, err := v.IsNodeExist(path)
 	if exists || err != nil {
-		logger.Error(fmt.Sprintf("Node already exist, not creating new node, returning"), err)
+		logger.Error("Node already exist, not creating new node, returning", err)
 		return fmt.Errorf("node already exist for %s: %w", path, err)
 	}
 	response, err := v.conn.Put(context.Background(), path, fmt.Sprintf("%v", value))

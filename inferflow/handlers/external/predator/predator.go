@@ -3,7 +3,6 @@ package predator
 import (
 	"fmt"
 	"math/rand"
-	"strings"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/helix-client/pkg/clients/predator"
@@ -72,19 +71,6 @@ func InitPredatorHandler(configs *configs.AppConfigs) {
 			}
 		}
 	}
-}
-
-func convertToValidJSON(configStr string) string {
-	properties := []string{"Host", "Port", "Deadline", "PlainText", "CallerId", "CallerToken", "BatchSize"}
-
-	result := configStr
-	for _, prop := range properties {
-		unquoted := prop + ":"
-		quoted := "\"" + prop + "\":"
-		result = strings.ReplaceAll(result, unquoted, quoted)
-	}
-
-	return result
 }
 
 func GetPredatorResponse(predatorReq *predator.PredatorRequest, endPoint string, endPoints []config.ModelEndpoint, errLoggingPercent int, compMetricTags []string) *predator.PredatorResponse {
