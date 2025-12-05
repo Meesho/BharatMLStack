@@ -263,6 +263,18 @@ func (a *Adapter) MapProtoToPredatorResponse(tritonResponse *triton.ModelInferRe
 		tritonOutputIndex[output.Name] = i
 	}
 
+	// Validate that we have outputs before accessing them
+	if len(tritonResponse.Outputs) == 0 {
+		log.Warn().Msg("Received triton response with no outputs")
+		return nil
+	}
+
+	// Validate that the first output has a valid shape
+	if len(tritonResponse.Outputs[0].Shape) == 0 {
+		log.Warn().Msg("Received triton response with output having no shape")
+		return nil
+	}
+
 	// Calculate rowCount once, assuming all outputs have the same batch size
 	rowCount := int(tritonResponse.Outputs[0].Shape[0])
 
@@ -278,6 +290,23 @@ func (a *Adapter) MapProtoToPredatorResponse(tritonResponse *triton.ModelInferRe
 	for _, reqOut := range requestedOutputs {
 		tritonIdx, ok := tritonOutputIndex[reqOut.Name]
 		if !ok {
+			continue
+		}
+		// Validate bounds for Outputs and RawOutputContents
+		if tritonIdx >= len(tritonResponse.Outputs) {
+			log.Warn().
+				Int("triton_idx", tritonIdx).
+				Int("outputs_len", len(tritonResponse.Outputs)).
+				Str("output_name", reqOut.Name).
+				Msg("Triton output index out of bounds")
+			continue
+		}
+		if tritonIdx >= len(tritonResponse.RawOutputContents) {
+			log.Warn().
+				Int("triton_idx", tritonIdx).
+				Int("raw_output_contents_len", len(tritonResponse.RawOutputContents)).
+				Str("output_name", reqOut.Name).
+				Msg("Triton raw output contents index out of bounds")
 			continue
 		}
 		tritonOut := tritonResponse.Outputs[tritonIdx]

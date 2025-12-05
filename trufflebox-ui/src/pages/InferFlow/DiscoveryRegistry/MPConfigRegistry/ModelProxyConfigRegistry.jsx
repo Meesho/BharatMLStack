@@ -56,7 +56,7 @@ const ModelProxyConfigRegistry = () => {
   const fetchConfigs = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-discovery/configs`, {
+      const response = await axios.get(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-discovery/configs`, {
         headers: {
           Authorization: `Bearer ${user?.token}`,
           'Content-Type': 'application/json'
@@ -132,7 +132,7 @@ const ModelProxyConfigRegistry = () => {
 
   const handleDeleteConfig = async (row) => {
     try {
-      const response = await axios.patch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/delete?id=${row.config_id}`, {}, {
+      const response = await axios.patch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/delete?id=${row.config_id}`, {}, {
         headers: {
           Authorization: `Bearer ${user?.token}`,
           'Content-Type': 'application/json'

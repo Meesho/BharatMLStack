@@ -145,7 +145,7 @@ const ScaleUpMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
   const fetchLoggingTtlOptions = async () => {
     try {
       const response = await axios.get(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/logging-ttl`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/logging-ttl`,
         {
           headers: {
             Authorization: `Bearer ${user?.token}`,
@@ -308,7 +308,7 @@ const ScaleUpMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
       };
 
       const response = await axios.post(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/mp-config-registry/scale-up`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/scale-up`,
         payload,
         {
           headers: {

@@ -4,11 +4,11 @@ option go_package = "../grpc";
 
 package numerix;
 
-service numerix {
-    rpc Compute(numerixRequestProto) returns (numerixResponseProto);
+service Numerix {
+    rpc Compute(NumerixRequestProto) returns (NumerixResponseProto);
 }
 
-message numerixRequestProto {
+message NumerixRequestProto {
     EntityScoreData entity_score_data = 1;
 }
 
@@ -34,7 +34,7 @@ message ByteList {
     repeated bytes values = 1;
 }
 
-message numerixResponseProto {
+message NumerixResponseProto {
     oneof response {  
         ComputationScoreData computation_score_data = 1;
         Error error = 2;

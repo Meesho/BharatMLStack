@@ -1,0 +1,44 @@
+# tools and packages from base image
+FROM golang:1.19-alpine as builder
+RUN apk add git openssh-client 
+RUN apk add -U --no-cache ca-certificates
+
+ARG SSH_PRIVATE_KEY
+RUN mkdir /root/.ssh/
+RUN echo "\${SSH_PRIVATE_KEY}" > /root/.ssh/id_rsa
+RUN chmod 600 /root/.ssh/*
+RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
+RUN echo "[url \"ssh://git@github.com/\"] insteadOf = https://github.com/" > /root/.gitconfig
+RUN cat /root/.gitconfig
+# for golang
+ENV CGO_ENABLED=0 GOOS=linux
+
+# directory inside container and default destination for all subsequent commands
+WORKDIR /app/
+
+# before running go mod download we need go.mod & go.sum files
+COPY go.mod go.sum ./
+
+# downloading all the dependencies
+RUN go mod download
+<% if(module_property.kafka) { println "ENV CGO_ENABLED=1" %>
+<% println "RUN apk update" %>
+<% println "RUN apk upgrade" %> 
+<% println "RUN apk add pkgconf bash build-base sudo" %>
+<% println "RUN git clone https://github.com/edenhill/librdkafka.git && cd librdkafka && ./configure --prefix /usr && make && make install"} %>
+
+# copying the source code
+COPY . ./
+
+# building the code for linux OS
+RUN go build -tags musl --ldflags "-extldflags -static" -v -o server cmd/${module}/main.go
+
+# deploy multistage 
+FROM debian:10
+
+# copy the binary to the production image from the builder stage.
+COPY --from=builder /app/server /app/server
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# running the binary
+CMD ["/app/server"]

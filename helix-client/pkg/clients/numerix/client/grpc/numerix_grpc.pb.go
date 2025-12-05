@@ -19,7 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Numerix_Compute_FullMethodName = "/numerix.numerix/Compute"
+	Numerix_Compute_FullMethodName = "/numerix.Numerix/Compute"
 )
 
 // NumerixClient is the client API for Numerix service.
@@ -108,7 +108,7 @@ func _Numerix_Compute_Handler(srv interface{}, ctx context.Context, dec func(int
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Numerix_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "numerix.numerix",
+	ServiceName: "numerix.Numerix",
 	HandlerType: (*NumerixServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

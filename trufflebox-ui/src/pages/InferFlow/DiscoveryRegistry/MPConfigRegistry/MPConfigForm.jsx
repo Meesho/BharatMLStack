@@ -937,16 +937,16 @@ const MPConfigForm = ({
                 <Grid item xs={12}>
                   <Autocomplete
                     options={computeConfigs || []}
-                    getOptionLabel={(option) => option.compute_id || ''}
-                    value={computeConfigs?.find(config => config.compute_id === reRanker.eq_id) || null}
+                    getOptionLabel={(option) => option.config_id || ''}
+                    value={computeConfigs?.find(config => config.config_id === reRanker.eq_id) || null}
                     onChange={(event, newValue) => {
-                      const value = newValue?.compute_id || '';
+                      const value = newValue?.config_id || '';
                       handleReRankerChange(index, 'eq_id', value);
                     }}
                     renderInput={(params) => (
                       <TextField
                         {...params}
-                        label="Compute ID"
+                        label="Config ID"
                         size="small"
                         fullWidth
                       />

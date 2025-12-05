@@ -67,29 +67,48 @@ const FeatureList = ({
   
   const versionNumber = parseInt(activeVersion, 10);
   const featureData = features[versionNumber];
-  const labels = featureData ? featureData.labels.split(',') : [];
-  const defaultValues = featureData ? featureData['default-values'] : [];
-  const sourceBasePaths = featureData ? featureData['source-base-paths'] || [] : [];
-  const sourceDataColumns = featureData ? featureData['source-data-columns'] || [] : [];
-  const storageProviders = featureData ? featureData['storage-providers'] || [] : [];
-  const stringLengths = featureData ? featureData['string-lengths'] || [] : [];
-  const vectorLengths = featureData ? featureData['vector-lengths'] || [] : [];
+  // Safely handle labels - split and filter out empty strings
+  const labels = featureData && featureData.labels 
+    ? featureData.labels.split(',').filter(label => label.trim() !== '')
+    : [];
+  
+  // Safely handle all arrays - ensure they're arrays, not null
+  const defaultValues = (featureData && Array.isArray(featureData['default-values'])) 
+    ? featureData['default-values'] 
+    : [];
+  const sourceBasePaths = (featureData && Array.isArray(featureData['source-base-paths'])) 
+    ? featureData['source-base-paths'] 
+    : [];
+  const sourceDataColumns = (featureData && Array.isArray(featureData['source-data-columns'])) 
+    ? featureData['source-data-columns'] 
+    : [];
+  const storageProviders = (featureData && Array.isArray(featureData['storage-providers'])) 
+    ? featureData['storage-providers'] 
+    : [];
+  const stringLengths = (featureData && Array.isArray(featureData['string-lengths'])) 
+    ? featureData['string-lengths'] 
+    : [];
+  const vectorLengths = (featureData && Array.isArray(featureData['vector-lengths'])) 
+    ? featureData['vector-lengths'] 
+    : [];
 
   // Filter the labels and defaultValues based on the search term
   const filteredData = labels
     .map((label, index) => ({
       label,
-      defaultValue: defaultValues[index],
-      sourceBasePath: sourceBasePaths[index]|| 'N/A',
-      sourceDataColumn: sourceDataColumns[index]|| 'N/A',
+      defaultValue: defaultValues[index] ?? '-',
+      sourceBasePath: sourceBasePaths[index] || 'N/A',
+      sourceDataColumn: sourceDataColumns[index] || 'N/A',
       storageProvider: storageProviders[index] || 'N/A',
-      stringLength: stringLengths[index],
-      vectorLength: vectorLengths[index],
+      stringLength: stringLengths[index] ?? '-',
+      vectorLength: vectorLengths[index] ?? '-',
     }))
-    .filter(item => 
-      item.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.defaultValue.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    .filter(item => {
+      const labelMatch = item.label && item.label.toLowerCase().includes(searchTerm.toLowerCase());
+      const defaultValueMatch = item.defaultValue && 
+        item.defaultValue.toString().toLowerCase().includes(searchTerm.toLowerCase());
+      return labelMatch || defaultValueMatch;
+    });
 
   const handleInfoClick = (feature) => {
     setSelectedFeature(feature);
