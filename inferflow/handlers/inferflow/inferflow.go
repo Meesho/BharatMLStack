@@ -87,7 +87,7 @@ func (s *Inferflow) RetrieveModelScore(ctx context.Context, req *pb.InferflowReq
 	conf, err := config.GetModelConfig(req.ModelConfigId)
 	if err != nil {
 		errMsg := getErrMsg(err)
-		return processInferflowResponse(nil, &errMsg), status.Errorf(codes.InvalidArgument, errMsg)
+		return processInferflowResponse(nil, &errMsg), status.Error(codes.InvalidArgument, errMsg)
 	}
 
 	tags := []string{"model-id", req.ModelConfigId}
@@ -97,7 +97,7 @@ func (s *Inferflow) RetrieveModelScore(ctx context.Context, req *pb.InferflowReq
 	InferflowReq, err := createInferflowRequestProto(ctx, req)
 	if err != nil {
 		errMsg := getErrMsg(err)
-		return processInferflowResponse(nil, &errMsg), status.Errorf(codes.InvalidArgument, errMsg)
+		return processInferflowResponse(nil, &errMsg), status.Error(codes.InvalidArgument, errMsg)
 	}
 
 	headers := getAllHeaders(ctx)
@@ -135,7 +135,7 @@ func getAllHeaders(ctx context.Context) map[string]string {
 	hMap := make(map[string]string, 0)
 	md, ok := metadata.FromIncomingContext(ctx)
 	if ok {
-		for headerKey, _ := range headersMap {
+		for headerKey := range headersMap {
 			headerValues := md.Get(headerKey)
 			if len(headerValues) > 0 {
 				hMap[headerKey] = headerValues[0]
@@ -279,15 +279,4 @@ func getRankerModelSchema(c *config.Config) []string {
 		}
 	}
 	return rFeatures
-}
-
-func getComputeId(c *config.Config) string {
-
-	var numerixComputeId string
-	for _, iNumerixComp := range c.ComponentConfig.NumerixComponentConfig.Values() {
-		if numerixComp, ok := iNumerixComp.(config.NumerixComponentConfig); ok {
-			numerixComputeId = numerixComp.ComputeId
-		}
-	}
-	return numerixComputeId
 }

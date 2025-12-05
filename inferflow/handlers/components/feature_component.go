@@ -402,7 +402,7 @@ func (fComponent *FeatureComponent) putFeatureValuesIntoCache(
 
 	for rowIdx, row := range featureComponentBuilder.UniqueEntityIds {
 		cacheKey := entityLabelKey + row
-		if featureComponentBuilder.InMemPresent[rowIdx] == true {
+		if featureComponentBuilder.InMemPresent[rowIdx] {
 			continue
 		}
 		//Set

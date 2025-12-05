@@ -4,7 +4,7 @@ go 1.24.4
 
 require (
 	github.com/DataDog/datadog-go/v5 v5.5.0
-	github.com/Meesho/BharatMLStack/helix-client v1.0.0-alpha-649f13
+	github.com/Meesho/BharatMLStack/helix-client v1.0.0-alpha-649f16
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/coocood/freecache v1.2.4
 	github.com/dgraph-io/ristretto v0.2.0
@@ -19,7 +19,6 @@ require (
 	go.etcd.io/etcd/client/v3 v3.5.17
 	google.golang.org/grpc v1.75.0
 	google.golang.org/protobuf v1.36.9
-
 )
 
 require (

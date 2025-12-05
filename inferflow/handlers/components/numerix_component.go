@@ -95,7 +95,7 @@ func (iComponent *NumerixComponent) populateScoreMap(modelID string, config conf
 		if numerixResponse != nil && numerixResponse.ComputationScoreData.Data != nil && len(numerixResponse.ComputationScoreData.Data) > 0 {
 			numerixComponentBuilder.Scores = make([][]byte, len(numerixResponse.ComputationScoreData.Data))
 			for i, data := range numerixResponse.ComputationScoreData.Data {
-				if data != nil && len(data) > 1 && data[1] != nil {
+				if len(data) > 1 && data[1] != nil {
 					numerixComponentBuilder.Scores[i] = data[1]
 				}
 			}

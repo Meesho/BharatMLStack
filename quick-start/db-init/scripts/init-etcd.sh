@@ -11,14 +11,16 @@ etcdctl --endpoints=http://etcd:2379 put /config/onfs "{}"
 echo "  📋 Creating /reader keys..."
 etcdctl --endpoints=http://etcd:2379 put /config/onfs/security/reader/test "{\"token\":\"test\"}"
 
-echo "  📋 Creating /config/numerix configuration key..."
-etcdctl --endpoints=http://etcd:2379 put /config/numerix/expression-config/1 "{\"expression\":\"a b c * *\"}"
+
+
 
 # Verify etcd initialization
 echo "  🔍 Verifying etcd configuration..."
 if etcdctl --endpoints=http://etcd:2379 get /config/onfs > /dev/null 2>&1; then
   echo "  ✅ etcd configuration key '/config/onfs' created successfully"
 else
-  echo "  ❌ Failed to create etcd configuration key"
+  echo "  ❌ Failed to create etcd configuration key '/config/onfs'"
   exit 1
-fi 
+fi
+
+echo "  ✅ etcd initialization completed successfully" 
