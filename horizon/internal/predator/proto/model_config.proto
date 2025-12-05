@@ -1,0 +1,401 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "horizon/internal/predator";
+
+enum DataType {
+  TYPE_INVALID = 0;
+  TYPE_BOOL = 1;
+  TYPE_UINT8 = 2;
+  TYPE_UINT16 = 3;
+  TYPE_UINT32 = 4;
+  TYPE_UINT64 = 5;
+  TYPE_INT8 = 6;
+  TYPE_INT16 = 7;
+  TYPE_INT32 = 8;
+  TYPE_INT64 = 9;
+  TYPE_FP16 = 10;
+  TYPE_FP32 = 11;
+  TYPE_FP64 = 12;
+  TYPE_STRING = 13;
+  TYPE_BF16 = 14;
+}
+
+message ModelRateLimiter
+{
+  message Resource
+  {
+    string name = 1;
+    bool global = 2;
+    uint32 count = 3;
+  }
+  repeated Resource resources = 1;
+  uint32 priority = 2;
+}
+
+message ModelInstanceGroup
+{
+  enum Kind {
+    KIND_AUTO = 0;
+    KIND_GPU = 1;
+    KIND_CPU = 2;
+    KIND_MODEL = 3;
+  }
+
+  message SecondaryDevice
+  {
+    enum SecondaryDeviceKind {
+      KIND_NVDLA = 0;
+    }
+    SecondaryDeviceKind kind = 1;
+    int64 device_id = 2;
+  }
+
+  string name = 1;
+  Kind kind = 4;
+  int32 count = 2;
+  ModelRateLimiter rate_limiter = 6;
+  repeated int32 gpus = 3;
+  repeated SecondaryDevice secondary_devices = 8;
+  repeated string profile = 5;
+  bool passive = 7;
+  string host_policy = 9;
+}
+
+message ModelTensorReshape
+{
+  repeated int64 shape = 1;
+}
+message ModelInput
+{
+  enum Format {
+    FORMAT_NONE = 0;
+    FORMAT_NHWC = 1;
+    FORMAT_NCHW = 2;
+  }
+  string name = 1;
+  DataType data_type = 2;
+  Format format = 3;
+  repeated int64 dims = 4;
+  ModelTensorReshape reshape = 5;
+  bool is_shape_tensor = 6;
+  bool allow_ragged_batch = 7;
+  bool optional = 8;
+  bool is_non_linear_format_io = 9;
+}
+
+message ModelOutput
+{
+  string name = 1;
+  DataType data_type = 2;
+  repeated int64 dims = 3;
+  ModelTensorReshape reshape = 5;
+  string label_filename = 4;
+  bool is_shape_tensor = 6;
+  bool is_non_linear_format_io = 7;
+}
+message BatchInput
+{
+  enum Kind {
+    BATCH_ELEMENT_COUNT = 0;
+    BATCH_ACCUMULATED_ELEMENT_COUNT = 1;
+    BATCH_ACCUMULATED_ELEMENT_COUNT_WITH_ZERO = 2;
+    BATCH_MAX_ELEMENT_COUNT_AS_SHAPE = 3;
+    BATCH_ITEM_SHAPE = 4;
+    BATCH_ITEM_SHAPE_FLATTEN = 5;
+  }
+  Kind kind = 1;
+  repeated string target_name = 2;
+  DataType data_type = 3;
+  repeated string source_input = 4;
+}
+
+message BatchOutput
+{
+  enum Kind {
+    BATCH_SCATTER_WITH_INPUT_SHAPE = 0;
+  }
+
+  repeated string target_name = 1;
+  Kind kind = 2;
+  repeated string source_input = 3;
+}
+
+message ModelVersionPolicy
+{
+  message Latest
+  {
+    uint32 num_versions = 1;
+  }
+  message All {}
+  message Specific
+  {
+    repeated int64 versions = 1;
+  }
+
+  oneof policy_choice
+  {
+    Latest latest = 1;
+    All all = 2;
+    Specific specific = 3;
+  }
+}
+
+message ModelOptimizationPolicy
+{
+
+  message Graph
+  {
+    int32 level = 1;
+  }
+
+  enum ModelPriority {
+    PRIORITY_DEFAULT = 0;
+    PRIORITY_MAX = 1;
+    PRIORITY_MIN = 2;
+  }
+  message Cuda
+  {
+    message GraphSpec
+    {
+      message Shape
+      {
+        repeated int64 dim = 1;
+      }
+      message LowerBound
+      {
+        int32 batch_size = 1;
+        map<string, Shape> input = 2;
+      }
+      int32 batch_size = 1;
+      map<string, Shape> input = 2;
+      LowerBound graph_lower_bound = 3;
+    }
+    bool graphs = 1;
+    bool busy_wait_events = 2;
+    repeated GraphSpec graph_spec = 3;
+    bool output_copy_stream = 4;
+  }
+  message ExecutionAccelerators
+  {
+    message Accelerator
+    {
+      string name = 1;
+      map<string, string> parameters = 2;
+    }
+    repeated Accelerator gpu_execution_accelerator = 1;
+    repeated Accelerator cpu_execution_accelerator = 2;
+  }
+  message PinnedMemoryBuffer
+  {
+    bool enable = 1;
+  }
+  Graph graph = 1;
+  ModelPriority priority = 2;
+  Cuda cuda = 3;
+  ExecutionAccelerators execution_accelerators = 4;
+  PinnedMemoryBuffer input_pinned_memory = 5;
+  PinnedMemoryBuffer output_pinned_memory = 6;
+  uint32 gather_kernel_buffer_threshold = 7;
+  bool eager_batching = 8;
+}
+message ModelQueuePolicy
+{
+  enum TimeoutAction {
+    REJECT = 0;
+    DELAY = 1;
+  }
+  TimeoutAction timeout_action = 1;
+  uint64 default_timeout_microseconds = 2;
+  bool allow_timeout_override = 3;
+  uint32 max_queue_size = 4;
+}
+message ModelDynamicBatching
+{
+  repeated int32 preferred_batch_size = 1;
+  uint64 max_queue_delay_microseconds = 2;
+  bool preserve_ordering = 3;
+  uint64 priority_levels = 4;
+  uint64 default_priority_level = 5;
+  ModelQueuePolicy default_queue_policy = 6;
+  map<uint64, ModelQueuePolicy> priority_queue_policy = 7;
+}
+
+message ModelSequenceBatching
+{
+  message Control
+  {
+    enum Kind {
+      CONTROL_SEQUENCE_START = 0;
+      CONTROL_SEQUENCE_READY = 1;
+      CONTROL_SEQUENCE_END = 2;
+      CONTROL_SEQUENCE_CORRID = 3;
+    }
+    Kind kind = 1;
+    repeated int32 int32_false_true = 2;
+    repeated float fp32_false_true = 3;
+    repeated bool bool_false_true = 5;
+    DataType data_type = 4;
+  }
+  message ControlInput
+  {
+    string name = 1;
+    repeated Control control = 2;
+  }
+  message InitialState
+  {
+    DataType data_type = 1;
+    repeated int64 dims = 2;
+    oneof state_data
+    {
+      bool zero_data = 3;
+      string data_file = 4;
+    }
+    string name = 5;
+  }
+  message State
+  {
+    string input_name = 1;
+    string output_name = 2;
+    DataType data_type = 3;
+    repeated int64 dims = 4;
+    repeated InitialState initial_state = 5;
+    bool use_same_buffer_for_input_output = 6;
+    bool use_growable_memory = 7;
+  }
+  message StrategyDirect
+  {
+    uint64 max_queue_delay_microseconds = 1;
+    float minimum_slot_utilization = 2;
+  }
+
+  message StrategyOldest
+  {
+    int32 max_candidate_sequences = 1;
+    repeated int32 preferred_batch_size = 2;
+    uint64 max_queue_delay_microseconds = 3;
+    bool preserve_ordering = 4;
+  }
+  oneof strategy_choice
+  {
+    StrategyDirect direct = 3;
+    StrategyOldest oldest = 4;
+  }
+  uint64 max_sequence_idle_microseconds = 1;
+  repeated ControlInput control_input = 2;
+  repeated State state = 5;
+  bool iterative_sequence = 6;
+}
+message ModelEnsembling
+{
+  message Step
+  {
+    string model_name = 1;
+    int64 model_version = 2;
+    map<string, string> input_map = 3;
+    map<string, string> output_map = 4;
+    string model_namespace = 5;
+  }
+  repeated Step step = 1;
+}
+message ModelParameter
+{
+  string string_value = 1;
+}
+message ModelWarmup
+{
+  message Input
+  {
+    DataType data_type = 1;
+    repeated int64 dims = 2;
+    oneof input_data_type
+    {
+      bool zero_data = 3;
+      bool random_data = 4;
+      string input_data_file = 5;
+    }
+  }
+  string name = 1;
+  uint32 batch_size = 2;
+  map<string, Input> inputs = 3;
+  uint32 count = 4;
+}
+
+message ModelOperations
+{
+  repeated string op_library_filename = 1;
+}
+
+message ModelTransactionPolicy
+{
+  bool decoupled = 1;
+}
+message ModelRepositoryAgents
+{
+  message Agent
+  {
+    string name = 1;
+    map<string, string> parameters = 2;
+  }
+  repeated Agent agents = 1;
+}
+
+message ModelResponseCache
+{
+  bool enable = 1;
+}
+
+message ModelMetrics
+{
+  message MetricControl
+  {
+    message MetricIdentifier
+    {
+      string family = 1;
+    }
+    message HistogramOptions
+    {
+      repeated double buckets = 1;
+    }
+    MetricIdentifier metric_identifier = 1;
+    oneof metric_options
+    {
+      HistogramOptions histogram_options = 2;
+    }
+  }
+  repeated MetricControl metric_control = 1;
+}
+
+message ModelConfig
+{
+  string name = 1;
+  string platform = 2;
+  string backend = 17;
+  string runtime = 25;
+  ModelVersionPolicy version_policy = 3;
+
+  int32 max_batch_size = 4;
+  repeated ModelInput input = 5;
+  repeated ModelOutput output = 6;
+  repeated BatchInput batch_input = 20;
+  repeated BatchOutput batch_output = 21;
+  ModelOptimizationPolicy optimization = 12;
+  oneof scheduling_choice
+  {
+    ModelDynamicBatching dynamic_batching = 11;
+    ModelSequenceBatching sequence_batching = 13;
+    ModelEnsembling ensemble_scheduling = 15;
+  }
+  repeated ModelInstanceGroup instance_group = 7;
+  string default_model_filename = 8;
+  map<string, string> cc_model_filenames = 9;
+  map<string, string> metric_tags = 10;
+  map<string, ModelParameter> parameters = 14;
+  repeated ModelWarmup model_warmup = 16;
+  ModelOperations model_operations = 18;
+  ModelTransactionPolicy model_transaction_policy = 19;
+  ModelRepositoryAgents model_repository_agents = 23;
+  ModelResponseCache response_cache = 24;
+  ModelMetrics model_metrics = 26;
+}

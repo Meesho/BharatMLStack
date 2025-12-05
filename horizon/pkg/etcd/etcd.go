@@ -5,13 +5,8 @@ import (
 )
 
 const (
-	configPath        = "/config/"
-	timeout           = 30 * time.Second
-	envAppName        = "APP_NAME"
-	envEtcdServer     = "ETCD_SERVER"
-	envEtcdUsername   = "ETCD_USERNAME"
-	envEtcdPassword   = "ETCD_PASSWORD"
-	envWatcherEnabled = "ETCD_WATCHER_ENABLED"
+	configPath = "/config/"
+	timeout    = 5 * time.Second
 )
 
 type Etcd interface {
@@ -26,5 +21,5 @@ type Etcd interface {
 	IsNodeExist(path string) (bool, error)
 	IsLeafNodeExist(path string) (bool, error)
 	RegisterWatchPathCallback(path string, callback func() error) error
-	Delete(path string) error
+	DeleteNode(path string) error
 }

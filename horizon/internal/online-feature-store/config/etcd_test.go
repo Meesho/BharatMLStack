@@ -40,6 +40,11 @@ func (m *MockEtcdInstance) Delete(path string) error {
 	return args.Error(0)
 }
 
+func (m *MockEtcdInstance) DeleteNode(path string) error {
+	args := m.Called(path)
+	return args.Error(0)
+}
+
 // Test helper functions
 func createTestFeatureRegistry() *FeatureRegistry {
 	return &FeatureRegistry{
@@ -342,7 +347,7 @@ func TestEtcd_DeleteFeatures(t *testing.T) {
 				mockEtcd.On("IsNodeExist", "/config/test_app/entities/test_entity/feature-groups/test_fg").Return(true, nil)
 				mockEtcd.On("GetConfigInstance").Return(createTestFeatureRegistry())
 				mockEtcd.On("SetValues", mock.AnythingOfType("map[string]interface {}")).Return(nil)
-				mockEtcd.On("Delete", "/config/test_app/source/test_entity|test_fg|feature1").Return(nil)
+				mockEtcd.On("DeleteNode", "/config/test_app/source/test_entity|test_fg|feature1").Return(nil)
 			},
 			expectError: false,
 		},
@@ -405,8 +410,8 @@ func TestEtcd_DeleteFeatures(t *testing.T) {
 				mockEtcd.On("IsNodeExist", "/config/test_app/entities/test_entity/feature-groups/test_fg").Return(true, nil)
 				mockEtcd.On("GetConfigInstance").Return(createTestFeatureRegistry())
 				mockEtcd.On("SetValues", mock.AnythingOfType("map[string]interface {}")).Return(nil)
-				mockEtcd.On("Delete", "/config/test_app/source/test_entity|test_fg|feature1").Return(nil)
-				mockEtcd.On("Delete", "/config/test_app/source/test_entity|test_fg|feature2").Return(nil)
+				mockEtcd.On("DeleteNode", "/config/test_app/source/test_entity|test_fg|feature1").Return(nil)
+				mockEtcd.On("DeleteNode", "/config/test_app/source/test_entity|test_fg|feature2").Return(nil)
 			},
 			expectError: false,
 		},
