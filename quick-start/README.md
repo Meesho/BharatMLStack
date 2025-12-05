@@ -53,6 +53,47 @@ The start script provides an interactive service selector that allows you to cho
 
 **Infrastructure services (ScyllaDB, MySQL, Redis, etcd, Kafka) and Management Tools (etcd-workbench, kafka-ui) are always started.**
 
+### Initializing with Dummy Data
+
+For testing and development, you can initialize the databases with sample dummy data. This includes:
+- Sample entities (user, catalog)
+- Feature groups and features
+- Example configurations for Inferflow and Numerix
+- Test data in MySQL, ScyllaDB, and etcd
+
+**Usage:**
+
+```bash
+# Interactive mode with dummy data
+./start.sh --dummy-data
+
+# Start all services with dummy data (non-interactive)
+./start.sh --all --dummy-data
+
+# Combine with version specification
+ONFS_VERSION=v1.2.0 ./start.sh --all --dummy-data
+
+# Combine with local builds
+ONFS_VERSION=local ./start.sh --dummy-data
+```
+
+**What gets initialized:**
+
+- **ScyllaDB**: Creates keyspace, tables, and inserts sample feature data
+- **MySQL**: Creates all tables and inserts:
+  - API resolvers
+  - Role permissions
+  - Sample entities, feature groups, and features
+  - Inferflow and Numerix configurations
+  - Service deployable configurations
+- **etcd**: Sets up configuration keys with:
+  - Security tokens
+  - Entity and feature group configurations
+  - Inferflow component configurations
+  - Model and expression configurations
+
+**Note:** The dummy data initialization scripts run automatically when you use the `--dummy-data` flag. The regular initialization scripts (which create empty schemas) are used by default.
+
 ### Service Independence
 
 Services can run independently based on your needs:

@@ -141,6 +141,8 @@ services:
       context: ./db-init
       dockerfile: Dockerfile
     container_name: db-init
+    environment:
+      - INIT_DUMMY_DATA=${INIT_DUMMY_DATA:-false}
     networks:
       - onfs-network
     depends_on:

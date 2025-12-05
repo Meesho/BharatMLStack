@@ -39,6 +39,7 @@ START_NUMERIX=false
 START_TRUFFLEBOX=false
 START_INFERFLOW=false
 START_PREDATOR=false
+INIT_DUMMY_DATA=false
 
 check_go_version() {
   if ! command -v go &> /dev/null; then
@@ -504,7 +505,20 @@ start_selected_services() {
   export TRUFFLEBOX_VERSION
   export INFERFLOW_VERSION
   
-  (cd "$WORKSPACE_DIR" && docker-compose up -d --build $SELECTED_SERVICES)
+  # Export INIT_DUMMY_DATA if set (will be passed to db-init container)
+  if [[ "$INIT_DUMMY_DATA" == true ]]; then
+    export INIT_DUMMY_DATA=true
+    echo "   📦 Dummy data initialization will be enabled for db-init"
+  fi
+  
+  # Rebuild db-init if dummy data is enabled (to ensure main-init.sh has the latest changes)
+  if [[ "$INIT_DUMMY_DATA" == true ]]; then
+    echo "   🔨 Rebuilding db-init container for dummy data support..."
+    (cd "$WORKSPACE_DIR" && INIT_DUMMY_DATA=true docker-compose build db-init)
+  fi
+  
+  # Pass INIT_DUMMY_DATA to docker-compose so it gets passed to the db-init container
+  (cd "$WORKSPACE_DIR" && INIT_DUMMY_DATA="${INIT_DUMMY_DATA:-false}" docker-compose up -d --build $SELECTED_SERVICES)
   start_init_services_if_missing
   
   echo ""
@@ -675,10 +689,14 @@ if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   echo "BharatML Stack Quick Start"
   echo ""
   echo "Usage:"
-  echo "  ./start.sh              # Interactive mode with service selection"
-  echo "  ./start.sh --all        # Start all services (non-interactive)"
-  echo "  ./start.sh --local      # Start services in local mode (build docker images locally)"
-  echo "  ./start.sh --help       # Show this help"
+  echo "  ./start.sh                    # Interactive mode with service selection"
+  echo "  ./start.sh --all              # Start all services (non-interactive)"
+  echo "  ./start.sh --local            # Start services in local mode (build docker images locally)"
+  echo "  ./start.sh --dummy-data       # Initialize databases with dummy data"
+  echo "  ./start.sh --help             # Show this help"
+  echo ""
+  echo "Flags can be combined:"
+  echo "  ./start.sh --all --dummy-data # Start all services with dummy data"
   echo ""
   echo "Infrastructure (ScyllaDB, MySQL, Redis, etcd, Kafka, kafka-init) and Management Tools (etcd-workbench, kafka-ui) are always started."
   echo "You can choose which application services to start:"
@@ -688,6 +706,10 @@ if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   echo "  • Numerix Matrix Operations"
   echo "  • TruffleBox UI"
   echo "  • Inferflow"
+  echo ""
+  echo "Dummy Data Initialization:"
+  echo "  Use --dummy-data flag to initialize databases with sample data for testing."
+  echo "  This will populate MySQL, ScyllaDB, and etcd with example entities, features, and configurations."
   echo ""
   echo "Version Control:"
   echo "  Set version environment variables to control which images to use:"
@@ -711,25 +733,34 @@ fi
 
 setup_workspace
 
-# Handle non-interactive mode
-if [ "$1" = "--all" ]; then
-  echo "🎯 Non-interactive mode: Starting all services"
-  SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES $INFERFLOW_SERVICES $PREDATOR_SERVICES"
-  START_ONFS=true
-  START_ONFS_CONSUMER=true
-  START_HORIZON=true
-  START_NUMERIX=true
-  START_TRUFFLEBOX=true
-  START_INFERFLOW=true
-  START_PREDATOR=true
-else
-  # Interactive mode
-  get_user_choice
-fi
+# Parse command line arguments
+for arg in "$@"; do
+  case $arg in
+    --all)
+      echo "🎯 Non-interactive mode: Starting all services"
+      SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES $INFERFLOW_SERVICES $PREDATOR_SERVICES"
+      START_ONFS=true
+      START_ONFS_CONSUMER=true
+      START_HORIZON=true
+      START_NUMERIX=true
+      START_TRUFFLEBOX=true
+      START_INFERFLOW=true
+      START_PREDATOR=true
+      ;;
+    --local)
+      echo "🎯 Starting services in local mode"
+      LOCAL_MODE=true
+      ;;
+    --dummy-data)
+      echo "🎯 Dummy data initialization enabled"
+      INIT_DUMMY_DATA=true
+      ;;
+  esac
+done
 
-if [ "$1" = "--local" ]; then
-  echo "🎯 Starting services in local mode"
-  LOCAL_MODE=true
+# If --all was not specified, use interactive mode
+if [[ "$START_ONFS" == false && "$START_ONFS_CONSUMER" == false && "$START_HORIZON" == false && "$START_NUMERIX" == false && "$START_TRUFFLEBOX" == false && "$START_INFERFLOW" == false && "$START_PREDATOR" == false ]]; then
+  get_user_choice
 fi
 
 # Setup local builds AFTER service selection (so START_* flags are set)
