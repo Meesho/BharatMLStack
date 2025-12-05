@@ -87,7 +87,7 @@ func (s *Inferflow) RetrieveModelScore(ctx context.Context, req *pb.InferflowReq
 	conf, err := config.GetModelConfig(req.ModelConfigId)
 	if err != nil {
 		errMsg := getErrMsg(err)
-		return processInferflowResponse(nil, &errMsg), status.Errorf(codes.InvalidArgument, errMsg)
+		return processInferflowResponse(nil, &errMsg), status.Error(codes.InvalidArgument, errMsg)
 	}
 
 	tags := []string{"model-id", req.ModelConfigId}
@@ -97,7 +97,7 @@ func (s *Inferflow) RetrieveModelScore(ctx context.Context, req *pb.InferflowReq
 	InferflowReq, err := createInferflowRequestProto(ctx, req)
 	if err != nil {
 		errMsg := getErrMsg(err)
-		return processInferflowResponse(nil, &errMsg), status.Errorf(codes.InvalidArgument, errMsg)
+		return processInferflowResponse(nil, &errMsg), status.Error(codes.InvalidArgument, errMsg)
 	}
 
 	headers := getAllHeaders(ctx)
