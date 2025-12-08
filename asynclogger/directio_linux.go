@@ -12,8 +12,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// alignmentSize is the required alignment for O_DIRECT on Linux (typically 512 bytes)
-const alignmentSize = 512
+// alignmentSize is the required alignment for O_DIRECT on Linux
+// For ext4 filesystem, this must be 4096 bytes (4KB)
+// O_DIRECT requires alignment to filesystem block size, not just sector size
+const alignmentSize = 4096
 
 // flushBufferPool provides pre-allocated aligned buffers for flushing
 // Each buffer is 256MB to comfortably handle 128MB buffer + alignment padding
