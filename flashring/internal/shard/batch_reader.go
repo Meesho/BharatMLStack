@@ -89,7 +89,7 @@ func (br *BatchReader) collectBatch(firstReq *ReadRequest) []*ReadRequest {
 				return batch
 			}
 			// Small wait for more requests (100ns)
-			time.Sleep(60 * time.Nanosecond)
+			time.Sleep(50 * time.Nanosecond)
 		}
 	}
 
