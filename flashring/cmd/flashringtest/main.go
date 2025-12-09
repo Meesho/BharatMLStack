@@ -26,6 +26,42 @@ func normalDistInt(max int) int {
 	}
 }
 
+// normalDistIntPartitioned returns an integer following a normal distribution
+// centered at the middle of the total key space, but constrained to a specific
+// worker's partition. Workers assigned to ranges near the center will naturally
+// get more load, while workers at the edges get less load.
+// workerID: the ID of the worker (0-indexed)
+// numWorkers: total number of workers
+// totalKeys: total number of keys across all partitions
+func normalDistIntPartitioned(workerID, numWorkers, totalKeys int) int {
+	if totalKeys <= 0 || numWorkers <= 0 {
+		return 0
+	}
+
+	// Calculate partition boundaries for this worker
+	partitionSize := totalKeys / numWorkers
+	partitionStart := workerID * partitionSize
+	partitionEnd := partitionStart + partitionSize
+
+	// Last worker takes any remaining keys
+	if workerID == numWorkers-1 {
+		partitionEnd = totalKeys
+	}
+
+	// All workers sample from the same distribution centered at the middle
+	mean := float64(totalKeys) / 2.0
+	stdDev := float64(totalKeys) / 8.0
+
+	// Keep sampling until we get a value in this worker's partition
+	for {
+		val := rand.NormFloat64()*stdDev + mean
+
+		if val >= float64(partitionStart) && val < float64(partitionEnd) {
+			return int(val)
+		}
+	}
+}
+
 func main() {
 	// Flags to parameterize load tests
 	//pick plan from the environment variable

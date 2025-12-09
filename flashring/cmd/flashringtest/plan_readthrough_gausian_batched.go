@@ -45,7 +45,7 @@ func planReadthroughGaussianBatched() {
 	flag.IntVar(&keysPerShard, "keys-per-shard", 20_00_00, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 10, "file size in GiB per shard")
-	flag.IntVar(&readWorkers, "readers", 1, "number of read workers")
+	flag.IntVar(&readWorkers, "readers", 10, "number of read workers")
 	flag.IntVar(&writeWorkers, "writers", 10, "number of write workers")
 	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
 	flag.Int64Var(&iterations, "iterations", 100_000_000, "number of iterations")
@@ -174,7 +174,8 @@ func planReadthroughGaussianBatched() {
 			go func(workerID int) {
 				defer wg.Done()
 				for k := 0; k < totalKeys*MULTIPLIER; k += 1 {
-					randomval := normalDistInt(totalKeys)
+					// Each worker samples from its own partition of the key space
+					randomval := normalDistIntPartitioned(workerID, readWorkers, totalKeys)
 					key := fmt.Sprintf("key%d", randomval)
 					val, found, expired := pc.Get(key)
 
