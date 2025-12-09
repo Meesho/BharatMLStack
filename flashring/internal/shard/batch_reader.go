@@ -2,6 +2,7 @@ package filecache
 
 import (
 	"fmt"
+	"runtime"
 	"sort"
 	"sync"
 	"time"
@@ -73,7 +74,7 @@ func (br *BatchReader) processBatches() {
 	}
 }
 
-func (br *BatchReader) collectBatch(firstReq *ReadRequest) []*ReadRequest {
+func (br *BatchReader) collectBatchOld(firstReq *ReadRequest) []*ReadRequest {
 	batch := make([]*ReadRequest, 0, br.maxBatchSize)
 	batch = append(batch, firstReq)
 
@@ -93,6 +94,48 @@ func (br *BatchReader) collectBatch(firstReq *ReadRequest) []*ReadRequest {
 		}
 	}
 
+	return batch
+}
+
+func (br *BatchReader) collectBatch(firstReq *ReadRequest) []*ReadRequest {
+	// 1. Initialize batch with the first request
+	batch := make([]*ReadRequest, 0, br.maxBatchSize)
+	batch = append(batch, firstReq)
+
+	// 2. Set the deadline (Only relevant if br.batchWindow > 0)
+	deadline := time.Now().Add(br.batchWindow)
+
+	// 3. The Core Loop: Aggressively collect available requests
+	for len(batch) < br.maxBatchSize {
+		select {
+		case req := <-br.requests:
+			// Request immediately available, append and continue the loop
+			batch = append(batch, req)
+		default:
+			// No more requests immediately available on the channel.
+
+			// A. Check the size threshold (optional, for immediate execution)
+			if len(batch) >= br.maxBatchSize {
+				return batch
+			}
+
+			// B. If the batch window has expired, return now
+			if !time.Now().Before(deadline) {
+				return batch
+			}
+
+			// C. Yield the processor for an *accurate* period (or just yield)
+			// Use a highly specialized yield or a short, reliable sleep.
+
+			// OPTION 1: Explicitly yield the Goroutine (Best for highest throughput)
+			runtime.Gosched()
+
+			// OPTION 2: Use a minimum reliable sleep (e.g., 1 microsecond)
+			// time.Sleep(1 * time.Microsecond)
+		}
+	}
+
+	// 4. Return the batch if maxBatchSize was hit
 	return batch
 }
 
