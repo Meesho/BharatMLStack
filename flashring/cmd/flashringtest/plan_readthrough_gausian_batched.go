@@ -41,8 +41,8 @@ func planReadthroughGaussianBatched() {
 	)
 
 	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul/", "data directory for shard files")
-	flag.IntVar(&numShards, "shards", 100, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 20_00_00, "keys per shard")
+	flag.IntVar(&numShards, "shards", 200, "number of shards")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 10_00_00, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 10, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 1, "number of read workers")
