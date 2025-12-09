@@ -3,7 +3,6 @@ package asynclogger
 import (
 	"encoding/binary"
 	"fmt"
-	"os"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -38,8 +37,8 @@ type Logger struct {
 	// Active set pointer (atomically swapped)
 	activeSet atomic.Pointer[BufferSet]
 
-	// File for writing logs with Direct I/O
-	file *os.File
+	// FileWriter for writing logs with Direct I/O and rotation support
+	fileWriter *FileWriter
 
 	// Channel for flush requests
 	flushChan chan *BufferSet
@@ -80,10 +79,10 @@ func New(config Config) (*Logger, error) {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	// Open file with Direct I/O
-	file, err := openDirectIO(config.LogFilePath)
+	// Create FileWriter for Direct I/O with rotation support
+	fileWriter, err := NewFileWriter(config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open log file: %w", err)
+		return nil, fmt.Errorf("failed to create file writer: %w", err)
 	}
 
 	// Create two buffer sets for double buffering
@@ -94,7 +93,7 @@ func New(config Config) (*Logger, error) {
 	l := &Logger{
 		setA:          setA,
 		setB:          setB,
-		file:          file,
+		fileWriter:    fileWriter,
 		flushChan:     make(chan *BufferSet, 2), // Buffer for both sets
 		ticker:        time.NewTicker(config.FlushInterval),
 		done:          make(chan struct{}),
@@ -348,14 +347,36 @@ func (l *Logger) flushSet(set *BufferSet) {
 	// Single batched write for all shards - track timing
 	if len(shardBuffers) > 0 {
 		writeStart := time.Now()
-		n, err := writevAligned(l.file, shardBuffers)
+		n, err := l.fileWriter.WriteVectored(shardBuffers)
 		writeDuration := time.Since(writeStart)
 
 		// Track write duration
-		l.stats.TotalWriteDuration.Add(writeDuration.Nanoseconds())
+		writeDurationNs := writeDuration.Nanoseconds()
+		l.stats.TotalWriteDuration.Add(writeDurationNs)
+
+		// Update max write duration atomically
+		for {
+			currentMax := l.stats.MaxWriteDuration.Load()
+			if writeDurationNs <= currentMax {
+				break
+			}
+			if l.stats.MaxWriteDuration.CompareAndSwap(currentMax, writeDurationNs) {
+				break
+			}
+		}
 
 		if err != nil {
 			l.stats.FlushErrors.Add(1)
+			// Log flush error details for debugging
+			// Note: Using fmt.Printf to avoid circular dependency on logger
+			fmt.Printf("[FLUSH_ERROR] Logger=%s SetID=%d Shards=%d Bytes=%d Error=%v Duration=%v\n",
+				l.config.LogFilePath, set.ID(), len(shardBuffers), func() int {
+					total := 0
+					for _, buf := range shardBuffers {
+						total += len(buf)
+					}
+					return total
+				}(), err, writeDuration)
 		} else {
 			l.stats.BytesWritten.Add(int64(n))
 			l.stats.Flushes.Add(1)
@@ -368,11 +389,23 @@ func (l *Logger) flushSet(set *BufferSet) {
 	}
 
 	// Note: With O_DSYNC flag, each write() automatically syncs data to disk
-	// No explicit file.Sync() call needed - sync happens during writevAligned()
+	// No explicit file.Sync() call needed - sync happens during WriteVectored()
 
 	// Track flush duration
 	flushDuration := time.Since(flushStart)
-	l.stats.TotalFlushDuration.Add(flushDuration.Nanoseconds())
+	flushDurationNs := flushDuration.Nanoseconds()
+	l.stats.TotalFlushDuration.Add(flushDurationNs)
+
+	// Update max flush duration atomically
+	for {
+		currentMax := l.stats.MaxFlushDuration.Load()
+		if flushDurationNs <= currentMax {
+			break
+		}
+		if l.stats.MaxFlushDuration.CompareAndSwap(currentMax, flushDurationNs) {
+			break
+		}
+	}
 }
 
 // drainFlushChannel flushes all pending buffer sets in the channel
@@ -420,9 +453,9 @@ func (l *Logger) Close() error {
 		l.flushSet(inactiveSet)
 	}
 
-	// Close the file
-	if err := l.file.Close(); err != nil {
-		return fmt.Errorf("failed to close log file: %w", err)
+	// Close the file writer (handles rotation cleanup)
+	if err := l.fileWriter.Close(); err != nil {
+		return fmt.Errorf("failed to close file writer: %w", err)
 	}
 
 	return nil

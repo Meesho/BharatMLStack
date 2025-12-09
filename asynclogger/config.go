@@ -22,17 +22,22 @@ type Config struct {
 	// FlushTimeout is the maximum time to wait for writes to complete before flushing (default: 10ms)
 	// If timeout expires, flush proceeds anyway (may result in one corrupted log line)
 	FlushTimeout time.Duration
+
+	// RotationInterval is the time interval after which log files should rotate to a new file (default: 24h)
+	// Set to 0 to disable rotation. Rotated files are named with timestamp: {baseName}_{YYYY-MM-DD_HH-MM-SS}.log
+	RotationInterval time.Duration
 }
 
 // DefaultConfig returns a configuration with baseline defaults
 // logPath is required - the path where logs will be written
 func DefaultConfig(logPath string) Config {
 	return Config{
-		LogFilePath:   logPath,
-		BufferSize:    64 * 1024 * 1024,      // 64MB (baseline configuration)
-		NumShards:     8,                     // 8 shards
-		FlushInterval: 10 * time.Second,      // 10 seconds
-		FlushTimeout:  10 * time.Millisecond, // 10ms timeout for write completion
+		LogFilePath:      logPath,
+		BufferSize:       64 * 1024 * 1024,      // 64MB (baseline configuration)
+		NumShards:        8,                     // 8 shards
+		FlushInterval:    10 * time.Second,      // 10 seconds
+		FlushTimeout:     10 * time.Millisecond, // 10ms timeout for write completion
+		RotationInterval: 24 * time.Hour,        // 24 hours (default rotation interval)
 	}
 }
 
