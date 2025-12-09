@@ -56,7 +56,7 @@ func planReadthroughGaussianBatched() {
 
 	flag.BoolVar(&enableBatching, "enable-batching", true, "enable read batching")
 	flag.IntVar(&batchWindowMicros, "batch-window-us", 3, "batch window in microseconds")
-	flag.IntVar(&maxBatchSize, "max-batch", 100, "max batch size")
+	flag.IntVar(&maxBatchSize, "max-batch", 1000, "max batch size")
 	flag.Parse()
 
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
