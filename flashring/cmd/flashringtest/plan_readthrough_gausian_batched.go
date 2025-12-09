@@ -55,7 +55,7 @@ func planReadthroughGaussianBatched() {
 	flag.StringVar(&cpuProfile, "cpuprofile", "", "write cpu profile to this file")
 
 	flag.BoolVar(&enableBatching, "enable-batching", true, "enable read batching")
-	flag.IntVar(&batchWindowMicros, "batch-window-us", 1, "batch window in microseconds")
+	flag.IntVar(&batchWindowMicros, "batch-window-us", 0, "batch window in microseconds")
 	flag.IntVar(&maxBatchSize, "max-batch", 1000, "max batch size")
 	flag.Parse()
 
