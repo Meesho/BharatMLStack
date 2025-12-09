@@ -61,6 +61,11 @@ type WrapCacheConfig struct {
 	ReWriteScoreThreshold float32
 	GridSearchEpsilon     float64
 	SampleDuration        time.Duration
+
+	// Batching reads
+	EnableBatching    bool
+	BatchWindowMicros int // in microseconds
+	MaxBatchSize      int
 }
 
 func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*WrapCache, error) {
@@ -134,6 +139,11 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 		MaxMemTableCount:      uint32(MaxMemTableCount),
 		GridSearchEpsilon:     config.GridSearchEpsilon,
 	})
+
+	batchWindow := time.Duration(0)
+	if config.EnableBatching && config.BatchWindowMicros > 0 {
+		batchWindow = time.Duration(config.BatchWindowMicros) * time.Microsecond
+	}
 	shards := make([]*filecache.ShardCache, config.NumShards)
 	for i := 0; i < config.NumShards; i++ {
 		shards[i] = filecache.NewShardCache(filecache.ShardCacheConfig{
@@ -146,6 +156,11 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 			BlockSize:           BLOCK_SIZE,
 			Directory:           mountPoint,
 			Predictor:           predictor,
+
+			//batching reads
+			EnableBatching: config.EnableBatching,
+			BatchWindow:    batchWindow,
+			MaxBatchSize:   config.MaxBatchSize,
 		})
 	}
 	shardLocks := make([]sync.RWMutex, config.NumShards)

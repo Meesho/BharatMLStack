@@ -22,6 +22,9 @@ type ShardCache struct {
 	predictor         *maths.Predictor
 	startAt           int64
 	Stats             *Stats
+
+	//batching reads
+	batchReader *BatchReader
 }
 
 type Stats struct {
@@ -50,6 +53,11 @@ type ShardCacheConfig struct {
 	AsyncReadWorkers    int
 	AsyncQueueDepth     int
 	Predictor           *maths.Predictor
+
+	//batching reads
+	EnableBatching bool
+	BatchWindow    time.Duration
+	MaxBatchSize   int
 }
 
 func NewShardCache(config ShardCacheConfig) *ShardCache {
@@ -82,7 +90,7 @@ func NewShardCache(config ShardCacheConfig) *ShardCache {
 		log.Panic().Err(err).Msg("Failed to create read page allocator")
 	}
 	dm := indices.NewDeleteManager(ki, file, config.DeleteAmortizedStep)
-	return &ShardCache{
+	sc := &ShardCache{
 		keyIndex:          ki,
 		mm:                memtableManager,
 		file:              file,
@@ -96,6 +104,16 @@ func NewShardCache(config ShardCacheConfig) *ShardCache {
 			BadKeyMemIds: make(map[uint32]int),
 		},
 	}
+
+	// Initialize batch reader if enabled
+	if config.EnableBatching {
+		sc.batchReader = NewBatchReader(BatchReaderConfig{
+			BatchWindow:  config.BatchWindow,
+			MaxBatchSize: config.MaxBatchSize,
+		}, sc)
+	}
+
+	return sc
 }
 
 func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
@@ -136,6 +154,26 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 
 	_, currMemId, _ := fc.mm.GetMemtable()
 	shouldReWrite := fc.predictor.Predict(uint64(freq), uint64(lastAccess), memId, currMemId)
+
+	// Use batching if enabled
+	if fc.batchReader != nil {
+		req := &ReadRequest{
+			Key:    key,
+			Length: length,
+			MemId:  memId,
+			Offset: offset,
+			Result: make(chan ReadResult, 1),
+		}
+
+		fc.batchReader.requests <- req
+		result := <-req.Result
+
+		if result.Error != nil {
+			return false, nil, 0, false, shouldReWrite
+		}
+
+		return result.Found, result.Data, remainingTTL, result.Expired, shouldReWrite
+	}
 
 	exists := true
 	var buf []byte
@@ -190,4 +228,29 @@ func (fc *ShardCache) readFromDisk(fileOffset int64, length uint16, buf []byte) 
 
 func (fc *ShardCache) GetRingBufferActiveEntries() int {
 	return fc.keyIndex.GetRB().ActiveEntries()
+}
+
+// batching reads
+func (fc *ShardCache) processBuffer(key string, buf []byte, length uint16) ReadResult {
+	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
+	computedCR32 := crc32.ChecksumIEEE(buf[4:])
+	gotKey := string(buf[4 : 4+len(key)])
+
+	if gotCR32 != computedCR32 {
+		fc.Stats.BadCR32Count++
+		return ReadResult{Found: false, Error: fmt.Errorf("crc mismatch")}
+	}
+	if gotKey != key {
+		fc.Stats.BadKeyCount++
+		return ReadResult{Found: false, Error: fmt.Errorf("key mismatch")}
+	}
+
+	valLen := int(length) - 4 - len(key)
+	value := make([]byte, valLen)
+	copy(value, buf[4+len(key):4+len(key)+valLen])
+
+	return ReadResult{
+		Found: true,
+		Data:  value,
+	}
 }

@@ -18,7 +18,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func planReadthroughGaussian() {
+func planReadthroughGaussianBatched() {
 	var (
 		mountPoint         string
 		numShards          int
@@ -33,6 +33,11 @@ func planReadthroughGaussian() {
 		logStats           bool
 		memProfile         string
 		cpuProfile         string
+
+		//batching reads
+		enableBatching    bool
+		batchWindowMicros int // in microseconds
+		maxBatchSize      int
 	)
 
 	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul/", "data directory for shard files")
@@ -48,6 +53,10 @@ func planReadthroughGaussian() {
 	flag.BoolVar(&logStats, "log-stats", true, "periodically log cache stats")
 	flag.StringVar(&memProfile, "memprofile", "mem.prof", "write memory profile to this file")
 	flag.StringVar(&cpuProfile, "cpuprofile", "", "write cpu profile to this file")
+
+	flag.BoolVar(&enableBatching, "enable-batching", true, "enable read batching")
+	flag.IntVar(&batchWindowMicros, "batch-window-us", 10, "batch window in microseconds")
+	flag.IntVar(&maxBatchSize, "max-batch", 32, "max batch size")
 	flag.Parse()
 
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
@@ -94,6 +103,11 @@ func planReadthroughGaussian() {
 		ReWriteScoreThreshold: 0.8,
 		GridSearchEpsilon:     0.0001,
 		SampleDuration:        time.Duration(sampleSecs) * time.Second,
+
+		//batching reads
+		EnableBatching:    enableBatching,
+		BatchWindowMicros: batchWindowMicros,
+		MaxBatchSize:      maxBatchSize,
 	}
 
 	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, logStats)

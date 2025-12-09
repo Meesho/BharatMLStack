@@ -36,6 +36,8 @@ func main() {
 		planReadthroughGaussian()
 	} else if plan == "random" {
 		planRandomGaussian()
+	} else if plan == "readthrough-batched" {
+		planReadthroughGaussianBatched()
 	} else {
 		panic("invalid plan")
 	}
