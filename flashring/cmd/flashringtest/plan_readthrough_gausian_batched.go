@@ -46,7 +46,7 @@ func planReadthroughGaussianBatched() {
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 10, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 1, "number of read workers")
-	flag.IntVar(&writeWorkers, "writers", 1, "number of write workers")
+	flag.IntVar(&writeWorkers, "writers", 10, "number of write workers")
 	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
 	flag.Int64Var(&iterations, "iterations", 100_000_000, "number of iterations")
 	flag.Float64Var(&aVal, "a", 0.4, "a value for the predictor")
