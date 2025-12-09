@@ -45,7 +45,7 @@ func planReadthroughGaussianBatched() {
 	flag.IntVar(&keysPerShard, "keys-per-shard", 10_00_00, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 10, "file size in GiB per shard")
-	flag.IntVar(&readWorkers, "readers", 40, "number of read workers")
+	flag.IntVar(&readWorkers, "readers", 2, "number of read workers")
 	flag.IntVar(&writeWorkers, "writers", 4, "number of write workers")
 	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
 	flag.Int64Var(&iterations, "iterations", 100_000_000, "number of iterations")
@@ -55,7 +55,7 @@ func planReadthroughGaussianBatched() {
 	flag.StringVar(&cpuProfile, "cpuprofile", "", "write cpu profile to this file")
 
 	flag.BoolVar(&enableBatching, "enable-batching", true, "enable read batching")
-	flag.IntVar(&batchWindowMicros, "batch-window-us", 1000, "batch window in microseconds")
+	flag.IntVar(&batchWindowMicros, "batch-window-us", 500, "batch window in microseconds")
 	flag.IntVar(&maxBatchSize, "max-batch", 32, "max batch size")
 	flag.Parse()
 
