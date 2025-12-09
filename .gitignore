@@ -7,3 +7,9 @@ dist/
 workspace/
 .vscode/
 .cursor/
+__pycache__/
+
+# Dev toggle script artifacts
+.internal-configs/
+.dev-toggle-state
+.go.mod.appended

@@ -3,10 +3,11 @@ package feature
 import (
 	"context"
 	"fmt"
-	"github.com/Meesho/BharatMLStack/online-feature-store/internal/types"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/Meesho/BharatMLStack/online-feature-store/internal/types"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/blocks"
@@ -169,7 +170,7 @@ func (h *Handler) decodeFeatureValue(encodedValue []byte, entityLabel, featureLa
 			return nil, fmt.Errorf("failed to get string lengths for feature group %v: %s", featureGroup.Id, err)
 		}
 		sequence, err := h.config.GetSequenceNo(entityLabel, featureGroup.Id, activeVersion, featureLabel)
-		if err != nil {
+		if err != nil || sequence == -1 {
 			return nil, fmt.Errorf("failed to get sequence number for feature %s in feature group %v: %s", featureLabel, featureGroup.Id, err)
 		}
 		decodedValue, err := blocks.HelperVectorFeatureStringToConcatenatedString(encodedValue, int(stringLengths[sequence]))

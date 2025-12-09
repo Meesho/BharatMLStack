@@ -27,12 +27,14 @@ type Config interface {
 	GetFeatureGroup(ctx *gin.Context)
 	AddFeatures(ctx *gin.Context)
 	RetrieveEntities(ctx *gin.Context)
+	DeleteFeatures(ctx *gin.Context)
 	RetrieveFeatureGroups(ctx *gin.Context)
 	ProcessStore(ctx *gin.Context)
 	ProcessEntity(ctx *gin.Context)
 	ProcessFeatureGroup(ctx *gin.Context)
 	ProcessJob(ctx *gin.Context)
 	ProcessAddFeatures(ctx *gin.Context)
+	ProcessDeleteFeatures(ctx *gin.Context)
 	GetAllEntitiesRequestForUser(ctx *gin.Context)
 	GetAllFeatureGroupsRequestForUser(ctx *gin.Context)
 	GetAllJobsRequestForUser(ctx *gin.Context)
@@ -43,6 +45,7 @@ type Config interface {
 	EditFeatureGroup(ctx *gin.Context)
 	EditFeatures(ctx *gin.Context)
 	GetOnlineFeatureMapping(ctx *gin.Context)
+	GetCacheConfig(ctx *gin.Context)
 }
 
 var (
@@ -296,6 +299,29 @@ func (v *V1) AddFeatures(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Feature Addition Request Registered successfully with RequestId %v", requestId)})
 }
 
+func (v *V1) DeleteFeatures(ctx *gin.Context) {
+	var request handler.DeleteFeaturesRequest
+	if err := ctx.BindJSON(&request); err != nil {
+		log.Error().Err(err).Msg("Error in binding request body")
+		_ = ctx.Error(api.NewBadRequestError(err.Error()))
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	email, role, err := ParseAuthenticationHeader(ctx)
+	if err != nil {
+		return
+	}
+	request.UserId = email
+	request.Role = role
+	requestId, err := v.Config.DeleteFeatures(&request)
+	if err != nil {
+		ctx.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Feature Deletion Request Registered successfully with RequestId %v", requestId)})
+}
+
 func (v *V1) EditFeatures(ctx *gin.Context) {
 	var request handler.EditFeatureRequest
 	if err := ctx.BindJSON(&request); err != nil {
@@ -481,6 +507,34 @@ func (v *V1) ProcessAddFeatures(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"message": "Features Processed successfully"})
 }
 
+func (v *V1) ProcessDeleteFeatures(ctx *gin.Context) {
+	var request handler.ProcessDeleteFeaturesRequest
+	if err := ctx.BindJSON(&request); err != nil {
+		log.Error().Err(err).Msg("Error in binding request body")
+		_ = ctx.Error(api.NewBadRequestError(err.Error()))
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	email, role, err := ParseAuthenticationHeader(ctx)
+	if err != nil {
+		return
+	}
+	request.ApproverId = email
+	request.Role = role
+	if role != "admin" {
+		err = errors.New("not authorized to process request")
+		ctx.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := v.Config.ProcessDeleteFeatures(&request); err != nil {
+		ctx.Error(err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"message": "Feature Deletion Processed successfully"})
+}
+
 func (v *V1) GetAllEntitiesRequestForUser(ctx *gin.Context) {
 	email, role, err := ParseAuthenticationHeader(ctx)
 	if err != nil {
@@ -576,7 +630,26 @@ func (v *V1) GetOnlineFeatureMapping(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(api.NewInternalServerError(err.Error()).StatusCode, handler.GetOnlineFeatureMappingResponse{
 			Error: err.Error(),
-			Data:  []string{},
+			Data:  map[string]string{},
+		})
+		return
+	}
+	ctx.JSON(200, response)
+}
+
+func (v *V1) GetCacheConfig(ctx *gin.Context) {
+	var request handler.GetCacheConfigRequest
+	if err := ctx.BindJSON(&request); err != nil {
+		log.Error().Err(err).Msg("Error in binding request body")
+		_ = ctx.Error(api.NewBadRequestError(err.Error()))
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	response, err := v.Config.GetCacheConfig(request)
+	if err != nil {
+		ctx.JSON(api.NewInternalServerError(err.Error()).StatusCode, handler.GetCacheConfigResponse{
+			Error: err.Error(),
+			Data:  map[string]string{},
 		})
 		return
 	}

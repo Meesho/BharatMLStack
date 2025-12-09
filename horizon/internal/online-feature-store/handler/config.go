@@ -23,6 +23,7 @@ type Config interface {
 	GetConfig() (map[string]string, error)
 	AddFeatures(*AddFeatureRequest) (uint, error)
 	EditFeatures(*EditFeatureRequest) (uint, error)
+	DeleteFeatures(*DeleteFeaturesRequest) (uint, error)
 	RetrieveEntities() (*[]RetrieveEntityResponse, error)
 	RetrieveFeatureGroups(entityLabel string) (*[]RetrieveFeatureGroupResponse, error)
 	ProcessEntity(*ProcessEntityRequest) error
@@ -30,6 +31,7 @@ type Config interface {
 	ProcessStore(*ProcessStoreRequest) error
 	ProcessJob(*ProcessJobRequest) error
 	ProcessAddFeature(*ProcessAddFeatureRequest) error
+	ProcessDeleteFeatures(*ProcessDeleteFeaturesRequest) error
 	GetAllEntitiesRequest(email, role string) ([]entity.Table, error)
 	GetAllFeatureGroupsRequest(email, role string) ([]featuregroup.Table, error)
 	GetAllJobsRequest(email, role string) ([]job.Table, error)
@@ -37,4 +39,5 @@ type Config interface {
 	GetAllFeaturesRequest(email, role string) ([]features.Table, error)
 	RetrieveSourceMapping(jobId, jobToken string) (*RetrieveSourceMappingResponse, error)
 	GetOnlineFeatureMapping(request GetOnlineFeatureMappingRequest) (GetOnlineFeatureMappingResponse, error)
+	GetCacheConfig(request GetCacheConfigRequest) (GetCacheConfigResponse, error)
 }

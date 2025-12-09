@@ -6,15 +6,12 @@ import {
   DialogContent,
   DialogTitle,
   TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Tooltip,
   Divider,
   InputAdornment,
   Box,
-  Typography
+  Typography,
+  Autocomplete
 } from '@mui/material';
 import { Modal, ListGroup, Table } from 'react-bootstrap';
 import "./styles.scss";
@@ -149,15 +146,17 @@ const FeatureGroupRegistry = () => {
       setSelectedStore(stores[value]);
     }
     
+    const trimmedValue = typeof value === 'string' ? value.trim() : value;
+    
     setFeatureGroupData((prevData) => ({
       ...prevData,
       [name]: name === "store-id" || name === "ttl-in-seconds" 
-        ? parseInt(value, 10) 
+        ? parseInt(trimmedValue, 10) 
         : name === "distributed-cache-enabled" || name === "in-memory-cache-enabled"
-        ? value === 'true'
+        ? trimmedValue === 'true'
         : name === "data-type"
-        ? addDataTypePrefix(value) 
-        : value,
+        ? addDataTypePrefix(trimmedValue) 
+        : trimmedValue,
     }));
   };
 
@@ -166,7 +165,7 @@ const FeatureGroupRegistry = () => {
     const updatedFeatures = [...featureGroupData.features];
     updatedFeatures[index] = {
       ...updatedFeatures[index],
-      [name]: value,
+      [name]: typeof value === 'string' ? value.trim() : value,
     };
     setFeatureGroupData((prevData) => ({
       ...prevData,
@@ -376,30 +375,31 @@ const FeatureGroupRegistry = () => {
       <DialogTitle>{viewMode ? 'Feature Group' : 'Create Feature Group'}</DialogTitle>
       <DialogContent>
         <div style={{margin: '1.5rem'}}>
-          <FormControl fullWidth margin="normal" error={!!validationErrors["entity-label"]}>
-            <InputLabel id="entity-label">Entity Label *</InputLabel>
-            <Select
-              labelId="entity-label"
-              name="entity-label"
-              value={featureGroupData["entity-label"]}
-              onChange={handleChange}
-              fullWidth
-              disabled={viewMode}
-              label="Entity Label *"
-              error={!!validationErrors["entity-label"]}
-            >
-              {entities.map((entity) => (
-                <MenuItem key={entity} value={entity}>
-                  {entity}
-                </MenuItem>
-              ))}
-            </Select>
-            {validationErrors["entity-label"] && (
-              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
-                {validationErrors["entity-label"]}
-              </Typography>
+          <Autocomplete
+            options={entities}
+            value={featureGroupData["entity-label"]}
+            onChange={(event, newValue) => {
+              const syntheticEvent = {
+                target: {
+                  name: 'entity-label',
+                  value: newValue || ''
+                }
+              };
+              handleChange(syntheticEvent);
+            }}
+            disabled={viewMode}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Entity Label *"
+                name="entity-label"
+                fullWidth
+                margin="normal"
+                error={!!validationErrors["entity-label"]}
+                helperText={validationErrors["entity-label"]}
+              />
             )}
-          </FormControl>
+          />
 
           <TextField
             label="Feature Group Label *"
@@ -422,91 +422,100 @@ const FeatureGroupRegistry = () => {
             disabled={true}
           />
 
-          <FormControl fullWidth margin="normal" error={!!validationErrors["job-id"]}>
-            <InputLabel id="job-name-label">Job Name *</InputLabel>
-            <Select
-              labelId="job-name-label"
-              name="job-id"
-              value={featureGroupData["job-id"]}
-              onChange={handleChange}
-              fullWidth
-              disabled={viewMode}
-              label="Job Name *"
-              error={!!validationErrors["job-id"]}
-            >
-              {jobs.map((job) => (
-                <MenuItem key={job} value={job}>
-                  {job}
-                </MenuItem>
-              ))}
-            </Select>
-            {validationErrors["job-id"] && (
-              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
-                {validationErrors["job-id"]}
-              </Typography>
+          <Autocomplete
+            options={jobs}
+            value={featureGroupData["job-id"]}
+            onChange={(event, newValue) => {
+              const syntheticEvent = {
+                target: {
+                  name: 'job-id',
+                  value: newValue || ''
+                }
+              };
+              handleChange(syntheticEvent);
+            }}
+            disabled={viewMode}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Job Name *"
+                name="job-id"
+                fullWidth
+                margin="normal"
+                error={!!validationErrors["job-id"]}
+                helperText={validationErrors["job-id"]}
+              />
             )}
-          </FormControl>
+          />
 
-          <FormControl fullWidth margin="normal" error={!!validationErrors["store-id"]}>
-            <InputLabel id="store-id-label">Store ID *</InputLabel>
-            <Select
-              labelId="store-id-label"
-              name="store-id"
-              value={featureGroupData["store-id"]}
-              onChange={handleChange}
-              fullWidth
-              disabled={viewMode}
-              label="Store ID *"
-              error={!!validationErrors["store-id"]}
-              endAdornment={
-                selectedStore && (
-                  <InputAdornment position="end">
-                    <Tooltip
-                      title={
-                        <div>
-                          <p>DB Type: {selectedStore["db-type"]}</p>
-                          <p>Conf ID: {selectedStore["conf-id"]}</p>
-                          <p>Table: {selectedStore["table"]}</p>
-                          <p>Table TTL(in Seconds): {selectedStore["table-ttl"]}</p>
-                          <p>Primary keys: {selectedStore["primary-keys"]}</p>
-                        </div>
-                      }
-                      placement="bottom-end"
-                      slotProps={{
-                        tooltip: {
-                          sx: {
-                            bgcolor: 'white',
-                            color: 'black',
-                            border: '1px solid #cccccc',
-                            boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
-                            p: 1,
-                            width: '280px',
-                            maxWidth: '300px',
-                            '& p': {
-                              my: 0.5,
+          <Autocomplete
+            options={Object.keys(stores).map(storeId => ({ value: parseInt(storeId), label: storeId }))}
+            getOptionLabel={(option) => option.label}
+            value={Object.keys(stores).map(storeId => ({ value: parseInt(storeId), label: storeId })).find(option => option.value === featureGroupData["store-id"]) || null}
+            onChange={(event, newValue) => {
+              const syntheticEvent = {
+                target: {
+                  name: 'store-id',
+                  value: newValue?.value || ''
+                }
+              };
+              handleChange(syntheticEvent);
+            }}
+            disabled={viewMode}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Store ID *"
+                name="store-id"
+                fullWidth
+                margin="normal"
+                error={!!validationErrors["store-id"]}
+                helperText={validationErrors["store-id"]}
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (
+                    <>
+                      {params.InputProps.endAdornment}
+                      {selectedStore && (
+                        <InputAdornment position="end">
+                          <Tooltip
+                            title={
+                              <div>
+                                <p>DB Type: {selectedStore["db-type"]}</p>
+                                <p>Conf ID: {selectedStore["conf-id"]}</p>
+                                <p>Table: {selectedStore["table"]}</p>
+                                <p>Table TTL(in Seconds): {selectedStore["table-ttl"]}</p>
+                                <p>Primary keys: {selectedStore["primary-keys"]}</p>
+                              </div>
                             }
-                          }
-                        }
-                      }}
-                    >
-                      <InfoIcon style={{ color: '#522b4a', cursor: 'pointer', fontSize: '20px', position: 'absolute', right: '24px'}} />
-                    </Tooltip>
-                  </InputAdornment>
-                )
-              }
-            >
-              {Object.keys(stores).map((storeId) => (
-                <MenuItem key={storeId} value={parseInt(storeId)}>
-                  {storeId}
-                </MenuItem>
-              ))}
-            </Select>
-            {validationErrors["store-id"] && (
-              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
-                {validationErrors["store-id"]}
-              </Typography>
+                            placement="bottom-end"
+                            slotProps={{
+                              tooltip: {
+                                sx: {
+                                  bgcolor: 'white',
+                                  color: 'black',
+                                  border: '1px solid #cccccc',
+                                  boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
+                                  p: 1,
+                                  width: '280px',
+                                  maxWidth: '300px',
+                                  '& p': {
+                                    my: 0.5,
+                                  }
+                                }
+                              }
+                            }}
+                          >
+                            <InfoIcon style={{ color: '#522b4a', cursor: 'pointer', fontSize: '20px'}} />
+                          </Tooltip>
+                        </InputAdornment>
+                      )}
+                    </>
+                  )
+                }}
+              />
             )}
-          </FormControl>
+          />
 
           <TextField
             label="TTL in Seconds *"
@@ -521,62 +530,79 @@ const FeatureGroupRegistry = () => {
             helperText={validationErrors["ttl-in-seconds"]}
           />
 
-          <FormControl fullWidth margin="normal">
-            <InputLabel id="distributed-cache-enabled-label">Distributed Caching Enabled</InputLabel>
-            <Select
-              labelId="distributed-cache-enabled-label"
-              name="distributed-cache-enabled"
-              value={featureGroupData["distributed-cache-enabled"].toString()}
-              onChange={handleChange}
-              fullWidth
-              disabled={viewMode}
-              label="Distributed Caching Enabled"
-            >
-              <MenuItem value="true">True</MenuItem>
-              <MenuItem value="false">False</MenuItem>
-            </Select>
-          </FormControl>
-
-          <FormControl fullWidth margin="normal">
-            <InputLabel id="in-memory-cache-enabled-label">In Memory Caching Enabled</InputLabel>
-            <Select
-              labelId="in-memory-cache-enabled-label"
-              name="in-memory-cache-enabled"
-              value={featureGroupData["in-memory-cache-enabled"].toString()}
-              onChange={handleChange}
-              fullWidth
-              disabled={viewMode}
-              label="In Memory Caching Enabled"
-            >
-              <MenuItem value="true">True</MenuItem>
-              <MenuItem value="false">False</MenuItem>
-            </Select>
-          </FormControl>
-
-          <FormControl fullWidth margin="normal" error={!!validationErrors["data-type"]}>
-            <InputLabel id="data-type-label">Data Type *</InputLabel>
-            <Select
-              labelId="data-type-label"
-              name="data-type"
-              value={removeDataTypePrefix(featureGroupData["data-type"])}
-              onChange={handleChange}
-              fullWidth
-              disabled={viewMode}
-              label="Data Type *"
-              error={!!validationErrors["data-type"]}
-            >
-              {dataTypes.map((type) => (
-                <MenuItem key={type} value={type}>
-                  {type}
-                </MenuItem>
-              ))}
-            </Select>
-            {validationErrors["data-type"] && (
-              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
-                {validationErrors["data-type"]}
-              </Typography>
+          <Autocomplete
+            options={['true', 'false']}
+            value={featureGroupData["distributed-cache-enabled"].toString()}
+            onChange={(event, newValue) => {
+              const syntheticEvent = {
+                target: {
+                  name: 'distributed-cache-enabled',
+                  value: newValue || 'false'
+                }
+              };
+              handleChange(syntheticEvent);
+            }}
+            disabled={viewMode}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Distributed Caching Enabled"
+                name="distributed-cache-enabled"
+                fullWidth
+                margin="normal"
+              />
             )}
-          </FormControl>
+          />
+
+          <Autocomplete
+            options={['true', 'false']}
+            value={featureGroupData["in-memory-cache-enabled"].toString()}
+            onChange={(event, newValue) => {
+              const syntheticEvent = {
+                target: {
+                  name: 'in-memory-cache-enabled',
+                  value: newValue || 'false'
+                }
+              };
+              handleChange(syntheticEvent);
+            }}
+            disabled={viewMode}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="In Memory Caching Enabled"
+                name="in-memory-cache-enabled"
+                fullWidth
+                margin="normal"
+              />
+            )}
+          />
+
+          <Autocomplete
+            options={dataTypes}
+            value={removeDataTypePrefix(featureGroupData["data-type"])}
+            onChange={(event, newValue) => {
+              const syntheticEvent = {
+                target: {
+                  name: 'data-type',
+                  value: newValue || ''
+                }
+              };
+              handleChange(syntheticEvent);
+            }}
+            disabled={viewMode}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Data Type *"
+                name="data-type"
+                fullWidth
+                margin="normal"
+                error={!!validationErrors["data-type"]}
+                helperText={validationErrors["data-type"]}
+              />
+            )}
+          />
 
           <h5>Features</h5>
           {featureGroupData.features.map((feature, index) => (
@@ -622,52 +648,61 @@ const FeatureGroupRegistry = () => {
                     gap: '0px 16px'
                   }}
                 >
-                  <FormControl margin="normal" fullWidth>
-                    <InputLabel id={`source-type-label-${index}`}>Source Type</InputLabel>
-                    <Select
-                      labelId={`source-type-label-${index}`}
-                      id={`source-type-${index}`}
-                      name="storage-provider"
-                      value={feature["storage-provider"]}
-                      onChange={(e) => handleFeatureChange(index, e)}
-                      label="Source Type"
-                      disabled={viewMode}
-                      endAdornment={
-                        <InputAdornment position="end">
-                          <Tooltip
-                            title="Cloud storage or table"
-                            placement="bottom-end"
-                            slotProps={{
-                              tooltip: {
-                                sx: {
-                                  bgcolor: 'white',
-                                  color: 'black',
-                                  border: '1px solid #cccccc',
-                                  boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
-                                  p: 1,
-                                  width: '280px',
-                                  maxWidth: '300px',
-                                  '& p': {
-                                    my: 0.5,
-                                  }
-                                }
-                              }
-                            }}
-                          >
-                            <InfoIcon style={{ color: '#522b4a', cursor: 'pointer', fontSize: '20px', position: 'absolute', right: '24px'}} />
-                          </Tooltip>
-                        </InputAdornment>
-                      }
-                    >
-                      <MenuItem value="PARQUET_GCS">PARQUET_GCS</MenuItem>
-                      <MenuItem value="PARQUET_S3">PARQUET_S3</MenuItem>
-                      <MenuItem value="PARQUET_ADLS">PARQUET_ADLS</MenuItem>
-                      <MenuItem value="DELTA_GCS">DELTA_GCS</MenuItem>
-                      <MenuItem value="DELTA_S3">DELTA_S3</MenuItem>
-                      <MenuItem value="DELTA_ADLS">DELTA_ADLS</MenuItem>
-                      <MenuItem value="TABLE">TABLE</MenuItem>
-                    </Select>
-                  </FormControl>
+                  <Autocomplete
+                    options={['PARQUET_GCS', 'PARQUET_S3', 'PARQUET_ADLS', 'DELTA_GCS', 'DELTA_S3', 'DELTA_ADLS', 'TABLE']}
+                    value={feature["storage-provider"]}
+                    onChange={(event, newValue) => {
+                      const syntheticEvent = {
+                        target: {
+                          name: 'storage-provider',
+                          value: newValue || ''
+                        }
+                      };
+                      handleFeatureChange(index, syntheticEvent);
+                    }}
+                    disabled={viewMode}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Source Type"
+                        name="storage-provider"
+                        margin="normal"
+                        fullWidth
+                        InputProps={{
+                          ...params.InputProps,
+                          endAdornment: (
+                            <>
+                              {params.InputProps.endAdornment}
+                              <InputAdornment position="end">
+                                <Tooltip
+                                  title="Cloud storage or table"
+                                  placement="bottom-end"
+                                  slotProps={{
+                                    tooltip: {
+                                      sx: {
+                                        bgcolor: 'white',
+                                        color: 'black',
+                                        border: '1px solid #cccccc',
+                                        boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
+                                        p: 1,
+                                        width: '280px',
+                                        maxWidth: '300px',
+                                        '& p': {
+                                          my: 0.5,
+                                        }
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <InfoIcon style={{ color: '#522b4a', cursor: 'pointer', fontSize: '20px'}} />
+                                </Tooltip>
+                              </InputAdornment>
+                            </>
+                          )
+                        }}
+                      />
+                    )}
+                  />
                   <TextField
                     label="Source Base Path"
                     name="source-base-path"

@@ -1,12 +1,21 @@
 package config
 
 import (
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/circuitbreaker"
 	"github.com/stretchr/testify/mock"
 )
 
 // MockConfigManager implements Manager interface for testing
 type MockConfigManager struct {
 	mock.Mock
+}
+
+func (m *MockConfigManager) GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error) {
+	args := m.Called(entityLabel)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[int]bool), args.Error(1)
 }
 
 func (m *MockConfigManager) GetEntity(entityLabel string) (*Entity, error) {
@@ -84,6 +93,11 @@ func (m *MockConfigManager) GetP2PCacheConfForEntity(entityLabel string) (*Cache
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*Cache), args.Error(1)
+}
+
+func (m *MockConfigManager) GetP2PEnabledPercentage() int {
+	args := m.Called()
+	return args.Int(0)
 }
 
 func (m *MockConfigManager) GetStores() (*map[string]Store, error) {
@@ -194,6 +208,15 @@ func (m *MockConfigManager) GetAllRegisteredClients() map[string]string {
 }
 
 func (m *MockConfigManager) RegisterClients() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+func (m *MockConfigManager) GetCircuitBreakerConfigs() map[string]circuitbreaker.Config {
+	args := m.Called()
+	return args.Get(0).(map[string]circuitbreaker.Config)
+}
+func (m *MockConfigManager) UpdateCBConfigs() error {
 	args := m.Called()
 	return args.Error(0)
 }

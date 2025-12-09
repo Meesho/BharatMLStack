@@ -233,7 +233,9 @@ const TableContent = ({
         return (
           String(row.RequestId).toLowerCase().includes(searchLower) ||
           (row.CreatedBy && row.CreatedBy.toLowerCase().includes(searchLower)) ||
-          (row.ApprovedBy && row.ApprovedBy.toLowerCase().includes(searchLower))
+          (row.ApprovedBy && row.ApprovedBy.toLowerCase().includes(searchLower)) ||
+          (row.EntityLabel && row.EntityLabel.toLowerCase().includes(searchLower)) ||
+          (row.FeatureGroupLabel && row.FeatureGroupLabel.toLowerCase().includes(searchLower))
         );
       });
     }

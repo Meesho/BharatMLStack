@@ -19,6 +19,7 @@ import (
 const configManagerVersion = 1
 const normalizedEntitiesWatchPath = "/entities"
 const registeredClientsWatchPath = "/security/reader"
+const cbWatchPath = "/circuitbreaker"
 
 func main() {
 	config.InitEnv()
@@ -33,8 +34,13 @@ func main() {
 	system.Init()
 	featureConfig.InitEtcDBridge()
 	configManager := featureConfig.Instance(featureConfig.DefaultVersion)
+	configManager.UpdateCBConfigs()
+	err := etcd.Instance().RegisterWatchPathCallback(cbWatchPath, configManager.UpdateCBConfigs)
+	if err != nil {
+		log.Error().Err(err).Msg("Error registering watch path callback for circuit breaker")
+	}
 	configManager.GetNormalizedEntities()
-	err := etcd.Instance().RegisterWatchPathCallback(normalizedEntitiesWatchPath, configManager.GetNormalizedEntities)
+	err = etcd.Instance().RegisterWatchPathCallback(normalizedEntitiesWatchPath, configManager.GetNormalizedEntities)
 	if err != nil {
 		log.Error().Err(err).Msg("Error registering watch path callback for in-memory cache")
 	}

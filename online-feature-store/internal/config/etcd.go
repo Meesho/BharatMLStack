@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/circuitbreaker"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/etcd"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -134,7 +135,12 @@ func (e *Etcd) GetP2PCacheConfForEntity(entityLabel string) (*Cache, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &entity.P2PCache, nil
+	// TODO: use inmemory config until scaled up
+	return &entity.InMemoryCache, nil
+}
+
+func (e *Etcd) GetP2PEnabledPercentage() int {
+	return e.GetEtcdInstance().P2PEnabledPercentage
 }
 
 func (e *Etcd) GetStores() (*map[string]Store, error) {
@@ -266,7 +272,8 @@ func (e *Etcd) GetSequenceNo(entityLabel string, fgId int, version int, featureL
 
 	sequence, ok := sequences[featureLabel]
 	if !ok {
-		return 0, fmt.Errorf("feature %s not found", featureLabel)
+		log.Error().Msgf("feature %s not found", featureLabel)
+		return -1, nil
 	}
 
 	return sequence, nil
@@ -477,9 +484,65 @@ func (e *Etcd) GetNormalizedEntities() error {
 	return nil
 }
 
+func (e *Etcd) GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error) {
+	entity, err := e.GetEntity(entityLabel)
+	if err != nil {
+		return nil, err
+	}
+
+	allFGIds := make(map[int]bool)
+	for _, fg := range entity.FeatureGroups {
+		allFGIds[fg.Id] = true
+	}
+
+	return allFGIds, nil
+}
+
 func isEntityValid(entity *Entity) bool {
 	if entity == nil || entity.Label == "" || entity.Keys == nil || len(entity.Keys) == 0 {
 		return false
 	}
 	return true
+}
+
+func (e *Etcd) GetCircuitBreakerConfigs() map[string]circuitbreaker.Config {
+	instance := e.GetEtcdInstance()
+	return instance.CircuitBreaker
+}
+
+func (e *Etcd) UpdateCBConfigs() error {
+	cbConfigs := e.GetCircuitBreakerConfigs()
+	for cbManagerName, cbConfig := range cbConfigs {
+		activeCBs := make([]string, 0)
+		inactiveCBs := make([]string, 0)
+		for cbName, activeCBConfig := range cbConfig.ActiveCBKeys {
+			if activeCBConfig.Enabled {
+				activeCBs = append(activeCBs, cbName)
+			} else {
+				inactiveCBs = append(inactiveCBs, cbName)
+			}
+		}
+		cbManager := circuitbreaker.GetManager(cbManagerName)
+		cbManager.ActivateCBKey(activeCBs)
+		cbManager.DeactivateCBKey(inactiveCBs)
+		cbManager.UpdateCBConfig(cbConfig)
+
+		// Handle force open/close based on etcd config
+		for cbName, activeCBConfig := range cbConfig.ActiveCBKeys {
+			if activeCBConfig.Enabled {
+				switch activeCBConfig.ForcedState {
+				case 1:
+					cbManager.ForceOpenCB(cbName)
+				case -1:
+					cbManager.ForceCloseCB(cbName)
+				case 0:
+					cbManager.NormalExecutionModeCB(cbName)
+				default:
+					log.Error().Msgf("invalid forced state for circuit breaker %s. switching to normal execution mode", cbName)
+					cbManager.NormalExecutionModeCB(cbName)
+				}
+			}
+		}
+	}
+	return nil
 }

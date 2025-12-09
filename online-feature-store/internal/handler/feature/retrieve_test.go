@@ -2,8 +2,9 @@ package feature
 
 import (
 	"fmt"
-	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config/enums"
 	"testing"
+
+	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config/enums"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/system"
@@ -370,6 +371,120 @@ func TestPreProcessForKeys(t *testing.T) {
 		expectedError  string
 		validateResult func(*testing.T, *RetrieveData)
 	}{
+		{
+			name: "Happy path - numeric features with duplicate keys",
+			retrieveData: &RetrieveData{
+				EntityLabel:    "user",
+				ReqColumnCount: 2,
+				Query: &retrieve.Query{
+					Keys: []*retrieve.Keys{
+						{Cols: []string{"user1", "region1"}},
+						{Cols: []string{"user2", "region2"}},
+						{Cols: []string{"user1", "region1"}}, // Duplicate key
+					},
+				},
+				Result: &retrieve.Result{
+					FeatureSchemas: []*retrieve.FeatureSchema{
+						{
+							FeatureGroupLabel: "user_profile",
+							Features: []*retrieve.Feature{
+								{Label: "age", ColumnIdx: 0},
+								{Label: "income", ColumnIdx: 1},
+							},
+						},
+					},
+				},
+				AllFGLabelToFGId: map[string]int{
+					"user_profile": 1,
+				},
+				AllFGIdToDataType: map[int]types.DataType{
+					1: types.DataTypeInt32,
+				},
+			},
+			setupMock: func(m *config.MockConfigManager) {
+				m.On("GetFeatureGroup", "user", "user_profile").Return(&config.FeatureGroup{
+					Id:            1,
+					ActiveVersion: "1",
+				}, nil)
+
+				m.On("GetDefaultValueByte", "user", 1, 1, "age").Return([]byte{0, 0, 0, 25}, nil)
+				m.On("GetDefaultValueByte", "user", 1, 1, "income").Return([]byte{0, 0, 0, 50}, nil)
+			},
+			validateResult: func(t *testing.T, rd *RetrieveData) {
+				// Check unique keys
+				assert.Len(t, rd.UniqueKeys, 2, "Should have 2 unique keys")
+				assert.Len(t, rd.Result.Rows, 3, "Should have 3 total rows")
+
+				// Validate KeyToOriginalIndices
+				indices := rd.KeyToOriginalIndices["user1|region1"]
+				assert.Len(t, indices, 2, "Should have 2 indices for duplicate key")
+				assert.Contains(t, indices, 0)
+				assert.Contains(t, indices, 2)
+
+				// Check ReqKeyToIdx mapping
+				assert.Equal(t, 0, rd.ReqKeyToIdx["user1|region1"])
+				assert.Equal(t, 1, rd.ReqKeyToIdx["user2|region2"])
+
+				// Validate all rows have correct default values
+				for i := 0; i < 3; i++ {
+					row := rd.Result.Rows[i]
+					assert.Equal(t, []byte{0, 0, 0, 25}, row.Columns[0], "First column should have default age value")
+					assert.Equal(t, []byte{0, 0, 0, 50}, row.Columns[1], "Second column should have default income value")
+				}
+			},
+		},
+		{
+			name: "Happy path - string features with duplicate keys",
+			retrieveData: &RetrieveData{
+				EntityLabel:    "user",
+				ReqColumnCount: 1,
+				Query: &retrieve.Query{
+					Keys: []*retrieve.Keys{
+						{Cols: []string{"user1"}},
+						{Cols: []string{"user1"}},
+						{Cols: []string{"user2"}},
+					},
+				},
+				Result: &retrieve.Result{
+					FeatureSchemas: []*retrieve.FeatureSchema{
+						{
+							FeatureGroupLabel: "user_info",
+							Features: []*retrieve.Feature{
+								{Label: "name", ColumnIdx: 0},
+							},
+						},
+					},
+				},
+				AllFGLabelToFGId: map[string]int{
+					"user_info": 1,
+				},
+				AllFGIdToDataType: map[int]types.DataType{
+					1: types.DataTypeString,
+				},
+			},
+			setupMock: func(m *config.MockConfigManager) {},
+			validateResult: func(t *testing.T, rd *RetrieveData) {
+				// Check unique keys
+				assert.Len(t, rd.UniqueKeys, 2, "Should have 2 unique keys")
+				assert.Len(t, rd.Result.Rows, 3, "Should have 3 total rows")
+
+				// Validate KeyToOriginalIndices
+				indices := rd.KeyToOriginalIndices["user1"]
+				assert.Len(t, indices, 2, "Should have 2 indices for duplicate key")
+				assert.Contains(t, indices, 0)
+				assert.Contains(t, indices, 1)
+
+				// Check ReqKeyToIdx mapping
+				assert.Equal(t, 0, rd.ReqKeyToIdx["user1"])
+				assert.Equal(t, 2, rd.ReqKeyToIdx["user2"])
+
+				// Validate all rows have nil columns initially
+				for i := 0; i < 3; i++ {
+					row := rd.Result.Rows[i]
+					assert.Nil(t, row.Columns[0], "String column should be nil initially")
+				}
+			},
+		},
 		{
 			name: "Happy path - numeric features",
 			retrieveData: &RetrieveData{

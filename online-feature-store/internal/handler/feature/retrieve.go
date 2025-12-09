@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/quantization"
 
@@ -15,7 +17,9 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/repositories/caches"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/repositories/provider"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/repositories/stores"
+	handler "github.com/Meesho/BharatMLStack/online-feature-store/internal/handler/circuitbreaker"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/types"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/circuitbreaker"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/ds"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
@@ -29,6 +33,7 @@ var (
 
 const (
 	featurePartsSeparator = "@"
+	distributedCacheCBKey = "distributed_cache_retrieval"
 )
 
 type FGData struct {
@@ -44,20 +49,25 @@ type FGData struct {
 }
 
 type RetrieveHandler struct {
-	config      config.Manager
-	imcProvider provider.CacheProvider
-	dcProvider  provider.CacheProvider
-	dbProvider  provider.StoreProvider
+	config                     config.Manager
+	imcProvider                provider.CacheProvider
+	dcProvider                 provider.CacheProvider
+	dbProvider                 provider.StoreProvider
+	p2pCacheProvider           provider.CacheProvider
+	distributedCacheCBProvider *handler.DFCircuitBreakerHandler
 }
 
 func InitRetrieveHandler(configManager config.Manager) *RetrieveHandler {
+	distributedCacheCBManager := circuitbreaker.GetManager("distributed_cache")
 	if frHandler == nil {
 		frOnce.Do(func() {
 			frHandler = &RetrieveHandler{
-				config:      configManager,
-				imcProvider: provider.InMemoryCacheProviderImpl,
-				dcProvider:  provider.DistributedCacheProviderImpl,
-				dbProvider:  provider.StorageProviderImpl,
+				config:                     configManager,
+				imcProvider:                provider.InMemoryCacheProviderImpl,
+				dcProvider:                 provider.DistributedCacheProviderImpl,
+				dbProvider:                 provider.StorageProviderImpl,
+				p2pCacheProvider:           provider.P2PCacheProviderImpl,
+				distributedCacheCBProvider: handler.NewDFCircuitBreakerHandler(distributedCacheCBManager),
 			}
 		})
 	}
@@ -91,10 +101,12 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 	}()
 	ReqInMemEmpty := retrieveData.ReqInMemCachedFGIds.IsEmpty()
 	ReqDistEmpty := retrieveData.ReqDistCachedFGIds.IsEmpty()
-	allKeys := retrieveData.Query.Keys
+	allKeys := retrieveData.UniqueKeys
 	reqDistCachedFGIds := retrieveData.ReqDistCachedFGIds
 	reqDbFGIds := retrieveData.ReqDbFGIds
 	allDistFGIds := retrieveData.AllDistCachedFGIds
+
+	isP2PEnabled := h.isP2PCacheEnabled(retrieveData.EntityLabel)
 
 	if ReqInMemEmpty && ReqDistEmpty {
 		_, err = h.retrieveFromDB(allKeys, retrieveData, reqDbFGIds, fgDataChan)
@@ -137,7 +149,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		}
 		return retrieveData.Result, nil
 	} else if !ReqInMemEmpty && ReqDistEmpty {
-		missingInMemKeys, err := h.retrieveFromInMemoryCache(allKeys, retrieveData, retrieveData.ReqInMemCachedFGIds, fgDataChan)
+		missingInMemKeys, err := h.retrieveFromInMemoryCache(allKeys, retrieveData, retrieveData.ReqInMemCachedFGIds, fgDataChan, isP2PEnabled)
 		if err != nil {
 			h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
 			return nil, err
@@ -165,12 +177,12 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 			return nil, err
 		}
 		if len(missingInMemKeys) > 0 {
-			go h.persistToInMemoryCache(retrieveData.EntityLabel, retrieveData, retrieveData.ReqInMemCachedFGIds, missingInMemKeys)
+			go h.persistToInMemoryCache(retrieveData.EntityLabel, retrieveData, retrieveData.ReqInMemCachedFGIds, missingInMemKeys, isP2PEnabled)
 		}
 		return retrieveData.Result, nil
 	} else if !ReqInMemEmpty && !ReqDistEmpty {
 		reqDbFGIdsExists := !reqDbFGIds.IsEmpty()
-		missingInMemKeys, err := h.retrieveFromInMemoryCache(allKeys, retrieveData, retrieveData.ReqInMemCachedFGIds, fgDataChan)
+		missingInMemKeys, err := h.retrieveFromInMemoryCache(allKeys, retrieveData, retrieveData.ReqInMemCachedFGIds, fgDataChan, isP2PEnabled)
 		if err != nil {
 			h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
 			return nil, err
@@ -231,7 +243,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 			return nil, err
 		}
 		if len(missingInMemKeys) > 0 {
-			go h.persistToInMemoryCache(retrieveData.EntityLabel, retrieveData, retrieveData.ReqInMemCachedFGIds, missingInMemKeys)
+			go h.persistToInMemoryCache(retrieveData.EntityLabel, retrieveData, retrieveData.ReqInMemCachedFGIds, missingInMemKeys, isP2PEnabled)
 		}
 		if len(missingDistKeys) > 0 {
 			go h.persistToDistributedCache(retrieveData.EntityLabel, retrieveData, allDistFGIds, missingDistKeys)
@@ -244,7 +256,19 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 	}
 }
 
-func (h *RetrieveHandler) retrieveFromInMemoryCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int], fgDataChan chan *FGData) ([]*retrieve.Keys, error) {
+func (h *RetrieveHandler) isP2PCacheEnabled(entityLabel string) bool {
+	if h.p2pCacheProvider == nil {
+		return false
+	}
+	// If cache is setup, then enable based on percentage
+	return rand.Intn(100) < h.config.GetP2PEnabledPercentage()
+}
+
+func (h *RetrieveHandler) retrieveFromInMemoryCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int], fgDataChan chan *FGData, isP2PEnabled bool) ([]*retrieve.Keys, error) {
+	// TODO: Remove once fully scaled
+	if isP2PEnabled {
+		return h.retrieveFromP2PCache(keys, retrieveData, fgIds, fgDataChan)
+	}
 	entityLabel := retrieveData.EntityLabel
 	cache, err := h.imcProvider.GetCache(entityLabel)
 	if err != nil {
@@ -277,6 +301,53 @@ func (h *RetrieveHandler) retrieveFromInMemoryCache(keys []*retrieve.Keys, retri
 	return missingDataKeys, nil
 }
 
+func (h *RetrieveHandler) retrieveFromP2PCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int], fgDataChan chan *FGData) ([]*retrieve.Keys, error) {
+	entityLabel := retrieveData.EntityLabel
+	metric.Count("feature.retrieve.cache.requests.total", 1, []string{"entity_name", entityLabel, "cache_type", "p2p"})
+
+	startTime := time.Now()
+	log.Debug().Msgf("Retrieving features from P2P cache for keys %v", keys)
+
+	cache, err := h.p2pCacheProvider.GetCache(entityLabel)
+	if err != nil {
+		return nil, err
+	}
+	metric.Count("feature.retrieve.cache.total", int64(len(keys)), []string{"entity_name", entityLabel, "cache_type", "p2p"})
+
+	cacheData, err := cache.MultiGetV2(entityLabel, keys)
+	log.Debug().Msgf("Retrieved features from P2P cache for keys %v, cacheData: %v", keys, cacheData)
+	if err != nil {
+		log.Error().Err(err).Msgf("Error while retrieving features from P2P cache for keys %v", keys)
+		return nil, err
+	}
+	missingDataKeys := make([]*retrieve.Keys, 0)
+	for i, key := range keys {
+		keyIdx := retrieveData.ReqKeyToIdx[getKeyString(key)]
+		serData := cacheData[i]
+		if len(serData) == 0 {
+			missingDataKeys = append(missingDataKeys, key)
+			continue
+		}
+		csdb, _ := blocks.CreateCSDBForInMemory(serData)
+		fgIdToDDB, _ := csdb.GetDeserializedPSDBForFGIds(retrieveData.ReqInMemCachedFGIds)
+		if fgIdToDDB != nil {
+			fgDataChan <- &FGData{
+				data:    retrieveData,
+				fgToDDB: fgIdToDDB,
+				keyIdx:  keyIdx,
+				opClose: false,
+			}
+		} else {
+			missingDataKeys = append(missingDataKeys, key)
+		}
+	}
+	metric.Count("feature.retrieve.cache.hit", int64(len(keys)-len(missingDataKeys)), []string{"entity_name", entityLabel, "cache_type", "p2p"})
+	metric.Count("feature.retrieve.cache.miss", int64(len(missingDataKeys)), []string{"entity_name", entityLabel, "cache_type", "p2p"})
+	log.Debug().Msgf("Missing data keys from P2P cache: %v", missingDataKeys)
+	metric.Timing("feature.retrieve.cache.latency", time.Since(startTime), []string{"entity_name", entityLabel, "cache_type", "p2p"})
+	return missingDataKeys, nil
+}
+
 func (h *RetrieveHandler) retrieveFromDistributedCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int], fgDataChan chan *FGData) ([]*retrieve.Keys, error) {
 	log.Debug().Msgf("Retrieving features from distributed cache for keys %v and fgIds %v", keys, fgIds)
 	entityLabel := retrieveData.EntityLabel
@@ -285,11 +356,37 @@ func (h *RetrieveHandler) retrieveFromDistributedCache(keys []*retrieve.Keys, re
 		return nil, err
 	}
 	var cacheData [][]byte
+	if h.distributedCacheCBProvider.IsCBEnabled(distributedCacheCBKey) && !h.distributedCacheCBProvider.IsCallAllowed(distributedCacheCBKey) {
+		log.Debug().Msgf("Circuit breaker is open, returning negative cache for all fgIds")
+		metric.Gauge("feature.retrieve.cb.open", 1, []string{"entity_name", entityLabel, "cb_key", distributedCacheCBKey})
+		for _, key := range keys {
+			keyIdx := retrieveData.ReqKeyToIdx[getKeyString(key)]
+			fgIdToDDB := make(map[int]*blocks.DeserializedPSDB)
+			fgIds.KeyIterator(func(fgId int) bool {
+				fgIdToDDB[fgId] = blocks.NegativeCacheDeserializePSDB()
+				return true
+			})
+			fgDataChan <- &FGData{
+				data:    retrieveData,
+				fgToDDB: fgIdToDDB,
+				keyIdx:  keyIdx,
+				opClose: false,
+			}
+		}
+		return nil, nil
+	}
+	metric.Gauge("feature.retrieve.cb.open", 0, []string{"entity_name", entityLabel, "cb_key", distributedCacheCBKey})
 	cacheData, err = cache.MultiGetV2(entityLabel, keys)
 	log.Debug().Msgf("Retrieved features from distributed cache for keys %v and fgIds %v, cacheData: %v", keys, fgIds, cacheData)
 	if err != nil {
+		if h.distributedCacheCBProvider.IsCBEnabled(distributedCacheCBKey) {
+			h.distributedCacheCBProvider.RecordFailure(distributedCacheCBKey)
+		}
 		log.Error().Err(err).Msgf("Error while retrieving features from distributed cache for keys %v and fgIds %v", keys, fgIds)
 		return nil, err
+	}
+	if h.distributedCacheCBProvider.IsCBEnabled(distributedCacheCBKey) {
+		h.distributedCacheCBProvider.RecordSuccess(distributedCacheCBKey)
 	}
 	missingDataKeys := make([]*retrieve.Keys, 0)
 	for i, key := range keys {
@@ -492,7 +589,8 @@ func preProcessForKeys(retrieveData *RetrieveData, configManager config.Manager)
 	query := retrieveData.Query
 	rows := make([]*retrieve.Row, len(query.Keys))
 	reqKeyToIdx := make(map[string]int, len(query.Keys))
-
+	uniquekeys := make([]*retrieve.Keys, 0)
+	keyToOriginalIndices := make(map[string][]int)
 	// Create a map of feature group properties for quick lookup
 	fgProps := make(map[string]struct {
 		id       int
@@ -523,8 +621,14 @@ func preProcessForKeys(retrieveData *RetrieveData, configManager config.Manager)
 	// Process each key
 	for i, key := range query.Keys {
 		keyStr := getKeyString(key)
-		reqKeyToIdx[keyStr] = i
 
+		if _, exists := keyToOriginalIndices[keyStr]; !exists {
+			uniquekeys = append(uniquekeys, key)
+			reqKeyToIdx[keyStr] = i
+			keyToOriginalIndices[keyStr] = make([]int, 0)
+		}
+
+		keyToOriginalIndices[keyStr] = append(keyToOriginalIndices[keyStr], i)
 		// Create row with pre-allocated columns
 		dt := make([][]byte, retrieveData.ReqColumnCount)
 		rows[i] = &retrieve.Row{
@@ -561,7 +665,8 @@ func preProcessForKeys(retrieveData *RetrieveData, configManager config.Manager)
 			}
 		}
 	}
-
+	retrieveData.UniqueKeys = uniquekeys
+	retrieveData.KeyToOriginalIndices = keyToOriginalIndices
 	retrieveData.ReqKeyToIdx = reqKeyToIdx
 	retrieveData.Result.Rows = rows
 	return nil
@@ -664,6 +769,8 @@ func preProcessFGs(retrieveData *RetrieveData, configManager config.Manager) err
 }
 
 func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks.DeserializedPSDB, keyIdx int) {
+	keyStr := getKeyString(data.Query.Keys[keyIdx])
+
 	for fgId, ddb := range fgToDDB {
 		if _, ok := data.ReqIdxToFgIdToDdb[keyIdx]; !ok {
 			data.ReqIdxToFgIdToDdb[keyIdx] = make(map[int]*blocks.DeserializedPSDB)
@@ -683,6 +790,7 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			featureLabelWithQuantType := data.ReqFGIdToFeatureLabelWithQuantType[fgId]
 			var version int
 			var err error
+
 			if ddb.NegativeCache || ddb.Expired {
 				version, err = h.config.GetActiveVersion(data.EntityLabel, fgId)
 				if err != nil {
@@ -697,6 +805,33 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 				log.Error().Err(err).Msgf("Error while getting sequence no for feature %s", featureLabel)
 				return
 			}
+			// Handle missing features (seq = -1)
+			if seq == -1 {
+				log.Warn().Msgf("Feature %s not found in version %d, switching to active version for default value", featureLabel, version)
+
+				// Get active version
+				version, err = h.config.GetActiveVersion(data.EntityLabel, fgId)
+				if err != nil {
+					log.Error().Err(err).Msgf("Error while getting active version for missing feature %s", featureLabel)
+					return
+				}
+				// Try to get sequence from active version
+				activeSeq, err := h.config.GetSequenceNo(data.EntityLabel, fgId, version, featureLabel)
+				if err != nil {
+					log.Error().Err(err).Msgf("Error while getting sequence no from active version for feature %s", featureLabel)
+					return
+				}
+				// if feature is not present in active version just return
+				if activeSeq == -1 {
+					log.Warn().Msgf("Feature %s is not available in active version", featureLabel)
+					return
+				}
+				// Feature exists in active version
+				seq = activeSeq
+				ddb.NegativeCache = true
+				metric.Count("online.feature.store.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel})
+			}
+
 			stringLengths, err := h.config.GetStringLengths(data.EntityLabel, fgId, int(version))
 			if err != nil {
 				log.Error().Err(err).Msgf("Error while getting string lengths for feature %s", featureLabel)
@@ -712,6 +847,7 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 				log.Error().Err(err).Msgf("Error while getting number of features for feature %s", featureLabel)
 				return
 			}
+
 			var fdata []byte
 			if ddb.NegativeCache || ddb.Expired {
 				fdata, err = h.config.GetDefaultValueByte(data.EntityLabel, fgId, int(version), featureLabel)
@@ -738,7 +874,9 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			}
 
 			colIdx := meta.(int)
-			data.Result.Rows[keyIdx].Columns[colIdx] = fdata
+			for _, idx := range data.KeyToOriginalIndices[keyStr] {
+				data.Result.Rows[idx].Columns[colIdx] = fdata
+			}
 		})
 	}
 }
@@ -754,11 +892,13 @@ func (h *RetrieveHandler) closeFeatureDataChannel(fgDataChan chan *FGData, retri
 	close(fgDataChan)
 }
 
-func (h *RetrieveHandler) persistToCache(entityLabel string, retrieveData *RetrieveData, fgIds ds.Set[int], missingKeys []*retrieve.Keys, isDistributed bool) {
+func (h *RetrieveHandler) persistToCache(entityLabel string, retrieveData *RetrieveData, fgIds ds.Set[int], missingKeys []*retrieve.Keys, isDistributed bool, isP2PEnabled bool) {
 	var cache caches.Cache
 	var err error
 
-	if isDistributed {
+	if isP2PEnabled {
+		cache, err = h.p2pCacheProvider.GetCache(entityLabel)
+	} else if isDistributed {
 		cache, err = h.dcProvider.GetCache(entityLabel)
 	} else {
 		cache, err = h.imcProvider.GetCache(entityLabel)
@@ -813,14 +953,14 @@ func (h *RetrieveHandler) persistToCache(entityLabel string, retrieveData *Retri
 	}
 }
 
-func (h *RetrieveHandler) persistToInMemoryCache(entityLabel string, retrieveData *RetrieveData, fgIds ds.Set[int], missingInMemKeys []*retrieve.Keys) {
+func (h *RetrieveHandler) persistToInMemoryCache(entityLabel string, retrieveData *RetrieveData, fgIds ds.Set[int], missingInMemKeys []*retrieve.Keys, isP2PEnabled bool) {
 	log.Debug().Msgf("Persisting to in memory cache for entity %s, fgIds %v, missingInMemKeys %v", entityLabel, fgIds, missingInMemKeys)
-	h.persistToCache(entityLabel, retrieveData, fgIds, missingInMemKeys, false)
+	h.persistToCache(entityLabel, retrieveData, fgIds, missingInMemKeys, false, isP2PEnabled)
 }
 
 func (h *RetrieveHandler) persistToDistributedCache(entityLabel string, retrieveData *RetrieveData, fgIds ds.Set[int], missingDistKeys []*retrieve.Keys) {
 	log.Debug().Msgf("Persisting to distributed cache for entity %s, fgIds %v, missingDistKeys %v", entityLabel, fgIds, missingDistKeys)
-	h.persistToCache(entityLabel, retrieveData, fgIds, missingDistKeys, true)
+	h.persistToCache(entityLabel, retrieveData, fgIds, missingDistKeys, true, false)
 }
 
 // ... existing code ...

@@ -21,34 +21,30 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '24'
 
-      - name: Cache npm dependencies
+      - name: Cache yarn dependencies
         uses: actions/cache@v3
         with:
           path: |
-            ~/.npm
+            ~/.cache/yarn
             trufflebox-ui/node_modules
-          key: ${{ runner.os }}-npm-${{ hashFiles('trufflebox-ui/package.json') }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('trufflebox-ui/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-npm-
+            ${{ runner.os }}-yarn-
 
       - name: Install dependencies
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+          yarn install
 
       - name: Run linter
-        run: npm run lint --if-present
+        run: yarn run lint --if-present
 
       - name: Run tests
-        run: npm test -- --passWithNoTests --watchAll=false || echo "No tests found or test command not available"
+        run: yarn test -- --passWithNoTests --watchAll=false || echo "No tests found or test command not available"
 
       - name: Build application
-        run: npm run build --if-present
+        run: yarn run build --if-present
 
       - name: Test Docker build
         run: |

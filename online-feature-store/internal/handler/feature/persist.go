@@ -3,6 +3,9 @@ package feature
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/compression"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config/enums"
@@ -15,14 +18,24 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/persist"
 	"github.com/rs/zerolog/log"
-	"sync"
-	"time"
 )
 
 var (
 	fpV2Once    sync.Once
 	fpV2Handler *PersistHandler
 )
+
+type InvalidEventError struct {
+	message string
+}
+
+func (e *InvalidEventError) Error() string {
+	return e.message
+}
+
+func NewInvalidEventError(message string) *InvalidEventError {
+	return &InvalidEventError{message: message}
+}
 
 type PersistHandler struct {
 	persist.FeatureServiceServer
@@ -159,16 +172,16 @@ func (p *PersistHandler) preProcessAndValidateFeatureSchema(persistData *Persist
 	entityLabel := persistData.EntityLabel
 
 	// Validate entity exists first
-	_, err := p.config.GetEntity(entityLabel)
-	if err != nil {
-		return fmt.Errorf("invalid entity %s: %w", entityLabel, err)
+	entityConf, err := p.config.GetEntity(entityLabel)
+	if err != nil || entityConf == nil {
+		return NewInvalidEventError(fmt.Sprintf("invalid entity %s: %v", entityLabel, err))
 	}
 	persistData.StoreIdToMaxColumnSize = make(map[string]int)
 
 	for _, fg := range query.FeatureGroupSchema {
-		fgConf, err := p.config.GetFeatureGroup(entityLabel, fg.Label)
-		if err != nil {
-			return fmt.Errorf("failed to get feature group %s: %w", fg.Label, err)
+		fgConf, ok := entityConf.FeatureGroups[fg.Label]
+		if !ok {
+			return NewInvalidEventError(fmt.Sprintf("feature group %s not found for entity : %s", fg.Label, entityLabel))
 		}
 		storeConf, err := p.config.GetStore(fgConf.StoreId)
 		if err != nil {
@@ -195,7 +208,7 @@ func (p *PersistHandler) preparePersistData(persistData *PersistData) error {
 			}
 			featureData, err := system.ParseFeatureValue(fgSchema.GetFeatureLabels(), data.GetFeatureValues()[fgIndex], persistData.AllFGIdToFgConf[fgId].DataType, persistData.AllFGIdToFgConf[fgId].FeatureMeta)
 			if err != nil {
-				return fmt.Errorf("failed to parse feature value for entity %s and feature group %s: %w", persistData.EntityLabel, fgSchema.GetLabel(), err)
+				return NewInvalidEventError(fmt.Sprintf("failed to parse feature value for entity %s and feature group %s: %v", persistData.EntityLabel, fgSchema.GetLabel(), err))
 			}
 			activeVersion, err := p.config.GetActiveVersion(persistData.EntityLabel, fgId)
 			if err != nil {
@@ -225,6 +238,7 @@ func (p *PersistHandler) PersistToDb(persistData *PersistData) error {
 	const batchSize = 100
 
 	for storeId, allRows := range persistData.StoreIdToRows {
+
 		store, err := p.dbProvider.GetStore(storeId)
 		if err != nil {
 			return fmt.Errorf("failed to get store for storeId %s: %w", storeId, err)
@@ -282,7 +296,7 @@ func (p *PersistHandler) processBatchesForRedis(store stores.Store, storeId, ent
 	// Check for any errors
 	for err := range errChan {
 		if err != nil {
-			return err
+			return fmt.Errorf("persist failed for redis store %s: %w", storeId, err)
 		}
 	}
 
@@ -321,7 +335,7 @@ func (p *PersistHandler) processRowsForScylla(wg *sync.WaitGroup, store stores.S
 	// Check for any errors
 	for err := range errChan {
 		if err != nil {
-			return fmt.Errorf("persist failed for store %s: %w", storeId, err)
+			return fmt.Errorf("persist failed for scylla store %s: %w", storeId, err)
 		}
 	}
 
