@@ -55,8 +55,8 @@ func planReadthroughGaussianBatched() {
 	flag.StringVar(&cpuProfile, "cpuprofile", "", "write cpu profile to this file")
 
 	flag.BoolVar(&enableBatching, "enable-batching", true, "enable read batching")
-	flag.IntVar(&batchWindowMicros, "batch-window-us", 5, "batch window in microseconds")
-	flag.IntVar(&maxBatchSize, "max-batch", 16, "max batch size")
+	flag.IntVar(&batchWindowMicros, "batch-window-us", 100, "batch window in microseconds")
+	flag.IntVar(&maxBatchSize, "max-batch", 1024, "max batch size")
 	flag.Parse()
 
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
