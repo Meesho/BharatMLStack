@@ -21,19 +21,10 @@ import (
 // O_DIRECT requires alignment to filesystem block size, not just sector size
 const alignmentSize = 4096
 
-// flushBufferPool provides pre-allocated aligned buffers for flushing
-// Each buffer is 256MB to comfortably handle 128MB buffer + alignment padding
-var flushBufferPool = sync.Pool{
-	New: func() interface{} {
-		size := 256 * 1024 * 1024 // 256MB
-		buf := allocAlignedBuffer(size)
-		return &buf
-	},
-}
-
 // openDirectIO opens a file with O_DIRECT and O_DSYNC flags
 // O_DIRECT: Bypasses OS page cache, writes directly to disk
 // O_DSYNC: Each write automatically syncs data to disk (eliminates need for explicit sync)
+// O_TRUNC: Truncates file to ensure it starts at offset 0 (4096-byte aligned) for O_DIRECT compliance
 // Note: O_APPEND is removed to allow manual offset tracking for file rotation
 func openDirectIO(path string) (*os.File, int64, error) {
 	// Ensure parent directory exists
@@ -42,18 +33,14 @@ func openDirectIO(path string) (*os.File, int64, error) {
 		return nil, 0, fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	// Open with O_DIRECT, O_DSYNC, O_WRONLY, O_CREAT (no O_APPEND - we track offset manually)
+	// Open with O_DIRECT, O_DSYNC, O_WRONLY, O_CREAT, O_TRUNC
+	// O_TRUNC ensures file starts at offset 0 (aligned) for O_DIRECT compliance
+	// This avoids alignment issues when opening existing files
 	fd, err := syscall.Open(path,
-		syscall.O_WRONLY|syscall.O_CREAT|syscall.O_DIRECT|syscall.O_DSYNC,
+		syscall.O_WRONLY|syscall.O_CREAT|syscall.O_TRUNC|syscall.O_DIRECT|syscall.O_DSYNC,
 		0644)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to open file with O_DIRECT: %w", err)
-	}
-
-	// Get initial file size if file exists (for offset tracking)
-	var initialOffset int64
-	if stat, err := os.Stat(path); err == nil {
-		initialOffset = stat.Size()
 	}
 
 	file := os.NewFile(uintptr(fd), path)
@@ -62,7 +49,8 @@ func openDirectIO(path string) (*os.File, int64, error) {
 		return nil, 0, fmt.Errorf("failed to create file descriptor")
 	}
 
-	return file, initialOffset, nil
+	// File is always truncated, so offset is always 0 (aligned)
+	return file, 0, nil
 }
 
 // allocAlignedBuffer allocates a byte slice aligned to filesystem block size (4096 bytes for ext4) for O_DIRECT
@@ -86,141 +74,38 @@ func allocAlignedBuffer(size int) []byte {
 	return buf[offset : offset+alignedSize]
 }
 
-// writeAligned writes data to file ensuring filesystem block size alignment (4096 bytes for ext4)
-// Pads data if necessary to meet alignment requirements
-// Uses pooled buffers to eliminate allocations (was 290 MB/sec!)
-func writeAligned(file *os.File, data []byte) (int, error) {
-	if len(data) == 0 {
-		return 0, nil
-	}
-
-	// Calculate aligned size (round up to alignment boundary)
-	alignedSize := ((len(data) + alignmentSize - 1) / alignmentSize) * alignmentSize
-
-	// If data is already aligned, write directly
-	if len(data) == alignedSize {
-		n, err := file.Write(data)
-		if err != nil {
-			return n, fmt.Errorf("direct I/O write failed: %w", err)
-		}
-		return n, nil
-	}
-
-	// Get buffer from pool (eliminates 290 MB/sec allocations!)
-	bufPtr := flushBufferPool.Get().(*[]byte)
-	alignedBuf := *bufPtr
-	defer flushBufferPool.Put(bufPtr)
-
-	// Ensure buffer is large enough
-	if cap(alignedBuf) < alignedSize {
-		// Pool buffer too small, allocate new one (should be rare)
-		alignedBuf = allocAlignedBuffer(alignedSize)
-	} else {
-		// Reuse pooled buffer
-		alignedBuf = alignedBuf[:alignedSize]
-	}
-
-	// Copy data and zero out padding
-	copy(alignedBuf, data)
-	for i := len(data); i < alignedSize; i++ {
-		alignedBuf[i] = 0
-	}
-
-	n, err := file.Write(alignedBuf[:alignedSize])
-	if err != nil {
-		return n, fmt.Errorf("direct I/O write failed: %w", err)
-	}
-
-	// Return actual data written (not including padding)
-	if n > len(data) {
-		return len(data), nil
-	}
-	return n, nil
-}
-
 // writevAlignedWithOffset writes multiple buffers to file at a specific offset using vectored I/O
 // Uses unix.Pwritev() - NO memory copy, just pointers! Maintains vectored I/O efficiency with offset control
-// This is the OPTIMAL implementation - reduces 8 syscalls to 1 with zero copy overhead
-// IMPORTANT: With O_DIRECT, buffers must be aligned to filesystem block size (4096 bytes for ext4)
+// OPTIMIZATION: Buffers are already address and size-aligned (4096 bytes) from NewBuffer(),
+// so no padding or buffer pooling is needed - true zero-copy!
 func writevAlignedWithOffset(fd int, buffers [][]byte, offset int64) (int, error) {
 	if len(buffers) == 0 {
 		return 0, nil
 	}
 
-	// Prepare aligned buffers - each buffer aligned independently
-	var alignedBuffers [][]byte
-	var totalActualSize int
-	var pooledBuffers []*[]byte // Track pooled buffers to return after write
-
+	// Filter out empty buffers
+	nonEmptyBuffers := make([][]byte, 0, len(buffers))
 	for _, buf := range buffers {
-		if len(buf) == 0 {
-			continue
-		}
-
-		totalActualSize += len(buf)
-		alignedSize := ((len(buf) + alignmentSize - 1) / alignmentSize) * alignmentSize
-
-		// Check size alignment for O_DIRECT
-		// Note: Address alignment is ensured by allocAlignedBuffer() for all buffers
-		if len(buf) == alignedSize {
-			// Already aligned, use directly (zero copy!)
-			alignedBuffers = append(alignedBuffers, buf)
-		} else {
-			// Buffer size is not aligned - pad to aligned size
-			// Copy to a properly aligned buffer from pool or allocate new one
-			bufPtr := flushBufferPool.Get().(*[]byte)
-			paddedBuf := *bufPtr
-
-			if cap(paddedBuf) < alignedSize {
-				// Pool buffer too small, allocate new aligned buffer
-				flushBufferPool.Put(bufPtr)
-				paddedBuf = allocAlignedBuffer(alignedSize)
-			} else {
-				// Use pooled buffer (already address-aligned from allocAlignedBuffer())
-				// Slicing preserves address alignment since base address doesn't change
-				paddedBuf = paddedBuf[:alignedSize]
-				pooledBuffers = append(pooledBuffers, bufPtr)
-			}
-
-			// Copy data into aligned buffer and zero-pad to aligned size
-			copy(paddedBuf, buf)
-			// Zero out padding bytes (compiler optimizes this loop)
-			for i := len(buf); i < alignedSize; i++ {
-				paddedBuf[i] = 0
-			}
-
-			alignedBuffers = append(alignedBuffers, paddedBuf)
+		if len(buf) > 0 {
+			nonEmptyBuffers = append(nonEmptyBuffers, buf)
 		}
 	}
 
-	// Return pooled buffers after write completes
-	defer func() {
-		for _, bufPtr := range pooledBuffers {
-			flushBufferPool.Put(bufPtr)
-		}
-	}()
-
-	if len(alignedBuffers) == 0 {
+	if len(nonEmptyBuffers) == 0 {
 		return 0, nil
 	}
 
+	// Buffers are already aligned (address and size), so we can write directly!
 	// Single vectored write syscall at specific offset - kernel reads from multiple buffers!
 	// unix.Pwritev takes [][]byte directly with offset - NO iovec creation needed, NO copying!
-	n, err := unix.Pwritev(fd, alignedBuffers, offset)
+	n, err := unix.Pwritev(fd, nonEmptyBuffers, offset)
 	if err != nil {
 		return n, fmt.Errorf("vectored I/O write failed: %w", err)
 	}
 
-	// Return actual data written (not including padding)
-	if n > totalActualSize {
-		return totalActualSize, nil
-	}
+	// Return actual bytes written by Pwritev
+	// Buffers are already 4096-byte aligned, so offset stays aligned after write
 	return n, nil
-}
-
-// isAligned checks if a size is aligned to the required boundary
-func isAligned(size int) bool {
-	return size%alignmentSize == 0
 }
 
 // alignSize rounds up size to the nearest alignment boundary
