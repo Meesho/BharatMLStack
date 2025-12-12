@@ -13,3 +13,9 @@ __pycache__/
 .internal-configs/
 .dev-toggle-state
 .go.mod.appended
+
+
+flashring/performance_results.csv
+flashring/mem.prof
+flashring/flashring
+flashring/flashringtest

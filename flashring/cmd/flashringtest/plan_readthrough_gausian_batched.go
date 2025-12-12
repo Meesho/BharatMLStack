@@ -41,12 +41,12 @@ func planReadthroughGaussianBatched() {
 	)
 
 	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul/", "data directory for shard files")
-	flag.IntVar(&numShards, "shards", 100, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 20_00_00, "keys per shard")
+	flag.IntVar(&numShards, "shards", 200, "number of shards")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 10_00_00, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 10, "file size in GiB per shard")
-	flag.IntVar(&readWorkers, "readers", 4, "number of read workers")
-	flag.IntVar(&writeWorkers, "writers", 4, "number of write workers")
+	flag.IntVar(&readWorkers, "readers", 8, "number of read workers")
+	flag.IntVar(&writeWorkers, "writers", 8, "number of write workers")
 	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
 	flag.Int64Var(&iterations, "iterations", 100_000_000, "number of iterations")
 	flag.Float64Var(&aVal, "a", 0.4, "a value for the predictor")
@@ -55,8 +55,8 @@ func planReadthroughGaussianBatched() {
 	flag.StringVar(&cpuProfile, "cpuprofile", "", "write cpu profile to this file")
 
 	flag.BoolVar(&enableBatching, "enable-batching", true, "enable read batching")
-	flag.IntVar(&batchWindowMicros, "batch-window-us", 0, "batch window in microseconds")
-	flag.IntVar(&maxBatchSize, "max-batch", 1000, "max batch size")
+	flag.IntVar(&batchWindowMicros, "batch-window-us", 2, "batch window in microseconds")
+	flag.IntVar(&maxBatchSize, "max-batch", 200, "max batch size")
 	flag.Parse()
 
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
@@ -108,7 +108,20 @@ func planReadthroughGaussianBatched() {
 		EnableBatching:    enableBatching,
 		BatchWindowMicros: batchWindowMicros,
 		MaxBatchSize:      maxBatchSize,
+
+		// Pass the metrics collector to record cache metrics
+		MetricsRecorder: InitMetricsCollector(),
 	}
+
+	// Set additional input parameters that the cache doesn't know about
+	metricsCollector.SetShards(numShards)
+	metricsCollector.SetKeysPerShard(keysPerShard)
+	metricsCollector.SetReadWorkers(readWorkers)
+	metricsCollector.SetWriteWorkers(writeWorkers)
+	metricsCollector.SetPlan("readthrough-batched")
+
+	// Start background goroutine to wait for shutdown signal and export CSV
+	go RunmetricsWaitForShutdown()
 
 	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, logStats)
 	if err != nil {

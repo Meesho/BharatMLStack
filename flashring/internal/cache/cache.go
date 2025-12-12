@@ -37,10 +37,11 @@ var (
 )
 
 type WrapCache struct {
-	shards     []*filecache.ShardCache
-	shardLocks []sync.RWMutex
-	predictor  *maths.Predictor
-	stats      []*CacheStats
+	shards          []*filecache.ShardCache
+	shardLocks      []sync.RWMutex
+	predictor       *maths.Predictor
+	stats           []*CacheStats
+	metricsRecorder MetricsRecorder
 }
 
 type CacheStats struct {
@@ -51,6 +52,29 @@ type CacheStats struct {
 	Expired                atomic.Uint64
 	ShardWiseActiveEntries atomic.Uint64
 	LatencyTracker         *filecache.LatencyTracker
+	BatchTracker           *filecache.BatchTracker
+}
+
+// MetricsRecorder is an interface for recording metrics from the cache
+// Implement this interface to receive metrics from the cache layer
+type MetricsRecorder interface {
+	// Input parameters
+	SetShards(value int)
+	SetKeysPerShard(value int)
+	SetReadWorkers(value int)
+	SetWriteWorkers(value int)
+	SetPlan(value string)
+
+	// Observation metrics
+	RecordRP99(value time.Duration)
+	RecordRP50(value time.Duration)
+	RecordRP25(value time.Duration)
+	RecordWP99(value time.Duration)
+	RecordWP50(value time.Duration)
+	RecordWP25(value time.Duration)
+	RecordRThroughput(value float64)
+	RecordWThroughput(value float64)
+	RecordHitRate(value float64)
 }
 
 type WrapCacheConfig struct {
@@ -66,6 +90,9 @@ type WrapCacheConfig struct {
 	EnableBatching    bool
 	BatchWindowMicros int // in microseconds
 	MaxBatchSize      int
+
+	// Optional metrics recorder
+	MetricsRecorder MetricsRecorder
 }
 
 func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*WrapCache, error) {
@@ -144,6 +171,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 	if config.EnableBatching && config.BatchWindowMicros > 0 {
 		batchWindow = time.Duration(config.BatchWindowMicros) * time.Microsecond
 	}
+	shardLocks := make([]sync.RWMutex, config.NumShards)
 	shards := make([]*filecache.ShardCache, config.NumShards)
 	for i := 0; i < config.NumShards; i++ {
 		shards[i] = filecache.NewShardCache(filecache.ShardCacheConfig{
@@ -161,20 +189,22 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 			EnableBatching: config.EnableBatching,
 			BatchWindow:    batchWindow,
 			MaxBatchSize:   config.MaxBatchSize,
-		})
+		}, &shardLocks[i])
 	}
-	shardLocks := make([]sync.RWMutex, config.NumShards)
+
 	stats := make([]*CacheStats, config.NumShards)
 	for i := 0; i < config.NumShards; i++ {
-		stats[i] = &CacheStats{LatencyTracker: filecache.NewLatencyTracker()}
+		stats[i] = &CacheStats{LatencyTracker: filecache.NewLatencyTracker(), BatchTracker: filecache.NewBatchTracker()}
 	}
 	wc := &WrapCache{
-		shards:     shards,
-		shardLocks: shardLocks,
-		predictor:  predictor,
-		stats:      stats,
+		shards:          shards,
+		shardLocks:      shardLocks,
+		predictor:       predictor,
+		stats:           stats,
+		metricsRecorder: config.MetricsRecorder,
 	}
 	if logStats {
+
 		go func() {
 			sleepDuration := 10 * time.Second
 			// perShardPrevTotalGets := make([]uint64, config.NumShards)
@@ -219,6 +249,25 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 				log.Info().Msgf("Combined Put Count: %v", combinedTotalPuts)
 				log.Info().Msgf("Combined Get Latencies - P25: %v, P50: %v, P99: %v", combinedGetP25, combinedGetP50, combinedGetP99)
 				log.Info().Msgf("Combined Put Latencies - P25: %v, P50: %v, P99: %v", combinedPutP25, combinedPutP50, combinedPutP99)
+
+				combinedGetBatchP25, combinedGetBatchP50, combinedGetBatchP99 := wc.shards[0].Stats.BatchTracker.GetBatchSizePercentiles()
+				log.Info().Msgf("Combined Get Batch Sizes - P25: %v, P50: %v, P99: %v", combinedGetBatchP25, combinedGetBatchP50, combinedGetBatchP99)
+
+				// Send metrics to the recorder if configured
+				if wc.metricsRecorder != nil {
+					rThroughput := float64(combinedTotalGets-combinedPrevTotalGets) / sleepDuration.Seconds()
+					wThroughput := float64(combinedTotalPuts-combinedPrevTotalPuts) / sleepDuration.Seconds()
+
+					wc.metricsRecorder.RecordRP25(combinedGetP25)
+					wc.metricsRecorder.RecordRP50(combinedGetP50)
+					wc.metricsRecorder.RecordRP99(combinedGetP99)
+					wc.metricsRecorder.RecordWP25(combinedPutP25)
+					wc.metricsRecorder.RecordWP50(combinedPutP50)
+					wc.metricsRecorder.RecordWP99(combinedPutP99)
+					wc.metricsRecorder.RecordRThroughput(rThroughput)
+					wc.metricsRecorder.RecordWThroughput(wThroughput)
+					wc.metricsRecorder.RecordHitRate(combinedHitRate)
+				}
 
 				combinedPrevTotalGets = combinedTotalGets
 				combinedPrevTotalPuts = combinedTotalPuts
@@ -291,9 +340,26 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 		wc.stats[shardIdx].LatencyTracker.RecordGet(time.Since(start))
 	}()
 
-	wc.shardLocks[shardIdx].Lock()
-	defer wc.shardLocks[shardIdx].Unlock()
-	keyFound, val, remainingTTL, expired, shouldReWrite := wc.shards[shardIdx].Get(key)
+	var keyFound bool
+	var val []byte
+	var remainingTTL uint16
+	var expired bool
+	var shouldReWrite bool
+	if wc.shards[shardIdx].BatchReader != nil {
+		reqChan := make(chan filecache.ReadResultV2, 1)
+		wc.shards[shardIdx].BatchReader.Requests <- &filecache.ReadRequestV2{
+			Key:    key,
+			Result: reqChan,
+		}
+		result := <-reqChan
+
+		keyFound, val, remainingTTL, expired, shouldReWrite = result.Found, result.Data, result.TTL, result.Expired, result.ShouldRewrite
+	} else {
+		wc.shardLocks[shardIdx].RLock()
+		defer wc.shardLocks[shardIdx].RUnlock()
+		keyFound, val, remainingTTL, expired, shouldReWrite = wc.shards[shardIdx].Get(key)
+	}
+
 	if keyFound && !expired {
 		wc.stats[shardIdx].Hits.Add(1)
 	}
@@ -301,7 +367,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 		wc.stats[shardIdx].Expired.Add(1)
 	}
 	wc.stats[shardIdx].TotalGets.Add(1)
-	if shouldReWrite {
+	if false && shouldReWrite {
 		wc.stats[shardIdx].ReWrites.Add(1)
 		wc.putLocked(shardIdx, h32, key, val, remainingTTL)
 	}

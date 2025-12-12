@@ -68,6 +68,7 @@ func (br *BatchReader) processBatches() {
 			return
 		case firstReq := <-br.requests:
 			batch := br.collectBatch(firstReq)
+			br.shardCache.Stats.BatchTracker.RecordBatchSize(len(batch))
 			br.executeBatch(batch)
 		}
 	}
@@ -77,19 +78,14 @@ func (br *BatchReader) collectBatch(firstReq *ReadRequest) []*ReadRequest {
 	batch := make([]*ReadRequest, 0, br.maxBatchSize)
 	batch = append(batch, firstReq)
 
-	deadline := time.Now().Add(br.batchWindow)
+	timer := time.NewTimer(br.batchWindow)
 
-	for len(batch) < br.maxBatchSize && time.Now().Before(deadline) {
+	for len(batch) < br.maxBatchSize {
 		select {
 		case req := <-br.requests:
 			batch = append(batch, req)
-		default:
-			// No more requests immediately available
-			if len(batch) >= 8 { // Have enough, execute now
-				return batch
-			}
-			// Small wait for more requests (100ns)
-			time.Sleep(50 * time.Nanosecond)
+		case <-timer.C:
+			return batch
 		}
 	}
 
@@ -129,10 +125,16 @@ func (br *BatchReader) executeBatch(batch []*ReadRequest) {
 	})
 
 	// Execute disk reads (could be parallelized or merged here)
+	var wg sync.WaitGroup
 	for _, req := range diskReads {
-		result := br.executeReadFromDisk(req)
-		req.Result <- result
+		wg.Add(1)
+		go func(r *ReadRequest) {
+			defer wg.Done()
+			result := br.executeReadFromDisk(r)
+			r.Result <- result
+		}(req)
 	}
+	wg.Wait()
 }
 
 func (br *BatchReader) executeReadFromDisk(req *ReadRequest) ReadResult {

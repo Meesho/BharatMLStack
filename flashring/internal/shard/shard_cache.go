@@ -3,6 +3,7 @@ package filecache
 import (
 	"fmt"
 	"hash/crc32"
+	"sync"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/allocators"
@@ -24,7 +25,7 @@ type ShardCache struct {
 	Stats             *Stats
 
 	//batching reads
-	batchReader *BatchReader
+	BatchReader *BatchReaderV2
 }
 
 type Stats struct {
@@ -39,6 +40,7 @@ type Stats struct {
 	DeletedKeyCount  int
 	BadCRCMemIds     map[uint32]int
 	BadKeyMemIds     map[uint32]int
+	BatchTracker     *BatchTracker
 }
 
 type ShardCacheConfig struct {
@@ -60,7 +62,7 @@ type ShardCacheConfig struct {
 	MaxBatchSize   int
 }
 
-func NewShardCache(config ShardCacheConfig) *ShardCache {
+func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 	filename := fmt.Sprintf("%s/%d.bin", config.Directory, time.Now().UnixNano())
 	punchHoleSize := config.MemtableSize
 	fsConf := fs.FileConfig{
@@ -102,15 +104,16 @@ func NewShardCache(config ShardCacheConfig) *ShardCache {
 			MemIdCount:   make(map[uint32]int),
 			BadCRCMemIds: make(map[uint32]int),
 			BadKeyMemIds: make(map[uint32]int),
+			BatchTracker: NewBatchTracker(),
 		},
 	}
 
 	// Initialize batch reader if enabled
 	if config.EnableBatching {
-		sc.batchReader = NewBatchReader(BatchReaderConfig{
+		sc.BatchReader = NewBatchReaderV2(BatchReaderV2Config{
 			BatchWindow:  config.BatchWindow,
 			MaxBatchSize: config.MaxBatchSize,
-		}, sc)
+		}, sc, sl)
 	}
 
 	return sc
@@ -141,7 +144,6 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 
 func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
-
 	if status == indices.StatusNotFound {
 		fc.Stats.KeyNotFoundCount++
 		return false, nil, 0, false, false
@@ -154,26 +156,6 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 
 	_, currMemId, _ := fc.mm.GetMemtable()
 	shouldReWrite := fc.predictor.Predict(uint64(freq), uint64(lastAccess), memId, currMemId)
-
-	// Use batching if enabled
-	if fc.batchReader != nil {
-		req := &ReadRequest{
-			Key:    key,
-			Length: length,
-			MemId:  memId,
-			Offset: offset,
-			Result: make(chan ReadResult, 1),
-		}
-
-		fc.batchReader.requests <- req
-		result := <-req.Result
-
-		if result.Error != nil {
-			return false, nil, 0, false, shouldReWrite
-		}
-
-		return result.Found, result.Data, remainingTTL, result.Expired, shouldReWrite
-	}
 
 	exists := true
 	var buf []byte
