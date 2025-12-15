@@ -30,6 +30,9 @@ Connector module for Flink 1.20.x.
 - **`FeatureEventSerialization`** — converts `FeatureEvent` → Protobuf bytes
 - **`FeatureEventKeySerialization`** — extracts Kafka key from `EntityLabel`
 - **`KafkaSinkFactory`** — builds a ready-to-use `KafkaSink<FeatureEvent>`
+- **`DataStreamFlink`** — validated wrapper around `DataStream<FeatureEvent>` that enforces Horizon validation
+- **`FeatureEventValidation`** — validates events against Horizon source mapping
+- **`HorizonClient`** — client for fetching feature mappings from Horizon API
 
 This simplifies class loading and ensures that Flink controls all Kafka behavior.
 
@@ -101,9 +104,51 @@ KafkaSink<FeatureEvent> sink = KafkaSinkFactory.create(
 
 ## Using It in a Flink Job
 
+### With Feature Mapping Validation (Recommended)
+
+Use `DataStreamFlink` to automatically validate all events against Horizon before sinking. Invalid events will cause the stream to fail with an exception.
+
 ```java
 DataStream<FeatureEvent> stream = ...;
-KafkaSink<FeatureEvent> sink = KafkaSinkFactory.create(...);
+
+// Create validated stream wrapper
+DataStreamFlink validatedStream = new DataStreamFlink(
+    stream,
+    cfg.getSourceMappingBaseUrl(), // Horizon API base URL
+    cfg.getJobId(),                 // Job ID for Horizon
+    cfg.getJobToken()               // Job token for Horizon
+);
+
+// Create Kafka sink
+KafkaSink<FeatureEvent> sink = KafkaSinkFactory.create(
+    cfg.getBootstrapServers(),
+    cfg.getTopic(),
+    cfg.getProducerProperties(),
+    cfg.isTransactional(),
+    "flink-feature-store-",
+    cfg.getSourceMappingBaseUrl(),
+    cfg.getJobId(),
+    cfg.getJobToken()
+);
+
+// Sink validated stream (invalid events will cause stream to fail)
+validatedStream.sinkTo(sink);
+```
+
+### Without Validation (Not Recommended)
+
+```java
+DataStream<FeatureEvent> stream = ...;
+KafkaSink<FeatureEvent> sink = KafkaSinkFactory.create(
+    cfg.getBootstrapServers(),
+    cfg.getTopic(),
+    cfg.getProducerProperties(),
+    cfg.isTransactional(),
+    "flink-feature-store-",
+    null, // horizonUrl (not used)
+    null, // jobId (not used)
+    null  // jobToken (not used)
+);
 stream.sinkTo(sink);
 ```
 
@@ -113,6 +158,14 @@ stream.sinkTo(sink);
 env.enableCheckpointing(60000);
 ```
 
+**Validation Features:**
+- ✅ Validates entity label exists in Horizon mapping
+- ✅ Validates keys schema matches Horizon expectations
+- ✅ Validates feature group label is registered
+- ✅ Validates feature labels are registered for the entity/feature group combination
+- ❌ **Invalid events cause the stream to fail** (throws RuntimeException)
+- Validation mapping is fetched once during initialization and cached
+
 ## Protobuf Schema
 
 **Located at:**
@@ -121,19 +174,17 @@ env.enableCheckpointing(60000);
 **Generated at:**
 - `target/generated-sources/protobuf/java/persist/`
 
-## TODO (Future Work)
+## Feature Mapping Validation
 
-### Feature Mapping Validation
+The SDK provides forceful validation of feature mappings against Horizon before events are written to Kafka:
 
-The SDK will soon introduce strict validation of the ingested features:
+- ✅ Validates entity label exists in Horizon mapping
+- ✅ Validates keys schema matches Horizon expectations
+- ✅ Validates feature group label is registered
+- ✅ Validates feature labels are registered for the entity/feature group combination
+- ❌ **Invalid events cause the stream to fail** (throws RuntimeException)
 
-- Validate entity label
-- Validate feature group label
-- Validate list of feature names
-- Validate feature data types (fp64, bool, string, vector, etc.)
-- Validate schema compliance
-
-This will prevent ingestion of invalid or unregistered features.
+This prevents ingestion of invalid or unregistered features. See the "Using It in a Flink Job" section above for usage examples with `DataStreamFlink`.
 
 
 ## Testing

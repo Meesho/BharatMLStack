@@ -45,6 +45,14 @@ public final class FeatureStoreClientConfig implements Serializable {
         public Builder producerProperties(Properties p) { this.props = p; return this; }
 
         public FeatureStoreClientConfig build() {
+            // Automatic validation - no need for client to call validate()
+            if (bootstrapServers == null || bootstrapServers.isEmpty()) {
+                throw new IllegalArgumentException("bootstrapServers is required");
+            }
+            if (topic == null || topic.isEmpty()) {
+                throw new IllegalArgumentException("topic is required");
+            }
+            
             return new FeatureStoreClientConfig(bootstrapServers, topic, transactional, props);
         }
     }
