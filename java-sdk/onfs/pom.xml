@@ -11,6 +11,5 @@
   <modules>
     <module>feature-store-core</module>
     <module>feature-store-flink-connector-sdk-flink1x</module>
-    <module>onfs-client</module>
   </modules>
 </project>
