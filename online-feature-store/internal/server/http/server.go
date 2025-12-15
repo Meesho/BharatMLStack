@@ -21,9 +21,17 @@ func Init() {
 			gin.SetMode(gin.ReleaseMode)
 		}
 		router = gin.New()
+
+		router.Use(gin.Recovery())
+		router.Use(gin.Logger())
+		// router.Use(AuthMiddleware())
+
 		router.GET("/health/self", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"message": "true"})
 		})
+
+		// Register API routes
+		RegisterRoutes(router)
 	})
 }
 
