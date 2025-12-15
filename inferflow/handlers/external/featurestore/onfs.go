@@ -40,16 +40,17 @@ func initFSConnection(fsConfig FSConfig) (*grpc.ClientConn, error) {
 	resolver.SetDefaultScheme(RESOLVER_DEFAULT_SCHEME)
 	var gConn *grpc.ClientConn
 	var err error
+	target := fsConfig.Host + ":" + fsConfig.Port
 	if fsConfig.PLAIN_TEXT {
-		gConn, err = grpc.Dial(
-			fsConfig.Host+":"+fsConfig.Port,
+		gConn, err = grpc.NewClient(
+			target,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
 		)
 	} else {
 		creds := credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})
-		gConn, err = grpc.Dial(
-			fsConfig.Host+":"+fsConfig.Port,
+		gConn, err = grpc.NewClient(
+			target,
 			grpc.WithTransportCredentials(creds),
 			grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
 		)
@@ -198,7 +199,7 @@ func buildQueryBatches(
 
 	idx := 0
 	for j, row := range featureComponentBuilder.UniqueEntityIds {
-		if featureComponentBuilder.InMemPresent[j] == false {
+		if !featureComponentBuilder.InMemPresent[j] {
 			batchGlobalIndexes[idx/fsConfig.BatchSize][idx%fsConfig.BatchSize] = j
 			batches[idx/fsConfig.BatchSize].Keys[idx%fsConfig.BatchSize] = &proto.Keys{Cols: featureComponentBuilder.EntitiesToKeyValuesMap[row]}
 			idx++

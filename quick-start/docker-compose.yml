@@ -2,12 +2,13 @@ version: '3.8'
 
 # BharatML Stack Application Versions
 # To test different versions, set environment variables:
-#   ONFS_VERSION=v1.2.3 HORIZON_VERSION=v2.1.0 NUMERIX_VERSION=v1.0.0 TRUFFLEBOX_VERSION=v1.0.5 docker-compose up
+#   ONFS_VERSION=v1.2.3 HORIZON_VERSION=v2.1.0 NUMERIX_VERSION=v1.0.0 TRUFFLEBOX_VERSION=v1.0.5 INFERFLOW_VERSION=v1.0.0 docker-compose up
 # Or modify the default values below:
 #   ONFS_VERSION: latest
 #   HORIZON_VERSION: latest
 #   NUMERIX_VERSION: latest
 #   TRUFFLEBOX_VERSION: latest
+#   INFERFLOW_VERSION: latest
 
 services:
   # Infrastructure Services
@@ -140,6 +141,8 @@ services:
       context: ./db-init
       dockerfile: Dockerfile
     container_name: db-init
+    environment:
+      - INIT_DUMMY_DATA=${INIT_DUMMY_DATA:-false}
     networks:
       - onfs-network
     depends_on:
@@ -324,8 +327,7 @@ services:
       - "8082:8082"
     environment:
       - APP_NAME=horizon
-      - APP_ENVIRONMENT=PROD
-      - APP_ENV=production
+      - APP_ENV=PROD
       - APP_PORT=8082
       - APP_LOG_LEVEL=DEBUG
       - APP_METRIC_SAMPLING_RATE=1
@@ -355,8 +357,14 @@ services:
       - SCYLLA_1_PASSWORD=
       - SCYLLA_1_USERNAME=
       - SCYLLA_ACTIVE_CONFIG_IDS=1
+      - REDIS_FAILOVER_ACTIVE_CONFIG_IDS=4
       - DISTRIBUTED_CACHE_ACTIVE_CONFIG_IDS=2
       - IN_MEMORY_CACHE_ACTIVE_CONFIG_IDS=3
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+      - HORIZON_APP_NAME=horizon
+      - NUMERIX_APP_NAME=numerix
+      - INFERFLOW_APP_NAME=inferflow
+      - IS_DUMMY_MODEL_ENABLED=true
     networks:
       - onfs-network
     depends_on:
@@ -418,6 +426,63 @@ services:
       start_period: 60s
     restart: "no"
 
+  inferflow:
+    image: ghcr.io/meesho/inferflow:${INFERFLOW_VERSION:-latest}
+    container_name: inferflow
+    ports:
+      - "8085:8085"
+    environment:
+      - APP_GC_PERCENTAGE=1
+      - ETCD_SERVER=http://etcd:2379
+      - ETCD_WATCHER_ENABLED=true
+      - IN_MEMORY_CACHE_SIZE_IN_BYTES=6000000000
+      - NUMERIX_CLIENT_V1_AUTHTOKEN=numerix
+      - NUMERIX_CLIENT_V1_BATCHSIZE=100
+      - NUMERIX_CLIENT_V1_DEADLINE_MS=5000
+      - NUMERIX_CLIENT_V1_HOST=numerix
+      - NUMERIX_CLIENT_V1_PLAINTEXT=true
+      - NUMERIX_CLIENT_V1_PORT=8083
+      - APP_ENV=prod
+      - APP_LOG_LEVEL=INFO
+      - APP_NAME=inferflow
+      - APP_PORT=8085
+      - DAG_TOPOLOGY_CACHE_SIZE=500
+      - DAG_TOPOLOGY_CACHE_TTL_SEC=300
+      - EXTERNAL_SERVICE_ONFS_FS_BATCH_SIZE=50
+      - EXTERNAL_SERVICE_ONFS_FS_CALLER_ID=inferflow
+      - EXTERNAL_SERVICE_ONFS_FS_CALLER_TOKEN=inferflow
+      - EXTERNAL_SERVICE_ONFS_FS_GRPC_PLAIN_TEXT=true
+      - EXTERNAL_SERVICE_ONFS_FS_HOST=onfs-api-server
+      - EXTERNAL_SERVICE_ONFS_FS_PORT=8089
+      - EXTERNAL_SERVICE_ONFS_FS_DEAD_LINE=200
+      - EXTERNAL_SERVICE_PREDATOR_PORT=8001
+      - EXTERNAL_SERVICE_PREDATOR_GRPC_PLAIN_TEXT=true
+      - EXTERNAL_SERVICE_PREDATOR_CALLER_ID=inferflow
+      - EXTERNAL_SERVICE_PREDATOR_CALLER_TOKEN=inferflow
+      - METRIC_SAMPLING_RATE=1
+    networks:
+      - onfs-network
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  inferflow-healthcheck:
+    image: alpine:latest
+    container_name: inferflow-healthcheck
+    networks:
+      - onfs-network
+    depends_on:
+      - inferflow
+    command: sh -c "apk add --no-cache curl && sleep infinity"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://inferflow:8085/health/self"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: "no"
+
   trufflebox-ui:
     image: ghcr.io/meesho/trufflebox-ui:${TRUFFLEBOX_VERSION:-latest}
     container_name: trufflebox
@@ -427,9 +492,9 @@ services:
       - REACT_APP_ENVIRONMENT=staging
       - REACT_APP_HORIZON_BASE_URL=http://localhost:8082
       - REACT_APP_ONLINE_FEATURE_STORE_ENABLED=true
-      - REACT_APP_INFERFLOW_ENABLED=false
-      - REACT_APP_NUMERIX_ENABLED=false
-      - REACT_APP_PREDATOR_ENABLED=false
+      - REACT_APP_INFERFLOW_ENABLED=true
+      - REACT_APP_NUMERIX_ENABLED=true
+      - REACT_APP_PREDATOR_ENABLED=true
       - REACT_APP_EMBEDDING_PLATFORM_ENABLED=false
     networks:
       - onfs-network
@@ -452,6 +517,41 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+
+  predator:
+    build:
+      context: ..
+      dockerfile: predator-dummy/Dockerfile
+    container_name: predator
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+    networks:
+      - onfs-network
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 8001 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  predator-healthcheck:
+    image: alpine:latest
+    container_name: predator-healthcheck
+    networks:
+      - onfs-network
+    depends_on:
+      - predator
+    command: sh -c "apk add --no-cache curl netcat-openbsd && sleep infinity"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "predator", "8001"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    restart: "no"
 
   # Optional: Management Tools
   kafka-ui:

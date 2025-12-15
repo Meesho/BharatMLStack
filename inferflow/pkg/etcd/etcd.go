@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	basePath          = "/config/inferflow/"
+	basePath          = "/config/inferflow/services/"
 	configPath        = "/model-config"
 	connectionTimeout = 30 * time.Second
 	envAppName        = "applicationName"

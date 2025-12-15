@@ -27,7 +27,7 @@ func InitServer(configs *configs.AppConfigs) {
 	// create the cmux object that will multiplex 2 protocols on same port
 	mux := cmux.New(listener)
 	// match gRPC requests, otherwise regular HTTP requests
-	grpcListener := mux.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
+	grpcListener := mux.Match(cmux.HTTP2())
 	httpListener := mux.Match(cmux.Any())
 
 	// GRPC Server :

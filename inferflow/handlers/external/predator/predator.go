@@ -3,7 +3,6 @@ package predator
 import (
 	"fmt"
 	"math/rand"
-	"strings"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/helix-client/pkg/clients/predator"
@@ -35,6 +34,8 @@ func InitPredatorHandler(configs *configs.AppConfigs) {
 		predatorConfigs := modelConfig.ComponentConfig.PredatorComponentConfig.Values()
 		for _, predatorConfig := range predatorConfigs {
 			predatorConfigMap := predatorConfig.(config.PredatorComponentConfig)
+			deadline := configs.Configs.ExternalServicePredator_Deadline
+			logger.Info(fmt.Sprintf("Deadline: %d", deadline))
 			if predatorConfigMap.ModelEndpoint != "" && !model_endpoints[predatorConfigMap.ModelEndpoint] {
 				model_endpoints[predatorConfigMap.ModelEndpoint] = true
 				config := &predator.Config{
@@ -43,6 +44,7 @@ func InitPredatorHandler(configs *configs.AppConfigs) {
 					PlainText:   configs.Configs.ExternalServicePredator_GrpcPlainText,
 					CallerId:    configs.Configs.ExternalServicePredator_CallerId,
 					CallerToken: configs.Configs.ExternalServicePredator_CallerToken,
+					DeadLine:    deadline,
 				}
 				client := predator.InitClient(i, config)
 				predatorClientMap[predatorConfigMap.ModelEndpoint] = &client
@@ -58,6 +60,7 @@ func InitPredatorHandler(configs *configs.AppConfigs) {
 							PlainText:   configs.Configs.ExternalServicePredator_GrpcPlainText,
 							CallerId:    configs.Configs.ExternalServicePredator_CallerId,
 							CallerToken: configs.Configs.ExternalServicePredator_CallerToken,
+							DeadLine:    deadline,
 						}
 						client := predator.InitClient(i, config)
 						predatorClientMap[modelEndPoint.EndPoint] = &client
@@ -68,19 +71,6 @@ func InitPredatorHandler(configs *configs.AppConfigs) {
 			}
 		}
 	}
-}
-
-func convertToValidJSON(configStr string) string {
-	properties := []string{"Host", "Port", "Deadline", "PlainText", "CallerId", "CallerToken", "BatchSize"}
-
-	result := configStr
-	for _, prop := range properties {
-		unquoted := prop + ":"
-		quoted := "\"" + prop + "\":"
-		result = strings.ReplaceAll(result, unquoted, quoted)
-	}
-
-	return result
 }
 
 func GetPredatorResponse(predatorReq *predator.PredatorRequest, endPoint string, endPoints []config.ModelEndpoint, errLoggingPercent int, compMetricTags []string) *predator.PredatorResponse {
