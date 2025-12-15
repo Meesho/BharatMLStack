@@ -30,9 +30,10 @@ Connector module for Flink 1.20.x.
 - **`FeatureEventSerialization`** — converts `FeatureEvent` → Protobuf bytes
 - **`FeatureEventKeySerialization`** — extracts Kafka key from `EntityLabel`
 - **`KafkaSinkFactory`** — builds a ready-to-use `KafkaSink<FeatureEvent>`
-- **`DataStreamFlink`** — validated wrapper around `DataStream<FeatureEvent>` that enforces Horizon validation
 - **`FeatureEventValidation`** — validates events against Horizon source mapping
-- **`HorizonClient`** — client for fetching feature mappings from Horizon API
+- **`HorizonClient`** (in `horizon` package) — client for fetching feature mappings from Horizon API
+- **`SourceMappingHolder`** (in `horizon` package) — thread-safe instance-based holder for source mapping response (supports multiple independent jobs)
+- **`EtcdWatcher`** (in `etcd` package) — monitors etcd for schema changes and automatically refreshes data in a SourceMappingHolder instance
 
 This simplifies class loading and ensures that Flink controls all Kafka behavior.
 
@@ -106,18 +107,50 @@ KafkaSink<FeatureEvent> sink = KafkaSinkFactory.create(
 
 ### With Feature Mapping Validation (Recommended)
 
-Use `DataStreamFlink` to automatically validate all events against Horizon before sinking. Invalid events will cause the stream to fail with an exception.
+Use `FeatureEventValidation` as a filter to automatically validate all events against Horizon before sinking. Invalid events are filtered out from the stream.
+
+**Important:** `FeatureEventValidation` uses a registry pattern to avoid Flink serialization issues. You must register the `SourceMappingHolder` with a unique key before creating the filter.
 
 ```java
+import com.bharatml.featurestore.connector.FeatureEventValidation;
+import com.bharatml.featurestore.connector.horizon.HorizonClient;
+import com.bharatml.featurestore.connector.horizon.SourceMappingHolder;
+import com.bharatml.featurestore.connector.etcd.EtcdWatcher;
+
 DataStream<FeatureEvent> stream = ...;
 
-// Create validated stream wrapper
-DataStreamFlink validatedStream = new DataStreamFlink(
-    stream,
-    cfg.getSourceMappingBaseUrl(), // Horizon API base URL
-    cfg.getJobId(),                 // Job ID for Horizon
-    cfg.getJobToken()               // Job token for Horizon
-);
+// Create HorizonClient
+HorizonClient horizonClient = new HorizonClient(horizonBaseUrl);
+
+// Create a SourceMappingHolder instance for this job
+SourceMappingHolder sourceMappingHolder = new SourceMappingHolder();
+
+// Initialize metadata from Horizon
+sourceMappingHolder.update(horizonClient.getHorizonResponse(jobId, jobToken));
+
+// Register the holder with a unique key (e.g., jobId)
+// This must be done before creating the Flink filter
+String holderKey = jobId; // Use a unique identifier for this job
+FeatureEventValidation.registerHolder(holderKey, sourceMappingHolder);
+
+// Optionally: Start etcd watcher to automatically refresh metadata on schema changes
+EtcdWatcher etcdWatcher = EtcdWatcher.builder()
+    .etcdEndpoint(etcdEndpoint)
+    .etcdUsername(etcdUsername)
+    .etcdPassword(etcdPassword)
+    .watchKey(watchKey)
+    .horizonClient(horizonClient)
+    .jobId(jobId)
+    .jobToken(jobToken)
+    .sourceMappingHolder(sourceMappingHolder)
+    .build();
+etcdWatcher.start();
+
+// Apply validation filter - pass only the key, not the holder instance
+// The filter will retrieve the holder from the registry in its open() method
+DataStream<FeatureEvent> validatedStream = stream
+    .filter(new FeatureEventValidation(holderKey))
+    .name("FeatureEventValidationFilter");
 
 // Create Kafka sink
 KafkaSink<FeatureEvent> sink = KafkaSinkFactory.create(
@@ -125,13 +158,10 @@ KafkaSink<FeatureEvent> sink = KafkaSinkFactory.create(
     cfg.getTopic(),
     cfg.getProducerProperties(),
     cfg.isTransactional(),
-    "flink-feature-store-",
-    cfg.getSourceMappingBaseUrl(),
-    cfg.getJobId(),
-    cfg.getJobToken()
+    "flink-feature-store-"
 );
 
-// Sink validated stream (invalid events will cause stream to fail)
+// Sink validated stream
 validatedStream.sinkTo(sink);
 ```
 
@@ -144,10 +174,7 @@ KafkaSink<FeatureEvent> sink = KafkaSinkFactory.create(
     cfg.getTopic(),
     cfg.getProducerProperties(),
     cfg.isTransactional(),
-    "flink-feature-store-",
-    null, // horizonUrl (not used)
-    null, // jobId (not used)
-    null  // jobToken (not used)
+    "flink-feature-store-"
 );
 stream.sinkTo(sink);
 ```
@@ -163,8 +190,81 @@ env.enableCheckpointing(60000);
 - ✅ Validates keys schema matches Horizon expectations
 - ✅ Validates feature group label is registered
 - ✅ Validates feature labels are registered for the entity/feature group combination
-- ❌ **Invalid events cause the stream to fail** (throws RuntimeException)
-- Validation mapping is fetched once during initialization and cached
+- ✅ **Invalid events are filtered out** (removed from stream, not causing failures)
+- Validation mapping is read from the `SourceMappingHolder` instance, which can be updated dynamically via `EtcdWatcher`
+- ✅ **Supports multiple independent jobs**: Each job can have its own `SourceMappingHolder` instance with different `jobId` and `jobToken`
+- ✅ **Flink-compatible**: Uses registry pattern to avoid serialization issues with Flink operators
+
+## Dynamic Source Mapping Updates with EtcdWatcher
+
+The `EtcdWatcher` monitors an etcd key prefix for changes and automatically refreshes the source mapping from Horizon when changes are detected. This allows the validation to use the latest schema without restarting the Flink job.
+
+```java
+// Create HorizonClient
+HorizonClient horizonClient = new HorizonClient(horizonBaseUrl);
+
+// Create a SourceMappingHolder instance
+SourceMappingHolder sourceMappingHolder = new SourceMappingHolder();
+
+// Initialize with current schema
+sourceMappingHolder.update(horizonClient.getHorizonResponse(jobId, jobToken));
+
+// Start etcd watcher to monitor schema changes using builder pattern
+EtcdWatcher etcdWatcher = EtcdWatcher.builder()
+    .etcdEndpoint(etcdEndpoint)      // etcd server endpoint
+    .etcdUsername(etcdUsername)      // etcd username
+    .etcdPassword(etcdPassword)      // etcd password
+    .watchKey(watchKey)              // etcd key prefix to watch (e.g., "/config/orion-v2/entities")
+    .horizonClient(horizonClient)    // HorizonClient instance
+    .jobId(jobId)                    // Job ID for Horizon API
+    .jobToken(jobToken)              // Job token for Horizon API
+    .sourceMappingHolder(sourceMappingHolder) // SourceMappingHolder instance to update
+    .build();
+etcdWatcher.start();
+
+// The watcher will automatically update the SourceMappingHolder instance when etcd changes are detected
+// FeatureEventValidation will use the updated schema for subsequent events
+```
+
+## Multiple Jobs Support
+
+Since `SourceMappingHolder` is instance-based and `FeatureEventValidation` uses a registry pattern, you can run multiple Flink jobs with different `jobId` and `jobToken` values, each maintaining its own independent source mapping:
+
+```java
+// Job 1 with its own source mapping
+HorizonClient client1 = new HorizonClient(horizonBaseUrl);
+SourceMappingHolder holder1 = new SourceMappingHolder();
+holder1.update(client1.getHorizonResponse(jobId1, jobToken1));
+FeatureEventValidation.registerHolder("job1", holder1);
+EtcdWatcher watcher1 = EtcdWatcher.builder()
+    .etcdEndpoint(etcdEndpoint)
+    .etcdUsername(etcdUsername)
+    .etcdPassword(etcdPassword)
+    .watchKey(watchKey)
+    .horizonClient(client1)
+    .jobId(jobId1)
+    .jobToken(jobToken1)
+    .sourceMappingHolder(holder1)
+    .build();
+FeatureEventValidation validation1 = new FeatureEventValidation("job1");
+
+// Job 2 with its own independent source mapping
+HorizonClient client2 = new HorizonClient(horizonBaseUrl);
+SourceMappingHolder holder2 = new SourceMappingHolder();
+holder2.update(client2.getHorizonResponse(jobId2, jobToken2));
+FeatureEventValidation.registerHolder("job2", holder2);
+EtcdWatcher watcher2 = EtcdWatcher.builder()
+    .etcdEndpoint(etcdEndpoint)
+    .etcdUsername(etcdUsername)
+    .etcdPassword(etcdPassword)
+    .watchKey(watchKey)
+    .horizonClient(client2)
+    .jobId(jobId2)
+    .jobToken(jobToken2)
+    .sourceMappingHolder(holder2)
+    .build();
+FeatureEventValidation validation2 = new FeatureEventValidation("job2");
+```
 
 ## Protobuf Schema
 
@@ -176,16 +276,17 @@ env.enableCheckpointing(60000);
 
 ## Feature Mapping Validation
 
-The SDK provides forceful validation of feature mappings against Horizon before events are written to Kafka:
+The SDK provides validation of feature mappings against Horizon before events are written to Kafka:
 
 - ✅ Validates entity label exists in Horizon mapping
 - ✅ Validates keys schema matches Horizon expectations
 - ✅ Validates feature group label is registered
 - ✅ Validates feature labels are registered for the entity/feature group combination
-- ❌ **Invalid events cause the stream to fail** (throws RuntimeException)
+- ✅ **Invalid events are filtered out** (removed from stream)
+- ✅ **Supports multiple independent jobs**: Each job maintains its own source mapping
+- ✅ **Flink-compatible**: Uses registry pattern to avoid serialization issues
 
-This prevents ingestion of invalid or unregistered features. See the "Using It in a Flink Job" section above for usage examples with `DataStreamFlink`.
-
+This prevents ingestion of invalid or unregistered features. The validation uses a `SourceMappingHolder` instance which can be updated dynamically via `EtcdWatcher` to reflect schema changes without restarting the Flink job.
 
 ## Testing
 

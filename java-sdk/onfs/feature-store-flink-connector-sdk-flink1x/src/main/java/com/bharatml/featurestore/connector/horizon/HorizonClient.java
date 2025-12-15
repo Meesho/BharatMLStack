@@ -1,6 +1,5 @@
-package com.bharatml.featurestore.connector;
+package com.bharatml.featurestore.connector.horizon;
 
-import com.bharatml.featurestore.connector.horizon.SourceMappingResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

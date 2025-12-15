@@ -21,16 +21,8 @@ public class StorageProviderData {
         return storageProvider;
     }
     
-    public void setStorageProvider(String storageProvider) {
-        this.storageProvider = storageProvider;
-    }
-    
     public List<BasePathData> getBasePath() {
         return basePath;
-    }
-    
-    public void setBasePath(List<BasePathData> basePath) {
-        this.basePath = basePath;
     }
     
     /**

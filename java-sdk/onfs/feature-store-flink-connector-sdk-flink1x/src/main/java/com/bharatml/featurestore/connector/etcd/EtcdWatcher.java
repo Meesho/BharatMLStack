@@ -1,201 +1,172 @@
 package com.bharatml.featurestore.connector.etcd;
 
-import com.bharatml.featurestore.connector.HorizonClient;
+import com.bharatml.featurestore.connector.horizon.HorizonClient;
 import com.bharatml.featurestore.connector.horizon.SourceMappingHolder;
 import com.bharatml.featurestore.connector.horizon.SourceMappingResponse;
 import io.etcd.jetcd.ByteSequence;
 import io.etcd.jetcd.Client;
+import io.etcd.jetcd.Watch;
 import io.etcd.jetcd.options.WatchOption;
+import io.etcd.jetcd.watch.WatchResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicReference;
+import java.nio.charset.StandardCharsets;
 
-/**
- * EtcdWatcher monitors an etcd key for changes and updates feature metadata
- * by calling Horizon API when changes are detected.
- * 
- * Usage:
- * <pre>
- * AtomicReference&lt;SourceMappingResponse&gt; metadataRef = new AtomicReference&lt;&gt;();
- * EtcdWatcher watcher = new EtcdWatcher(
- *     "http://localhost:2379",
- *     "username",
- *     "password",
- *     "/feature/schema",
- *     "http://horizon:8080",
- *     "jobId",
- *     "jobToken",
- *     metadataRef
- * );
- * watcher.start();
- * // ... later ...
- * watcher.stop();
- * </pre>
- */
 public class EtcdWatcher {
+
     private static final Logger logger = LoggerFactory.getLogger(EtcdWatcher.class);
-    
+
     private final String etcdEndpoint;
     private final String etcdUsername;
     private final String etcdPassword;
     private final String watchKey;
-    private final String horizonBaseUrl;
+    private final HorizonClient horizonClient;
     private final String jobId;
     private final String jobToken;
-    
+    private final SourceMappingHolder sourceMappingHolder;  // Add this field
+
     private Client etcdClient;
-    private volatile boolean isWatching = false;
-    private Thread watchThread;
-    
-    /**
-     * Creates a new EtcdWatcher instance.
-     * 
-     * @param etcdEndpoint etcd server endpoint
-     * @param etcdUsername etcd username for authentication
-     * @param etcdPassword etcd password for authentication
-     * @param watchKey etcd key to watch for changes
-     * @param horizonBaseUrl Horizon API base URL
-     * @param jobId job ID for Horizon API calls
-     * @param jobToken job token for Horizon API calls
-     */
+    private Watch.Watcher watcher;
+    private volatile boolean running;
+
     public EtcdWatcher(
             String etcdEndpoint,
             String etcdUsername,
             String etcdPassword,
             String watchKey,
-            String horizonBaseUrl,
+            HorizonClient horizonClient,
             String jobId,
-            String jobToken) {
+            String jobToken,
+            SourceMappingHolder sourceMappingHolder  // Add this parameter
+    ) {
         this.etcdEndpoint = etcdEndpoint;
         this.etcdUsername = etcdUsername;
         this.etcdPassword = etcdPassword;
         this.watchKey = watchKey;
-        this.horizonBaseUrl = horizonBaseUrl;
+        this.horizonClient = horizonClient;
         this.jobId = jobId;
         this.jobToken = jobToken;
+        this.sourceMappingHolder = sourceMappingHolder;  // Initialize the field
     }
-    
-    /**
-     * Starts watching the etcd key for changes.
-     * This method is non-blocking and starts a background thread.
-     * 
-     * @throws IllegalStateException if already watching
-     * @throws RuntimeException if etcd client initialization fails
-     */
-    public void start() {
-        if (isWatching) {
-            throw new IllegalStateException("EtcdWatcher is already watching");
+
+    public static Builder builder(){ return new Builder(); }
+
+    public synchronized void start() {
+        if (running) {
+            throw new IllegalStateException("EtcdWatcher already running");
         }
-        
+
         try {
-            // Initialize etcd client
             etcdClient = Client.builder()
                     .endpoints(etcdEndpoint)
-                    .user(ByteSequence.from(etcdUsername.getBytes()))
-                    .password(ByteSequence.from(etcdPassword.getBytes()))
+                    .user(ByteSequence.from(etcdUsername, StandardCharsets.UTF_8))
+                    .password(ByteSequence.from(etcdPassword, StandardCharsets.UTF_8))
                     .build();
-            
-            // Start watching in a background thread
-            isWatching = true;
-            watchThread = new Thread(this::watchLoop, "EtcdWatcher-" + watchKey);
-            watchThread.setDaemon(true);
-            watchThread.start();
-            
-            logger.info("Started watching etcd key: {}", watchKey);
+
+            WatchOption option = WatchOption.builder()
+                    .isPrefix(true)
+                    .build();
+
+            ByteSequence key = ByteSequence.from(watchKey, StandardCharsets.UTF_8);
+
+            watcher = etcdClient.getWatchClient().watch(key, option, new Watch.Listener() {
+
+                @Override
+                public void onNext(WatchResponse response) {
+                    logger.info(
+                            "etcd change detected under prefix {}",
+                            watchKey
+                    );
+
+                    // ANY change triggers mapping refresh by calling Horizon
+                    refreshSourceMapping();
+                }
+
+                @Override
+                public void onError(Throwable throwable) {
+                    logger.error("etcd watch error for prefix {}", watchKey, throwable);
+                }
+
+                @Override
+                public void onCompleted() {
+                    logger.info("etcd watch completed for prefix {}", watchKey);
+                }
+            });
+
+            running = true;
+            logger.info("Started etcd watcher for prefix {}", watchKey);
+
         } catch (Exception e) {
-            isWatching = false;
-            logger.error("Failed to start etcd watcher", e);
-            throw new RuntimeException("Failed to start etcd watcher: " + e.getMessage(), e);
+            logger.error("Failed to start etcd watcher for prefix {}", watchKey, e);
+            throw new RuntimeException(e);
         }
     }
-    
-    /**
-     * Stops watching the etcd key and closes the etcd client.
-     */
-    public void stop() {
-        if (!isWatching) {
-            return;
+
+    public synchronized void stop() {
+        running = false;
+
+        if (watcher != null) {
+            try {
+                watcher.close();
+            } catch (Exception e) {
+                logger.error("Error closing etcd watcher", e);
+            }
         }
-        
-        isWatching = false;
-        
+
         if (etcdClient != null) {
             try {
                 etcdClient.close();
-                logger.info("Stopped watching etcd key: {}", watchKey);
             } catch (Exception e) {
-                logger.warn("Error closing etcd client", e);
+                logger.error("Error closing etcd client", e);
             }
         }
-        
-        if (watchThread != null) {
-            watchThread.interrupt();
-        }
-    }
-    
-    /**
-     * Main watch loop that monitors etcd for changes.
-     */
-    private void watchLoop() {
-        try {
-            ByteSequence key = ByteSequence.from(watchKey.getBytes());
-            
-            // Watch for PUT + DELETE events on this key
-            WatchOption options = WatchOption.builder()
-                    .isPrefix(false)   // Watch specific key, not prefix
-                    .build();
-            
-            etcdClient.getWatchClient().watch(key, options, response -> {
-                if (!response.getEvents().isEmpty()) {
-                    logger.info("🔄 Change detected in etcd key: {}", watchKey);
-                    updateFeatureMetadata();
-                }
-            });
-            
-            logger.info("👀 Watching etcd key: {}", watchKey);
-            
-            // Keep the watcher running until stopped
-            while (isWatching) {
-                Thread.sleep(1000);
-            }
-        } catch (InterruptedException e) {
-            logger.info("EtcdWatcher thread interrupted, stopping watch");
-            Thread.currentThread().interrupt();
-        } catch (Exception e) {
-            logger.error("Error in etcd watch loop", e);
-            isWatching = false;
-        }
-    }
-    
-    /**
-     * Updates the feature metadata by calling Horizon API.
-     * This method is thread-safe and updates the AtomicReference.
-     */
-    private void updateFeatureMetadata() {
-        try {
-            logger.info("Fetching updated feature metadata from Horizon (jobId: {})", jobId);
-            
-            HorizonClient horizonClient = new HorizonClient(horizonBaseUrl);
-            SourceMappingResponse updatedResponse = horizonClient.getHorizonResponse(jobId, jobToken);
 
-            //Automatically updates with the bew response
-            SourceMappingHolder.update(updatedResponse);
+        logger.info("Stopped etcd watcher for prefix {}", watchKey);
+    }
 
-            logger.info("Successfully updated feature metadata from Horizon");
+    private void refreshSourceMapping() {
+        try {
+            logger.info("Calling Horizon to refresh metadata (jobId={})", jobId);
+
+            SourceMappingResponse response =
+                    horizonClient.getHorizonResponse(jobId, jobToken);
+
+            sourceMappingHolder.update(response);  // Use instance method instead of static
+
+            logger.info("Horizon response updated successfully");
+
         } catch (IOException | InterruptedException e) {
-            logger.error("Failed to update feature metadata from Horizon: {}", e.getMessage(), e);
-            // Don't throw exception - allow watcher to continue
+            logger.error("Failed to refresh metadata from Horizon", e);
         }
     }
-    
-    /**
-     * Checks if the watcher is currently active.
-     * 
-     * @return true if watching, false otherwise
-     */
-    public boolean isWatching() {
-        return isWatching;
+
+    public boolean isRunning() {
+        return running;
+    }
+
+    public static class Builder {
+        private String etcdEndpoint;
+        private String etcdUsername;
+        private String etcdPassword;
+        private String watchKey;
+        private HorizonClient horizonClient;
+        private String jobId;
+        private String jobToken;
+        private SourceMappingHolder sourceMappingHolder;
+
+        public Builder etcdEndpoint(String ep) { this.etcdEndpoint = ep; return this; }
+        public Builder etcdUsername(String u) { this.etcdUsername = u; return this; }
+        public Builder etcdPassword(String p) { this.etcdPassword = p; return this; }
+        public Builder watchKey(String w) { this.watchKey = w; return this; }
+        public Builder horizonClient(HorizonClient h) { this.horizonClient = h; return this; }
+        public Builder jobId(String id) { this.jobId = id; return this; }
+        public Builder jobToken(String t) { this.jobToken = t; return this; }
+        public Builder sourceMappingHolder(SourceMappingHolder sm) { this.sourceMappingHolder= sm; return this; }
+
+        public EtcdWatcher build() {
+            return new EtcdWatcher(etcdEndpoint, etcdUsername, etcdPassword, watchKey, horizonClient, jobId, jobToken, sourceMappingHolder);
+        }
     }
 }
