@@ -6,6 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/online-feature-store/internal/system"
+	"github.com/cespare/xxhash/v2"
+
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/blocks"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/models"
@@ -260,6 +263,7 @@ func (s *ScyllaStore) getRetrievePreparedStatement(keyspace, table string, fgCol
 	if query == "" {
 		query = buildRetrieveQueryTemplate(keyspace, table, fgColumns, idColumns)
 		s.queryCache.Set(key, query)
+		metric.Count("retrieve_query_cache_miss", 1, []string{"table", table})
 	}
 
 	// Create query based on session type
@@ -298,8 +302,35 @@ func buildPersistQueryTemplate(keyspace, table string, preparedColumns []string,
 	return query
 }
 
+func unorderedHashXXH64(values []string) uint64 {
+	var h uint64 = 0
+	for _, v := range values {
+		h += xxhash.Sum64String(v)
+	}
+	return h
+}
 func getRetrievePreparedStatementKey(keyspace, table string, retrieveColumns, idColumns []string) string {
-	return keyspace + table + strings.Join(retrieveColumns, "") + strings.Join(idColumns, "") + "retrieve"
+	h := xxhash.New()
+	// Fixed parts (order matters here)
+	_, _ = h.WriteString(keyspace)
+	_, _ = h.WriteString(table)
+
+	// Unordered (order should NOT matter)
+	// The generated hash will be the same for any unique combination of columns, regardless of order.
+	// For example: [seg_1, seg_2, seg_3] and [seg_2, seg_1, seg_3] will produce the same hash.
+	retrieveHash := unorderedHashXXH64(retrieveColumns)
+	idHash := unorderedHashXXH64(idColumns)
+
+	// add both
+	buf := make([]byte, 16)
+	system.ByteOrder.PutUint64(buf[:8], retrieveHash)
+	system.ByteOrder.PutUint64(buf[8:], idHash)
+	_, _ = h.Write(buf)
+
+	_, _ = h.WriteString("retrieve")
+
+	// final hex
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 func getPersistPreparedStatementKey(keyspace, table string, persistColumns []string) string {
