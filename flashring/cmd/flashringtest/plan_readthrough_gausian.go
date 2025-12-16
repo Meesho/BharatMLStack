@@ -94,7 +94,20 @@ func planReadthroughGaussian() {
 		ReWriteScoreThreshold: 0.8,
 		GridSearchEpsilon:     0.0001,
 		SampleDuration:        time.Duration(sampleSecs) * time.Second,
+
+		// Pass the metrics collector to record cache metrics
+		MetricsRecorder: InitMetricsCollector(),
 	}
+
+	// Set additional input parameters that the cache doesn't know about
+	metricsCollector.SetShards(numShards)
+	metricsCollector.SetKeysPerShard(keysPerShard)
+	metricsCollector.SetReadWorkers(readWorkers)
+	metricsCollector.SetWriteWorkers(writeWorkers)
+	metricsCollector.SetPlan("readthrough")
+
+	// Start background goroutine to wait for shutdown signal and export CSV
+	go RunmetricsWaitForShutdown()
 
 	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, logStats)
 	if err != nil {

@@ -55,9 +55,10 @@ type MetricChannels struct {
 
 // MetricAverager maintains running averages for a metric
 type MetricAverager struct {
-	mu    sync.RWMutex
-	sum   float64
-	count int64
+	mu        sync.RWMutex
+	sum       float64
+	count     int64
+	lastValue float64
 }
 
 func (ma *MetricAverager) Add(value float64) {
@@ -68,6 +69,7 @@ func (ma *MetricAverager) Add(value float64) {
 	defer ma.mu.Unlock()
 	ma.sum += value
 	ma.count++
+	ma.lastValue = value
 }
 
 func (ma *MetricAverager) AddDuration(value time.Duration) {
@@ -87,6 +89,12 @@ func (ma *MetricAverager) Average() float64 {
 		return 0
 	}
 	return ma.sum / float64(ma.count)
+}
+
+func (ma *MetricAverager) Latest() float64 {
+	ma.mu.RLock()
+	defer ma.mu.RUnlock()
+	return ma.lastValue
 }
 
 func (ma *MetricAverager) Reset() {
@@ -132,7 +140,7 @@ func NewMetricsCollector(bufferSize int) *MetricsCollector {
 	}
 
 	// Initialize averagers for each metric
-	metricNames := []string{"RP99", "RP50", "RP25", "WP99", "WP50", "WP25", "RThroughput", "WThroughput", "HitRate", "CPUUsage", "MemoryUsage"}
+	metricNames := []string{"RThroughput", "RP99", "RP50", "RP25", "WThroughput", "WP99", "WP50", "WP25", "HitRate", "CPUUsage", "MemoryUsage"}
 	for _, name := range metricNames {
 		mc.averagers[name] = &MetricAverager{}
 	}
@@ -274,8 +282,8 @@ func (mc *MetricsCollector) GetAveragedMetrics() RunMetrics {
 		WP99:         time.Duration(mc.averagers["WP99"].Average()),
 		WP50:         time.Duration(mc.averagers["WP50"].Average()),
 		WP25:         time.Duration(mc.averagers["WP25"].Average()),
-		RThroughput:  mc.averagers["RThroughput"].Average(),
-		WThroughput:  mc.averagers["WThroughput"].Average(),
+		RThroughput:  mc.averagers["RThroughput"].Latest(),
+		WThroughput:  mc.averagers["WThroughput"].Latest(),
 		HitRate:      mc.averagers["HitRate"].Average(),
 		CPUUsage:     mc.averagers["CPUUsage"].Average(),
 		MemoryUsage:  mc.averagers["MemoryUsage"].Average(),
@@ -390,8 +398,8 @@ func logResultsToCSV() error {
 	// The list of all your column headers
 	header := []string{
 		"SHARDS", "KEYS_PER_SHARD", "READ_WORKERS", "WRITE_WORKERS", "PLAN",
-		"R_P99", "R_P50", "R_P25", "W_P99", "W_P50", "W_P25",
-		"R_THROUGHPUT", "W_THROUGHPUT", "HIT_RATE", "CPU", "MEMORY", "TIME",
+		"R_THROUGHPUT", "R_P99", "R_P50", "R_P25", "W_THROUGHPUT", "W_P99", "W_P50", "W_P25",
+		"HIT_RATE", "CPU", "MEMORY", "TIME",
 	}
 
 	// Determine if the file is new (or empty) and needs the header
@@ -412,14 +420,16 @@ func logResultsToCSV() error {
 		currentMetrics.Plan,
 
 		// Observation Parameters (convert floats to strings)
+		fmt.Sprintf("%v", currentMetrics.RThroughput),
 		fmt.Sprintf("%v", currentMetrics.RP99),
 		fmt.Sprintf("%v", currentMetrics.RP50),
 		fmt.Sprintf("%v", currentMetrics.RP25),
+
+		fmt.Sprintf("%v", currentMetrics.WThroughput),
 		fmt.Sprintf("%v", currentMetrics.WP99),
 		fmt.Sprintf("%v", currentMetrics.WP50),
 		fmt.Sprintf("%v", currentMetrics.WP25),
-		fmt.Sprintf("%v", currentMetrics.RThroughput),
-		fmt.Sprintf("%v", currentMetrics.WThroughput),
+
 		fmt.Sprintf("%v", currentMetrics.HitRate),
 		fmt.Sprintf("%v", currentMetrics.CPUUsage),
 		fmt.Sprintf("%v", currentMetrics.MemoryUsage),

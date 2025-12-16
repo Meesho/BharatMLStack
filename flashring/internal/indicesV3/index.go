@@ -2,6 +2,7 @@ package indicesv2
 
 import (
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
@@ -21,7 +22,7 @@ const (
 )
 
 type Index struct {
-	rm       map[uint64]int
+	rm       sync.Map
 	rb       *RingBuffer
 	mc       *maths.MorrisLogCounter
 	startAt  int64
@@ -32,9 +33,9 @@ func NewIndex(hashBits int, rbInitial, rbMax, deleteAmortizedStep int) *Index {
 	if ByteOrder == nil {
 		loadByteOrder()
 	}
-	rm := make(map[uint64]int)
+	// rm := make(map[uint64]int)
 	return &Index{
-		rm:       rm,
+		rm:       sync.Map{},
 		rb:       NewRingBuffer(rbInitial, rbMax),
 		mc:       maths.New(12),
 		startAt:  time.Now().Unix(),
@@ -51,15 +52,15 @@ func (i *Index) Put(key string, length, ttlInMinutes uint16, memId, offset uint3
 	delta := uint16(expiryAt - (i.startAt / 60))
 	encode(key, length, delta, lastAccess, freq, memId, offset, entry)
 
-	if headIdx, ok := i.rm[hlo]; !ok {
+	if headIdx, ok := i.rm.Load(hlo); !ok {
 		encodeHashNextPrev(hhi, hlo, -1, -1, hashNextPrev)
-		i.rm[hlo] = idx
+		i.rm.Store(hlo, idx)
 		return
 	} else {
-		_, headHashNextPrev, _ := i.rb.Get(headIdx)
+		_, headHashNextPrev, _ := i.rb.Get(int(headIdx.(int)))
 		encodeUpdatePrev(int32(idx), headHashNextPrev)
-		encodeHashNextPrev(hhi, hlo, -1, int32(headIdx), hashNextPrev)
-		i.rm[hlo] = idx
+		encodeHashNextPrev(hhi, hlo, -1, int32(headIdx.(int)), hashNextPrev)
+		i.rm.Store(hlo, idx)
 		return
 	}
 
@@ -67,8 +68,8 @@ func (i *Index) Put(key string, length, ttlInMinutes uint16, memId, offset uint3
 
 func (i *Index) Get(key string) (length, lastAccess, remainingTTL uint16, freq uint64, memId, offset uint32, status Status) {
 	hhi, hlo := hash128(key)
-	if idx, ok := i.rm[hlo]; ok {
-		entry, hashNextPrev, _ := i.rb.Get(idx)
+	if idx, ok := i.rm.Load(hlo); ok {
+		entry, hashNextPrev, _ := i.rb.Get(int(idx.(int)))
 		for {
 			if isHashMatch(hhi, hlo, hashNextPrev) {
 				length, deltaExptime, lastAccess, freq, memId, offset := decode(entry)
@@ -102,9 +103,9 @@ func (ix *Index) Delete(count int) (uint32, int) {
 		}
 		delMemId, _ := decodeMemIdOffset(deleted)
 		deletedHlo := decodeHashLo(deletedHashNextPrev)
-		mapIdx, ok := ix.rm[deletedHlo]
-		if ok && mapIdx == deletedIdx {
-			delete(ix.rm, deletedHlo)
+		mapIdx, ok := ix.rm.Load(deletedHlo)
+		if ok && mapIdx.(int) == deletedIdx {
+			ix.rm.Delete(deletedHlo)
 		} else if ok && hasPrev(deletedHashNextPrev) {
 			prevIdx := decodePrev(deletedHashNextPrev)
 			_, hashNextPrev, _ := ix.rb.Get(int(prevIdx))
