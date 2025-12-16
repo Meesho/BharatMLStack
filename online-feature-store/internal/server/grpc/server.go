@@ -3,13 +3,10 @@ package grpc
 import (
 	"net"
 	"net/http"
-	"os"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/handler/feature"
-	httpserver "github.com/Meesho/BharatMLStack/online-feature-store/internal/server/http"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/p2p"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/persist"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
@@ -24,7 +21,6 @@ import (
 type Server struct {
 	GRPCServer  *grpc.Server
 	HTTPHandler *gin.Engine
-	enableHTTP  bool
 }
 
 var (
@@ -35,52 +31,29 @@ var (
 // Init initializes the gRPC and HTTP server with the given middlewares if any
 func Init() {
 	once.Do(func() {
+		// Create a gRPC server with the logger and recovery middleware
+		grpcServer := grpc.NewServer(
+			grpc.ChainUnaryInterceptor(ServerInterceptor, RecoveryInterceptor),
+		)
 
 		env := viper.GetString("APP_ENV")
 		if env == "prod" || env == "production" {
 			gin.SetMode(gin.ReleaseMode)
 		}
 
-		// HTTP - Use string comparison (more reliable for env vars)
-		enableHTTPStr := strings.ToLower(strings.TrimSpace(viper.GetString("ENABLE_HTTP_API")))
-		enableHTTP := enableHTTPStr == "true" || enableHTTPStr == "1"
-
 		// Create a Gin router
 		router := gin.New()
-		router.Use(gin.Recovery())
-		router.Use(gin.Logger())
 
 		// Create HTTP routes and handlers using Gin
 		router.GET("/health/self", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"message": "true"})
 		})
 
-		if enableHTTP {
-			log.Info().Msg("HTTP API mode enabled - initializing HTTP server")
-			httpserver.Init()
-			log.Info().Msg("HTTP API routes registered")
-		} else {
-			log.Info().Msg("gRPC API mode enabled (default)")
-			log.Warn().
-				Str("ENABLE_HTTP_API_env", os.Getenv("ENABLE_HTTP_API")).
-				Str("enableHTTPStr", enableHTTPStr).
-				Msg("HTTP API mode DISABLED - using gRPC mode")
-			grpcServer := grpc.NewServer(
-				grpc.ChainUnaryInterceptor(ServerInterceptor, RecoveryInterceptor),
-			)
-			server = &Server{
-				GRPCServer:  grpcServer,
-				HTTPHandler: router,
-				enableHTTP:  false,
-			}
-			return
-		}
 		server = &Server{
-			GRPCServer:  nil,
-			HTTPHandler: httpserver.Instance(),
-			enableHTTP:  true,
+			GRPCServer:  grpcServer,
+			HTTPHandler: router,
 		}
-		log.Info().Msg("HTTP API server initialized successfully")
+
 	})
 }
 
@@ -96,10 +69,6 @@ func (server *Server) Run() error {
 		log.Panic().Msgf("Failed to start the application - Failed to listen: %v", err)
 	}
 
-	if server.enableHTTP {
-		return http.Serve(listener, server.HTTPHandler)
-	}
-
 	// Create a cmux multiplexer that will multiplex 2 protocols on same port
 	mux := cmux.New(listener)
 
@@ -112,6 +81,7 @@ func (server *Server) Run() error {
 	persist.RegisterFeatureServiceServer(server.GRPCServer, feature.InitPersistHandler())
 	p2p.RegisterP2PCacheServiceServer(server.GRPCServer, feature.InitP2PCacheHandler())
 	reflection.Register(server.GRPCServer)
+
 	// Start listeners for each protocol
 	// Start the gRPC server in a separate goroutine
 	go func() {
