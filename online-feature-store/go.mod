@@ -1,13 +1,12 @@
 module github.com/Meesho/BharatMLStack/online-feature-store
 
-go 1.22.0
-
-toolchain go1.22.8
+go 1.24.4
 
 require (
 	github.com/DataDog/datadog-go/v5 v5.5.0
 	github.com/Meesho/gocql v1.15.3
 	github.com/apache/arrow/go/v17 v17.0.0
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/confluentinc/confluent-kafka-go/v2 v2.6.1
 	github.com/coocood/freecache v1.2.4
 	github.com/failsafe-go/failsafe-go v0.6.9
@@ -33,7 +32,6 @@ require (
 	github.com/bits-and-blooms/bitset v1.14.3 // indirect
 	github.com/bytedance/sonic v1.11.6 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
-	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
