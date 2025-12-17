@@ -29,23 +29,16 @@ func RegisterRoutes(router *gin.Engine) {
 }
 
 // createContextWithAuth creates a context with authentication metadata from HTTP headers
-func createContextWithAuth(c *gin.Context) (context.Context, error) {
-	callerId := c.GetHeader("online-feature-store-caller-id")
-	authToken := c.GetHeader("online-feature-store-auth-token")
-
-	if callerId == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "online-feature-store-caller-id header is missing")
-	}
-	if authToken == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "online-feature-store-auth-token header is missing")
-	}
+func createContextWithAuth(c *gin.Context) context.Context {
+	callerId := c.GetHeader(callerIdHeader)
+	authToken := c.GetHeader(AuthTokenHeader)
 
 	md := metadata.New(map[string]string{
-		"online-feature-store-caller-id":  callerId,
-		"online-feature-store-auth-token": authToken,
+		callerIdHeader:  callerId,
+		AuthTokenHeader: authToken,
 	})
 
-	return metadata.NewIncomingContext(c.Request.Context(), md), nil
+	return metadata.NewIncomingContext(c.Request.Context(), md)
 }
 
 // handleError converts gRPC errors to HTTP responses
