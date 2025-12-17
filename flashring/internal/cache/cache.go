@@ -33,7 +33,7 @@ var (
 	ErrMemtableSizeNotMultipleOf4KB = fmt.Errorf("memtable size must be a multiple of 4KB")
 	ErrFileSizeLessThan1            = fmt.Errorf("file size must be greater than 0")
 	ErrFileSizeNotMultipleOf4KB     = fmt.Errorf("file size must be a multiple of 4KB")
-	Seed                            = strconv.Itoa(int(time.Now().UnixNano()))
+	Seed                            = xxhash.Sum64String(strconv.Itoa(int(time.Now().UnixNano())))
 )
 
 type WrapCache struct {
@@ -307,6 +307,76 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*Wr
 	return wc, nil
 }
 
+func (wc *WrapCache) PutLL(key string, value []byte, exptimeInMinutes uint16) error {
+
+	h32 := wc.Hash(key)
+	shardIdx := h32 % uint32(len(wc.shards))
+	start := time.Now()
+
+	result := filecache.ErrorPool.Get().(chan error)
+
+	wc.shards[shardIdx].WriteCh <- &filecache.WriteRequestV2{
+		Key:              key,
+		Value:            value,
+		ExptimeInMinutes: exptimeInMinutes,
+		Result:           result,
+	}
+
+	if h32%100 < 10 {
+		wc.stats[shardIdx].ShardWiseActiveEntries.Store(uint64(wc.shards[shardIdx].GetRingBufferActiveEntries()))
+	}
+
+	op := <-result
+	filecache.ErrorPool.Put(result)
+	wc.stats[shardIdx].TotalPuts.Add(1)
+	wc.stats[shardIdx].LatencyTracker.RecordPut(time.Since(start))
+	return op
+}
+
+func (wc *WrapCache) GetLL(key string) ([]byte, bool, bool) {
+	h32 := wc.Hash(key)
+	shardIdx := h32 % uint32(len(wc.shards))
+
+	start := time.Now()
+
+	found, value, _, expired, needsSlowPath := wc.shards[shardIdx].GetFastPath(key)
+
+	if !needsSlowPath {
+		if found && !expired {
+			wc.stats[shardIdx].Hits.Add(1)
+		} else if expired {
+			wc.stats[shardIdx].Expired.Add(1)
+		}
+
+		wc.stats[shardIdx].TotalGets.Add(1)
+		wc.stats[shardIdx].LatencyTracker.RecordGet(time.Since(start))
+		return value, found, expired
+	}
+
+	result := filecache.ReadResultPool.Get().(chan filecache.ReadResultV2)
+
+	req := filecache.ReadRequestPool.Get().(*filecache.ReadRequestV2)
+	req.Key = key
+	req.Result = result
+
+	wc.shards[shardIdx].ReadCh <- req
+	op := <-result
+
+	filecache.ReadResultPool.Put(result)
+	filecache.ReadRequestPool.Put(req)
+
+	if op.Found && !op.Expired {
+		wc.stats[shardIdx].Hits.Add(1)
+	}
+	if op.Expired {
+		wc.stats[shardIdx].Expired.Add(1)
+	}
+	wc.stats[shardIdx].LatencyTracker.RecordGet(time.Since(start))
+	wc.stats[shardIdx].TotalGets.Add(1)
+
+	return op.Data, op.Found, op.Expired
+}
+
 func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) error {
 
 	h32 := wc.Hash(key)
@@ -376,8 +446,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 }
 
 func (wc *WrapCache) Hash(key string) uint32 {
-	nKey := key + Seed
-	return uint32(xxhash.Sum64String(nKey))
+	return uint32(xxhash.Sum64String(key) ^ Seed)
 }
 
 func (wc *WrapCache) GetShardCache(shardIdx int) *filecache.ShardCache {

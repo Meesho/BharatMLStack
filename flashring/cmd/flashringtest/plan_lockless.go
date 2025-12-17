@@ -18,7 +18,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func planReadthroughGaussian() {
+func planLockless() {
 	var (
 		mountPoint         string
 		numShards          int
@@ -37,7 +37,7 @@ func planReadthroughGaussian() {
 
 	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul/", "data directory for shard files")
 	flag.IntVar(&numShards, "shards", 500, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 4_00_00, "keys per shard")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 10_00_00, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 2, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 8, "number of read workers")
@@ -104,7 +104,7 @@ func planReadthroughGaussian() {
 	metricsCollector.SetKeysPerShard(keysPerShard)
 	metricsCollector.SetReadWorkers(readWorkers)
 	metricsCollector.SetWriteWorkers(writeWorkers)
-	metricsCollector.SetPlan("readthrough")
+	metricsCollector.SetPlan("lockless")
 
 	// Start background goroutine to wait for shutdown signal and export CSV
 	go RunmetricsWaitForShutdown()
@@ -138,7 +138,7 @@ func planReadthroughGaussian() {
 
 		key := fmt.Sprintf("key%d", k)
 		val := []byte(fmt.Sprintf(str1kb, k))
-		if err := pc.Put(key, val, 60); err != nil {
+		if err := pc.PutLL(key, val, 60); err != nil {
 			panic(err)
 		}
 		if k%5000000 == 0 {
@@ -157,7 +157,7 @@ func planReadthroughGaussian() {
 				for mk := range missedKeyChanList[workerID] {
 					key := fmt.Sprintf("key%d", mk)
 					val := []byte(fmt.Sprintf(str1kb, mk))
-					if err := pc.Put(key, val, 60); err != nil {
+					if err := pc.PutLL(key, val, 60); err != nil {
 						panic(err)
 					}
 				}
@@ -175,7 +175,7 @@ func planReadthroughGaussian() {
 				for k := 0; k < totalKeys*MULTIPLIER; k += 1 {
 					randomval := normalDistIntPartitioned(workerID, readWorkers, totalKeys)
 					key := fmt.Sprintf("key%d", randomval)
-					val, found, expired := pc.Get(key)
+					val, found, expired := pc.GetLL(key)
 
 					if !found {
 						writeWorkerid := randomval % writeWorkers
