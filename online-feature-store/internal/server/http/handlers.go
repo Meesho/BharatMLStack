@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/handler/feature"
-	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/p2p"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/persist"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
 	"github.com/gin-gonic/gin"
@@ -26,11 +25,6 @@ func RegisterRoutes(router *gin.Engine) {
 
 		// Feature persistence endpoint (mirroring gRPC PersistFeatureService)
 		api.POST("/features/persist", handlePersistFeatures)
-
-		// P2P Cache endpoints (mirroring gRPC P2PCacheService)
-		api.GET("/p2p/cluster-configs/:entity_label", handleGetClusterConfigs)
-		api.POST("/p2p/cache/get", handleGetP2PCacheValues)
-		api.POST("/p2p/cache/set", handleSetP2PCacheValues)
 	}
 }
 
@@ -190,98 +184,6 @@ func handlePersistFeatures(c *gin.Context) {
 
 	handler := feature.InitPersistHandler()
 	result, err := handler.PersistFeatures(ctx, &query)
-	if err != nil {
-		handleError(c, err)
-		return
-	}
-
-	jsonBytes, err := protojson.Marshal(result)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to marshal result to JSON")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize response"})
-		return
-	}
-
-	c.Data(http.StatusOK, "application/json", jsonBytes)
-}
-
-// handleGetClusterConfigs handles GET /api/v1/p2p/cluster-configs/:entity_label
-func handleGetClusterConfigs(c *gin.Context) {
-	ctx, err := createContextWithAuth(c)
-	if err != nil {
-		handleError(c, err)
-		return
-	}
-
-	entityLabel := c.Param("entity_label")
-	query := &p2p.Query{
-		EntityLabel: entityLabel,
-	}
-
-	handler := feature.InitP2PCacheHandler()
-	result, err := handler.GetClusterConfigs(ctx, query)
-	if err != nil {
-		handleError(c, err)
-		return
-	}
-
-	jsonBytes, err := protojson.Marshal(result)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to marshal result to JSON")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize response"})
-		return
-	}
-
-	c.Data(http.StatusOK, "application/json", jsonBytes)
-}
-
-// handleGetP2PCacheValues handles POST /api/v1/p2p/cache/get
-func handleGetP2PCacheValues(c *gin.Context) {
-	ctx, err := createContextWithAuth(c)
-	if err != nil {
-		handleError(c, err)
-		return
-	}
-
-	var query p2p.CacheQuery
-	if err := c.ShouldBindJSON(&query); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body: " + err.Error()})
-		return
-	}
-
-	handler := feature.InitP2PCacheHandler()
-	result, err := handler.GetP2PCacheValues(ctx, &query)
-	if err != nil {
-		handleError(c, err)
-		return
-	}
-
-	jsonBytes, err := protojson.Marshal(result)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to marshal result to JSON")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize response"})
-		return
-	}
-
-	c.Data(http.StatusOK, "application/json", jsonBytes)
-}
-
-// handleSetP2PCacheValues handles POST /api/v1/p2p/cache/set
-func handleSetP2PCacheValues(c *gin.Context) {
-	ctx, err := createContextWithAuth(c)
-	if err != nil {
-		handleError(c, err)
-		return
-	}
-
-	var query p2p.CacheKeyValue
-	if err := c.ShouldBindJSON(&query); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body: " + err.Error()})
-		return
-	}
-
-	handler := feature.InitP2PCacheHandler()
-	result, err := handler.SetP2PCacheValues(ctx, &query)
 	if err != nil {
 		handleError(c, err)
 		return

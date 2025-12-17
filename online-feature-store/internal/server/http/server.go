@@ -24,7 +24,7 @@ func Init() {
 
 		router.Use(gin.Recovery())
 		router.Use(gin.Logger())
-		// router.Use(AuthMiddleware())
+		router.Use(AuthMiddleware())
 
 		router.GET("/health/self", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"message": "true"})

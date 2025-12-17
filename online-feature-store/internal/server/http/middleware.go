@@ -5,7 +5,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AuthMiddleware validates authentication headers (mirrors gRPC ServerInterceptor)
+const (
+	callerIdHeader  = "online-feature-store-caller-id"
+	AuthTokenHeader = "online-feature-store-auth-token"
+)
+
+// AuthMiddleware validates authentication headers
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Skip auth for health check
@@ -14,17 +19,17 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		callerId := c.GetHeader("online-feature-store-caller-id")
-		authToken := c.GetHeader("online-feature-store-auth-token")
+		callerId := c.GetHeader(callerIdHeader)
+		authToken := c.GetHeader(AuthTokenHeader)
 
 		if callerId == "" {
-			c.JSON(400, gin.H{"error": "online-feature-store-caller-id header is missing"})
+			c.JSON(400, gin.H{"error": callerIdHeader + " header is missing"})
 			c.Abort()
 			return
 		}
 
 		if authToken == "" {
-			c.JSON(400, gin.H{"error": "online-feature-store-auth-token header is missing"})
+			c.JSON(400, gin.H{"error": AuthTokenHeader + " header is missing"})
 			c.Abort()
 			return
 		}

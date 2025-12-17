@@ -1,30 +1,23 @@
 package main
 
 import (
-	"net"
 	"net/http"
 	_ "net/http/pprof"
-	"strconv"
 	"strings"
 
 	featureConfig "github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/repositories/provider"
-	"github.com/Meesho/BharatMLStack/online-feature-store/internal/handler/feature"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/server/grpc"
 	httpserver "github.com/Meesho/BharatMLStack/online-feature-store/internal/server/http"
+	muxserver "github.com/Meesho/BharatMLStack/online-feature-store/internal/server/mux"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/system"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/etcd"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/infra"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/logger"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
-	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/p2p"
-	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/persist"
-	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
 	"github.com/rs/zerolog/log"
-	"github.com/soheilhy/cmux"
 	"github.com/spf13/viper"
-	"google.golang.org/grpc/reflection"
 )
 
 const configManagerVersion = 1
@@ -61,7 +54,7 @@ func main() {
 	}
 	provider.InitProvider(configManager, etcd.Instance())
 
-	// HTTP API check
+	// Check if HTTP API should be enabled
 	enableHTTPStr := strings.ToLower(strings.TrimSpace(viper.GetString("ENABLE_HTTP_API")))
 	enableHTTP := enableHTTPStr == "true" || enableHTTPStr == "1"
 
@@ -72,48 +65,16 @@ func main() {
 		grpc.Init()
 		httpserver.Init()
 
-		if !viper.IsSet("APP_PORT") {
-			log.Panic().Msgf("Failed to start the application - APP_PORT is not set")
-		}
-		port := viper.GetInt("APP_PORT")
-
-		listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+		// Initialize and run mux server
+		mux, err := muxserver.Init()
 		if err != nil {
-			log.Panic().Msgf("Failed to start the application - Failed to listen: %v", err)
+			log.Panic().Err(err).Msg("Failed to initialize mux server")
 		}
 
-		// cmux for both gRPC & HTTP on same port
-		mux := cmux.New(listener)
+		mux.RegisterServices()
 
-		// cmux listener for HTTP connections
-		httpListener := mux.Match(cmux.HTTP1Fast())
-		// cmux listener for gRPC connections
-		grpcListener := mux.Match(cmux.HTTP2(), cmux.HTTP2HeaderField("content-type", "application/grpc"), cmux.Any())
-
-		// register gRPC services
-		grpcServer := grpc.Instance().GRPCServer
-		retrieve.RegisterFeatureServiceServer(grpcServer, feature.InitV1())
-		persist.RegisterFeatureServiceServer(grpcServer, feature.InitPersistHandler())
-		p2p.RegisterP2PCacheServiceServer(grpcServer, feature.InitP2PCacheHandler())
-		reflection.Register(grpcServer)
-
-		// start HTTP server in a separate goroutine
-		go func() {
-			if err := http.Serve(httpListener, httpserver.Instance()); err != nil {
-				log.Panic().Msgf("Failed to serve HTTP server: %v", err)
-			}
-		}()
-
-		// start gRPC server in a separate goroutine
-		go func() {
-			if err := grpcServer.Serve(grpcListener); err != nil {
-				log.Panic().Msgf("Failed to serve gRPC server: %v", err)
-			}
-		}()
-
-		log.Info().Int("port", port).Msg("HTTP and gRPC servers started via cmux")
-		if err := mux.Serve(); err != nil {
-			log.Panic().Err(err).Msg("Error from running cmux server")
+		if err := mux.Run(); err != nil {
+			log.Panic().Err(err).Msg("Error from running mux server")
 		}
 	} else {
 		log.Info().Msg("gRPC API mode enabled (default)")
