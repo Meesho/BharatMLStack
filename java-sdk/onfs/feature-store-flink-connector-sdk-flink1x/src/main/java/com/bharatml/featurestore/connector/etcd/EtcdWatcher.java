@@ -25,7 +25,7 @@ public class EtcdWatcher {
     private final HorizonClient horizonClient;
     private final String jobId;
     private final String jobToken;
-    private final SourceMappingHolder sourceMappingHolder;  // Add this field
+    private final SourceMappingHolder sourceMappingHolder;
 
     private Client etcdClient;
     private Watch.Watcher watcher;
@@ -39,7 +39,7 @@ public class EtcdWatcher {
             HorizonClient horizonClient,
             String jobId,
             String jobToken,
-            SourceMappingHolder sourceMappingHolder  // Add this parameter
+            SourceMappingHolder sourceMappingHolder
     ) {
         this.etcdEndpoint = etcdEndpoint;
         this.etcdUsername = etcdUsername;
@@ -48,7 +48,7 @@ public class EtcdWatcher {
         this.horizonClient = horizonClient;
         this.jobId = jobId;
         this.jobToken = jobToken;
-        this.sourceMappingHolder = sourceMappingHolder;  // Initialize the field
+        this.sourceMappingHolder = sourceMappingHolder;
     }
 
     public static Builder builder(){ return new Builder(); }
@@ -133,7 +133,7 @@ public class EtcdWatcher {
             SourceMappingResponse response =
                     horizonClient.getHorizonResponse(jobId, jobToken);
 
-            sourceMappingHolder.update(response);  // Use instance method instead of static
+            sourceMappingHolder.update(response);
 
             logger.info("Horizon response updated successfully");
 
