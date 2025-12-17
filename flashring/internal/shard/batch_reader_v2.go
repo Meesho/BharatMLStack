@@ -20,6 +20,13 @@ type ReadResultV2 struct {
 	Error         error
 }
 
+type WriteRequestV2 struct {
+	Key              string
+	Value            []byte
+	ExptimeInMinutes uint16
+	Result           chan error
+}
+
 type BatchReaderV2 struct {
 	Requests     chan *ReadRequestV2
 	batchWindow  time.Duration
@@ -33,6 +40,32 @@ type BatchReaderV2 struct {
 type BatchReaderV2Config struct {
 	BatchWindow  time.Duration
 	MaxBatchSize int
+}
+
+var ReadRequestPool = sync.Pool{
+	New: func() interface{} {
+		return &ReadRequestV2{}
+	},
+}
+
+var ReadResultPool = sync.Pool{
+	New: func() interface{} {
+		return make(chan ReadResultV2, 1)
+	},
+}
+
+var ErrorPool = sync.Pool{
+	New: func() interface{} {
+		return make(chan error, 1)
+	},
+}
+
+var BufPool = sync.Pool{
+	New: func() interface{} {
+		// Allocate max expected size - use pointer to avoid allocation on Put
+		buf := make([]byte, 4096)
+		return &buf
+	},
 }
 
 func NewBatchReaderV2(config BatchReaderV2Config, sc *ShardCache, sl *sync.RWMutex) *BatchReaderV2 {
