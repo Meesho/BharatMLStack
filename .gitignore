@@ -6,6 +6,9 @@ dist/
 .idea/
 workspace/
 __pycache__/
+java-sdk/onfs/feature-store-orchestrator/target/
+java-sdk/onfs/feature-store-flink-connector-sdk-flink1x/target/
+java-sdk/onfs/feature-store-core/target/
 
 # Dev toggle script artifacts
 .internal-configs/
