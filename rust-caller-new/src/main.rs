@@ -8,7 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tonic::{
-    metadata::{metadata_value::Ascii, MetadataValue},
+    metadata::AsciiMetadataValue,
     transport::{Channel, Endpoint},
 };
 use tower_http::cors::CorsLayer;
@@ -32,8 +32,8 @@ struct ApiResponse {
 struct AppState {
     client: RetrieveClient<Channel>,
     // Pre-built metadata values to avoid allocations on every request
-    auth_token: MetadataValue<Ascii>,
-    caller_id: MetadataValue<Ascii>,
+    auth_token: AsciiMetadataValue,
+    caller_id: AsciiMetadataValue,
 }
 
 impl AppState {
@@ -42,8 +42,8 @@ impl AppState {
         // This avoids string allocations on every request
         Ok(Self {
             client,
-            auth_token: MetadataValue::from_static("atishay"),
-            caller_id: MetadataValue::from_static("test-3"),
+            auth_token: AsciiMetadataValue::from_static("atishay"),
+            caller_id: AsciiMetadataValue::from_static("test-3"),
         })
     }
 }
@@ -78,8 +78,8 @@ async fn retrieve_features(State(state): State<Arc<AppState>>)
 
 async fn retrieve_features_internal(
     client: &mut RetrieveClient<Channel>,
-    auth_token: &MetadataValue<Ascii>,
-    caller_id: &MetadataValue<Ascii>,
+    auth_token: &AsciiMetadataValue,
+    caller_id: &AsciiMetadataValue,
 ) -> Result<retrieve::Result, Box<dyn std::error::Error>> {
     // Build request with minimal allocations - use string literals where possible
     let mut request = tonic::Request::new(Query {
