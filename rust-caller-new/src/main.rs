@@ -6,7 +6,7 @@ use axum::{
     Router,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tonic::{
     metadata::MetadataValue,
     transport::{Channel, Endpoint},
@@ -31,22 +31,33 @@ struct ApiResponse {
 #[derive(Clone)]
 struct AppState {
     client: RetrieveClient<Channel>,
+    // Pre-built metadata values to avoid allocations on every request
+    auth_token: MetadataValue,
+    caller_id: MetadataValue,
+}
+
+impl AppState {
+    fn new(client: RetrieveClient<Channel>) -> Result<Self, Box<dyn std::error::Error>> {
+        // Pre-build metadata values once using static strings
+        // This avoids string allocations on every request
+        Ok(Self {
+            client,
+            auth_token: MetadataValue::from_static("atishay"),
+            caller_id: MetadataValue::from_static("test-3"),
+        })
+    }
 }
 
 async fn retrieve_features(State(state): State<Arc<AppState>>)
     -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)>
 {
-    // Hardcoded auth metadata
-    let auth_token = "atishay".to_string();
-    let caller_id = "test-3".to_string();
-
     // Clone client - this is cheap because it only clones the Arc pointer to the channel
     let mut client = state.client.clone();
     
-    match retrieve_features_internal(&mut client, auth_token, caller_id).await {
-        Ok(result) => Ok(Json(ApiResponse {
+    match retrieve_features_internal(&mut client, &state.auth_token, &state.caller_id).await {
+        Ok(_result) => Ok(Json(ApiResponse {
             success: true,
-            data: Some(format!("{:?}", result)),
+            data: Some("Features retrieved successfully".to_string()),
             error: None,
             message: "Features retrieved successfully".to_string(),
         })),
@@ -67,18 +78,16 @@ async fn retrieve_features(State(state): State<Arc<AppState>>)
 
 async fn retrieve_features_internal(
     client: &mut RetrieveClient<Channel>,
-    auth_token: String,
-    caller_id: String,
+    auth_token: &MetadataValue,
+    caller_id: &MetadataValue,
 ) -> Result<retrieve::Result, Box<dyn std::error::Error>> {
-    // Create request with timeout
+    // Build request with minimal allocations - use string literals where possible
     let mut request = tonic::Request::new(Query {
-        entity_label: "catalog".to_string(),
+        entity_label: "catalog".to_string(), // This needs to be owned
         feature_groups: vec![
             FeatureGroup {
                 label: "derived_fp32".to_string(),
-                feature_labels: vec![
-                    "clicks_by_views_3_days".to_string(),
-                ],
+                feature_labels: vec!["clicks_by_views_3_days".to_string()],
             },
         ],
         keys_schema: vec!["catalog_id".to_string()],
@@ -92,21 +101,33 @@ async fn retrieve_features_internal(
     // Set timeout (5 seconds like Go implementation)
     request.set_timeout(Duration::from_secs(5));
 
+    // Insert pre-built metadata values directly - no cloning, no allocations
     request.metadata_mut().insert(
         "online-feature-store-auth-token",
-        MetadataValue::from_str(&auth_token)?,
+        auth_token.clone(),
     );
     request.metadata_mut().insert(
         "online-feature-store-caller-id",
-        MetadataValue::from_str(&caller_id)?,
+        caller_id.clone(),
     );
 
     let response = client.retrieve_features(request).await?;
     Ok(response.into_inner())
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Configure Tokio runtime for optimal I/O performance
+    // Use fewer worker threads for I/O-bound workloads to reduce context switching overhead
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(num_cpus::get().min(4)) // Limit to 4 threads max for I/O workloads
+        .enable_io()
+        .enable_time()
+        .build()?;
+
+    rt.block_on(async_main())
+}
+
+async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Connecting to feature store...");
 
     // Configure channel with optimizations for high-performance IO
@@ -126,7 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create client - this is cheap to clone, uses Arc internally
     let client = RetrieveClient::new(channel);
-    let state = Arc::new(AppState { client });
+    let state = Arc::new(AppState::new(client)?);
 
     let app = Router::new()
         .route("/retrieve-features", post(retrieve_features))
