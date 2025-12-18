@@ -40,7 +40,10 @@ async fn retrieve_features(State(state): State<Arc<AppState>>)
     let auth_token = "atishay".to_string();
     let caller_id = "test-3".to_string();
 
-    match retrieve_features_internal(&state.client, auth_token, caller_id).await {
+    // Clone client - this is cheap because it only clones the Arc pointer to the channel
+    let mut client = state.client.clone();
+    
+    match retrieve_features_internal(&mut client, auth_token, caller_id).await {
         Ok(result) => Ok(Json(ApiResponse {
             success: true,
             data: Some(format!("{:?}", result)),
@@ -63,7 +66,7 @@ async fn retrieve_features(State(state): State<Arc<AppState>>)
 }
 
 async fn retrieve_features_internal(
-    client: &RetrieveClient<Channel>,
+    client: &mut RetrieveClient<Channel>,
     auth_token: String,
     caller_id: String,
 ) -> Result<retrieve::Result, Box<dyn std::error::Error>> {
