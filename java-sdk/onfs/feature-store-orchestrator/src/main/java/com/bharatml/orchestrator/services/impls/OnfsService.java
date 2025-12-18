@@ -10,6 +10,7 @@ import com.bharatml.orchestrator.grpc.service.FeatureServiceGrpc;
 import com.bharatml.orchestrator.grpc.config.OnfsClientConfig;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
+import io.grpc.StatusRuntimeException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import static com.bharatml.orchestrator.Constants.ONFS_GRPC_CHANNEL_TEMPLATE;
@@ -43,7 +44,14 @@ public class OnfsService implements IOnfsService {
         if (metadata != null) {
             stub = stub.withInterceptors(io.grpc.stub.MetadataUtils.newAttachHeadersInterceptor(metadata));
         }
-        return ProtoConvertor.convertToResult(stub.retrieveFeatures(queryProto));
+        try {
+            return ProtoConvertor.convertToResult(stub.retrieveFeatures(queryProto));
+        } catch (StatusRuntimeException e) {
+            log.error("gRPC call to retrieveFeatures failed: status={}, description={}, entityLabel={}",
+                    e.getStatus().getCode(), e.getStatus().getDescription(),
+                    request != null ? request.getEntityLabel() : "unknown", e);
+            throw e;
+        }
     }
 
     @Override
@@ -59,6 +67,13 @@ public class OnfsService implements IOnfsService {
         if (metadata != null) {
             stub = stub.withInterceptors(io.grpc.stub.MetadataUtils.newAttachHeadersInterceptor(metadata));
         }
-        return ProtoConvertor.convertToDecodedResult(stub.retrieveDecodedResult(queryProto));
+        try {
+            return ProtoConvertor.convertToDecodedResult(stub.retrieveDecodedResult(queryProto));
+        } catch (StatusRuntimeException e) {
+            log.error("gRPC call to retrieveDecodedResult failed: status={}, description={}, entityLabel={}",
+                    e.getStatus().getCode(), e.getStatus().getDescription(),
+                    request != null ? request.getEntityLabel() : "unknown", e);
+            throw e;
+        }
     }
 } 
