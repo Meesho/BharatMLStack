@@ -118,8 +118,12 @@ async fn retrieve_features_internal(
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Configure Tokio runtime for optimal I/O performance
     // Use fewer worker threads for I/O-bound workloads to reduce context switching overhead
+    let worker_threads = std::thread::available_parallelism()
+        .map(|n| n.get().min(4))
+        .unwrap_or(4); // Default to 4 if unavailable
+    
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(num_cpus::get().min(4)) // Limit to 4 threads max for I/O workloads
+        .worker_threads(worker_threads) // Limit to 4 threads max for I/O workloads
         .enable_io()
         .enable_time()
         .build()?;
