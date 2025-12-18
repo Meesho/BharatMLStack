@@ -41,6 +41,7 @@ public class OnfsService implements IOnfsService {
     public Result retrieveFeatures(Metadata metadata, Query request) {
         RetrieveProto.Query queryProto = ProtoConvertor.convertToQueryProto(request);
         FeatureServiceGrpc.FeatureServiceBlockingStub stub = FeatureServiceGrpc.newBlockingStub(managedChannel);
+        stub = stub.withDeadlineAfter(onfsClientConfig.getHttp2Config().getGrpcDeadline(), java.util.concurrent.TimeUnit.MILLISECONDS);
         if (metadata != null) {
             stub = stub.withInterceptors(io.grpc.stub.MetadataUtils.newAttachHeadersInterceptor(metadata));
         }
