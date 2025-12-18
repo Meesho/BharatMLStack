@@ -34,39 +34,20 @@ struct AppState {
     // Pre-built metadata values to avoid allocations on every request
     auth_token: AsciiMetadataValue,
     caller_id: AsciiMetadataValue,
-    // Pre-built base query template to avoid allocations
-    base_query: Query,
 }
 
 impl AppState {
     fn new(client: RetrieveClient<Channel>) -> Result<Self, Box<dyn std::error::Error>> {
         // Pre-build metadata values once using static strings
         // This avoids string allocations on every request
+        // AsciiMetadataValue::from_static uses static string references - zero allocation
         let auth_token = AsciiMetadataValue::from_static("atishay");
         let caller_id = AsciiMetadataValue::from_static("test-3");
-        
-        // Pre-build the base query structure once - this eliminates all allocations per request
-        let base_query = Query {
-            entity_label: "catalog".to_string(),
-            feature_groups: vec![
-                FeatureGroup {
-                    label: "derived_fp32".to_string(),
-                    feature_labels: vec!["clicks_by_views_3_days".to_string()],
-                },
-            ],
-            keys_schema: vec!["catalog_id".to_string()],
-            keys: vec![
-                Keys { cols: vec!["176".to_string()] },
-                Keys { cols: vec!["179".to_string()] },
-            ],
-            metadata: HashMap::new(),
-        };
         
         Ok(Self {
             client,
             auth_token,
             caller_id,
-            base_query,
         })
     }
 }
@@ -74,14 +55,12 @@ impl AppState {
 async fn retrieve_features(State(state): State<Arc<AppState>>)
     -> Result<Json<ApiResponse>, (StatusCode, Json<ApiResponse>)>
 {
-    // Clone client - this is cheap because it only clones the Arc pointer to the channel
-    let mut client = state.client.clone();
-    
+    // Don't clone client - use it directly with mutable reference
+    // The client internally uses Arc, so concurrent access is safe
     match retrieve_features_internal(
-        &mut client,
+        &state.client,
         &state.auth_token,
         &state.caller_id,
-        &state.base_query,
     ).await {
         Ok(_result) => Ok(Json(ApiResponse {
             success: true,
@@ -105,19 +84,34 @@ async fn retrieve_features(State(state): State<Arc<AppState>>)
 }
 
 async fn retrieve_features_internal(
-    client: &mut RetrieveClient<Channel>,
+    client: &RetrieveClient<Channel>,
     auth_token: &AsciiMetadataValue,
     caller_id: &AsciiMetadataValue,
-    base_query: &Query,
 ) -> Result<retrieve::Result, Box<dyn std::error::Error>> {
-    // Clone the pre-built query - this is much cheaper than building from scratch
-    // All strings are already allocated, so this just copies pointers/references
-    let mut request = tonic::Request::new(base_query.clone());
-
-    // Set timeout (5 seconds like Go implementation)
+    // Build query directly - minimal allocations, same as Go
+    // Go also builds the struct each time, but Go's GC makes this efficient
+    // In Rust, we need to be careful about allocations
+    let query = Query {
+        entity_label: "catalog".to_string(),
+        feature_groups: vec![
+            FeatureGroup {
+                label: "derived_fp32".to_string(),
+                feature_labels: vec!["clicks_by_views_3_days".to_string()],
+            },
+        ],
+        keys_schema: vec!["catalog_id".to_string()],
+        keys: vec![
+            Keys { cols: vec!["176".to_string()] },
+            Keys { cols: vec!["179".to_string()] },
+        ],
+        metadata: HashMap::new(),
+    };
+    
+    // Create request with timeout - use method chaining for efficiency
+    let mut request = tonic::Request::new(query);
     request.set_timeout(Duration::from_secs(5));
 
-    // Insert pre-built metadata values directly - no cloning, no allocations
+    // Insert pre-built metadata values - AsciiMetadataValue clone is cheap (just increments ref count)
     request.metadata_mut().insert(
         "online-feature-store-auth-token",
         auth_token.clone(),
@@ -127,6 +121,9 @@ async fn retrieve_features_internal(
         caller_id.clone(),
     );
 
+    // Clone client only when needed - Tonic client is internally Arc-based
+    // This is the same pattern Go uses - the client is thread-safe
+    let mut client = client.clone();
     let response = client.retrieve_features(request).await?;
     Ok(response.into_inner())
 }
@@ -151,17 +148,19 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Connecting to feature store...");
 
     // Configure channel with optimizations for high-performance IO
+    // Following article recommendations: connection multiplexing efficiency
     let channel = Endpoint::from_static("http://online-feature-store-api.int.meesho.int:80")
-        // Enable HTTP/2 keepalive to keep connections alive
-        // Set interval between HTTP/2 Ping frames (30 seconds)
+        // Connection timeout - how long to wait for initial connection
+        .timeout(Duration::from_secs(10))
+        // HTTP/2 keepalive settings for connection reuse
+        // Interval between HTTP/2 Ping frames (30 seconds)
         .http2_keep_alive_interval(Duration::from_secs(30))
-        // Set timeout for keepalive ping acknowledgment (10 seconds)
+        // Timeout for keepalive ping acknowledgment (10 seconds)
         .keep_alive_timeout(Duration::from_secs(10))
         // Send keepalive pings even when connection is idle
+        // This is critical for connection multiplexing efficiency
         .keep_alive_while_idle(true)
-        // Set connection timeout
-        .timeout(Duration::from_secs(10))
-        // Connect with retry logic
+        // Connect - single connection handles thousands of concurrent streams
         .connect()
         .await?;
 
