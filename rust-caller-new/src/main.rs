@@ -1,5 +1,4 @@
 use axum::{extract::State, http::StatusCode, response::Json, routing::post, Router};
-use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
 
@@ -47,7 +46,7 @@ fn get_labels() -> Vec<String> {
 }
 
 #[tokio::main]
-async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Connecting to feature store...");
 
     let channel = Endpoint::from_static("http://online-feature-store-api.int.meesho.int:80")
