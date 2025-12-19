@@ -3,7 +3,6 @@ package main
 import (
 	"net/http"
 	_ "net/http/pprof"
-	"strings"
 
 	featureConfig "github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/repositories/provider"
@@ -55,14 +54,12 @@ func main() {
 	provider.InitProvider(configManager, etcd.Instance())
 
 	// Check if HTTP API should be enabled
-	enableHTTPStr := strings.ToLower(strings.TrimSpace(viper.GetString("ENABLE_HTTP_API")))
-	enableHTTP := enableHTTPStr == "true" || enableHTTPStr == "1"
-
+	enableHTTP := viper.GetBool("ENABLE_HTTP_API")
+	grpc.Init()
 	if enableHTTP {
 		log.Info().Msg("HTTP API mode enabled - starting HTTP and gRPC servers via cmux")
 
-		// Initialize both servers
-		grpc.Init()
+		// Initialize HTTP server along with gRPC server
 		httpserver.Init()
 
 		// Initialize and run mux server
@@ -78,7 +75,6 @@ func main() {
 		}
 	} else {
 		log.Info().Msg("gRPC API mode enabled (default)")
-		grpc.Init()
 		err = grpc.Instance().Run()
 		if err != nil {
 			log.Panic().Err(err).Msg("Error from running online-feature-store api-server")

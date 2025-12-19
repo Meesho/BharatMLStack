@@ -35,7 +35,6 @@ func Init() {
 		grpcServer := grpc.NewServer(
 			grpc.ChainUnaryInterceptor(ServerInterceptor, RecoveryInterceptor),
 		)
-
 		env := viper.GetString("APP_ENV")
 		if env == "prod" || env == "production" {
 			gin.SetMode(gin.ReleaseMode)
@@ -48,12 +47,10 @@ func Init() {
 		router.GET("/health/self", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"message": "true"})
 		})
-
 		server = &Server{
 			GRPCServer:  grpcServer,
 			HTTPHandler: router,
 		}
-
 	})
 }
 
@@ -81,7 +78,6 @@ func (server *Server) Run() error {
 	persist.RegisterFeatureServiceServer(server.GRPCServer, feature.InitPersistHandler())
 	p2p.RegisterP2PCacheServiceServer(server.GRPCServer, feature.InitP2PCacheHandler())
 	reflection.Register(server.GRPCServer)
-
 	// Start listeners for each protocol
 	// Start the gRPC server in a separate goroutine
 	go func() {

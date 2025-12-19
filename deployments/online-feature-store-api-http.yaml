@@ -13,7 +13,7 @@ priority: p0
 initialDelaySeconds: 60
 service_type:
   - grpc
-  - httpserver
+  - httpstateless
   - database
 environment:
   ftr:
