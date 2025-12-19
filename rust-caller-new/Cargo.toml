@@ -4,19 +4,23 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1", features = ["full", "tracing"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time"] }
 tonic = "0.11"
 prost = "0.12"
 tower = "0.4"
 axum = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tower-http = { version = "0.5", features = ["cors", "trace"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tower-http = { version = "0.5", features = ["cors"] }
 
 [build-dependencies]
 tonic-build = "0.11"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
 
 [workspace]
 
