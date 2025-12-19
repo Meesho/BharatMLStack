@@ -90,7 +90,7 @@ async fn retrieve_features_internal(
 ) -> Result<retrieve::Result, Box<dyn std::error::Error>> {
     // Build query with all feature labels
     // Convert static string slice to owned Vec<String> for protobuf
-    let feature_labels: Vec<String> = &[
+    let feature_labels: Vec<String> = (&[
         "max_product_price_percentile",
         "orders_by_views_56day_percentile",
         "catalog__platform_orders_by_clicks_28_days_percentile_bin",
@@ -896,7 +896,7 @@ async fn retrieve_features_internal(
         "num_img_review_By_num_review_28_days",
         "qr_orders_By_sub_orders_7_days",
         "return_orders_By_sub_orders_7_days",
-    ]
+    ])
     .iter()
     .map(|s| s.to_string())
     .collect();
