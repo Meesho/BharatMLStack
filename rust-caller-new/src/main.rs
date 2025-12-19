@@ -895,9 +895,11 @@ async fn retrieve_features_internal(
         "prep_only__search__clicks_by_views_56_days",
         "num_img_review_By_num_review_28_days",
         "qr_orders_By_sub_orders_7_days",
-        "return_orders_By_sub_orders_7_days"].iter()
-        .map(|s| s.to_string())
-        .collect();
+        "return_orders_By_sub_orders_7_days",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
     
     let query = Query {
         entity_label: "catalog".to_string(),
