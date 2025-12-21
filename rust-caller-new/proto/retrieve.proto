@@ -12,7 +12,6 @@ message Query {
   repeated FeatureGroup feature_groups = 2;
   repeated string keys_schema = 3;
   repeated Keys keys = 4;
-  map<string, string> metadata = 5;
 }
 
 message Feature {
