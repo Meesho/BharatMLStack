@@ -58,7 +58,7 @@ fn get_labels() -> Vec<String> {
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Connecting to feature store...");
+    println!("Connecting to feature store 1...");
 
     let channel = Endpoint::from_static("http://online-feature-store-api.int.meesho.int:80")
         .timeout(Duration::from_secs(10))
