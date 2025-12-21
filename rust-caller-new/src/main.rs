@@ -1,5 +1,5 @@
 use axum::{extract::State, http::StatusCode, response::Json, routing::post, Router};
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
 
 pub mod retrieve {
@@ -70,17 +70,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = RetrieveClient::new(channel);
     
-    // Pre-build static parts once at startup using Arc<str> for sharing
+    // Pre-build static parts once at startup using Arc for sharing
     // This allows multiple owners without cloning string data - similar to Go's string literals!
     let feature_labels = Arc::new(get_labels());
-    let keys_schema = Arc::from(vec![Arc::from("catalog_id")]);
     
     let state = Arc::new(AppState {
         client,
         entity_label: "catalog".to_string(),
         feature_group: FeatureGroup {
             label: "derived_fp32".to_string(),
-            feature_labels: get_labels(),
+            feature_labels: (*feature_labels).clone(),
         },
         keys_schema: vec!["catalog_id".to_string()],
         auth_token: AsciiMetadataValue::from_static("atishay"),
