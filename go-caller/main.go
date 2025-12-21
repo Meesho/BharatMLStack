@@ -710,6 +710,7 @@ func getLabels() []string {
 }
 
 func main() {
+	print("Starting go-caller with 4 threads")
 	runtime.GOMAXPROCS(4)
 	gin.SetMode(gin.ReleaseMode)
 
