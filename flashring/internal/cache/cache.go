@@ -437,7 +437,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 		wc.stats[shardIdx].Expired.Add(1)
 	}
 	wc.stats[shardIdx].TotalGets.Add(1)
-	if false && shouldReWrite {
+	if shouldReWrite {
 		wc.stats[shardIdx].ReWrites.Add(1)
 		wc.putLocked(shardIdx, h32, key, val, remainingTTL)
 	}
