@@ -23,6 +23,7 @@ type Repository interface {
 	Deactivate(configID string) error
 	GetLatestPendingRequestByConfigID(configID string) ([]Table, error)
 	GetApprovedRequestsByConfigID(configID string) ([]Table, error)
+	GetByConfigIDandVersion(configID string, version int) ([]Table, error)
 }
 
 type InferflowRequest struct {
@@ -142,5 +143,17 @@ func (g *InferflowRequest) GetLatestPendingRequestByConfigID(configID string) ([
 	result := g.db.Where("config_id = ? AND status NOT IN (?)", configID, []string{"APPROVED", "REJECTED"}).
 		Order("created_at DESC").
 		Find(&tables)
+	return tables, result.Error
+}
+
+func (g *InferflowRequest) GetByConfigIDandVersion(configID string, version int) ([]Table, error) {
+	var tables []Table
+	result := g.db.Where("config_id = ? AND version = ? AND status = ?", configID, version, "APPROVED").Find(&tables)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if len(tables) == 0 {
+		return nil, errors.New("no request found with the given config_id and version")
+	}
 	return tables, result.Error
 }

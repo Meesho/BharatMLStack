@@ -163,6 +163,16 @@ type TestResults struct {
 	Message string `json:"message"`
 }
 
+type GetSchemaResponse struct {
+	Components []SchemaComponents
+}
+
+type SchemaComponents struct {
+	FeatureName string `json:"feature_name"`
+	FeatureType string `json:"feature_type"`
+	FeatureSize any `json:"feature_size"`
+}
+
 func (p *Payload) Scan(value interface{}) error {
 	if value == nil {
 		*p = Payload{}
