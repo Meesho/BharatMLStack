@@ -94,7 +94,7 @@ func (h *Handler) CreateDeployable(request *DeployableRequest) error {
 		DeployableRunningStatus: false,
 		DeployableHealth:        "DEPLOYMENT_REASON_ARGO_APP_HEALTH_DEGRADED",
 		DeployableWorkFlowId:    "",
-		MonitoringUrl: fmt.Sprintf("%s/d/a2605923-52c4-4834-bdae-97570966b765/model-inference-service?orgId=1&var-service=%s&var-query0=",
+		MonitoringUrl: fmt.Sprintf("%s/d/a2605923-52c4-4834-bdae-97570966b765/predator?orgId=1&var-service=%s&var-query0=",
 			grafanaBaseUrl, request.AppName),
 		WorkFlowStatus: "WORKFLOW_NOT_STARTED",
 	}
