@@ -7,7 +7,7 @@ pub mod retrieve {
 }
 
 use retrieve::feature_service_client::FeatureServiceClient as RetrieveClient;
-use retrieve::{FeatureGroup, Keys, Query};
+use retrieve::{FeatureGroup, Keys};
 
 #[derive(Clone)]
 struct AppState {
@@ -130,8 +130,9 @@ async fn pprof_profile(
         .build()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
-    // Convert report to protobuf format using the protobuf feature
-    let profile = report.pprof().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // Convert report to protobuf format
+    // Using the protobuf feature to encode the profile
+    let profile: pprof::Profile = report.into();
     let mut protobuf_body = Vec::new();
     profile.write_to(&mut protobuf_body).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
@@ -158,7 +159,7 @@ async fn pprof_heap() -> Result<impl axum::response::IntoResponse, StatusCode> {
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
     // Convert report to protobuf format
-    let profile = report.pprof().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let profile: pprof::Profile = report.into();
     let mut protobuf_body = Vec::new();
     profile.write_to(&mut protobuf_body).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
