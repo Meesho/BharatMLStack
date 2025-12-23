@@ -100,6 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("pprof endpoints available on http://127.0.0.1:8080/debug/pprof/profile");
     println!("pprof endpoints available on http://127.0.0.1:8080/debug/pprof/heap");
     
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
     axum::serve(listener, app).await?;
 
     Ok(())
@@ -127,11 +128,11 @@ async fn pprof_profile(
         .build()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
-    // Convert report to protobuf format using the protobuf feature
-    // The Report struct can be converted to pprof Profile format
+    // Convert report to protobuf format
+    // Use report.pprof() to get a Profile, then write_to_writer to serialize
     let mut protobuf_body = Vec::new();
-    pprof::protobuf::encode(&report, &mut protobuf_body)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let profile = report.pprof().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    profile.write_to_writer(&mut protobuf_body).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
     Ok(Response::builder()
         .status(200)
@@ -157,8 +158,8 @@ async fn pprof_heap() -> Result<impl axum::response::IntoResponse, StatusCode> {
     
     // Convert report to protobuf format
     let mut protobuf_body = Vec::new();
-    pprof::protobuf::encode(&report, &mut protobuf_body)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let profile = report.pprof().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    profile.write_to_writer(&mut protobuf_body).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
     Ok(Response::builder()
         .status(200)
