@@ -1,5 +1,5 @@
-use axum::{extract::Query as QueryParams, extract::State, http::StatusCode, response::Json, routing::get, routing::post, Router};
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use axum::{extract::State, http::StatusCode, response::Json, routing::post, Router};
+use std::{sync::Arc, time::Duration};
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
 
 pub mod retrieve {
