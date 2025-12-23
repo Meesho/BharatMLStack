@@ -89,85 +89,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         keys_schema,
     });
 
+    // Start profiling - guard must be kept alive for profiling to continue
+    let _guard = pprof::ProfilerGuardBuilder::default()
+        .frequency(1000)
+        .blocklist(&["libc", "libgcc", "pthread", "vdso"])
+        .build()
+        .unwrap();
+
+    println!("Profiler started. Server will begin shortly...");
+
     let app = Router::new()
         .route("/retrieve-features", post(retrieve_features))
-        .route("/debug/pprof/profile", get(pprof_profile))
-        .route("/debug/pprof/heap", get(pprof_heap))
         .with_state(state);
 
-    // Main server on 0.0.0.0:8080
-    println!("Starting rust-caller-new on http://0.0.0.0:8080");
-    println!("pprof endpoints available on http://127.0.0.1:8080/debug/pprof/profile");
-    println!("pprof endpoints available on http://127.0.0.1:8080/debug/pprof/heap");
-    
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
+    println!("Server listening on 0.0.0.0:8080");
+    
+    // Profiling continues while server runs
+    // When server exits, guard is dropped and profiling stops
     axum::serve(listener, app).await?;
+
+    // Optional: Generate final report before shutdown
+    // Note: This won't execute if server runs indefinitely
+    // For periodic reports, use a separate task or endpoint
+    if let Ok(report) = _guard.report().build() {
+        println!("Final profiling report: {:?}", &report);
+    }
 
     Ok(())
 }
 
-// pprof endpoints for profiling
-async fn pprof_profile(
-    QueryParams(params): QueryParams<HashMap<String, String>>,
-) -> Result<impl axum::response::IntoResponse, StatusCode> {
-    use axum::response::Response;
-    use axum::body::Body;
-    
-    let duration_secs = params
-        .get("seconds")
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(30);
-    
-    let guard = pprof::ProfilerGuard::new(100)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    tokio::time::sleep(Duration::from_secs(duration_secs)).await;
-    
-    // Build protobuf Profile from ReportBuilder
-    // In pprof 0.15 with protobuf feature, ReportBuilder has a pprof() method
-    let mut protobuf_body = Vec::new();
-    let profile = guard
-        .report()
-        .pprof()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    profile
-        .encode(&mut protobuf_body)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    Ok(Response::builder()
-        .status(200)
-        .header("Content-Type", "application/x-protobuf")
-        .body(Body::from(protobuf_body))
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?)
-}
-
-async fn pprof_heap() -> Result<impl axum::response::IntoResponse, StatusCode> {
-    use axum::response::Response;
-    use axum::body::Body;
-    
-    // Heap profiling endpoint
-    let guard = pprof::ProfilerGuard::new(100)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    tokio::time::sleep(Duration::from_secs(1)).await;
-    
-    // Build protobuf Profile from ReportBuilder
-    let mut protobuf_body = Vec::new();
-    let profile = guard
-        .report()
-        .pprof()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    profile
-        .encode(&mut protobuf_body)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    Ok(Response::builder()
-        .status(200)
-        .header("Content-Type", "application/x-protobuf")
-        .body(Body::from(protobuf_body))
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?)
-}
 
 
