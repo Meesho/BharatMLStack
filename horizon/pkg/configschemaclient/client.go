@@ -5,7 +5,7 @@ import (
 )
 
 // BuildFeatureSchema builds a feature schema from the component and response configs.
-// It processes components in order: Iris Output → Iris Input → FS → RTP → Predator Input → Predator Output → Response Config
+// It processes components in order: FS → RTP → Iris Output → Predator Output → Iris Input → Predator Input
 func BuildFeatureSchema(componentConfig *ComponentConfig, responseConfig *ResponseConfig) []SchemaComponents {
 	if componentConfig == nil {
 		return nil
@@ -33,27 +33,23 @@ func BuildFeatureSchema(componentConfig *ComponentConfig, responseConfig *Respon
 		}
 	}
 
-	// 1. Iris Output
-	addUniqueComponents(processIrisOutput(componentConfig.NumerixComponents))
-
-	// 2. Iris Input
-	addUniqueComponents(processIrisInput(componentConfig.NumerixComponents))
-
-	// 3. FS (Feature Store)
+	// 1. FS (Feature Store)
 	addUniqueComponents(processFS(componentConfig.FeatureComponents))
 
-	// 4. RTP (Real Time Pricing)
+	// 2. RTP (Real Time Pricing)
 	addUniqueComponents(processRTP(componentConfig.RTPComponents))
 
-	// 5. Predator Input (only add if not already present)
+	// 3. Iris Output
+	addUniqueComponents(processIrisOutput(componentConfig.NumerixComponents))
+
+	// 4. Predator Output
+	addUniqueComponents(processPredatorOutput(componentConfig.PredatorComponents))
+
+	// 5. Iris Input (only add if not already present)
+	addOrUpdateComponents(processIrisInput(componentConfig.NumerixComponents))
+
+	// 6. Predator Input (only add if not already present)
 	addOrUpdateComponents(processPredatorInput(componentConfig.PredatorComponents))
-
-	// 6. Predator Output (only add if not already present)
-	addOrUpdateComponents(processPredatorOutput(componentConfig.PredatorComponents))
-
-	// 7. Response Config features
-	responseSchemaComponents := ProcessResponseConfig(responseConfig, response)
-	addUniqueComponents(responseSchemaComponents)
 
 	return response
 }
