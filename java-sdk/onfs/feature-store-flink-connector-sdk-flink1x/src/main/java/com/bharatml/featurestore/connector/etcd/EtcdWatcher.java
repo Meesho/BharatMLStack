@@ -21,7 +21,7 @@ public class EtcdWatcher {
     private final String etcdEndpoint;
     private final String etcdUsername;
     private final String etcdPassword;
-    private final String watchKey;
+    private final String watchPath;
     private final HorizonClient horizonClient;
     private final String jobId;
     private final String jobToken;
@@ -35,7 +35,7 @@ public class EtcdWatcher {
             String etcdEndpoint,
             String etcdUsername,
             String etcdPassword,
-            String watchKey,
+            String watchPath,
             HorizonClient horizonClient,
             String jobId,
             String jobToken,
@@ -44,7 +44,7 @@ public class EtcdWatcher {
         this.etcdEndpoint = etcdEndpoint;
         this.etcdUsername = etcdUsername;
         this.etcdPassword = etcdPassword;
-        this.watchKey = watchKey;
+        this.watchPath = watchPath;
         this.horizonClient = horizonClient;
         this.jobId = jobId;
         this.jobToken = jobToken;
@@ -69,7 +69,12 @@ public class EtcdWatcher {
                     .isPrefix(true)
                     .build();
 
-            ByteSequence key = ByteSequence.from(watchKey, StandardCharsets.UTF_8);
+            String etcdEntitiesWatchPath = String.format(
+                    "%s/entities",
+                    watchPath
+            );
+
+            ByteSequence key = ByteSequence.from(etcdEntitiesWatchPath, StandardCharsets.UTF_8);
 
             watcher = etcdClient.getWatchClient().watch(key, option, new Watch.Listener() {
 
@@ -77,7 +82,7 @@ public class EtcdWatcher {
                 public void onNext(WatchResponse response) {
                     logger.info(
                             "etcd change detected under prefix {}",
-                            watchKey
+                            etcdEntitiesWatchPath
                     );
 
                     // ANY change triggers mapping refresh by calling Horizon
@@ -86,20 +91,20 @@ public class EtcdWatcher {
 
                 @Override
                 public void onError(Throwable throwable) {
-                    logger.error("etcd watch error for prefix {}", watchKey, throwable);
+                    logger.error("etcd watch error for prefix {}", watchPath, throwable);
                 }
 
                 @Override
                 public void onCompleted() {
-                    logger.info("etcd watch completed for prefix {}", watchKey);
+                    logger.info("etcd watch completed for prefix {}", watchPath);
                 }
             });
 
             running = true;
-            logger.info("Started etcd watcher for prefix {}", watchKey);
+            logger.info("Started etcd watcher for prefix {}", watchPath);
 
         } catch (Exception e) {
-            logger.error("Failed to start etcd watcher for prefix {}", watchKey, e);
+            logger.error("Failed to start etcd watcher for prefix {}", watchPath, e);
             throw new RuntimeException(e);
         }
     }
@@ -123,7 +128,7 @@ public class EtcdWatcher {
             }
         }
 
-        logger.info("Stopped etcd watcher for prefix {}", watchKey);
+        logger.info("Stopped etcd watcher for prefix {}", watchPath);
     }
 
     private void refreshSourceMapping() {
@@ -150,7 +155,7 @@ public class EtcdWatcher {
         private String etcdEndpoint;
         private String etcdUsername;
         private String etcdPassword;
-        private String watchKey;
+        private String watchPath;
         private HorizonClient horizonClient;
         private String jobId;
         private String jobToken;
@@ -159,14 +164,14 @@ public class EtcdWatcher {
         public Builder etcdEndpoint(String ep) { this.etcdEndpoint = ep; return this; }
         public Builder etcdUsername(String u) { this.etcdUsername = u; return this; }
         public Builder etcdPassword(String p) { this.etcdPassword = p; return this; }
-        public Builder watchKey(String w) { this.watchKey = w; return this; }
+        public Builder watchPath(String w) { this.watchPath = w; return this; }
         public Builder horizonClient(HorizonClient h) { this.horizonClient = h; return this; }
         public Builder jobId(String id) { this.jobId = id; return this; }
         public Builder jobToken(String t) { this.jobToken = t; return this; }
         public Builder sourceMappingHolder(SourceMappingHolder sm) { this.sourceMappingHolder= sm; return this; }
 
         public EtcdWatcher build() {
-            return new EtcdWatcher(etcdEndpoint, etcdUsername, etcdPassword, watchKey, horizonClient, jobId, jobToken, sourceMappingHolder);
+            return new EtcdWatcher(etcdEndpoint, etcdUsername, etcdPassword, watchPath, horizonClient, jobId, jobToken, sourceMappingHolder);
         }
     }
 }

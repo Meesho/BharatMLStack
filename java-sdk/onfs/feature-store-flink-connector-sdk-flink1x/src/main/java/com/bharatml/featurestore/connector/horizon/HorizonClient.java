@@ -18,12 +18,14 @@ public final class HorizonClient {
     private final String horizonBaseUrl;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    private final int responseTimeoutMs;
 
-    public HorizonClient(String horizonBaseUrl) {
+    public HorizonClient(String horizonBaseUrl, int connectTimeoutMs, int responseTimeoutMs) {
         this.horizonBaseUrl = horizonBaseUrl;
+        this.responseTimeoutMs = responseTimeoutMs;
 
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(30))
+                .connectTimeout(Duration.ofMillis(connectTimeoutMs))
                 .build();
 
         this.objectMapper = new ObjectMapper();
@@ -42,8 +44,7 @@ public final class HorizonClient {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .POST(HttpRequest.BodyPublishers.noBody())
-                .timeout(Duration.ofSeconds(15))
-                // DO NOT set Accept-Encoding → avoids gzip issues
+                .timeout(Duration.ofMillis(responseTimeoutMs))
                 .header("Accept", "application/json")
                 .build();
 

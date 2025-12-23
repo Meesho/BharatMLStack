@@ -1,12 +1,11 @@
 package com.bharatml.featurestore.connector.horizon;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import java.util.List;
-import java.util.Map;
+
+import java.util.*;
 
 /**
  * Response structure from Horizon /get-source-mapping endpoint.
- * Represents the complete metadata mapping for features.
  */
 public class SourceMappingResponse {
     
@@ -28,27 +27,60 @@ public class SourceMappingResponse {
     }
     
     /**
-     * Checks if the given entity label exists in the keys mapping.
-     */
-    public boolean hasEntityLabel(String entityLabel) {
-        return keys != null && keys.containsKey(entityLabel);
-    }
-    
-    /**
      * Checks if the given entity, feature group, and feature labels are registered.
      */
     public boolean hasFeatureMapping(String entityLabel, String featureGroupLabel, List<String> featureLabels) {
         if (data == null) {
             return false;
         }
-        
-        for (StorageProviderData storageData : data) {
-            if (storageData.hasFeatureMapping(entityLabel, featureGroupLabel, featureLabels)) {
-                return true;
+
+        int featureLabelsCount = 0;
+        for (String featureLabel : featureLabels) {
+            for (StorageProviderData storageData : data) {
+                if (storageData.hasFeatureMapping(entityLabel, featureGroupLabel, featureLabel)) {
+                    featureLabelsCount++;
+                }
             }
         }
-        
-        return false;
+        return featureLabelsCount==featureLabels.size();
     }
+
+    public static class StorageProviderData {
+
+        @JsonProperty("storage-provider")
+        private String storageProvider;
+
+        @JsonProperty("base-path")
+        private List<BasePathData> basePath;
+
+        public StorageProviderData() {
+        }
+
+        public String getStorageProvider() {
+            return storageProvider;
+        }
+
+        public List<BasePathData> getBasePath() {
+            return basePath;
+        }
+
+        public boolean hasFeatureMapping(String entityLabel, String featureGroupLabel, String featureLabel) {
+            if (basePath == null || featureLabel.isEmpty()) {
+                return false;
+            }
+            // Iterate through all base paths
+            for (BasePathData basePathData : basePath) {
+                for (BasePathData.DataPath dataPath : basePathData.getDataPaths()) {
+                    if (dataPath.getEntityLabel() != null && dataPath.getEntityLabel().equals(entityLabel) &&
+                        dataPath.getFeatureGroupLabel() != null && dataPath.getFeatureGroupLabel().equals(featureGroupLabel) &&
+                        dataPath.getFeatureLabel() != null && dataPath.getFeatureLabel().equals(featureLabel)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+    }
+
 }
 

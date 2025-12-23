@@ -24,27 +24,54 @@ public class BasePathData {
     public List<DataPath> getDataPaths() {
         return dataPaths;
     }
-    
-    /**
-     * Checks if this base path contains the given feature mapping.
-     */
-    public boolean hasFeatureMapping(String entityLabel, String featureGroupLabel, List<String> featureLabels) {
-        if (dataPaths == null) {
-            return false;
+
+    public static class DataPath {
+
+        @JsonProperty("entity-label")
+        private String entityLabel;
+
+        @JsonProperty("feature-group-label")
+        private String featureGroupLabel;
+
+        @JsonProperty("feature-label")
+        private String featureLabel;
+
+        @JsonProperty("source-data-column")
+        private String sourceDataColumn;
+
+        @JsonProperty("default-value")
+        private String defaultValue;
+
+        @JsonProperty("data-type")
+        private String dataType;
+
+        public DataPath() {
         }
-        
-        // Check if all requested features exist in this base path
-        for (String featureLabel : featureLabels) {
-            for (DataPath dataPath : dataPaths) {
-                if (dataPath.getEntityLabel().equals(entityLabel) &&
-                    dataPath.getFeatureGroupLabel().equals(featureGroupLabel) &&
-                    dataPath.getFeatureLabel().equals(featureLabel)) {
-                    return true;
-                }
-            }
+
+        public String getEntityLabel() {
+            return entityLabel;
         }
-        
-        return false;
+
+        public String getFeatureGroupLabel() {
+            return featureGroupLabel;
+        }
+
+        public String getFeatureLabel() {
+            return featureLabel;
+        }
+
+        public String getSourceDataColumn() {
+            return sourceDataColumn;
+        }
+
+        public String getDefaultValue() {
+            return defaultValue;
+        }
+
+        public String getDataType() {
+            return dataType;
+        }
     }
 }
+
 
