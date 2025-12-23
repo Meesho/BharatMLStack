@@ -34,6 +34,7 @@ func ExtractVariables(expression string) []string {
 		if IsNumber(token) || IsOp(token) {
 			continue
 		}
+		// Preserve all occurrences, including duplicates and parentheses
 		vars = append(vars, token)
 	}
 

@@ -3,31 +3,64 @@ package main
 import (
 	"strconv"
 
+	horizonConfig "github.com/Meesho/BharatMLStack/horizon/internal"
+	applicationRouter "github.com/Meesho/BharatMLStack/horizon/internal/application/route"
 	authRouter "github.com/Meesho/BharatMLStack/horizon/internal/auth/router"
-	middlewares "github.com/Meesho/BharatMLStack/horizon/internal/middlewares"
-	numerixConfig "github.com/Meesho/BharatMLStack/horizon/internal/numerix/config"
-	numerixRouter "github.com/Meesho/BharatMLStack/horizon/internal/numerix/router"
+	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
+	connectionConfigRouter "github.com/Meesho/BharatMLStack/horizon/internal/connectionconfig/route"
+	deployableRouter "github.com/Meesho/BharatMLStack/horizon/internal/deployable/router"
+	inferflowConfig "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
+	inferflowRouter "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/route"
+	"github.com/Meesho/BharatMLStack/horizon/internal/middleware"
+	numerixConfig "github.com/Meesho/BharatMLStack/horizon/internal/numerix/etcd"
+	numerixRouter "github.com/Meesho/BharatMLStack/horizon/internal/numerix/route"
 	ofsConfig "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/config"
 	ofsRouter "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/router"
-	"github.com/Meesho/BharatMLStack/horizon/pkg/config"
+	predatorRouter "github.com/Meesho/BharatMLStack/horizon/internal/predator/route"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/etcd"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/httpframework"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/logger"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/metric"
-	"github.com/spf13/viper"
+	"github.com/Meesho/BharatMLStack/horizon/pkg/scheduler"
+)
+
+type AppConfig struct {
+	Configs        configs.Configs
+	DynamicConfigs configs.DynamicConfigs
+}
+
+func (cfg *AppConfig) GetStaticConfig() interface{} {
+	return &cfg.Configs
+}
+
+func (cfg *AppConfig) GetDynamicConfig() interface{} {
+	return &cfg.DynamicConfigs
+}
+
+var (
+	appConfig AppConfig
 )
 
 func main() {
-	config.InitEnv()
-	infra.InitDBConnectors()
-	logger.Init()
-	metric.Init()
-	httpframework.Init(middlewares.NewMiddleware().GetMiddleWares()...)
-	etcd.InitFromAppName(&ofsConfig.FeatureRegistry{}, viper.GetString("ONLINE_FEATURE_STORE_APP_NAME"))
-	etcd.InitFromAppName(&numerixConfig.NumerixConfig{}, viper.GetString("NUMERIX_APP_NAME"))
+	configs.InitConfig(&appConfig)
+	infra.InitDBConnectors(appConfig.Configs)
+	etcd.InitFromAppName(&ofsConfig.FeatureRegistry{}, appConfig.Configs.OnlineFeatureStoreAppName, appConfig.Configs)
+	etcd.InitFromAppName(&numerixConfig.NumerixConfigRegistery{}, appConfig.Configs.NumerixAppName, appConfig.Configs)
+	etcd.InitFromAppName(&inferflowConfig.ModelConfigRegistery{}, appConfig.Configs.InferflowAppName, appConfig.Configs)
+	etcd.InitFromAppName(&inferflowConfig.HorizonRegistry{}, appConfig.Configs.HorizonAppName, appConfig.Configs)
+	horizonConfig.InitAll(appConfig.Configs)
+	logger.Init(appConfig.Configs)
+	metric.Init(appConfig.Configs)
+	httpframework.Init(middleware.NewMiddleware().GetMiddleWares()...)
+	deployableRouter.Init()
+	inferflowRouter.Init()
+	numerixRouter.Init()
+	applicationRouter.Init()
+	connectionConfigRouter.Init()
+	predatorRouter.Init()
 	authRouter.Init()
 	ofsRouter.Init()
-	numerixRouter.Init()
-	httpframework.Instance().Run(":" + strconv.Itoa(viper.GetInt("APP_PORT")))
+	scheduler.Init(appConfig.Configs)
+	httpframework.Instance().Run(":" + strconv.Itoa(appConfig.Configs.AppPort))
 }

@@ -6,13 +6,13 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/horizon/internal/constant"
+
 	"gorm.io/gorm"
 )
 
 const (
 	tableName = "numerix_config"
-	createdAt = "CreatedAt"
-	updatedAt = "UpdatedAt"
 )
 
 type Expression struct {
@@ -52,11 +52,11 @@ func (Table) TableName() string {
 }
 
 func (Table) BeforeCreate(tx *gorm.DB) (err error) {
-	tx.Statement.SetColumn(createdAt, time.Now())
+	tx.Statement.SetColumn(constant.CreatedAt, time.Now())
 	return
 }
 
 func (Table) BeforeUpdate(tx *gorm.DB) (err error) {
-	tx.Statement.SetColumn(updatedAt, time.Now())
+	tx.Statement.SetColumn(constant.UpdatedAt, time.Now())
 	return
 }

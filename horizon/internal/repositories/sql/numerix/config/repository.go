@@ -2,6 +2,7 @@ package numerix_config
 
 import (
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
@@ -10,6 +11,7 @@ import (
 
 type Repository interface {
 	GetAll() ([]Table, error)
+	GetAllPaginated(page int, pageSize int, configID int) ([]Table, int64, error)
 	Create(table *Table) error
 	CreateTx(tx *gorm.DB, table *Table) error
 	UpdateTx(tx *gorm.DB, table *Table) error
@@ -52,6 +54,37 @@ func (g *NumerixConfig) GetAll() ([]Table, error) {
 	var configs []Table
 	result := g.db.Where("active = ?", true).Find(&configs)
 	return configs, result.Error
+}
+
+func (g *NumerixConfig) GetAllPaginated(page int, pageSize int, configID int) ([]Table, int64, error) {
+	var configs []Table
+	var totalCount int64
+
+	// Build base query
+	query := g.db.Model(&Table{}).Where("active = ?", true)
+
+	// Add search filter if provided
+	if configID != 0 {
+		query = query.Where("CAST(config_id AS CHAR) LIKE ?", strconv.Itoa(configID)+"%")
+	}
+
+	// Get total count
+	countResult := query.Count(&totalCount)
+	if countResult.Error != nil {
+		return nil, 0, countResult.Error
+	}
+
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Get paginated results
+	result := query.
+		Order("updated_at DESC").
+		Limit(pageSize).
+		Offset(offset).
+		Find(&configs)
+
+	return configs, totalCount, result.Error
 }
 
 func (g *NumerixConfig) Create(table *Table) error {

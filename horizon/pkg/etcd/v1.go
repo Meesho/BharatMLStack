@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -27,56 +26,17 @@ type V1 struct {
 	mu                 sync.Mutex
 }
 
-func newV1Etcd(config interface{}) Etcd {
-	if !viper.IsSet(envAppName) || !viper.IsSet(envEtcdServer) {
-		log.Panic().Msgf("%s or %s is not set", envAppName, envEtcdServer)
-	}
-	appName := viper.GetString(envAppName)
-	etcdServers := viper.GetString(envEtcdServer)
-	etcdBasePath := configPath + appName
-	servers := strings.Split(etcdServers, ",")
-	var username, password string
-	if viper.IsSet(envEtcdUsername) && viper.IsSet(envEtcdPassword) {
-		username = viper.GetString(envEtcdUsername)
-		password = viper.GetString(envEtcdPassword)
-	}
-
-	conn, err := clientv3.New(clientv3.Config{Endpoints: servers, Username: username, Password: password, DialTimeout: timeout, DialKeepAliveTime: timeout, PermitWithoutStream: true})
-	if err != nil {
-		log.Error().Msgf("failed to create etcd client: %v", err)
-	}
-	v1Etcd := &V1{
-		conn:               conn,
-		basePath:           etcdBasePath,
-		config:             config,
-		appName:            appName,
-		WatchPathCallbacks: make(map[string][]interface{}),
-	}
-	err = v1Etcd.updateConfig(config)
-	var watcherEnabled bool
-	if viper.IsSet(envWatcherEnabled) {
-		watcherEnabled = viper.GetBool(envWatcherEnabled)
-		if watcherEnabled {
-			v1Etcd.WatchPrefix(context.Background(), etcdBasePath, appName)
-		}
-	}
-	if err != nil {
-		log.Panic().Err(err).Msgf("unable to create config from etcd")
-	}
-	return v1Etcd
-}
-
 func newV1EtcdFromAppName(config interface{}, appName string) Etcd {
-	if !viper.IsSet(envEtcdServer) {
-		log.Panic().Msgf("%s is not set", envEtcdServer)
+	if len(envEtcdServer) == 0 {
+		log.Panic().Msgf("ETCD_SERVER is not set")
 	}
-	etcdServers := viper.GetString(envEtcdServer)
+	etcdServers := envEtcdServer
 	etcdBasePath := configPath + appName
 	servers := strings.Split(etcdServers, ",")
 	var username, password string
-	if viper.IsSet(envEtcdUsername) && viper.IsSet(envEtcdPassword) {
-		username = viper.GetString(envEtcdUsername)
-		password = viper.GetString(envEtcdPassword)
+	if len(envEtcdUsername) != 0 && len(envEtcdPassword) != 0 {
+		username = envEtcdUsername
+		password = envEtcdPassword
 	}
 
 	conn, err := clientv3.New(clientv3.Config{Endpoints: servers, Username: username, Password: password, DialTimeout: timeout, DialKeepAliveTime: timeout, PermitWithoutStream: true})
@@ -91,13 +51,11 @@ func newV1EtcdFromAppName(config interface{}, appName string) Etcd {
 		WatchPathCallbacks: make(map[string][]interface{}),
 	}
 	err = v1Etcd.updateConfig(config)
-	var watcherEnabled bool
-	if viper.IsSet(envWatcherEnabled) {
-		watcherEnabled = viper.GetBool(envWatcherEnabled)
-		if watcherEnabled {
-			v1Etcd.WatchPrefix(context.Background(), etcdBasePath, appName)
-		}
+
+	if envWatcherEnabled {
+		v1Etcd.WatchPrefix(context.Background(), etcdBasePath, appName)
 	}
+
 	if err != nil {
 		log.Panic().Err(err).Msgf("unable to create config from etcd")
 	}
@@ -670,7 +628,7 @@ func (v *V1) RegisterWatchPathCallback(path string, callback func() error) error
 	return nil
 }
 
-func (v *V1) Delete(path string) error {
+func (v *V1) DeleteNode(path string) error {
 	_, err := v.conn.Delete(context.Background(), path)
 	if err != nil {
 		log.Error().Msgf("Failed to delete node %s: %v", path, err)
