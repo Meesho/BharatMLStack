@@ -437,6 +437,132 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   VALUES ('admin', 'admin', 'admin@admin.com', '\$2a\$10\$kYoMds9IsbvPNhJasKHO7.fTSosfbPhSAf7ElNQJ9pIa0iWBOt97e', 'admin', 1);
 "
 
+# Insert API resolvers
+echo "  🔌 Inserting API resolvers..."
+mysql -hmysql -uroot -proot --skip-ssl testdb -e "
+  -- Predator APIs
+  INSERT INTO api_resolvers (method, api_path, resolver_fn) VALUES
+  ('GET', '/api/v1/horizon/predator-config-registry/model-params', 'ModelParamsResolver'),
+  ('POST', '/api/v1/horizon/predator-config-registry/models/onboard', 'ModelOnboardResolver'),
+  ('POST', '/api/v1/horizon/predator-config-registry/models/edit', 'ModelOnboardResolver'),
+  ('POST', '/api/v1/horizon/predator-config-registry/models/promote', 'ModelPromoteResolver'),
+  ('POST', '/api/v1/horizon/predator-config-registry/models/scale-up', 'ModelScaleUpResolver'),
+  ('PATCH', '/api/v1/horizon/predator-config-registry/models/delete', 'ModelDeleteResolver'),
+  ('POST', '/api/v1/horizon/predator-config-registry/upload-json', 'ModelUploadMetaDataResolver'),
+  ('POST', '/api/v1/horizon/predator-config-registry/upload-model-folder', 'ModelUploadMetaDataResolver'),
+  ('GET', '/api/v1/horizon/predator-config-discovery/models', 'ModelDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/predator-config-discovery/source-models', 'ModelSourceDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/predator-config-discovery/feature-types', 'ModelSourceDiscoveryResolver'),
+  ('PUT', '/api/v1/horizon/predator-config-approval/process-request', 'ModelApprovalResolver'),
+  ('GET', '/api/v1/horizon/predator-config-approval/requests/:group_id', 'ModelValidatorResolver'),
+  ('GET', '/api/v1/horizon/predator-config-approval/requests', 'ModelRequestDiscoveryResolver'),
+  ('POST', '/api/v1/horizon/predator-config-testing/generate-request', 'ModelTestGenerateRequestResolver'),
+  ('POST', '/api/v1/horizon/predator-config-testing/functional-testing/execute-request', 'ModelFunctionalTestResolver'),
+  ('POST', '/api/v1/horizon/predator-config-testing/load-testing/execute-request', 'ModelLoadTestResolver'),
+
+  -- Inferflow APIs
+  ('POST', '/api/v1/horizon/inferflow-config-registry/onboard', 'InferflowOnboardResolver'),
+  ('POST', '/api/v1/horizon/inferflow-config-registry/promote', 'InferflowPromoteResolver'),
+  ('POST', '/api/v1/horizon/inferflow-config-registry/edit', 'InferflowEditResolver'),
+  ('POST', '/api/v1/horizon/inferflow-config-registry/clone', 'InferflowCloneResolver'),
+  ('POST', '/api/v1/horizon/inferflow-config-registry/scale-up', 'InferflowScaleUpResolver'),
+  ('GET', '/api/v1/horizon/inferflow-config-registry/logging-ttl', 'InferflowDiscoveryResolver'),
+  ('PATCH', '/api/v1/horizon/inferflow-config-registry/delete', 'InferflowDeleteResolver'),
+  ('GET', '/api/v1/horizon/inferflow-config-registry/latestRequest/:config_id', 'InferflowDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/inferflow-config-discovery/configs', 'InferflowDiscoveryResolver'),
+  ('POST', '/api/v1/horizon/inferflow-config-approval/review', 'InferflowRequestReviewResolver'),
+  ('POST', '/api/v1/horizon/inferflow-config-approval/cancel', 'InferflowRequestCancelResolver'),
+  ('GET', '/api/v1/horizon/inferflow-config-approval/configs', 'InferflowRequestDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/inferflow-config-approval/validate/:request_id', 'InferflowRequestValidateResolver'),
+  ('POST', '/api/v1/horizon/inferflow-config-testing/functional-test/generate-request', 'InferflowTestGenerateRequestResolver'),
+  ('POST', '/api/v1/horizon/inferflow-config-testing/functional-test/execute-request', 'InferflowTestExecuteRequestResolver'),
+
+  -- Numerix APIs
+  ('POST', '/api/v1/horizon/numerix-expression/generate', 'NumerixExpressionGenerateResolver'),
+  ('GET', '/api/v1/horizon/numerix-expression/:config_id/variables', 'NumerixExpressionVariablesResolver'),
+  ('POST', '/api/v1/horizon/numerix-config-registry/onboard', 'NumerixConfigOnboardResolver'),
+  ('POST', '/api/v1/horizon/numerix-config-registry/promote', 'NumerixConfigPromoteResolver'),
+  ('POST', '/api/v1/horizon/numerix-config-registry/edit', 'NumerixConfigEditResolver'),
+  ('GET', '/api/v1/horizon/numerix-config-discovery/configs', 'NumerixConfigDiscoveryResolver'),
+  ('POST', '/api/v1/horizon/numerix-config-approval/review', 'NumerixConfigRequestReviewResolver'),
+  ('POST', '/api/v1/horizon/numerix-config-approval/cancel', 'NumerixConfigRequestCancelResolver'),
+  ('GET', '/api/v1/horizon/numerix-config-approval/configs', 'NumerixConfigRequestDiscoveryResolver'),
+  ('POST', '/api/v1/horizon/numerix-testing/functional-testing/generate-request', 'NumerixTestGenerateRequestResolver'),
+  ('POST', '/api/v1/horizon/numerix-testing/functional-testing/execute-request', 'NumerixTestExecuteRequestResolver'),
+
+  -- Application APIs
+  ('POST', '/api/v1/horizon/application-registry/applications', 'ApplicationOnboardResolver'),
+  ('PUT', '/api/v1/horizon/application-registry/applications/:token', 'ApplicationEditResolver'),
+  ('GET', '/api/v1/horizon/application-discovery/applications', 'ApplicationDiscoveryRegistryResolver'),
+
+  -- Connection Config APIs
+  ('POST', '/api/v1/horizon/service-connection-registry/connections', 'ConnectionConfigOnboardResolver'),
+  ('PUT', '/api/v1/horizon/service-connection-registry/connections/:id', 'ConnectionConfigEditResolver'),
+  ('GET', '/api/v1/horizon/service-connection-discovery/connections', 'ConnectionConfigDiscoveryResolver'),
+
+  -- Deployable APIs
+  ('POST', '/api/v1/horizon/deployable-registry/deployables', 'DeployableCreateResolver'),
+  ('PUT', '/api/v1/horizon/deployable-registry/deployables', 'DeployableUpdateResolver'),
+  ('POST', '/api/v1/horizon/deployable-registry/deployables/refresh', 'DeployableRefreshResolver'),
+  ('GET', '/api/v1/horizon/deployable-discovery/deployables/metadata', 'DeployableMetadataViewResolver'),
+  ('GET', '/api/v1/horizon/deployable-discovery/deployables', 'DeployableViewResolver'),
+  ('PUT', '/api/v1/horizon/deployable-registry/deployables/tune-thresholds', 'DeployableTuneResolver');
+"
+
+# Insert role permissions for admin role
+echo "  🔐 Inserting role permissions for admin role..."
+mysql -hmysql -uroot -proot --skip-ssl testdb -e "
+  -- Predator permissions
+  INSERT INTO role_permission (role, service, screen_type, module) VALUES
+  ('admin', 'predator', 'model-approval', 'review'),
+  ('admin', 'predator', 'model-approval', 'validate'),
+  ('admin', 'predator', 'model-approval', 'view'),
+  ('admin', 'predator', 'model', 'view'),
+  ('admin', 'predator', 'model', 'delete'),
+  ('admin', 'predator', 'model', 'scale_up'),
+  ('admin', 'predator', 'model', 'promote'),
+  ('admin', 'predator', 'model', 'onboard'),
+  ('admin', 'predator', 'model', 'test'),
+
+  -- Inferflow permissions
+  ('admin', 'inferflow', 'inferflow-config', 'view'),
+  ('admin', 'inferflow', 'inferflow-config', 'scale-up'),
+  ('admin', 'inferflow', 'inferflow-config', 'delete'),
+  ('admin', 'inferflow', 'inferflow-config', 'clone'),
+  ('admin', 'inferflow', 'inferflow-config', 'promote'),
+  ('admin', 'inferflow', 'inferflow-config', 'onboard'),
+  ('admin', 'inferflow', 'inferflow-config', 'edit'),
+  ('admin', 'inferflow', 'inferflow-config-approval', 'review'),
+  ('admin', 'inferflow', 'inferflow-config-approval', 'cancel'),
+  ('admin', 'inferflow', 'inferflow-config-approval', 'validate'),
+  ('admin', 'inferflow', 'inferflow-config-approval', 'view'),
+  ('admin', 'inferflow', 'inferflow-config-testing', 'test'),
+
+  -- Numerix permissions
+  ('admin', 'numerix', 'numerix-config', 'view'),
+  ('admin', 'numerix', 'numerix-config', 'onboard'),
+  ('admin', 'numerix', 'numerix-config', 'promote'),
+  ('admin', 'numerix', 'numerix-config', 'edit'),
+  ('admin', 'numerix', 'numerix-config-approval', 'review'),
+  ('admin', 'numerix', 'numerix-config-approval', 'cancel'),
+  ('admin', 'numerix', 'numerix-config-approval', 'view'),
+  ('admin', 'numerix', 'numerix-config-approval', 'delete'),
+  ('admin', 'numerix', 'numerix-config-testing', 'test'),
+
+  -- Application permissions
+  ('admin', 'application', 'application-discovery-registry', 'view'),
+  ('admin', 'application', 'application-discovery-registry', 'onboard'),
+  ('admin', 'application', 'application-discovery-registry', 'edit'),
+  ('admin', 'application', 'connection-config', 'view'),
+  ('admin', 'application', 'connection-config', 'onboard'),
+  ('admin', 'application', 'connection-config', 'edit'),
+
+  -- Deployable permissions
+  ('admin', 'all', 'deployable', 'onboard'),
+  ('admin', 'all', 'deployable', 'edit'),
+  ('admin', 'all', 'deployable', 'view');
+"
+
 # Verify initialization
 echo "  🔍 Verifying MySQL initialization..."
 ADMIN_COUNT=$(mysql -hmysql -uroot -proot --skip-ssl testdb -sN -e "SELECT COUNT(*) FROM users WHERE email='admin@admin.com';")

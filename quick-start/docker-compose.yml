@@ -459,6 +459,7 @@ services:
       - EXTERNAL_SERVICE_PREDATOR_GRPC_PLAIN_TEXT=true
       - EXTERNAL_SERVICE_PREDATOR_CALLER_ID=inferflow
       - EXTERNAL_SERVICE_PREDATOR_CALLER_TOKEN=inferflow
+      - EXTERNAL_SERVICE_PREDATOR_DEADLINE=200
       - METRIC_SAMPLING_RATE=1
     networks:
       - onfs-network
@@ -489,7 +490,7 @@ services:
     ports:
       - "3000:80"
     environment:
-      - REACT_APP_ENVIRONMENT=staging
+      - REACT_APP_ENVIRONMENT=production
       - REACT_APP_HORIZON_BASE_URL=http://localhost:8082
       - REACT_APP_ONLINE_FEATURE_STORE_ENABLED=true
       - REACT_APP_INFERFLOW_ENABLED=true
