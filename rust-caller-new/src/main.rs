@@ -1,4 +1,4 @@
-use axum::{extract::State, http::StatusCode, response::{Html, Json, Response}, routing::{get, post}, Router};
+use axum::{extract::State, http::StatusCode, response::{Html, Json, Response, IntoResponse}, routing::{get, post}, Router};
 use axum::body::Body;
 use std::sync::Arc;
 use std::sync::mpsc;
@@ -7,6 +7,15 @@ use tokio::sync::oneshot;
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
 #[cfg(feature = "protobuf")]
 use pprof::protos::Message;
+
+// Configure jemalloc with profiling enabled
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
+#[allow(non_upper_case_globals)]
+#[export_name = "malloc_conf"]
+pub static malloc_conf: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0";
 
 pub mod retrieve {
     tonic::include_proto!("retrieve");
@@ -82,6 +91,42 @@ async fn get_pprof_text(State(state): State<Arc<AppState>>) -> Result<Html<Strin
         Ok(Ok(text)) => Ok(Html(format!("<pre>{}</pre>", text))),
         _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
+}
+
+// Endpoint to get heap/memory profiling data
+#[cfg(not(target_env = "msvc"))]
+async fn get_pprof_heap() -> Result<impl IntoResponse, (StatusCode, String)> {
+    // Check if jemalloc profiling is available
+    let prof_ctl = jemalloc_pprof::PROF_CTL.as_ref()
+        .ok_or_else(|| (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "jemalloc profiling not available. Ensure tikv-jemallocator is configured correctly.".to_string(),
+        ))?;
+    
+    let mut prof_ctl = prof_ctl.lock().await;
+    
+    // Verify profiling is activated
+    if !prof_ctl.activated() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Heap profiling not activated. Ensure jemalloc is configured with profiling enabled.".to_string(),
+        ));
+    }
+    
+    // Generate pprof heap profile
+    let pprof_data = prof_ctl.dump_pprof()
+        .map_err(|e| (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to generate heap profile: {}", e),
+        ))?;
+    
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "application/x-protobuf")
+        .header("Content-Encoding", "gzip")
+        .header("Content-Disposition", "attachment; filename=heap.pb.gz")
+        .body(Body::from(pprof_data))
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?)
 }
 
 async fn retrieve_features(State(state): State<Arc<AppState>>) -> Result<Json<String>, StatusCode> {
@@ -222,17 +267,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         report_tx,
     });
 
+    // Check jemalloc heap profiling availability
+    #[cfg(not(target_env = "msvc"))]
+    {
+        if let Some(prof_ctl) = jemalloc_pprof::PROF_CTL.as_ref() {
+            let prof_ctl = prof_ctl.lock().await;
+            if prof_ctl.activated() {
+                println!("Heap profiling: Enabled");
+            } else {
+                println!("Heap profiling: Configured but not activated");
+            }
+        } else {
+            println!("Heap profiling: Not available (jemalloc not configured)");
+        }
+    }
+
     println!("Profiler started. Server will begin shortly...");
     println!("Profiling endpoints available:");
-    println!("  - GET /pprof/protobuf - Download pprof data (use with: go tool pprof http://localhost:8080/pprof/protobuf)");
-    println!("  - GET /pprof/flamegraph - View flamegraph SVG in browser");
-    println!("  - GET /pprof/text - View text report");
+    println!("  - GET /pprof/protobuf - Download CPU pprof data (use with: go tool pprof http://localhost:8080/pprof/protobuf)");
+    println!("  - GET /pprof/flamegraph - View CPU flamegraph SVG in browser");
+    println!("  - GET /pprof/text - View CPU text report");
+    #[cfg(not(target_env = "msvc"))]
+    println!("  - GET /pprof/heap - Download heap/memory pprof data (use with: go tool pprof http://localhost:8080/pprof/heap)");
 
     let app = Router::new()
         .route("/retrieve-features", post(retrieve_features))
         .route("/pprof/protobuf", get(get_pprof_protobuf))
         .route("/pprof/flamegraph", get(get_flamegraph))
         .route("/pprof/text", get(get_pprof_text))
+        #[cfg(not(target_env = "msvc"))]
+        .route("/pprof/heap", get(get_pprof_heap))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
