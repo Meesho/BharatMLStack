@@ -2,10 +2,10 @@ import React, { useCallback } from 'react';
 import { Box, Typography, CircularProgress, Alert } from '@mui/material';
 import { useAuth } from '../../Auth/AuthContext';
 import { SERVICES, SCREEN_TYPES, ACTIONS } from '../../../constants/permissions';
-import GenericModelConfigApprovalTable from './GenericModelConfigApprovalTable';
+import GenericInferflowConfigApprovalTable from './GenericInferflowConfigApprovalTable';
 import * as URL_CONSTANTS from '../../../config';
 
-const ModelConfigApproval = () => {
+const InferflowConfigApproval = () => {
   const { 
     hasPermission, 
     permissions,
@@ -90,11 +90,11 @@ const ModelConfigApproval = () => {
 
   return (
     <Box>
-        <GenericModelConfigApprovalTable
+        <GenericInferflowConfigApprovalTable
         onReview={handleReview}
       />
     </Box>
   );
 };
 
-export default ModelConfigApproval;
+export default InferflowConfigApproval;
