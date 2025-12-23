@@ -1,5 +1,6 @@
-use axum::{extract::State, http::StatusCode, response::Json, routing::post, Router};
-use std::{sync::Arc, time::Duration};
+use axum::{extract::State, http::{HeaderMap, HeaderValue, StatusCode}, response::{Html, Json, Response}, routing::{get, post}, Router};
+use axum::body::Body;
+use std::{sync::{Arc, Mutex}, time::Duration};
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
 
 pub mod retrieve {
@@ -8,6 +9,11 @@ pub mod retrieve {
 
 use retrieve::feature_service_client::FeatureServiceClient as RetrieveClient;
 use retrieve::{FeatureGroup, Keys};
+
+// Profiler guard wrapper - allows generating reports from any thread
+struct ProfilerState {
+    guard: Arc<Mutex<Option<pprof::ProfilerGuard>>>,
+}
 
 #[derive(Clone)]
 struct AppState {
@@ -18,6 +24,70 @@ struct AppState {
     feature_labels: Arc<Vec<Arc<str>>>, // Shared strings, only Arc pointers are cloned
     entity_label: Arc<str>,
     keys_schema: Arc<[Arc<str>]>, // Shared strings
+    profiler: Arc<ProfilerState>,
+}
+
+// Endpoint to get pprof data in protobuf format (for go tool pprof)
+async fn get_pprof_protobuf(State(state): State<Arc<AppState>>) -> Result<Response<Body>, StatusCode> {
+    let guard_opt = state.profiler.guard.lock().unwrap();
+    if let Some(ref guard) = *guard_opt {
+        match guard.report().build() {
+            Ok(report) => {
+                let mut response = Response::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Type", "application/x-protobuf")
+                    .header("Content-Disposition", "attachment; filename=profile.pb.gz")
+                    .body(Body::from(report.pprof().unwrap()))
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                Ok(response)
+            }
+            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        }
+    } else {
+        Err(StatusCode::SERVICE_UNAVAILABLE)
+    }
+}
+
+// Endpoint to get flamegraph SVG
+async fn get_flamegraph(State(state): State<Arc<AppState>>) -> Result<Response<Body>, StatusCode> {
+    let guard_opt = state.profiler.guard.lock().unwrap();
+    if let Some(ref guard) = *guard_opt {
+        match guard.report().build() {
+            Ok(report) => {
+                let mut flamegraph = Vec::new();
+                report.flamegraph(&mut flamegraph).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                
+                let mut response = Response::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Type", "image/svg+xml")
+                    .header("Content-Disposition", "inline; filename=flamegraph.svg")
+                    .body(Body::from(flamegraph))
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                Ok(response)
+            }
+            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        }
+    } else {
+        Err(StatusCode::SERVICE_UNAVAILABLE)
+    }
+}
+
+// Endpoint to get text report
+async fn get_pprof_text(State(state): State<Arc<AppState>>) -> Result<Html<String>, StatusCode> {
+    let guard_opt = state.profiler.guard.lock().unwrap();
+    if let Some(ref guard) = *guard_opt {
+        match guard.report().build() {
+            Ok(report) => {
+                let mut text = Vec::new();
+                report.text(&mut text).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                let text_str = String::from_utf8(text).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                Ok(Html(format!("<pre>{}</pre>", text_str)))
+            }
+            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        }
+    } else {
+        Err(StatusCode::SERVICE_UNAVAILABLE)
+    }
 }
 
 async fn retrieve_features(State(state): State<Arc<AppState>>) -> Result<Json<String>, StatusCode> {
@@ -80,6 +150,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let feature_labels = Arc::new(get_labels());
     let keys_schema = Arc::from(vec![Arc::from("catalog_id")]);
     
+    // Start profiling - guard must be kept alive for profiling to continue
+    let guard = pprof::ProfilerGuardBuilder::default()
+        .frequency(1000)
+        .blocklist(&["libc", "libgcc", "pthread", "vdso"])
+        .build()
+        .unwrap();
+
+    let profiler_state = Arc::new(ProfilerState {
+        guard: Arc::new(Mutex::new(Some(guard))),
+    });
+
     let state = Arc::new(AppState {
         client,
         auth_token: AsciiMetadataValue::from_static("atishay"),
@@ -87,19 +168,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         feature_labels,
         entity_label: Arc::from("catalog"),
         keys_schema,
+        profiler: profiler_state.clone(),
     });
 
-    // Start profiling - guard must be kept alive for profiling to continue
-    let _guard = pprof::ProfilerGuardBuilder::default()
-        .frequency(1000)
-        .blocklist(&["libc", "libgcc", "pthread", "vdso"])
-        .build()
-        .unwrap();
-
     println!("Profiler started. Server will begin shortly...");
+    println!("Profiling endpoints available:");
+    println!("  - GET /pprof/protobuf - Download pprof data (use with: go tool pprof http://localhost:8080/pprof/protobuf)");
+    println!("  - GET /pprof/flamegraph - View flamegraph SVG in browser");
+    println!("  - GET /pprof/text - View text report");
 
     let app = Router::new()
         .route("/retrieve-features", post(retrieve_features))
+        .route("/pprof/protobuf", get(get_pprof_protobuf))
+        .route("/pprof/flamegraph", get(get_flamegraph))
+        .route("/pprof/text", get(get_pprof_text))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
@@ -108,13 +190,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Profiling continues while server runs
     // When server exits, guard is dropped and profiling stops
     axum::serve(listener, app).await?;
-
-    // Optional: Generate final report before shutdown
-    // Note: This won't execute if server runs indefinitely
-    // For periodic reports, use a separate task or endpoint
-    if let Ok(report) = _guard.report().build() {
-        println!("Final profiling report: {:?}", &report);
-    }
 
     Ok(())
 }
