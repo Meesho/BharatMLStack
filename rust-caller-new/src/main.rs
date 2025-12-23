@@ -1,6 +1,9 @@
-use axum::{extract::State, http::{HeaderMap, HeaderValue, StatusCode}, response::{Html, Json, Response}, routing::{get, post}, Router};
+use axum::{extract::State, http::StatusCode, response::{Html, Json, Response}, routing::{get, post}, Router};
 use axum::body::Body;
-use std::{sync::{Arc, Mutex}, time::Duration};
+use std::sync::Arc;
+use std::sync::mpsc;
+use std::time::Duration;
+use tokio::sync::oneshot;
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
 
 pub mod retrieve {
@@ -10,9 +13,11 @@ pub mod retrieve {
 use retrieve::feature_service_client::FeatureServiceClient as RetrieveClient;
 use retrieve::{FeatureGroup, Keys};
 
-// Profiler guard wrapper - allows generating reports from any thread
-struct ProfilerState {
-    guard: Arc<Mutex<Option<pprof::ProfilerGuard>>>,
+// Report request types
+enum ReportRequest {
+    Protobuf(oneshot::Sender<Result<Vec<u8>, String>>),
+    Flamegraph(oneshot::Sender<Result<Vec<u8>, String>>),
+    Text(oneshot::Sender<Result<String, String>>),
 }
 
 #[derive(Clone)]
@@ -24,69 +29,56 @@ struct AppState {
     feature_labels: Arc<Vec<Arc<str>>>, // Shared strings, only Arc pointers are cloned
     entity_label: Arc<str>,
     keys_schema: Arc<[Arc<str>]>, // Shared strings
-    profiler: Arc<ProfilerState>,
+    report_tx: mpsc::Sender<ReportRequest>,
 }
 
 // Endpoint to get pprof data in protobuf format (for go tool pprof)
 async fn get_pprof_protobuf(State(state): State<Arc<AppState>>) -> Result<Response<Body>, StatusCode> {
-    let guard_opt = state.profiler.guard.lock().unwrap();
-    if let Some(ref guard) = *guard_opt {
-        match guard.report().build() {
-            Ok(report) => {
-                let mut response = Response::builder()
-                    .status(StatusCode::OK)
-                    .header("Content-Type", "application/x-protobuf")
-                    .header("Content-Disposition", "attachment; filename=profile.pb.gz")
-                    .body(Body::from(report.pprof().unwrap()))
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-                Ok(response)
-            }
-            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    let (tx, rx) = oneshot::channel();
+    state.report_tx.send(ReportRequest::Protobuf(tx))
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    
+    match rx.await {
+        Ok(Ok(data)) => {
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "application/x-protobuf")
+                .header("Content-Disposition", "attachment; filename=profile.pb.gz")
+                .body(Body::from(data))
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
         }
-    } else {
-        Err(StatusCode::SERVICE_UNAVAILABLE)
+        _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 
 // Endpoint to get flamegraph SVG
 async fn get_flamegraph(State(state): State<Arc<AppState>>) -> Result<Response<Body>, StatusCode> {
-    let guard_opt = state.profiler.guard.lock().unwrap();
-    if let Some(ref guard) = *guard_opt {
-        match guard.report().build() {
-            Ok(report) => {
-                let mut flamegraph = Vec::new();
-                report.flamegraph(&mut flamegraph).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-                
-                let mut response = Response::builder()
-                    .status(StatusCode::OK)
-                    .header("Content-Type", "image/svg+xml")
-                    .header("Content-Disposition", "inline; filename=flamegraph.svg")
-                    .body(Body::from(flamegraph))
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-                Ok(response)
-            }
-            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    let (tx, rx) = oneshot::channel();
+    state.report_tx.send(ReportRequest::Flamegraph(tx))
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    
+    match rx.await {
+        Ok(Ok(data)) => {
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "image/svg+xml")
+                .header("Content-Disposition", "inline; filename=flamegraph.svg")
+                .body(Body::from(data))
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
         }
-    } else {
-        Err(StatusCode::SERVICE_UNAVAILABLE)
+        _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 
 // Endpoint to get text report
 async fn get_pprof_text(State(state): State<Arc<AppState>>) -> Result<Html<String>, StatusCode> {
-    let guard_opt = state.profiler.guard.lock().unwrap();
-    if let Some(ref guard) = *guard_opt {
-        match guard.report().build() {
-            Ok(report) => {
-                let mut text = Vec::new();
-                report.text(&mut text).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-                let text_str = String::from_utf8(text).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-                Ok(Html(format!("<pre>{}</pre>", text_str)))
-            }
-            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-        }
-    } else {
-        Err(StatusCode::SERVICE_UNAVAILABLE)
+    let (tx, rx) = oneshot::channel();
+    state.report_tx.send(ReportRequest::Text(tx))
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    
+    match rx.await {
+        Ok(Ok(text)) => Ok(Html(format!("<pre>{}</pre>", text))),
+        _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 
@@ -157,8 +149,63 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .unwrap();
 
-    let profiler_state = Arc::new(ProfilerState {
-        guard: Arc::new(Mutex::new(Some(guard))),
+    // Channel for report requests - handlers send requests, background task generates reports
+    let (report_tx, report_rx) = mpsc::channel::<ReportRequest>();
+
+    // Spawn background task to handle report generation
+    // This task holds the guard (which is not Send) and generates reports on demand
+    tokio::task::spawn_blocking(move || {
+        while let Ok(request) = report_rx.recv() {
+            match guard.report().build() {
+                Ok(report) => {
+                    match request {
+                        ReportRequest::Protobuf(tx) => {
+                            if let Ok(pprof_data) = report.pprof() {
+                                let _ = tx.send(Ok(pprof_data));
+                            } else {
+                                let _ = tx.send(Err("Failed to generate pprof data".to_string()));
+                            }
+                        }
+                        ReportRequest::Flamegraph(tx) => {
+                            let mut flamegraph = Vec::new();
+                            if report.flamegraph(&mut flamegraph).is_ok() {
+                                let _ = tx.send(Ok(flamegraph));
+                            } else {
+                                let _ = tx.send(Err("Failed to generate flamegraph".to_string()));
+                            }
+                        }
+                        ReportRequest::Text(tx) => {
+                            let mut text = Vec::new();
+                            if report.text(&mut text).is_ok() {
+                                if let Ok(text_str) = String::from_utf8(text) {
+                                    let _ = tx.send(Ok(text_str));
+                                } else {
+                                    let _ = tx.send(Err("Failed to convert text to UTF-8".to_string()));
+                                }
+                            } else {
+                                let _ = tx.send(Err("Failed to generate text report".to_string()));
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    let error_msg = format!("Failed to build report: {:?}", e);
+                    match request {
+                        ReportRequest::Protobuf(tx) => {
+                            let _ = tx.send(Err(error_msg.clone()));
+                        }
+                        ReportRequest::Flamegraph(tx) => {
+                            let _ = tx.send(Err(error_msg.clone()));
+                        }
+                        ReportRequest::Text(tx) => {
+                            let _ = tx.send(Err(error_msg));
+                        }
+                    }
+                }
+            }
+        }
+        // Keep guard alive - it will be dropped when this task ends
+        drop(guard);
     });
 
     let state = Arc::new(AppState {
@@ -168,7 +215,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         feature_labels,
         entity_label: Arc::from("catalog"),
         keys_schema,
-        profiler: profiler_state.clone(),
+        report_tx,
     });
 
     println!("Profiler started. Server will begin shortly...");
