@@ -1,5 +1,5 @@
 use axum::{extract::State, http::StatusCode, response::Json, routing::post, Router};
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
 
 pub mod retrieve {
@@ -42,7 +42,6 @@ async fn retrieve_features(State(state): State<Arc<AppState>>) -> Result<Json<St
             Keys { cols: vec!["176".to_string()] },
             Keys { cols: vec!["179".to_string()] },
         ],
-        metadata: HashMap::new(),
     };
 
     let mut request = tonic::Request::new(query);
