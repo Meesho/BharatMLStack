@@ -1,4 +1,4 @@
-use axum::{extract::Query, extract::State, http::StatusCode, response::Json, routing::get, routing::post, Router};
+use axum::{extract::Query as QueryParams, extract::State, http::StatusCode, response::Json, routing::get, routing::post, Router};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
 
@@ -28,7 +28,7 @@ async fn retrieve_features(State(state): State<Arc<AppState>>) -> Result<Json<St
         .map(|arc_str| arc_str.as_ref().to_string()) // Clone Arc pointer, then convert to String
         .collect();
     
-    let query = Query {
+    let query = retrieve::Query {
         entity_label: state.entity_label.as_ref().to_string(),
         feature_groups: vec![FeatureGroup {
             label: "derived_fp32".to_string(),
@@ -110,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 // pprof endpoints for profiling
 async fn pprof_profile(
-    Query(params): Query<HashMap<String, String>>,
+    QueryParams(params): QueryParams<HashMap<String, String>>,
 ) -> Result<impl axum::response::IntoResponse, StatusCode> {
     use axum::response::Response;
     use axum::body::Body;
@@ -130,17 +130,15 @@ async fn pprof_profile(
         .build()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
-    let mut body = Vec::new();
-    report
-        .pprof()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .write_to(&mut body)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // Convert report to protobuf format using the protobuf feature
+    let profile = report.pprof().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut protobuf_body = Vec::new();
+    profile.write_to(&mut protobuf_body).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
     Ok(Response::builder()
         .status(200)
         .header("Content-Type", "application/x-protobuf")
-        .body(Body::from(body))
+        .body(Body::from(protobuf_body))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?)
 }
 
@@ -159,17 +157,15 @@ async fn pprof_heap() -> Result<impl axum::response::IntoResponse, StatusCode> {
         .build()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
-    let mut body = Vec::new();
-    report
-        .pprof()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .write_to(&mut body)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // Convert report to protobuf format
+    let profile = report.pprof().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut protobuf_body = Vec::new();
+    profile.write_to(&mut protobuf_body).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
     Ok(Response::builder()
         .status(200)
         .header("Content-Type", "application/x-protobuf")
-        .body(Body::from(body))
+        .body(Body::from(protobuf_body))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?)
 }
 
