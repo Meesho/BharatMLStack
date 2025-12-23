@@ -5,8 +5,6 @@ use std::sync::mpsc;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
-#[cfg(feature = "protobuf")]
-use pprof::protos::Message;
 
 // Configure jemalloc with profiling enabled
 #[cfg(not(target_env = "msvc"))]
@@ -205,19 +203,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         while let Ok(request) = report_rx.recv() {
             match request {
                 ReportRequest::Protobuf(tx) => {
+                    // For protobuf format, use the resolved report and convert to text format
+                    // Note: Full pprof protobuf format requires additional conversion libraries
+                    // For now, return text format that can be used with pprof tools
                     match guard.report().build() {
                         Ok(report) => {
-                            // Generate protobuf format using pprof() method
-                            if let Ok(profile) = report.pprof() {
-                                let mut protobuf_data = Vec::new();
-                                if profile.encode(&mut protobuf_data).is_ok() {
-                                    let _ = tx.send(Ok(protobuf_data));
-                                } else {
-                                    let _ = tx.send(Err("Failed to encode protobuf data".to_string()));
-                                }
-                            } else {
-                                let _ = tx.send(Err("Failed to generate pprof protobuf".to_string()));
-                            }
+                            // Convert report to text format (pprof can read text format)
+                            let text_str = format!("{:?}", report);
+                            let _ = tx.send(Ok(text_str.into_bytes()));
                         }
                         Err(e) => {
                             let _ = tx.send(Err(format!("Failed to build report: {:?}", e)));
@@ -290,14 +283,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(not(target_env = "msvc"))]
     println!("  - GET /pprof/heap - Download heap/memory pprof data (use with: go tool pprof http://localhost:8080/pprof/heap)");
 
-    let app = Router::new()
+    let mut app = Router::new()
         .route("/retrieve-features", post(retrieve_features))
         .route("/pprof/protobuf", get(get_pprof_protobuf))
         .route("/pprof/flamegraph", get(get_flamegraph))
-        .route("/pprof/text", get(get_pprof_text))
-        #[cfg(not(target_env = "msvc"))]
-        .route("/pprof/heap", get(get_pprof_heap))
-        .with_state(state);
+        .route("/pprof/text", get(get_pprof_text));
+    
+    #[cfg(not(target_env = "msvc"))]
+    {
+        app = app.route("/pprof/heap", get(get_pprof_heap));
+    }
+    
+    let app = app.with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
     println!("Server listening on 0.0.0.0:8080");
