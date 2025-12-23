@@ -58,12 +58,34 @@ public class EtcdWatcher {
             throw new IllegalStateException("EtcdWatcher already running");
         }
 
+        running = true;
+        setupWatch();
+        logger.info("Started etcd watcher for prefix {}", watchPath);
+    }
+    
+    private synchronized void setupWatch() {
+        if (!running) {
+            return;
+        }
+        
         try {
-            etcdClient = Client.builder()
-                    .endpoints(etcdEndpoint)
-                    .user(ByteSequence.from(etcdUsername, StandardCharsets.UTF_8))
-                    .password(ByteSequence.from(etcdPassword, StandardCharsets.UTF_8))
-                    .build();
+            // Close existing watcher if any
+            if (watcher != null) {
+                try {
+                    watcher.close();
+                } catch (Exception e) {
+                    // Ignore errors when closing
+                }
+            }
+            
+            // Create or recreate etcd client if needed
+            if (etcdClient == null) {
+                etcdClient = Client.builder()
+                        .endpoints(etcdEndpoint)
+                        .user(ByteSequence.from(etcdUsername, StandardCharsets.UTF_8))
+                        .password(ByteSequence.from(etcdPassword, StandardCharsets.UTF_8))
+                        .build();
+            }
 
             WatchOption option = WatchOption.builder()
                     .isPrefix(true)
@@ -74,16 +96,20 @@ public class EtcdWatcher {
                     watchPath
             );
 
+            logger.error("Setting up watch for etcd path: {} (prefix mode: true)", etcdEntitiesWatchPath);
             ByteSequence key = ByteSequence.from(etcdEntitiesWatchPath, StandardCharsets.UTF_8);
 
             watcher = etcdClient.getWatchClient().watch(key, option, new Watch.Listener() {
 
                 @Override
                 public void onNext(WatchResponse response) {
-                    logger.info(
-                            "etcd change detected under prefix {}",
-                            etcdEntitiesWatchPath
-                    );
+                    logger.info("etcd change detected under prefix {}", etcdEntitiesWatchPath);
+                    
+                    // Process all events in the response
+                    response.getEvents().forEach(event -> {
+                        String changedKey = event.getKeyValue().getKey().toString(StandardCharsets.UTF_8);
+                        logger.info("Changed key: {}", changedKey);
+                    });
 
                     // ANY change triggers mapping refresh by calling Horizon
                     refreshSourceMapping();
@@ -91,21 +117,34 @@ public class EtcdWatcher {
 
                 @Override
                 public void onError(Throwable throwable) {
-                    logger.error("etcd watch error for prefix {}", watchPath, throwable);
+                    logger.error("Watch error for key: {} - Error: {}", etcdEntitiesWatchPath, throwable.getMessage());
+                    // Restart the watch
+                    if (running) {
+                        setupWatch();
+                    }
                 }
 
                 @Override
                 public void onCompleted() {
-                    logger.info("etcd watch completed for prefix {}", watchPath);
+                    logger.info("Watch completed for key: {}", etcdEntitiesWatchPath);
+                    // Restart the watch
+                    if (running) {
+                        setupWatch();
+                    }
                 }
             });
 
-            running = true;
-            logger.info("Started etcd watcher for prefix {}", watchPath);
-
+            logger.info("Watch successfully set up for etcd key: {}", etcdEntitiesWatchPath);
         } catch (Exception e) {
-            logger.error("Failed to start etcd watcher for prefix {}", watchPath, e);
-            throw new RuntimeException(e);
+            logger.error("Failed to setup watch for prefix {}", watchPath, e);
+            // Retry in background thread to avoid blocking the callback
+            if (running) {
+                new Thread(() -> {
+                    if (running) {
+                        setupWatch();
+                    }
+                }, "EtcdWatcher-Retry").start();
+            }
         }
     }
 
