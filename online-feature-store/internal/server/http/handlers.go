@@ -100,11 +100,7 @@ func grpcToHTTPStatus(code codes.Code) int {
 
 // handleRetrieveFeatures handles POST /api/v1/features/retrieve
 func handleRetrieveFeatures(c *gin.Context) {
-	ctx, err := createContextWithAuth(c)
-	if err != nil {
-		handleError(c, err)
-		return
-	}
+	ctx := createContextWithAuth(c)
 
 	var query retrieve.Query
 	if err := c.ShouldBindJSON(&query); err != nil {
@@ -132,11 +128,7 @@ func handleRetrieveFeatures(c *gin.Context) {
 
 // handleRetrieveDecodedResult handles POST /api/v1/features/retrieve/decoded
 func handleRetrieveDecodedResult(c *gin.Context) {
-	ctx, err := createContextWithAuth(c)
-	if err != nil {
-		handleError(c, err)
-		return
-	}
+	ctx := createContextWithAuth(c)
 
 	var query retrieve.Query
 	if err := c.ShouldBindJSON(&query); err != nil {
@@ -163,11 +155,7 @@ func handleRetrieveDecodedResult(c *gin.Context) {
 
 // handlePersistFeatures handles POST /api/v1/features/persist
 func handlePersistFeatures(c *gin.Context) {
-	ctx, err := createContextWithAuth(c)
-	if err != nil {
-		handleError(c, err)
-		return
-	}
+	ctx := createContextWithAuth(c)
 
 	var query persist.Query
 	if err := c.ShouldBindJSON(&query); err != nil {
