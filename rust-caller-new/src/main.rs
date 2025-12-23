@@ -128,37 +128,29 @@ async fn get_pprof_heap() -> Result<impl IntoResponse, (StatusCode, String)> {
 }
 
 async fn retrieve_features(State(state): State<Arc<AppState>>) -> Result<Json<String>, StatusCode> {
-    // Build Query efficiently using Arc<str> - clone Arc pointers (cheap), convert to String only for protobuf
-    // This is similar to Go: strings are shared, only pointers/references are copied
-    let feature_labels: Vec<String> = state.feature_labels
-        .iter()
-        .map(|arc_str| arc_str.as_ref().to_string()) // Clone Arc pointer, then convert to String
-        .collect();
     
     let query = retrieve::Query {
-        entity_label: state.entity_label.as_ref().to_string(),
-        feature_groups: vec![FeatureGroup {
-            label: "derived_fp32".to_string(),
-            feature_labels,
-        }],
-        keys_schema: state.keys_schema
-            .iter()
-            .map(|arc_str| arc_str.as_ref().to_string())
-            .collect(),
-        keys: vec![
-            Keys { cols: vec!["176".to_string()] },
-            Keys { cols: vec!["179".to_string()] },
-        ],
+        entity_label: state.entity_label.as_ref().to_string(), // single alloc (required by proto)
+        feature_groups: vec![state.feature_group.as_ref().clone()],
+        keys_schema: state.keys_schema.as_ref().clone(),
+        keys: state.keys.as_ref().clone(),
     };
 
+    
     let mut request = tonic::Request::new(query);
     request.set_timeout(Duration::from_secs(5));
-    request.metadata_mut().insert("online-feature-store-auth-token", state.auth_token.clone());
-    request.metadata_mut().insert("online-feature-store-caller-id", state.caller_id.clone());
 
-    // Clone client only when needed (tonic clients are cheap to clone)
-    match state.client.clone().retrieve_features(request).await {
-        Ok(_) => Ok(Json("success".to_string())),
+    request.metadata_mut().insert(
+        "online-feature-store-auth-token",
+        state.auth_token.clone(),
+    );
+    request.metadata_mut().insert(
+        "online-feature-store-caller-id",
+        state.caller_id.clone(),
+    );
+
+    match state.client.retrieve_features(request).await {
+        Ok(_) => Ok(Json("success")),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
