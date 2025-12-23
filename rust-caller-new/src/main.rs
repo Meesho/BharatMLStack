@@ -5,6 +5,8 @@ use std::sync::mpsc;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
+#[cfg(feature = "protobuf")]
+use pprof::protos::Message;
 
 pub mod retrieve {
     tonic::include_proto!("retrieve");
@@ -156,17 +158,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // This task holds the guard (which is not Send) and generates reports on demand
     tokio::task::spawn_blocking(move || {
         while let Ok(request) = report_rx.recv() {
-            match guard.report().build() {
-                Ok(report) => {
-                    match request {
-                        ReportRequest::Protobuf(tx) => {
-                            if let Ok(pprof_data) = report.pprof() {
-                                let _ = tx.send(Ok(pprof_data));
+            match request {
+                ReportRequest::Protobuf(tx) => {
+                    match guard.report().build() {
+                        Ok(report) => {
+                            // Generate protobuf format using pprof() method
+                            if let Ok(profile) = report.pprof() {
+                                let mut protobuf_data = Vec::new();
+                                if profile.encode(&mut protobuf_data).is_ok() {
+                                    let _ = tx.send(Ok(protobuf_data));
+                                } else {
+                                    let _ = tx.send(Err("Failed to encode protobuf data".to_string()));
+                                }
                             } else {
-                                let _ = tx.send(Err("Failed to generate pprof data".to_string()));
+                                let _ = tx.send(Err("Failed to generate pprof protobuf".to_string()));
                             }
                         }
-                        ReportRequest::Flamegraph(tx) => {
+                        Err(e) => {
+                            let _ = tx.send(Err(format!("Failed to build report: {:?}", e)));
+                        }
+                    }
+                }
+                ReportRequest::Flamegraph(tx) => {
+                    match guard.report().build() {
+                        Ok(report) => {
                             let mut flamegraph = Vec::new();
                             if report.flamegraph(&mut flamegraph).is_ok() {
                                 let _ = tx.send(Ok(flamegraph));
@@ -174,31 +189,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let _ = tx.send(Err("Failed to generate flamegraph".to_string()));
                             }
                         }
-                        ReportRequest::Text(tx) => {
-                            let mut text = Vec::new();
-                            if report.text(&mut text).is_ok() {
-                                if let Ok(text_str) = String::from_utf8(text) {
-                                    let _ = tx.send(Ok(text_str));
-                                } else {
-                                    let _ = tx.send(Err("Failed to convert text to UTF-8".to_string()));
-                                }
-                            } else {
-                                let _ = tx.send(Err("Failed to generate text report".to_string()));
-                            }
+                        Err(e) => {
+                            let _ = tx.send(Err(format!("Failed to build report: {:?}", e)));
                         }
                     }
                 }
-                Err(e) => {
-                    let error_msg = format!("Failed to build report: {:?}", e);
-                    match request {
-                        ReportRequest::Protobuf(tx) => {
-                            let _ = tx.send(Err(error_msg.clone()));
+                ReportRequest::Text(tx) => {
+                    match guard.report().build() {
+                        Ok(report) => {
+                            // Use Debug trait for text output
+                            let text_str = format!("{:?}", report);
+                            let _ = tx.send(Ok(text_str));
                         }
-                        ReportRequest::Flamegraph(tx) => {
-                            let _ = tx.send(Err(error_msg.clone()));
-                        }
-                        ReportRequest::Text(tx) => {
-                            let _ = tx.send(Err(error_msg));
+                        Err(e) => {
+                            let _ = tx.send(Err(format!("Failed to build report: {:?}", e)));
                         }
                     }
                 }
