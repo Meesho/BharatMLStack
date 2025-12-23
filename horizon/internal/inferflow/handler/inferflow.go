@@ -1130,6 +1130,18 @@ func (m *InferFlow) GetFeatureSchema(request FeatureSchemaRequest) (FeatureSchem
 	componentConfig := &modelProxyConfig.ConfigValue.ComponentConfig
 	responseConfig := &modelProxyConfig.ConfigValue.ResponseConfig
 
+	requestVersionInt, err := strconv.Atoi(request.Version)
+	if err != nil {
+		return FeatureSchemaResponse{
+			Data: []inferflow.SchemaComponents{},
+		}, err
+	}
+	if requestVersionInt != componentConfig.CacheVersion {
+		return FeatureSchemaResponse{
+			Data: []inferflow.SchemaComponents{},
+		}, errors.New("cache version mismatch for model config: " + request.ModelConfigId)
+	}
+
 	clientComponentConfig := toClientComponentConfig(componentConfig)
 	clientResponseConfig := toClientResponseConfig(responseConfig)
 
