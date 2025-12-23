@@ -96,7 +96,7 @@ public class EtcdWatcher {
                     watchPath
             );
 
-            logger.error("Setting up watch for etcd path: {} (prefix mode: true)", etcdEntitiesWatchPath);
+            logger.info("Setting up watch for etcd path: {} (prefix mode: true)", etcdEntitiesWatchPath);
             ByteSequence key = ByteSequence.from(etcdEntitiesWatchPath, StandardCharsets.UTF_8);
 
             watcher = etcdClient.getWatchClient().watch(key, option, new Watch.Listener() {
