@@ -1,5 +1,5 @@
-use axum::{extract::State, http::StatusCode, response::Json, routing::post, Router};
-use std::{sync::Arc, time::Duration};
+use axum::{extract::Query as QueryParams, extract::State, http::StatusCode, response::Json, routing::get, routing::post, Router};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
 
 pub mod retrieve {
@@ -91,36 +91,80 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = Router::new()
         .route("/retrieve-features", post(retrieve_features))
-        // pprof endpoints temporarily disabled
-        // .route("/debug/pprof/profile", get(pprof_profile))
-        // .route("/debug/pprof/heap", get(pprof_heap))
+        .route("/debug/pprof/profile", get(pprof_profile))
+        .route("/debug/pprof/heap", get(pprof_heap))
         .with_state(state);
 
     // Main server on 0.0.0.0:8080
     println!("Starting rust-caller-new on http://0.0.0.0:8080");
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
-    
-    // pprof endpoints temporarily disabled
+    println!("pprof endpoints available on http://127.0.0.1:8080/debug/pprof/profile");
+    println!("pprof endpoints available on http://127.0.0.1:8080/debug/pprof/heap");
     
     axum::serve(listener, app).await?;
 
     Ok(())
 }
 
-// pprof endpoints for profiling - temporarily disabled until pprof API is fixed
-// To enable: uncomment pprof dependency in Cargo.toml and fix the API calls below
-/*
+// pprof endpoints for profiling
 async fn pprof_profile(
     QueryParams(params): QueryParams<HashMap<String, String>>,
 ) -> Result<impl axum::response::IntoResponse, StatusCode> {
-    // pprof implementation needed
-    Err(StatusCode::NOT_IMPLEMENTED)
+    use axum::response::Response;
+    use axum::body::Body;
+    
+    let duration_secs = params
+        .get("seconds")
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(30);
+    
+    let guard = pprof::ProfilerGuard::new(100)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    tokio::time::sleep(Duration::from_secs(duration_secs)).await;
+    
+    let report = guard
+        .report()
+        .build()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    // Convert report to protobuf format using the protobuf feature
+    // The Report struct can be converted to pprof Profile format
+    let mut protobuf_body = Vec::new();
+    pprof::protobuf::encode(&report, &mut protobuf_body)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    Ok(Response::builder()
+        .status(200)
+        .header("Content-Type", "application/x-protobuf")
+        .body(Body::from(protobuf_body))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?)
 }
 
 async fn pprof_heap() -> Result<impl axum::response::IntoResponse, StatusCode> {
-    // pprof implementation needed
-    Err(StatusCode::NOT_IMPLEMENTED)
+    use axum::response::Response;
+    use axum::body::Body;
+    
+    // Heap profiling endpoint
+    let guard = pprof::ProfilerGuard::new(100)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    
+    let report = guard
+        .report()
+        .build()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    // Convert report to protobuf format
+    let mut protobuf_body = Vec::new();
+    pprof::protobuf::encode(&report, &mut protobuf_body)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    Ok(Response::builder()
+        .status(200)
+        .header("Content-Type", "application/x-protobuf")
+        .body(Body::from(protobuf_body))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?)
 }
-*/
 
 
