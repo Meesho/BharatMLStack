@@ -1,9 +1,9 @@
 use axum::{extract::State, http::StatusCode, response::{Html, Json, Response, IntoResponse}, routing::{get, post}, Router};
 use axum::body::Body;
 use std::sync::Arc;
-use std::sync::mpsc;
+// use std::sync::mpsc;  // Commented out - pprof related
 use std::time::Duration;
-use tokio::sync::oneshot;
+// use tokio::sync::oneshot;  // Commented out - pprof related
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
 
 // Configure jemalloc with profiling enabled
@@ -26,12 +26,12 @@ use retrieve::{FeatureGroup, Keys};
 const FEATURE_GROUP_LABEL: &str = "derived_fp32";
 const SUCCESS_RESPONSE: &str = "success";
 
-// Report request types
-enum ReportRequest {
-    Protobuf(oneshot::Sender<Result<Vec<u8>, String>>),
-    Flamegraph(oneshot::Sender<Result<Vec<u8>, String>>),
-    Text(oneshot::Sender<Result<String, String>>),
-}
+// Report request types - COMMENTED OUT (pprof related)
+// enum ReportRequest {
+//     Protobuf(oneshot::Sender<Result<Vec<u8>, String>>),
+//     Flamegraph(oneshot::Sender<Result<Vec<u8>, String>>),
+//     Text(oneshot::Sender<Result<String, String>>),
+// }
 
 #[derive(Clone)]
 struct AppState {
@@ -42,11 +42,11 @@ struct AppState {
     feature_labels: Arc<Vec<String>>, // Clone Arc pointer (cheap), use strings directly
     entity_label: Arc<str>,
     keys_schema: Arc<Vec<String>>, // Changed from Arc<[Arc<str>]> to Arc<Vec<String>>
-    report_tx: mpsc::Sender<ReportRequest>,
+    // report_tx: mpsc::Sender<ReportRequest>,  // Commented out - pprof related
 }
 
-// Endpoint to get pprof data in protobuf format (for go tool pprof)
-async fn get_pprof_protobuf(State(state): State<Arc<AppState>>) -> Result<Response<Body>, StatusCode> {
+// Endpoint to get pprof data in protobuf format (for go tool pprof) - COMMENTED OUT
+/* async fn get_pprof_protobuf(State(state): State<Arc<AppState>>) -> Result<Response<Body>, StatusCode> {
     let (tx, rx) = oneshot::channel();
     state.report_tx.send(ReportRequest::Protobuf(tx))
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
@@ -62,10 +62,10 @@ async fn get_pprof_protobuf(State(state): State<Arc<AppState>>) -> Result<Respon
         }
         _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
-}
+} */
 
-// Endpoint to get flamegraph SVG
-async fn get_flamegraph(State(state): State<Arc<AppState>>) -> Result<Response<Body>, StatusCode> {
+// Endpoint to get flamegraph SVG - COMMENTED OUT
+/* async fn get_flamegraph(State(state): State<Arc<AppState>>) -> Result<Response<Body>, StatusCode> {
     let (tx, rx) = oneshot::channel();
     state.report_tx.send(ReportRequest::Flamegraph(tx))
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
@@ -81,10 +81,10 @@ async fn get_flamegraph(State(state): State<Arc<AppState>>) -> Result<Response<B
         }
         _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
-}
+} */
 
-// Endpoint to get text report
-async fn get_pprof_text(State(state): State<Arc<AppState>>) -> Result<Html<String>, StatusCode> {
+// Endpoint to get text report - COMMENTED OUT
+/* async fn get_pprof_text(State(state): State<Arc<AppState>>) -> Result<Html<String>, StatusCode> {
     let (tx, rx) = oneshot::channel();
     state.report_tx.send(ReportRequest::Text(tx))
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
@@ -93,10 +93,10 @@ async fn get_pprof_text(State(state): State<Arc<AppState>>) -> Result<Html<Strin
         Ok(Ok(text)) => Ok(Html(format!("<pre>{}</pre>", text))),
         _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
-}
+} */
 
-// Endpoint to get heap/memory profiling data
-#[cfg(not(target_env = "msvc"))]
+// Endpoint to get heap/memory profiling data - COMMENTED OUT
+/* #[cfg(not(target_env = "msvc"))]
 async fn get_pprof_heap() -> Result<impl IntoResponse, (StatusCode, String)> {
     // Check if jemalloc profiling is available
     let prof_ctl = jemalloc_pprof::PROF_CTL.as_ref()
@@ -129,7 +129,7 @@ async fn get_pprof_heap() -> Result<impl IntoResponse, (StatusCode, String)> {
         .header("Content-Disposition", "attachment; filename=heap.pb.gz")
         .body(Body::from(pprof_data))
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?)
-}
+} */
 
 async fn retrieve_features(State(state): State<Arc<AppState>>) -> Result<Json<String>, StatusCode> {
     // OPTIMIZATION: Use strings directly - no conversion needed since we store Vec<String>
@@ -195,10 +195,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let feature_labels = Arc::new(get_labels());
     let keys_schema = Arc::new(vec!["catalog_id".to_string()]);
     
-    // Start profiling - guard must be kept alive for profiling to continue
+    // Start profiling - guard must be kept alive for profiling to continue - COMMENTED OUT
     // Higher frequency = more samples = better resolution
     // blocklist excludes low-level libraries to focus on application code
-    let guard = pprof::ProfilerGuardBuilder::default()
+    /* let guard = pprof::ProfilerGuardBuilder::default()
         .frequency(10000)  // Increased from 1000 to 10000 for better resolution
         .blocklist(&["libc", "libgcc", "pthread", "vdso"])
         .build()
@@ -258,7 +258,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         // Keep guard alive - it will be dropped when this task ends
         drop(guard);
-    });
+    }); */
 
     let state = Arc::new(AppState {
         client,
@@ -267,11 +267,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         feature_labels,
         entity_label: Arc::from("catalog"),
         keys_schema,
-        report_tx,
+        // report_tx,  // Commented out - pprof related
     });
 
-    // Check jemalloc heap profiling availability
-    #[cfg(not(target_env = "msvc"))]
+    // Check jemalloc heap profiling availability - COMMENTED OUT
+    /* #[cfg(not(target_env = "msvc"))]
     {
         if let Some(prof_ctl) = jemalloc_pprof::PROF_CTL.as_ref() {
             let prof_ctl = prof_ctl.lock().await;
@@ -291,25 +291,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - GET /pprof/flamegraph - View CPU flamegraph SVG in browser");
     println!("  - GET /pprof/text - View CPU text report");
     #[cfg(not(target_env = "msvc"))]
-    println!("  - GET /pprof/heap - Download heap/memory pprof data (use with: go tool pprof http://localhost:8080/pprof/heap)");
+    println!("  - GET /pprof/heap - Download heap/memory pprof data (use with: go tool pprof http://localhost:8080/pprof/heap)"); */
 
-    let mut app = Router::new()
-        .route("/retrieve-features", post(retrieve_features))
-        .route("/pprof/protobuf", get(get_pprof_protobuf))
-        .route("/pprof/flamegraph", get(get_flamegraph))
-        .route("/pprof/text", get(get_pprof_text));
+    let app = Router::new()
+        .route("/retrieve-features", post(retrieve_features));
+        // Pprof routes commented out
+        // .route("/pprof/protobuf", get(get_pprof_protobuf))
+        // .route("/pprof/flamegraph", get(get_flamegraph))
+        // .route("/pprof/text", get(get_pprof_text));
     
-    #[cfg(not(target_env = "msvc"))]
-    {
-        app = app.route("/pprof/heap", get(get_pprof_heap));
-    }
+    // #[cfg(not(target_env = "msvc"))]
+    // {
+    //     app = app.route("/pprof/heap", get(get_pprof_heap));
+    // }
     
     let app = app.with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
     println!("Server listening on 0.0.0.0:8080");
     
-    // Profiling continues while server runs
+    // Profiling continues while server runs - COMMENTED OUT
     // When server exits, guard is dropped and profiling stops
     axum::serve(listener, app).await?;
 
