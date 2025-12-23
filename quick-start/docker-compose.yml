@@ -152,6 +152,7 @@ services:
       - P2P_CACHE_5_NUM_CLIENTS=2
       - P2P_CACHE_5_SERVER_PORT=8088
       - P2P_CACHE_ACTIVE_CONFIG_IDS=5
+      - ENABLE_HTTP_API=true
     networks:
       - onfs-network
     depends_on:

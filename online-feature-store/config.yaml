@@ -23,6 +23,7 @@ environment:
             - online-feature-store-consumer-v5
             - online-feature-store-api-secondary-p2p-test
             - online-feature-store-api-nrt
+            - online-feature-store-api-http
     stg:
         deployment_order:
             - online-feature-store-api

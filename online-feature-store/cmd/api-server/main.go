@@ -7,6 +7,8 @@ import (
 	featureConfig "github.com/Meesho/BharatMLStack/online-feature-store/internal/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/data/repositories/provider"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/server/grpc"
+	httpserver "github.com/Meesho/BharatMLStack/online-feature-store/internal/server/http"
+	muxserver "github.com/Meesho/BharatMLStack/online-feature-store/internal/server/mux"
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/system"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/config"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/etcd"
@@ -14,6 +16,7 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/logger"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
 )
 
 const configManagerVersion = 1
@@ -30,7 +33,6 @@ func main() {
 	etcd.Init(configManagerVersion, &featureConfig.FeatureRegistry{})
 	metric.Init()
 	infra.InitDBConnectors()
-	grpc.Init()
 	system.Init()
 	featureConfig.InitEtcDBridge()
 	configManager := featureConfig.Instance(featureConfig.DefaultVersion)
@@ -50,9 +52,33 @@ func main() {
 		log.Error().Err(err).Msg("Error registering watch path callback for registered clients")
 	}
 	provider.InitProvider(configManager, etcd.Instance())
-	err = grpc.Instance().Run()
-	if err != nil {
-		log.Panic().Err(err).Msg("Error from running online-feature-store api-server")
+
+	// Check if HTTP API should be enabled
+	enableHTTP := viper.GetBool("ENABLE_HTTP_API")
+	grpc.Init()
+	if enableHTTP {
+		log.Info().Msg("HTTP API mode enabled - starting HTTP and gRPC servers via cmux")
+
+		// Initialize HTTP server along with gRPC server
+		httpserver.Init()
+
+		// Initialize and run mux server
+		mux, err := muxserver.Init()
+		if err != nil {
+			log.Panic().Err(err).Msg("Failed to initialize mux server")
+		}
+
+		mux.RegisterServices()
+
+		if err := mux.Run(); err != nil {
+			log.Panic().Err(err).Msg("Error from running mux server")
+		}
+	} else {
+		log.Info().Msg("gRPC API mode enabled (default)")
+		err = grpc.Instance().Run()
+		if err != nil {
+			log.Panic().Err(err).Msg("Error from running online-feature-store api-server")
+		}
+		log.Info().Msgf("online-feature-store gRPC API server started.")
 	}
-	log.Info().Msgf("online-feature-store api server started.")
 }
