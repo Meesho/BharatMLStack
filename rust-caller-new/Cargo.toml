@@ -24,11 +24,28 @@ protobuf = ["pprof/protobuf"]
 [build-dependencies]
 tonic-build = "0.11"
 
+# Debug profile optimized for profiling (better symbol resolution)
+[profile.dev]
+opt-level = 1  # Some optimization but keeps function boundaries
+debug = 2      # Full debug info including line numbers
+
+# Production release profile with profiling support
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
-strip = true
+# Keep debug symbols for production profiling
+# debug = 1: Line numbers and file names (good balance - ~10-20% larger binary)
+# debug = 2: Full debug info (larger binary ~30-50%, best for profiling)
+debug = 1
+# DO NOT strip symbols - needed for profiling to show function names
+# strip = true  # Keep commented out for profiling
+
+# Alternative: Create a separate profiling profile if you want to keep release smaller
+# Uncomment below and use: cargo build --profile profiling
+# [profile.profiling]
+# inherits = "release"
+# debug = 2  # Full debug info for best profiling visibility
 
 [workspace]
 

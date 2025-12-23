@@ -188,8 +188,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let keys_schema = Arc::from(vec![Arc::from("catalog_id")]);
     
     // Start profiling - guard must be kept alive for profiling to continue
+    // Higher frequency = more samples = better resolution
+    // blocklist excludes low-level libraries to focus on application code
     let guard = pprof::ProfilerGuardBuilder::default()
-        .frequency(1000)
+        .frequency(10000)  // Increased from 1000 to 10000 for better resolution
         .blocklist(&["libc", "libgcc", "pthread", "vdso"])
         .build()
         .unwrap();
