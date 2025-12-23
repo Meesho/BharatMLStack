@@ -124,17 +124,19 @@ async fn pprof_profile(
     tokio::time::sleep(Duration::from_secs(duration_secs)).await;
     
     // Build protobuf Profile from Report
-    // With protobuf feature enabled, Report has a pprof() method
+    // In pprof 0.15 with protobuf feature, Report has a pprof() method
     let report = guard
         .report()
         .build()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
-    let mut protobuf_body = Vec::new();
-    report
+    let profile = report
         .pprof()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .write_to_writer(&mut protobuf_body)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    let mut protobuf_body = Vec::new();
+    profile
+        .encode(&mut protobuf_body)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
     Ok(Response::builder()
@@ -160,11 +162,13 @@ async fn pprof_heap() -> Result<impl axum::response::IntoResponse, StatusCode> {
         .build()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
-    let mut protobuf_body = Vec::new();
-    report
+    let profile = report
         .pprof()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .write_to_writer(&mut protobuf_body)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    let mut protobuf_body = Vec::new();
+    profile
+        .encode(&mut protobuf_body)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
     Ok(Response::builder()
