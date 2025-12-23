@@ -8,7 +8,7 @@ import * as URL_CONSTANTS from '../../../../config';
 import InfoIcon from '@mui/icons-material/Info';
 import CloseIcon from '@mui/icons-material/Close';
 
-const DeployableModelProxyRegistry = () => {
+const DeployableInferflowRegistry = () => {
   const { user, hasPermission, permissions } = useAuth();
   
   const service = SERVICES.InferFlow;
@@ -533,4 +533,4 @@ const DeployableModelProxyRegistry = () => {
   );
 };
 
-export default DeployableModelProxyRegistry;
+export default DeployableInferflowRegistry;
