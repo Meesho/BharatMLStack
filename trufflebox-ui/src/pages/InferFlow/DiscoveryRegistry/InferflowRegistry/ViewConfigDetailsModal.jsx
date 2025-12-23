@@ -16,7 +16,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 
-const ViewConfigDetailsModal = ({ open, onClose, configData }) => {
+const ViewInferflowConfigDetailsModal = ({ open, onClose, configData }) => {
   const getStatusChip = (status) => {
     if (status) {
       return (
@@ -276,4 +276,4 @@ const ViewConfigDetailsModal = ({ open, onClose, configData }) => {
   );
 };
 
-export default ViewConfigDetailsModal; 
+export default ViewInferflowConfigDetailsModal; 
