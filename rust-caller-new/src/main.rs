@@ -12,9 +12,6 @@ use retrieve::{FeatureGroup, Keys, Query};
 #[derive(Clone)]
 struct AppState {
     client: RetrieveClient<Channel>,
-    entity_label: String,
-    feature_group: FeatureGroup,
-    keys_schema: Vec<String>,
     auth_token: AsciiMetadataValue,
     caller_id: AsciiMetadataValue,
 }
@@ -22,11 +19,18 @@ struct AppState {
 async fn retrieve_features(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<&'static str>, StatusCode> {
+    let entity_label = "catalog".to_string();
+    let keys_schema = vec!["catalog_id".to_string()];
+
+    let feature_group = FeatureGroup {
+        label: "derived_fp32".to_string(),
+        feature_labels: get_labels(),
+    };
 
     let query = Query {
-        entity_label: state.entity_label.clone(),
-        feature_groups: vec![state.feature_group.clone()],
-        keys_schema: state.keys_schema.clone(),
+        entity_label,
+        feature_groups: vec![feature_group],
+        keys_schema,
         keys: vec![
             Keys { cols: vec!["176".to_string()] },
             Keys { cols: vec!["179".to_string()] },
@@ -58,7 +62,7 @@ fn get_labels() -> Vec<String> {
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Connecting to feature store 1...");
+    println!("Connecting to feature store 2...");
 
     let channel = Endpoint::from_static("http://online-feature-store-api.int.meesho.int:80")
         .timeout(Duration::from_secs(10))
@@ -70,18 +74,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = RetrieveClient::new(channel);
     
-    // Pre-build static parts once at startup using Arc for sharing
-    // This allows multiple owners without cloning string data - similar to Go's string literals!
-    let feature_labels = Arc::new(get_labels());
-    
     let state = Arc::new(AppState {
         client,
-        entity_label: "catalog".to_string(),
-        feature_group: FeatureGroup {
-            label: "derived_fp32".to_string(),
-            feature_labels: (*feature_labels).clone(),
-        },
-        keys_schema: vec!["catalog_id".to_string()],
         auth_token: AsciiMetadataValue::from_static("atishay"),
         caller_id: AsciiMetadataValue::from_static("test-3"),
     });

@@ -17,11 +17,8 @@ import (
 
 // AppState stores gRPC client
 type AppState struct {
-	client       retrieve.FeatureServiceClient
-	entityLabel  string
-	featureGroup *retrieve.FeatureGroup
-	keysSchema   []string
-	metadata     metadata.MD
+	client   retrieve.FeatureServiceClient
+	metadata metadata.MD
 }
 
 func (s *AppState) handler(c *gin.Context) {
@@ -29,12 +26,20 @@ func (s *AppState) handler(c *gin.Context) {
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, s.metadata)
 
+	entityLabel := "catalog"
+	keysSchema := []string{"catalog_id"}
+
+	featureGroup := &retrieve.FeatureGroup{
+		Label:         "derived_fp32",
+		FeatureLabels: getLabels(),
+	}
+
 	req := &retrieve.Query{
-		EntityLabel: s.entityLabel,
+		EntityLabel: entityLabel,
 		FeatureGroups: []*retrieve.FeatureGroup{
-			s.featureGroup,
+			featureGroup,
 		},
-		KeysSchema: s.keysSchema,
+		KeysSchema: keysSchema,
 		Keys: []*retrieve.Keys{
 			{Cols: []string{"176"}},
 			{Cols: []string{"179"}},
@@ -710,7 +715,7 @@ func getLabels() []string {
 }
 
 func main() {
-	print("Starting go-caller with 4 threads")
+	print("Starting go-caller with 4 threads 1")
 	runtime.GOMAXPROCS(4)
 	gin.SetMode(gin.ReleaseMode)
 
@@ -727,16 +732,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	featureGroup := &retrieve.FeatureGroup{
-		Label:         "derived_fp32",
-		FeatureLabels: getLabels(),
-	}
-
 	state := &AppState{
-		client:       retrieve.NewFeatureServiceClient(conn),
-		entityLabel:  "catalog",
-		featureGroup: featureGroup,
-		keysSchema:   []string{"catalog_id"},
+		client: retrieve.NewFeatureServiceClient(conn),
 		metadata: metadata.MD{
 			"online-feature-store-auth-token": []string{"atishay"},
 			"online-feature-store-caller-id":  []string{"test-3"},
