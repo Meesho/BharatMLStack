@@ -445,3 +445,12 @@ type RTPFeatureGroup struct {
 	Features []string `json:"features"`
 	DataType string   `json:"dataType"`
 }
+
+type FeatureSchemaRequest struct {
+	ModelConfigId string `json:"model_config_id"`
+	Version       string `json:"version"`
+}
+
+type FeatureSchemaResponse struct {
+	Data []dbModel.SchemaComponents `json:"data"`
+}
