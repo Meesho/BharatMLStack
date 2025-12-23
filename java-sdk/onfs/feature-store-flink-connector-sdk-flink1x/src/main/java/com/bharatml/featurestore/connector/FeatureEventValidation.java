@@ -18,6 +18,7 @@ public final class FeatureEventValidation extends RichFilterFunction<FeatureEven
     private static final Map<String, SourceMappingHolder> holderRegistry = new java.util.concurrent.ConcurrentHashMap<>();
     private final String holderKey;
 
+    private transient long validEventsCount;
     private transient long invalidEventsCount;
     
     /**
@@ -59,6 +60,7 @@ public final class FeatureEventValidation extends RichFilterFunction<FeatureEven
             throw new IllegalStateException("SourceMappingHolder not found for key: " + holderKey);
         }
 
+        this.validEventsCount = 0;
         this.invalidEventsCount = 0;
     }
 
@@ -122,7 +124,11 @@ public final class FeatureEventValidation extends RichFilterFunction<FeatureEven
         return keySchemaSet.containsAll(eventKeysSchema);
     }
 
-    public long getInvalidEventsMetric() {
+    public long getValidEventsCount() {
+        return validEventsCount;
+    }
+
+    public long getInvalidEventsCount() {
         return invalidEventsCount;
     }
 }

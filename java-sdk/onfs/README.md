@@ -167,187 +167,42 @@ KafkaSink<FeatureEvent> sink = KafkaSinkFactory.create(
 validatedStream.sinkTo(sink);
 ```
 
-### Without Validation (Not Recommended)
-
-```java
-DataStream<FeatureEvent> stream = ...;
-KafkaSink<FeatureEvent> sink = KafkaSinkFactory.create(
-    cfg.getBootstrapServers(),
-    cfg.getTopic(),
-    cfg.getProducerProperties(),
-    cfg.isTransactional(),
-    "flink-feature-store-"
-);
-stream.sinkTo(sink);
-```
-
-**For `EXACTLY_ONCE`:**
+**For `EXACTLY_ONCE` semantics:**
 
 ```java
 env.enableCheckpointing(60000);
 ```
 
 **Validation Features:**
-- ✅ Validates entity label exists in Horizon mapping
-- ✅ Validates keys schema matches Horizon expectations
-- ✅ Validates feature group label is registered
-- ✅ Validates feature labels are registered for the entity/feature group combination
-- ✅ **Invalid events are filtered out** (removed from stream, not causing failures)
-- Validation mapping is read from the `SourceMappingHolder` instance, which can be updated dynamically via `EtcdWatcher`
-- ✅ **Supports multiple independent jobs**: Each job can have its own `SourceMappingHolder` instance with different `jobId` and `jobToken`
-- ✅ **Flink-compatible**: Uses registry pattern to avoid serialization issues with Flink operators
-- ✅ **Real-time metrics**: Invalid event count is tracked and can be monitored in real-time
+- ✅ Validates entity label, keys schema, feature group, and feature labels against Horizon mapping
+- ✅ Invalid events are filtered out (removed from stream)
+- ✅ Supports multiple independent jobs (instance-based `SourceMappingHolder` with registry pattern)
+- ✅ Dynamic schema updates via `EtcdWatcher` without job restart
+- ✅ Metrics: Access valid and invalid events counts via `getValidEventsCount()` and `getInvalidEventsCount()` instance methods respectively.
 
-## Monitoring Invalid Events
+## Dynamic Schema Updates with EtcdWatcher
 
-The `FeatureEventValidation` class automatically tracks the number of invalid events that fail validation. This metric is aggregated across all task manager instances that share the same `holderKey`, providing a unified view of validation failures.
+`EtcdWatcher` monitors etcd for schema changes and automatically refreshes the source mapping. The watcher watches `{watchPath}/entities` with prefix mode enabled.
 
-### Accessing the Metric
-
-You can access the invalid event count programmatically using the static method:
+**Note:** Pass the base path (e.g., `"/config/orion-v2"`) as `watchPath` - the code automatically appends `/entities`.
 
 ```java
-// Get the total count of invalid events for a specific holder key
-// This aggregates counts from all task manager instances
-long invalidCount = FeatureEventValidation.getInvalidEventMetric(holderKey);
-System.out.println("Total invalid events: " + invalidCount);
-```
-
-### Real-time Monitoring
-
-To monitor invalid events in real-time, you can create a background thread that periodically reads the metric:
-
-```java
-// Start a background thread to print metrics every second
-AtomicBoolean jobRunning = new AtomicBoolean(true);
-Thread metricThread = new Thread(() -> {
-    long previousCount = 0;
-    while (jobRunning.get()) {
-        try {
-            Thread.sleep(1000); // Sleep for 1 second
-            long currentCount = FeatureEventValidation.getInvalidEventMetric(holderKey);
-            long delta = currentCount - previousCount;
-            System.out.println(String.format("[Metric] Invalid events: %d (Δ: %d)", currentCount, delta));
-            previousCount = currentCount;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            break;
-        }
-    }
-}, "MetricPrinter");
-metricThread.setDaemon(true);
-metricThread.start();
-
-// Run your Flink job
-env.execute("My Flink Job");
-
-// Stop the metric thread when job completes
-jobRunning.set(false);
-metricThread.interrupt();
-```
-
-**Key Points:**
-- The metric is thread-safe and aggregates counts from all parallel task manager instances
-- Each `holderKey` maintains its own independent counter
-- The counter starts at 0 when the first filter instance is opened
-- You can read the metric at any time, even while the Flink job is running
-
-## Dynamic Source Mapping Updates with EtcdWatcher
-
-The `EtcdWatcher` monitors an etcd path prefix for changes and automatically refreshes the source mapping from Horizon when changes are detected. This allows the validation to use the latest schema without restarting the Flink job.
-
-```java
-// Create HorizonClient with configurable timeouts
-int connectTimeoutMs = 3000;  // Connection timeout in milliseconds
-int responseTimeoutMs = 1500; // Response timeout in milliseconds
-HorizonClient horizonClient = new HorizonClient(horizonBaseUrl, connectTimeoutMs, responseTimeoutMs);
-
-// Create a SourceMappingHolder instance
-SourceMappingHolder sourceMappingHolder = new SourceMappingHolder();
-
-// Initialize with current schema
-sourceMappingHolder.update(horizonClient.getHorizonResponse(jobId, jobToken));
-
-// Start etcd watcher to monitor schema changes using builder pattern
 EtcdWatcher etcdWatcher = EtcdWatcher.builder()
-    .etcdEndpoint(etcdEndpoint)      // etcd server endpoint
-    .etcdUsername(etcdUsername)      // etcd username
-    .etcdPassword(etcdPassword)      // etcd password
-    .watchPath(watchPath)             // etcd path prefix to watch (e.g., "/config/appName")
-    .horizonClient(horizonClient)    // HorizonClient instance
-    .jobId(jobId)                     // Job ID for Horizon API
-    .jobToken(jobToken)               // Job token for Horizon API
-    .sourceMappingHolder(sourceMappingHolder) // SourceMappingHolder instance to update
+    .etcdEndpoint(etcdEndpoint)
+    .etcdUsername(etcdUsername)
+    .etcdPassword(etcdPassword)
+    .watchPath("/config/orion-v2")  // Base path - /entities is appended automatically
+    .horizonClient(horizonClient)
+    .jobId(jobId)
+    .jobToken(jobToken)
+    .sourceMappingHolder(sourceMappingHolder)
     .build();
 etcdWatcher.start();
-
-// The watcher will automatically update the SourceMappingHolder instance when etcd changes are detected
-// FeatureEventValidation will use the updated schema for subsequent events
 ```
 
-## Multiple Jobs Support
+The watcher automatically restarts on errors/completion and updates the `SourceMappingHolder` when changes are detected.
 
-Since `SourceMappingHolder` is instance-based and `FeatureEventValidation` uses a registry pattern, you can run multiple Flink jobs with different `jobId` and `jobToken` values, each maintaining its own independent source mapping:
 
-```java
-// Job 1 with its own source mapping
-int connectTimeoutMs = 3000;
-int responseTimeoutMs = 1500;
-HorizonClient client1 = new HorizonClient(horizonBaseUrl, connectTimeoutMs, responseTimeoutMs);
-SourceMappingHolder holder1 = new SourceMappingHolder();
-holder1.update(client1.getHorizonResponse(jobId1, jobToken1));
-FeatureEventValidation.registerHolder("job1", holder1);
-EtcdWatcher watcher1 = EtcdWatcher.builder()
-    .etcdEndpoint(etcdEndpoint)
-    .etcdUsername(etcdUsername)
-    .etcdPassword(etcdPassword)
-    .watchPath(watchPath)
-    .horizonClient(client1)
-    .jobId(jobId1)
-    .jobToken(jobToken1)
-    .sourceMappingHolder(holder1)
-    .build();
-FeatureEventValidation validation1 = new FeatureEventValidation("job1");
-
-// Job 2 with its own independent source mapping
-HorizonClient client2 = new HorizonClient(horizonBaseUrl, connectTimeoutMs, responseTimeoutMs);
-SourceMappingHolder holder2 = new SourceMappingHolder();
-holder2.update(client2.getHorizonResponse(jobId2, jobToken2));
-FeatureEventValidation.registerHolder("job2", holder2);
-EtcdWatcher watcher2 = EtcdWatcher.builder()
-    .etcdEndpoint(etcdEndpoint)
-    .etcdUsername(etcdUsername)
-    .etcdPassword(etcdPassword)
-    .watchPath(watchPath)
-    .horizonClient(client2)
-    .jobId(jobId2)
-    .jobToken(jobToken2)
-    .sourceMappingHolder(holder2)
-    .build();
-FeatureEventValidation validation2 = new FeatureEventValidation("job2");
-```
-
-## Protobuf Schema
-
-**Located at:**
-- `java-sdk/onfs/proto/feature.proto`
-
-**Generated at:**
-- `target/generated-sources/protobuf/java/persist/`
-
-## Feature Mapping Validation
-
-The SDK provides validation of feature mappings against Horizon before events are written to Kafka:
-
-- ✅ Validates entity label exists in Horizon mapping
-- ✅ Validates keys schema matches Horizon expectations
-- ✅ Validates feature group label is registered
-- ✅ Validates feature labels are registered for the entity/feature group combination
-- ✅ **Invalid events are filtered out** (removed from stream)
-- ✅ **Supports multiple independent jobs**: Each job maintains its own source mapping
-- ✅ **Flink-compatible**: Uses registry pattern to avoid serialization issues
-
-This prevents ingestion of invalid or unregistered features. The validation uses a `SourceMappingHolder` instance which can be updated dynamically via `EtcdWatcher` to reflect schema changes without restarting the Flink job.
 
 ## Testing
 
