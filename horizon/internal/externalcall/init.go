@@ -28,9 +28,8 @@ func Init(config configs.Configs) {
 	// These values come from REPOSITORY_NAME and BRANCH_NAME environment variables (mandatory)
 	github.InitRepositoryAndBranch(config.RepositoryName, config.BranchName)
 
-	// Temporarily commented out - uncomment when configs are available
 	// Initialize feature validation client with local online feature store
-	// InitFeatureValidationClient()
+	InitFeatureValidationClient()
 	// Initialize pricing client - provides both raw data types and RTP format
-	// PricingClient.InitPricingClient()
+	PricingClient.InitPricingClient()
 }
