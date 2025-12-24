@@ -16,6 +16,7 @@ type ServiceDeployableConfig struct {
 	Host                    string `gorm:"unique;not null"`
 	Service                 string `gorm:"type:ENUM('inferflow', 'predator', 'numerix')"`
 	Active                  bool   `gorm:"default:false"`
+	Port                    int    `gorm:"default:8080"` // Port field for the deployable
 	CreatedBy               string
 	UpdatedBy               string
 	CreatedAt               time.Time

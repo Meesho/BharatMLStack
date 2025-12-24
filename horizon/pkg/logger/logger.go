@@ -25,12 +25,14 @@ func Init(config configs.Configs) {
 	appName = config.AppName
 	logLevel := config.AppLogLevel
 
+	// Use default app name if not set (for local testing)
 	if len(appName) == 0 {
-		panic("App name is not set!")
+		appName = "horizon"
+		log.Warn().Msg("App name not set, defaulting to 'horizon'")
 	}
 	if len(logLevel) == 0 {
-		log.Warn().Msg("Log level not set, defaulting to WARN")
-		logLevel = "WARN"
+		log.Warn().Msg("Log level not set, defaulting to INFO")
+		logLevel = "INFO"
 	}
 	initLogger(appName, logLevel)
 }

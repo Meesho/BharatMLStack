@@ -48,7 +48,7 @@ func InitV1ConfigHandler() Config {
 			distributedCacheActiveConfIdsStr := onlinefeaturestore.DistributedCacheActiveConfIdsStr
 			inMemoryCacheActiveConfIdsStr := onlinefeaturestore.InMemoryCacheActiveConfIdsStr
 			if scyllaActiveConfIdsStr == "" {
-				log.Panic().Msg("SCYLLA_ACTIVE_CONFIG_IDS environment variable is not set. Please set SCYLLA_ACTIVE_CONFIG_IDS to initialize the handler.")
+				return
 			}
 			scyllaActiveIds := strings.Split(scyllaActiveConfIdsStr, ",")
 			scyllaStores := make(map[int]scylla.Store, len(scyllaActiveIds))
@@ -56,19 +56,14 @@ func InitV1ConfigHandler() Config {
 				confIdToDbTypeMap[configIdStr] = "scylla"
 				activeConfigId, err := strconv.Atoi(configIdStr)
 				if err != nil {
-					log.Panic().Msgf("Error in converting config id %s to int: %v", configIdStr, err)
+					log.Error().Msgf("Error in converting config id %s to int", configIdStr)
+					continue
 				}
-				connFacade, err := infra.Scylla.GetConnection(activeConfigId)
-				if err != nil {
-					log.Panic().Msgf("Error getting Scylla connection for config id %d: %v", activeConfigId, err)
-				}
-				conn, ok := connFacade.(*infra.ScyllaClusterConnection)
-				if !ok {
-					log.Panic().Msgf("Error: Scylla connection is not of type ScyllaClusterConnection for config id %d", activeConfigId)
-				}
-				scyllaStore, err := scylla.NewRepository(conn)
-				if err != nil {
-					log.Panic().Msgf("Error in creating scylla store for config id %d: %v", activeConfigId, err)
+				connFacade, _ := infra.Scylla.GetConnection(activeConfigId)
+				conn := connFacade.(*infra.ScyllaClusterConnection)
+				scyllaStore, err2 := scylla.NewRepository(conn)
+				if err2 != nil {
+					log.Error().Msgf("Error in creating scylla store")
 				}
 				scyllaStores[activeConfigId] = scyllaStore
 			}
@@ -93,33 +88,27 @@ func InitV1ConfigHandler() Config {
 				}
 			}
 
-			connection, err := infra.SQL.GetConnection()
-			if err != nil {
-				log.Panic().Msgf("Error getting SQL connection: %v", err)
-			}
-			sqlConn, ok := connection.(*infra.SQLConnection)
-			if !ok {
-				log.Panic().Msg("Error: SQL connection is not of type SQLConnection")
-			}
+			connection, _ := infra.SQL.GetConnection()
+			sqlConn := connection.(*infra.SQLConnection)
 			entityRepo, err := entity.NewRepository(sqlConn)
 			if err != nil {
-				log.Panic().Msgf("Error in creating entity repository: %v", err)
+				log.Error().Msgf("Error in creating entity repository")
 			}
 			fgRepo, err := featuregroup.NewRepository(sqlConn)
 			if err != nil {
-				log.Panic().Msgf("Error in creating feature group repository: %v", err)
+				log.Error().Msgf("Error in creating feature group repository")
 			}
 			featureRepo, err := features.NewRepository(sqlConn)
 			if err != nil {
-				log.Panic().Msgf("Error in creating feature repository: %v", err)
+				log.Error().Msgf("Error in creating feature repository")
 			}
 			storeRepo, err := store.NewRepository(sqlConn)
 			if err != nil {
-				log.Panic().Msgf("Error in creating store repository: %v", err)
+				log.Error().Msgf("Error in creating store repository")
 			}
 			jobRepo, err := job.NewRepository(sqlConn)
 			if err != nil {
-				log.Panic().Msgf("Error in creating job repository: %v", err)
+				log.Error().Msgf("Error in creating job repository")
 			}
 			config = &OnlineFeatureStore{
 				Config:       config2.NewEtcdConfig(),
@@ -130,7 +119,6 @@ func InitV1ConfigHandler() Config {
 				jobRepo:      jobRepo,
 				scyllaStores: scyllaStores,
 			}
-			log.Info().Msgf("Online Feature Store handler initialized successfully")
 		})
 	}
 	return config

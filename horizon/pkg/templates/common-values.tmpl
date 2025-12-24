@@ -1,0 +1,359 @@
+{{ define "jmxconfig" }}
+  enabled: false
+{{ end }}
+
+{{ define "args" }}
+{{ end }}
+
+{{ define "labels" }}
+{{ end }}
+
+{{ define "tolerations" }}
+{{ end }}
+
+{{ define "podAnnotations" }}
+{{ end }}
+
+{{ define "externalSecret" }}
+  enabled: true
+{{ end }}
+
+{{ define "env" }}
+    null
+{{ end }}
+
+{{ define "lifecycle" }}
+  lifecycle:
+    preStop:
+      exec:
+        command:
+          - /bin/bash
+          - -c
+          - kill -SIGQUIT; /bin/sleep 120
+{{ end }}
+
+{{ define "appType"}}
+{{ end }}
+
+{{ define "metrics_port"}}
+{{ end }}
+
+{{ define "otel" }}
+{{ end }}
+
+{{ if eq .deploymentStrategy "canary" }}
+canary:{{ toYAML .canary | nindent 2}}
+{{else}}
+canary:
+  enabled: false
+{{end}}
+{{ template "appType" . }}
+cron:
+  enabled: false
+  serviceAccount:
+    enabled: false
+applicationName: {{ .app_name }}
+autoscaling:
+  enabled: {{ .as_enabled }}
+  maxReplicas: {{ .as_max }}
+  minReplicas: {{ .as_min }}
+  pollingInterval: {{ .as_poll }}
+  scaledown:
+    policies:
+      - periodseconds: {{ .as_down_period }}
+        type: Pods
+        value: {{ .as_down_pod_count }}
+    selectpolicy: Min
+    stabilizationWindowSeconds: {{ .as_down_stable_window }}
+  scaleup:
+    policies:
+      - periodseconds: {{ .as_up_period }}
+        type: Pods
+        value: {{ .as_up_pod_count }}
+      - periodseconds: {{ .as_up_period }}
+        type: Percent
+        value: {{ .as_up_pod_percentage }}
+    selectpolicy: Max
+    stabilizationWindowSeconds: {{ .as_up_stable_window }}
+{{ if not .triggers}}
+  triggers:
+    - metadata:
+        value: "{{ .as_trigger_value }}"
+      metricType: {{ .as_trigger_type }}
+      type: {{ .as_trigger_metric }}
+{{ else }}
+  triggers: {{.triggers| toYAML | nindent 2}}
+{{ end }}
+replicaCount: {{ .replica_count }}
+{{ template "otel" . }}
+deployment:
+  terminationGracePeriodSeconds: {{ .terminationGracePeriodSeconds }}
+{{ template "lifecycle" . }}
+  affinity: {}
+  podDistributionSkew: {{ .podDistributionSkew }}
+  args:
+  {{ template "args" . }}
+  command:
+  {{ template "command" . }}
+  enabled: true
+  env: {{ template "env" . }}
+  envFrom:
+    secretRef: {{ .app_name }}
+  {{ if .triton_image_tag }}
+  image:
+    pullPolicy: IfNotPresent
+    pullSecret: ""
+    repository: {{ .triton_repository }}
+    tag: {{ .triton_image_tag }}
+  {{ end }}
+  minReadySeconds: 10
+  podAnnotations:
+{{ if .appMetrics}}
+    prometheus.io/path: /actuator/prometheus
+    prometheus.io/port: '{{ .app_port }}'
+    prometheus.io/scrape: "true"
+{{ end }}
+{{ if .pod_annotations }}
+{{ .pod_annotations | toYAML | indent 4}}
+{{ end }}
+{{ template "podAnnotations" . }}
+{{ if and (not .appMetrics) (not .pod_annotations) }}
+    {}
+{{ end }}
+{{ if .triton_image_tag }}
+{{ template "ports" . }}
+{{ template "probes" . }}
+{{ else }}
+  ports:
+    - containerPort: {{ .app_port }}
+      name: http
+      protocol: TCP
+{{ template "metrics_port" . }}
+  probes:
+    liveness:
+      failureThreshold: {{ .liveness_failure_threshold }}
+      initialDelaySeconds: {{ .initialDelaySeconds }}
+      path: {{ .health_check }}
+      periodSeconds: {{ .liveness_period_seconds }}
+      port: http
+      scheme: HTTP
+      successThreshold: {{ .liveness_success_threshold }}
+      timeoutSeconds: {{ .liveness_timeout_seconds }}
+    readiness:
+      failureThreshold: {{ .readiness_failure_threshold }}
+      initialDelaySeconds: {{ .initialDelaySeconds }}
+      path: {{ .health_check }}
+      periodSeconds: {{ .readiness_period_seconds }}
+      port: http
+      scheme: HTTP
+      successThreshold: {{ .readiness_success_threshold }}
+      timeoutSeconds: {{ .readiness_timeout_seconds }}
+{{ end }}
+  resources:
+    limits:
+      cpu: {{ .cpu_limit }}
+      memory: {{ .memory_limit }}i
+      {{ if .gpu_limit }}
+      gpu: {{ .gpu_limit }}
+      {{ end }}
+    requests:
+      cpu: {{ .cpu_request }}
+      memory: {{ .memory_request }}i
+      {{ if .gpu_request }}
+      gpu: {{ .gpu_request }}
+      {{ end }}
+  revisionHistoryLimit: 6
+{{ if .serviceAccount }}
+  serviceAccount:
+    enabled: true
+    annotations:
+      iam.gke.io/gcp-service-account: {{ .serviceAccount }}
+{{ else }}
+  serviceAccount:
+    annotations: null
+    enabled: false
+{{ end }}
+  nodeSelector:
+    {{ .nodeSelector }}: {{ .nodeSelectorValue }}
+{{ if .hostAliases}}
+  hostAliases: {{ .hostAliases | toYAML | nindent 4}}
+{{ end }}
+{{ if .triton_image_tag }}
+{{ template "tolerations" . }}
+{{ else }}
+  tolerations:
+    - effect: NoSchedule
+      key: {{ .nodeSelector }}
+      operator: Equal
+      value: {{ .nodeSelectorValue }}
+{{ end }}
+  updateStrategy:
+    strategy:
+{{ if eq .deploymentStrategy "recreate" }}
+      type: Recreate
+{{ else }}
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0%
+        maxSurge: {{ .maxSurge }}%
+{{ end }}
+externalSecret:
+  annotations: 
+{{ if .external_secrets_annotations}} 
+{{ .external_secrets_annotations | toYAML | indent 4}}
+{{ end }}
+{{ if eq .service_name "predator" }}
+  enabled: false
+{{ else }}
+{{ template "externalSecret" . }}
+  path: {{ if .vault_path_prefix }}{{ .vault_path_prefix }}/{{ end }}{{ .vault_env }}/{{ .bu }}/{{ .team }}/{{ .app_name }}
+  version: latest
+  name: {{ .env_ns }}-{{ .app_name }} 
+  target: {{ .app_name }}
+{{ end }}
+fullnameOverride: ""
+ingress:
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+{{ if .ingress_annotations}}
+{{ .ingress_annotations| toYAML | indent 4}}
+{{ end }}
+  enabled: true
+{{ if .grpc_host }}
+  grpc_hosts:
+  - host: {{ .grpc_host }}
+    paths:
+    - pathType: ImplementationSpecific
+      path: /
+{{ else if .grpc_hosts }}
+  grpc_hosts:
+  {{ range .grpc_hosts }}
+  - host: {{ .grpc_host}}
+    paths:
+    {{ range .paths }}
+    - pathType: {{ .pathType }}
+      path: {{ .path }}
+      {{ if .targetService }}
+      targetService: {{ .targetService }}
+      {{ end }} 
+    {{ end }}
+  {{ end }}
+{{ end }} 
+{{ if .host }}
+  hosts:
+  - host: {{ .host }}
+    paths:
+    - pathType: ImplementationSpecific
+      path: /
+{{ else if .hosts }}
+  hosts:
+  {{ range .hosts }}
+  - host: {{ .host}}
+    paths:
+    {{ range .paths }}
+    - pathType: {{ .pathType }}
+      path: {{ .path }}
+      {{ if .targetService }}
+      targetService: {{ .targetService }}
+      {{ end }} 
+    {{ end }}
+  {{ end }}
+{{ end }}  
+  ingressClassName: {{ .ingress_class }}
+  servicePort: http
+  enableWebsocket: {{ .enableWebsocket }}
+  slowStart:
+    enabled: {{ if .slowStartWindow}}true{{ else }}false{{ end }}
+    window: {{ if .slowStartWindow}}{{ .slowStartWindow }}{{ else }}120s{{ end }}
+    aggression: {{ if .slowStartAggression}}{{ .slowStartAggression }}{{ else }}1.0{{ end }}
+    minPercent: {{ if .slowStartMinPercent}}{{ .slowStartMinPercent }}{{ else }}10{{ end }}
+jmxconfig:
+{{  template "jmxconfig" . }}
+labels:
+  priority: {{ .priority }}
+  priority_v2: {{ .priority_v2 }} 
+  primary_owner: {{ .primary_owner }}
+  secondary_owner: {{ .secondary_owner }}
+  env: {{ .environment_norm }}
+  team: {{ .team_norm }}
+  bu: {{ .bu_norm }}
+  {{- if .service_type_norm }}
+  service_type: {{ .service_type_norm }}
+  {{ template "labels" . }}
+  {{- end }}
+nameOverride: ""
+namespace: {{ .env_ns }}-{{ .app_name }}
+podDisruptionBudget:
+  enabled: {{ if .pdbMaxUnavailable}}true{{ else }}false{{ end }}
+  maxUnavailable: {{ .pdbMaxUnavailable }}
+  minAvailable: {{ .pdbMinAvailable }}
+securityContext:
+  fsGroup: 65534
+  runAsGroup: 65534
+  runAsUser: 65534
+{{ if .triton_image_tag }}
+{{ template "service" . }}
+{{ else }}
+service:
+{{ if .service_annotations}}
+  annotations: {{ .service_annotations | toYAML | nindent 4}}
+{{ else }}
+  annotations: null
+{{ end }}
+  enabled: true
+  addHeadless: {{ .addHeadless }}
+{{ if .addon_ports }}
+  {{ range .addon_ports}} 
+  addons:
+    - name: {{ .name }}
+      targetPort: {{ .targetPort}}
+      type: {{ .type }}
+  {{ end }}
+{{ else }}
+  addon_ports: []
+{{ end }}
+
+{{ if and .grpc_port .app_port (or .grpc_host .grpc_hosts) }} 
+  ports: 
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: {{ .app_port }}
+  grpc_ports:
+    - name: grpc
+      port: 80
+      protocol: TCP
+      targetPort: {{ .grpc_port }}
+{{ else }}
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: {{ .primary_port }}
+{{ end }}
+  type: ClusterIP
+{{ end }}
+
+createContourGateway: {{ if .createContourGateway }}{{ .createContourGateway }}{{ else }}false{{ end }}
+contourResponseTimeout: {{ .contourResponseTimeout }}
+
+#ModelInferenceServiceValues
+
+{{ if .gcs_triton_path }}
+initContainer:
+    command:
+        - /bin/bash
+        - -c
+        - time gcloud storage  cp -r {{  .gcs_bucket_path }} /models
+    image: {{ .init_container_image }}
+{{ end }}
+
+
+{{ if .sharedMemory }}
+sharedmemory:
+    size: 500Mi
+{{ end }}
+
+

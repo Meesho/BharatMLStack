@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+package inferflow;
+
 option go_package = "github.com/meesho/BharatMLStack/horizon/internal/inferflow/handler/proto/protogen";
 
 // Request

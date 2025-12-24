@@ -16,6 +16,7 @@ type Etcd interface {
 	handleMap(dataMap, metaMap *map[string]string, output interface{}, prefix string) error
 	SetValue(path string, value interface{}) error
 	SetValues(paths map[string]interface{}) error
+	GetValue(path string) (string, error)
 	CreateNode(path string, value interface{}) error
 	CreateNodes(paths map[string]interface{}) error
 	IsNodeExist(path string) (bool, error)

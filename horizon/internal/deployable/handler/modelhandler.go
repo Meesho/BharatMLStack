@@ -48,7 +48,7 @@ func (h *InferflowHandler) CreateDeployable(request *DeployableRequest) error {
 		DeployableRunningStatus: false,
 		DeployableHealth:        "DEPLOYMENT_REASON_ARGO_APP_HEALTHY",
 		DeployableWorkFlowId:    "",
-		MonitoringUrl: fmt.Sprintf("%s/d/dQ1Gux-Vk/inferflow?orgId=1&refresh=1m&var-service=%s",
+		MonitoringUrl: fmt.Sprintf("%s/d/dQ1Gux-Vk/model-proxy-service?orgId=1&refresh=1m&var-service=%s",
 			grafanaBaseUrl, request.AppName),
 		WorkFlowStatus: "WORKFLOW_COMPLETED",
 	}

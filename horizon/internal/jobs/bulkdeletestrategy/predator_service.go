@@ -2,10 +2,12 @@ package bulkdeletestrategy
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/constant"
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
+	infrastructurehandler "github.com/Meesho/BharatMLStack/horizon/internal/infrastructure/handler"
 	"github.com/Meesho/BharatMLStack/horizon/internal/predator/handler"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/discoveryconfig"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/predatorconfig"
@@ -15,11 +17,12 @@ import (
 )
 
 type PredatorService struct {
-	sqlConn          *infra.SQLConnection
-	prometheusClient externalcall.PrometheusClient
-	ringmasterClient externalcall.RingmasterClient
-	slackClient      externalcall.SlackClient
-	gcsClient        externalcall.GCSClientInterface
+	sqlConn               *infra.SQLConnection
+	prometheusClient      externalcall.PrometheusClient
+	infrastructureHandler infrastructurehandler.InfrastructureHandler
+	workingEnv            string
+	slackClient           externalcall.SlackClient
+	gcsClient             externalcall.GCSClientInterface
 }
 
 const (
@@ -170,10 +173,17 @@ func (p *PredatorService) deactivateModelsAndRestartDeployable(deleteModelNameLi
 		return err
 	}
 
-	err = p.ringmasterClient.RestartDeployable(&serviceDeployable)
-	if err != nil {
-		log.Error().Err(err).Msg("Error restarting deployable in Ringmaster")
-		return err
+	// Extract isCanary from deployable config
+	var deployableConfig map[string]interface{}
+	isCanary := false
+	if err := json.Unmarshal(serviceDeployable.Config, &deployableConfig); err == nil {
+		if strategy, ok := deployableConfig["deploymentStrategy"].(string); ok && strategy == "canary" {
+			isCanary = true
+		}
+	}
+	if err := p.infrastructureHandler.RestartDeployment(serviceDeployable.Name, p.workingEnv, isCanary); err != nil {
+		log.Error().Err(err).Msg("Error restarting deployable")
+		return fmt.Errorf("failed to restart deployable: %w", err)
 	}
 
 	return nil
