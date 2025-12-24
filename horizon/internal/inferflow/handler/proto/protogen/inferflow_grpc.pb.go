@@ -19,7 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Inferflow_RetrieveModelScore_FullMethodName = "/inferflow.Inferflow/RetrieveModelScore"
+	Inferflow_RetrieveModelScore_FullMethodName = "/Inferflow/RetrieveModelScore"
 )
 
 // InferflowClient is the client API for Inferflow service.
@@ -108,7 +108,7 @@ func _Inferflow_RetrieveModelScore_Handler(srv interface{}, ctx context.Context,
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Inferflow_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "inferflow.Inferflow",
+	ServiceName: "Inferflow",
 	HandlerType: (*InferflowServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

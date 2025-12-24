@@ -65,7 +65,7 @@ func (e *Etcd) CreateConfig(serviceName string, ConfigId string, InferflowConfig
 		return err
 	}
 
-	return e.inferflowInstance.CreateNode(fmt.Sprintf("/config/%s/%s/model-config/config-map/%s", e.appName, serviceName, ConfigId), string(configJson))
+	return e.inferflowInstance.CreateNode(fmt.Sprintf("/config/%s/services//%s/model-config/config-map/%s", e.appName, serviceName, ConfigId), string(configJson))
 }
 
 func (e *Etcd) UpdateConfig(serviceName string, ConfigId string, InferflowConfig InferflowConfig) error {
@@ -74,9 +74,9 @@ func (e *Etcd) UpdateConfig(serviceName string, ConfigId string, InferflowConfig
 	if err != nil {
 		return err
 	}
-	return e.inferflowInstance.SetValue(fmt.Sprintf("/config/%s/%s/model-config/config-map/%s", e.appName, serviceName, ConfigId), string(configJson))
+	return e.inferflowInstance.SetValue(fmt.Sprintf("/config/%s/services/%s/model-config/config-map/%s", e.appName, serviceName, ConfigId), string(configJson))
 }
 
 func (e *Etcd) DeleteConfig(serviceName string, ConfigId string) error {
-	return e.inferflowInstance.DeleteNode(fmt.Sprintf("/config/%s/%s/model-config/config-map/%s", e.appName, serviceName, ConfigId))
+	return e.inferflowInstance.DeleteNode(fmt.Sprintf("/config/%s/services/%s/model-config/config-map/%s", e.appName, serviceName, ConfigId))
 }

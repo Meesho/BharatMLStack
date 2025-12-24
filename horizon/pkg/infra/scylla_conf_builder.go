@@ -60,28 +60,23 @@ const (
 func BuildClusterConfigFromEnv(envPrefix string) (*gocql.ClusterConfig, error) {
 
 	log.Debug().Msgf("building scylla cluster config from env, env prefix - %s", envPrefix)
-	// Use GetString instead of IsSet because AutomaticEnv() normalizes keys
-	// and IsSet() may not work correctly with dynamic env var names
-	contactPoints := viper.GetString(envPrefix + contactPointsSuffix)
-	if contactPoints == "" {
+	if !viper.IsSet(envPrefix + contactPointsSuffix) {
 		return nil, errors.New(envPrefix + contactPointsSuffix + " not set")
 	}
+	contactPoints := viper.GetString(envPrefix + contactPointsSuffix)
 	hosts := strings.Split(contactPoints, ",")
 
 	cfg := gocql.NewCluster(hosts...)
 
-	// Use GetInt/GetString instead of IsSet for AutomaticEnv() compatibility
-	port := viper.GetInt(envPrefix + portSuffix)
-	if port == 0 {
+	if !viper.IsSet(envPrefix + portSuffix) {
 		return nil, errors.New(envPrefix + portSuffix + " not set")
 	}
-	cfg.Port = port
+	cfg.Port = viper.GetInt(envPrefix + portSuffix)
 
-	keyspace := viper.GetString(envPrefix + keyspaceSuffix)
-	if keyspace == "" {
+	if !viper.IsSet(envPrefix + keyspaceSuffix) {
 		return nil, errors.New(envPrefix + keyspaceSuffix + " not set")
 	}
-	cfg.Keyspace = keyspace
+	cfg.Keyspace = viper.GetString(envPrefix + keyspaceSuffix)
 
 	if viper.IsSet(envPrefix + timeoutSuffix) {
 		cfg.Timeout = time.Duration(viper.GetInt(envPrefix+timeoutSuffix)) * time.Millisecond

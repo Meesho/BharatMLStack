@@ -122,18 +122,11 @@ func bindEnvVars() {
 	viper.BindEnv("distributed_cache_active_conf_ids", "DISTRIBUTED_CACHE_ACTIVE_CONFIG_IDS")
 	viper.BindEnv("in_memory_cache_active_conf_ids", "IN_MEMORY_CACHE_ACTIVE_CONFIG_IDS")
 
-	// ArgoCD configuration (default - can be overridden per environment)
-	// Environment-specific pattern: {WORKING_ENV}_ARGOCD_API and {WORKING_ENV}_ARGOCD_TOKEN
-	// Example: For workingEnv="gcp_stg", reads GCP_STG_ARGOCD_API and GCP_STG_ARGOCD_TOKEN
-	// These are automatically read by pkg/argocd/client.go based on workingEnv
 	viper.BindEnv("argocd_api", "ARGOCD_API")
 	viper.BindEnv("argocd_token", "ARGOCD_TOKEN")
 
-	// Working environment (deprecated - workingEnv is passed in API requests, not from env var)
-	// Kept for backward compatibility but not used
 	viper.BindEnv("working_env", "WORKING_ENV")
 
-	// GitHub App configuration
 	viper.BindEnv("github_app_id", "GITHUB_APP_ID")
 	viper.BindEnv("github_installation_id", "GITHUB_INSTALLATION_ID")
 	viper.BindEnv("github_private_key_path", "GITHUB_PRIVATE_KEY_PATH")
@@ -141,15 +134,12 @@ func bindEnvVars() {
 	viper.BindEnv("github_commit_author", "GITHUB_COMMIT_AUTHOR")
 	viper.BindEnv("github_commit_email", "GITHUB_COMMIT_EMAIL")
 
-	// GitHub Repository Names
 	viper.BindEnv("github_helm_chart_repo", "GITHUB_HELM_CHART_REPO")
 	viper.BindEnv("github_infra_helm_chart_repo", "GITHUB_INFRA_HELM_CHART_REPO")
 	viper.BindEnv("github_argo_repo", "GITHUB_ARGO_REPO")
 
-	// VictoriaMetrics configuration
 	viper.BindEnv("victoriametrics_server_address", "VICTORIAMETRICS_SERVER_ADDRESS")
 
-	// GitHub Branch Configuration (per environment)
 	viper.BindEnv("github_branch_prd", "GITHUB_BRANCH_PRD")
 	viper.BindEnv("github_branch_gcp_prd", "GITHUB_BRANCH_GCP_PRD")
 	viper.BindEnv("github_branch_int", "GITHUB_BRANCH_INT")
@@ -160,19 +150,12 @@ func bindEnvVars() {
 	viper.BindEnv("github_branch_ftr", "GITHUB_BRANCH_FTR")
 	viper.BindEnv("github_branch_gcp_ftr", "GITHUB_BRANCH_GCP_FTR")
 
-	// Repository and Branch configuration (mandatory)
-	// All files will be pushed to the specified repository and branch
-	// These are required - the application will fail if not set
 	viper.BindEnv("repository_name", "REPOSITORY_NAME")
 	viper.BindEnv("branch_name", "BRANCH_NAME")
 
-	// Service Config Source configuration
-	viper.BindEnv("service_config_source", "SERVICE_CONFIG_SOURCE") // "local" or "github"
-	viper.BindEnv("service_config_repo", "SERVICE_CONFIG_REPO")     // GitHub repo name for service configs
-	viper.BindEnv("service_config_path", "SERVICE_CONFIG_PATH")     // Local path for service configs (default: "./configs")
-
-	// DNS API configuration is handled in organization-specific implementations
-	// Provide organization-specific implementations to enable DNS operations
+	viper.BindEnv("service_config_source", "SERVICE_CONFIG_SOURCE")
+	viper.BindEnv("service_config_repo", "SERVICE_CONFIG_REPO")
+	viper.BindEnv("service_config_path", "SERVICE_CONFIG_PATH")
 }
 
 // bindEnvVars explicitly binds environment variables to Viper keys

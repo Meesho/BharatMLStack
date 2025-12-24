@@ -51,7 +51,7 @@ const (
 	adminRole                         = "ADMIN"
 	activeTrue                        = true
 	activeFalse                       = false
-	inferFlowRetrieveModelScoreMethod = "/InferFlowService/RetrieveModelScore"
+	inferFlowRetrieveModelScoreMethod = "/InferFlow/RetrieveModelScore"
 	setFunctionalTest                 = "FunctionalTest"
 )
 
@@ -748,7 +748,7 @@ func (m *InferFlow) GetAll() (GetAllResponse, error) {
 
 		infraConfig := m.infrastructureHandler.GetConfig(serviceDeployableTable.Name, m.workingEnv)
 		// Convert to mainHandler.Config for compatibility
-		ringMasterConfig := mainHandler.Config{
+		DeployableConfig := mainHandler.Config{
 			MinReplica:    infraConfig.MinReplica,
 			MaxReplica:    infraConfig.MaxReplica,
 			RunningStatus: infraConfig.RunningStatus,
@@ -758,7 +758,7 @@ func (m *InferFlow) GetAll() (GetAllResponse, error) {
 			ConfigID:                table.ConfigID,
 			ConfigValue:             ConfigValue,
 			Host:                    serviceDeployableTable.Host,
-			DeployableRunningStatus: ringMasterConfig.RunningStatus == "true",
+			DeployableRunningStatus: DeployableConfig.RunningStatus == "true",
 			MonitoringUrl:           serviceDeployableTable.MonitoringUrl,
 			CreatedBy:               table.CreatedBy,
 			UpdatedBy:               table.UpdatedBy,
@@ -1009,7 +1009,7 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 
 	protoResponse := &pb.InferflowResponseProto{}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 	defer cancel()
 

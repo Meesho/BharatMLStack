@@ -176,6 +176,10 @@ func (m *MiddlewareHandler) CheckScreenPermission(c *gin.Context, claims *handle
 		path = c.Request.URL.Path
 	}
 
+	if strings.HasPrefix(path, "/api/v1/online-feature-store") {
+		return
+	}
+
 	apiResolver, err := m.apiResolverRepo.GetResolver(method, path)
 
 	if err != nil || apiResolver.ResolverFn == "" {

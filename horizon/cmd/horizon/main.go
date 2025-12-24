@@ -3,33 +3,32 @@ package main
 import (
 	"strconv"
 
-	"github.com/gin-contrib/cors"
-
 	horizonConfig "github.com/Meesho/BharatMLStack/horizon/internal"
+	applicationRouter "github.com/Meesho/BharatMLStack/horizon/internal/application/route"
+	authRouter "github.com/Meesho/BharatMLStack/horizon/internal/auth/router"
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
-
-	// inferflowConfig "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd" // TODO: Uncomment for production
-
+	connectionConfigRouter "github.com/Meesho/BharatMLStack/horizon/internal/connectionconfig/route"
 	deployableRouter "github.com/Meesho/BharatMLStack/horizon/internal/deployable/router"
 	dnsRouter "github.com/Meesho/BharatMLStack/horizon/internal/dns"
+	inferflowConfig "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
+	inferflowRouter "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/route"
 	infrastructureRouter "github.com/Meesho/BharatMLStack/horizon/internal/infrastructure/router"
-	workflowRouter "github.com/Meesho/BharatMLStack/horizon/internal/workflow/router"
-
-	// "github.com/Meesho/BharatMLStack/horizon/internal/middleware" // TODO: Uncomment for production
-	// numerixConfig "github.com/Meesho/BharatMLStack/horizon/internal/numerix/etcd" // TODO: Uncomment for production
-
-	// ofsConfig "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/config" // TODO: Uncomment for production
+	"github.com/Meesho/BharatMLStack/horizon/internal/middleware"
+	numerixConfig "github.com/Meesho/BharatMLStack/horizon/internal/numerix/etcd"
+	numerixRouter "github.com/Meesho/BharatMLStack/horizon/internal/numerix/route"
+	ofsConfig "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/config"
+	ofsRouter "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/router"
+	predatorRouter "github.com/Meesho/BharatMLStack/horizon/internal/predator/route"
 	workflowPkg "github.com/Meesho/BharatMLStack/horizon/internal/workflow"
 	workflowEtcd "github.com/Meesho/BharatMLStack/horizon/internal/workflow/etcd"
 	workflowHandler "github.com/Meesho/BharatMLStack/horizon/internal/workflow/handler"
-
+	workflowRouter "github.com/Meesho/BharatMLStack/horizon/internal/workflow/router"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/etcd"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/httpframework"
-
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/logger"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/metric"
-	"github.com/rs/zerolog/log"
+	"github.com/Meesho/BharatMLStack/horizon/pkg/scheduler"
 )
 
 type AppConfig struct {
@@ -51,69 +50,28 @@ var (
 
 func main() {
 	configs.InitConfig(&appConfig)
-	horizonConfig.InitAll(appConfig.Configs)
-
-	// Initialize logger first (needed for logging)
-	logger.Init(appConfig.Configs)
-
-	// Database initialization (MySQL credentials in env.example)
 	infra.InitDBConnectors(appConfig.Configs)
-
-	metric.Init(appConfig.Configs)
-
-	// TODO: Uncomment for production - Auth middleware required for authentication
-	// httpframework.Init(middleware.NewMiddleware().GetMiddleWares()...)
-
-	// Local testing: Only CORS middleware, no authentication
-	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowOrigins = []string{"*"}
-	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}
-	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization"}
-	corsConfig.AllowCredentials = true
-	httpframework.Init(cors.New(corsConfig))
-
-	// TODO: Uncomment for production - etcd initialization required for config management
-	// etcd.InitFromAppName(&ofsConfig.FeatureRegistry{}, appConfig.Configs.OnlineFeatureStoreAppName, appConfig.Configs)
-	// etcd.InitFromAppName(&numerixConfig.NumerixConfigRegistery{}, appConfig.Configs.NumerixAppName, appConfig.Configs)
-	// etcd.InitFromAppName(&inferflowConfig.ModelConfigRegistery{}, appConfig.Configs.InferflowAppName, appConfig.Configs)
-	// etcd.InitFromAppName(&inferflowConfig.HorizonRegistry{}, appConfig.Configs.HorizonAppName, appConfig.Configs)
-
-	// Workflow etcd initialization (same pattern as numerix)
+	etcd.InitFromAppName(&ofsConfig.FeatureRegistry{}, appConfig.Configs.OnlineFeatureStoreAppName, appConfig.Configs)
+	etcd.InitFromAppName(&numerixConfig.NumerixConfigRegistery{}, appConfig.Configs.NumerixAppName, appConfig.Configs)
+	etcd.InitFromAppName(&inferflowConfig.ModelConfigRegistery{}, appConfig.Configs.InferflowAppName, appConfig.Configs)
+	etcd.InitFromAppName(&inferflowConfig.HorizonRegistry{}, appConfig.Configs.HorizonAppName, appConfig.Configs)
 	etcd.InitFromAppName(&workflowEtcd.WorkflowRegistry{}, workflowPkg.WorkflowAppName, appConfig.Configs)
-
-	// Initialize workflow handler (starts worker pool) - same pattern as numerix handler initialization
+	horizonConfig.InitAll(appConfig.Configs)
+	logger.Init(appConfig.Configs)
+	metric.Init(appConfig.Configs)
+	httpframework.Init(middleware.NewMiddleware().GetMiddleWares()...)
 	workflowHandler.InitV1WorkflowHandler()
-
-	// Deployable router - enabled now that MySQL credentials are available
 	deployableRouter.Init(appConfig.Configs)
-
-	// TODO: Uncomment for production - These routers require database connection
-	// inferflowRouter.Init()        // Requires DB
-	// numerixRouter.Init()          // Requires DB
-	// applicationRouter.Init()      // May require DB
-	// connectionConfigRouter.Init() // Requires DB
-	// predatorRouter.Init()         // Requires DB
-	// authRouter.Init()             // Requires DB (for login/register)
-	// ofsRouter.Init()              // May require DB
-
-	// Infrastructure router - works without DB (uses ArgoCD/GitHub directly)
+	inferflowRouter.Init()
+	numerixRouter.Init()
+	applicationRouter.Init()
+	connectionConfigRouter.Init()
+	predatorRouter.Init()
+	authRouter.Init()
+	ofsRouter.Init()
 	infrastructureRouter.Init()
-
-	// DNS router - only available when built with -tags meesho
-	// For open-source builds, this is a no-op
 	dnsRouter.Init()
-
-	// Workflow router - works without DB (uses etcd for state management)
 	workflowRouter.Init()
-
-	// TODO: Uncomment for production
-	// scheduler.Init(appConfig.Configs)
-
-	// Use default port if not set (for local testing)
-	port := appConfig.Configs.AppPort
-	if port == 0 {
-		port = 8082
-		log.Warn().Int("port", port).Msg("App port not set, defaulting to 8082")
-	}
-	httpframework.Instance().Run(":" + strconv.Itoa(port))
+	scheduler.Init(appConfig.Configs)
+	httpframework.Instance().Run(":" + strconv.Itoa(appConfig.Configs.AppPort))
 }
