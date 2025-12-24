@@ -512,55 +512,149 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
 # Insert role permissions for admin role
 echo "  🔐 Inserting role permissions for admin role..."
 mysql -hmysql -uroot -proot --skip-ssl testdb -e "
-  -- Predator permissions
+  -- Deployable permissions (service: all)
   INSERT INTO role_permission (role, service, screen_type, module) VALUES
+  ('admin', 'all', 'deployable', 'onboard'),
+  ('admin', 'all', 'deployable', 'edit'),
+  ('admin', 'all', 'deployable', 'view'),
+
+  -- Predator permissions
+  ('admin', 'predator', 'model-approval', 'approve'),
+  ('admin', 'predator', 'model-approval', 'view'),
+  ('admin', 'predator', 'model-approval', 'reject'),
+  ('admin', 'predator', 'model-approval', 'cancel'),
   ('admin', 'predator', 'model-approval', 'review'),
   ('admin', 'predator', 'model-approval', 'validate'),
-  ('admin', 'predator', 'model-approval', 'view'),
-  ('admin', 'predator', 'model', 'view'),
   ('admin', 'predator', 'model', 'delete'),
-  ('admin', 'predator', 'model', 'scale_up'),
-  ('admin', 'predator', 'model', 'promote'),
   ('admin', 'predator', 'model', 'onboard'),
+  ('admin', 'predator', 'model', 'view'),
   ('admin', 'predator', 'model', 'test'),
+  ('admin', 'predator', 'model', 'edit'),
+  ('admin', 'predator', 'model', 'upload'),
+  ('admin', 'predator', 'model', 'upload_edit'),
+  ('admin', 'predator', 'deployable', 'onboard'),
+  ('admin', 'predator', 'deployable', 'edit'),
+  ('admin', 'predator', 'deployable', 'view'),
 
-  -- Inferflow permissions
-  ('admin', 'inferflow', 'inferflow-config', 'view'),
-  ('admin', 'inferflow', 'inferflow-config', 'scale-up'),
-  ('admin', 'inferflow', 'inferflow-config', 'delete'),
-  ('admin', 'inferflow', 'inferflow-config', 'clone'),
-  ('admin', 'inferflow', 'inferflow-config', 'promote'),
-  ('admin', 'inferflow', 'inferflow-config', 'onboard'),
-  ('admin', 'inferflow', 'inferflow-config', 'edit'),
-  ('admin', 'inferflow', 'inferflow-config-approval', 'review'),
-  ('admin', 'inferflow', 'inferflow-config-approval', 'cancel'),
-  ('admin', 'inferflow', 'inferflow-config-approval', 'validate'),
-  ('admin', 'inferflow', 'inferflow-config-approval', 'view'),
+  -- Inferflow permissions 
+  ('admin', 'inferflow', 'inferflow-config-testing', 'view'),
   ('admin', 'inferflow', 'inferflow-config-testing', 'test'),
+  ('admin', 'inferflow', 'deployable', 'view'),
+  ('admin', 'inferflow', 'deployable', 'register'),
+  ('admin', 'inferflow', 'deployable', 'edit'),
+  ('admin', 'inferflow', 'deployable', 'onboard'),
+  ('admin', 'inferflow', 'inferflow-config', 'view'),
+  ('admin', 'inferflow', 'inferflow-config', 'approve'),
+  ('admin', 'inferflow', 'inferflow-config', 'reject'),
+  ('admin', 'inferflow', 'inferflow-config', 'cancel'),
+  ('admin', 'inferflow', 'inferflow-config', 'clone'),
+  ('admin', 'inferflow', 'inferflow-config', 'deactivate'),
+  ('admin', 'inferflow', 'inferflow-config', 'fetch'),
+  ('admin', 'inferflow', 'inferflow-config', 'edit'),
+  ('admin', 'inferflow', 'inferflow-config', 'onboard'),
+  ('admin', 'inferflow', 'inferflow-config', 'test'),
+  ('admin', 'inferflow', 'inferflow-config-approval', 'validate'),
+  ('admin', 'inferflow', 'inferflow-config-approval', 'approve'),
+  ('admin', 'inferflow', 'inferflow-config-approval', 'reject'),
+  ('admin', 'inferflow', 'inferflow-config-approval', 'cancel'),
+  ('admin', 'inferflow', 'inferflow-config-approval', 'view'),
 
-  -- Numerix permissions
-  ('admin', 'numerix', 'numerix-config', 'view'),
-  ('admin', 'numerix', 'numerix-config', 'onboard'),
-  ('admin', 'numerix', 'numerix-config', 'promote'),
-  ('admin', 'numerix', 'numerix-config', 'edit'),
-  ('admin', 'numerix', 'numerix-config-approval', 'review'),
-  ('admin', 'numerix', 'numerix-config-approval', 'cancel'),
+  -- Numerix permissions 
   ('admin', 'numerix', 'numerix-config-approval', 'view'),
-  ('admin', 'numerix', 'numerix-config-approval', 'delete'),
+  ('admin', 'numerix', 'numerix-config-approval', 'approve'),
+  ('admin', 'numerix', 'numerix-config-approval', 'reject'),
+  ('admin', 'numerix', 'numerix-config-approval', 'cancel'),
+  ('admin', 'numerix', 'numerix-config-approval', 'review'),
+  ('admin', 'numerix', 'numerix-config-testing', 'view'),
   ('admin', 'numerix', 'numerix-config-testing', 'test'),
+  ('admin', 'numerix', 'numerix-config', 'test'),
+  ('admin', 'numerix', 'numerix-config', 'view'),
+  ('admin', 'numerix', 'numerix-config', 'edit'),
+  ('admin', 'numerix', 'numerix-config', 'onboard'),
+
 
   -- Application permissions
   ('admin', 'application', 'application-discovery-registry', 'view'),
-  ('admin', 'application', 'application-discovery-registry', 'onboard'),
   ('admin', 'application', 'application-discovery-registry', 'edit'),
+  ('admin', 'application', 'application-discovery-registry', 'onboard'),
   ('admin', 'application', 'connection-config', 'view'),
-  ('admin', 'application', 'connection-config', 'onboard'),
   ('admin', 'application', 'connection-config', 'edit'),
+  ('admin', 'application', 'connection-config', 'onboard');
+"
 
-  -- Deployable permissions
-  ('admin', 'all', 'deployable', 'onboard'),
-  ('admin', 'all', 'deployable', 'edit'),
-  ('admin', 'all', 'deployable', 'view');
+echo "Adding services into service_deployable_config table..."
+mysql -hmysql -uroot -proot --skip-ssl testdb -e "
+  INSERT INTO group_id_counter (id, counter, created_at, updated_at) 
+  VALUES (1, 1, NOW(), NOW());
+
+  INSERT INTO service_deployable_config (
+    id, name, host, service, active, created_by, updated_by,
+    created_at, updated_at, config, monitoring_url, deployable_running_status,
+    deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
+  ) VALUES (
+      59,
+      'predator-search-ct-gpu',
+      'predator-search-ct-gpu.prd.int',
+      'predator',
+      1,
+      'admin@admin.com',
+      '',
+      '2025-09-01 15:03:14',
+      '2025-09-01 15:31:31',
+      '{\"cpuLimit\":\"7000\",\"gpu_limit\":\"1\",\"cpuRequest\":\"6500\",\"gpu_request\":\"1\",\"max_replica\":\"300\",\"memoryLimit\":\"15\",\"min_replica\":\"2\",\"cpuLimitUnit\":\"m\",\"machine_type\":\"GPU\",\"cpu_threshold\":\"70\",\"gpu_threshold\":\"60\",\"memoryRequest\":\"13\",\"cpuRequestUnit\":\"m\",\"serviceAccount\":\"sa-dsci-predator-datascience-prd-0622.iam.gserviceaccount.com\",\"gcs_bucket_path\":\"gs://gcs-dsci-model-repository-prd/predator/ranking/search-ct-gpu/*\",\"gcs_triton_path\":\"gs://gcs-dsci-model-repository-prd/scripts/launch_triton_server.py\",\"memoryLimitUnit\":\"G\",\"triton_image_tag\":\"gpu-py-ensem-trt-onnx-pytorch-fil-ensem-cache-met-v2.48.0\",\"memoryRequestUnit\":\"G\",\"nodeSelectorValue\":\"mlp-g2-standard-8\",\"deploymentStrategy\":\"rollingUpdate\"}',
+      'https://grafana-prd.gcp.in/d/a2605923-52c4-4834-bdae-97570966b765/predator?orgId=1&var-service=predator-search-ct-gpu&var-query0=',
+      1,
+      'gcp_prd-predator-search-ct-gpu-mlp-deployment-workflow-01 Sep 2025 15:05:57.698922063',
+      '9829a49e-616d-4d4b-a8c8-c5ac8de9c090',
+      'DEPLOYMENT_REASON_ARGO_APP_HEALTHY',
+      'WORKFLOW_COMPLETED'
+  );
+
+  INSERT INTO service_deployable_config (
+    id, name, host, service, active, created_by, updated_by,
+    created_at, updated_at, config, monitoring_url, deployable_running_status,
+    deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
+  ) VALUES (
+      3019,
+      'inferflow',
+      'inferflow:8085',
+      'inferflow',
+      1,
+      'admin@admin.com',
+      NULL,
+      '2025-10-24 16:57:45',
+      '2025-11-17 16:04:29',
+      '{\"cpuLimit\":\"4000\",\"gpu_limit\":\"\",\"cpuRequest\":\"3500\",\"gpu_request\":\"\",\"max_replica\":\"100\",\"memoryLimit\":\"8\",\"min_replica\":\"2\",\"cpuLimitUnit\":\"m\",\"memoryRequest\":\"6\",\"cpuRequestUnit\":\"m\",\"memoryLimitUnit\":\"G\",\"memoryRequestUnit\":\"G\"}',
+      'https://grafana-prd.example.com/d/dQ1Gux-Vk/inferflow-service?orgId=1&refresh=60s&var-service=inferflow-service-search-ct&from=now-6h&to=now',
+      1,
+      NULL,
+      NULL,
+      'DEPLOYMENT_REASON_ARGO_APP_HEALTHY',
+      'WORKFLOW_COMPLETED'
+  );
+
+  INSERT INTO service_deployable_config (
+    id, name, host, service, active, created_by, updated_by,
+    created_at, updated_at, config, monitoring_url, deployable_running_status,
+    deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
+  ) VALUES (
+      1,
+      'numerix',
+      'numerix:8083',
+      'numerix',
+      1,
+      'admin@admin.com',
+      NULL,
+      '2025-11-28 10:00:00',
+      '2025-11-28 10:00:00',
+      '{\"cpuLimit\": \"3500\", \"gpu_limit\": \"\", \"cpuRequest\": \"2500\", \"gpu_request\": \"0\", \"max_replica\": \"20\", \"memoryLimit\": \"500\", \"min_replica\": \"2\", \"cpuLimitUnit\": \"m\", \"machine_type\": \"CPU\", \"cpu_threshold\": \"70\", \"gpu_threshold\": \"\", \"memoryRequest\": \"200\", \"cpuRequestUnit\": \"m\", \"serviceAccount\": \"\", \"gcs_bucket_path\": \"\", \"memoryLimitUnit\": \"M\", \"triton_image_tag\": \"\", \"memoryRequestUnit\": \"M\", \"nodeSelectorValue\": \"rust-onboard\"}',
+      NULL,
+      NULL,
+      NULL,
+      NULL,
+      'DEPLOYMENT_REASON_ARGO_APP_HEALTHY',
+      'WORKFLOW_COMPLETED'
+  );
 "
 
 # Verify initialization
