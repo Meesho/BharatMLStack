@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"runtime"
 	"time"
 
 	retrieve "github.com/Meesho/BharatMLStack/go-sdk/pkg/proto/onfs/retrieve" // adjust path
@@ -82,7 +81,6 @@ func (s *AppState) handler(c *gin.Context) {
 
 func main() {
 	print("Starting go-caller with 4 threads version 4")
-	runtime.GOMAXPROCS(4)
 	gin.SetMode(gin.ReleaseMode)
 
 	conn, err := grpc.Dial(

@@ -196,7 +196,7 @@ async fn retrieve_features(
     }
 }
 
-#[tokio::main(flavor = "multi_thread", worker_threads = 4)]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Connecting to feature store version 4...");
 
