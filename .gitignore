@@ -5,6 +5,8 @@ dist/
 .env*
 .idea/
 workspace/
+.vscode/
+.cursor/
 __pycache__/
 java-sdk/onfs/feature-store-client/target/
 java-sdk/onfs/feature-store-flink-connector-sdk-flink1x/target/
@@ -14,3 +16,9 @@ java-sdk/onfs/feature-store-core/target/
 .internal-configs/
 .dev-toggle-state
 .go.mod.appended
+
+
+flashring/performance_results.csv
+flashring/mem.prof
+flashring/flashring
+flashring/flashringtest
