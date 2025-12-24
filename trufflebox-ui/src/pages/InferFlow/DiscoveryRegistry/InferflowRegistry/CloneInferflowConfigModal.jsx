@@ -9,18 +9,20 @@ import {
   IconButton,
   Typography,
   Alert,
+  CircularProgress,
   Snackbar,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { useAuth } from '../../../Auth/AuthContext';
 import axios from 'axios';
 import * as URL_CONSTANTS from '../../../../config';
-import MPConfigForm from './MPConfigForm';
+import InferflowConfigForm from './InferflowConfigForm';
 
-const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
+const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState('');
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -76,36 +78,14 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
   const CALIBRATION_OPTIONS = ['pctr_calibration', 'pcvr_calibration'];
   
   const DATA_TYPE_OPTIONS = [
-    'DataTypeFP8E5M2',
-    'DataTypeFP8E4M3',
-    'DataTypeFP16',
-    'DataTypeFP32',
-    'DataTypeFP64',
-    'DataTypeInt8',
-    'DataTypeInt16',
-    'DataTypeInt32',
-    'DataTypeInt64',
-    'DataTypeUint8',
-    'DataTypeUint16',
-    'DataTypeUint32',
-    'DataTypeUint64',
-    'DataTypeString',
-    'DataTypeBool',
-    'DataTypeFP8E5M2Vector',
-    'DataTypeFP8E4M3Vector',
-    'DataTypeFP16Vector',
-    'DataTypeFP32Vector',
-    'DataTypeFP64Vector',
-    'DataTypeInt8Vector',
-    'DataTypeInt16Vector',
-    'DataTypeInt32Vector',
-    'DataTypeInt64Vector',
-    'DataTypeUint8Vector',
-    'DataTypeUint16Vector',
-    'DataTypeUint32Vector',
-    'DataTypeUint64Vector',
-    'DataTypeStringVector',
-    'DataTypeBoolVector'
+    'DataTypeFP8E5M2', 'DataTypeFP8E4M3', 'DataTypeFP16', 'DataTypeFP32', 'DataTypeFP64',
+    'DataTypeInt8', 'DataTypeInt16', 'DataTypeInt32', 'DataTypeInt64',
+    'DataTypeUint8', 'DataTypeUint16', 'DataTypeUint32', 'DataTypeUint64',
+    'DataTypeString', 'DataTypeBool',
+    'DataTypeFP8E5M2Vector', 'DataTypeFP8E4M3Vector', 'DataTypeFP16Vector', 'DataTypeFP32Vector', 'DataTypeFP64Vector',
+    'DataTypeInt8Vector', 'DataTypeInt16Vector', 'DataTypeInt32Vector', 'DataTypeInt64Vector',
+    'DataTypeUint8Vector', 'DataTypeUint16Vector', 'DataTypeUint32Vector', 'DataTypeUint64Vector',
+    'DataTypeStringVector', 'DataTypeBoolVector'
   ];
 
   useEffect(() => {
@@ -114,6 +94,97 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
     fetchMPHosts();
     fetchFeatureTypes();
   }, []);
+
+  useEffect(() => {
+    if (configData && open) {
+      loadConfigData();
+    }
+  }, [configData, open]);
+
+  const loadConfigData = async () => {
+    if (!configData?.config_id) return;
+    
+    setDataLoading(true);
+    try {
+      // Fetch the latest config data from API to get full details
+      const response = await axios.get(
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/latestRequest/${configData.config_id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${user?.token}`,
+          },
+        }
+      );
+      
+      if (!response.data.error && response.data.data) {
+        const data = response.data.data;
+        const requestPayload = data.payload?.request_payload || {};
+        
+        // Process rankers to handle null entity_id, convert dimensions, and fetch max_batch_size
+        const processedRankers = (requestPayload.rankers || []).map(ranker => {
+          // Find the model to get max_batch_size
+          const model = modelsList.find(m => m.model_name === ranker.model_name);
+          
+          return {
+            ...ranker,
+            entity_id: ranker.entity_id || [],
+            max_batch_size: model?.meta_data?.batch_size || null, // Store max for validation
+            route_config: ranker.route_config 
+              ? (typeof ranker.route_config === 'string' 
+                  ? ranker.route_config 
+                  : JSON.stringify(ranker.route_config, null, 2))
+              : '',
+            outputs: (ranker.outputs || []).map(output => ({
+              ...output,
+              model_scores_dims: typeof output.model_scores_dims === 'string' 
+                ? output.model_scores_dims 
+                : JSON.stringify(output.model_scores_dims || [])
+            }))
+          };
+        });
+
+        // Process re-rankers to handle null entity_id
+        const processedReRankers = (requestPayload.re_rankers || []).map(reRanker => ({
+          ...reRanker,
+          entity_id: reRanker.entity_id || [],
+          eq_variables: reRanker.eq_variables || {}
+        }));
+        
+        // Use data from request_payload
+        // User can edit these to create a new config ID
+        setFormData({
+          real_estate: requestPayload.real_estate || '',
+          tenant: requestPayload.tenant || '',
+          config_identifier: requestPayload.config_identifier || '',
+          rankers: processedRankers,
+          re_rankers: processedReRankers,
+          response: requestPayload.response || {
+            prism_logging_perc: 1,
+            ranker_schema_features_in_response_perc: 0,
+            response_features: [],
+            log_features: false,
+            log_batch_size: 1000
+          },
+          config_mapping: requestPayload.config_mapping || {
+            deployable_id: ''
+          }
+        });
+        
+        // Expand all rankers and re-rankers for clone mode
+        if (requestPayload.rankers) {
+          setExpandedRankers(requestPayload.rankers.map((_, idx) => idx));
+        }
+        if (requestPayload.re_rankers) {
+          setExpandedReRankers(requestPayload.re_rankers.map((_, idx) => idx));
+        }
+      }
+    } catch (error) {
+      console.log('Error loading config data:', error);
+      setError('Failed to load configuration data');
+    } finally {
+      setDataLoading(false);
+    }
+  };
 
   const fetchModelsList = async () => {
     try {
@@ -222,8 +293,6 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
     }
   };
 
-
-
   const fetchExpressionVariables = async (configId, reRankerIndex) => {
     try {
       const response = await axios.get(
@@ -244,6 +313,17 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
       console.log('Error fetching expression variables:', error);
     }
   };
+
+  // Load expression variables for existing re-rankers
+  useEffect(() => {
+    if (formData.re_rankers && formData.re_rankers.length > 0) {
+      formData.re_rankers.forEach((reRanker, index) => {
+        if (reRanker.eq_id && !expressionVariables[index]) {
+          fetchExpressionVariables(reRanker.eq_id, index);
+        }
+      });
+    }
+  }, [formData.re_rankers]);
 
   const handleBasicInfoChange = (field) => (event) => {
     setFormData(prev => ({
@@ -268,7 +348,7 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
             newRankers[index].end_point = selectedModel.host;
           }
 
-          // Auto-fill batch_size from model's batch_size
+          // Auto-fill batch_size from model's max_batch_size
           if (selectedModel.meta_data.batch_size) {
             newRankers[index].batch_size = selectedModel.meta_data.batch_size.toString();
             newRankers[index].max_batch_size = selectedModel.meta_data.batch_size;
@@ -276,7 +356,6 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
 
           // Safety check for inputs
           if (Array.isArray(selectedModel.meta_data.inputs)) {
-            // Auto-fill inputs
             newRankers[index].inputs = selectedModel.meta_data.inputs.map(input => ({
               name: input.name,
               data_type: input.data_type,
@@ -287,7 +366,6 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
 
           // Safety check for outputs
           if (Array.isArray(selectedModel.meta_data.outputs)) {
-            // Auto-fill outputs
             newRankers[index].outputs = selectedModel.meta_data.outputs.map(output => ({
               name: output.name,
               data_type: output.data_type,
@@ -354,7 +432,7 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
             eq_variables: {}
           };
           // Fetch expression variables for the new compute ID
-          fetchExpressionVariables(value, index);
+        fetchExpressionVariables(value, index);
         } else {
           // Clear everything if eq_id is cleared
           newReRankers[index] = {
@@ -398,7 +476,7 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
 
       return Array.isArray(parsed) ? parsed.map(dim => {
         if (Array.isArray(dim) && dim.length > 0) {
-          return String(dim[0]); // Display just the value
+          return String(dim[0]);
         }
         return String(dim);
       }) : [];
@@ -409,9 +487,7 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
 
   const convertDimensionsToString = (dimsArray) => {
     try {
-      // Convert each dimension to an array containing that value
       const parsedDims = dimsArray.map(dim => {
-        // Try to parse as number if possible
         const numValue = Number(dim);
         return [isNaN(numValue) ? dim : numValue];
       });
@@ -420,8 +496,6 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
       return '[]';
     }
   };
-
-
 
   const addRanker = () => {
     const newIndex = formData.rankers.length;
@@ -448,7 +522,6 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
         }]
       }]
     }));
-    // Expand the newly added ranker
     setExpandedRankers(prev => [...prev, newIndex]);
   };
 
@@ -457,7 +530,6 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
       ...prev,
       rankers: prev.rankers.filter((_, i) => i !== index)
     }));
-    // Update expanded state
     setExpandedRankers(prev => 
       prev.filter(i => i !== index).map(i => i > index ? i - 1 : i)
     );
@@ -475,7 +547,6 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
         entity_id: []
       }]
     }));
-    // Expand the newly added re-ranker
     setExpandedReRankers(prev => [...prev, newIndex]);
   };
 
@@ -484,11 +555,9 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
       ...prev,
       re_rankers: prev.re_rankers.filter((_, i) => i !== index)
     }));
-    // Also clean up the expression variables for this index
     setExpressionVariables(prev => {
       const newVars = { ...prev };
       delete newVars[index];
-      // Re-index remaining variables
       const reIndexed = {};
       Object.keys(newVars).forEach(key => {
         const oldIndex = parseInt(key);
@@ -500,7 +569,6 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
       });
       return reIndexed;
     });
-    // Update expanded state
     setExpandedReRankers(prev => 
       prev.filter(i => i !== index).map(i => i > index ? i - 1 : i)
     );
@@ -577,9 +645,9 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
             }
             if (!input.features || input.features.length === 0) {
               errors.push(`Ranker ${rankerIndex + 1}, Input ${inputIndex + 1}: At least one feature is required`);
-            }
-          });
         }
+      });
+    }
 
         // Validate outputs
         if (!ranker.outputs || ranker.outputs.length === 0) {
@@ -666,7 +734,6 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
       setLoading(true);
       setError('');
 
-      // Validate form before submission
       const validationErrors = validateForm();
       if (validationErrors.length > 0) {
         const errorMessage = validationErrors.join('\n');
@@ -740,7 +807,7 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
       };
 
       const response = await axios.post(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/onboard`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/inferflow-config-registry/clone`,
         payload,
         {
           headers: {
@@ -755,15 +822,28 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
         return;
       }
 
-      const successMessage = response.data.data?.message || 'InferFlow Config onboarded successfully';
+      const successMessage = response.data.data?.message || 'InferFlow Config cloned successfully';
       onSuccess(successMessage);
       onClose();
     } catch (error) {
-      setError(error.response?.data?.error || error.message || 'Failed to onboard InferFlow config');
+      setError(error.response?.data?.error || error.message || 'Failed to clone InferFlow config');
     } finally {
       setLoading(false);
     }
   };
+
+  if (dataLoading) {
+    return (
+      <Dialog open={open} maxWidth="md" fullWidth>
+        <DialogContent>
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 4 }}>
+            <CircularProgress />
+            <Typography sx={{ ml: 2 }}>Loading configuration...</Typography>
+          </Box>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog
@@ -782,7 +862,7 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
         justifyContent: 'space-between',
         alignItems: 'center'
       }}>
-        <Typography variant="h6">Onboard InferFlow Config</Typography>
+        <Typography variant="h6">Clone InferFlow Config</Typography>
         <IconButton
           edge="end"
           color="inherit"
@@ -795,10 +875,16 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
 
       <DialogContent dividers>
         <Box sx={{ p: 2 }}>
-          <MPConfigForm
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              <strong>Cloning Configuration:</strong> You can modify any field to create a new configuration. Change the Config Identifier to create a different config ID.
+            </Typography>
+          </Alert>
+          
+          <InferflowConfigForm
             formData={formData}
             isEditMode={false}
-            isCloneMode={false}
+            isCloneMode={true}
             isAdmin={isAdmin}
             handleBasicInfoChange={handleBasicInfoChange}
             handleRankerChange={handleRankerChange}
@@ -849,7 +935,7 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
             '&:hover': { bgcolor: '#380730' }
           }}
         >
-          {loading ? 'Submitting...' : 'Submit'}
+          {loading ? 'Cloning...' : 'Clone Config'}
         </Button>
       </DialogActions>
 
@@ -873,4 +959,4 @@ const OnboardMPConfigModal = ({ open, onClose, onSuccess }) => {
   );
 };
 
-export default OnboardMPConfigModal; 
+export default CloneInferflowConfigModal;

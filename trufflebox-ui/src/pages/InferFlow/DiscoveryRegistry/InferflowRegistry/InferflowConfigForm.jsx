@@ -122,7 +122,7 @@ const RepeatDimensionInput = ({ onAddRepeated }) => {
   );
 };
 
-const MPConfigForm = ({
+const InferflowConfigForm = ({
   formData,
   isEditMode = false,
   isCloneMode = false,
@@ -1304,5 +1304,5 @@ const MPConfigForm = ({
   );
 };
 
-export default MPConfigForm;
+export default InferflowConfigForm;
 

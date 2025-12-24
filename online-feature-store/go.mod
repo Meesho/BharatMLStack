@@ -92,5 +92,3 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/redis/go-redis/v9 v9.5.1 => github.com/Meesho/go-redis/v9 v9.6.2

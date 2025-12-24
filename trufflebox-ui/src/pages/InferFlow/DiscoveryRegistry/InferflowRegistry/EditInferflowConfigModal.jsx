@@ -18,10 +18,10 @@ import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import { useAuth } from '../../../Auth/AuthContext';
 import axios from 'axios';
 import * as URL_CONSTANTS from '../../../../config';
-import MPConfigForm from './MPConfigForm';
+import InferflowConfigForm from './InferflowConfigForm';
 import JsonDiffView from '../../../../components/JsonDiffView';
 
-const EditMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
+const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const [loading, setLoading] = useState(false);
@@ -909,7 +909,7 @@ const EditMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
 
       <DialogContent dividers>
         <Box sx={{ p: 2 }}>
-          <MPConfigForm
+          <InferflowConfigForm
             formData={formData}
             isEditMode={true}
             isCloneMode={false}
@@ -1182,4 +1182,4 @@ const EditMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
   );
 };
 
-export default EditMPConfigModal;
+export default EditInferflowConfigModal;

@@ -43,7 +43,7 @@ import { useAuth } from '../../../Auth/AuthContext';
 import axios from 'axios';
 import * as URL_CONSTANTS from '../../../../config';
 
-const MPConfigTestingModal = ({ open, onClose, configData, onTestComplete }) => {
+const InferflowConfigTestingModal = ({ open, onClose, configData, onTestComplete }) => {
   const { user } = useAuth();
   
   // State for testing process
@@ -718,4 +718,4 @@ const MPConfigTestingModal = ({ open, onClose, configData, onTestComplete }) => 
   );
 };
 
-export default MPConfigTestingModal;
+export default InferflowConfigTestingModal;
