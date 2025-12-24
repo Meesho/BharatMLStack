@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Snackbar, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography } from '@mui/material';
-import GenericMPConfigRegistryTable from './GenericMPConfigRegistryTable';
-import OnboardMPConfigModal from './OnboardMPConfigModal';
-import EditMPConfigModal from './EditMPConfigModal';
-import CloneMPConfigModal from './CloneMPConfigModal';
-import PromoteMPConfigModal from './PromoteMPConfigModal';
-import ScaleUpMPConfigModal from './ScaleUpMPConfigModal';
-import MPConfigTestingModal from './MPConfigTestingModal';
-import ViewConfigDetailsModal from './ViewConfigDetailsModal';
+import GenericInferflowConfigRegistryTable from './GenericInferflowConfigRegistryTable';
+import OnboardInferflowConfigModal from './OnboardInferflowConfigModal';
+import EditInferflowConfigModal from './EditInferflowConfigModal';
+import CloneInferflowConfigModal from './CloneInferflowConfigModal';
+import PromoteInferflowConfigModal from './PromoteInferflowConfigModal';
+import ScaleUpInferflowConfigModal from './ScaleUpInferflowConfigModal';
+import InferflowConfigTestingModal from './InferflowConfigTestingModal';
+import ViewInferflowConfigDetailsModal from './ViewInferflowConfigDetailsModal';
 import ProductionCredentialModal from '../../../../common/ProductionCredentialModal';
 import { useAuth } from '../../../Auth/AuthContext';
 import { SERVICES, SCREEN_TYPES, ACTIONS } from '../../../../constants/permissions';
 import * as URL_CONSTANTS from '../../../../config';
 import axios from 'axios';
 
-const ModelProxyConfigRegistry = () => {
+const InferflowConfigRegistry = () => {
   const { user, hasPermission, permissions } = useAuth();
   
   const service = SERVICES.InferFlow;
@@ -269,7 +269,7 @@ const ModelProxyConfigRegistry = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <GenericMPConfigRegistryTable
+      <GenericInferflowConfigRegistryTable
         data={configData}
         loading={loading}
         onViewDetails={handleViewDetails}
@@ -282,13 +282,13 @@ const ModelProxyConfigRegistry = () => {
         onOnboard={handleOnboard}
       />
 
-      <OnboardMPConfigModal
+      <OnboardInferflowConfigModal
         open={onboardModalOpen}
         onClose={() => setOnboardModalOpen(false)}
         onSuccess={handleOnboardSuccess}
       />
 
-      <EditMPConfigModal
+      <EditInferflowConfigModal
         open={editModalOpen}
         onClose={() => setEditModalOpen(false)}
         onSuccess={(message) => {
@@ -298,7 +298,7 @@ const ModelProxyConfigRegistry = () => {
         configData={selectedConfig}
       />
 
-      <CloneMPConfigModal
+      <CloneInferflowConfigModal
         open={cloneModalOpen}
         onClose={() => setCloneModalOpen(false)}
         onSuccess={(message, type = 'success') => {
@@ -308,7 +308,7 @@ const ModelProxyConfigRegistry = () => {
         configData={selectedConfig}
       />
 
-      <PromoteMPConfigModal
+      <PromoteInferflowConfigModal
         open={promoteModalOpen}
         onClose={() => setPromoteModalOpen(false)}
         onSuccess={(message) => {
@@ -318,7 +318,7 @@ const ModelProxyConfigRegistry = () => {
         configData={selectedConfig}
       />
 
-      <ScaleUpMPConfigModal
+      <ScaleUpInferflowConfigModal
         open={scaleUpModalOpen}
         onClose={() => setScaleUpModalOpen(false)}
         onSuccess={(message) => {
@@ -328,13 +328,13 @@ const ModelProxyConfigRegistry = () => {
         configData={selectedConfig}
       />
 
-      <ViewConfigDetailsModal
+      <ViewInferflowConfigDetailsModal
         open={viewDetailsModal.open}
         onClose={() => setViewDetailsModal({ open: false, config: null })}
         configData={viewDetailsModal.config}
       />
 
-      <MPConfigTestingModal
+      <InferflowConfigTestingModal
         open={testModalOpen}
         onClose={() => setTestModalOpen(false)}
         configData={selectedConfig}
@@ -405,4 +405,4 @@ const ModelProxyConfigRegistry = () => {
   );
 };
 
-export default ModelProxyConfigRegistry;
+export default InferflowConfigRegistry;

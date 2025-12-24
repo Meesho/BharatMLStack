@@ -22,7 +22,7 @@ import { useAuth } from '../../../Auth/AuthContext';
 import axios from 'axios';
 import * as URL_CONSTANTS from '../../../../config';
 
-const PromoteMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
+const PromoteInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -676,4 +676,4 @@ const PromoteMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
   );
 };
 
-export default PromoteMPConfigModal; 
+export default PromoteInferflowConfigModal; 
