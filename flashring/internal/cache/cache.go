@@ -93,6 +93,9 @@ type WrapCacheConfig struct {
 
 	// Optional metrics recorder
 	MetricsRecorder MetricsRecorder
+
+	//Badger
+	MountPoint string
 }
 
 func NewWrapCache(config WrapCacheConfig, mountPoint string, logStats bool) (*WrapCache, error) {

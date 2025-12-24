@@ -76,6 +76,8 @@ func main() {
 		planReadthroughGaussianBatched()
 	} else if plan == "lockless" {
 		planLockless()
+	} else if plan == "badger" {
+		planBadger()
 	} else {
 		panic("invalid plan")
 	}
