@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	cachepkg "github.com/Meesho/BharatMLStack/flashring/internal/cache"
+	cachepkg "github.com/Meesho/BharatMLStack/flashring/pkg/cache"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
