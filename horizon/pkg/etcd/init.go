@@ -1,38 +1,36 @@
 package etcd
 
 import (
+	"sync"
+
+	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 )
 
 var (
-	instances map[string]Etcd
+	instances         map[string]Etcd
+	envEtcdServer     string
+	envEtcdUsername   string
+	envEtcdPassword   string
+	envWatcherEnabled bool
+	initEtcdOnce      sync.Once
 )
 
 // Init initializes the Etcd client, to be called from main.go
-func Init(config interface{}) {
-	appName := viper.GetString("APP_NAME")
+func InitFromAppName(config interface{}, appName string, appConfig configs.Configs) {
+	initEtcdOnce.Do(func() {
+		envEtcdServer = appConfig.EtcdServer
+		envEtcdUsername = appConfig.EtcdUsername
+		envEtcdPassword = appConfig.EtcdPassword
+		envWatcherEnabled = appConfig.EtcdWatcherEnabled
+	})
 	if instances == nil {
 		instances = make(map[string]Etcd)
-		if instances[appName] == nil {
-			instances[appName] = newV1Etcd(config)
-		}
 	}
-}
 
-// InitFromAppName initializes the Etcd client, to be called from main.go
-func InitFromAppName(config interface{}, appName string) {
-	if instances == nil {
-		instances = make(map[string]Etcd)
-		if instances[appName] == nil {
-			instances[appName] = newV1EtcdFromAppName(config, appName)
-		}
+	if instances[appName] == nil {
+		instances[appName] = newV1EtcdFromAppName(config, appName)
 	}
-}
-
-// InitV1 initializes the Etcd client with version 1
-func InitV1(config interface{}) {
-	Init(config)
 }
 
 // Instance returns the Etcd client instance. Ensure that Init is called before calling this function

@@ -30,11 +30,28 @@ import axios from 'axios';
 import { useAuth } from '../../../Auth/AuthContext';
 import * as URL_CONSTANTS from '../../../../config';
 
+const shouldRequireField = (dataType, fieldType) => {
+  if (!dataType) return false;
+  
+  const cleanDataType = dataType.replace('DataType', '');
+  
+  if (fieldType === 'string') {
+    return cleanDataType === 'String' || cleanDataType === 'StringVector';
+  }
+  
+  if (fieldType === 'vector') {
+    return cleanDataType.includes('Vector');
+  }
+  
+  return false;
+};
+
 const FeatureList = ({
   features, 
   activeVersion, 
   entityLabel,
-  featureGroupLabel
+  featureGroupLabel,
+  dataType
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -50,29 +67,48 @@ const FeatureList = ({
   
   const versionNumber = parseInt(activeVersion, 10);
   const featureData = features[versionNumber];
-  const labels = featureData ? featureData.labels.split(',') : [];
-  const defaultValues = featureData ? featureData['default-values'] : [];
-  const sourceBasePaths = featureData ? featureData['source-base-paths'] || [] : [];
-  const sourceDataColumns = featureData ? featureData['source-data-columns'] || [] : [];
-  const storageProviders = featureData ? featureData['storage-providers'] || [] : [];
-  const stringLengths = featureData ? featureData['string-lengths'] || [] : [];
-  const vectorLengths = featureData ? featureData['vector-lengths'] || [] : [];
+  // Safely handle labels - split and filter out empty strings
+  const labels = featureData && featureData.labels 
+    ? featureData.labels.split(',').filter(label => label.trim() !== '')
+    : [];
+  
+  // Safely handle all arrays - ensure they're arrays, not null
+  const defaultValues = (featureData && Array.isArray(featureData['default-values'])) 
+    ? featureData['default-values'] 
+    : [];
+  const sourceBasePaths = (featureData && Array.isArray(featureData['source-base-paths'])) 
+    ? featureData['source-base-paths'] 
+    : [];
+  const sourceDataColumns = (featureData && Array.isArray(featureData['source-data-columns'])) 
+    ? featureData['source-data-columns'] 
+    : [];
+  const storageProviders = (featureData && Array.isArray(featureData['storage-providers'])) 
+    ? featureData['storage-providers'] 
+    : [];
+  const stringLengths = (featureData && Array.isArray(featureData['string-lengths'])) 
+    ? featureData['string-lengths'] 
+    : [];
+  const vectorLengths = (featureData && Array.isArray(featureData['vector-lengths'])) 
+    ? featureData['vector-lengths'] 
+    : [];
 
   // Filter the labels and defaultValues based on the search term
   const filteredData = labels
     .map((label, index) => ({
       label,
-      defaultValue: defaultValues[index],
-      sourceBasePath: sourceBasePaths[index]|| 'N/A',
-      sourceDataColumn: sourceDataColumns[index]|| 'N/A',
+      defaultValue: defaultValues[index] ?? '-',
+      sourceBasePath: sourceBasePaths[index] || 'N/A',
+      sourceDataColumn: sourceDataColumns[index] || 'N/A',
       storageProvider: storageProviders[index] || 'N/A',
-      stringLength: stringLengths[index],
-      vectorLength: vectorLengths[index],
+      stringLength: stringLengths[index] ?? '-',
+      vectorLength: vectorLengths[index] ?? '-',
     }))
-    .filter(item => 
-      item.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.defaultValue.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    .filter(item => {
+      const labelMatch = item.label && item.label.toLowerCase().includes(searchTerm.toLowerCase());
+      const defaultValueMatch = item.defaultValue && 
+        item.defaultValue.toString().toLowerCase().includes(searchTerm.toLowerCase());
+      return labelMatch || defaultValueMatch;
+    });
 
   const handleInfoClick = (feature) => {
     setSelectedFeature(feature);
@@ -113,22 +149,23 @@ const FeatureList = ({
   };
 
   const handleSubmitEdit = async () => {
-    // Validate required fields
     const errors = [];
     
     editFeatures.forEach((feature, index) => {
-      // Check if string-lengths is undefined, null, or empty string, but allow '0'
-      if (feature['string-lengths'] === undefined || 
-          feature['string-lengths'] === null || 
-          feature['string-lengths'].toString().trim() === '') {
-        errors.push({ index, field: 'string-lengths', message: 'String Length is required' });
+      if (shouldRequireField(dataType, 'string')) {
+        if (feature['string-lengths'] === undefined || 
+            feature['string-lengths'] === null || 
+            feature['string-lengths'].toString().trim() === '') {
+          errors.push({ index, field: 'string-lengths', message: 'String Length is required' });
+        }
       }
       
-      // Check if vector-lengths is undefined, null, or empty string, but allow '0'
-      if (feature['vector-lengths'] === undefined || 
-          feature['vector-lengths'] === null || 
-          feature['vector-lengths'].toString().trim() === '') {
-        errors.push({ index, field: 'vector-lengths', message: 'Vector Length is required' });
+      if (shouldRequireField(dataType, 'vector')) {
+        if (feature['vector-lengths'] === undefined || 
+            feature['vector-lengths'] === null || 
+            feature['vector-lengths'].toString().trim() === '') {
+          errors.push({ index, field: 'vector-lengths', message: 'Vector Length is required' });
+        }
       }
     });
     
@@ -389,8 +426,12 @@ const FeatureList = ({
                   <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f5f5f5' }}>Source Base Path</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f5f5f5' }}>Source Data Column</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f5f5f5' }}>Storage Provider</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f5f5f5' }}>String Length *</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f5f5f5' }}>Vector Length *</TableCell>
+                  {shouldRequireField(dataType, 'string') && (<TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f5f5f5' }}>
+                    String Length{shouldRequireField(dataType, 'string') ? ' *' : ''}
+                  </TableCell>)}
+                  {shouldRequireField(dataType, 'vector') && (<TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f5f5f5' }}>
+                    Vector Length{shouldRequireField(dataType, 'vector') ? ' *' : ''}
+                  </TableCell>)}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -442,30 +483,30 @@ const FeatureList = ({
                         <MenuItem value="TABLE">TABLE</MenuItem>
                       </TextField>
                     </TableCell>
-                    <TableCell>
+                    {shouldRequireField(dataType, 'string') && (<TableCell>
                       <TextField
                         value={feature['string-lengths']}
                         onChange={(e) => handleEditChange(index, 'string-lengths', e.target.value)}
                         fullWidth
                         variant="outlined"
                         size="small"
-                        required
+                        required={shouldRequireField(dataType, 'string')}
                         error={hasError(index, 'string-lengths')}
                         helperText={getErrorMessage(index, 'string-lengths')}
                       />
-                    </TableCell>
-                    <TableCell>
+                    </TableCell>)}
+                    {shouldRequireField(dataType, 'vector') && (<TableCell>
                       <TextField
                         value={feature['vector-lengths']}
                         onChange={(e) => handleEditChange(index, 'vector-lengths', e.target.value)}
                         fullWidth
                         variant="outlined"
                         size="small"
-                        required
+                        required={shouldRequireField(dataType, 'vector')}
                         error={hasError(index, 'vector-lengths')}
                         helperText={getErrorMessage(index, 'vector-lengths')}
                       />
-                    </TableCell>
+                    </TableCell>)}
                   </TableRow>
                 ))}
               </TableBody>
@@ -473,7 +514,9 @@ const FeatureList = ({
           </TableContainer>
           
           <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography sx={{ color: 'text.secondary' }}>* Required fields</Typography>
+            {(shouldRequireField(dataType, 'string') || shouldRequireField(dataType, 'vector')) && (
+              <Typography sx={{ color: 'text.secondary' }}>* Required fields</Typography>
+            )}
             <Button 
               variant="contained" 
               sx={{

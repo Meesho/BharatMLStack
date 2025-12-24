@@ -1,0 +1,151 @@
+name: Release Helix Client
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v0.1.20 or v0.1.20-beta.1)'
+        required: true
+        type: string
+      is_beta:
+        description: 'Is this a beta release?'
+        required: false
+        type: boolean
+        default: false
+      is_alpha:
+        description: 'Is this an alpha release?'
+        required: false
+        type: boolean
+        default: false
+      branch:
+        description: 'Branch to release from'
+        required: true
+        type: string
+        default: 'main'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.branch }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+
+      - name: Validate Helix Client
+        run: |
+          echo "Current branch: ${{ github.ref }}"
+          cd helix-client
+          go mod tidy
+          go test -v ./...
+          go build -v ./...
+          go vet ./...
+
+      - name: Create Git tag
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          TAG="helix-client/${{ inputs.version }}"
+          git tag -a "$TAG" -m "Helix Client release ${{ inputs.version }}"
+          git push origin "$TAG"
+
+      - name: Create GitHub Release (Production)
+        if: ${{ !inputs.is_beta && !inputs.is_alpha }}
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: helix-client/${{ inputs.version }}
+          release_name: Helix Client ${{ inputs.version }}
+          body: |
+            ## Helix Client Release ${{ inputs.version }}
+            
+            ### Installation
+            ```bash
+            go get github.com/${{ github.repository }}/helix-client@${{ inputs.version }}
+            ```
+            
+            ### Features
+            - Go client libraries for BharatMLStack services
+            - Numerix, Predator, and Skye client integrations
+            - Type-safe API bindings and gRPC support
+            
+            ### Usage
+            ```go
+            import "github.com/${{ github.repository }}/helix-client"
+            ```
+            
+            ### Changes
+            Please see the commit history for detailed changes.
+            
+            ### Validation
+            - ✅ Tests passed
+            - ✅ Build successful
+            - ✅ Go vet clean
+          draft: false
+          prerelease: false
+
+      - name: Create Beta Pre-release
+        if: ${{ inputs.is_beta }}
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: helix-client/${{ inputs.version }}
+          release_name: Helix Client ${{ inputs.version }} (Beta)
+          body: |
+            ## Helix Client Beta Release ${{ inputs.version }}
+            
+            ⚠️ **This is a beta release from the develop branch** - Use for testing purposes only.
+            
+            ### Installation
+            ```bash
+            go get github.com/${{ github.repository }}/helix-client@${{ inputs.version }}
+            ```
+            
+            ### Changes
+            Please see the commit history for detailed changes.
+            
+            ### Validation
+            - ✅ Tests passed
+            - ✅ Build successful
+            - ✅ Go vet clean
+          draft: false
+          prerelease: true
+
+      - name: Create Alpha Pre-release
+        if: ${{ inputs.is_alpha }}
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: helix-client/${{ inputs.version }}
+          release_name: Helix Client ${{ inputs.version }} (Alpha)
+          body: |
+            ## Helix Client Alpha Release ${{ inputs.version }}
+            
+            ⚠️ **This is an alpha release from a feature/fix branch** - Experimental build for development and testing.
+            
+            ### Installation
+            ```bash
+            go get github.com/${{ github.repository }}/helix-client@${{ inputs.version }}
+            ```
+            
+            ### Changes
+            Please see the commit history for detailed changes.
+            
+            ### Validation
+            - ✅ Tests passed
+            - ✅ Build successful
+            - ✅ Go vet clean
+          draft: false
+          prerelease: true 

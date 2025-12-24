@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+option go_package = "../grpc";
+
+// Request
+message InferflowRequestProto {
+    repeated Entity entities = 1;
+    message Entity {
+        string entity = 1;
+        repeated string ids = 2;
+        repeated Feature features = 3;
+        message Feature {
+            string name = 1;
+            repeated string ids_feature_value = 2;
+        }
+    }
+    string model_config_id = 2;
+    string tracking_id = 3;
+}
+  
+// Response
+message InferflowResponseProto {
+    repeated ComponentData component_data = 1;
+    message ComponentData {
+        repeated string data = 1;
+    }
+    Error error = 2;
+    message Error {
+        string message = 1;
+    }
+}
+ 
+service Inferflow {
+  rpc RetrieveModelScore(InferflowRequestProto) returns (InferflowResponseProto) {};
+}

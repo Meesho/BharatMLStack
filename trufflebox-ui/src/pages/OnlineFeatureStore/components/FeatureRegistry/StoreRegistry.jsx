@@ -6,12 +6,9 @@ import {
   DialogContent,
   DialogTitle,
   TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Typography,
   Box,
+  Autocomplete,
 } from '@mui/material';
 import { Modal, ListGroup } from 'react-bootstrap';
 import "./styles.scss";
@@ -80,8 +77,12 @@ const StoreRegistry = () => {
         }
 
         const data = await response.json();
-        const configIds = Object.keys(data).map(id => parseInt(id, 10));
-        setConfigOptions(configIds);
+        // Create options array with id and dbType for display
+        const configOptions = Object.keys(data).map(id => ({
+          id: parseInt(id, 10),
+          dbType: data[id]
+        }));
+        setConfigOptions(configOptions);
         setConfigDbTypeMap(data);
       } catch (error) {
         console.error('Error fetching config options:', error);
@@ -103,7 +104,8 @@ const StoreRegistry = () => {
       
       // Auto-fill db-type when conf-id changes
       if (name === "conf-id" && value) {
-        updates["db-type"] = configDbTypeMap[value] || "";
+        // Convert to string for map lookup since API returns string keys
+        updates["db-type"] = configDbTypeMap[value.toString()] || "";
       }
       
       return {
@@ -160,15 +162,18 @@ const StoreRegistry = () => {
       errors.table = "Table name is required";
     }
     
-    if (!storeData["table-ttl"] || storeData["table-ttl"] === "") {
+    if (storeData["table-ttl"] === "" || storeData["table-ttl"] === null || storeData["table-ttl"] === undefined) {
       errors["table-ttl"] = "Table Time to Live is required";
-    } else if (storeData["table-ttl"] <= 0) {
-      errors["table-ttl"] = "Table Time to Live must be greater than 0";
+    } else if (storeData["table-ttl"] < 0) {
+      errors["table-ttl"] = "Table Time to Live must be greater than or equal to 0";
     }
     
-    const nonEmptyKeys = storeData["primary-keys"].filter(key => key && key.trim() !== "");
-    if (nonEmptyKeys.length === 0) {
-      errors["primary-keys"] = "At least one primary key is required";
+    // Primary keys are only required if db-type is not redis_failover
+    if (storeData["db-type"] !== "redis_failover") {
+      const nonEmptyKeys = storeData["primary-keys"].filter(key => key && key.trim() !== "");
+      if (nonEmptyKeys.length === 0) {
+        errors["primary-keys"] = "At least one primary key is required";
+      }
     }
     
     setValidationErrors(errors);
@@ -240,7 +245,7 @@ const StoreRegistry = () => {
   const updatePrimaryKey = (index, value) => {
     setStoreData(prevData => {
       const newKeys = [...prevData["primary-keys"]];
-      newKeys[index] = value;
+      newKeys[index] = typeof value === 'string' ? value.trim() : value;
       return {
         ...prevData,
         "primary-keys": newKeys
@@ -270,49 +275,57 @@ const StoreRegistry = () => {
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
         <DialogTitle>Register Store</DialogTitle>
         <DialogContent>
-          <FormControl fullWidth margin="normal" error={!!validationErrors["conf-id"]}>
-            <InputLabel id="conf-id-label">Config ID *</InputLabel>
-            <Select
-              labelId="conf-id-label"
-              name="conf-id"
-              value={storeData["conf-id"]}
-              onChange={handleChange}
-              fullWidth
-              label="Config ID *"
-              error={!!validationErrors["conf-id"]}
-            >
-              {configOptions.map((id) => (
-                <MenuItem key={id} value={id}>
-                  {id}
-                </MenuItem>
-              ))}
-            </Select>
-            {validationErrors["conf-id"] && (
-              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
-                {validationErrors["conf-id"]}
-              </Typography>
+          <Autocomplete
+            options={configOptions}
+            getOptionLabel={(option) => `${option.id} - ${option.dbType}`}
+            value={configOptions.find(opt => opt.id === storeData["conf-id"]) || null}
+            onChange={(event, newValue) => {
+              const syntheticEvent = {
+                target: {
+                  name: 'conf-id',
+                  value: newValue ? newValue.id : ''
+                }
+              };
+              handleChange(syntheticEvent);
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Config ID *"
+                name="conf-id"
+                fullWidth
+                margin="normal"
+                error={!!validationErrors["conf-id"]}
+                helperText={validationErrors["conf-id"]}
+              />
             )}
-          </FormControl>
-          <FormControl fullWidth margin="normal" error={!!validationErrors["db-type"]}>
-            <InputLabel id="db-type-label">Database Type *</InputLabel>
-            <Select
-              labelId="db-type-label"
-              name="db-type"
-              value={storeData["db-type"]}
-              onChange={handleChange}
-              fullWidth
-              label="Database Type *"
-              disabled
-              error={!!validationErrors["db-type"]}
-            >
-              <MenuItem value={storeData["db-type"]}>{storeData["db-type"]}</MenuItem>
-            </Select>
-            {validationErrors["db-type"] && (
-              <Typography variant="caption" color="error" sx={{ mt: 1 }}>
-                {validationErrors["db-type"]}
-              </Typography>
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+          />
+          <Autocomplete
+            options={[storeData["db-type"]]}
+            value={storeData["db-type"]}
+            onChange={(event, newValue) => {
+              const syntheticEvent = {
+                target: {
+                  name: 'db-type',
+                  value: newValue || ''
+                }
+              };
+              handleChange(syntheticEvent);
+            }}
+            disabled
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Database Type *"
+                name="db-type"
+                fullWidth
+                margin="normal"
+                error={!!validationErrors["db-type"]}
+                helperText={validationErrors["db-type"]}
+              />
             )}
-          </FormControl>
+          />
           <TextField
             label="Table *"
             name="table"
@@ -338,7 +351,7 @@ const StoreRegistry = () => {
           <div style={{ marginTop: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Typography variant="subtitle1" color={validationErrors["primary-keys"] ? "error" : "inherit"}>
-                Primary Keys *
+                Primary Keys {storeData["db-type"] !== "redis_failover" ? "*" : ""}
               </Typography>
               <Button 
                 variant="text" 
@@ -363,6 +376,12 @@ const StoreRegistry = () => {
               </Typography>
             )}
             
+            {storeData["db-type"] === "redis_failover" && (
+              <Typography variant="caption" color="textSecondary" sx={{ mt: 1, display: 'block' }}>
+                Primary keys are optional for redis_failover database type
+              </Typography>
+            )}
+            
             {storeData["primary-keys"].length === 0 && (
               <Typography variant="body2" color="textSecondary" style={{ marginTop: '10px' }}>
                 No primary keys added yet
@@ -373,7 +392,7 @@ const StoreRegistry = () => {
               <div key={index} style={{ display: 'flex', gap: '10px', marginTop: '10px', alignItems: 'center' }}>
                 <TextField
                   fullWidth
-                  label={`Primary Key ${index + 1} *`}
+                  label={`Primary Key ${index + 1}${storeData["db-type"] !== "redis_failover" ? " *" : ""}`}
                   value={key}
                   onChange={(e) => updatePrimaryKey(index, e.target.value)}
                   error={validationErrors["primary-keys"] && (!key || key.trim() === "")}

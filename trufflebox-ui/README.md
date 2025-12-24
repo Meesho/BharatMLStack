@@ -30,7 +30,7 @@ Built with modern web technologies:
 
 ### Prerequisites
 
-- Node.js 16+ and npm
+- Node.js 16+ and yarn
 - Docker and Docker Compose (for containerized deployment)
 - Access to BharatMLStack backend services (Horizon, Skye)
 
@@ -43,7 +43,7 @@ Built with modern web technologies:
 
 2. **Install Dependencies**
    ```bash
-   npm install
+   yarn install
    ```
 
 3. **Configure Environment**
@@ -54,7 +54,7 @@ Built with modern web technologies:
 
 4. **Start Development Server**
    ```bash
-   npm start
+   yarn start
    ```
 
    Open [http://localhost:3000](http://localhost:3000) to view the application.
@@ -124,10 +124,10 @@ The application generates runtime configuration in `env.js` to support dynamic e
 
 | Command | Description |
 |---------|-------------|
-| `npm start` | Start development server with hot reload |
-| `npm test` | Run test suite |
-| `npm run build` | Build optimized production bundle |
-| `npm run eject` | Eject from Create React App (⚠️ irreversible) |
+| `yarn start` | Start development server with hot reload |
+| `yarn test` | Run test suite |
+| `yarn run build` | Build optimized production bundle |
+| `yarn run eject` | Eject from Create React App (⚠️ irreversible) |
 
 ### Project Structure
 

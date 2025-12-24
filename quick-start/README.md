@@ -20,12 +20,19 @@ BharatMLStack's Online Feature Store consists of several interconnected services
 - **MySQL**: Relational database for metadata and configuration
 - **Redis**: In-memory data store for caching
 - **etcd**: Distributed key-value store for service coordination
+- **Apache Kafka**: Message broker for feature ingestion pipeline
 
 **Application Services:**
-- **Horizon**: Backend API service (runs on port 8082)
-- **Trufflebox UI**: Frontend web interface (runs on port 3000)
 - **Online Feature Store gRPC API Server**: High-performance gRPC interface (runs on port 8089)
+- **ONFS Consumer**: Kafka consumer service for real-time feature ingestion from message streams (runs on port 8090)
+- **Horizon**: Backend API service (runs on port 8082)
+- **Numerix**: Matrix operations service (runs on port 8083)
+- **Trufflebox UI**: Frontend web interface (runs on port 3000)
+- **Inferflow**: Inference workflow service (runs on port 8085)
+
+**Management Tools:**
 - **etcd Workbench**: etcd management interface (runs on port 8081)
+- **Kafka UI**: Kafka cluster management interface (runs on port 8084)
 
 All services are orchestrated using Docker Compose with pre-built images from GitHub Container Registry (GHCR).
 
@@ -33,30 +40,169 @@ All services are orchestrated using Docker Compose with pre-built images from Gi
 
 ### Starting the System
 
-Run the start script to set up your workspace and launch all services:
+The start script provides an interactive service selector that allows you to choose which application services to run:
 
 ```bash
 ./start.sh
 ```
 
-### Testing Different Versions
+**Interactive Options:**
+1. **All Services** - Starts all application services (API Server, Consumer, Horizon, Numerix, TruffleBox UI, Inferflow)
+2. **Custom Selection** - Choose individual services to start
+3. **Exit** - Exit without starting
 
-You can easily test different versions of the application services by setting environment variables:
+**Infrastructure services (ScyllaDB, MySQL, Redis, etcd, Kafka) and Management Tools (etcd-workbench, kafka-ui) are always started.**
+
+### Initializing with Dummy Data
+
+For testing and development, you can initialize the databases with sample dummy data. This includes:
+- Sample entities (user, catalog)
+- Feature groups and features
+- Example configurations for Inferflow and Numerix
+- Test data in MySQL, ScyllaDB, and etcd
+
+**Usage:**
 
 ```bash
-# Test specific versions [Replace with actual versions]
-ONFS_VERSION=v1.2.3 HORIZON_VERSION=v2.1.0 TRUFFLEBOX_VERSION=v1.0.5 ./start.sh
+# Interactive mode with dummy data
+./start.sh --dummy-data
 
-# Or set them in your workspace and run docker-compose directly
-cd workspace
-ONFS_VERSION=main docker-compose up -d onfs-api-server
+# Start all services with dummy data (non-interactive)
+./start.sh --all --dummy-data
+
+# Combine with version specification
+ONFS_VERSION=v1.2.0 ./start.sh --all --dummy-data
+
+# Combine with local builds
+ONFS_VERSION=local ./start.sh --dummy-data
 ```
 
-Available version formats:
+**What gets initialized:**
+
+- **ScyllaDB**: Creates keyspace, tables, and inserts sample feature data
+- **MySQL**: Creates all tables and inserts:
+  - API resolvers
+  - Role permissions
+  - Sample entities, feature groups, and features
+  - Inferflow and Numerix configurations
+  - Service deployable configurations
+- **etcd**: Sets up configuration keys with:
+  - Security tokens
+  - Entity and feature group configurations
+  - Inferflow component configurations
+  - Model and expression configurations
+
+**Note:** The dummy data initialization scripts run automatically when you use the `--dummy-data` flag. The regular initialization scripts (which create empty schemas) are used by default.
+
+### Service Independence
+
+Services can run independently based on your needs:
+- **ONFS API Server** - For direct gRPC feature operations
+- **ONFS Consumer** - For real-time Kafka-based feature ingestion (independent of API Server)
+- **Horizon + TruffleBox UI** - For web-based feature store management
+- **Numerix** - For matrix operations
+- **Inferflow** - For inference workflow management
+
+### Specifying Service Versions
+
+You can specify versions for application services using environment variables:
+
+```bash
+# Specify individual service versions
+ONFS_VERSION=v1.2.3 ./start.sh
+
+# Specify consumer version
+ONFS_CONSUMER_VERSION=v1.0.0-beta-d74137 ./start.sh
+
+# Combine multiple versions
+ONFS_VERSION=v1.2.0 HORIZON_VERSION=v2.1.0 TRUFFLEBOX_VERSION=v1.0.5 INFERFLOW_VERSION=v1.0.0 ./start.sh
+
+# Start all services with specific versions
+ONFS_VERSION=v1.2.0 ONFS_CONSUMER_VERSION=v1.0.0-beta-d74137 INFERFLOW_VERSION=v1.0.0 ./start.sh
+
+# Build services from local source code
+ONFS_VERSION=local HORIZON_VERSION=local INFERFLOW_VERSION=local ./start.sh
+```
+
+**Available Environment Variables:**
+- `ONFS_VERSION` - Online Feature Store API Server version
+- `ONFS_CONSUMER_VERSION` - ONFS Consumer version
+- `HORIZON_VERSION` - Horizon Backend version
+- `NUMERIX_VERSION` - Numerix Matrix Operations version
+- `TRUFFLEBOX_VERSION` - TruffleBox UI version
+- `INFERFLOW_VERSION` - Inferflow version
+
+**Version Formats:**
 - `latest` (default) - Latest stable release
 - `main` - Latest development build  
 - `v1.2.3` - Specific version tag
 - `sha-abcd1234` - Specific commit SHA
+- `local` - Build from local Dockerfile (requires source code in workspace)
+
+**Non-interactive Mode:**
+```bash
+# Start all services without prompts
+./start.sh --all
+
+# Start with specific versions non-interactively
+ONFS_VERSION=v1.2.0 ./start.sh --all
+```
+
+### Building from Local Source
+
+You can build services from local source code by setting the version to `local`. This is useful for development and testing changes:
+
+```bash
+# Build a single service from local source
+ONFS_VERSION=local ./start.sh
+
+# Build multiple services from local source
+ONFS_VERSION=local HORIZON_VERSION=local INFERFLOW_VERSION=local ./start.sh
+
+# Build all services from local source
+ONFS_VERSION=local ONFS_CONSUMER_VERSION=local HORIZON_VERSION=local \
+  NUMERIX_VERSION=local TRUFFLEBOX_VERSION=local INFERFLOW_VERSION=local ./start.sh
+```
+
+**Requirements for Local Builds:**
+- Source code must be available in the parent directory (relative to `quick-start/`)
+- Python 3 must be installed (for modifying docker-compose.yml)
+- Docker must be able to build the Dockerfiles
+
+**How it works:**
+1. The script copies the source directory to the workspace
+2. Modifies `docker-compose.yml` to use `build` instead of `image`
+3. Docker Compose builds the image from the local Dockerfile
+4. The built image is used to start the container
+
+**Note:** Local builds require the source code structure to match the expected Dockerfile locations:
+- `online-feature-store/cmd/api-server/DockerFile` for ONFS API Server
+- `online-feature-store/cmd/consumer/DockerFile` for ONFS Consumer
+- `horizon/cmd/horizon/Dockerfile` for Horizon
+- `numerix/Dockerfile` for Numerix
+- `trufflebox-ui/DockerFile` for TruffleBox UI
+- `inferflow/cmd/inferflow/Dockerfile` for Inferflow
+
+**Advanced: Direct docker-compose Usage**
+
+You can also work directly with docker-compose in the workspace directory:
+
+```bash
+# Change to workspace directory
+cd workspace
+
+# Start specific service with version
+ONFS_VERSION=main docker-compose up -d onfs-api-server
+
+# Start multiple services with different versions
+ONFS_VERSION=v1.2.0 HORIZON_VERSION=v2.1.0 docker-compose up -d onfs-api-server horizon
+
+# Restart a service with a different version
+ONFS_CONSUMER_VERSION=v1.0.0-beta-d74137 docker-compose up -d onfs-consumer
+
+# View specific service
+docker-compose ps onfs-api-server
+```
 
 This will:
 1. Check for Go installation (1.22+ required)
@@ -70,7 +216,11 @@ Once complete, you can access:
 - **Trufflebox UI**: http://localhost:3000
 - **Horizon API**: http://localhost:8082
 - **Online Feature Store gRPC API**: http://localhost:8089
+- **ONFS Consumer**: http://localhost:8090 (health check)
+- **Numerix**: http://localhost:8083
+- **Inferflow**: http://localhost:8085
 - **etcd Workbench**: http://localhost:8081
+- **Kafka UI**: http://localhost:8084
 
 ### Stopping the System
 
@@ -99,6 +249,12 @@ To stop and completely purge all containers, volumes, and workspace:
   - Health check: http://localhost:8082/health
 - **ONFS gRPC API**: http://localhost:8089
   - Health check: http://localhost:8089/health/self
+- **ONFS Consumer**: http://localhost:8090
+  - Health check: http://localhost:8090/health/self
+- **Numerix**: http://localhost:8083
+  - Health check: http://localhost:8083/health
+- **Inferflow**: http://localhost:8085
+  - Health check: http://localhost:8085/health/self
 
 ### Database Access
 
@@ -122,164 +278,10 @@ To stop and completely purge all containers, volumes, and workspace:
   - Endpoint: http://localhost:2379
   - Workbench: http://localhost:8081
 
-
-
-## Feature Store API Examples
-
-### gRPC API Commands
-
-Use the following `grpcurl` commands to interact with the Online Feature Store gRPC API:
-
-**Persist Features:**
-```bash
-grpcurl -plaintext -H "online-feature-store-caller-id: <caller-id>" -H "online-feature-store-auth-token: <auth-token>" -d '<request-body>' localhost:8089 persist.FeatureService/PersistFeatures
-```
-
-**Retrieve Features (Decoded):**
-```bash
-grpcurl -plaintext -H "online-feature-store-caller-id: <caller-id>" -H "online-feature-store-auth-token: <auth-token>" -d '<request-body>' localhost:8089 retrieve.FeatureService/RetrieveDecodedResult
-```
-
-**Retrieve Features (Binary):**
-```bash
-grpcurl -plaintext -H "online-feature-store-caller-id: <caller-id>" -H "online-feature-store-auth-token: <auth-token>" -d '<request-body>' localhost:8089 retrieve.FeatureService/RetrieveFeatures
-```
-
-### Sample Request Bodies
-
-**Single Feature Group Persist:**
-```json
-{
-    "data": [{
-        "key_values": ["10"],
-        "feature_values": [{
-            "values": {"fp32_values": [123.45]}
-        }]
-    }],
-    "entity_label": "catalog",
-    "feature_group_schema": [{
-        "label": "int_fg",
-        "feature_labels": ["id"]
-    }],
-    "keys_schema": ["catalog_id"]
-}
-```
-
-**Single Feature Group Retrieve:**
-```json
-{
-    "entity_label": "catalog",
-    "feature_groups": [{
-        "label": "int_fg",
-        "feature_labels": ["id"]
-    }],
-    "keys_schema": ["catalog_id"],
-    "keys": [{"cols": ["10"]}]
-}
-```
-
-**Multiple Feature Groups Persist:**
-```json
-{
-    "data": [
-        {
-            "key_values": ["1"],
-            "feature_values": [
-                {"values": {"fp32_values": [28.5]}},
-                {"values": {"string_values": ["Bharat"]}}
-            ]
-        },
-        {
-            "key_values": ["2"],
-            "feature_values": [
-                {"values": {"fp32_values": [32.0]}},
-                {"values": {"string_values": ["India"]}}
-            ]
-        }
-    ],
-    "entity_label": "catalog",
-    "feature_group_schema": [
-        {"label": "int_fg", "feature_labels": ["id"]},
-        {"label": "string_fg", "feature_labels": ["name"]}
-    ],
-    "keys_schema": ["catalog_id"]
-}
-```
-
-**Multiple Feature Groups Retrieve:**
-```json
-{
-    "entity_label": "catalog",
-    "feature_groups": [
-        {"label": "int_fg", "feature_labels": ["id"]},
-        {"label": "string_fg", "feature_labels": ["name"]}
-    ],
-    "keys_schema": ["catalog_id"],
-    "keys": [
-        {"cols": ["1"]},
-        {"cols": ["2"]}
-    ]
-}
-```
-
-**Vector Feature Group Persist:**
-```json
-{
-    "data": [{
-        "key_values": ["123"],
-        "feature_values": [{
-            "values": {
-                "vector": [{
-                    "values": {"fp32_values": [1.0, 2.0, 3.0, 4.0]}
-                }]
-            }
-        }]
-    }],
-    "entity_label": "catalog",
-    "feature_group_schema": [{
-        "label": "vector_fg",
-        "feature_labels": ["embedding"]
-    }],
-    "keys_schema": ["catalog_id"]
-}
-```
-
-**Vector Feature Group Retrieve:**
-```json
-{
-    "entity_label": "catalog",
-    "feature_groups": [{
-        "label": "vector_fg",
-        "feature_labels": ["embedding"]
-    }],
-    "keys_schema": ["catalog_id"],
-    "keys": [{"cols": ["123"]}]
-}
-```
-
-### Key Points
-
-**Only one type per feature value block:**
-- `feature_values` is a list, and each item in the list has only one value type populated
-- For example: one item has only `fp32_values`, another has only `int64_values`
-
-**Field Types:**
-The following value types are supported:
-
-- **fp32_values**: `float32[]`
-- **fp64_values**: `float64[]`
-- **int32_values**: `int32[]`
-- **int64_values**: `string[]` (because JSON doesn't support 64-bit ints directly)
-- **uint32_values**: `uint32[]`
-- **uint64_values**: `string[]`
-- **string_values**: `string[]`
-- **bool_values**: `bool[]`
-- **vector**: list of objects with nested values (used for embedded features)
-
-### Response Format Differences
-
-- **Retrieve Features (Binary)**: Returns data in binary format for optimal performance and reduced network overhead
-- **Retrieve Features (Decoded)**: Returns data in human-readable string format for easier debugging and development purposes
+- **Kafka**:
+  - Bootstrap Servers: localhost:9092
+  - Kafka UI: http://localhost:8084
+  - Default Topic: online-feature-store.feature_ingestion
 
 ## Managing Services
 
@@ -293,6 +295,12 @@ cd workspace && docker-compose logs -f
 cd workspace && docker-compose logs -f horizon
 cd workspace && docker-compose logs -f trufflebox-ui
 cd workspace && docker-compose logs -f onfs-api-server
+cd workspace && docker-compose logs -f onfs-consumer
+cd workspace && docker-compose logs -f inferflow
+cd workspace && docker-compose logs -f kafka
+
+# View logs for multiple services
+cd workspace && docker-compose logs -f onfs-api-server onfs-consumer inferflow
 ```
 
 ### Service Management
@@ -315,7 +323,25 @@ cd workspace && docker-compose ps
 
 ### Common Issues
 
-1. **Port conflicts**: Ensure ports 3000, 8081, 8082, 8089, 9042, 3306, 6379, and 2379 are not in use by other applications.
+1. **Port conflicts**: The following ports must be available:
+   
+   | Port | Service |
+   |------|---------|
+   | 3000 | TruffleBox UI |
+   | 8081 | etcd Workbench |
+   | 8082 | Horizon API |
+   | 8083 | Numerix |
+   | 8084 | Kafka UI |
+   | 8085 | Inferflow |
+   | 8089 | ONFS gRPC API |
+   | 8090 | ONFS Consumer |
+   | 9092 | Kafka |
+   | 9042 | ScyllaDB |
+   | 3306 | MySQL |
+   | 6379 | Redis |
+   | 2379 | etcd |
+   
+   If any ports are in use, stop conflicting services or modify port mappings in `docker-compose.yml`.
 
 2. **Docker network issues**: If containers can't communicate, try recreating:
    ```bash
@@ -332,15 +358,40 @@ cd workspace && docker-compose ps
    ```bash
    docker login ghcr.io
    ```
-5. [How to use Etcd Workbench ?](https://github.com/tzfun/etcd-workbench/blob/master/README.md)
+
+5. **Kafka consumer not receiving messages**: 
+   ```bash
+   # Check if Kafka topic exists
+   docker exec -it broker kafka-topics.sh --bootstrap-server localhost:9092 --list
+   
+   # Check consumer group status
+   docker exec -it broker kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group onfs-consumer-group --describe
+   
+   # Verify Kafka UI
+   open http://localhost:8084
+   ```
+
+6. **Consumer lag issues**: Monitor consumer performance via Kafka UI (http://localhost:8084) to identify bottlenecks
+
+7. [How to use Etcd Workbench ?](https://github.com/tzfun/etcd-workbench/blob/master/README.md)
 
 ### Service Dependencies
 
 Services start in the following order:
-1. Infrastructure services (ScyllaDB, MySQL, Redis, etcd)
-2. Online Feature Store gRPC API Server
-3. Horizon (depends on databases + ONFS API)
+1. Infrastructure services (ScyllaDB, MySQL, Redis, etcd, Kafka)
+2. Infrastructure init services (kafka-init, db-init) - only started if containers don't exist (preserves modifications)
+3. Application services (can run independently):
+   - **ONFS API Server** - depends on databases (ScyllaDB, MySQL, Redis, etcd)
+   - **ONFS Consumer** - depends on Kafka and databases (independent of API Server)
+   - **Horizon** - depends on databases and ScyllaDB
+   - **Numerix** - depends on etcd
+   - **Inferflow** - depends on etcd, ONFS API Server, and Numerix
 4. Trufflebox UI (depends on Horizon)
+
+**Key Points:**
+- ONFS Consumer can run without ONFS API Server
+- Services can be started individually based on use case
+- All services depend on their respective infrastructure components
 
 If a service fails to start, check its dependencies are healthy first.
 
