@@ -1,0 +1,184 @@
+{{- if .Values.cron }}
+{{- if .Values.cron.enabled }}
+{{- range $name, $job := .Values.cron.jobs }}
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $.Values.namespace}}-{{$name}}
+  namespace: {{ $.Values.namespace }}
+  labels:
+{{ include "labels.common" $ | indent 4 }}
+{{ include "labels.chart" $ | indent 4 }}
+{{- include "labels.selector" $ | nindent 4 }}
+spec:
+  concurrencyPolicy: {{ $.Values.cron.concurrencyPolicy }}
+  failedJobsHistoryLimit: {{ $.Values.cron.failedJobsHistoryLimit }}
+  successfulJobsHistoryLimit: {{ $.Values.cron.successfulJobsHistoryLimit }}
+  schedule: {{ .schedule | quote }}
+  {{- if .suspend }}
+  suspend: {{ .suspend }}
+  {{- end }}
+  {{- if .startingDeadlineSeconds }}
+  startingDeadlineSeconds: {{ $.Values.cron.startingDeadlineSeconds }}
+  {{- end }}
+  jobTemplate:
+    metadata:
+    spec:
+      # {{- if $.Values.cron.activeDeadlineSeconds }}
+      # activeDeadlineSeconds: {{ $.Values.cron.activeDeadlineSeconds }}
+      # {{- end }}
+      {{- if $.Values.cron.backoffLimit }}
+      backoffLimit: {{ $.Values.cron.backoffLimit }}
+      {{- end }}
+      # {{- if $.Values.cron.ttlSecondsAfterFinished }}
+      # ttlSecondsAfterFinished: {{ $.Values.cron.ttlSecondsAfterFinished }}
+      # {{- end}}
+      template:
+        metadata:
+          annotations:
+          {{- with $.Values.cron.podAnnotations }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+            telegraf.influxdata.com/inputs: |+
+              [[inputs.exec]] 
+                commands = ["/tmp/entry.sh"]
+            telegraf.influxdata.com/class: "infra"
+            telegraf.influxdata.com/image: "847438129436.dkr.ecr.ap-southeast-1.amazonaws.com/telegraf:1.24.4-cronjob-1"
+            telegraf.influxdata.com/volume-mounts: '{"podtermination": "/tmp/podtermination"}'
+          labels:
+            {{- include "labels.common" $ | nindent 12 }}
+        spec:
+          shareProcessNamespace: true
+          restartPolicy: {{ default "Never" .restartPolicy }}
+          {{- if $.Values.cron.serviceAccount.enabled }}
+          serviceAccountName: {{ $.Values.namespace  }}
+          {{- end }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          {{- with $.Values.cron.hostAliases }}
+          hostAliases:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: {{ $name }}
+              securityContext:
+                {{- toYaml $.Values.securityContext | nindent 16 }}
+              image: {{ $.Values.cron.image.repository }}:{{ $.Values.cron.image.tag }}
+              imagePullPolicy: {{ $.Values.cron.image.pullPolicy }}
+              {{- if  $.Values.cron.lifecycle }}
+              lifecycle: {{ toYaml  $.Values.cron.lifecycle | nindent 16 }}
+              {{- end }}
+              {{- if .command }}
+              command:
+                {{- toYaml .command | nindent 16 }}
+              {{- end }}
+              {{- with .args }}
+              args:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              env:
+                - name: TZ
+                  value: Asia/Kolkata
+                - name: TELEGRAF_UDP_HOST
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: status.podIP
+                - name: NODE_IP
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: spec.nodeName
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: POD_IP
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: status.podIP
+              {{- with $.Values.cron.env }}
+                {{- range . }}
+                - name: {{ .name }}
+                  value: "{{ .value }}"
+                {{- end }}
+              {{- end }}
+              envFrom:
+                - secretRef:
+                    name: {{ $.Values.cron.envFrom.secretRef }}
+                {{- if ( default false ($.Values.disasterRecovery).enabled ) }}
+                - secretRef:
+                    name: {{ .Values.deployment.envFrom.secretRef }}-dr
+                {{- end }}
+              ports:
+                - containerPort: 9273
+                  name: telegraf-sc
+                  protocol: TCP
+                - containerPort: 8880
+                  name: metric
+                  protocol: TCP
+              resources:
+                {{- with .resources.limits }}
+                limits:
+                  {{- with .memory }}
+                  memory: "{{ . }}"
+                  {{- end }}
+                  {{- with .cpu }}
+                  cpu: "{{ . }}"
+                  {{- end }}
+                {{- end }}
+                {{- with .resources.requests }}
+                requests:
+                  {{- with .memory }}
+                  memory: "{{ . }}"
+                  {{- end }}
+                  {{- with .cpu }}
+                  cpu: "{{ . }}"
+                  {{- end }}
+                {{- end }}
+                {{- if $.Values.jmxconfig.enabled }}
+              volumeMounts:
+                - name: {{ $.Values.namespace }}-jmx
+                  mountPath: "/jmx"
+                {{- end }}
+                {{- if or (eq ($.Values.appType) "python-2.7") (eq ($.Values.appType) "python-3.7") }}
+                - name: {{ $.Values.namespace }}-envconfig
+                  mountPath: "/app/envConfig"
+                  readOnly: true
+                {{- end }}
+                - name: podtermination
+                  mountPath: /tmp/podtermination
+          priorityClassName: high-priority
+          {{- with $.Values.cron.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 16 }}
+          {{- end }}
+          {{- with $.Values.cron.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 16 }}
+          {{- end }}
+          {{- with $.Values.affinity }}
+          affinity:
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if $.Values.jmxconfig.enabled }}
+          volumes:
+            - name: {{ $.Values.namespace }}-jmx
+              configMap:
+                name: {{ $.Values.namespace }}-jmx
+          {{- end }}
+            {{- if and (or (eq ($.Values.appType) "python-2.7") (eq ($.Values.appType) "python-3.7") ) ($.Values.externalSecret.enabled) }}
+            - name: {{ $.Values.namespace }}-envconfig
+              secret:
+                secretName: {{ $.Values.cron.envFrom.secretRef }}
+                optional: false
+            {{- end }}
+            - name: podtermination
+              emptyDir: {}
+  {{- end }}
+{{- end }}
+{{- end }}

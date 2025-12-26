@@ -1,0 +1,38 @@
+{{- if .Values.ingress.enabled -}}
+{{- if or ( eq "internal" .Values.ingress.ingressClassName ) ( eq "external" .Values.ingress.ingressClassName ) -}}
+{{- $servicePort := .Values.ingress.servicePort -}}
+{{- $pathType := .Values.ingress.pathType -}}
+{{- $namespace := .Values.namespace -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ $namespace }}
+  name: {{ $namespace }}
+  labels:
+{{ include "labels.common" . | indent 4 }}
+{{ include "labels.chart" . | indent 4 }}
+{{- if .Values.ingress.annotations }}
+  annotations:
+{{ toYaml .Values.ingress.annotations | indent 4 }}
+{{- end }}
+spec:
+{{- if .Values.ingress.ingressClassName }}
+  ingressClassName: {{ .Values.ingress.ingressClassName }}
+{{- end}}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host }}
+      http:
+        paths:
+        {{- range .paths }}
+        - pathType: {{ .pathType }}
+          path: {{ .path }}
+          backend:
+            service:
+              name: {{ $namespace }}
+              port:
+                name: {{ $servicePort }}
+        {{ end -}}
+    {{ end -}}
+{{- end -}}
+{{- end -}}

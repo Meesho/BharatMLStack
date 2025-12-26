@@ -1,0 +1,36 @@
+{{- if or (.Values.podDisruptionBudget.enabled) (.Values.deployment.enabled) }}
+{{- if or ( and (.Values.deployment.enabled) (.Values.autoscaling.enabled) ( gt (int .Values.autoscaling.minReplicas) 1)) ( and (eq .Values.autoscaling.enabled false) ( gt ( int .Values.deployment.replicaCount) 1 )) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.namespace }}
+  labels:
+{{ include "labels.common" . | indent 4 }}
+{{ include "labels.chart" . | indent 4 }}
+spec:
+  {{- if .Values.podDisruptionBudget.enabled }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  {{- else }}
+  {{- if .Values.deployment.enabled }}
+    {{- if (eq .Values.deployment.updateStrategy.strategy.type "RollingUpdate") }}
+  maxUnavailable: {{ .Values.deployment.updateStrategy.strategy.rollingUpdate.maxSurge | default "10%" }}
+    {{- else }}
+  maxUnavailable: "10%"
+  {{- end }}
+  {{ else }}
+  maxUnavailable: "10%"
+  {{- end }}
+  {{- end }}
+  {{- if .Values.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+    {{- if and (.Values.canary.enabled) (eq .Values.labels.env "prod") }}
+    {{- include "labels.primary-selector" . | nindent 6 }}
+    {{- else }}
+    {{- include "labels.selector" . | nindent 6 }}
+    {{- end }}
+{{- end }}
+{{- end }}

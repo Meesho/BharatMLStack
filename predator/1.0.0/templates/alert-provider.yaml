@@ -1,0 +1,12 @@
+apiVersion: flagger.app/v1beta1
+kind: AlertProvider
+metadata:
+  name: flagger-status
+  namespace: {{ .Values.namespace }}
+spec:
+  type: slack
+  channel: {{ .Values.canary.slackChannel }}
+  username: flagger
+  # webhook address (ignored if secretRef is specified)
+  # or https://slack.com/api/chat.postMessage if you use token in the secret
+  address: {{ .Values.canary.slackWebhookURL | default "" }}

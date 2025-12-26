@@ -1,0 +1,192 @@
+{{- if and (.Values.canary.enabled) (eq .Values.labels.env "prod") }}
+{{- if or ( eq "contour-internal" .Values.ingress.ingressClassName ) ( eq "contour-external" .Values.ingress.ingressClassName ) ( eq "contour-internal-0" .Values.ingress.ingressClassName ) ( eq "contour-internal-1" .Values.ingress.ingressClassName ) ( eq "contour-external-0" .Values.ingress.ingressClassName ) ( eq "contour-external-1" .Values.ingress.ingressClassName ) }}
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  name: {{ .Values.namespace }}
+  namespace: {{ .Values.namespace }}
+spec:
+  provider: contour
+  # deployment reference
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.namespace }}
+  # HPA reference (optional)
+  # autoscalerRef:
+  #   apiVersion: keda.sh/v1alpha1
+  #   kind: ScaledObject
+  #   name: {{ .Values.namespace }}
+  # the maximum time in seconds for the canary deployment
+  # to make progress before it is rollback (default 600s)
+  progressDeadlineSeconds: {{ .Values.canary.progressDeadlineSeconds | default 60 }}
+  service:
+    # ClusterIP port number
+    port: {{ .Values.canary.service.port }}
+    # container port number or name
+    targetPort: {{ .Values.canary.service.targetPort }}
+    {{- if .Values.ingress.enableWebsocket }}
+    enableWebsockets: true
+    {{- end }}
+    {{- if $.Values.ingress.slowStart.enabled }}
+    slowStartWindow: {{ $.Values.ingress.slowStart.window }}
+    slowStartAggression: {{ $.Values.ingress.slowStart.aggression | float64 | squote }}
+    slowStartMinPercent: {{ $.Values.ingress.slowStart.minPercent }}
+    {{- end }}
+    {{- if $.Values.service.annotations }}
+    primary:
+      annotations:
+{{ toYaml $.Values.service.annotations | indent 8 }}
+    canary:
+      annotations:
+{{ toYaml $.Values.service.annotations | indent 8 }}
+    apex:
+      annotations:
+{{ toYaml $.Values.service.annotations | indent 8 }}
+    {{- end }}
+    {{- if $.Values.contourResponseTimeout }}
+    timeout: {{ $.Values.contourResponseTimeout }}
+    {{- end }}
+  # skip analysis
+  {{- if ( default false (.Values.disasterRecovery).enabled ) }}
+  skipAnalysis: true
+  {{- else }}
+  skipAnalysis: {{ .Values.canary.skipAnalysis }}
+  {{- end }}
+  analysis:
+    # schedule interval (default 60s)
+    interval: {{ .Values.canary.analysisInterval | default "10s" }}
+    # max number of failed metric checks before rollback
+    threshold: {{ .Values.canary.analysisThreshold | default 10 }}
+    # max traffic percentage routed to canary
+    # percentage (0-100)
+    maxWeight: {{ .Values.canary.analysisMaxWeight | default 20 }}
+    # canary increment step
+    # percentage (0-100)
+    stepWeight: {{ .Values.canary.analysisStepWeight | default 5 }}
+    # NGINX Prometheus checks
+    metrics:
+    {{- if and (.Values.ingress.enableWebsocket) (or (eq .Values.namespace "prd-voice-bot") (eq .Values.namespace "prd-devops-golang-app")) }}
+    - name: {{ .Values.namespace }}-latency
+      templateRef:
+        name: {{ .Values.namespace }}-latency
+      thresholdRange:
+        min: {{ .Values.canary.analysisMetrics.thresholdRangeMin | default 60 }}
+      interval: {{ .Values.canary.analysisMetrics.interval | default "1m" }}
+    {{- else }}
+    - name: {{ .Values.namespace }}-requests
+      templateRef:
+        name: {{ .Values.namespace }}-requests
+      # minimum req success rate (non 5xx responses)
+      # percentage (0-100)
+      thresholdRange:
+        min: {{ .Values.canary.analysisMetrics.thresholdRangeMin | default 0.99 }}
+      interval: {{ .Values.canary.analysisMetrics.interval | default "1m" }}
+    - name: {{ .Values.namespace }}-latency
+      templateRef:
+        name: {{ .Values.namespace }}-latency
+      # minimum req latency 
+      #The latency threshold for the service can be found in pulse
+      thresholdRange:
+        max: 0
+      interval: {{ .Values.canary.analysisMetrics.interval | default "1m" }}
+    # web hook for canary
+    {{- end}}
+    {{- if and (.Values.canary.enabled) (eq .Values.canary.enableManualPromotion  true ) (eq .Values.labels.env "prod")}}
+    webhooks:
+    - name: promote-canary
+      type: confirm-promotion
+      {{- if or (eq .Values.labels.env "prod") (eq .Values.labels.env "prd") (eq .Values.labels.env "int") }}
+      url: http://{{ .Values.labels.bu }}-flagger-loadtester.{{ .Values.canary.loadtester.contourProdDomain | default "prd.example.int" }}/gate/check
+      {{- else }}
+      url: http://{{ .Values.labels.env }}-flagger-loadtester.{{ .Values.canary.loadtester.stagingDomain | default "stg.example.com" }}/gate/check
+      {{- end }}
+    - name: rollback-canary
+      type: rollback
+      {{- if or (eq .Values.labels.env "prod") (eq .Values.labels.env "prd") (eq .Values.labels.env "int") }}
+      url: http://{{ .Values.labels.bu }}-flagger-loadtester.{{ .Values.canary.loadtester.contourProdDomain | default "prd.example.int" }}/rollback/check
+      {{- else }}
+      url: http://{{ .Values.labels.env }}-flagger-loadtester.{{ .Values.canary.loadtester.stagingDomain | default "stg.example.com" }}/rollback/check
+      {{- end }}
+    - name: close-promote-canary
+      type: post-rollout
+      {{- if or (eq .Values.labels.env "prod") (eq .Values.labels.env "prd") (eq .Values.labels.env "int") }}
+      url: http://{{ .Values.labels.bu }}-flagger-loadtester.{{ .Values.canary.loadtester.contourProdDomain | default "prd.example.int" }}/gate/close
+      {{- else }}
+      url: http://{{ .Values.labels.env }}-flagger-loadtester.{{ .Values.canary.loadtester.stagingDomain | default "stg.example.com" }}/gate/close
+      {{- end }}
+    - name: close-rollback-canary
+      type: post-rollout
+      {{- if or (eq .Values.labels.env "prod") (eq .Values.labels.env "prd") (eq .Values.labels.env "int") }}
+      url: http://{{ .Values.labels.bu }}-flagger-loadtester.{{ .Values.canary.loadtester.contourProdDomain | default "prd.example.int" }}/rollback/close
+      {{- else }}
+      url: http://{{ .Values.labels.env }}-flagger-loadtester.{{ .Values.canary.loadtester.stagingDomain | default "stg.example.com" }}/rollback/close
+      {{- end }}
+    {{- end }}
+    # Alerts for the above analysis
+    alerts:
+      - name: flagger-status
+        providerRef:
+          name: flagger-status
+          namespace: {{ .Values.namespace }}
+        severity: error
+      - name: flagger-status
+        providerRef:
+          name: flagger-status
+          namespace: {{ .Values.namespace }}
+        severity: warn
+      - name: flagger-status
+        providerRef:
+          name: flagger-status
+          namespace: {{ .Values.namespace }}
+        severity: info
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.namespace }}
+  labels:
+{{ include "labels.common" $ | indent 4 }}
+{{ include "labels.chart" $ | indent 4 }}
+  annotations:
+    projectcontour.io/ingress.class: {{ .Values.ingress.ingressClassName }}
+spec: {}
+{{- end -}}
+{{- else -}}
+{{- if .Values.ingress.enabled -}}
+{{- if or ( eq "contour-internal" .Values.ingress.ingressClassName ) ( eq "contour-external" .Values.ingress.ingressClassName ) ( eq "contour-internal-0" .Values.ingress.ingressClassName ) ( eq "contour-internal-1" .Values.ingress.ingressClassName ) ( eq "contour-external-0" .Values.ingress.ingressClassName ) ( eq "contour-external-1" .Values.ingress.ingressClassName ) }}
+{{- $servicePortNumber := .Values.ingress.servicePortNumber -}}
+{{- $namespace := $.Values.namespace -}}
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  namespace: {{ $.Values.namespace }}
+  name: {{ $.Values.namespace }}
+  labels:
+{{ include "labels.common" $ | indent 4 }}
+{{ include "labels.chart" $ | indent 4 }}
+  annotations:
+    projectcontour.io/ingress.class: {{ $.Values.ingress.ingressClassName }}
+spec:
+  ingressClassName: {{ $.Values.ingress.ingressClassName }}
+  routes:
+    - services:
+        - name: {{ $.Values.namespace }}
+          port: {{ $servicePortNumber | default "80" }}
+          {{- if $.Values.ingress.slowStart.enabled }}
+          slowStartPolicy:
+            window: {{ $.Values.ingress.slowStart.window }}
+            aggression: {{ $.Values.ingress.slowStart.aggression | float64 | squote }}
+            minWeightPercent: {{ $.Values.ingress.slowStart.minPercent }}
+          {{- end }}
+      {{- if $.Values.ingress.enableWebsocket }}
+      enableWebsockets: true
+      {{- end }}
+      {{- if $.Values.contourResponseTimeout }}
+      timeoutPolicy:
+        response: {{ $.Values.contourResponseTimeout }}
+      {{- end }}
+{{- end -}}
+{{- end -}}
+{{- end -}}

@@ -1,0 +1,68 @@
+{{- if .Values.ingress.enabled -}}
+{{- if .Values.createContourGateway -}}
+{{- if or ( eq "contour-internal" .Values.ingress.ingressClassName ) ( eq "contour-internal-0" .Values.ingress.ingressClassName ) ( eq "contour-internal-1" .Values.ingress.ingressClassName ) }}
+{{- $servicePortNumber := .Values.ingress.servicePortNumber -}}
+{{- $pathType := .Values.ingress.pathType -}}
+{{- $namespace := .Values.namespace -}}
+{{- $intraIngressClass := "" -}}
+{{- if eq .Values.ingress.ingressClassName "contour-internal" -}}
+  {{- $intraIngressClass = "contour-internal-intra" -}}
+{{- else if eq .Values.ingress.ingressClassName "contour-internal-0" -}}
+  {{- $intraIngressClass = "contour-internal-intra-0" -}}
+{{- else if eq .Values.ingress.ingressClassName "contour-internal-1" -}}
+  {{- $intraIngressClass = "contour-internal-intra-1" -}}
+{{- end -}}
+{{ $count := 0 | int }}
+{{- range .Values.ingress.hosts }}
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  namespace: {{ $namespace }}
+  name: {{ $namespace }}-intra-{{ $count }}
+  labels:
+{{ include "labels.common" $ | indent 4 }}
+{{ include "labels.chart" $ | indent 4 }}
+  annotations:
+    projectcontour.io/ingress.class: {{ $intraIngressClass }}
+spec:
+  ingressClassName: {{ $intraIngressClass }}
+  virtualhost:
+    fqdn: "{{ .host }}"
+  includes:
+    {{- range .paths }}
+    - conditions:
+      {{- if or ( eq ( lower .pathType ) "prefix" ) ( eq ( lower .pathType ) "implementationspecific") }}
+      - prefix: {{ .path }}
+      {{- end }}
+      {{- if ( eq ( lower .pathType ) "exact" ) }}
+      - exact: {{ .path }}
+      {{- end }}
+      {{- if ( eq ( lower .pathType ) "regex" ) }}
+      - regex: {{ .path }}
+      {{- end }}
+      {{- if ( eq ( lower .pathType ) "header" ) }}
+      - header:
+          name: {{ (split "___" .path)._0 }}
+          {{ (split "___" .path)._1 }}: {{ (split "___" .path)._2 }}
+      {{- end }}
+      {{- if ( eq ( lower .pathType ) "prefixheader" ) }}
+      - prefix: {{ (split "___" .path)._0 }}
+      - header:
+          name: {{ (split "___" .path)._1 }}
+          {{ (split "___" .path)._2 }}: {{ (split "___" .path)._3 }}
+      {{- end }}
+      {{- if .targetService }}
+      name: {{ .targetService | replace "/" "-" }}-intra
+      namespace:  {{ (split "/" .targetService)._0 }}
+      {{- else }}
+      name: {{ $namespace }}-intra
+      namespace:  {{ $namespace }}
+      {{- end }}
+    {{- end }}
+    {{ $count = add1 $count }}
+---
+
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
