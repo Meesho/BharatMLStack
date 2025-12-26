@@ -1,0 +1,67 @@
+{{- if and (.Values.canary.enabled) (eq .Values.labels.env "prod") }}
+{{- if or ( eq "contour-internal" .Values.ingress.ingressClassName ) ( eq "contour-internal-0" .Values.ingress.ingressClassName ) ( eq "contour-internal-1" .Values.ingress.ingressClassName ) }}
+{{- $intraIngressClass := "" -}}
+{{- if eq .Values.ingress.ingressClassName "contour-internal" -}}
+  {{- $intraIngressClass = "contour-internal-intra" -}}
+{{- else if eq .Values.ingress.ingressClassName "contour-internal-0" -}}
+  {{- $intraIngressClass = "contour-internal-intra-0" -}}
+{{- else if eq .Values.ingress.ingressClassName "contour-internal-1" -}}
+  {{- $intraIngressClass = "contour-internal-intra-1" -}}
+{{- end -}}
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.namespace }}-intra
+  labels:
+{{ include "labels.common" $ | indent 4 }}
+{{ include "labels.chart" $ | indent 4 }}
+  annotations:
+    projectcontour.io/ingress.class: {{ $intraIngressClass }}
+spec: {}
+{{- end -}}
+{{- else -}}
+{{- if .Values.ingress.enabled -}}
+{{- if or ( eq "contour-internal" .Values.ingress.ingressClassName ) ( eq "contour-internal-0" .Values.ingress.ingressClassName ) ( eq "contour-internal-1" .Values.ingress.ingressClassName ) }}
+{{- $intraIngressClass := "" -}}
+{{- if eq .Values.ingress.ingressClassName "contour-internal" -}}
+  {{- $intraIngressClass = "contour-internal-intra" -}}
+{{- else if eq .Values.ingress.ingressClassName "contour-internal-0" -}}
+  {{- $intraIngressClass = "contour-internal-intra-0" -}}
+{{- else if eq .Values.ingress.ingressClassName "contour-internal-1" -}}
+  {{- $intraIngressClass = "contour-internal-intra-1" -}}
+{{- end -}}
+{{- $servicePortNumber := .Values.ingress.servicePortNumber -}}
+{{- $namespace := $.Values.namespace -}}
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  namespace: {{ $.Values.namespace }}
+  name: {{ $.Values.namespace }}-intra
+  labels:
+{{ include "labels.common" $ | indent 4 }}
+{{ include "labels.chart" $ | indent 4 }}
+  annotations:
+    projectcontour.io/ingress.class: {{ $intraIngressClass }}
+spec:
+  ingressClassName: {{ $intraIngressClass }}
+  routes:
+    - services:
+        - name: {{ $.Values.namespace }}
+          port: {{ $servicePortNumber | default "80" }}
+          {{- if $.Values.ingress.slowStart.enabled }}
+          slowStartPolicy:
+            window: {{ $.Values.ingress.slowStart.window }}
+            aggression: {{ $.Values.ingress.slowStart.aggression | float64 | squote }}
+            minWeightPercent: {{ $.Values.ingress.slowStart.minPercent }}
+          {{- end }}
+      {{- if $.Values.ingress.enableWebsocket }}
+      enableWebsockets: true
+      {{- end }}
+      {{- if $.Values.contourResponseTimeout }}
+      timeoutPolicy:
+        response: {{ $.Values.contourResponseTimeout }}
+      {{- end }}
+{{- end -}}
+{{- end -}}
+{{- end -}}

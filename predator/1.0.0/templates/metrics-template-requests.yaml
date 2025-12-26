@@ -1,0 +1,30 @@
+{{- if .Values.canary.enabled }}
+apiVersion: flagger.app/v1beta1
+kind: MetricTemplate
+metadata:
+  labels:
+    {{- include "labels.common" . | nindent 4 }}
+  name: {{ .Values.namespace }}-requests
+  namespace: {{ .Values.namespace }}
+spec:
+  provider:
+    type: prometheus
+  {{- $bu := .Values.labels.bu }}
+  {{- if not (or (eq $bu "demand") (eq $bu "farmiso") (eq $bu "central") (eq $bu "dataengg") (eq $bu "datascience") (eq $bu "supply") (eq $bu "infra")) }}
+  {{- $bu = "infra" }}
+  {{- end }}
+  {{- $address := printf "http://vmselect-%s-prd-proxy.victoriametrics.svc.cluster.local:8481/select/100/prometheus/" $bu }}
+    address: {{ $address }}
+  {{- if or ( eq "contour-internal" .Values.ingress.ingressClassName ) ( eq "contour-external" .Values.ingress.ingressClassName ) ( eq "contour-internal-0" .Values.ingress.ingressClassName ) ( eq "contour-internal-1" .Values.ingress.ingressClassName ) ( eq "contour-external-0" .Values.ingress.ingressClassName ) ( eq "contour-external-1" .Values.ingress.ingressClassName ) }}
+  {{- if or (.Values.ingress.grpc_hosts) (and (.Values.service.annotations) (hasKey .Values.service.annotations "projectcontour.io/upstream-protocol.h2c")) }}
+  query: |
+    sum(rate(envoy_cluster_grpc_0{envoy_cluster_name=~"{{ .Values.namespace }}_{{ .Values.namespace }}-canary_80"}[1m])) / sum(rate(envoy_cluster_grpc_total{envoy_cluster_name=~"{{ .Values.namespace }}_{{ .Values.namespace }}-canary_80"}[1m]))
+  {{- else }}
+  query: |
+    (sum(rate(envoy_cluster_upstream_rq{envoy_cluster_name=~"{{ .Values.namespace }}_{{ .Values.namespace }}-canary_80",envoy_response_code!~"[4-5].*"}[1m])) by (envoy_cluster_name) - sum(rate(envoy_cluster_upstream_cx_destroy_local_with_active_rq{envoy_cluster_name=~"{{ .Values.namespace }}_{{ .Values.namespace }}-canary_80"}[1m]))) / sum(rate(envoy_cluster_upstream_rq{envoy_cluster_name=~"{{ .Values.namespace }}_{{ .Values.namespace }}-canary_80"}[1m])) by (envoy_cluster_name)
+  {{- end }}
+  {{- else }}
+  query: |
+    sum(rate(nginx_ingress_controller_requests{canary=~"{{ .Values.namespace }}-{{ .Values.namespace }}-canary-http",ingress=~"{{ .Values.namespace }}",status!~"[4-5].*"}[1m])) by (ingress)/sum(rate(nginx_ingress_controller_requests{canary=~"{{ .Values.namespace }}-{{ .Values.namespace }}-canary-http",ingress=~"{{ .Values.namespace }}"}[1m])) by (ingress)
+  {{- end }}
+{{- end }}

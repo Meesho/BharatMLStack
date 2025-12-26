@@ -1,0 +1,71 @@
+{{ $dynamicPort := 9000 | int }}
+{{- if or ( eq "contour-internal" .Values.ingress.ingressClassName ) ( eq "contour-external" .Values.ingress.ingressClassName ) ( eq "contour-internal-0" .Values.ingress.ingressClassName ) ( eq "contour-internal-1" .Values.ingress.ingressClassName ) ( eq "contour-external-0" .Values.ingress.ingressClassName ) ( eq "contour-external-1" .Values.ingress.ingressClassName ) }}
+{{- range .Values.service.addons }}
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    {{- include "labels.common" $ | nindent 4 }}
+  namespace: {{ $.Values.namespace }}
+  {{- if and ($.Values.canary.enabled) (eq $.Values.labels.env "prod") }}
+  name: {{ $.Values.namespace }}-{{ .name }}
+  {{- else }}
+  name: {{ $.Values.namespace }}-{{ .name }}
+  {{- end }}
+  annotations:
+  {{- if .annotations }}
+{{ toYaml .annotations | indent 4 }}
+  {{- end }}
+    {{- if (eq .type "grpc") }}
+    projectcontour.io/upstream-protocol.h2c: {{ $dynamicPort | quote }}
+    {{- end }}
+  labels:
+{{ include "labels.common" $ | indent 4 }}
+{{ include "labels.chart" $ | indent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: {{ .name }}
+      port: {{ $dynamicPort }}
+      protocol: TCP
+      targetPort: {{ .targetPort }}
+  selector:
+    {{- if and ($.Values.canary.enabled) (eq $.Values.labels.env "prod") }}
+    {{- include "labels.primary-selector" $ | nindent 4 }}
+    {{- else }}
+    {{- include "labels.selector" $ | nindent 4 }}
+    {{- end }}
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  namespace: {{ $.Values.namespace }}
+  name: {{ $.Values.namespace }}-{{ .name }}
+  labels:
+{{ include "labels.common" $ | indent 4 }}
+{{ include "labels.chart" $ | indent 4 }}
+  annotations:
+    projectcontour.io/ingress.class: {{ $.Values.ingress.ingressClassName }}
+spec:
+  ingressClassName: {{ $.Values.ingress.ingressClassName }}
+  routes:
+    - services:
+        - name: {{ $.Values.namespace }}-{{ .name }}
+          port: {{ $dynamicPort }}
+          {{- if $.Values.ingress.slowStart.enabled }}
+          slowStartPolicy:
+            window: {{ $.Values.ingress.slowStart.window }}
+            aggression: {{ $.Values.ingress.slowStart.aggression | float64 | squote }}
+            minWeightPercent: {{ $.Values.ingress.slowStart.minPercent }}
+          {{- end }}
+      {{- if .enableWebsocket }}
+      enableWebsockets: true
+      {{- end }}
+      {{- if $.Values.contourResponseTimeout }}
+      timeoutPolicy:
+        response: {{ $.Values.contourResponseTimeout }}
+      {{- end }}
+---
+{{ $dynamicPort = add1 $dynamicPort }}
+{{- end }}
+{{- end }}

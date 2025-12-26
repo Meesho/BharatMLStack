@@ -1,0 +1,29 @@
+{{- if .Values.service.enabled }}
+{{- if or (eq .Values.canary.enabled false) ( and (.Values.canary.enabled) (ne .Values.labels.env "prod")) }}
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    {{- include "labels.common" . | nindent 4 }}
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.namespace }}
+{{- if .Values.service.annotations }}
+  annotations:
+{{ toYaml .Values.service.annotations | indent 4 }}
+{{- end }}
+  labels:
+{{ include "labels.common" . | indent 4 }}
+{{ include "labels.chart" . | indent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    {{- range .Values.service.ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      protocol: {{ .protocol }}
+      targetPort: {{ .targetPort }}
+    {{- end }}
+  selector:
+    {{- include "labels.selector" . | nindent 4 }}
+{{- end }}
+{{- end }}
