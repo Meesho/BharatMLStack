@@ -132,8 +132,78 @@ interactive_select_command() {
     done
 }
 
+select_internal_repo_branch() {
+    local provided_branch="${1:-}"
+    local branch=""
+
+    # 1) explicit arg wins
+    if [ -n "$provided_branch" ]; then
+        branch="$provided_branch"
+    # 2) env var next
+    elif [ -n "${INTERNAL_REPO_BRANCH:-}" ]; then
+        branch="$INTERNAL_REPO_BRANCH"
+    # 3) interactive prompt if we have a TTY
+    elif [ -t 0 ]; then
+        echo "" >&2
+        echo "==========================================" >&2
+        echo "  Step 3: Select Internal Configs Branch" >&2
+        echo "==========================================" >&2
+        echo "" >&2
+        echo "Choose the branch to use from internal configs repo:" >&2
+        echo "  [1] develop (default)" >&2
+        echo "  [2] main" >&2
+        echo "  [3] enter a custom branch name (e.g., feature/my-change)" >&2
+        echo "" >&2
+
+        while true; do
+            read -p "Select branch (1-2 or name): " selection
+            selection="$(echo "${selection:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+            case "$selection" in
+                ""|1|develop)
+                    branch="develop"
+                    break
+                    ;;
+                2|main)
+                    branch="main"
+                    break
+                    ;;
+                3)
+                    read -p "Enter branch name: " custom
+                    branch="${custom:-}"
+                    break
+                    ;;
+                *)
+                    # Treat anything else as a branch name
+                    branch="$selection"
+                    break
+                    ;;
+            esac
+        done
+    else
+        # 4) non-interactive default
+        branch="develop"
+    fi
+
+    branch="$(echo "${branch:-}" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    if [ -z "$branch" ]; then
+        log_error "Internal configs branch cannot be empty"
+        exit 1
+    fi
+
+    # Validate branch name as a proper git branch ref (safe for checkout/clone)
+    if command -v git >/dev/null 2>&1; then
+        if ! git check-ref-format --branch "$branch" >/dev/null 2>&1; then
+            log_error "Invalid internal configs branch name: '$branch'"
+            exit 1
+        fi
+    fi
+
+    echo "$branch"
+    return 0
+}
+
 print_usage() {
-    echo "Usage: $0 <folder-name> <command>"
+    echo "Usage: $0 <folder-name> <command> [branch]"
     echo ""
     echo "Parameters:"
     echo "  1. folder-name  - Name of the folder to operate on"
@@ -159,10 +229,16 @@ print_usage() {
     echo "       • status   - Show current development mode status"
     echo "       • update   - Update internal configs (pull latest from internal repo)"
     echo ""
+    echo "  3. branch       - (Optional) Internal configs repo branch to use (default: develop)"
+    echo "                   Examples: develop, main, feature/my-change"
+    echo "                   You can also set INTERNAL_REPO_BRANCH env var."
+    echo ""
     echo "Examples:"
     if [ ${#available_folders[@]} -gt 0 ]; then
         local first_folder="${available_folders[0]}"
         echo "  $0 $first_folder enable"
+        echo "  $0 $first_folder enable develop"
+        echo "  $0 $first_folder enable main"
         if [ ${#available_folders[@]} -gt 1 ]; then
             local second_folder="${available_folders[1]}"
             echo "  $0 $second_folder status"
@@ -295,6 +371,8 @@ check_status() {
 }
 
 clone_or_update_internal_repo() {
+    local target_branch="${INTERNAL_REPO_BRANCH:-develop}"
+
     if [ -d "$INTERNAL_REPO_DIR/.git" ]; then
         log_info "Internal configs repo already exists, updating..."
         log_debug "Repository path: $INTERNAL_REPO_DIR"
@@ -305,41 +383,31 @@ clone_or_update_internal_repo() {
         git fetch origin
         log_debug "Fetch completed"
         
-        # Determine the default branch (main or master)
-        log_debug "Determining default branch..."
-        default_branch=$(git remote show origin | grep 'HEAD branch' | cut -d' ' -f5)
-        if [ -z "$default_branch" ]; then
-            log_debug "Could not detect default branch via remote show, trying fallback..."
-            # Fallback: try main first, then master
-            if git show-ref --verify --quiet refs/remotes/origin/main; then
-                default_branch="main"
-                log_debug "Found refs/remotes/origin/main"
-            elif git show-ref --verify --quiet refs/remotes/origin/master; then
-                default_branch="master"
-                log_debug "Found refs/remotes/origin/master"
-            else
-                log_error "Could not determine default branch (main or master not found)"
-                cd "$TARGET_DIR"
-                exit 1
-            fi
+        log_info "Using branch: $target_branch"
+
+        # Ensure the remote branch exists (and fetch it explicitly if needed)
+        if ! git show-ref --verify --quiet "refs/remotes/origin/$target_branch"; then
+            log_info "Remote branch origin/$target_branch not found locally; fetching it..."
+            git fetch origin "$target_branch" || true
         fi
-        
-        log_info "Default branch detected: $default_branch"
-        
-        # Checkout the default branch if we're on a different branch
+        if ! git show-ref --verify --quiet "refs/remotes/origin/$target_branch"; then
+            log_error "Branch not found in internal configs repo: origin/$target_branch"
+            exit 1
+        fi
+
+        # Switch to the requested branch, tracking origin/<branch>
+        local current_branch
         current_branch=$(git rev-parse --abbrev-ref HEAD)
         log_debug "Current branch: $current_branch"
-        if [ "$current_branch" != "$default_branch" ]; then
-            log_info "Switching from $current_branch to $default_branch"
-            git checkout "$default_branch"
-            log_debug "Branch switch completed"
-        else
-            log_debug "Already on $default_branch, no branch switch needed"
+        if [ "$current_branch" != "$target_branch" ]; then
+            log_info "Switching from $current_branch to $target_branch"
         fi
+        git checkout -B "$target_branch" "origin/$target_branch"
+        log_debug "Branch checkout completed"
         
         # Reset to latest
-        log_info "Resetting to origin/$default_branch..."
-        git reset --hard "origin/$default_branch"
+        log_info "Resetting to origin/$target_branch..."
+        git reset --hard "origin/$target_branch"
         local commit_hash=$(git rev-parse --short HEAD)
         log_info "Updated to commit: $commit_hash"
         
@@ -348,8 +416,9 @@ clone_or_update_internal_repo() {
         log_info "Internal configs repo not found, cloning..."
         log_debug "Cloning from: $INTERNAL_REPO_URL"
         log_debug "Destination: $INTERNAL_REPO_DIR"
+        log_debug "Branch: $target_branch"
         rm -rf "$INTERNAL_REPO_DIR"
-        git clone "$INTERNAL_REPO_URL" "$INTERNAL_REPO_DIR"
+        git clone -b "$target_branch" "$INTERNAL_REPO_URL" "$INTERNAL_REPO_DIR"
         local commit_hash=$(cd "$INTERNAL_REPO_DIR" && git rev-parse --short HEAD)
         log_info "Clone completed at commit: $commit_hash"
     fi
@@ -432,24 +501,64 @@ enable_dev_mode() {
     if [ -f "$INTERNAL_FOLDER_DIR/go.mod" ]; then
         log_debug "Found go.mod in internal configs: $INTERNAL_FOLDER_DIR/go.mod"
         
-        # Extract lines that start with "replace " from internal go.mod
-        if grep -E "^replace " "$INTERNAL_FOLDER_DIR/go.mod" > "$GO_MOD_APPEND_FILE"; then
-            local replace_count=$(wc -l < "$GO_MOD_APPEND_FILE")
-            log_info "Found $replace_count replace directive(s) to append"
-            log_debug "Replace directives:"
+        # Extract require/replace directives from internal go.mod.
+        # Supports both single-line directives and block forms:
+        #   require ( ... )
+        #   replace ( ... )
+        # We normalize block entries into single-line statements to keep the appended section simple.
+        local extracted_lines
+        extracted_lines="$(
+            awk '
+                function ltrim(s) { sub(/^[ \t]+/, "", s); return s }
+                BEGIN { in_req=0; in_rep=0 }
+                {
+                    line=$0
+
+                    if (line ~ /^require[ \t]*\(/) { in_req=1; next }
+                    if (line ~ /^replace[ \t]*\(/) { in_rep=1; next }
+
+                    if (in_req) {
+                        if (line ~ /^\)/) { in_req=0; next }
+                        trimmed=ltrim(line)
+                        if (trimmed=="" || trimmed ~ /^\/\//) next
+                        print "require " trimmed
+                        next
+                    }
+
+                    if (in_rep) {
+                        if (line ~ /^\)/) { in_rep=0; next }
+                        trimmed=ltrim(line)
+                        if (trimmed=="" || trimmed ~ /^\/\//) next
+                        print "replace " trimmed
+                        next
+                    }
+
+                    if (line ~ /^require[ \t]+/ && line !~ /^require[ \t]*\(/) { print line; next }
+                    if (line ~ /^replace[ \t]+/ && line !~ /^replace[ \t]*\(/) { print line; next }
+                }
+            ' "$INTERNAL_FOLDER_DIR/go.mod" | sed '/^[[:space:]]*$/d'
+        )"
+
+        if [ -n "$extracted_lines" ]; then
+            printf "%s\n" "$extracted_lines" > "$GO_MOD_APPEND_FILE"
+
+            local extracted_count
+            extracted_count=$(wc -l < "$GO_MOD_APPEND_FILE")
+            log_info "Found $extracted_count directive(s) (require/replace) to append"
+            log_debug "Directives to append:"
             while IFS= read -r line; do
                 log_debug "  $line"
             done < "$GO_MOD_APPEND_FILE"
-            
+
             # Append to current go.mod
             log_info "Appending to $GO_MOD_FILE..."
             echo "" >> "$GO_MOD_FILE"
             echo "// Added by dev-toggle-go.sh - DO NOT EDIT" >> "$GO_MOD_FILE"
             cat "$GO_MOD_APPEND_FILE" >> "$GO_MOD_FILE"
-            
-            log_info "✓ Successfully appended replace directives to go.mod"
+
+            log_info "✓ Successfully appended require/replace directives to go.mod"
         else
-            log_warn "No replace directives found in internal go.mod"
+            log_warn "No require/replace directives found in internal go.mod"
             rm -f "$GO_MOD_APPEND_FILE"
         fi
     else
@@ -622,6 +731,7 @@ update_internal_configs() {
 # Main script logic
 FOLDER_NAME_INPUT="${1:-}"
 COMMAND="${2:-}"
+BRANCH_INPUT="${3:-}"
 
 # Interactive mode: prompt for missing parameters
 if [ -z "$FOLDER_NAME_INPUT" ]; then
@@ -633,6 +743,12 @@ fi
 
 if [ -z "$COMMAND" ]; then
     COMMAND=$(interactive_select_command)
+fi
+
+# If command needs internal configs, choose the branch once (applies to all selected folders)
+if [ "$COMMAND" = "enable" ] || [ "$COMMAND" = "update" ]; then
+    INTERNAL_REPO_BRANCH="$(select_internal_repo_branch "$BRANCH_INPUT")"
+    log_debug "Internal configs branch: $INTERNAL_REPO_BRANCH"
 fi
 
 # Parse folder names (support multiple folders)
