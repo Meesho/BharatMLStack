@@ -24,6 +24,10 @@ canary:
   # Prometheus metrics URL
   promURL: ""  # Will be set based on environment if not provided
   
+  # Slack configuration
+  slackChannel: ""  # Slack channel for canary notifications
+  slackWebhookURL: ""  # Slack incoming webhook URL (set in environment-specific values files)
+  
   # Loadtester webhook URLs
   loadtester:
     # Production/Integration loadtester domain (e.g., "internal.example.com")
