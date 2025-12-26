@@ -180,6 +180,13 @@ func (m *MiddlewareHandler) CheckScreenPermission(c *gin.Context, claims *handle
 		return
 	}
 
+	if path == "/logout" ||
+		path == "/users" ||
+		path == "/update-user" ||
+		path == "/api/v1/horizon/permission-by-role" {
+		return
+	}
+
 	apiResolver, err := m.apiResolverRepo.GetResolver(method, path)
 
 	if err != nil || apiResolver.ResolverFn == "" {

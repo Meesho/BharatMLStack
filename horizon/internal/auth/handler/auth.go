@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/auth"
+	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/rolepermission"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/token"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/dgrijalva/jwt-go"
@@ -15,8 +16,9 @@ import (
 )
 
 type AuthHandler struct {
-	authRepo  auth.Repository
-	tokenRepo token.Repository
+	authRepo       auth.Repository
+	tokenRepo      token.Repository
+	rolePermission rolepermission.Repository
 }
 
 func InitAuthHandler() Authenticator {
@@ -32,9 +34,14 @@ func InitAuthHandler() Authenticator {
 			if err != nil {
 				log.Error().Msgf("Error in creating token repository")
 			}
+			rolePermission, err := rolepermission.NewRepository(sqlConn)
+			if err != nil {
+				log.Error().Msgf("Error in creating role permission repository")
+			}
 			authenticator = &AuthHandler{
-				authRepo:  authRepo,
-				tokenRepo: tokenRepo,
+				authRepo:       authRepo,
+				tokenRepo:      tokenRepo,
+				rolePermission: rolePermission,
 			}
 		})
 	}
@@ -215,4 +222,56 @@ func (a *AuthHandler) UpdateUserAccessAndRole(email string, isActive bool, role 
 		return err
 	}
 	return nil
+}
+
+func (a *AuthHandler) GetPermissionByRole(role string) PermissionResponse {
+	permissions, err := a.rolePermission.GetPermissionsByRole(role)
+	if err != nil {
+		log.Warn().Msgf("Error fetching permissions for role %s: %v", role, err)
+		return PermissionResponse{
+			Role:        role,
+			Permissions: []ServiceSet{},
+		}
+	}
+
+	serviceMap := make(map[string]map[string][]string)
+
+	for _, perm := range permissions {
+		if _, ok := serviceMap[perm.Service]; !ok {
+			serviceMap[perm.Service] = make(map[string][]string)
+		}
+		serviceMap[perm.Service][perm.ScreenType] = append(serviceMap[perm.Service][perm.ScreenType], perm.Module)
+	}
+
+	var serviceSets []ServiceSet
+	for service, screenMap := range serviceMap {
+		var screens []ScreenInfo
+		for screenType, actions := range screenMap {
+			screens = append(screens, ScreenInfo{
+				ScreenType:     screenType,
+				AllowedActions: unique(actions),
+			})
+		}
+		serviceSets = append(serviceSets, ServiceSet{
+			Service: service,
+			Screens: screens,
+		})
+	}
+
+	return PermissionResponse{
+		Role:        role,
+		Permissions: serviceSets,
+	}
+}
+
+func unique(input []string) []string {
+	seen := make(map[string]struct{})
+	var result []string
+	for _, v := range input {
+		if _, ok := seen[v]; !ok {
+			seen[v] = struct{}{}
+			result = append(result, v)
+		}
+	}
+	return result
 }
