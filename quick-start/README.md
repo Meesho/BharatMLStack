@@ -11,6 +11,26 @@ A quick way to get the BharatML Stack Online Feature Store platform up and runni
 - Bash shell
 - `grpcurl` for testing gRPC API endpoints (install from [https://github.com/fullstorydev/grpcurl](https://github.com/fullstorydev/grpcurl))
 
+### Optional Prerequisites
+
+**For Kubernetes support:**
+
+- **kind** (Kubernetes in Docker) - Required if you want to use Kubernetes features
+
+  **macOS:**
+  ```bash
+  brew install kind
+  ```
+
+  **Linux:**
+  ```bash
+  curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+  chmod +x ./kind
+  sudo mv ./kind /usr/local/bin/kind
+  ```
+
+  For other platforms or the latest version, visit: https://kind.sigs.k8s.io/docs/user/quick-start/#installation
+
 ## System Components
 
 BharatMLStack's Online Feature Store consists of several interconnected services:
@@ -33,6 +53,7 @@ BharatMLStack's Online Feature Store consists of several interconnected services
 **Management Tools:**
 - **etcd Workbench**: etcd management interface (runs on port 8081)
 - **Kafka UI**: Kafka cluster management interface (runs on port 8084)
+- **Kubernetes (kind)**: Local Kubernetes cluster (optional, requires kind installation)
 
 All services are orchestrated using Docker Compose with pre-built images from GitHub Container Registry (GHCR).
 
@@ -47,11 +68,16 @@ The start script provides an interactive service selector that allows you to cho
 ```
 
 **Interactive Options:**
-1. **All Services** - Starts all application services (API Server, Consumer, Horizon, Numerix, TruffleBox UI, Inferflow)
+1. **All Services** - Starts all application services (API Server, Consumer, Horizon, Numerix, TruffleBox UI, Inferflow, Predator)
 2. **Custom Selection** - Choose individual services to start
 3. **Exit** - Exit without starting
 
 **Infrastructure services (ScyllaDB, MySQL, Redis, etcd, Kafka) and Management Tools (etcd-workbench, kafka-ui) are always started.**
+
+**Optional Services:**
+- **Kubernetes (kind cluster)** - Local Kubernetes cluster for container orchestration
+
+During interactive mode, you'll be prompted to optionally include Kubernetes. See the "ArgoCD (Optional - Manual Installation)" section below for instructions on installing ArgoCD in the Kubernetes cluster.
 
 ### Initializing with Dummy Data
 
@@ -221,6 +247,7 @@ Once complete, you can access:
 - **Inferflow**: http://localhost:8085
 - **etcd Workbench**: http://localhost:8081
 - **Kafka UI**: http://localhost:8084
+- **Kubernetes** (if enabled): Use `kubectl cluster-info --context kind-bharatml-stack`
 
 ### Stopping the System
 
@@ -255,6 +282,69 @@ To stop and completely purge all containers, volumes, and workspace:
   - Health check: http://localhost:8083/health
 - **Inferflow**: http://localhost:8085
   - Health check: http://localhost:8085/health/self
+
+### Kubernetes (Optional)
+
+**Kubernetes (kind cluster):**
+- **Cluster Name**: `bharatml-stack`
+- **Context**: `kind-bharatml-stack`
+- **Access**: Use `kubectl` commands with the context:
+  ```bash
+  kubectl cluster-info --context kind-bharatml-stack
+  kubectl get nodes --context kind-bharatml-stack
+  ```
+
+### ArgoCD (Optional - Manual Installation)
+
+ArgoCD can be installed in the Kubernetes cluster using kubectl. Follow these steps:
+
+1. **Ensure Kubernetes cluster is running** (start with `./start.sh --k8s` or enable Kubernetes in interactive mode)
+
+2. **Install ArgoCD in the cluster:**
+   ```bash
+   kubectl create namespace argocd
+   kubectl apply -n argocd \
+     -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+   ```
+
+3. **Wait for ArgoCD to be ready:**
+   ```bash
+   kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
+   ```
+
+4. **Access ArgoCD:**
+
+   By default, ArgoCD's service is a ClusterIP (only accessible from within the cluster). You have two options:
+
+   **Option A: Port-Forward (Temporary, requires keeping terminal open)**
+   ```bash
+   kubectl port-forward svc/argocd-server -n argocd 8087:443
+   ```
+   Keep this terminal session running. Access ArgoCD at http://localhost:8087
+
+   **Option B: NodePort (Persistent, no terminal needed)**
+   ```bash
+   # Change the service type to NodePort
+   kubectl patch svc argocd-server -n argocd -p '{"spec":{"type":"NodePort"}}'
+   
+   # Get the NodePort (usually in 30000-32767 range)
+   kubectl get svc argocd-server -n argocd
+   ```
+   Access ArgoCD at `https://localhost:<NODEPORT>` (use the port shown in the output, typically around 30000-32767)
+
+5. **Get the initial admin password:**
+   ```bash
+   kubectl -n argocd get secret argocd-initial-admin-secret \
+     -o jsonpath="{.data.password}" | base64 -d
+   ```
+
+6. **Access ArgoCD UI:**
+   - **If using port-forward**: http://localhost:8087
+   - **If using NodePort**: https://localhost:<NODEPORT> (use the port from step 4)
+   - Username: `admin`
+   - Password: (from step 5)
+
+**Why port-forward?** ArgoCD's default service type (ClusterIP) only allows access from within the cluster. Port-forward creates a temporary tunnel from your local machine to the cluster. For persistent access without keeping a terminal open, use NodePort (Option B above).
 
 ### Database Access
 

@@ -307,6 +307,9 @@ get_user_choice() {
         START_TRUFFLEBOX=true
         START_INFERFLOW=true
         START_PREDATOR=true
+        echo ""
+        echo "🔧 Optional Infrastructure:"
+        ask_dummy_data
         break
         ;;
       2)
@@ -390,11 +393,37 @@ custom_selection() {
   fi
   
   echo ""
+  echo "🔧 Optional Infrastructure:"
+  
+  
+  echo ""
   if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false && $START_INFERFLOW == false && $START_PREDATOR == false ]]; then
     echo "🎯 Custom selection complete: Only infrastructure services will be started"
   else
     echo "🎯 Custom selection complete!"
   fi
+  
+  ask_dummy_data
+}
+
+ask_dummy_data() {
+  echo ""
+  echo "📦 Dummy Data Initialization"
+  echo "============================"
+  echo ""
+  echo "Would you like to initialize databases with dummy data?"
+  echo "This will populate MySQL, ScyllaDB, and etcd with example entities,"
+  echo "features, and configurations for testing purposes."
+  echo ""
+  read -p "Initialize dummy data? [y/N]: " init_dummy
+  if [[ $init_dummy =~ ^[Yy]$ ]]; then
+    INIT_DUMMY_DATA=true
+    echo "✅ Dummy data initialization enabled"
+  else
+    INIT_DUMMY_DATA=false
+    echo "⏭️  Skipping dummy data initialization"
+  fi
+  echo ""
 }
 
 start_init_services_if_missing() {
@@ -517,8 +546,8 @@ start_selected_services() {
     (cd "$WORKSPACE_DIR" && INIT_DUMMY_DATA=true docker-compose build db-init)
   fi
   
-  # Pass INIT_DUMMY_DATA to docker-compose so it gets passed to the db-init container
-  (cd "$WORKSPACE_DIR" && INIT_DUMMY_DATA="${INIT_DUMMY_DATA:-false}" docker-compose up -d --build $SELECTED_SERVICES)
+  # Pass INIT_DUMMY_DATA to docker-compose
+  (cd "$WORKSPACE_DIR" && INIT_DUMMY_DATA="${INIT_DUMMY_DATA:-false}" CLUSTER_NAME="${CLUSTER_NAME:-bharatml-stack}" docker-compose up -d --build $SELECTED_SERVICES)
   start_init_services_if_missing
   
   echo ""
@@ -637,8 +666,15 @@ show_access_info() {
   fi
   echo ""
   echo "📋 Access Information:"
+  echo ""
+  echo "   Management Tools:"
   echo "   🔧 etcd Workbench:    http://localhost:8081"
   echo "   📊 Kafka UI:          http://localhost:8084"
+  
+  if [[ $START_ONFS == true || $START_ONFS_CONSUMER == true || $START_HORIZON == true || $START_NUMERIX == true || $START_TRUFFLEBOX == true || $START_INFERFLOW == true || $START_PREDATOR == true ]]; then
+    echo ""
+    echo "   Application Services:"
+  fi
   
   if [[ $START_ONFS == true ]]; then
     echo "   🚀 ONFS gRPC API:     http://localhost:8089"
@@ -706,6 +742,7 @@ if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   echo "  • Numerix Matrix Operations"
   echo "  • TruffleBox UI"
   echo "  • Inferflow"
+  echo "  • Predator (Dummy gRPC Inference Server)"
   echo ""
   echo "Dummy Data Initialization:"
   echo "  Use --dummy-data flag to initialize databases with sample data for testing."
