@@ -12,9 +12,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-var (
-	argocdConfig map[string]ArgoCDConfig
-)
 
 type ArgoCDConfig struct {
 	API   string
@@ -23,7 +20,6 @@ type ArgoCDConfig struct {
 
 // InitArgoCDClient initializes ArgoCD client configuration
 func InitArgoCDClient(configs map[string]ArgoCDConfig) {
-	argocdConfig = configs
 	log.Info().Msg("ArgoCD client initialized")
 }
 
@@ -59,40 +55,6 @@ func getArgoCDAPI(workingEnv string) string {
 			Msg("Neither environment-specific nor default ArgoCD API is configured")
 	}
 	return api
-}
-
-// getArgoCDToken returns the ArgoCD token for the given workingEnv
-// Uses workingEnv exactly as provided (just uppercased) - no transformation
-// Falls back to ARGOCD_TOKEN if environment-specific value is not set
-// Example: For workingEnv="gcp_stg", reads GCP_STG_ARGOCD_TOKEN
-func getArgoCDToken(workingEnv string) string {
-	// Use workingEnv exactly as provided (just uppercased) - no transformation
-	// Example: "gcp_stg" -> "GCP_STG_ARGOCD_TOKEN", "gcp_int" -> "GCP_INT_ARGOCD_TOKEN"
-	envSpecificKey := GetArgoCDConfigKey(workingEnv, "ARGOCD_TOKEN")
-	token := viper.GetString(envSpecificKey)
-	
-	if token != "" {
-		log.Debug().
-			Str("workingEnv", workingEnv).
-			Str("env_key", envSpecificKey).
-			Msg("Using environment-specific ArgoCD token")
-		return token
-	}
-	
-	// Fallback to default ArgoCD token if environment-specific not set
-	token = viper.GetString("ARGOCD_TOKEN")
-	if token != "" {
-		log.Debug().
-			Str("workingEnv", workingEnv).
-			Str("env_key", envSpecificKey).
-			Msg("Environment-specific ArgoCD token not found, using default ARGOCD_TOKEN")
-	} else {
-		log.Warn().
-			Str("workingEnv", workingEnv).
-			Str("env_key", envSpecificKey).
-			Msg("Neither environment-specific nor default ArgoCD token is configured")
-	}
-	return token
 }
 
 func getArgoCDClient(api string, reqBody []byte, method string, workingEnv string, workingBU string, zone string) (*http.Request, error) {
@@ -173,12 +135,12 @@ func makeArgoCDCall(req *http.Request) ([]byte, error) {
 	response, err := client.Do(req)
 	if err != nil {
 		log.Error().Err(err).Msg("makeArgoCDCall: Failed to get call response from ArgoCD")
-		return nil, errors.New("Failed to get call response from ArgoCD")
+		return nil, errors.New("failed to get call response from ArgoCD")
 	}
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		log.Error().Err(err).Msg("makeArgoCDCall: Failed to parse response from ArgoCD")
-		return nil, errors.New("Failed to parse response from ArgoCD")
+		return nil, errors.New("failed to parse response from ArgoCD")
 	}
 	defer response.Body.Close()
 

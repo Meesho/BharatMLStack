@@ -1,8 +1,6 @@
 package argocd
 
 import (
-	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -18,59 +16,6 @@ const (
 	DR_ENV         = "dr"
 	PRD_ENV        = "prd"
 )
-
-func argocdWorkingBUMagic(api string, workingEnv string, workingBU string) (string, error) {
-	// Default case
-	log.Info().Str("API", api).Str("WorkingEnv", workingEnv).Str("WorkingBU", workingBU).Msg("Entered argocdWorkingBUMagic")
-	if workingBU == COMMON_BU {
-		log.Info().Str("WorkingEnv", workingEnv).Str("workingBU", workingBU).Msg("Working BU is common")
-		return workingEnv, nil
-	}
-
-	// If workingEnv is GCP int, return `workingEnv_shared`
-	if workingEnv == GCP_INT_ENV {
-		log.Info().Str("WorkingEnv", workingEnv).Msg("workingEnv is GCP int Returning combined workingEnv_sharedBU")
-		return fmt.Sprintf("%s_%s", workingEnv, SHARED_BU), nil
-	}
-
-	// If workingBU is not empty
-	// If workingEnv is not GCP prd/int, return as it is (no bu)
-	if workingBU != "" && workingEnv != GCP_PRD_ENV && workingEnv != GCP_INT_ENV {
-		log.Info().Str("WorkingEnv", workingEnv).Msg("workingEnv is not GCP prd/int Returning workingEnv as is")
-		return workingEnv, nil
-	}
-
-	// If workingBU is not empty
-	// return `workingEnv_workingBU`
-	if workingBU != "" {
-		log.Info().Str("WorkingEnvWorkingBU", fmt.Sprintf("%s_%s", workingEnv, workingBU)).Msg("Returning combined workingEnv_workingBU")
-		return fmt.Sprintf("%s_%s", workingEnv, workingBU), nil
-	}
-
-	// If workingBU is empty and
-	// If workingEnv is not GCP prd/int, return as it is (no bu)
-	if workingEnv != GCP_PRD_ENV && workingEnv != GCP_INT_ENV {
-		log.Info().Str("WorkingEnv", workingEnv).Msg("workingBU is empty and workingEnv is not GCP prd/int Returning workingEnv as is")
-		return workingEnv, nil
-	}
-
-	// If workingBU is empty and
-	// If workingEnv starts with GCP prefix.
-	// We have several cases to handle and we try to fetch the workingBU from the database
-
-	// Extract the namespace/name from the application
-	applicationName := ExtractApplicationNameFromAPI(api)
-	// Failed case,
-	if applicationName == "" {
-		log.Error().Str("API", api).Msg("argocdWorkingBUMagic: Failed to extract application name from database")
-		return "", errors.New("Failed to fetch application name for " + api + " to predict the workingBU.")
-	}
-
-	// For now, return workingEnv if we can't determine BU
-	// TODO: Implement database lookup if needed
-	log.Warn().Str("ApplicationName", applicationName).Msg("argocdWorkingBUMagic: BU lookup not implemented, using workingEnv")
-	return workingEnv, nil
-}
 
 func ExtractApplicationNameFromAPI(api string) string {
 	log.Info().Str("API", api).Msg("Entered ExtractApplicationNameFromAPI")

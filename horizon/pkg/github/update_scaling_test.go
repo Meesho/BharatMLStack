@@ -1,20 +1,12 @@
 package github
 
 import (
-	"encoding/base64"
 	"testing"
 
 	"github.com/Meesho/BharatMLStack/horizon/pkg/argocd"
 	"github.com/google/go-github/v53/github"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v3"
 )
-
-// Helper functions for tests
-func createMockFileContent(yamlData map[string]interface{}) string {
-	content, _ := yaml.Marshal(yamlData)
-	return base64.StdEncoding.EncodeToString(content)
-}
 
 func createTestArgoCDApp() argocd.ArgoCDApplicationMetadata {
 	return argocd.ArgoCDApplicationMetadata{

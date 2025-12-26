@@ -34,7 +34,7 @@ func GetArgoCDResource(kind string, name string, hasCanary bool) (ArgoCDResource
 
 	if !slices.Contains(allowedKinds, kind) {
 		log.Error().Msg("GetArgoCDResource: Invalid kind of Object")
-		return ArgoCDResource{}, errors.New("Invalid kind of Object")
+		return ArgoCDResource{}, errors.New("invalid kind of Object")
 	}
 
 	group := groups[kind][0]

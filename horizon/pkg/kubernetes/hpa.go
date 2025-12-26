@@ -27,7 +27,7 @@ func ParseHPAJson(hpa interface{}) (HPA, error) {
 	HPAJson, err := json.Marshal(hpa)
 	if err != nil {
 		log.Error().Err(err).Msg("ParseHPAJson: Unable to convert HPA to Json")
-		return HPA{}, errors.New("Unable to convert HPA to Json")
+		return HPA{}, errors.New("unable to convert HPA to Json")
 	}
 
 	manifest := gjson.Get(string(HPAJson), "manifest").String()
@@ -60,7 +60,7 @@ func ParseScaledObjectJson(scaledObject interface{}) (AutoScalingPolicy, error) 
 	scaledObjectJson, err := json.Marshal(scaledObject)
 	if err != nil {
 		log.Error().Err(err).Msg("ParseScaledObjectJson: Unable to convert ScaledObject to Json")
-		return AutoScalingPolicy{}, errors.New("Unable to convert ScaledObject to Json")
+		return AutoScalingPolicy{}, errors.New("unable to convert ScaledObject to Json")
 	}
 
 	manifest := gjson.Get(string(scaledObjectJson), "manifest").String()

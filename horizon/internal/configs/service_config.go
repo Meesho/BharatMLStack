@@ -220,7 +220,7 @@ func (l *GitHubServiceConfigLoader) LoadServiceConfig(serviceName, workingEnv st
 	}
 
 	// Log podAnnotations immediately after YAML parsing (before ApplyDefaults)
-	if config.PodAnnotations != nil && len(config.PodAnnotations) > 0 {
+	if len(config.PodAnnotations) > 0 {
 		log.Info().
 			Str("serviceName", serviceName).
 			Str("configPath", configPath).
@@ -335,7 +335,7 @@ func (l *LocalFileServiceConfigLoader) LoadServiceConfig(serviceName, workingEnv
 	}
 
 	// Log podAnnotations immediately after YAML parsing (before ApplyDefaults)
-	if config.PodAnnotations != nil && len(config.PodAnnotations) > 0 {
+	if len(config.PodAnnotations) > 0 {
 		log.Info().
 			Str("serviceName", serviceName).
 			Str("configPath", configPath).
@@ -371,7 +371,7 @@ func (l *LocalFileServiceConfigLoader) LoadServiceConfig(serviceName, workingEnv
 		Str("secondaryOwner", config.SecondaryOwner)
 
 	// Log podAnnotations if present
-	if config.PodAnnotations != nil && len(config.PodAnnotations) > 0 {
+	if len(config.PodAnnotations) > 0 {
 		logFields = logFields.
 			Int("podAnnotationsCount", len(config.PodAnnotations)).
 			Interface("podAnnotations", config.PodAnnotations)
@@ -457,7 +457,7 @@ func (c *ServiceConfig) ApplyDefaults() {
 		if c.PriorityV2 != "" {
 			c.Labels.PriorityV2 = c.PriorityV2
 		}
-		if c.CustomLabels != nil && len(c.CustomLabels) > 0 {
+		if len(c.CustomLabels) > 0 {
 			c.Labels.CustomLabels = c.CustomLabels
 		}
 	}

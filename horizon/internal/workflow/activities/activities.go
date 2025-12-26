@@ -461,7 +461,7 @@ func UpdateValuesProperties(payload map[string]interface{}, workingEnv string) e
 			Str("workingEnv", workingEnv).
 			Msg("UpdateValuesProperties: Domain not found in payload, host generation may fail. Ensure domain is set in service config.yaml")
 		// Fallback: construct host without domain (will likely fail, but allows error to surface)
-		payload["host"] = fmt.Sprintf("%s", appName)
+		payload["host"] = appName
 	} else {
 		payload["host"] = fmt.Sprintf("%s.%s", appName, domain)
 	}
@@ -983,10 +983,7 @@ func CreateValuesYaml(payload map[string]interface{}, workingEnv string) error {
 	if memoryRequest != "" && memoryRequestUnit != "" {
 		// Remove "i" from unit if present (e.g., "Gi" -> "G", "Mi" -> "M")
 		// Template will add "i" suffix automatically
-		unit := memoryRequestUnit
-		if strings.HasSuffix(unit, "i") {
-			unit = strings.TrimSuffix(unit, "i")
-		}
+		unit := strings.TrimSuffix(memoryRequestUnit, "i")
 		payload["memory_request"] = memoryRequest + unit
 	} else if memoryRequest != "" {
 		payload["memory_request"] = memoryRequest
@@ -997,10 +994,7 @@ func CreateValuesYaml(payload map[string]interface{}, workingEnv string) error {
 	if memoryLimit != "" && memoryLimitUnit != "" {
 		// Remove "i" from unit if present (e.g., "Gi" -> "G", "Mi" -> "M")
 		// Template will add "i" suffix automatically
-		unit := memoryLimitUnit
-		if strings.HasSuffix(unit, "i") {
-			unit = strings.TrimSuffix(unit, "i")
-		}
+		unit := strings.TrimSuffix(memoryLimitUnit, "i")
 		payload["memory_limit"] = memoryLimit + unit
 	} else if memoryLimit != "" {
 		payload["memory_limit"] = memoryLimit

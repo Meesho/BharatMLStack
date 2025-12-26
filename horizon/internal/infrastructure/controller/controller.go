@@ -306,7 +306,7 @@ func (c *InfrastructureController) UpdatePodAnnotations(ctx *gin.Context) {
 	}
 
 	// Validate annotations
-	if request.Annotations == nil || len(request.Annotations) == 0 {
+	if len(request.Annotations) == 0 {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "annotations are required and cannot be empty"})
 		return
 	}
@@ -358,7 +358,7 @@ func (c *InfrastructureController) UpdateAutoscalingTriggers(ctx *gin.Context) {
 	}
 
 	// Validate triggers
-	if request.Triggers == nil || len(request.Triggers) == 0 {
+	if len(request.Triggers) == 0 {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "triggers array is required and cannot be empty"})
 		return
 	}

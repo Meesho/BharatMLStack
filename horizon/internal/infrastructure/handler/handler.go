@@ -422,7 +422,7 @@ func (h *infrastructureHandler) UpdatePodAnnotations(appName string, annotations
 		Msg("Updating pod annotations")
 
 	// Validate annotations
-	if annotations == nil || len(annotations) == 0 {
+	if len(annotations) == 0 {
 		log.Error().Msg("Invalid pod annotations - annotations map is empty")
 		return fmt.Errorf("pod annotations are required")
 	}
