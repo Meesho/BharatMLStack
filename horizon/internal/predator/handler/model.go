@@ -76,7 +76,7 @@ type PredatorDeployableConfig struct {
 	TritonImageTag     string `json:"triton_image_tag"`
 	ServiceAccount     string `json:"serviceAccount"`
 	NodeSelectorValue  string `json:"nodeSelectorValue"`
-	GCSTritonPath      string `json:"gcs_triton_path"`
+	GCSTritonPath      bool   `json:"gcs_triton_path"`
 	CPUThreshold       string `json:"cpu_threshold"`
 	GPUThreshold       string `json:"gpu_threshold"`
 	DeploymentStrategy string `json:"deploymentStrategy"`

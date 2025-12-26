@@ -176,7 +176,6 @@ func (m *MiddlewareHandler) CheckScreenPermission(c *gin.Context, claims *handle
 		path = c.Request.URL.Path
 	}
 
-	// Skip resolver check for online feature store APIs since they don't have resolvers defined
 	if strings.HasPrefix(path, "/api/v1/online-feature-store") {
 		return
 	}
