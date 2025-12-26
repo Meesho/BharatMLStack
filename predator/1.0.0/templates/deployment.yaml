@@ -1,4 +1,4 @@
-{{- if .Values.deployment.enabled }}
+{{- if and .Values.deployment .Values.deployment.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -50,15 +50,6 @@ spec:
           configMap:
             name: {{ .Values.namespace }}-jmx
       {{- end }}
-        {{- if and (or (or (eq (.Values.appType) "python-2.7") (eq (.Values.appType) "python-3.7")) (eq (.Values.appType) "php")) (.Values.externalSecret.enabled) }}
-        {{- if not (.Values.jmxconfig.enabled) }}
-      volumes:
-        {{- end}}
-        - name: {{ .Values.namespace }}-envconfig
-          secret:
-            secretName: {{ .Values.deployment.envFrom.secretRef }}
-            optional: false
-        {{- end}}
       volumes:
          - name: shared-volume
            emptyDir: {}
@@ -94,19 +85,6 @@ spec:
           {{- if .Values.sharedmemory }}
             - mountPath: /dev/shm
               name: cache-volume  
-          {{- end }}
-          {{- if or (eq (.Values.appType) "python-2.7") (eq (.Values.appType) "python-3.7") }}
-          - name: {{ .Values.namespace }}-envconfig
-            mountPath: "/app/envConfig"
-            readOnly: true
-          {{- end }}
-          {{- if (eq (.Values.appType) "php") }}
-          {{- if not (.Values.jmxconfig.enabled) }}
-          volumeMounts:
-          {{- end}}
-          - name: {{ .Values.namespace }}-envconfig
-            mountPath: "/home/ubuntu/billion_dollar/{{ .Values.repoName }}/envConfig"
-            readOnly: true
           {{- end }}
           {{- if .Values.deployment.command }}
           command: {{- include "application.tplvalues.render" (dict "value" .Values.deployment.command "context" $) | nindent 12 }}
