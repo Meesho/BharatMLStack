@@ -212,6 +212,7 @@ services:
       - P2P_CACHE_5_NUM_CLIENTS=2
       - P2P_CACHE_5_SERVER_PORT=8088
       - P2P_CACHE_ACTIVE_CONFIG_IDS=5
+      - ENABLE_HTTP_API=true
     networks:
       - onfs-network
     depends_on:
@@ -327,7 +328,8 @@ services:
       - "8082:8082"
     environment:
       - APP_NAME=horizon
-      - APP_ENV=PROD
+      - APP_ENVIRONMENT=PROD
+      - APP_ENV=production
       - APP_PORT=8082
       - APP_LOG_LEVEL=DEBUG
       - APP_METRIC_SAMPLING_RATE=1
@@ -357,14 +359,8 @@ services:
       - SCYLLA_1_PASSWORD=
       - SCYLLA_1_USERNAME=
       - SCYLLA_ACTIVE_CONFIG_IDS=1
-      - REDIS_FAILOVER_ACTIVE_CONFIG_IDS=4
       - DISTRIBUTED_CACHE_ACTIVE_CONFIG_IDS=2
       - IN_MEMORY_CACHE_ACTIVE_CONFIG_IDS=3
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
-      - HORIZON_APP_NAME=horizon
-      - NUMERIX_APP_NAME=numerix
-      - INFERFLOW_APP_NAME=inferflow
-      - IS_DUMMY_MODEL_ENABLED=true
     networks:
       - onfs-network
     depends_on:

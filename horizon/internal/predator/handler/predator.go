@@ -13,6 +13,7 @@ import (
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/constant"
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
+	infrastructurehandler "github.com/Meesho/BharatMLStack/horizon/internal/infrastructure/handler"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/counter"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/validationjob"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/validationlock"
@@ -44,7 +45,8 @@ type Predator struct {
 	PredatorConfigRepo      predatorconfig.PredatorConfigRepository
 	ServiceDiscoveryRepo    discoveryconfig.DiscoveryConfigRepository
 	groupIdCounter          counter.GroupIdCounterRepository
-	ringMasterClient        externalcall.RingmasterClient
+	infrastructureHandler   infrastructurehandler.InfrastructureHandler
+	workingEnv              string
 	featureValidationClient externalcall.FeatureValidationClient
 	validationLockRepo      validationlock.Repository // Distributed lock repository for validation
 	validationJobRepo       validationjob.Repository  // Repository for tracking validation jobs
@@ -229,7 +231,9 @@ func InitV1ConfigHandler() (Config, error) {
 			return
 		}
 
-		ringMasterClient := externalcall.GetRingmasterClient()
+		infrastructureHandler := infrastructurehandler.InitInfrastructureHandler()
+		// Use generalized working environment
+		workingEnv := externalcall.GetWorkingEnvironment()
 
 		predator = &Predator{
 			GcsClient:               externalcall.CreateGCSClient(pred.IsGcsEnabled),
@@ -237,7 +241,8 @@ func InitV1ConfigHandler() (Config, error) {
 			Repo:                    repo,
 			PredatorConfigRepo:      predatorConfigRepo,
 			ServiceDiscoveryRepo:    serviceDiscoveryRepo,
-			ringMasterClient:        ringMasterClient,
+			infrastructureHandler:   infrastructureHandler,
+			workingEnv:              workingEnv,
 			groupIdCounter:          groupIdCounter,
 			featureValidationClient: externalcall.Client,
 			validationLockRepo:      validationLockRepo,
@@ -1112,7 +1117,15 @@ func (p *Predator) processRestartDeployableStage(email string, predatorRequestLi
 			log.Error().Err(err).Msg(errFailedToFindServiceDeployableEntry)
 			return err
 		}
-		if err := p.ringMasterClient.RestartDeployable(sd); err != nil {
+		// Extract isCanary from deployable config
+		var deployableConfig map[string]interface{}
+		isCanary := false
+		if err := json.Unmarshal(sd.Config, &deployableConfig); err == nil {
+			if strategy, ok := deployableConfig["deploymentStrategy"].(string); ok && strategy == "canary" {
+				isCanary = true
+			}
+		}
+		if err := p.infrastructureHandler.RestartDeployment(sd.Name, p.workingEnv, isCanary); err != nil {
 			log.Error().Err(err).Msg(errFailedToRestartDeployable)
 			return err
 		}
@@ -1513,14 +1526,14 @@ func (p *Predator) FetchModels() ([]ModelResponse, error) {
 		return nil, fmt.Errorf("failed to batch fetch related data: %w", err)
 	}
 
-	// Phase 2: Concurrently fetch RingMaster configs
-	ringMasterConfigs, err := p.batchFetchRingMasterConfigs(serviceDeployables)
+	// Phase 2: Concurrently fetch deployable configs
+	deployableConfigs, err := p.batchFetchDeployableConfigs(serviceDeployables)
 	if err != nil {
-		return nil, fmt.Errorf("failed to batch fetch ringmaster configs: %w", err)
+		return nil, fmt.Errorf("failed to batch fetch deployable configs: %w", err)
 	}
 
 	// Phase 3: Build response objects
-	results := p.buildModelResponses(predatorConfigs, discoveryConfigs, serviceDeployables, ringMasterConfigs)
+	results := p.buildModelResponses(predatorConfigs, discoveryConfigs, serviceDeployables, deployableConfigs)
 
 	return results, nil
 }
@@ -1572,13 +1585,13 @@ func (p *Predator) batchFetchRelatedData(predatorConfigs []predatorconfig.Predat
 	return discoveryConfigs, serviceDeployables, nil
 }
 
-// batchFetchRingMasterConfigs concurrently fetches RingMaster configs for all service deployables
-func (p *Predator) batchFetchRingMasterConfigs(serviceDeployables map[int]*servicedeployableconfig.ServiceDeployableConfig) (map[int]externalcall.Config, error) {
-	ringMasterConfigs := make(map[int]externalcall.Config)
+// batchFetchDeployableConfigs concurrently fetches deployable configs for all service deployables
+func (p *Predator) batchFetchDeployableConfigs(serviceDeployables map[int]*servicedeployableconfig.ServiceDeployableConfig) (map[int]externalcall.Config, error) {
+	deployableConfigs := make(map[int]externalcall.Config)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
-	// Use a semaphore to limit concurrent RingMaster API calls
+	// Use a semaphore to limit concurrent API calls
 	semaphore := make(chan struct{}, 10) // Limit to 10 concurrent calls
 
 	for id, deployable := range serviceDeployables {
@@ -1588,16 +1601,22 @@ func (p *Predator) batchFetchRingMasterConfigs(serviceDeployables map[int]*servi
 			semaphore <- struct{}{}        // Acquire semaphore
 			defer func() { <-semaphore }() // Release semaphore
 
-			config := p.ringMasterClient.GetConfig(sd.Name, sd.DeployableWorkFlowId, sd.DeploymentRunID)
+			infraConfig := p.infrastructureHandler.GetConfig(sd.Name, p.workingEnv)
+			// Convert to externalcall.Config for compatibility
+			config := externalcall.Config{
+				MinReplica:    infraConfig.MinReplica,
+				MaxReplica:    infraConfig.MaxReplica,
+				RunningStatus: infraConfig.RunningStatus,
+			}
 
 			mu.Lock()
-			ringMasterConfigs[deployableID] = config
+			deployableConfigs[deployableID] = config
 			mu.Unlock()
 		}(id, deployable)
 	}
 
 	wg.Wait()
-	return ringMasterConfigs, nil
+	return deployableConfigs, nil
 }
 
 // buildModelResponses constructs the final ModelResponse objects
@@ -1605,7 +1624,7 @@ func (p *Predator) buildModelResponses(
 	predatorConfigs []predatorconfig.PredatorConfig,
 	discoveryConfigs map[int]*discoveryconfig.DiscoveryConfig,
 	serviceDeployables map[int]*servicedeployableconfig.ServiceDeployableConfig,
-	ringMasterConfigs map[int]externalcall.Config,
+	deployableConfigs map[int]externalcall.Config,
 ) []ModelResponse {
 	results := make([]ModelResponse, 0, len(predatorConfigs))
 
@@ -1628,8 +1647,8 @@ func (p *Predator) buildModelResponses(
 			continue // Skip if config parsing fails
 		}
 
-		// Get RingMaster config
-		ringMasterConfig := ringMasterConfigs[serviceDiscovery.ServiceDeployableID]
+		// Get infrastructure config (HPA/replica info)
+		infraConfig := deployableConfigs[serviceDiscovery.ServiceDeployableID]
 
 		deploymentConfig := map[string]any{
 			machineTypeKey:    deployableConfig.MachineType,
@@ -1641,8 +1660,8 @@ func (p *Predator) buildModelResponses(
 			memLimitKey:       deployableConfig.MemoryLimit,
 			gpuRequestKey:     deployableConfig.GPURequest,
 			gpuLimitKey:       deployableConfig.GPULimit,
-			minReplicaKey:     ringMasterConfig.MinReplica,
-			maxReplicaKey:     ringMasterConfig.MaxReplica,
+			minReplicaKey:     infraConfig.MinReplica,
+			maxReplicaKey:     infraConfig.MaxReplica,
 			nodeSelectorKey:   deployableConfig.NodeSelectorValue,
 			tritonImageTagKey: deployableConfig.TritonImageTag,
 			basePathKey:       deployableConfig.GCSBucketPath,
@@ -1661,7 +1680,7 @@ func (p *Predator) buildModelResponses(
 			CreatedAt:               config.CreatedAt,
 			UpdatedBy:               config.UpdatedBy,
 			UpdatedAt:               config.UpdatedAt,
-			DeployableRunningStatus: ringMasterConfig.RunningStatus,
+			DeployableRunningStatus: infraConfig.RunningStatus,
 			TestResults:             config.TestResults,
 			HasNilData:              config.HasNilData,
 		}
@@ -1988,7 +2007,7 @@ func (p *Predator) startHealthCheckingProcess(job *validationjob.Table) {
 		}
 		job.HealthCheckCount++
 
-		// Check deployment health using RingMaster
+		// Check deployment health using infrastructure handler
 		isHealthy, err := p.checkDeploymentHealth(job.ServiceName)
 		if err != nil {
 			log.Error().Err(err).Msgf("Failed to check deployment health for job %d", job.ID)
@@ -2011,9 +2030,9 @@ func (p *Predator) startHealthCheckingProcess(job *validationjob.Table) {
 	p.updateRequestValidationStatus(job.GroupID, false)
 }
 
-// checkDeploymentHealth checks if the deployment is healthy using RingMaster
+// checkDeploymentHealth checks if the deployment is healthy using infrastructure handler
 func (p *Predator) checkDeploymentHealth(serviceName string) (bool, error) {
-	resourceDetail, err := p.ringMasterClient.GetResourceDetail(serviceName)
+	resourceDetail, err := p.infrastructureHandler.GetResourceDetail(serviceName, p.workingEnv)
 	if err != nil {
 		return false, fmt.Errorf("failed to get resource detail: %w", err)
 	}
@@ -2200,7 +2219,15 @@ func (p *Predator) restartTemporaryDeployable(tempDeployableID int) error {
 		return fmt.Errorf("failed to fetch temporary service deployable: %w", err)
 	}
 
-	if err := p.ringMasterClient.RestartDeployable(tempServiceDeployable); err != nil {
+	// Extract isCanary from deployable config
+	var deployableConfig map[string]interface{}
+	isCanary := false
+	if err := json.Unmarshal(tempServiceDeployable.Config, &deployableConfig); err == nil {
+		if strategy, ok := deployableConfig["deploymentStrategy"].(string); ok && strategy == "canary" {
+			isCanary = true
+		}
+	}
+	if err := p.infrastructureHandler.RestartDeployment(tempServiceDeployable.Name, p.workingEnv, isCanary); err != nil {
 		return fmt.Errorf("failed to restart temporary deployable: %w", err)
 	}
 
@@ -3033,38 +3060,6 @@ func ConvertExecuteRequestToTritonRequest(req ExecuteRequestLoadTest) (TritonInf
 }
 
 func (p *Predator) GetGCSModels() (*GCSFoldersResponse, error) {
-	if pred.IsDummyModelEnabled {
-		// Return dummy model based on predator_config entry in init-mysql.sh
-		// Model: ensemble_personalised_nqd_lgbm_v2_2
-		bucket := pred.GcsModelBucket
-		basePath := pred.GcsModelBasePath
-		if bucket == "" {
-			bucket = "dummy-bucket"
-		}
-		if basePath == "" {
-			basePath = "predator"
-		}
-		basePath = strings.TrimSuffix(basePath, "/")
-
-		dummyModel := GCSFolder{
-			Name: "ensemble_personalised_nqd_lgbm_v2_2",
-			Path: fmt.Sprintf("gcs://%s/%s/%s", bucket, basePath, "ensemble_personalised_nqd_lgbm_v2_2"),
-			Metadata: &FeatureMetadata{
-				Inputs: []InputMeta{
-					{
-						Name: "input__0",
-						Features: []string{
-							"ONLINE_FEATURE|user:derived_2_fp32:user__nqp",
-							"ONLINE_FEATURE|catalog:derived_fp32:nqp",
-							"ONLINE_FEATURE|user:derived_2_string:region",
-						},
-					},
-				},
-			},
-		}
-		return &GCSFoldersResponse{Folders: []GCSFolder{dummyModel}}, nil
-	}
-
 	bucket := pred.GcsModelBucket
 	basePath := pred.GcsModelBasePath
 

@@ -7,11 +7,23 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// getCurrentYear returns the current year for dynamic test generation
+func getCurrentYear() int {
+	return time.Now().UTC().Year()
+}
+
+// isLeapYear checks if a given year is a leap year
+func isLeapYear(year int) bool {
+	return year%4 == 0 && (year%100 != 0 || year%400 == 0)
+}
+
 func TestEncodeExpiry(t *testing.T) {
 	Init()
 	// Save the original function and restore after all tests
 	originalNow := timeNow
 	defer func() { timeNow = originalNow }()
+
+	currentYear := getCurrentYear()
 
 	tests := []struct {
 		name        string
@@ -22,29 +34,59 @@ func TestEncodeExpiry(t *testing.T) {
 	}{
 		{
 			name:        "Valid future expiry within same year",
-			setupTime:   time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-			expiryEpoch: uint64(time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC).Unix()),
+			setupTime:   time.Date(currentYear, 1, 15, 0, 0, 0, 0, time.UTC),
+			expiryEpoch: uint64(time.Date(currentYear, 2, 1, 0, 0, 0, 0, time.UTC).Unix()),
 			wantErr:     false,
 		},
 		{
-			name:        "Valid future expiry crossing year boundary",
-			setupTime:   time.Date(2024, 12, 31, 23, 59, 59, 0, time.UTC),
-			expiryEpoch: uint64(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC).Unix()),
+			name:        "Valid future expiry crossing year boundary - encoding on Dec 31",
+			setupTime:   time.Date(currentYear, 12, 31, 23, 59, 59, 0, time.UTC),
+			expiryEpoch: uint64(time.Date(currentYear+1, 1, 1, 0, 0, 0, 0, time.UTC).Unix()),
+			wantErr:     false,
+		},
+		{
+			name:        "Valid future expiry crossing year boundary - encoding on Dec 15, expiry in next year",
+			setupTime:   time.Date(currentYear, 12, 15, 12, 0, 0, 0, time.UTC),
+			expiryEpoch: uint64(time.Date(currentYear+1, 1, 15, 12, 0, 0, 0, time.UTC).Unix()),
+			wantErr:     false,
+		},
+		{
+			name:        "Valid future expiry - same year, same month, future day",
+			setupTime:   time.Date(currentYear, 6, 10, 0, 0, 0, 0, time.UTC),
+			expiryEpoch: uint64(time.Date(currentYear, 6, 20, 0, 0, 0, 0, time.UTC).Unix()),
 			wantErr:     false,
 		},
 		{
 			name:        "Past expiry",
-			setupTime:   time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
-			expiryEpoch: uint64(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Unix()),
+			setupTime:   time.Date(currentYear, 2, 1, 0, 0, 0, 0, time.UTC),
+			expiryEpoch: uint64(time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC).Unix()),
 			wantErr:     true,
 			errMsg:      "expiry time must be in future",
 		},
 		{
 			name:        "Expiry too far in future (> 513 days)",
-			setupTime:   time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-			expiryEpoch: uint64(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Add(514 * 24 * time.Hour).Unix()),
+			setupTime:   time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC),
+			expiryEpoch: uint64(time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC).Add(514 * 24 * time.Hour).Unix()),
 			wantErr:     true,
 			errMsg:      "expiry time cannot be more than 513 days from now",
+		},
+		{
+			name:        "Expiry exactly at 513 days",
+			setupTime:   time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC),
+			expiryEpoch: uint64(time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC).Add(513 * 24 * time.Hour).Unix()),
+			wantErr:     false,
+		},
+		{
+			name:        "Expiry in same year but different month",
+			setupTime:   time.Date(currentYear, 3, 15, 10, 30, 0, 0, time.UTC),
+			expiryEpoch: uint64(time.Date(currentYear, 7, 20, 14, 45, 30, 0, time.UTC).Unix()),
+			wantErr:     false,
+		},
+		{
+			name:        "Year boundary fix - encoding uses expiry year not current year",
+			setupTime:   time.Date(currentYear, 12, 31, 23, 0, 0, 0, time.UTC),
+			expiryEpoch: uint64(time.Date(currentYear+1, 1, 15, 12, 0, 0, 0, time.UTC).Unix()),
+			wantErr:     false,
 		},
 	}
 
@@ -83,6 +125,17 @@ func TestIsExpired(t *testing.T) {
 	originalNow := timeNow
 	defer func() { timeNow = originalNow }()
 
+	currentYear := getCurrentYear()
+	// Find next leap year for leap year tests
+	nextLeapYear := currentYear
+	for !isLeapYear(nextLeapYear) {
+		nextLeapYear++
+	}
+	nextNonLeapYear := nextLeapYear + 1
+	for isLeapYear(nextNonLeapYear) {
+		nextNonLeapYear++
+	}
+
 	tests := []struct {
 		name      string
 		setupTime time.Time // Time to set as "now"
@@ -91,90 +144,150 @@ func TestIsExpired(t *testing.T) {
 	}{
 		{
 			name:      "Invalid byte length",
-			setupTime: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			setupTime: time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC),
 			setup: func() []byte {
 				return []byte{1, 2, 3} // Invalid length
 			},
 			want: true,
 		},
 		{
+			name:      "Lifetime TTL (zero expiry)",
+			setupTime: time.Date(currentYear, 6, 15, 12, 0, 0, 0, time.UTC),
+			setup: func() []byte {
+				return []byte{0, 0, 0, 0, 0} // Zero expiry means lifetime
+			},
+			want: false,
+		},
+		{
 			name:      "Expired - same year, earlier day",
-			setupTime: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
+			setupTime: time.Date(currentYear, 2, 1, 0, 0, 0, 0, time.UTC),
 			setup: func() []byte {
 				// Mock time to encode
 				timeNow = func() time.Time {
-					return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+					return time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC)
 				}
 
-				b, _ := EncodeExpiry(uint64(time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC).Unix()))
+				b, _ := EncodeExpiry(uint64(time.Date(currentYear, 1, 15, 0, 0, 0, 0, time.UTC).Unix()))
 				return b
 			},
 			want: true,
 		},
 		{
 			name:      "Not expired - same year, future day",
-			setupTime: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			setupTime: time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC),
 			setup: func() []byte {
 				timeNow = func() time.Time {
-					return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+					return time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC)
 				}
 
-				b, _ := EncodeExpiry(uint64(time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC).Unix()))
+				b, _ := EncodeExpiry(uint64(time.Date(currentYear, 2, 1, 0, 0, 0, 0, time.UTC).Unix()))
 				return b
 			},
 			want: false,
 		},
 		{
 			name:      "Not expired - crossing year boundary",
-			setupTime: time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC),
+			setupTime: time.Date(currentYear+1, 1, 15, 0, 0, 0, 0, time.UTC),
 			setup: func() []byte {
 				timeNow = func() time.Time {
-					return time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC)
+					return time.Date(currentYear, 12, 31, 0, 0, 0, 0, time.UTC)
 				}
 
-				b, _ := EncodeExpiry(uint64(time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC).Unix()))
+				b, _ := EncodeExpiry(uint64(time.Date(currentYear+1, 2, 1, 0, 0, 0, 0, time.UTC).Unix()))
+				return b
+			},
+			want: false,
+		},
+		{
+			name:      "Not expired - encoding on Dec 31, expiry in next year",
+			setupTime: time.Date(currentYear+1, 1, 1, 0, 0, 0, 0, time.UTC),
+			setup: func() []byte {
+				timeNow = func() time.Time {
+					return time.Date(currentYear, 12, 31, 23, 59, 59, 0, time.UTC)
+				}
+
+				b, _ := EncodeExpiry(uint64(time.Date(currentYear+1, 1, 1, 0, 0, 0, 0, time.UTC).Unix()))
 				return b
 			},
 			want: false,
 		},
 		{
 			name:      "Same day - compare seconds (expired)",
-			setupTime: time.Date(2024, 1, 1, 15, 0, 0, 0, time.UTC),
+			setupTime: time.Date(currentYear, 1, 1, 15, 0, 0, 0, time.UTC),
 			setup: func() []byte {
 				timeNow = func() time.Time {
-					return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+					return time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC)
 				}
 
-				b, _ := EncodeExpiry(uint64(time.Date(2024, 1, 1, 14, 0, 0, 0, time.UTC).Unix()))
+				b, _ := EncodeExpiry(uint64(time.Date(currentYear, 1, 1, 14, 0, 0, 0, time.UTC).Unix()))
 				return b
 			},
 			want: true,
 		},
 		{
-			name:      "Maximum TTL test (513 days)",
-			setupTime: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			name:      "Same day - compare seconds (not expired)",
+			setupTime: time.Date(currentYear, 1, 1, 10, 0, 0, 0, time.UTC),
 			setup: func() []byte {
 				timeNow = func() time.Time {
-					return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+					return time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC)
 				}
 
-				b, _ := EncodeExpiry(uint64(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Add(513 * 24 * time.Hour).Unix()))
+				b, _ := EncodeExpiry(uint64(time.Date(currentYear, 1, 1, 14, 0, 0, 0, time.UTC).Unix()))
 				return b
 			},
 			want: false,
 		},
 		{
-			name:      "Leap year handling",
-			setupTime: time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
+			name:      "Maximum TTL test (513 days)",
+			setupTime: time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC),
 			setup: func() []byte {
 				timeNow = func() time.Time {
-					return time.Date(2024, 2, 28, 0, 0, 0, 0, time.UTC) // 2024 is a leap year
+					return time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC)
 				}
 
-				b, _ := EncodeExpiry(uint64(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC).Unix()))
+				b, _ := EncodeExpiry(uint64(time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC).Add(513 * 24 * time.Hour).Unix()))
 				return b
 			},
 			want: false,
+		},
+		{
+			name:      "Leap year handling - encoding before leap day",
+			setupTime: time.Date(nextLeapYear, 3, 1, 0, 0, 0, 0, time.UTC),
+			setup: func() []byte {
+				timeNow = func() time.Time {
+					return time.Date(nextLeapYear, 2, 28, 0, 0, 0, 0, time.UTC)
+				}
+
+				b, _ := EncodeExpiry(uint64(time.Date(nextLeapYear, 3, 15, 0, 0, 0, 0, time.UTC).Unix()))
+				return b
+			},
+			want: false,
+		},
+		{
+			name:      "Non-leap year handling - encoding before Feb 28",
+			setupTime: time.Date(nextNonLeapYear, 3, 1, 0, 0, 0, 0, time.UTC),
+			setup: func() []byte {
+				timeNow = func() time.Time {
+					return time.Date(nextNonLeapYear, 2, 27, 0, 0, 0, 0, time.UTC)
+				}
+
+				b, _ := EncodeExpiry(uint64(time.Date(nextNonLeapYear, 3, 15, 0, 0, 0, 0, time.UTC).Unix()))
+				return b
+			},
+			want: false,
+		},
+		{
+			name:      "Expired - cross year boundary but past expiry",
+			setupTime: time.Date(currentYear+1, 2, 1, 0, 0, 0, 0, time.UTC),
+			setup: func() []byte {
+				timeNow = func() time.Time {
+					return time.Date(currentYear, 12, 31, 0, 0, 0, 0, time.UTC)
+				}
+
+				b, _ := EncodeExpiry(uint64(time.Date(currentYear+1, 1, 15, 0, 0, 0, 0, time.UTC).Unix()))
+				return b
+			},
+			want: true,
 		},
 	}
 
@@ -191,6 +304,38 @@ func TestIsExpired(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEncodeExpiry_UsesExpiryYearNotCurrentYear(t *testing.T) {
+	Init()
+	originalNow := timeNow
+	defer func() { timeNow = originalNow }()
+
+	currentYear := getCurrentYear()
+
+	// Test: Encode on Dec 31 of current year, expiry in next year
+	// The encoded year should be the expiry year (next year), not current year
+	setupTime := time.Date(currentYear, 12, 31, 23, 0, 0, 0, time.UTC)
+	expiryTime := time.Date(currentYear+1, 1, 15, 12, 0, 0, 0, time.UTC)
+	expiryEpoch := uint64(expiryTime.Unix())
+
+	timeNow = func() time.Time {
+		return setupTime
+	}
+
+	encoded, err := EncodeExpiry(expiryEpoch)
+	assert.NoError(t, err)
+	assert.Len(t, encoded, 5)
+
+	// Decode and verify it matches the expiry time
+	decoded, err := DecodeExpiry(encoded)
+	assert.NoError(t, err)
+	assert.Equal(t, expiryEpoch, decoded)
+
+	// Verify the decoded time is in the correct year
+	decodedTime := time.Unix(int64(decoded), 0).UTC()
+	assert.Equal(t, currentYear+1, decodedTime.Year(), "decoded year should be expiry year, not current year")
+	assert.Equal(t, expiryTime.Unix(), decodedTime.Unix(), "decoded time should match expiry time exactly")
 }
 
 //
@@ -303,6 +448,17 @@ func TestEncodeDecodeExpiry(t *testing.T) {
 	originalNow := timeNow
 	defer func() { timeNow = originalNow }()
 
+	currentYear := getCurrentYear()
+	// Find next leap year for leap year tests
+	nextLeapYear := currentYear
+	for !isLeapYear(nextLeapYear) {
+		nextLeapYear++
+	}
+	nextNonLeapYear := nextLeapYear + 1
+	for isLeapYear(nextNonLeapYear) {
+		nextNonLeapYear++
+	}
+
 	tests := []struct {
 		name      string
 		inputTime time.Time
@@ -311,38 +467,63 @@ func TestEncodeDecodeExpiry(t *testing.T) {
 	}{
 		{
 			name:      "start of year",
-			setupTime: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-			inputTime: time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+			setupTime: time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC),
+			inputTime: time.Date(currentYear, 1, 2, 0, 0, 0, 0, time.UTC),
 		},
 		{
 			name:      "end of year",
-			setupTime: time.Date(2024, 12, 30, 0, 0, 0, 0, time.UTC),
-			inputTime: time.Date(2024, 12, 31, 23, 59, 59, 0, time.UTC),
+			setupTime: time.Date(currentYear, 12, 30, 0, 0, 0, 0, time.UTC),
+			inputTime: time.Date(currentYear, 12, 31, 23, 59, 59, 0, time.UTC),
 		},
 		{
 			name:      "leap day",
-			setupTime: time.Date(2024, 2, 28, 0, 0, 0, 0, time.UTC),
-			inputTime: time.Date(2024, 2, 29, 12, 30, 45, 0, time.UTC),
+			setupTime: time.Date(nextLeapYear, 2, 28, 0, 0, 0, 0, time.UTC),
+			inputTime: time.Date(nextLeapYear, 2, 29, 12, 30, 45, 0, time.UTC),
 		},
 		{
 			name:      "non-leap year",
-			setupTime: time.Date(2025, 2, 27, 0, 0, 0, 0, time.UTC),
-			inputTime: time.Date(2025, 2, 28, 0, 0, 0, 0, time.UTC),
+			setupTime: time.Date(nextNonLeapYear, 2, 27, 0, 0, 0, 0, time.UTC),
+			inputTime: time.Date(nextNonLeapYear, 2, 28, 0, 0, 0, 0, time.UTC),
 		},
 		{
 			name:      "middle of year with time",
-			setupTime: time.Date(2024, 7, 14, 0, 0, 0, 0, time.UTC),
-			inputTime: time.Date(2024, 7, 15, 13, 45, 30, 0, time.UTC),
+			setupTime: time.Date(currentYear, 7, 14, 0, 0, 0, 0, time.UTC),
+			inputTime: time.Date(currentYear, 7, 15, 13, 45, 30, 0, time.UTC),
 		},
 		{
 			name:      "last second of day",
-			setupTime: time.Date(2024, 3, 14, 0, 0, 0, 0, time.UTC),
-			inputTime: time.Date(2024, 3, 15, 23, 59, 59, 0, time.UTC),
+			setupTime: time.Date(currentYear, 3, 14, 0, 0, 0, 0, time.UTC),
+			inputTime: time.Date(currentYear, 3, 15, 23, 59, 59, 0, time.UTC),
 		},
 		{
 			name:      "first second of day",
-			setupTime: time.Date(2024, 3, 14, 0, 0, 0, 0, time.UTC),
-			inputTime: time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC),
+			setupTime: time.Date(currentYear, 3, 14, 0, 0, 0, 0, time.UTC),
+			inputTime: time.Date(currentYear, 3, 15, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:      "crossing year boundary - encoding on Dec 31",
+			setupTime: time.Date(currentYear, 12, 31, 23, 59, 59, 0, time.UTC),
+			inputTime: time.Date(currentYear+1, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:      "crossing year boundary - encoding on Dec 15, expiry in next year",
+			setupTime: time.Date(currentYear, 12, 15, 12, 0, 0, 0, time.UTC),
+			inputTime: time.Date(currentYear+1, 1, 15, 12, 0, 0, 0, time.UTC),
+		},
+		{
+			name:      "crossing year boundary - expiry in next year, same month",
+			setupTime: time.Date(currentYear, 12, 20, 0, 0, 0, 0, time.UTC),
+			inputTime: time.Date(currentYear+1, 1, 20, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:      "same year, different months",
+			setupTime: time.Date(currentYear, 3, 1, 0, 0, 0, 0, time.UTC),
+			inputTime: time.Date(currentYear, 8, 15, 10, 30, 45, 0, time.UTC),
+		},
+		{
+			name:      "maximum TTL (513 days)",
+			setupTime: time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC),
+			inputTime: time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC).Add(513 * 24 * time.Hour),
 		},
 	}
 
