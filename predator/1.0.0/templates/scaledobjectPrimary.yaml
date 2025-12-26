@@ -1,5 +1,5 @@
-{{- if and (.Values.canary.enabled) (eq .Values.labels.env "prod") }}
-{{- if .Values.autoscaling.enabled }}
+{{- if and .Values.canary (.Values.canary.enabled) (eq .Values.labels.env "prod") }}
+{{- if and .Values.autoscaling .Values.autoscaling.enabled }}
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:

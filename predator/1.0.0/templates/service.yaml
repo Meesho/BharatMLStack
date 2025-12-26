@@ -1,4 +1,4 @@
-{{- if .Values.service.enabled }}
+{{- if and .Values.service .Values.service.enabled }}
 {{- if or (eq .Values.canary.enabled false) ( and (.Values.canary.enabled) (ne .Values.labels.env "prod")) }}
 apiVersion: v1
 kind: Service

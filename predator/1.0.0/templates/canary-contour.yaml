@@ -154,7 +154,7 @@ metadata:
 spec: {}
 {{- end -}}
 {{- else -}}
-{{- if .Values.ingress.enabled -}}
+{{- if and .Values.ingress .Values.ingress.enabled -}}
 {{- if or ( eq "contour-internal" .Values.ingress.ingressClassName ) ( eq "contour-external" .Values.ingress.ingressClassName ) ( eq "contour-internal-0" .Values.ingress.ingressClassName ) ( eq "contour-internal-1" .Values.ingress.ingressClassName ) ( eq "contour-external-0" .Values.ingress.ingressClassName ) ( eq "contour-external-1" .Values.ingress.ingressClassName ) }}
 {{- $servicePortNumber := .Values.ingress.servicePortNumber -}}
 {{- $namespace := $.Values.namespace -}}

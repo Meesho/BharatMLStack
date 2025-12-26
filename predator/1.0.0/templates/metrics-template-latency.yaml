@@ -1,4 +1,4 @@
-{{- if .Values.canary.enabled }}
+{{- if and .Values.canary .Values.canary.enabled }}
 apiVersion: flagger.app/v1beta1
 kind: MetricTemplate
 metadata:

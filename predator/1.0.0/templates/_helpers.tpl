@@ -25,11 +25,9 @@ app: {{ .Values.namespace }}-primary
 
 {{- define "labels.common" -}}
 {{ template "labels.selector" . }}
-{{ if .Values.deployment.image }}
+{{- if and .Values.deployment .Values.deployment.image }}
 version: {{ .Values.deployment.image.tag }}
-{{ else }}
-version: {{ .Values.cron.image.tag }}
-{{ end }}
+{{- end }}
 env: {{ .Values.labels.env }}
 team: {{ .Values.labels.team }}
 bu: {{ .Values.labels.bu }}
