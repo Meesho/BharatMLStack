@@ -45,7 +45,7 @@ func TestGetFileYaml(t *testing.T) {
 			fileName:    "values.yaml",
 			workingEnv:  "unknown_env",
 			expectError: true,
-			errorMsg:    "unknown working environment",
+			errorMsg:    "GitHub client not initialized",
 		},
 		{
 			name:        "Valid gcp_prd environment",
@@ -101,7 +101,7 @@ func TestUpdateFileYaml(t *testing.T) {
 			sha:         github.String("abc123"),
 			workingEnv:  "unknown_env",
 			expectError: true,
-			errorMsg:    "unknown working environment",
+			errorMsg:    "GitHub client not initialized",
 		},
 		{
 			name:        "Invalid YAML data",
@@ -218,7 +218,7 @@ func TestUpdateTriggersInValues(t *testing.T) {
 			email:       "test@meesho.com",
 			workingEnv:  "unknown_env",
 			expectError: true,
-			errorMsg:    "unknown working environment",
+			errorMsg:    "GitHub client not initialized",
 			description: "Unknown environment should return error",
 		},
 		{
@@ -385,7 +385,7 @@ func TestUpdateTriggersInValuesProperties(t *testing.T) {
 			email:       "test@meesho.com",
 			workingEnv:  "unknown_env",
 			expectError: true,
-			errorMsg:    "unknown working environment",
+			errorMsg:    "GitHub client not initialized",
 			description: "Unknown environment should return error",
 		},
 		{

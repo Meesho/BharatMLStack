@@ -124,6 +124,14 @@ func (r ArgoCDResource) PatchArgoCDResource(payload interface{}, workingEnv stri
 		"",
 		"",
 	)
+	if err != nil {
+		log.Error().Err(err).Msg("PatchArgoCDResource: cannot create ArgoCD client request")
+		return nil, err
+	}
+	if req == nil {
+		log.Error().Msg("PatchArgoCDResource: ArgoCD client request is nil")
+		return nil, errors.New("ArgoCD client request is nil")
+	}
 
 	responseBody, err := makeArgoCDCall(req)
 	if err != nil {
@@ -145,7 +153,7 @@ func (r ArgoCDResource) PatchArgoCDResource(payload interface{}, workingEnv stri
 func GetArgoCDResourceDetail(appName string, workingEnv string) (ArgoCDAppApiResponse, error) {
 	// Construct expected ArgoCD application name
 	expectedArgoCDAppName := GetArgocdApplicationNameFromEnv(appName, workingEnv)
-	
+
 	log.Info().
 		Str("applicationName", appName).
 		Str("environment", workingEnv).
@@ -170,7 +178,7 @@ func GetArgoCDResourceDetail(appName string, workingEnv string) (ArgoCDAppApiRes
 			Msg("GetArgoCDResourceDetail: Failed to create ArgoCD client request - check ArgoCD configuration")
 		return ArgoCDAppApiResponse{}, err
 	}
-	
+
 	log.Info().
 		Str("applicationName", appName).
 		Str("workingEnv", workingEnv).
@@ -187,7 +195,7 @@ func GetArgoCDResourceDetail(appName string, workingEnv string) (ArgoCDAppApiRes
 			Msg("GetArgoCDResourceDetail: Failed to make ArgoCD API call - check ArgoCD connectivity and credentials")
 		return ArgoCDAppApiResponse{}, err
 	}
-	
+
 	log.Info().
 		Str("applicationName", appName).
 		Str("workingEnv", workingEnv).
@@ -211,14 +219,14 @@ func GetArgoCDResourceDetail(appName string, workingEnv string) (ArgoCDAppApiRes
 			Msg("GetArgoCDResourceDetail: Failed to unmarshal ArgoCD response body")
 		return ArgoCDAppApiResponse{}, err
 	}
-	
+
 	log.Info().
 		Str("applicationName", appName).
 		Str("workingEnv", workingEnv).
 		Str("expectedArgoCDAppName", expectedArgoCDAppName).
 		Int("nodeCount", len(appResponse.Nodes)).
 		Msg("GetArgoCDResourceDetail: Successfully parsed ArgoCD response")
-	
+
 	return appResponse, nil
 }
 

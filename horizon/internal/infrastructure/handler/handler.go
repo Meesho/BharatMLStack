@@ -459,7 +459,7 @@ func (h *infrastructureHandler) UpdatePodAnnotations(appName string, annotations
 	for k, v := range annotations {
 		podAnnotationsMap[k] = v
 	}
-	
+
 	// Check if podAnnotations already exists in values.yaml (camelCase)
 	if existingPodAnnotations, ok := data["podAnnotations"].(map[string]interface{}); ok {
 		// Merge with existing annotations (new annotations override existing ones)

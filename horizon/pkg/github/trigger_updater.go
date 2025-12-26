@@ -85,7 +85,7 @@ func (c *CPUTriggerUpdater) UpdateTriggers(triggers []interface{}, threshold str
 
 func (c *CPUTriggerUpdater) CreateNewTrigger(threshold string) map[string]interface{} {
 	log.Info().Msg("Creating new CPU trigger")
-	metadata := make(map[string]string)
+	metadata := make(map[string]interface{})
 	metadata["value"] = threshold
 
 	trigger := make(map[string]interface{})

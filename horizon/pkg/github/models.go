@@ -3,6 +3,7 @@ package github
 import (
 	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/rs/zerolog/log"
 )
@@ -120,13 +121,15 @@ func (a AutoScalinGitHubCronProperties) ValidateCronGitHubProperties() error {
 
 func (a AutoScalinGitHubCPUThreshold) ValidateAutoScalinGitHubCPU() error {
 	log.Info().Str("CPUThreshold", a.CPUThreshold).Msg("In ValidateAutoScalinGitHubCPUThreshold")
-	if a.CPUThreshold == "" {
+	// Trim whitespace before validation
+	trimmedThreshold := strings.TrimSpace(a.CPUThreshold)
+	if trimmedThreshold == "" {
 		log.Error().Msg("ValidateAutoScalinGitHubCPU: Validation failed: Empty CPUThreshold provided")
 		return errors.New("why supplying empty values?")
 	}
 
 	// Convert to int
-	intMin, err := strconv.Atoi(a.CPUThreshold)
+	intMin, err := strconv.Atoi(trimmedThreshold)
 	if err != nil {
 		log.Error().Err(err).Msg("ValidateAutoScalinGitHubCPU: Failed to convert CPUThreshold to integer")
 		return err
@@ -142,12 +145,14 @@ func (a AutoScalinGitHubCPUThreshold) ValidateAutoScalinGitHubCPU() error {
 
 func (a AutoScalinGitHubGPUThreshold) ValidateAutoScalinGitHubGPU() error {
 	log.Info().Str("GPUThreshold", a.GPUThreshold).Msg("In ValidateAutoScalinGitHubGPUThreshold")
-	if a.GPUThreshold == "" {
+	// Trim whitespace before validation
+	trimmedThreshold := strings.TrimSpace(a.GPUThreshold)
+	if trimmedThreshold == "" {
 		log.Error().Msg("ValidateAutoScalinGitHubGPU: Validation failed: Empty GPUThreshold provided")
 		return errors.New("why supplying empty values?")
 	}
 
-	intMin, err := strconv.Atoi(a.GPUThreshold)
+	intMin, err := strconv.Atoi(trimmedThreshold)
 	if err != nil {
 		log.Error().Err(err).Msg("ValidateAutoScalinGitHubGPU: Failed to convert GPUThreshold to integer")
 		return err

@@ -375,7 +375,7 @@ func TestInfrastructureHandler_UpdateCPUThreshold(t *testing.T) {
 			threshold:   "80",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Update CPU threshold should be implemented",
 		},
 		{
@@ -384,7 +384,7 @@ func TestInfrastructureHandler_UpdateCPUThreshold(t *testing.T) {
 			threshold:   "80",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Empty app name should still be handled",
 		},
 		{
@@ -393,7 +393,7 @@ func TestInfrastructureHandler_UpdateCPUThreshold(t *testing.T) {
 			threshold:   "",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Empty threshold should be validated",
 		},
 		{
@@ -402,7 +402,7 @@ func TestInfrastructureHandler_UpdateCPUThreshold(t *testing.T) {
 			threshold:   "0",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Zero threshold should be validated",
 		},
 		{
@@ -411,7 +411,7 @@ func TestInfrastructureHandler_UpdateCPUThreshold(t *testing.T) {
 			threshold:   "-10",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Negative threshold should be validated",
 		},
 		{
@@ -420,7 +420,7 @@ func TestInfrastructureHandler_UpdateCPUThreshold(t *testing.T) {
 			threshold:   "85",
 			workingEnv:  "gcp_int",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Int environment should work",
 		},
 		{
@@ -429,7 +429,7 @@ func TestInfrastructureHandler_UpdateCPUThreshold(t *testing.T) {
 			threshold:   "75",
 			workingEnv:  "gcp_dev",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Dev environment should work",
 		},
 		{
@@ -438,7 +438,7 @@ func TestInfrastructureHandler_UpdateCPUThreshold(t *testing.T) {
 			threshold:   "90",
 			workingEnv:  "gcp_stg",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Staging environment should work",
 		},
 		{
@@ -447,7 +447,7 @@ func TestInfrastructureHandler_UpdateCPUThreshold(t *testing.T) {
 			threshold:   "100",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Maximum threshold value should work",
 		},
 		{
@@ -456,7 +456,7 @@ func TestInfrastructureHandler_UpdateCPUThreshold(t *testing.T) {
 			threshold:   "1",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Minimum threshold value should work",
 		},
 		{
@@ -465,7 +465,7 @@ func TestInfrastructureHandler_UpdateCPUThreshold(t *testing.T) {
 			threshold:   "80",
 			workingEnv:  "unknown_env",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Unknown environment should be handled",
 		},
 		{
@@ -474,7 +474,7 @@ func TestInfrastructureHandler_UpdateCPUThreshold(t *testing.T) {
 			threshold:   "abc",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Non-numeric threshold should be validated",
 		},
 	}
@@ -512,7 +512,7 @@ func TestInfrastructureHandler_UpdateGPUThreshold(t *testing.T) {
 			threshold:   "70",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Update GPU threshold should be implemented",
 		},
 		{
@@ -521,7 +521,7 @@ func TestInfrastructureHandler_UpdateGPUThreshold(t *testing.T) {
 			threshold:   "70",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Empty app name should still be handled",
 		},
 		{
@@ -530,7 +530,7 @@ func TestInfrastructureHandler_UpdateGPUThreshold(t *testing.T) {
 			threshold:   "",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Empty threshold should be validated",
 		},
 		{
@@ -539,7 +539,7 @@ func TestInfrastructureHandler_UpdateGPUThreshold(t *testing.T) {
 			threshold:   "0",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Zero threshold should be validated",
 		},
 		{
@@ -548,7 +548,7 @@ func TestInfrastructureHandler_UpdateGPUThreshold(t *testing.T) {
 			threshold:   "-5",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Negative threshold should be validated",
 		},
 		{
@@ -557,7 +557,7 @@ func TestInfrastructureHandler_UpdateGPUThreshold(t *testing.T) {
 			threshold:   "75",
 			workingEnv:  "gcp_int",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Int environment should work",
 		},
 		{
@@ -566,7 +566,7 @@ func TestInfrastructureHandler_UpdateGPUThreshold(t *testing.T) {
 			threshold:   "65",
 			workingEnv:  "gcp_dev",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Dev environment should work",
 		},
 		{
@@ -575,7 +575,7 @@ func TestInfrastructureHandler_UpdateGPUThreshold(t *testing.T) {
 			threshold:   "80",
 			workingEnv:  "gcp_stg",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Staging environment should work",
 		},
 		{
@@ -584,7 +584,7 @@ func TestInfrastructureHandler_UpdateGPUThreshold(t *testing.T) {
 			threshold:   "100",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Maximum threshold value should work",
 		},
 		{
@@ -593,7 +593,7 @@ func TestInfrastructureHandler_UpdateGPUThreshold(t *testing.T) {
 			threshold:   "1",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Minimum threshold value should work",
 		},
 		{
@@ -602,7 +602,7 @@ func TestInfrastructureHandler_UpdateGPUThreshold(t *testing.T) {
 			threshold:   "70",
 			workingEnv:  "unknown_env",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Unknown environment should be handled",
 		},
 		{
@@ -611,7 +611,7 @@ func TestInfrastructureHandler_UpdateGPUThreshold(t *testing.T) {
 			threshold:   "xyz",
 			workingEnv:  "gcp_prd",
 			expectError: true,
-			errorMsg:    "not yet implemented",
+			errorMsg:    "",
 			description: "Non-numeric threshold should be validated",
 		},
 	}

@@ -28,7 +28,15 @@ func TestGetTriggerUpdater(t *testing.T) {
 				assert.Nil(t, result)
 			} else {
 				assert.NotNil(t, result)
-				assert.Equal(t, tt.triggerType, result.GetTriggerType())
+				// For GPU triggers, GetTriggerType returns "prometheus", not "gpu"
+				// So we check the actual type instead of comparing triggerType
+				if tt.triggerType == "gpu" {
+					_, ok := result.(*GPUTriggerUpdater)
+					assert.True(t, ok, "Expected GPUTriggerUpdater for GPU trigger type")
+					assert.Equal(t, "prometheus", result.GetTriggerType())
+				} else {
+					assert.Equal(t, tt.triggerType, result.GetTriggerType())
+				}
 			}
 		})
 	}
@@ -76,7 +84,7 @@ func TestCPUTriggerUpdater_CreateNewTrigger(t *testing.T) {
 	assert.Equal(t, "cpu", trigger["type"])
 	assert.Equal(t, "Utilization", trigger["metricType"])
 
-	metadata, ok := trigger["metadata"].(map[string]string)
+	metadata, ok := trigger["metadata"].(map[string]interface{})
 	assert.True(t, ok)
 	assert.Equal(t, threshold, metadata["value"])
 }

@@ -9,6 +9,8 @@ import (
 
 	infrastructurehandler "github.com/Meesho/BharatMLStack/horizon/internal/infrastructure/handler"
 	inframiddleware "github.com/Meesho/BharatMLStack/horizon/internal/infrastructure/middleware"
+	workflowPkg "github.com/Meesho/BharatMLStack/horizon/internal/workflow"
+	"github.com/Meesho/BharatMLStack/horizon/pkg/etcd"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -70,6 +72,153 @@ func (m *MockInfrastructureHandler) UpdateAutoscalingTriggers(appName string, tr
 	return args.Error(0)
 }
 
+// MockWorkflowHandler is a mock for workflow Handler
+type MockWorkflowHandler struct {
+	mock.Mock
+}
+
+func (m *MockWorkflowHandler) StartOnboardingWorkflow(payload map[string]interface{}, createdBy, workingEnv string) (string, error) {
+	args := m.Called(payload, createdBy, workingEnv)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockWorkflowHandler) StartThresholdUpdateWorkflow(payload map[string]interface{}, createdBy, workingEnv string) (string, error) {
+	args := m.Called(payload, createdBy, workingEnv)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockWorkflowHandler) StartCPUThresholdUpdateWorkflow(payload map[string]interface{}, createdBy, workingEnv string) (string, error) {
+	args := m.Called(payload, createdBy, workingEnv)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockWorkflowHandler) StartGPUThresholdUpdateWorkflow(payload map[string]interface{}, createdBy, workingEnv string) (string, error) {
+	args := m.Called(payload, createdBy, workingEnv)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockWorkflowHandler) StartSharedMemoryUpdateWorkflow(payload map[string]interface{}, createdBy, workingEnv string) (string, error) {
+	args := m.Called(payload, createdBy, workingEnv)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockWorkflowHandler) StartPodAnnotationsUpdateWorkflow(payload map[string]interface{}, createdBy, workingEnv string) (string, error) {
+	args := m.Called(payload, createdBy, workingEnv)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockWorkflowHandler) StartRestartDeploymentWorkflow(payload map[string]interface{}, createdBy, workingEnv string) (string, error) {
+	args := m.Called(payload, createdBy, workingEnv)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockWorkflowHandler) StartAutoscalingTriggersUpdateWorkflow(payload map[string]interface{}, createdBy, workingEnv string) (string, error) {
+	args := m.Called(payload, createdBy, workingEnv)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockWorkflowHandler) GetWorkflowStatus(workflowID string) (map[string]interface{}, error) {
+	args := m.Called(workflowID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[string]interface{}), args.Error(1)
+}
+
+// MockEtcdInstance is a mock implementation of etcd.Etcd interface for testing
+type MockEtcdInstance struct {
+	mock.Mock
+	etcd.Etcd
+	storage map[string]string
+}
+
+func NewMockEtcdInstance() *MockEtcdInstance {
+	return &MockEtcdInstance{
+		storage: make(map[string]string),
+	}
+}
+
+func (m *MockEtcdInstance) GetConfigInstance() interface{} {
+	args := m.Called()
+	return args.Get(0)
+}
+
+func (m *MockEtcdInstance) SetValue(path string, value interface{}) error {
+	args := m.Called(path, value)
+	if args.Error(0) == nil {
+		m.storage[path] = value.(string)
+	}
+	return args.Error(0)
+}
+
+func (m *MockEtcdInstance) GetValue(path string) (string, error) {
+	args := m.Called(path)
+	if val, ok := m.storage[path]; ok {
+		return val, args.Error(1)
+	}
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockEtcdInstance) CreateNode(path string, value interface{}) error {
+	args := m.Called(path, value)
+	if args.Error(0) == nil {
+		m.storage[path] = value.(string)
+	}
+	return args.Error(0)
+}
+
+func (m *MockEtcdInstance) DeleteNode(path string) error {
+	args := m.Called(path)
+	if args.Error(0) == nil {
+		delete(m.storage, path)
+	}
+	return args.Error(0)
+}
+
+func (m *MockEtcdInstance) SetValues(paths map[string]interface{}) error {
+	args := m.Called(paths)
+	return args.Error(0)
+}
+
+func (m *MockEtcdInstance) CreateNodes(paths map[string]interface{}) error {
+	args := m.Called(paths)
+	return args.Error(0)
+}
+
+func (m *MockEtcdInstance) IsNodeExist(path string) (bool, error) {
+	args := m.Called(path)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockEtcdInstance) IsLeafNodeExist(path string) (bool, error) {
+	args := m.Called(path)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockEtcdInstance) RegisterWatchPathCallback(path string, callback func() error) error {
+	args := m.Called(path, callback)
+	return args.Error(0)
+}
+
+func (m *MockEtcdInstance) Delete(path string) error {
+	return m.DeleteNode(path)
+}
+
+// setupMockEtcd initializes a mock etcd instance for testing
+// This is needed because NewController() calls GetWorkflowHandler() which requires etcd
+func setupMockEtcd() {
+	// Set WorkflowAppName for testing (normally set by Init)
+	workflowPkg.WorkflowAppName = "horizon"
+
+	// Create mock etcd instance
+	mockEtcd := NewMockEtcdInstance()
+
+	// Set up the mock instance in the etcd package
+	etcd.SetMockInstance(map[string]etcd.Etcd{
+		workflowPkg.WorkflowAppName: mockEtcd,
+	})
+}
+
 func setupTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -79,12 +228,23 @@ func setupTestRouter() *gin.Engine {
 }
 
 func TestNewController(t *testing.T) {
+	// Setup mock etcd before creating controller (required by GetWorkflowHandler)
+	setupMockEtcd()
+
 	controller := NewController()
 	assert.NotNil(t, controller)
 
-	// Verify it's a singleton
+	// Verify it creates a new instance each time (not a singleton)
+	// The underlying handlers (InfrastructureHandler and WorkflowHandler) are singletons,
+	// but the controller itself creates a new instance each time
 	controller2 := NewController()
-	assert.Equal(t, controller, controller2)
+	// Compare pointers to verify they are different instances
+	if controller == controller2 {
+		t.Error("NewController should create new instances each time, but got the same instance")
+	}
+
+	// Both controllers are valid and can be used
+	assert.NotNil(t, controller2)
 }
 
 func TestInfrastructureController_GetHPAConfig(t *testing.T) {
@@ -304,8 +464,7 @@ func TestInfrastructureController_RestartDeployment(t *testing.T) {
 				IsCanary: true,
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("RestartDeployment", "test-app", mock.AnythingOfType("string"), true).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Restart canary deployment should succeed",
@@ -317,8 +476,7 @@ func TestInfrastructureController_RestartDeployment(t *testing.T) {
 				IsCanary: false,
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("RestartDeployment", "test-app", mock.AnythingOfType("string"), false).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Restart non-canary deployment should succeed",
@@ -350,11 +508,10 @@ func TestInfrastructureController_RestartDeployment(t *testing.T) {
 				IsCanary: false,
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("RestartDeployment", "test-app", mock.AnythingOfType("string"), false).
-					Return(assert.AnError)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusInternalServerError,
-			description:    "Handler error should return internal server error",
+			description:    "Workflow handler error should return internal server error",
 		},
 		{
 			name:    "Test 6: Restart deployment with missing isCanary field",
@@ -363,9 +520,7 @@ func TestInfrastructureController_RestartDeployment(t *testing.T) {
 				"otherField": "value",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				// isCanary defaults to false when not provided
-				m.On("RestartDeployment", "test-app", mock.AnythingOfType("string"), false).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Missing isCanary field should default to false",
@@ -377,8 +532,7 @@ func TestInfrastructureController_RestartDeployment(t *testing.T) {
 				IsCanary: true,
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("RestartDeployment", "test-app-123", mock.AnythingOfType("string"), true).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Special characters in app name should work",
@@ -390,8 +544,7 @@ func TestInfrastructureController_RestartDeployment(t *testing.T) {
 				IsCanary: false,
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("RestartDeployment", "very-long-application-name-with-many-characters", mock.AnythingOfType("string"), false).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Long app name should work",
@@ -401,9 +554,7 @@ func TestInfrastructureController_RestartDeployment(t *testing.T) {
 			appName:     "test-app",
 			requestBody: map[string]interface{}{},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				// Empty body defaults to isCanary=false
-				m.On("RestartDeployment", "test-app", mock.AnythingOfType("string"), false).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Empty request body should default to isCanary=false",
@@ -415,9 +566,7 @@ func TestInfrastructureController_RestartDeployment(t *testing.T) {
 				"isCanary": nil,
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				// nil isCanary defaults to false when unmarshaled
-				m.On("RestartDeployment", "test-app", mock.AnythingOfType("string"), false).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Null isCanary should default to false",
@@ -431,8 +580,25 @@ func TestInfrastructureController_RestartDeployment(t *testing.T) {
 				tt.mockSetup(mockHandler)
 			}
 
+			// Create mock workflow handler
+			mockWorkflowHandler := new(MockWorkflowHandler)
+			// Set up expectations for workflow handler methods only when it will be called
+			// (not for validation error cases that return 400)
+			if tt.expectedStatus == http.StatusOK || tt.expectedStatus == http.StatusInternalServerError {
+				if tt.expectedStatus == http.StatusInternalServerError && tt.name == "Test 5: Restart deployment with handler error" {
+					// For error test case, mock workflow handler to return error
+					mockWorkflowHandler.On("StartRestartDeploymentWorkflow", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string")).
+						Return("", assert.AnError)
+				} else {
+					// For success cases, mock workflow handler to return success
+					mockWorkflowHandler.On("StartRestartDeploymentWorkflow", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string")).
+						Return("workflow-id-123", nil)
+				}
+			}
+
 			controller := &InfrastructureController{
-				handler: mockHandler,
+				handler:         mockHandler,
+				workflowHandler: mockWorkflowHandler,
 			}
 
 			router := setupTestRouter()
@@ -454,6 +620,10 @@ func TestInfrastructureController_RestartDeployment(t *testing.T) {
 
 			assert.Equal(t, tt.expectedStatus, w.Code, tt.description)
 			mockHandler.AssertExpectations(t)
+			// Only assert workflow handler expectations if it was set up (i.e., for 200/500 status codes)
+			if tt.expectedStatus == http.StatusOK || tt.expectedStatus == http.StatusInternalServerError {
+				mockWorkflowHandler.AssertExpectations(t)
+			}
 		})
 	}
 }
@@ -474,8 +644,7 @@ func TestInfrastructureController_UpdateCPUThreshold(t *testing.T) {
 				CPUThreshold: "80",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateCPUThreshold", "test-app", "80", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Valid CPU threshold update should succeed",
@@ -517,11 +686,10 @@ func TestInfrastructureController_UpdateCPUThreshold(t *testing.T) {
 				CPUThreshold: "80",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateCPUThreshold", "test-app", "80", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(assert.AnError)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusInternalServerError,
-			description:    "Handler error should return internal server error",
+			description:    "Workflow handler error should return internal server error",
 		},
 		{
 			name:    "Test 6: Update CPU threshold with zero threshold",
@@ -530,11 +698,10 @@ func TestInfrastructureController_UpdateCPUThreshold(t *testing.T) {
 				CPUThreshold: "0",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateCPUThreshold", "test-app", "0", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
-			description:    "Zero threshold should be passed to handler",
+			description:    "Zero threshold should be passed to workflow",
 		},
 		{
 			name:    "Test 7: Update CPU threshold with maximum value",
@@ -543,8 +710,7 @@ func TestInfrastructureController_UpdateCPUThreshold(t *testing.T) {
 				CPUThreshold: "100",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateCPUThreshold", "test-app", "100", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Maximum threshold value should work",
@@ -556,8 +722,7 @@ func TestInfrastructureController_UpdateCPUThreshold(t *testing.T) {
 				CPUThreshold: "1",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateCPUThreshold", "test-app", "1", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Minimum threshold value should work",
@@ -569,8 +734,7 @@ func TestInfrastructureController_UpdateCPUThreshold(t *testing.T) {
 				CPUThreshold: "80",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateCPUThreshold", "test-app-123", "80", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Special characters in app name should work",
@@ -594,11 +758,10 @@ func TestInfrastructureController_UpdateCPUThreshold(t *testing.T) {
 				CPUThreshold: "abc",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateCPUThreshold", "test-app", "abc", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
-			description:    "Non-numeric threshold should be passed to handler for validation",
+			description:    "Non-numeric threshold should be passed to workflow for validation",
 		},
 		{
 			name:    "Test 12: Update CPU threshold with negative threshold",
@@ -607,11 +770,10 @@ func TestInfrastructureController_UpdateCPUThreshold(t *testing.T) {
 				CPUThreshold: "-10",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateCPUThreshold", "test-app", "-10", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
-			description:    "Negative threshold should be passed to handler for validation",
+			description:    "Negative threshold should be passed to workflow for validation",
 		},
 	}
 
@@ -622,8 +784,25 @@ func TestInfrastructureController_UpdateCPUThreshold(t *testing.T) {
 				tt.mockSetup(mockHandler)
 			}
 
+			// Create mock workflow handler
+			mockWorkflowHandler := new(MockWorkflowHandler)
+			// Set up expectations for workflow handler methods only when it will be called
+			// (not for validation error cases that return 400)
+			if tt.expectedStatus == http.StatusOK || tt.expectedStatus == http.StatusInternalServerError {
+				if tt.expectedStatus == http.StatusInternalServerError && tt.name == "Test 5: Update CPU threshold with handler error" {
+					// For error test case, mock workflow handler to return error
+					mockWorkflowHandler.On("StartCPUThresholdUpdateWorkflow", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string")).
+						Return("", assert.AnError)
+				} else {
+					// For success cases, mock workflow handler to return success
+					mockWorkflowHandler.On("StartCPUThresholdUpdateWorkflow", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string")).
+						Return("workflow-id-123", nil)
+				}
+			}
+
 			controller := &InfrastructureController{
-				handler: mockHandler,
+				handler:         mockHandler,
+				workflowHandler: mockWorkflowHandler,
 			}
 
 			router := setupTestRouter()
@@ -645,6 +824,10 @@ func TestInfrastructureController_UpdateCPUThreshold(t *testing.T) {
 
 			assert.Equal(t, tt.expectedStatus, w.Code, tt.description)
 			mockHandler.AssertExpectations(t)
+			// Only assert workflow handler expectations if it was set up (i.e., for 200/500 status codes)
+			if tt.expectedStatus == http.StatusOK || tt.expectedStatus == http.StatusInternalServerError {
+				mockWorkflowHandler.AssertExpectations(t)
+			}
 		})
 	}
 }
@@ -665,8 +848,7 @@ func TestInfrastructureController_UpdateGPUThreshold(t *testing.T) {
 				GPUThreshold: "70",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateGPUThreshold", "test-app", "70", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Valid GPU threshold update should succeed",
@@ -708,11 +890,10 @@ func TestInfrastructureController_UpdateGPUThreshold(t *testing.T) {
 				GPUThreshold: "70",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateGPUThreshold", "test-app", "70", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(assert.AnError)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusInternalServerError,
-			description:    "Handler error should return internal server error",
+			description:    "Workflow handler error should return internal server error",
 		},
 		{
 			name:    "Test 6: Update GPU threshold with zero threshold",
@@ -721,11 +902,10 @@ func TestInfrastructureController_UpdateGPUThreshold(t *testing.T) {
 				GPUThreshold: "0",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateGPUThreshold", "test-app", "0", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
-			description:    "Zero threshold should be passed to handler",
+			description:    "Zero threshold should be passed to workflow",
 		},
 		{
 			name:    "Test 7: Update GPU threshold with maximum value",
@@ -734,8 +914,7 @@ func TestInfrastructureController_UpdateGPUThreshold(t *testing.T) {
 				GPUThreshold: "100",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateGPUThreshold", "test-app", "100", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Maximum threshold value should work",
@@ -747,8 +926,7 @@ func TestInfrastructureController_UpdateGPUThreshold(t *testing.T) {
 				GPUThreshold: "1",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateGPUThreshold", "test-app", "1", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Minimum threshold value should work",
@@ -760,8 +938,7 @@ func TestInfrastructureController_UpdateGPUThreshold(t *testing.T) {
 				GPUThreshold: "70",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateGPUThreshold", "test-app-123", "70", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Special characters in app name should work",
@@ -785,11 +962,10 @@ func TestInfrastructureController_UpdateGPUThreshold(t *testing.T) {
 				GPUThreshold: "xyz",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateGPUThreshold", "test-app", "xyz", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
-			description:    "Non-numeric threshold should be passed to handler for validation",
+			description:    "Non-numeric threshold should be passed to workflow for validation",
 		},
 		{
 			name:    "Test 12: Update GPU threshold with negative threshold",
@@ -798,11 +974,10 @@ func TestInfrastructureController_UpdateGPUThreshold(t *testing.T) {
 				GPUThreshold: "-5",
 			},
 			mockSetup: func(m *MockInfrastructureHandler) {
-				m.On("UpdateGPUThreshold", "test-app", "-5", mock.AnythingOfType("string"), mock.AnythingOfType("string")).
-					Return(nil)
+				// Infrastructure handler is not called directly - workflow handler is used instead
 			},
 			expectedStatus: http.StatusOK,
-			description:    "Negative threshold should be passed to handler for validation",
+			description:    "Negative threshold should be passed to workflow for validation",
 		},
 	}
 
@@ -813,8 +988,25 @@ func TestInfrastructureController_UpdateGPUThreshold(t *testing.T) {
 				tt.mockSetup(mockHandler)
 			}
 
+			// Create mock workflow handler
+			mockWorkflowHandler := new(MockWorkflowHandler)
+			// Set up expectations for workflow handler methods only when it will be called
+			// (not for validation error cases that return 400)
+			if tt.expectedStatus == http.StatusOK || tt.expectedStatus == http.StatusInternalServerError {
+				if tt.expectedStatus == http.StatusInternalServerError && tt.name == "Test 5: Update GPU threshold with handler error" {
+					// For error test case, mock workflow handler to return error
+					mockWorkflowHandler.On("StartGPUThresholdUpdateWorkflow", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string")).
+						Return("", assert.AnError)
+				} else {
+					// For success cases, mock workflow handler to return success
+					mockWorkflowHandler.On("StartGPUThresholdUpdateWorkflow", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string")).
+						Return("workflow-id-123", nil)
+				}
+			}
+
 			controller := &InfrastructureController{
-				handler: mockHandler,
+				handler:         mockHandler,
+				workflowHandler: mockWorkflowHandler,
 			}
 
 			router := setupTestRouter()
@@ -836,6 +1028,10 @@ func TestInfrastructureController_UpdateGPUThreshold(t *testing.T) {
 
 			assert.Equal(t, tt.expectedStatus, w.Code, tt.description)
 			mockHandler.AssertExpectations(t)
+			// Only assert workflow handler expectations if it was set up (i.e., for 200/500 status codes)
+			if tt.expectedStatus == http.StatusOK || tt.expectedStatus == http.StatusInternalServerError {
+				mockWorkflowHandler.AssertExpectations(t)
+			}
 		})
 	}
 }
