@@ -221,7 +221,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Window sizes optimization for better throughput
         .initial_stream_window_size(Some(1024 * 1024 * 200)) // 2MB (default: 65,535 bytes)
         .initial_connection_window_size(Some(1024 * 1024 * 400)) // 4MB (default: 65,535 bytes)
-        .concurrency_limit(2000)
+        .concurrency_limit(4000)
         .connect()
         .await?;
     
