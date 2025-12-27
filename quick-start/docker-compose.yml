@@ -328,8 +328,7 @@ services:
       - "8082:8082"
     environment:
       - APP_NAME=horizon
-      - APP_ENVIRONMENT=PROD
-      - APP_ENV=production
+      - APP_ENV=PROD
       - APP_PORT=8082
       - APP_LOG_LEVEL=DEBUG
       - APP_METRIC_SAMPLING_RATE=1
@@ -351,6 +350,7 @@ services:
       - ETCD_WATCHER_ENABLED=true
       - ETCD_SERVER=etcd:2379
       - ONLINE_FEATURE_STORE_APP_NAME=onfs
+      - REDIS_FAILOVER_ACTIVE_CONFIG_IDS=4
       - SCYLLA_1_CONTACT_POINTS=scylla
       - SCYLLA_1_KEYSPACE=onfs
       - SCYLLA_1_NUM_CONNS=1
@@ -361,6 +361,34 @@ services:
       - SCYLLA_ACTIVE_CONFIG_IDS=1
       - DISTRIBUTED_CACHE_ACTIVE_CONFIG_IDS=2
       - IN_MEMORY_CACHE_ACTIVE_CONFIG_IDS=3
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+      - HORIZON_APP_NAME=horizon
+      - NUMERIX_APP_NAME=numerix
+      - INFERFLOW_APP_NAME=inferflow
+      - IS_DUMMY_MODEL_ENABLED=true
+      - ARGOCD_API=http://host.docker.internal:8087
+      - ARGOCD_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhcmdvY2QiLCJzdWIiOiJhZG1pbjphcGlLZXkiLCJuYmYiOjE3NjY3NzA1OTksImlhdCI6MTc2Njc3MDU5OSwianRpIjoiZDEyN2FlZDAtOTRhYi00Mzc0LWI2NzUtMzBkYWQ5YWY2MDk4In0.n5AoP6QUDTyygbR5ASAhnCzimxMOwjHZvMrRpq7bB2g
+      - ARGOCD_NAMESPACE=argocd
+      - ARGOCD_DESTINATION_NAME=in-cluster
+      - ARGOCD_PROJECT=default
+      - ARGOCD_HELMCHART_PATH=1.0.0
+      - ARGOCD_SYNC_POLICY_OPTIONS=CreateNamespace=true
+      - ARGOCD_INSECURE=true
+      - SUPPORTED_ENVIRONMENTS=prd,stg,int
+      - WORKING_ENV=prd
+      - SERVICE_CONFIG_SOURCE=local
+      - SERVICE_CONFIG_REPO=<REPO_NAME>
+      - SERVICE_CONFIG_PATH=/app/configs
+      - REPOSITORY_NAME=onboarding-test
+      - BRANCH_NAME=main
+      - GITHUB_APP_ID=<APP_NAME>
+      - GITHUB_INSTALLATION_ID=<INSTALLATION_ID>
+      - GITHUB_PRIVATE_KEY_PATH=/app/configs/github.pem
+      - GITHUB_OWNER=<OWNER_NAME>
+      - GITHUB_COMMIT_AUTHOR=<COMMIT_AUTHOR>
+      - GITHUB_COMMIT_EMAIL=<COMMIT_EMAIL>
+    volumes:
+      - ./configs:/app/configs:ro
     networks:
       - onfs-network
     depends_on:

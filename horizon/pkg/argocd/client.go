@@ -2,16 +2,17 @@ package argocd
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
-
 
 type ArgoCDConfig struct {
 	API   string
@@ -32,7 +33,7 @@ func getArgoCDAPI(workingEnv string) string {
 	// Example: "gcp_stg" -> "GCP_STG_ARGOCD_API", "gcp_int" -> "GCP_INT_ARGOCD_API"
 	envSpecificKey := GetArgoCDConfigKey(workingEnv, "ARGOCD_API")
 	api := viper.GetString(envSpecificKey)
-	
+
 	if api != "" {
 		log.Debug().
 			Str("workingEnv", workingEnv).
@@ -40,7 +41,7 @@ func getArgoCDAPI(workingEnv string) string {
 			Msg("Using environment-specific ArgoCD API")
 		return api
 	}
-	
+
 	// Fallback to default ArgoCD API if environment-specific not set
 	api = viper.GetString("ARGOCD_API")
 	if api != "" {
@@ -89,7 +90,7 @@ func getArgoCDClient(api string, reqBody []byte, method string, workingEnv strin
 	}
 
 	var argocdApi string
-	if strings.HasPrefix(api, "https://") {
+	if strings.HasPrefix(api, "https://") || strings.HasPrefix(api, "http://") {
 		argocdApi = api
 	} else {
 		// Try environment-specific first, then fallback to default
@@ -130,7 +131,7 @@ func getArgoCDClient(api string, reqBody []byte, method string, workingEnv strin
 
 func makeArgoCDCall(req *http.Request) ([]byte, error) {
 	log.Info().Msg("Entered makeArgoCDCall")
-	client := &http.Client{}
+	client := getHTTPClient()
 
 	response, err := client.Do(req)
 	if err != nil {
@@ -157,3 +158,17 @@ func makeArgoCDCall(req *http.Request) ([]byte, error) {
 	return body, nil
 }
 
+func getHTTPClient() *http.Client {
+	transport := &http.Transport{}
+	isTlsDisabled := viper.GetBool("ARGOCD_INSECURE")
+	if isTlsDisabled {
+		transport.TLSClientConfig = &tls.Config{
+			InsecureSkipVerify: true, // #nosec G402
+		}
+	}
+
+	return &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Second,
+	}
+}

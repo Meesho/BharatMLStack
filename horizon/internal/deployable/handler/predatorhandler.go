@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -529,12 +530,14 @@ func (h *Handler) CreateDeployable(request *DeployableRequest, workingEnv string
 		Str("workingEnv", workingEnv).
 		Msg("CreateDeployable: Using unique database entry name and host per environment")
 
+	if serviceConfig.AppPort != 0 {
+		host = host + ":" + strconv.Itoa(serviceConfig.AppPort)
+	}
 	deployableConfig := &servicedeployableconfig.ServiceDeployableConfig{
 		Name:                    dbEntryName, // Use environment-prefixed name for database uniqueness
 		Service:                 request.ServiceName,
 		Host:                    host, // Use environment-prefixed host for database uniqueness
 		Active:                  true,
-		Port:                    serviceConfig.AppPort, // Set port from service_config
 		CreatedBy:               request.CreatedBy,
 		Config:                  configJSON,
 		DeployableRunningStatus: false,
@@ -549,7 +552,6 @@ func (h *Handler) CreateDeployable(request *DeployableRequest, workingEnv string
 		Str("appName", request.AppName).
 		Str("host", deployableConfig.Host).
 		Str("service", deployableConfig.Service).
-		Int("port", deployableConfig.Port).
 		Msg("CreateDeployable: Creating deployable entry in database")
 
 	if err := h.repo.Create(deployableConfig); err != nil {

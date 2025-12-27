@@ -12,76 +12,76 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
   USE testdb;
   
   CREATE TABLE entity (
-    request_id int NOT NULL AUTO_INCREMENT,
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
     payload text NOT NULL,
     entity_label varchar(255) NOT NULL,
     created_by varchar(255) NOT NULL,
     approved_by varchar(255) NOT NULL,
     status varchar(255) NOT NULL,
-    created_at datetime DEFAULT CURRENT_TIMESTAMP,
-    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    request_type varchar(255) NOT NULL,
     service varchar(255) NOT NULL,
     reject_reason varchar(255) NOT NULL,
-    request_type varchar(255) DEFAULT NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (request_id)
   );
   
   CREATE TABLE feature_group (
-    request_id int NOT NULL AUTO_INCREMENT,
-    payload text NOT NULL,
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
     entity_label varchar(255) NOT NULL,
     feature_group_label varchar(255) NOT NULL,
+    payload json NOT NULL,
     created_by varchar(255) NOT NULL,
     approved_by varchar(255) NOT NULL,
     status varchar(255) NOT NULL,
-    created_at datetime DEFAULT CURRENT_TIMESTAMP,
-    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    request_type varchar(255) NOT NULL,
     service varchar(255) NOT NULL,
     reject_reason varchar(255) NOT NULL,
-    request_type varchar(255) DEFAULT NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (request_id)
   );
   
   CREATE TABLE features (
-    request_id int NOT NULL AUTO_INCREMENT,
-    payload text NOT NULL,
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
     entity_label varchar(255) NOT NULL,
     feature_group_label varchar(255) NOT NULL,
+    payload json NOT NULL,
     created_by varchar(255) NOT NULL,
     approved_by varchar(255) NOT NULL,
     status varchar(255) NOT NULL,
-    created_at datetime DEFAULT CURRENT_TIMESTAMP,
-    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    request_type varchar(255) DEFAULT NULL,
+    request_type varchar(255) NOT NULL,
     service varchar(255) NOT NULL,
     reject_reason varchar(255) NOT NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (request_id)
   );
   
   CREATE TABLE job (
-    request_id int NOT NULL AUTO_INCREMENT,
-    payload text NOT NULL,
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
     job_id varchar(255) NOT NULL,
+    payload text NOT NULL,
     created_by varchar(255) NOT NULL,
     approved_by varchar(255) NOT NULL,
     status varchar(255) NOT NULL,
-    created_at datetime DEFAULT CURRENT_TIMESTAMP,
-    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     service varchar(255) NOT NULL,
     reject_reason varchar(255) NOT NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (request_id)
   );
   
   CREATE TABLE store (
-    request_id int NOT NULL AUTO_INCREMENT,
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
     payload text NOT NULL,
     created_by varchar(255) NOT NULL,
     approved_by varchar(255) NOT NULL,
     status varchar(255) NOT NULL,
-    created_at datetime DEFAULT CURRENT_TIMESTAMP,
-    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     service varchar(255) NOT NULL,
     reject_reason varchar(255) NOT NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (request_id)
   );
   
@@ -111,6 +111,336 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     UNIQUE KEY id (id),
     UNIQUE KEY token (token)
   );
+  
+  CREATE TABLE api_resolvers (
+    id int unsigned NOT NULL AUTO_INCREMENT,
+    method varchar(255) NOT NULL,
+    api_path varchar(255) NOT NULL,
+    resolver_fn varchar(255) NOT NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+  );
+  
+  CREATE TABLE application_config (
+    app_token varchar(255) NOT NULL,
+    bu varchar(255) NOT NULL,
+    team varchar(255) NOT NULL,
+    service varchar(255) NOT NULL,
+    active boolean NOT NULL,
+    created_by varchar(255) NOT NULL,
+    updated_by varchar(255),
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (app_token)
+  );
+  
+  CREATE TABLE circuit_breakers (
+    id int NOT NULL,
+    name varchar(255) NOT NULL,
+    enabled boolean DEFAULT true,
+    slow_call_rate_threshold int,
+    failure_rate_threshold int,
+    sliding_window_type varchar(255) NOT NULL,
+    sliding_window_size int NOT NULL,
+    minimum_no_of_calls int,
+    auto_transition_open_to_half boolean DEFAULT true,
+    max_wait_half_open_state int,
+    wait_open_state int,
+    slow_call_duration int,
+    permitted_calls_half_open int,
+    bh_name int,
+    bh_core_pool_size int,
+    bh_max_pool_size int,
+    bh_queue_size int,
+    bh_fallback_core_size int,
+    bh_keep_alive_ms int,
+    created_by varchar(255),
+    updated_by varchar(255),
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY name (name),
+    UNIQUE KEY bh_name (bh_name)
+  );
+  
+  CREATE TABLE service_connection_config (
+    id int unsigned NOT NULL AUTO_INCREMENT,
+    \`default\` boolean NOT NULL,
+    service varchar(255) NOT NULL,
+    conn_protocol varchar(255) NOT NULL,
+    http_config json NOT NULL,
+    grpc_config json NOT NULL,
+    active boolean NOT NULL,
+    created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_by varchar(255) NOT NULL,
+    updated_by varchar(255),
+    PRIMARY KEY (id)
+  );
+  
+  CREATE TABLE group_id_counter (
+    id bigint NOT NULL AUTO_INCREMENT,
+    counter bigint NOT NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+  );
+  
+  CREATE TABLE deployable_metadata (
+    id int NOT NULL,
+    \`key\` varchar(255) NOT NULL,
+    value varchar(255) NOT NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    active boolean DEFAULT true,
+    PRIMARY KEY (id)
+  );
+  
+  CREATE TABLE discovery_config (
+    id int NOT NULL AUTO_INCREMENT,
+    app_token varchar(255),
+    service_deployable_id int,
+    circuit_breaker_id int,
+    service_connection_id int,
+    route_service_connection_id int,
+    route_service_deployable_id int,
+    route_percent int,
+    active boolean DEFAULT true,
+    default_response varchar(5000),
+    default_response_percent int,
+    default_response_enabled_forCB boolean DEFAULT false,
+    created_by varchar(255),
+    updated_by varchar(255),
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+  );
+  
+  CREATE TABLE inferflow_config (
+    id int unsigned NOT NULL AUTO_INCREMENT,
+    discovery_id int NOT NULL,
+    config_id varchar(255) NOT NULL,
+    config_value json NOT NULL,
+    default_response json,
+    created_by varchar(255) NOT NULL,
+    updated_by varchar(255),
+    active boolean NOT NULL,
+    created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    test_results json,
+    PRIMARY KEY (id),
+    UNIQUE KEY config_id (config_id)
+  );
+  
+  CREATE TABLE inferflow_request (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    config_id varchar(255) NOT NULL,
+    payload json NOT NULL,
+    created_by varchar(255) NOT NULL,
+    version int NOT NULL DEFAULT 1,
+    updated_by varchar(255),
+    reviewer varchar(255),
+    status varchar(255) NOT NULL,
+    request_type varchar(255) NOT NULL,
+    reject_reason varchar(255),
+    active boolean NOT NULL,
+    created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE numerix_binary_ops (
+    id int unsigned NOT NULL AUTO_INCREMENT,
+    operator varchar(255) NOT NULL,
+    precedence int unsigned NOT NULL,
+    created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+  );
+  
+  CREATE TABLE numerix_config (
+    id int unsigned NOT NULL AUTO_INCREMENT,
+    config_id int unsigned NOT NULL,
+    config_value json NOT NULL,
+    created_by varchar(255) NOT NULL,
+    updated_by varchar(255),
+    active boolean NOT NULL,
+    created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    test_results json,
+    PRIMARY KEY (id),
+    UNIQUE KEY config_id (config_id)
+  );
+  
+  CREATE TABLE numerix_request (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    config_id int unsigned NOT NULL,
+    created_by varchar(255) NOT NULL,
+    updated_by varchar(255),
+    reviewer varchar(255) NOT NULL,
+    status varchar(255) NOT NULL,
+    request_type varchar(255) NOT NULL,
+    reject_reason varchar(255),
+    payload json NOT NULL,
+    created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE numerix_unary_ops (
+    id int unsigned NOT NULL AUTO_INCREMENT,
+    operator varchar(255) NOT NULL,
+    parameters int unsigned NOT NULL,
+    created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+  );
+  
+  CREATE TABLE predator_config (
+    id int NOT NULL AUTO_INCREMENT,
+    discovery_config_id int NOT NULL,
+    model_name varchar(255) NOT NULL,
+    meta_data json,
+    active boolean DEFAULT true,
+    created_by varchar(255),
+    updated_by varchar(255),
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    test_results json,
+    has_nil_data boolean DEFAULT false,
+    PRIMARY KEY (id)
+  );
+  
+  CREATE TABLE predator_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    group_id int unsigned NOT NULL,
+    model_name varchar(255) NOT NULL,
+    payload json NOT NULL,
+    created_by varchar(255) NOT NULL,
+    updated_by varchar(255),
+    reviewer varchar(255),
+    request_stage enum('Clone To Bucket','Restart Deployable','DB Population','Pending','Request Payload Error') DEFAULT 'Pending',
+    request_type enum('Onboard','ScaleUp','Promote','Delete','Edit') NOT NULL,
+    status enum('Pending Approval','Approved','Rejected','Cancelled','Failed','In Progress','') DEFAULT 'Pending Approval',
+    active boolean DEFAULT true,
+    reject_reason varchar(255),
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_valid boolean DEFAULT false,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE role_permission (
+    id int unsigned NOT NULL AUTO_INCREMENT,
+    role varchar(255) NOT NULL,
+    service varchar(255) NOT NULL,
+    screen_type varchar(255) NOT NULL,
+    module varchar(255) NOT NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+  );
+  
+  CREATE TABLE schedule_job (
+    entry_date date NOT NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (entry_date)
+  );
+  
+  CREATE TABLE service_config (
+    id int NOT NULL,
+    service_name varchar(255) NOT NULL,
+    primary_owner varchar(255),
+    secondary_owner varchar(255),
+    repo_name varchar(255),
+    branch_name varchar(255),
+    health_check varchar(255),
+    app_port int,
+    team varchar(255),
+    bu varchar(255),
+    priority_v2 varchar(255),
+    module varchar(255),
+    app_type varchar(255),
+    ingress_class varchar(255),
+    build_no varchar(255),
+    config json,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+  );
+  
+  CREATE TABLE service_deployable_config (
+    id int NOT NULL AUTO_INCREMENT,
+    name varchar(255),
+    host varchar(255) NOT NULL,
+    service enum('inferflow', 'predator', 'numerix'),
+    active boolean DEFAULT false,
+    created_by varchar(255),
+    updated_by varchar(255),
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    config json,
+    monitoring_url varchar(255) DEFAULT NULL,
+    deployable_running_status boolean,
+    deployable_work_flow_id varchar(255),
+    deployment_run_id varchar(255),
+    deployable_health enum('DEPLOYMENT_REASON_ARGO_APP_HEALTH_DEGRADED', 'DEPLOYMENT_REASON_ARGO_APP_HEALTHY'),
+    work_flow_status enum('WORKFLOW_COMPLETED','WORKFLOW_NOT_FOUND','WORKFLOW_RUNNING','WORKFLOW_FAILED','WORKFLOW_NOT_STARTED'),
+    PRIMARY KEY (id),
+    UNIQUE KEY host (host)
+  );
+  
+  CREATE TABLE validation_jobs (
+    id int unsigned NOT NULL AUTO_INCREMENT,
+    group_id varchar(255) NOT NULL,
+    lock_id int unsigned NOT NULL,
+    test_deployable_id int NOT NULL,
+    service_name varchar(255) NOT NULL,
+    status varchar(50) NOT NULL,
+    validation_result boolean DEFAULT NULL,
+    error_message text,
+    restarted_at datetime DEFAULT NULL,
+    last_health_check datetime DEFAULT NULL,
+    health_check_count int DEFAULT 0,
+    max_health_checks int DEFAULT 10,
+    health_check_interval int DEFAULT 30,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_group_id (group_id),
+    KEY idx_lock_id (lock_id),
+    KEY idx_status (status)
+  );
+  
+  CREATE TABLE validation_locks (
+    id int unsigned NOT NULL AUTO_INCREMENT,
+    lock_key varchar(255) NOT NULL,
+    locked_by varchar(255) NOT NULL,
+    locked_at datetime NOT NULL,
+    expires_at datetime NOT NULL,
+    group_id varchar(255),
+    description text,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY lock_key (lock_key),
+    KEY idx_expires_at (expires_at)
+  );
+"
+
+echo "  📦 Inserting deployable metadata..."
+mysql -hmysql -uroot -proot --skip-ssl testdb -e "
+  INSERT INTO deployable_metadata (id,\`key\`, value, active, created_at, updated_at) VALUES
+    (1, 'node_selectors', 'mlp-g2-standard-8', 1, NOW(), NOW()),
+    (2, 'node_selectors', 'mlp-cpu-standard-8', 1, NOW(), NOW()),
+    (3, 'gcs_base_path', 'gs://dummy-model-repo-int', 1, NOW(), NOW()),
+    (4, 'gcs_base_path', 'gs://gcs-dsci-model-repository-prd', 1, NOW(), NOW()),
+    (5, 'triton_image_tags', 'tritonserver-25.01', 1, NOW(), NOW()),
+    (6, 'triton_image_tags', 'gpu-py-ensem-trt-onnx-pytorch-fil-ensem-cache-met-v2.48.0', 1, NOW(), NOW()),
+    (7, 'gcs_triton_path', 'gs://gcs-dsci-model-repository-prd/scripts/launch_triton_server.py', 1, NOW(), NOW()),
+    (8, 'service_account', 'sa-dsci-model-inference-servic@meesho-datascience-prd-0622.iam.gserviceaccount.com', 1, NOW(), NOW());
 "
 
 # Create default admin user
@@ -119,8 +449,9 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   INSERT INTO users (first_name, last_name, email, password_hash, role, is_active) 
   VALUES ('admin', 'admin', 'admin@admin.com', '\$2a\$10\$kYoMds9IsbvPNhJasKHO7.fTSosfbPhSAf7ElNQJ9pIa0iWBOt97e', 'admin', true);
 
-  INSERT INTO group_id_counter (id, counter, created_at, updated_at) 
-  VALUES (1, 1, NOW(), NOW());
+  # INSERT INTO group_id_counter (id, counter, created_at, updated_at) 
+  # VALUES (1, 1, NOW(), NOW());
+  
 
   INSERT INTO service_deployable_config (
     id, name, host, service, active, created_by, updated_by,
@@ -501,81 +832,6 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   ('admin', 'application', 'connection-config', 'view'),
   ('admin', 'application', 'connection-config', 'edit'),
   ('admin', 'application', 'connection-config', 'onboard');
-"
-
-echo "Adding services into service_deployable_config table..."
-mysql -hmysql -uroot -proot --skip-ssl testdb -e "
-  INSERT INTO group_id_counter (id, counter, created_at, updated_at) 
-  VALUES (1, 1, NOW(), NOW());
-
-  INSERT INTO service_deployable_config (
-    id, name, host, service, active, created_by, updated_by,
-    created_at, updated_at, config, monitoring_url, deployable_running_status,
-    deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
-  ) VALUES (
-      59,
-      'predator-search-ct-gpu',
-      'predator-search-ct-gpu.prd.int',
-      'predator',
-      1,
-      'admin@admin.com',
-      '',
-      '2025-09-01 15:03:14',
-      '2025-09-01 15:31:31',
-      '{\"cpuLimit\":\"7000\",\"gpu_limit\":\"1\",\"cpuRequest\":\"6500\",\"gpu_request\":\"1\",\"max_replica\":\"300\",\"memoryLimit\":\"15\",\"min_replica\":\"2\",\"cpuLimitUnit\":\"m\",\"machine_type\":\"GPU\",\"cpu_threshold\":\"70\",\"gpu_threshold\":\"60\",\"memoryRequest\":\"13\",\"cpuRequestUnit\":\"m\",\"serviceAccount\":\"sa-dsci-predator-datascience-prd-0622.iam.gserviceaccount.com\",\"gcs_bucket_path\":\"gs://gcs-dsci-model-repository-prd/predator/ranking/search-ct-gpu/*\",\"gcs_triton_path\":\"gs://gcs-dsci-model-repository-prd/scripts/launch_triton_server.py\",\"memoryLimitUnit\":\"G\",\"triton_image_tag\":\"gpu-py-ensem-trt-onnx-pytorch-fil-ensem-cache-met-v2.48.0\",\"memoryRequestUnit\":\"G\",\"nodeSelectorValue\":\"mlp-g2-standard-8\",\"deploymentStrategy\":\"rollingUpdate\"}',
-      'https://grafana-prd.gcp.in/d/a2605923-52c4-4834-bdae-97570966b765/predator?orgId=1&var-service=predator-search-ct-gpu&var-query0=',
-      1,
-      'gcp_prd-predator-search-ct-gpu-mlp-deployment-workflow-01 Sep 2025 15:05:57.698922063',
-      '9829a49e-616d-4d4b-a8c8-c5ac8de9c090',
-      'DEPLOYMENT_REASON_ARGO_APP_HEALTHY',
-      'WORKFLOW_COMPLETED'
-  );
-
-  INSERT INTO service_deployable_config (
-    id, name, host, service, active, created_by, updated_by,
-    created_at, updated_at, config, monitoring_url, deployable_running_status,
-    deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
-  ) VALUES (
-      3019,
-      'inferflow',
-      'inferflow:8085',
-      'inferflow',
-      1,
-      'admin@admin.com',
-      NULL,
-      '2025-10-24 16:57:45',
-      '2025-11-17 16:04:29',
-      '{\"cpuLimit\":\"4000\",\"gpu_limit\":\"\",\"cpuRequest\":\"3500\",\"gpu_request\":\"\",\"max_replica\":\"100\",\"memoryLimit\":\"8\",\"min_replica\":\"2\",\"cpuLimitUnit\":\"m\",\"memoryRequest\":\"6\",\"cpuRequestUnit\":\"m\",\"memoryLimitUnit\":\"G\",\"memoryRequestUnit\":\"G\"}',
-      'https://grafana-prd.example.com/d/dQ1Gux-Vk/inferflow-service?orgId=1&refresh=60s&var-service=inferflow-service-search-ct&from=now-6h&to=now',
-      1,
-      NULL,
-      NULL,
-      'DEPLOYMENT_REASON_ARGO_APP_HEALTHY',
-      'WORKFLOW_COMPLETED'
-  );
-
-  INSERT INTO service_deployable_config (
-    id, name, host, service, active, created_by, updated_by,
-    created_at, updated_at, config, monitoring_url, deployable_running_status,
-    deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
-  ) VALUES (
-      1,
-      'numerix',
-      'numerix:8083',
-      'numerix',
-      1,
-      'admin@admin.com',
-      NULL,
-      '2025-11-28 10:00:00',
-      '2025-11-28 10:00:00',
-      '{\"cpuLimit\": \"3500\", \"gpu_limit\": \"\", \"cpuRequest\": \"2500\", \"gpu_request\": \"0\", \"max_replica\": \"20\", \"memoryLimit\": \"500\", \"min_replica\": \"2\", \"cpuLimitUnit\": \"m\", \"machine_type\": \"CPU\", \"cpu_threshold\": \"70\", \"gpu_threshold\": \"\", \"memoryRequest\": \"200\", \"cpuRequestUnit\": \"m\", \"serviceAccount\": \"\", \"gcs_bucket_path\": \"\", \"memoryLimitUnit\": \"M\", \"triton_image_tag\": \"\", \"memoryRequestUnit\": \"M\", \"nodeSelectorValue\": \"rust-onboard\"}',
-      NULL,
-      NULL,
-      NULL,
-      NULL,
-      'DEPLOYMENT_REASON_ARGO_APP_HEALTHY',
-      'WORKFLOW_COMPLETED'
-  );
 "
 
 # Verify initialization

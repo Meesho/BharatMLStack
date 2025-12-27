@@ -12,6 +12,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/servicedeployableconfig"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -93,7 +94,7 @@ func (d *V1) CreateDeployable(ctx *gin.Context) {
 		Int("environmentsCount", len(request.Environments)).
 		Str("queryWorkingEnv", ctx.Query("workingEnv")).
 		Msg("CreateDeployable: Request received")
-	
+
 	// Log each environment in the request for debugging
 	if len(request.Environments) > 0 {
 		for i, env := range request.Environments {
@@ -140,8 +141,8 @@ func (d *V1) CreateDeployable(ctx *gin.Context) {
 		Str("appName", request.AppName).
 		Int("environmentsCount", len(request.Environments)).
 		Msg("CreateDeployable: No environments array detected, using legacy single-environment flow")
-	
-	workingEnv := ctx.Query("workingEnv")
+
+	workingEnv := viper.GetString("WORKING_ENV")
 	if workingEnv == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"error": "workingEnv query parameter is required when environments array is not provided",
@@ -149,7 +150,7 @@ func (d *V1) CreateDeployable(ctx *gin.Context) {
 		})
 		return
 	}
-	
+
 	log.Info().
 		Str("appName", request.AppName).
 		Str("workingEnv", workingEnv).

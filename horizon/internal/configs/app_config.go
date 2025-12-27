@@ -74,7 +74,7 @@ type Configs struct {
 
 	PhoenixServerBaseUrl string `mapstructure:"phoenix_server_base_url"`
 
-	PredatorMonitoringUrl string `mapstructure:"predator_monitoring_url"`
+	PredatorMonitoringUrl   string `mapstructure:"predator_monitoring_url"`
 	ScheduledCronExpression string `mapstructure:"scheduled_cron_expression"`
 
 	TestDeployableID    int `mapstructure:"test_deployable_id"`

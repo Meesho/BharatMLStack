@@ -82,6 +82,67 @@ validate_service() {
     echo "💡 Run './restart.sh --list' to see available services"
     exit 1
   fi
+  
+  # Warn if trying to restart infrastructure services (they should rarely need restarting)
+  local infrastructure_services="scylla mysql redis etcd kafka db-init kafka-init"
+  if echo "$infrastructure_services" | grep -q "\b${service_name}\b"; then
+    echo "⚠️  Warning: You are restarting an infrastructure service: $service_name"
+    echo "   Infrastructure services (databases, caches) should rarely be restarted"
+    echo "   as this may cause data loss or service disruption."
+    echo ""
+    read -p "   Are you sure you want to continue? (yes/no): " confirm
+    if [ "$confirm" != "yes" ]; then
+      echo "   Restart cancelled."
+      exit 0
+    fi
+  fi
+}
+
+update_docker_compose() {
+  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  
+  echo "   📋 Copying latest docker-compose.yml to workspace..."
+  
+  # Ensure workspace directory exists
+  if [ ! -d "$WORKSPACE_DIR" ]; then
+    mkdir -p "$WORKSPACE_DIR"
+  fi
+  
+  # Copy the latest docker-compose.yml from quick-start directory
+  if [ -f "$script_dir/docker-compose.yml" ]; then
+    cp "$script_dir/docker-compose.yml" "$WORKSPACE_DIR/"
+    echo "   ✅ Updated docker-compose.yml in workspace"
+  else
+    echo "   ⚠️  Warning: docker-compose.yml not found in $script_dir"
+    echo "   Using existing docker-compose.yml in workspace"
+  fi
+  
+  # Also copy db-init and predator-dummy directories if they exist
+  if [ -d "$script_dir/db-init" ]; then
+    if [ -d "$WORKSPACE_DIR/db-init" ]; then
+      rm -rf "$WORKSPACE_DIR/db-init"
+    fi
+    cp -r "$script_dir/db-init" "$WORKSPACE_DIR/"
+  fi
+  
+  if [ -d "$script_dir/predator-dummy" ]; then
+    if [ -d "$WORKSPACE_DIR/predator-dummy" ]; then
+      rm -rf "$WORKSPACE_DIR/predator-dummy"
+    fi
+    cp -r "$script_dir/predator-dummy" "$WORKSPACE_DIR/"
+  fi
+  
+  # Copy horizon configs directory for service config loading
+  local project_root="$(cd "$script_dir/.." && pwd)"
+  if [ -d "$project_root/horizon/configs" ]; then
+    if [ -d "$WORKSPACE_DIR/configs" ]; then
+      rm -rf "$WORKSPACE_DIR/configs"
+    fi
+    cp -r "$project_root/horizon/configs" "$WORKSPACE_DIR/"
+    echo "   ✅ Updated configs directory in workspace"
+  else
+    echo "   ⚠️  Warning: horizon/configs directory not found at $project_root/horizon/configs"
+  fi
 }
 
 restart_service() {
@@ -89,6 +150,9 @@ restart_service() {
   
   echo "🔄 Restarting service: $service_name"
   echo ""
+  
+  # Update docker-compose.yml and related files from quick-start directory
+  update_docker_compose
   
   # Check if container is running
   if docker ps --format "{{.Names}}" | grep -q "^${service_name}$"; then
@@ -107,8 +171,9 @@ restart_service() {
   (cd "$WORKSPACE_DIR" && docker-compose pull "$service_name" 2>/dev/null || true)
   
   # Start the service with latest configuration
+  # Use --no-deps to prevent restarting infrastructure services (redis, etcd, scylla, mysql, db-init)
   echo "   🚀 Starting service with latest configuration..."
-  (cd "$WORKSPACE_DIR" && docker-compose up -d "$service_name")
+  (cd "$WORKSPACE_DIR" && docker-compose up -d --no-deps "$service_name")
   
   echo ""
   echo "✅ Service '$service_name' restarted successfully!"

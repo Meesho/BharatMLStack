@@ -82,7 +82,6 @@ func UpdateDeploymentYaml(payload map[string]interface{}, workingEnv string) err
 }
 
 // CreateApplicationYaml creates the ArgoCD application YAML
-// This corresponds to RingMaster's CreateApplicationYamlActivity
 // Note: This is a simplified implementation. Full implementation would require
 // reading deployment.yaml from GitHub and constructing all bindings
 func CreateApplicationYaml(payload map[string]interface{}, workingEnv string) error {
@@ -664,15 +663,13 @@ func CreateValuesYaml(payload map[string]interface{}, workingEnv string) error {
 		Msg("CreateValuesYaml: Using triton_repository from config.yaml")
 
 	// init_container_image is required if gcs_triton_path is enabled
-	initContainerImage := getString(payload, "init_container_image")
-	if gcsTritonPath, ok := payload["gcs_triton_path"].(bool); ok && gcsTritonPath {
-		if initContainerImage == "" {
-			return fmt.Errorf("init_container_image is required in config.yaml for service %s in environment %s when gcs_triton_path is enabled", appName, workingEnv)
-		}
+	// initContainerImage := getString(payload, "init_container_image")
+	gcsTritonPath := getString(payload, "gcs_triton_path")
+	if gcsTritonPath != "" {
 		log.Info().
 			Str("appName", appName).
-			Str("init_container_image", initContainerImage).
-			Msg("CreateValuesYaml: Using init_container_image from config.yaml (gcs_triton_path enabled)")
+			Str("gcs_triton_path", gcsTritonPath).
+			Msg("CreateValuesYaml: Using gcs_triton_path from config.yaml (gcs_triton_path enabled)")
 	}
 	payload["environment_norm"] = envConfig["env_norm"]
 	payload["env_ns"] = configEnv
@@ -1244,11 +1241,14 @@ func IamBinding(payload map[string]interface{}, workingEnv string) error {
 	// Get GCP project ID from environment config
 	projectID := gcp.GetGCPProjectID(workingEnv)
 	if projectID == "" {
-		log.Error().
+		log.Warn().
 			Str("appName", appName).
 			Str("workingEnv", workingEnv).
-			Msg("IamBinding: GCP project ID not configured - cannot bind service account")
-		return fmt.Errorf("GCP project ID not configured for environment %s - set %s_GCP_PROJECT_ID or GCP_PROJECT_ID", workingEnv, strings.ToUpper(workingEnv))
+			Str("serviceAccount", serviceAccount).
+			Msg("IamBinding: GCP project ID not configured - skipping workload identity binding (not needed for local Kubernetes)")
+		// Skip IamBinding gracefully for local Kubernetes setups where GCP workload identity is not required
+		// This allows the workflow to continue without GCP configuration
+		return nil
 	}
 
 	// Get Kubernetes namespace: {env}-{appName}

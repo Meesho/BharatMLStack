@@ -88,6 +88,19 @@ setup_workspace() {
   fi
   cp -r ./predator-dummy "$WORKSPACE_DIR"/
   
+  # Copy horizon configs directory for service config loading
+  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local project_root="$(cd "$script_dir/.." && pwd)"
+  if [ -d "$project_root/horizon/configs" ]; then
+    if [ -d "$WORKSPACE_DIR/configs" ]; then
+      rm -rf "$WORKSPACE_DIR/configs"
+    fi
+    cp -r "$project_root/horizon/configs" "$WORKSPACE_DIR"/
+    echo "   ✅ Copied horizon configs to workspace"
+  else
+    echo "   ⚠️  Warning: horizon/configs directory not found at $project_root/horizon/configs"
+  fi
+  
   echo "✅ Workspace setup complete"
 }
 
@@ -245,6 +258,7 @@ if start_trufflebox == 'true' and trufflebox_version == 'local':
 
 # Inferflow
 if start_inferflow == 'true' and inferflow_version == 'local':
+    # Match inferflow service definition with image line (same pattern as other services)
     pattern = r'(  inferflow:\s*\n)\s+(image:.*\n)'
     replacement = r'\1    build:\n      context: ./inferflow\n      dockerfile: cmd/inferflow/Dockerfile\n    # \2'
     content = re.sub(pattern, replacement, content)
@@ -265,7 +279,11 @@ if start_numerix == 'true' and numerix_version == 'local' and 'build:' in conten
 if start_trufflebox == 'true' and trufflebox_version == 'local' and 'build:' in content and 'trufflebox-ui:' in content:
     changes_made = True
 if start_inferflow == 'true' and inferflow_version == 'local' and 'build:' in content and 'inferflow:' in content:
-    changes_made = True
+    # Check if the replacement actually happened by looking for the build context
+    if './inferflow' in content:
+        changes_made = True
+    else:
+        sys.stderr.write("Warning: inferflow build context not found after replacement\n")
 
 if not changes_made and (start_onfs == 'true' or start_onfs_consumer == 'true' or start_horizon == 'true' or 
                          start_numerix == 'true' or start_trufflebox == 'true' or start_inferflow == 'true'):
@@ -392,9 +410,6 @@ custom_selection() {
     START_PREDATOR=true
     echo "✅ Added: Predator"
   fi
-  
-  echo ""
-  echo "🔧 Optional Infrastructure:"
   
   
   echo ""
@@ -818,7 +833,11 @@ if [[ "$START_ONFS" == false && "$START_ONFS_CONSUMER" == false && "$START_HORIZ
 fi
 
 # Setup local builds AFTER service selection (so START_* flags are set)
-if [[ "$ENABLE_LOCAL_BUILD" = true ]]; then
+# Check if any version is set to "local" or if ENABLE_LOCAL_BUILD is true
+if [[ "$ENABLE_LOCAL_BUILD" = true || \
+      "$ONFS_VERSION" == "local" || "$ONFS_CONSUMER_VERSION" == "local" || \
+      "$HORIZON_VERSION" == "local" || "$NUMERIX_VERSION" == "local" || \
+      "$TRUFFLEBOX_VERSION" == "local" || "$INFERFLOW_VERSION" == "local" ]]; then
   setup_local_builds
 fi
 
