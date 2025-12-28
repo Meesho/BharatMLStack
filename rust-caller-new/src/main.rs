@@ -254,8 +254,8 @@ async fn retrieve_features_handler(
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Configure Tokio runtime explicitly for high performance
     // This ensures optimal CPU utilization
+    // Note: Not setting worker_threads uses all available CPU cores by default
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(0) // 0 = use all available CPU cores
         .enable_all()
         .build()?;
     
