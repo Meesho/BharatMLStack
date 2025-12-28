@@ -1,18 +1,25 @@
-use axum::{extract::State, http::StatusCode, response::Json, routing::post, Router};
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::{body::Incoming as IncomingBody, Method, Request, Response, StatusCode};
+use hyper_util::rt::TokioIo;
+use std::convert::Infallible;
 use std::sync::Arc;
-// use std::sync::mpsc;  // Commented out - pprof related
 use std::time::Duration;
-// use tokio::sync::oneshot;  // Commented out - pprof related
+use tokio::net::TcpListener;
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
+use http_body_util::Full;
+use hyper::body::Bytes;
 
-// Configure jemalloc with profiling enabled
-#[cfg(not(target_env = "msvc"))]
-#[global_allocator]
-static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+// Configure jemalloc - DISABLED profiling for production performance
+// Profiling adds significant overhead (~5-10% CPU)
+// Uncomment below for profiling, but expect lower RPS
+// #[cfg(not(target_env = "msvc"))]
+// #[global_allocator]
+// static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-#[allow(non_upper_case_globals)]
-#[export_name = "malloc_conf"]
-pub static malloc_conf: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0";
+// #[allow(non_upper_case_globals)]
+// #[export_name = "malloc_conf"]
+// pub static malloc_conf: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0";
 
 pub mod retrieve {
     tonic::include_proto!("retrieve");
@@ -146,10 +153,48 @@ async fn get_pprof_heap() -> Result<impl IntoResponse, (StatusCode, String)> {
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?)
 } */
 
-async fn retrieve_features(
-    State(state): State<Arc<AppState>>,
-    Json(request_body): Json<RetrieveFeaturesRequest>,
-) -> Result<Json<String>, StatusCode> {
+async fn retrieve_features_handler(
+    req: Request<IncomingBody>,
+    state: Arc<AppState>,
+) -> Result<Response<Full<Bytes>>, Infallible> {
+    // Only handle POST requests
+    if req.method() != Method::POST {
+        return Ok(Response::builder()
+            .status(StatusCode::METHOD_NOT_ALLOWED)
+            .body(Full::new(Bytes::from("Method not allowed")))
+            .unwrap());
+    }
+
+    // Only handle /retrieve-features endpoint
+    if req.uri().path() != "/retrieve-features" {
+        return Ok(Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Full::new(Bytes::from("Not found")))
+            .unwrap());
+    }
+
+    // Read request body
+    let body_bytes = match http_body_util::BodyExt::collect(req.into_body()).await {
+        Ok(collected) => collected.to_bytes(),
+        Err(_) => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Full::new(Bytes::from("Failed to read request body")))
+                .unwrap());
+        }
+    };
+
+    // Parse JSON request body
+    let request_body: RetrieveFeaturesRequest = match serde_json::from_slice(&body_bytes) {
+        Ok(body) => body,
+        Err(e) => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Full::new(Bytes::from(format!("Invalid JSON: {}", e))))
+                .unwrap());
+        }
+    };
+
     // Convert request body to protobuf Query
     let mut feature_groups = Vec::new();
     for fg in request_body.feature_groups {
@@ -171,21 +216,15 @@ async fn retrieve_features(
         keys,
     };
 
-    let mut request = tonic::Request::new(query);
+    let mut grpc_request = tonic::Request::new(query);
     // Increased timeout to 10s to handle high load scenarios without premature timeouts
-    request.set_timeout(Duration::from_secs(10));
-    request.metadata_mut().insert("online-feature-store-auth-token", state.auth_token.clone());
-    request.metadata_mut().insert("online-feature-store-caller-id", state.caller_id.clone());
+    grpc_request.set_timeout(Duration::from_secs(10));
+    grpc_request.metadata_mut().insert("online-feature-store-auth-token", state.auth_token.clone());
+    grpc_request.metadata_mut().insert("online-feature-store-caller-id", state.caller_id.clone());
 
-    // Using single connection - limited to ~100 concurrent streams (HTTP/2 protocol limit)
-    // For higher throughput, connection pooling is recommended
-    let client = state.client.clone();
-
-    // OPTIMIZATION: Drop response immediately after checking success to reduce cleanup overhead
-    // Based on flamegraph analysis: ~13-15% CPU was spent on drop_in_place for unused protobuf objects
-    // (drop_in_place<Result>, drop_in_place<Response>, drop_in_place<Vec<Row>>, etc.)
-    // By dropping explicitly in a smaller scope, we reduce the cleanup cost and memory pressure
-    let result = client.clone().retrieve_features(request).await;
+    // OPTIMIZATION: Clone client once (tonic clients are cheap handles, but avoid double cloning)
+    // Tonic client methods require ownership, so we clone once here
+    let result = state.client.clone().retrieve_features(grpc_request).await;
     
     match result {
         Ok(response) => {
@@ -194,21 +233,39 @@ async fn retrieve_features(
             // The response contains large protobuf structures (Vec<Row>, Feature, etc.) that are expensive to clean up
             // Since we don't use the response, dropping it immediately reduces memory pressure
             drop(response);
-            Ok(Json(SUCCESS_RESPONSE.to_string()))
+            
+            // Create JSON response
+            let json_response = format!("\"{}\"", SUCCESS_RESPONSE);
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "application/json")
+                .body(Full::new(Bytes::from(json_response)))
+                .unwrap())
         }
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Err(_) => {
+            Ok(Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Full::new(Bytes::from("\"error\"")))
+                .unwrap())
+        }
     }
 }
 
-#[tokio::main(flavor = "multi_thread")]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Configure Tokio runtime for high performance
-    // worker_threads = 0 means use all available CPU cores
-    // This allows better CPU utilization for high RPS scenarios
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Configure Tokio runtime explicitly for high performance
+    // This ensures optimal CPU utilization
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(0) // 0 = use all available CPU cores
+        .enable_all()
+        .build()?;
     
+    rt.block_on(async_main())
+}
+
+async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Connecting to feature store version 4...");
 
-    // Single gRPC connection
+    // Single gRPC connection with optimizations enabled
     // NOTE: HTTP/2 has a hard limit of ~100 concurrent streams per connection
     // This limits throughput to ~1,000-1,500 RPS depending on latency
     // For higher throughput, consider using connection pooling
@@ -218,10 +275,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .http2_keep_alive_interval(Duration::from_secs(30))
         .keep_alive_timeout(Duration::from_secs(10))
         .keep_alive_while_idle(true)
-        // Window sizes optimization for better throughput
-        // .initial_stream_window_size(Some(1024 * 1024 * 200)) // 2MB (default: 65,535 bytes)
-        // .initial_connection_window_size(Some(1024 * 1024 * 400)) // 4MB (default: 65,535 bytes)
-        // .concurrency_limit(4000)
+        // Window sizes optimization for better throughput - ENABLED
+        .initial_stream_window_size(1024 * 1024 * 2) // 2MB (default: 65,535 bytes)
+        .initial_connection_window_size(1024 * 1024 * 4) // 4MB (default: 65,535 bytes)
+        .concurrency_limit(4000) // Allow up to 4000 concurrent requests
         .connect()
         .await?;
     
@@ -323,37 +380,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(not(target_env = "msvc"))]
     println!("  - GET /pprof/heap - Download heap/memory pprof data (use with: go tool pprof http://localhost:8080/pprof/heap)"); */
 
-    let app = Router::new()
-        .route("/retrieve-features", post(retrieve_features));
-        // Pprof routes commented out
-        // .route("/pprof/protobuf", get(get_pprof_protobuf))
-        // .route("/pprof/flamegraph", get(get_flamegraph))
-        // .route("/pprof/text", get(get_pprof_text));
-    
-    // #[cfg(not(target_env = "msvc"))]
-    // {
-    //     app = app.route("/pprof/heap", get(get_pprof_heap));
-    // }
-    
-    let app = app.with_state(state);
-
     // Configure TCP listener
-    // Axum/Tokio handle TCP settings efficiently by default
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
+    // Hyper/Tokio handle TCP settings efficiently by default
+    let listener = TcpListener::bind("0.0.0.0:8080").await?;
     
     println!("Server listening on 0.0.0.0:8080");
     println!("Configured for high performance:");
     println!("  - Single gRPC connection (limited to ~100 concurrent streams)");
     println!("  - Tokio runtime using all CPU cores");
-    println!("  - HTTP/2 window sizes optimized for throughput");
-    println!("  - concurrency_limit: 2000 (client-side protection)");
+    println!("  - HTTP/2 window sizes optimized: 2MB stream, 4MB connection");
+    println!("  - concurrency_limit: 4000 (client-side protection)");
+    println!("  - Using raw Hyper for maximum performance");
     
-    // Profiling continues while server runs - COMMENTED OUT
-    // When server exits, guard is dropped and profiling stops
-    // Axum 0.7 uses axum::serve which handles high concurrency efficiently
-    axum::serve(listener, app).await?;
-
-    Ok(())
+    // Accept connections in a loop
+    loop {
+        match listener.accept().await {
+            Ok((stream, _)) => {
+                let io = TokioIo::new(stream);
+                let state_clone = state.clone();
+                
+                // Spawn a task to handle each connection
+                tokio::task::spawn(async move {
+                    let service = service_fn(move |req| {
+                        let state = state_clone.clone();
+                        retrieve_features_handler(req, state)
+                    });
+                    
+                    // Use HTTP/1.1 connection
+                    if let Err(err) = http1::Builder::new()
+                        .serve_connection(io, service)
+                        .await
+                    {
+                        eprintln!("Error serving connection: {:?}", err);
+                    }
+                });
+            }
+            Err(e) => {
+                eprintln!("Error accepting connection: {:?}", e);
+            }
+        }
+    }
 }
 
 
