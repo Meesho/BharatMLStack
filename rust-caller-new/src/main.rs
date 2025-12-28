@@ -255,8 +255,13 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     
     let client = RetrieveClient::new(channel);
-    println!("Created single gRPC connection");
     
+
+
+
+
+
+
     // Start profiling - guard must be kept alive for profiling to continue - COMMENTED OUT
     // Higher frequency = more samples = better resolution
     // blocklist excludes low-level libraries to focus on application code
