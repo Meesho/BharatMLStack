@@ -29,8 +29,6 @@ use retrieve::feature_service_client::FeatureServiceClient as RetrieveClient;
 use retrieve::{FeatureGroup, Keys};
 use serde::Deserialize;
 
-// Constants to avoid repeated string allocations
-const SUCCESS_RESPONSE: &str = "success";
 
 // Request body structure for retrieve_features endpoint
 #[derive(Debug, Deserialize)]
