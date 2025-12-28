@@ -371,22 +371,23 @@ services:
       - ARGOCD_NAMESPACE=argocd
       - ARGOCD_DESTINATION_NAME=in-cluster
       - ARGOCD_PROJECT=default
-      - ARGOCD_HELMCHART_PATH=1.0.0
+      - ARGOCD_HELMCHART_PATH=predator/1.0.0
       - ARGOCD_SYNC_POLICY_OPTIONS=CreateNamespace=true
       - ARGOCD_INSECURE=true
+      - LOCAL_MODEL_PATH=/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/horizon/configs/models/
       - SUPPORTED_ENVIRONMENTS=prd,stg,int
       - WORKING_ENV=prd
       - SERVICE_CONFIG_SOURCE=local
-      - SERVICE_CONFIG_REPO=<REPO_NAME>
+      - SERVICE_CONFIG_REPO=BharatMLStack-configs
       - SERVICE_CONFIG_PATH=/app/configs
       - REPOSITORY_NAME=onboarding-test
       - BRANCH_NAME=main
-      - GITHUB_APP_ID=<APP_NAME>
-      - GITHUB_INSTALLATION_ID=<INSTALLATION_ID>
+      - GITHUB_APP_ID=2546855
+      - GITHUB_INSTALLATION_ID=101432634
       - GITHUB_PRIVATE_KEY_PATH=/app/configs/github.pem
-      - GITHUB_OWNER=<OWNER_NAME>
-      - GITHUB_COMMIT_AUTHOR=<COMMIT_AUTHOR>
-      - GITHUB_COMMIT_EMAIL=<COMMIT_EMAIL>
+      - GITHUB_OWNER=Adit2607
+      - GITHUB_COMMIT_AUTHOR=horizon-bot
+      - GITHUB_COMMIT_EMAIL=aditya.garg@meesho.com
     volumes:
       - ./configs:/app/configs:ro
     networks:

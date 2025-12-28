@@ -433,14 +433,11 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
 echo "  📦 Inserting deployable metadata..."
 mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   INSERT INTO deployable_metadata (id,\`key\`, value, active, created_at, updated_at) VALUES
-    (1, 'node_selectors', 'mlp-g2-standard-8', 1, NOW(), NOW()),
-    (2, 'node_selectors', 'mlp-cpu-standard-8', 1, NOW(), NOW()),
-    (3, 'gcs_base_path', 'gs://dummy-model-repo-int', 1, NOW(), NOW()),
-    (4, 'gcs_base_path', 'gs://gcs-dsci-model-repository-prd', 1, NOW(), NOW()),
-    (5, 'triton_image_tags', 'tritonserver-25.01', 1, NOW(), NOW()),
-    (6, 'triton_image_tags', 'gpu-py-ensem-trt-onnx-pytorch-fil-ensem-cache-met-v2.48.0', 1, NOW(), NOW()),
-    (7, 'gcs_triton_path', 'gs://gcs-dsci-model-repository-prd/scripts/launch_triton_server.py', 1, NOW(), NOW()),
-    (8, 'service_account', 'sa-dsci-model-inference-servic@meesho-datascience-prd-0622.iam.gserviceaccount.com', 1, NOW(), NOW());
+    (1, 'node_selectors', 'bharatml-stack-control-plane', 1, NOW(), NOW()),
+    (3, 'gcs_base_path', 'NA', 1, NOW(), NOW()),
+    (6, 'triton_image_tags', '25.06-py3-min', 1, NOW(), NOW()),
+    (7, 'gcs_triton_path', 'NA', 1, NOW(), NOW()),
+    (8, 'service_account', 'NA', 1, NOW(), NOW());
 "
 
 # Create default admin user

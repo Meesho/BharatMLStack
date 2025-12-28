@@ -30,11 +30,13 @@ This guide will walk you through setting up Predator for local development, incl
 
 ## Step 1: Set Up Local ArgoCD
 
-### 1.0 Install Flagger CRDs (Required for AlertProvider)
+### 1.0 Install Required CRDs and PriorityClass
 
-The `AlertProvider` resource in the Predator Helm chart requires Flagger CRDs to be installed in your Kubernetes cluster. ArgoCD can deploy `AlertProvider` resources, but the CRD must exist in the cluster first.
+The Predator Helm chart uses several Custom Resource Definitions (CRDs) and a PriorityClass that must be installed in your Kubernetes cluster before ArgoCD can deploy resources.
 
-#### Install Flagger CRDs
+#### Install Flagger CRDs (Required for AlertProvider)
+
+The `AlertProvider` resource in the Predator Helm chart requires Flagger CRDs to be installed. ArgoCD can deploy `AlertProvider` resources, but the CRD must exist in the cluster first.
 
 ```bash
 # Install Flagger CRDs
@@ -49,7 +51,51 @@ You should see CRDs like:
 - `canaries.flagger.app`
 - `metrictemplates.flagger.app`
 
-**Note:** Once the CRDs are installed, ArgoCD will successfully deploy `AlertProvider` resources when syncing your application.
+#### Install KEDA CRDs (Required for ScaledObject)
+
+The `ScaledObject` resource requires KEDA CRDs to be installed. This is used for autoscaling based on custom metrics.
+
+```bash
+# Install KEDA CRDs
+kubectl apply -f https://github.com/kedacore/keda/releases/download/v2.12.0/keda-2.12.0.yaml
+
+# Or install only CRDs (lighter weight)
+kubectl apply -f https://raw.githubusercontent.com/kedacore/keda/v2.12.0/config/crd/bases/keda.sh_scaledobjects.yaml
+kubectl apply -f https://raw.githubusercontent.com/kedacore/keda/v2.12.0/config/crd/bases/keda.sh_scaledjobs.yaml
+kubectl apply -f https://raw.githubusercontent.com/kedacore/keda/v2.12.0/config/crd/bases/keda.sh_triggerauthentications.yaml
+
+# Verify installation
+kubectl get crd | grep keda
+```
+
+You should see CRDs like:
+- `scaledobjects.keda.sh`
+- `scaledjobs.keda.sh`
+- `triggerauthentications.keda.sh`
+
+#### Install PriorityClass (Required for Pod Scheduling)
+
+The Helm chart uses `priorityClassName: high-priority` for pod scheduling. You need to create this PriorityClass in your cluster.
+
+```bash
+# Create PriorityClass for high-priority pods
+kubectl apply -f - <<EOF
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-priority
+value: 1000
+globalDefault: false
+description: "High priority class for application pods"
+EOF
+
+# Verify installation
+kubectl get priorityclass high-priority
+```
+
+**Note:** PriorityClass is a cluster-scoped resource, so you only need to create it once per cluster. Once created, ArgoCD will successfully deploy pods with this priority class.
+
+**Note:** Once the CRDs and PriorityClass are installed, ArgoCD will successfully deploy these resources when syncing your application.
 
 ### 1.1 Install ArgoCD in Your Local Kubernetes Cluster
 
@@ -104,6 +150,32 @@ argocd login localhost:8087 --insecure
 # Generate token
 argocd account generate-token
 ```
+
+### 1.5 Create ArgoCD Application (Alternative to Manual Creation)
+
+If you prefer to create the ArgoCD Application via CLI instead of through the UI, you can use:
+
+```bash
+argocd app create prd-test \
+  --repo https://github.com/<REPO_OWNER>/<REPO_NAME>.git \
+  --revision main \
+  --path 1.0.0 \
+  --dest-server https://kubernetes.default.svc \
+  --dest-namespace prd-test \
+  --values ../prd/deployables/test/values.yaml \
+  --sync-policy automated \
+  --self-heal \
+  --auto-prune \
+  --sync-option CreateNamespace=true
+```
+
+**Note:** Replace:
+- `prd-test` with your application name (`{env}-{appName}`)
+- `<REPO_OWNER>/<REPO_NAME>` with your GitHub repository
+- `test` with your actual app name in the values path
+- `1.0.0` with your Helm chart path
+
+**Important:** The `--values` path should be relative to the repository root. The path `prd/deployables/test/values.yaml` means the file is at the root of your repo under `prd/deployables/test/values.yaml`.
 
 ---
 
@@ -286,6 +358,13 @@ horizon:
     - ARGOCD_SYNC_POLICY_OPTIONS=CreateNamespace=true
     - ARGOCD_INSECURE=true
     
+    # Local Development: Model Path (only used when GCS fields are "NA")
+    # IMPORTANT: This must be an absolute path accessible from your Kubernetes node
+    # - Docker Desktop: Use /Users/... paths (e.g., /Users/adityakumargarg/models)
+    # - kind/minikube: Path must exist on the VM/node
+    # - This path will be mounted as hostPath volume in the pod
+    - LOCAL_MODEL_PATH=/Users/adityakumargarg/models  # Update to your actual model directory path
+    
     # GitHub Configuration
     - REPOSITORY_NAME=onboarding-test  # Your repository name
     - BRANCH_NAME=main  # Your default branch
@@ -428,12 +507,160 @@ The Kubernetes API could not find flagger.app/AlertProvider for requested resour
   ```
 - Once CRDs are installed, ArgoCD will automatically deploy `AlertProvider` resources when syncing
 
+### Issue: Missing KEDA CRD Error
+
+**Error Message:**
+```
+The Kubernetes API could not find keda.sh/ScaledObject for requested resource prd-test/prd-test.
+```
+
+**Solution:**
+- Install KEDA CRDs (see Step 1.0):
+  ```bash
+  # Install KEDA CRDs (full installation)
+  kubectl apply -f https://github.com/kedacore/keda/releases/download/v2.12.0/keda-2.12.0.yaml
+  
+  # Or install only CRDs (lighter weight, recommended)
+  kubectl apply -f https://raw.githubusercontent.com/kedacore/keda/v2.12.0/config/crd/bases/keda.sh_scaledobjects.yaml
+  kubectl apply -f https://raw.githubusercontent.com/kedacore/keda/v2.12.0/config/crd/bases/keda.sh_scaledjobs.yaml
+  kubectl apply -f https://raw.githubusercontent.com/kedacore/keda/v2.12.0/config/crd/bases/keda.sh_triggerauthentications.yaml
+  ```
+- Verify installation:
+  ```bash
+  kubectl get crd | grep keda
+  ```
+- Once CRDs are installed, ArgoCD will successfully deploy `ScaledObject` resources when syncing
+
+### Issue: PriorityClass Not Found Error
+
+**Error Message:**
+```
+pods "prd-test-57ff5ffd59-" is forbidden: no PriorityClass with name high-priority was found
+```
+
+**Solution:**
+- Create the PriorityClass (see Step 1.0):
+  ```bash
+  kubectl apply -f - <<EOF
+  apiVersion: scheduling.k8s.io/v1
+  kind: PriorityClass
+  metadata:
+    name: high-priority
+  value: 1000
+  globalDefault: false
+  description: "High priority class for application pods"
+  EOF
+  ```
+- Verify installation:
+  ```bash
+  kubectl get priorityclass high-priority
+  ```
+- Once created, ArgoCD will successfully deploy pods with this priority class
+- **Note:** PriorityClass is cluster-scoped, so you only need to create it once per cluster
+
+### Issue: Node Affinity/Selector Not Matching
+
+**Error Message:**
+```
+0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector.
+no new claims to deallocate, preemption: 0/1 nodes are available: 
+1 Preemption is not helpful for scheduling.
+```
+
+**Solution:**
+
+The Helm chart uses `nodeSelector: dedicated: <value>` to schedule pods on specific nodes. The node label must match the nodeSelector value in your values.yaml.
+
+**Step 1: Check what the pod is requesting:**
+```bash
+kubectl get pod -n <namespace> -o jsonpath='{.items[0].spec.nodeSelector}'
+```
+
+**Step 2: Check current node labels:**
+```bash
+kubectl get nodes --show-labels | grep dedicated
+```
+
+**Step 3: Update the node label to match:**
+```bash
+# Get your node name
+NODE_NAME=$(kubectl get nodes -o name | head -1 | sed 's|node/||')
+
+# Update the label to match your nodeSelector value
+# Replace <your-nodeSelector-value> with the value from your values.yaml
+kubectl label node $NODE_NAME dedicated=<your-nodeSelector-value> --overwrite
+
+# Verify the label
+kubectl get nodes --show-labels | grep dedicated
+```
+
+**Example:**
+If your values.yaml has `nodeSelectorValue: "bharatml-stack-control-plane"`, then:
+```bash
+NODE_NAME=$(kubectl get nodes -o name | head -1 | sed 's|node/||')
+kubectl label node $NODE_NAME dedicated=bharatml-stack-control-plane --overwrite
+```
+
+**Alternative: Remove nodeSelector for local development**
+
+If you want to remove nodeSelector requirements for local development, edit your `prd/deployables/{appName}/values.yaml` in GitHub:
+```yaml
+nodeSelectorValue: ""  # Empty value will prevent nodeSelector from being applied
+```
+Then sync the ArgoCD application to pick up the change.
+
+**Note:** Labeling the node to match your nodeSelector is recommended as it matches production behavior without modifying Helm values.
+
 ### Issue: ArgoCD Token Expired
 
 **Solution:**
 - Generate a new token from ArgoCD UI (User Info → Generate New Token)
 - Update `ARGOCD_TOKEN` in docker-compose.yml
 - Restart Horizon service: `./restart.sh horizon`
+
+### Issue: Config File Not Found Error
+
+**Error Message:**
+```
+config.yaml not found for environment 'prd' and service 'predator' 
+(expected: configs/services/predator/prd/config.yaml): 
+failed to read service config file at /app/configs/services/predator/prd/config.yaml
+```
+
+**Solution:**
+
+The `start.sh` script automatically copies `horizon/configs` to `workspace/configs` during setup. If you see this error:
+
+1. **Verify config file exists in source:**
+   ```bash
+   ls -la horizon/configs/services/predator/prd/config.yaml
+   ```
+
+2. **Verify configs were copied to workspace:**
+   ```bash
+   ls -la quick-start/workspace/configs/services/predator/prd/config.yaml
+   ```
+
+3. **If configs are missing in workspace, re-run start.sh:**
+   ```bash
+   cd quick-start
+   ./start.sh
+   ```
+   The `start.sh` script will copy the configs directory automatically.
+
+4. **Check volume mount in docker-compose.yml:**
+   - Should have: `- ./configs:/app/configs:ro` (relative to workspace directory)
+   - And: `SERVICE_CONFIG_PATH=/app/configs`
+
+5. **If still not working, manually copy configs:**
+   ```bash
+   cd quick-start
+   cp -r ../horizon/configs workspace/
+   cd workspace
+   docker-compose restart horizon
+   ```
+
+**Note:** The `start.sh` script automatically copies `horizon/configs` to `workspace/configs` during initial setup. If you see this error, it usually means the workspace wasn't set up properly or the configs weren't copied.
 
 ### Issue: Private Key Not Found
 

@@ -10,6 +10,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/Meesho/BharatMLStack/horizon/internal/workflow/activities"
 	workflowHandler "github.com/Meesho/BharatMLStack/horizon/internal/workflow/handler"
+	"github.com/spf13/viper"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/serviceconfig"
@@ -679,6 +680,33 @@ func (h *Handler) CreateDeployable(request *DeployableRequest, workingEnv string
 	workflowPayload["nodeSelectorValue"] = request.NodeSelectorValue
 	workflowPayload["deploymentStrategy"] = request.DeploymentStrategy
 	workflowPayload["gcs_triton_path"] = request.GCSTritonPath
+
+	// Check if GCS fields are "NA" or empty, if so use localModelPath from config.yaml
+	gcsBucketPath := strings.TrimSpace(request.GCSBucketPath)
+	gcsTritonPath := strings.TrimSpace(request.GCSTritonPath)
+	serviceAccount := strings.TrimSpace(request.ServiceAccount)
+
+	// Check if any GCS-related field is "NA" or empty
+	useLocalModelPath := false
+	if gcsBucketPath == "" || strings.EqualFold(gcsBucketPath, "NA") ||
+		gcsTritonPath == "" || strings.EqualFold(gcsTritonPath, "NA") ||
+		serviceAccount == "" || strings.EqualFold(serviceAccount, "NA") {
+		useLocalModelPath = true
+		log.Info().
+			Str("appName", request.AppName).
+			Str("gcs_bucket_path", gcsBucketPath).
+			Str("gcs_triton_path", gcsTritonPath).
+			Str("serviceAccount", serviceAccount).
+			Msg("GCS fields are NA or empty, will use localModelPath from config.yaml for local development")
+	}
+
+	if useLocalModelPath {
+		workflowPayload["localModelPath"] = viper.GetString("LOCAL_MODEL_PATH")
+		log.Info().
+			Str("appName", request.AppName).
+			Str("localModelPath", viper.GetString("LOCAL_MODEL_PATH")).
+			Msg("Using localModelPath from config.yaml for local development")
+	}
 
 	// Add probe configuration from serviceConfig (read from config.yaml)
 	// These values come from config.yaml and have defaults applied in ApplyDefaults()

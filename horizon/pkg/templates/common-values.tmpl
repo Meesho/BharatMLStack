@@ -341,13 +341,38 @@ contourResponseTimeout: {{ .contourResponseTimeout }}
 
 #ModelInferenceServiceValues
 
-{{ if .gcs_triton_path }}
+# Init container for copying models from GCS (Google Cloud Storage)
+# Only created if gcs_triton_path is provided in values.yaml
+# 
+# For local development options:
+#   1. Use localModelPath in values.yaml to mount models from a local directory (for local K8s clusters)
+#      Example: localModelPath: "/path/to/local/models" (hostPath mount - no init container needed)
+#   2. Omit both gcs_triton_path and localModelPath to skip init container (empty /models directory)
+# 
+# Note: Local ArgoCD won't have GCP authentication to access GCS buckets
+# Init container for copying models
+# Option 1: Copy from GCS (when gcs_triton_path is provided and not "NA")
+# Option 2: Copy from localModelPath (when localModelPath is provided for local development)
+{{ if and .gcs_triton_path (ne .gcs_triton_path "NA") }}
 initContainer:
     command:
         - /bin/bash
         - -c
-        - time gcloud storage  cp -r {{  .gcs_bucket_path }} /models
+        - time gcloud storage cp -r {{  .gcs_bucket_path }} /models
     image: {{ .init_container_image }}
+{{ else if .localModelPath }}
+initContainer:
+    command:
+        - /bin/sh
+        - -c
+        - cp -r {{  .localModelPath }}/* /models/
+    image: docker.io/library/busybox:latest
+{{ end }}
+
+# For local development: Mount models from host path
+# Set this in values.yaml when gcs_triton_path is "NA" to use a local directory
+{{ if .localModelPath }}
+localModelPath: {{ .localModelPath }}
 {{ end }}
 
 
@@ -355,5 +380,3 @@ initContainer:
 sharedmemory:
     size: 500Mi
 {{ end }}
-
-

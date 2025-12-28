@@ -106,6 +106,7 @@ type Configs struct {
 	GitHubInstallationID int64  `mapstructure:"github_installation_id"`
 	GitHubPrivateKeyPath string `mapstructure:"github_private_key_path"`
 	GitHubOwner          string `mapstructure:"github_owner"`
+	LocalModelPath       string `mapstructure:"local_model_path"`
 
 	ServiceConfigSource string `mapstructure:"service_config_source"`
 	ServiceConfigRepo   string `mapstructure:"service_config_repo"`
