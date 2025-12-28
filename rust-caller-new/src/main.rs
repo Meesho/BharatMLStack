@@ -157,95 +157,67 @@ async fn retrieve_features_handler(
     req: Request<IncomingBody>,
     state: Arc<AppState>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-    // Only handle POST requests
-    if req.method() != Method::POST {
-        return Ok(Response::builder()
-            .status(StatusCode::METHOD_NOT_ALLOWED)
-            .body(Full::new(Bytes::from("Method not allowed")))
-            .unwrap());
-    }
 
-    // Only handle /retrieve-features endpoint
-    if req.uri().path() != "/retrieve-features" {
+    if req.method() != Method::POST || req.uri().path() != "/retrieve-features" {
         return Ok(Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Full::new(Bytes::from("Not found")))
             .unwrap());
     }
 
-    // Read request body
+    // 1. Efficiently collect body
     let body_bytes = match http_body_util::BodyExt::collect(req.into_body()).await {
         Ok(collected) => collected.to_bytes(),
-        Err(_) => {
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body(Full::new(Bytes::from("Failed to read request body")))
-                .unwrap());
-        }
+        Err(_) => return Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(Full::new(Bytes::from("Err"))).unwrap()),
     };
 
-    // Parse JSON request body
+
     let request_body: RetrieveFeaturesRequest = match serde_json::from_slice(&body_bytes) {
         Ok(body) => body,
-        Err(e) => {
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body(Full::new(Bytes::from(format!("Invalid JSON: {}", e))))
-                .unwrap());
-        }
+        Err(e) => return Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(Full::new(Bytes::from(e.to_string()))).unwrap()),
     };
 
-    // Convert request body to protobuf Query
-    let mut feature_groups = Vec::new();
-    for fg in request_body.feature_groups {
-        feature_groups.push(FeatureGroup {
-            label: fg.label,
-            feature_labels: fg.feature_labels,
-        });
-    }
-    
-    let mut keys = Vec::new();
-    for k in request_body.keys {
-        keys.push(Keys { cols: k.cols });
-    }
-    
+    // 3. ZERO-COPY TRANSFORMATION:
+    // We consume 'request_body' so that the Strings and Vecs are MOVED into the Protobuf struct,
+    // not cloned. This is the most efficient way in Rust without using unsafe.
+    // Using into_iter() moves ownership, avoiding all string/slice copies.
     let query = retrieve::Query {
-        entity_label: request_body.entity_label,
-        feature_groups,
-        keys_schema: request_body.keys_schema,
-        keys,
-    };
-
+        entity_label: request_body.entity_label, // Move String (zero-copy)
+        feature_groups: request_body.feature_groups
+            .into_iter() // Consume Vec, move ownership
+            .map(|fg| FeatureGroup {
+                label: fg.label, // Move String (zero-copy)
+                feature_labels: fg.feature_labels, // Move Vec<String> (zero-copy)
+            })
+            .collect::<Vec<_>>(), // Pre-allocates based on iterator size_hint()
+        keys_schema: request_body.keys_schema, // Move Vec<String> (zero-copy)
+        keys: request_body.keys
+            .into_iter() // Consume Vec, move ownership
+            .map(|k| Keys { cols: k.cols }) // Move Vec<String> (zero-copy)
+            .collect::<Vec<_>>(), // Pre-allocates based on iterator size_hint()
+    };  
+    
     let mut grpc_request = tonic::Request::new(query);
-    // Increased timeout to 10s to handle high load scenarios without premature timeouts
     grpc_request.set_timeout(Duration::from_secs(10));
     grpc_request.metadata_mut().insert("online-feature-store-auth-token", state.auth_token.clone());
     grpc_request.metadata_mut().insert("online-feature-store-caller-id", state.caller_id.clone());
 
-    // OPTIMIZATION: Clone client once (tonic clients are cheap handles, but avoid double cloning)
-    // Tonic client methods require ownership, so we clone once here
-    let result = state.client.clone().retrieve_features(grpc_request).await;
-    
-    match result {
+    // Execute gRPC call
+    match state.client.clone().retrieve_features(grpc_request).await {
         Ok(response) => {
-            // OPTIMIZATION: Drop response immediately - don't wait for end of function
-            // This reduces the time expensive drop operations hold resources
-            // The response contains large protobuf structures (Vec<Row>, Feature, etc.) that are expensive to clean up
-            // Since we don't use the response, dropping it immediately reduces memory pressure
+            // Immediately drop to free up the large Protobuf response buffer
             drop(response);
             
-            // Create JSON response
-            let json_response = format!("\"{}\"", SUCCESS_RESPONSE);
             Ok(Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "application/json")
-                .body(Full::new(Bytes::from(json_response)))
+                .body(Full::new(Bytes::from_static(b"\"success\""))) // Static bytes avoid allocation
                 .unwrap())
         }
         Err(_) => {
             Ok(Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Full::new(Bytes::from("\"error\"")))
+                .body(Full::new(Bytes::from_static(b"\"error\"")))
                 .unwrap())
         }
     }
