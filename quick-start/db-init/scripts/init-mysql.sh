@@ -7,11 +7,10 @@ echo "🗂️ Initializing MySQL..."
 # Database and table creation
 echo "  📋 Creating database and tables..."
 mysql -hmysql -uroot -proot --skip-ssl -e "
-  DROP DATABASE IF EXISTS testdb;
-  CREATE DATABASE testdb;
+  CREATE DATABASE IF NOT EXISTS testdb;
   USE testdb;
   
-  CREATE TABLE entity (
+  CREATE TABLE IF NOT EXISTS entity (
     request_id int unsigned NOT NULL AUTO_INCREMENT,
     payload text NOT NULL,
     entity_label varchar(255) NOT NULL,
@@ -26,7 +25,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (request_id)
   );
   
-  CREATE TABLE feature_group (
+  CREATE TABLE IF NOT EXISTS feature_group (
     request_id int unsigned NOT NULL AUTO_INCREMENT,
     entity_label varchar(255) NOT NULL,
     feature_group_label varchar(255) NOT NULL,
@@ -42,7 +41,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (request_id)
   );
   
-  CREATE TABLE features (
+  CREATE TABLE IF NOT EXISTS features (
     request_id int unsigned NOT NULL AUTO_INCREMENT,
     entity_label varchar(255) NOT NULL,
     feature_group_label varchar(255) NOT NULL,
@@ -58,7 +57,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (request_id)
   );
   
-  CREATE TABLE job (
+  CREATE TABLE IF NOT EXISTS job (
     request_id int unsigned NOT NULL AUTO_INCREMENT,
     job_id varchar(255) NOT NULL,
     payload text NOT NULL,
@@ -72,7 +71,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (request_id)
   );
   
-  CREATE TABLE store (
+  CREATE TABLE IF NOT EXISTS store (
     request_id int unsigned NOT NULL AUTO_INCREMENT,
     payload text NOT NULL,
     created_by varchar(255) NOT NULL,
@@ -85,7 +84,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (request_id)
   );
   
-  CREATE TABLE users (
+  CREATE TABLE IF NOT EXISTS users (
     id bigint unsigned NOT NULL AUTO_INCREMENT,
     first_name varchar(50) NOT NULL,
     last_name varchar(50) NOT NULL,
@@ -101,7 +100,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     CONSTRAINT users_chk_1 CHECK ((role in ('user','admin')))
   );
   
-  CREATE TABLE user_tokens (
+  CREATE TABLE IF NOT EXISTS user_tokens (
     id bigint unsigned NOT NULL AUTO_INCREMENT,
     user_email varchar(255) NOT NULL,
     token varchar(255) NOT NULL,
@@ -112,7 +111,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     UNIQUE KEY token (token)
   );
   
-  CREATE TABLE api_resolvers (
+  CREATE TABLE IF NOT EXISTS api_resolvers (
     id int unsigned NOT NULL AUTO_INCREMENT,
     method varchar(255) NOT NULL,
     api_path varchar(255) NOT NULL,
@@ -122,7 +121,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (id)
   );
   
-  CREATE TABLE application_config (
+  CREATE TABLE IF NOT EXISTS application_config (
     app_token varchar(255) NOT NULL,
     bu varchar(255) NOT NULL,
     team varchar(255) NOT NULL,
@@ -135,7 +134,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (app_token)
   );
   
-  CREATE TABLE circuit_breakers (
+  CREATE TABLE IF NOT EXISTS circuit_breakers (
     id int NOT NULL,
     name varchar(255) NOT NULL,
     enabled boolean DEFAULT true,
@@ -164,7 +163,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     UNIQUE KEY bh_name (bh_name)
   );
   
-  CREATE TABLE service_connection_config (
+  CREATE TABLE IF NOT EXISTS service_connection_config (
     id int unsigned NOT NULL AUTO_INCREMENT,
     \`default\` boolean NOT NULL,
     service varchar(255) NOT NULL,
@@ -179,7 +178,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (id)
   );
   
-  CREATE TABLE group_id_counter (
+  CREATE TABLE IF NOT EXISTS group_id_counter (
     id bigint NOT NULL AUTO_INCREMENT,
     counter bigint NOT NULL,
     created_at datetime DEFAULT CURRENT_TIMESTAMP,
@@ -187,7 +186,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (id)
   );
   
-  CREATE TABLE deployable_metadata (
+  CREATE TABLE IF NOT EXISTS deployable_metadata (
     id int NOT NULL,
     \`key\` varchar(255) NOT NULL,
     value varchar(255) NOT NULL,
@@ -197,7 +196,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (id)
   );
   
-  CREATE TABLE discovery_config (
+  CREATE TABLE IF NOT EXISTS discovery_config (
     id int NOT NULL AUTO_INCREMENT,
     app_token varchar(255),
     service_deployable_id int,
@@ -217,7 +216,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (id)
   );
   
-  CREATE TABLE inferflow_config (
+  CREATE TABLE IF NOT EXISTS inferflow_config (
     id int unsigned NOT NULL AUTO_INCREMENT,
     discovery_id int NOT NULL,
     config_id varchar(255) NOT NULL,
@@ -233,7 +232,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     UNIQUE KEY config_id (config_id)
   );
   
-  CREATE TABLE inferflow_request (
+  CREATE TABLE IF NOT EXISTS inferflow_request (
     request_id int unsigned NOT NULL AUTO_INCREMENT,
     config_id varchar(255) NOT NULL,
     payload json NOT NULL,
@@ -250,7 +249,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (request_id)
   );
   
-  CREATE TABLE numerix_binary_ops (
+  CREATE TABLE IF NOT EXISTS numerix_binary_ops (
     id int unsigned NOT NULL AUTO_INCREMENT,
     operator varchar(255) NOT NULL,
     precedence int unsigned NOT NULL,
@@ -259,7 +258,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (id)
   );
   
-  CREATE TABLE numerix_config (
+  CREATE TABLE IF NOT EXISTS numerix_config (
     id int unsigned NOT NULL AUTO_INCREMENT,
     config_id int unsigned NOT NULL,
     config_value json NOT NULL,
@@ -273,7 +272,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     UNIQUE KEY config_id (config_id)
   );
   
-  CREATE TABLE numerix_request (
+  CREATE TABLE IF NOT EXISTS numerix_request (
     request_id int unsigned NOT NULL AUTO_INCREMENT,
     config_id int unsigned NOT NULL,
     created_by varchar(255) NOT NULL,
@@ -288,7 +287,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (request_id)
   );
   
-  CREATE TABLE numerix_unary_ops (
+  CREATE TABLE IF NOT EXISTS numerix_unary_ops (
     id int unsigned NOT NULL AUTO_INCREMENT,
     operator varchar(255) NOT NULL,
     parameters int unsigned NOT NULL,
@@ -297,7 +296,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (id)
   );
   
-  CREATE TABLE predator_config (
+  CREATE TABLE IF NOT EXISTS predator_config (
     id int NOT NULL AUTO_INCREMENT,
     discovery_config_id int NOT NULL,
     model_name varchar(255) NOT NULL,
@@ -312,7 +311,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (id)
   );
   
-  CREATE TABLE predator_requests (
+  CREATE TABLE IF NOT EXISTS predator_requests (
     request_id int unsigned NOT NULL AUTO_INCREMENT,
     group_id int unsigned NOT NULL,
     model_name varchar(255) NOT NULL,
@@ -331,7 +330,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (request_id)
   );
   
-  CREATE TABLE role_permission (
+  CREATE TABLE IF NOT EXISTS role_permission (
     id int unsigned NOT NULL AUTO_INCREMENT,
     role varchar(255) NOT NULL,
     service varchar(255) NOT NULL,
@@ -342,14 +341,14 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (id)
   );
   
-  CREATE TABLE schedule_job (
+  CREATE TABLE IF NOT EXISTS schedule_job (
     entry_date date NOT NULL,
     created_at datetime DEFAULT CURRENT_TIMESTAMP,
     updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (entry_date)
   );
   
-  CREATE TABLE service_config (
+  CREATE TABLE IF NOT EXISTS service_config (
     id int NOT NULL,
     service_name varchar(255) NOT NULL,
     primary_owner varchar(255),
@@ -371,7 +370,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (id)
   );
   
-  CREATE TABLE service_deployable_config (
+  CREATE TABLE IF NOT EXISTS service_deployable_config (
     id int NOT NULL AUTO_INCREMENT,
     name varchar(255),
     host varchar(255) NOT NULL,
@@ -392,7 +391,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     UNIQUE KEY host (host)
   );
   
-  CREATE TABLE validation_jobs (
+  CREATE TABLE IF NOT EXISTS validation_jobs (
     id int unsigned NOT NULL AUTO_INCREMENT,
     group_id varchar(255) NOT NULL,
     lock_id int unsigned NOT NULL,
@@ -414,7 +413,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     KEY idx_status (status)
   );
   
-  CREATE TABLE validation_locks (
+  CREATE TABLE IF NOT EXISTS validation_locks (
     id int unsigned NOT NULL AUTO_INCREMENT,
     lock_key varchar(255) NOT NULL,
     locked_by varchar(255) NOT NULL,
@@ -432,48 +431,27 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
 
 echo "  📦 Inserting deployable metadata..."
 mysql -hmysql -uroot -proot --skip-ssl testdb -e "
-  INSERT INTO deployable_metadata (id,\`key\`, value, active, created_at, updated_at) VALUES
+  INSERT IGNORE INTO deployable_metadata (id,\`key\`, value, active, created_at, updated_at) VALUES
     (1, 'node_selectors', 'bharatml-stack-control-plane', 1, NOW(), NOW()),
     (3, 'gcs_base_path', 'NA', 1, NOW(), NOW()),
-    (6, 'triton_image_tags', '25.06-py3-min', 1, NOW(), NOW()),
+    (6, 'triton_image_tags', '25.06-py3', 1, NOW(), NOW()),
     (7, 'gcs_triton_path', 'NA', 1, NOW(), NOW()),
-    (8, 'service_account', 'NA', 1, NOW(), NOW());
+    (8, 'service_account', 'NA', 1, NOW(), NOW())
+  ON DUPLICATE KEY UPDATE 
+    value = VALUES(value),
+    updated_at = NOW();
 "
 
 # Create default admin user
 echo "  👤 Creating default admin user..."
 mysql -hmysql -uroot -proot --skip-ssl testdb -e "
-  INSERT INTO users (first_name, last_name, email, password_hash, role, is_active) 
+  INSERT IGNORE INTO users (first_name, last_name, email, password_hash, role, is_active) 
   VALUES ('admin', 'admin', 'admin@admin.com', '\$2a\$10\$kYoMds9IsbvPNhJasKHO7.fTSosfbPhSAf7ElNQJ9pIa0iWBOt97e', 'admin', true);
 
-  # INSERT INTO group_id_counter (id, counter, created_at, updated_at) 
+  # INSERT IGNORE INTO group_id_counter (id, counter, created_at, updated_at) 
   # VALUES (1, 1, NOW(), NOW());
-  
 
-  INSERT INTO service_deployable_config (
-    id, name, host, service, active, created_by, updated_by,
-    created_at, updated_at, config, monitoring_url, deployable_running_status,
-    deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
-  ) VALUES (
-      59,
-      'predator-search-ct-gpu',
-      'predator-search-ct-gpu.prd.int',
-      'predator',
-      1,
-      'admin@admin.com',
-      '',
-      '2025-09-01 15:03:14',
-      '2025-09-01 15:31:31',
-      '{\"cpuLimit\":\"7000\",\"gpu_limit\":\"1\",\"cpuRequest\":\"6500\",\"gpu_request\":\"1\",\"max_replica\":\"300\",\"memoryLimit\":\"15\",\"min_replica\":\"2\",\"cpuLimitUnit\":\"m\",\"machine_type\":\"GPU\",\"cpu_threshold\":\"70\",\"gpu_threshold\":\"60\",\"memoryRequest\":\"13\",\"cpuRequestUnit\":\"m\",\"serviceAccount\":\"sa-dsci-model-inference-servic-datascience-prd-0622.iam.gserviceaccount.com\",\"gcs_bucket_path\":\"gs://gcs-dsci-model-repository-prd/predator/ranking/search-ct-gpu/*\",\"gcs_triton_path\":\"gs://gcs-dsci-model-repository-prd/scripts/launch_triton_server.py\",\"memoryLimitUnit\":\"G\",\"triton_image_tag\":\"gpu-py-ensem-trt-onnx-pytorch-fil-ensem-cache-met-v2.48.0\",\"memoryRequestUnit\":\"G\",\"nodeSelectorValue\":\"mlp-g2-standard-8\",\"deploymentStrategy\":\"rollingUpdate\"}',
-      'https://grafana-prd.gcp.in/d/a2605923-52c4-4834-bdae-97570966b765/model-inference-service?orgId=1&var-service=predator-search-ct-gpu&var-query0=',
-      1,
-      'gcp_prd-predator-search-ct-gpu-mlp-deployment-workflow-01 Sep 2025 15:05:57.698922063',
-      '9829a49e-616d-4d4b-a8c8-c5ac8de9c090',
-      'DEPLOYMENT_REASON_ARGO_APP_HEALTHY',
-      'WORKFLOW_COMPLETED'
-  );
-
-  INSERT INTO service_deployable_config (
+  INSERT IGNORE INTO service_deployable_config (
     id, name, host, service, active, created_by, updated_by,
     created_at, updated_at, config, monitoring_url, deployable_running_status,
     deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
@@ -496,7 +474,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
       'WORKFLOW_COMPLETED'
   );
 
-  INSERT INTO service_deployable_config (
+  INSERT IGNORE INTO service_deployable_config (
     id, name, host, service, active, created_by, updated_by,
     created_at, updated_at, config, monitoring_url, deployable_running_status,
     deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
@@ -520,7 +498,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   );
 
 
-  INSERT INTO predator_requests (
+  INSERT IGNORE INTO predator_requests (
     request_id, group_id, model_name, payload, created_by, updated_by,
     reviewer, request_stage, request_type, status, active, reject_reason,
     created_at, updated_at, is_valid
@@ -542,7 +520,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
       1
   );
 
-  INSERT INTO discovery_config (
+  INSERT IGNORE INTO discovery_config (
     id, app_token, service_deployable_id, circuit_breaker_id, service_connection_id,
     route_service_connection_id, route_service_deployable_id, route_percent,
     active, default_response, default_response_percent, default_response_enabled_forCB,
@@ -566,7 +544,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
       '2025-11-26 18:22:50'
   );
 
-  INSERT INTO discovery_config (
+  INSERT IGNORE INTO discovery_config (
     id, app_token, service_deployable_id, circuit_breaker_id, service_connection_id,
     route_service_connection_id, route_service_deployable_id, route_percent,
     active, default_response, default_response_percent, default_response_enabled_forCB,
@@ -590,7 +568,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
     '2025-10-30 17:17:20'
   );
 
-  INSERT INTO predator_config (
+  INSERT IGNORE INTO predator_config (
     id, discovery_config_id, model_name, meta_data, active,
     created_by, updated_by, created_at, updated_at, test_results, has_nil_data
   ) VALUES (
@@ -607,7 +585,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
       0
   );
 
-  INSERT INTO service_connection_config (
+  INSERT IGNORE INTO service_connection_config (
     id,
     \`default\`,
     service,
@@ -634,7 +612,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   );
 
 
-  INSERT INTO entity (
+  INSERT IGNORE INTO entity (
     payload, entity_label, created_by, approved_by,
     status, request_type, service, reject_reason
   ) VALUES (
@@ -645,7 +623,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
     'catalog','admin@admin.com','admin@admin.com','Approved','Onboard','ONLINE_FEATURE_STORE',''
   );
 
-  INSERT INTO feature_group (
+  INSERT IGNORE INTO feature_group (
     entity_label, feature_group_label, payload,
     created_by, approved_by, status, request_type, service, reject_reason
   ) VALUES (
@@ -665,7 +643,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
     'admin@admin.com','admin@admin.com','Approved','Onboard','ONLINE_FEATURE_STORE',''
   );
 
-  INSERT INTO features (
+  INSERT IGNORE INTO features (
     entity_label, feature_group_label, payload,
     created_by, approved_by, status, request_type, service, reject_reason
   ) VALUES (
@@ -690,7 +668,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
 echo "  🔌 Inserting API resolvers..."
 mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   -- Predator APIs
-  INSERT INTO api_resolvers (method, api_path, resolver_fn) VALUES
+  INSERT IGNORE INTO api_resolvers (method, api_path, resolver_fn) VALUES
   ('GET', '/api/v1/horizon/predator-config-registry/model-params', 'ModelParamsResolver'),
   ('POST', '/api/v1/horizon/predator-config-registry/models/onboard', 'ModelOnboardResolver'),
   ('POST', '/api/v1/horizon/predator-config-registry/models/edit', 'ModelOnboardResolver'),
@@ -762,7 +740,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
 echo "  🔐 Inserting role permissions for admin role..."
 mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   -- Deployable permissions (service: all)
-  INSERT INTO role_permission (role, service, screen_type, module) VALUES
+  INSERT IGNORE INTO role_permission (role, service, screen_type, module) VALUES
   ('admin', 'all', 'deployable', 'onboard'),
   ('admin', 'all', 'deployable', 'edit'),
   ('admin', 'all', 'deployable', 'view'),

@@ -20,6 +20,9 @@ This guide will walk you through setting up Predator for local development, incl
 ## Prerequisites
 
 - Docker and Docker Compose installed
+- **Docker Desktop disk allocation: At least 100GB** (required for Triton server image ~15GB)
+  - Check: Docker Desktop → Settings → Resources → Advanced → "Disk image size"
+  - Increase if less than 100GB (see [Docker Disk Space troubleshooting](#issue-docker-disk-space---no-space-left-on-device))
 - Kubernetes cluster running locally (e.g., minikube, kind, Docker Desktop Kubernetes)
 - Argocd cli running locally to interact with argocd
 - kubectl configured to access your local cluster
@@ -169,11 +172,23 @@ argocd app create prd-test \
   --sync-option CreateNamespace=true
 ```
 
+**Important:** After creating the application, you **must** add the `app_name` label manually, as the CLI command doesn't support labels. The label is required for threshold updates to work correctly:
+
+```bash
+# Add the app_name label (use the actual app name without environment prefix)
+kubectl label application prd-test app_name=test -n argocd --overwrite
+```
+
+Alternatively, you can use `kubectl patch`:
+
+```bash
+kubectl patch application prd-test -n argocd --type merge -p '{"metadata":{"labels":{"app_name":"test"}}}'
+```
+
 **Note:** Replace:
 - `prd-test` with your application name (`{env}-{appName}`)
 - `<REPO_OWNER>/<REPO_NAME>` with your GitHub repository
-- `test` with your actual app name in the values path
-- `1.0.0` with your Helm chart path
+- `test` with your actual app name (without environment prefix) - this is what goes in the `app_name` label
 
 **Important:** The `--values` path should be relative to the repository root. The path `prd/deployables/test/values.yaml` means the file is at the root of your repo under `prd/deployables/test/values.yaml`.
 
@@ -361,9 +376,9 @@ horizon:
     # Local Development: Model Path (only used when GCS fields are "NA")
     # IMPORTANT: This must be an absolute path accessible from your Kubernetes node
     # - Docker Desktop: Use /Users/... paths (e.g., /Users/adityakumargarg/models)
-    # - kind/minikube: Path must exist on the VM/node
+    # - kind/minikube: Path must exist on the VM/node (see Step 8.2 for copying models)
     # - This path will be mounted as hostPath volume in the pod
-    - LOCAL_MODEL_PATH=/Users/adityakumargarg/models  # Update to your actual model directory path
+    - LOCAL_MODEL_PATH=/tmp/models  # For kind: use /tmp/models (see Step 8.2)
     
     # GitHub Configuration
     - REPOSITORY_NAME=onboarding-test  # Your repository name
@@ -376,7 +391,78 @@ horizon:
     - GITHUB_COMMIT_EMAIL=your-email@example.com  # Email for git commits
 ```
 
-### 8.2 Example Configuration
+### 8.2 Copy Models to Kubernetes Node (for kind/minikube)
+
+**Important:** For local Kubernetes clusters (kind/minikube), the models must exist on the Kubernetes node, not just on your host machine. The `hostPath` volume mounts from the node's filesystem.
+
+#### For kind Clusters:
+
+1. **Identify your kind node name:**
+   ```bash
+   kubectl get nodes
+   # Example output: bharatml-stack-control-plane
+   ```
+
+2. **Copy your models into the kind node:**
+   ```bash
+   # Get your kind node name
+   NODE_NAME=$(kubectl get nodes -o name | head -1 | sed 's|node/||')
+   
+   # Create models directory in the node
+   docker exec $NODE_NAME mkdir -p /tmp/models
+   
+   # Copy models from your host to the kind node
+   # Replace with your actual models directory path
+   tar -czf - -C /path/to/your/models . 2>/dev/null | \
+     docker exec -i $NODE_NAME tar -xzf - -C /tmp/models
+   
+   # Verify models were copied
+   docker exec $NODE_NAME ls -la /tmp/models/
+   ```
+
+3. **Example with actual path:**
+   ```bash
+   # If your models are at: /Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/horizon/configs/models/
+   NODE_NAME=$(kubectl get nodes -o name | head -1 | sed 's|node/||')
+   docker exec $NODE_NAME mkdir -p /tmp/models
+   tar -czf - -C /Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/horizon/configs/models . 2>/dev/null | \
+     docker exec -i $NODE_NAME tar -xzf - -C /tmp/models
+   docker exec $NODE_NAME ls -laR /tmp/models/
+   ```
+
+4. **Set `LOCAL_MODEL_PATH` in docker-compose.yml:**
+   ```yaml
+   - LOCAL_MODEL_PATH=/tmp/models  # Path inside the kind node
+   ```
+
+#### For Docker Desktop Kubernetes:
+
+Docker Desktop typically has access to `/Users` paths, so you can use your host path directly:
+```yaml
+- LOCAL_MODEL_PATH=/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/horizon/configs/models
+```
+
+#### For minikube:
+
+1. **SSH into minikube:**
+   ```bash
+   minikube ssh
+   ```
+
+2. **Copy models:**
+   ```bash
+   # From your host machine
+   minikube cp /path/to/your/models /tmp/models
+   ```
+
+3. **Set `LOCAL_MODEL_PATH` in docker-compose.yml:**
+   ```yaml
+   - LOCAL_MODEL_PATH=/tmp/models
+   ```
+
+**Note:** If you update your models, you'll need to copy them again to the Kubernetes node.
+
+### 8.3 Example Configuration
 
 ```yaml
 # Example with actual values
@@ -386,6 +472,7 @@ horizon:
 - GITHUB_OWNER=Adit2607
 - REPOSITORY_NAME=onboarding-test
 - BRANCH_NAME=main
+- LOCAL_MODEL_PATH=/tmp/models  # For kind clusters
 ```
 
 ---
@@ -557,6 +644,84 @@ pods "prd-test-57ff5ffd59-" is forbidden: no PriorityClass with name high-priori
   ```
 - Once created, ArgoCD will successfully deploy pods with this priority class
 - **Note:** PriorityClass is cluster-scoped, so you only need to create it once per cluster
+
+### Issue: Docker Disk Space - "no space left on device"
+
+**Error Message:**
+```
+failed to pull and unpack image: no space left on device
+```
+
+**Solution:**
+
+The Triton server full image (`25.06-py3`) is **~15GB+**. You **must increase Docker Desktop's disk allocation** - cleaning up space alone won't be sufficient.
+
+**Option 1: Increase Docker Disk Space (REQUIRED for Full Image)**
+
+**For Docker Desktop on macOS:**
+
+1. **Open Docker Desktop**
+2. Click the **Settings** (gear icon) in the top right
+3. Go to **Resources** → **Advanced**
+4. Find **"Disk image size"** (or "Disk image location")
+5. **Increase the size** to at least **100GB** (recommended: 120-150GB to have buffer)
+   - Current default is often 60GB, which is insufficient
+   - The Triton image alone needs ~15GB, plus your existing containers/volumes
+6. Click **"Apply & Restart"**
+   - Docker Desktop will restart and resize the disk image
+   - This may take a few minutes
+
+**For Docker Desktop on Windows:**
+
+1. Open Docker Desktop
+2. Go to **Settings** → **Resources** → **Advanced**
+3. Increase **"Disk image size"** to at least **100GB**
+4. Click **"Apply & Restart"**
+
+**Verify disk space after restart:**
+```bash
+docker system df
+```
+
+**Option 2: Clean Up Docker Resources (Do This First)**
+
+Before increasing disk size, clean up unused resources:
+
+```bash
+# Check current disk usage
+docker system df
+
+# Remove unused containers, networks, images, and build cache
+docker system prune -a -f
+
+# Remove unused volumes (be careful - this removes all unused volumes)
+# Only run this if you don't need any stopped containers' data
+docker volume prune -f
+
+# Remove specific unused images
+docker image prune -a -f
+```
+
+**Option 3: Use Minimal Image (If You Can't Increase Disk Space)**
+
+If you cannot increase Docker's disk allocation, use the minimal image variant:
+- Change `triton_image_tags` from `25.06-py3` to `25.06-py3-min` in your database
+- Note: The minimal image may have limitations and may not include `tritonserver` in PATH
+
+**After increasing disk space, update the database:**
+
+```bash
+# Connect to MySQL and ensure the image tag is set to full image
+mysql -hmysql -uroot -proot --skip-ssl testdb -e "
+  UPDATE deployable_metadata 
+  SET value = '25.06-py3' 
+  WHERE \`key\` = 'triton_image_tags' AND id = 6;
+"
+```
+
+Then re-run the onboarding workflow to use the full image.
+
+Then re-run the onboarding workflow to use the full image.
 
 ### Issue: Node Affinity/Selector Not Matching
 

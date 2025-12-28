@@ -374,7 +374,7 @@ services:
       - ARGOCD_HELMCHART_PATH=predator/1.0.0
       - ARGOCD_SYNC_POLICY_OPTIONS=CreateNamespace=true
       - ARGOCD_INSECURE=true
-      - LOCAL_MODEL_PATH=/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/horizon/configs/models/
+      - LOCAL_MODEL_PATH=/tmp/models
       - SUPPORTED_ENVIRONMENTS=prd,stg,int
       - WORKING_ENV=prd
       - SERVICE_CONFIG_SOURCE=local

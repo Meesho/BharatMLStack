@@ -184,7 +184,7 @@ func (d *V1) UpdateDeployable(ctx *gin.Context) {
 		return
 	}
 
-	workingEnv := ctx.Query("workingEnv")
+	workingEnv := viper.GetString("WORKING_ENV")
 	if workingEnv == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"error": "workingEnv query parameter is required",
@@ -324,7 +324,7 @@ func (d *V1) GetDeployablesByService(ctx *gin.Context) {
 func (d *V1) RefreshDeployable(ctx *gin.Context) {
 	appName := ctx.Query("app_name")
 	serviceType := ctx.Query("service_type")
-	workingEnv := ctx.Query("workingEnv")
+	workingEnv := viper.GetString("WORKING_ENV")
 
 	if appName == "" || serviceType == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -372,7 +372,7 @@ func (d *V1) TuneThresholds(ctx *gin.Context) {
 	}
 
 	// Get workingEnv from query parameter (required for multi-environment support)
-	workingEnv := ctx.Query("workingEnv")
+	workingEnv := viper.GetString("WORKING_ENV")
 	if workingEnv == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"error": "workingEnv query parameter is required",
