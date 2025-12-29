@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -514,9 +513,9 @@ func (h *Handler) CreateDeployable(request *DeployableRequest, workingEnv string
 		Str("workingEnv", workingEnv).
 		Msg("CreateDeployable: Using unique database entry name and host per environment")
 
-	if serviceConfig.AppPort != 0 {
-		host = host + ":" + strconv.Itoa(serviceConfig.AppPort)
-	}
+	// if serviceConfig.AppPort != 0 {
+	// 	host = host + ":" + strconv.Itoa(serviceConfig.AppPort)
+	// }
 	deployableConfig := &servicedeployableconfig.ServiceDeployableConfig{
 		Name:                    request.AppName,
 		Service:                 request.ServiceName,

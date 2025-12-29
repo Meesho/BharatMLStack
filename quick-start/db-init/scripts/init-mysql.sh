@@ -477,6 +477,29 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
       'WORKFLOW_COMPLETED'
   );
 
+  INSERT IGNORE INTO service_deployable_config (
+    id, name, host, service, active, created_by, updated_by,
+    created_at, updated_at, config, monitoring_url, deployable_running_status,
+    deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
+  ) VALUES (
+      3019,
+      'inferflow',
+      'inferflow.int.meesho.int',
+      'inferflow',
+      1,
+      'admin@admin.com',
+      NULL,
+      '2025-10-24 16:57:45',
+      '2025-11-17 16:04:29',
+      '{\"cpuLimit\":\"4000\",\"gpu_limit\":\"\",\"cpuRequest\":\"3500\",\"gpu_request\":\"\",\"max_replica\":\"100\",\"memoryLimit\":\"8\",\"min_replica\":\"2\",\"cpuLimitUnit\":\"m\",\"memoryRequest\":\"6\",\"cpuRequestUnit\":\"m\",\"memoryLimitUnit\":\"G\",\"memoryRequestUnit\":\"G\"}',
+      'https://grafana-prd.example.com/d/dQ1Gux-Vk/inferflow-service?orgId=1&refresh=60s&var-service=inferflow-service-search-ct&from=now-6h&to=now',
+      1,
+      NULL,
+      NULL,
+      'DEPLOYMENT_REASON_ARGO_APP_HEALTHY',
+      'WORKFLOW_COMPLETED'
+  );
+
   INSERT IGNORE INTO discovery_config (
     id, app_token, service_deployable_id, circuit_breaker_id, service_connection_id,
     route_service_connection_id, route_service_deployable_id, route_percent,
