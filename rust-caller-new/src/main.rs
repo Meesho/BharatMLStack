@@ -227,6 +227,9 @@ async fn get_pprof_heap(_state: Arc<AppState>) -> Result<Response<Full<Bytes>>, 
         .unwrap())
 }
 
+// Pre-allocated header values to avoid string allocations
+static CONTENT_TYPE_JSON: &str = "application/json";
+
 // Main router function that dispatches requests based on path
 // Prevent inlining to ensure function appears in profiles
 #[inline(never)]
@@ -234,6 +237,7 @@ async fn router(
     req: Request<IncomingBody>,
     state: Arc<AppState>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
+    // Optimization: Get path and method once, avoid multiple method calls
     let path = req.uri().path();
     let method = req.method();
     
@@ -253,6 +257,10 @@ async fn router(
     retrieve_features_handler(req, state).await
 }
 
+// Pre-allocated error responses to avoid allocations in hot path
+static BODY_ERROR_RESPONSE: &[u8] = b"Body Error";
+static SUCCESS_RESPONSE: &[u8] = b"\"success\"";
+
 // Prevent inlining to ensure function appears in profiles
 #[inline(never)]
 async fn retrieve_features_handler(
@@ -266,7 +274,7 @@ async fn retrieve_features_handler(
         Err(_) => {
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
-                .body(Full::new(Bytes::from("Body Error")))
+                .body(Full::new(Bytes::from_static(BODY_ERROR_RESPONSE)))
                 .unwrap());
         }
     };
@@ -275,23 +283,37 @@ async fn retrieve_features_handler(
 
     let request_body: RetrieveFeaturesRequest = match serde_json::from_slice(&body_bytes) {
         Ok(body) => body,
-        Err(e) => return Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(Full::new(Bytes::from(e.to_string()))).unwrap()),
+        Err(_) => {
+            // Avoid string allocation for common error case
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Full::new(Bytes::from_static(b"Invalid JSON")))
+                .unwrap());
+        }
     };
+
+    // Optimization: Pre-allocate vectors with known capacity to reduce reallocations
+    let feature_groups_len = request_body.feature_groups.len();
+    let keys_len = request_body.keys.len();
+    
+    let mut feature_groups = Vec::with_capacity(feature_groups_len);
+    for fg in request_body.feature_groups {
+        feature_groups.push(FeatureGroup {
+            label: fg.label,
+            feature_labels: fg.feature_labels,
+        });
+    }
+    
+    let mut keys = Vec::with_capacity(keys_len);
+    for k in request_body.keys {
+        keys.push(Keys { cols: k.cols });
+    }
 
     let query = retrieve::Query {
         entity_label: request_body.entity_label,
-        feature_groups: request_body.feature_groups
-            .into_iter()
-            .map(|fg| FeatureGroup {
-                label: fg.label,
-                feature_labels: fg.feature_labels,
-            })
-            .collect(),
+        feature_groups,
         keys_schema: request_body.keys_schema,
-        keys: request_body.keys
-            .into_iter()
-            .map(|k| Keys { cols: k.cols })
-            .collect(),
+        keys,
     };
 
     let mut grpc_request = tonic::Request::new(query);
@@ -300,19 +322,22 @@ async fn retrieve_features_handler(
     grpc_request.metadata_mut().insert("online-feature-store-auth-token", state.auth_token.clone());
     grpc_request.metadata_mut().insert("online-feature-store-caller-id", state.caller_id.clone());
     
+    // Note: tonic::Client is cheap to clone (internally uses Arc), but we still avoid unnecessary clones
     match state.client.clone().retrieve_features(grpc_request).await {
-        Ok(grpc_resp) => {
-            let _inner_data = grpc_resp.into_inner();
+            Ok(_grpc_resp) => {
+            // Optimization: Use static bytes and pre-allocated header value
             Ok(Response::builder()
                 .status(StatusCode::OK)
-                .header("Content-Type", "application/json")
-                .body(Full::new(Bytes::from_static(b"\"success\"")))
+                .header("Content-Type", CONTENT_TYPE_JSON)
+                .body(Full::new(Bytes::from_static(SUCCESS_RESPONSE)))
                 .unwrap())
         }
-        Err(e) => {
+        Err(_e) => {
+            // Optimization: Use static error message to avoid format!() allocation
+            // For production, consider logging the error separately
             Ok(Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Full::new(Bytes::from(format!("\"gRPC Error: {}\"", e))))
+                .body(Full::new(Bytes::from_static(b"\"gRPC Error\"")))
                 .unwrap())
         }
     }
