@@ -94,10 +94,11 @@ impl AppState {
         metadata.insert("online-feature-store-caller-id", state.caller_id.clone());
 
         // Call gRPC service with timeout
-        // Note: tonic::Client is cheap to clone (internally uses Arc), but we avoid explicit clone
+        // Note: tonic::Client is cheap to clone (internally uses Arc)
+        let mut client = (*state.client).clone();
         match tokio::time::timeout(
             Duration::from_secs(5),
-            state.client.retrieve_features(request)
+            client.retrieve_features(request)
         ).await {
             Ok(Ok(_response)) => Ok(Json(serde_json::json!("success"))),
             Ok(Err(e)) => {
