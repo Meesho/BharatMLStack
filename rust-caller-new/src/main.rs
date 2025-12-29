@@ -198,7 +198,7 @@ async fn retrieve_features_handler(
     
     match state.client.clone().retrieve_features(grpc_request).await {
         Ok(grpc_resp) => {
-            let inner_data = grpc_resp.into_inner();
+            let _inner_data = grpc_resp.into_inner();
             Ok(Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "application/json")
