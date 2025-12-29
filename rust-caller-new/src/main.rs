@@ -137,8 +137,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(app_state);
 
     // Start the server
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8081));
-    info!("🚀 Rust gRPC Client running on http://0.0.0.0:8081");
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+    info!("🚀 Rust gRPC Client running on http://0.0.0.0:8080");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
