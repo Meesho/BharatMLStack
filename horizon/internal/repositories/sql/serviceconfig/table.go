@@ -2,8 +2,9 @@ package serviceconfig
 
 import (
 	"encoding/json"
-	"gorm.io/gorm"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 const ServiceConfigTableName = "service_config"
@@ -20,10 +21,8 @@ type ServiceConfig struct {
 	Team           string
 	BU             string
 	PriorityV2     string
-	Module         string
 	AppType        string
 	IngressClass   string
-	BuildNo        string
 	Config         json.RawMessage `gorm:"type:json"`
 	CreatedAt      time.Time
 	UpdatedAt      time.Time

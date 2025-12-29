@@ -14,7 +14,6 @@ import (
 type InferflowService struct {
 	sqlConn          *infra.SQLConnection
 	prometheusClient externalcall.PrometheusClient
-	ringmasterClient externalcall.RingmasterClient
 	slackClient      externalcall.SlackClient
 	etcdClient       inferflow_etcd.Manager
 }

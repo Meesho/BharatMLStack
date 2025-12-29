@@ -12,6 +12,7 @@ import (
 	inferflowPkg "github.com/Meesho/BharatMLStack/horizon/internal/inferflow"
 	etcd "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
 	pb "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/handler/proto/protogen"
+	infrastructurehandler "github.com/Meesho/BharatMLStack/horizon/internal/infrastructure/handler"
 	discovery_config "github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/discoveryconfig"
 	inferflow "github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/inferflow"
 	inferflow_config "github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/inferflow/config"
@@ -31,7 +32,8 @@ type InferFlow struct {
 	InferFlowConfigRepo         inferflow_config.Repository
 	DiscoveryConfigRepo         discovery_config.DiscoveryConfigRepository
 	ServiceDeployableConfigRepo service_deployable_config.ServiceDeployableRepository
-	ringMasterClient            mainHandler.RingmasterClient
+	infrastructureHandler       infrastructurehandler.InfrastructureHandler
+	workingEnv                  string
 }
 
 const (
@@ -49,7 +51,7 @@ const (
 	adminRole                         = "ADMIN"
 	activeTrue                        = true
 	activeFalse                       = false
-	inferFlowRetrieveModelScoreMethod = "/Inferflow/RetrieveModelScore"
+	inferFlowRetrieveModelScoreMethod = "/InferFlow/RetrieveModelScore"
 	setFunctionalTest                 = "FunctionalTest"
 )
 
@@ -81,7 +83,9 @@ func InitV1ConfigHandler() Config {
 			log.Fatal().Err(err).Msg("Failed to create service deployable config repository")
 		}
 
-		ringMasterClient := mainHandler.GetRingmasterClient()
+		infrastructureHandler := infrastructurehandler.InitInfrastructureHandler()
+		// Use generalized working environment
+		workingEnv := mainHandler.GetWorkingEnvironment()
 
 		config = &InferFlow{
 			EtcdConfig:                  etcd.NewEtcdInstance(),
@@ -89,7 +93,8 @@ func InitV1ConfigHandler() Config {
 			InferFlowConfigRepo:         InferFlowConfigRepo,
 			DiscoveryConfigRepo:         DiscoveryConfigRepo,
 			ServiceDeployableConfigRepo: ServiceDeployableConfigRepo,
-			ringMasterClient:            ringMasterClient,
+			infrastructureHandler:       infrastructureHandler,
+			workingEnv:                  workingEnv,
 		}
 	}
 	return config
@@ -741,13 +746,19 @@ func (m *InferFlow) GetAll() (GetAllResponse, error) {
 
 		ConfigValue := AdaptFromDbToInferFlowConfig(table.ConfigValue)
 
-		ringMasterConfig := m.ringMasterClient.GetConfig(serviceDeployableTable.Name, serviceDeployableTable.DeployableWorkFlowId, serviceDeployableTable.DeploymentRunID)
+		infraConfig := m.infrastructureHandler.GetConfig(serviceDeployableTable.Name, m.workingEnv)
+		// Convert to mainHandler.Config for compatibility
+		DeployableConfig := mainHandler.Config{
+			MinReplica:    infraConfig.MinReplica,
+			MaxReplica:    infraConfig.MaxReplica,
+			RunningStatus: infraConfig.RunningStatus,
+		}
 
 		responseConfigs[i] = ConfigTable{
 			ConfigID:                table.ConfigID,
 			ConfigValue:             ConfigValue,
 			Host:                    serviceDeployableTable.Host,
-			DeployableRunningStatus: ringMasterConfig.RunningStatus == "true",
+			DeployableRunningStatus: DeployableConfig.RunningStatus == "true",
 			MonitoringUrl:           serviceDeployableTable.MonitoringUrl,
 			CreatedBy:               table.CreatedBy,
 			UpdatedBy:               table.UpdatedBy,
@@ -945,24 +956,17 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 			ep = strings.TrimPrefix(ep, "https://")
 		}
 		ep = strings.TrimSuffix(ep, "/")
-
-		// Check if endpoint already has a port
-		hasPort := strings.LastIndex(ep, ":") != -1
-
-		// Only add port if it's missing
-		if !hasPort {
-			var port string
-			if !inferflowPkg.IsMeeshoEnabled {
-				port = ":8085"
-			} else {
-				port = ":8080"
+		if idx := strings.LastIndex(ep, ":"); idx != -1 {
+			if idx < len(ep)-1 {
+				ep = ep[:idx]
 			}
-			env := strings.ToLower(strings.TrimSpace(inferflowPkg.AppEnv))
-			if env == "stg" || env == "int" {
-				port = ":80"
-			}
-			ep = ep + port
 		}
+		port := ":8080"
+		env := strings.ToLower(strings.TrimSpace(inferflowPkg.AppEnv))
+		if env == "stg" || env == "int" {
+			port = ":80"
+		}
+		ep = ep + port
 		return ep
 	}(request.EndPoint)
 
@@ -971,7 +975,6 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 		response.Error = err.Error()
 		return response, errors.New("failed to get connection: " + err.Error())
 	}
-	defer conn.Close()
 
 	protoRequest := &pb.InferflowRequestProto{}
 	protoRequest.ModelConfigId = request.RequestBody.ModelConfigID
