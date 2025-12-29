@@ -175,54 +175,12 @@ async fn get_pprof_text(state: Arc<AppState>) -> Result<Response<Full<Bytes>>, I
 }
 
 // Endpoint to get heap/memory profiling data
-#[cfg(not(target_env = "msvc"))]
-async fn get_pprof_heap(_state: Arc<AppState>) -> Result<Response<Full<Bytes>>, Infallible> {
-    // Check if jemalloc profiling is available
-    let prof_ctl = match jemalloc_pprof::PROF_CTL.as_ref() {
-        Some(ctl) => ctl,
-        None => {
-            return Ok(Response::builder()
-                .status(StatusCode::SERVICE_UNAVAILABLE)
-                .body(Full::new(Bytes::from("jemalloc profiling not available. Ensure tikv-jemallocator is configured correctly.")))
-                .unwrap());
-        }
-    };
-    
-    let mut prof_ctl = prof_ctl.lock().await;
-    
-    // Verify profiling is activated
-    if !prof_ctl.activated() {
-        return Ok(Response::builder()
-            .status(StatusCode::SERVICE_UNAVAILABLE)
-            .body(Full::new(Bytes::from("Heap profiling not activated. Ensure jemalloc is configured with profiling enabled.")))
-            .unwrap());
-    }
-    
-    // Generate pprof heap profile
-    match prof_ctl.dump_pprof() {
-        Ok(pprof_data) => {
-            Ok(Response::builder()
-                .status(StatusCode::OK)
-                .header("Content-Type", "application/x-protobuf")
-                .header("Content-Encoding", "gzip")
-                .header("Content-Disposition", "attachment; filename=heap.pb.gz")
-                .body(Full::new(Bytes::from(pprof_data)))
-                .unwrap())
-        }
-        Err(e) => {
-            Ok(Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Full::new(Bytes::from(format!("Failed to generate heap profile: {}", e))))
-                .unwrap())
-        }
-    }
-}
-
-#[cfg(target_env = "msvc")]
+// Note: Heap profiling requires jemalloc to be configured as the global allocator
+// Uncomment jemalloc_pprof in Cargo.toml and configure jemalloc to enable this
 async fn get_pprof_heap(_state: Arc<AppState>) -> Result<Response<Full<Bytes>>, Infallible> {
     Ok(Response::builder()
         .status(StatusCode::SERVICE_UNAVAILABLE)
-        .body(Full::new(Bytes::from("Heap profiling not available on Windows/MSVC")))
+        .body(Full::new(Bytes::from("Heap profiling not available. To enable:\n1. Uncomment jemalloc global allocator in main.rs\n2. Uncomment jemalloc_pprof dependency in Cargo.toml\n3. Rebuild the application")))
         .unwrap())
 }
 
@@ -447,20 +405,8 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
         report_tx: report_tx_final,
     });
 
-    // Check jemalloc heap profiling availability
-    #[cfg(not(target_env = "msvc"))]
-    {
-        if let Some(prof_ctl) = jemalloc_pprof::PROF_CTL.as_ref() {
-            let prof_ctl = prof_ctl.lock().await;
-            if prof_ctl.activated() {
-                println!("Heap profiling: Enabled");
-            } else {
-                println!("Heap profiling: Configured but not activated");
-            }
-        } else {
-            println!("Heap profiling: Not available (jemalloc not configured)");
-        }
-    }
+    // Note: Heap profiling disabled - requires jemalloc to be configured as global allocator
+    // To enable: uncomment jemalloc configuration at top of file and jemalloc_pprof in Cargo.toml
 
     if state.report_tx.is_some() {
         println!("CPU Profiler started. Profiling endpoints available:");
