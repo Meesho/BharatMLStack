@@ -12,7 +12,6 @@ import (
 	workflowHandler "github.com/Meesho/BharatMLStack/horizon/internal/workflow/handler"
 	"github.com/spf13/viper"
 
-	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/serviceconfig"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/servicedeployableconfig"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/argocd"
@@ -41,19 +40,16 @@ type Handler struct {
 	repo                servicedeployableconfig.ServiceDeployableRepository
 	serviceConfigRepo   serviceconfig.ServiceConfigRepository // Deprecated: kept for backward compatibility
 	serviceConfigLoader configs.ServiceConfigLoader           // New: config-as-code loader
-	ringMasterClient    externalcall.RingmasterClient         // Deprecated: kept for backward compatibility
 	workflowHandler     workflowHandler.Handler               // New: workflow handler for async onboarding
 }
 
 func NewHandler(
 	repo servicedeployableconfig.ServiceDeployableRepository,
 	serviceConfigRepo serviceconfig.ServiceConfigRepository,
-	ringMasterClient externalcall.RingmasterClient,
 ) *Handler {
 	return &Handler{
 		repo:              repo,
 		serviceConfigRepo: serviceConfigRepo,
-		ringMasterClient:  ringMasterClient,
 		workflowHandler:   workflowHandler.GetWorkflowHandler(), // Initialize workflow handler
 	}
 }
