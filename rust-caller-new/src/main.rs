@@ -1,11 +1,12 @@
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
-use hyper::{body::Incoming as IncomingBody, Request, Response, StatusCode};
+use hyper::{body::Incoming as IncomingBody, Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
+use tokio::sync::{mpsc, oneshot};
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
 use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
@@ -50,106 +51,204 @@ struct KeysRequest {
     cols: Vec<String>,
 }
 
-// Report request types - COMMENTED OUT (pprof related)
-// enum ReportRequest {
-//     Protobuf(oneshot::Sender<Result<Vec<u8>, String>>),
-//     Flamegraph(oneshot::Sender<Result<Vec<u8>, String>>),
-//     Text(oneshot::Sender<Result<String, String>>),
-// }
+// Report request types for pprof
+enum ReportRequest {
+    Protobuf(oneshot::Sender<Result<Vec<u8>, String>>),
+    Flamegraph(oneshot::Sender<Result<Vec<u8>, String>>),
+    Text(oneshot::Sender<Result<String, String>>),
+}
 
 #[derive(Clone)]
 struct AppState {
     client: RetrieveClient<Channel>,
     auth_token: AsciiMetadataValue,
     caller_id: AsciiMetadataValue,
-    // report_tx: mpsc::Sender<ReportRequest>,  // Commented out - pprof related
+    report_tx: Option<mpsc::Sender<ReportRequest>>,  // Optional for pprof
 }
 
-// Endpoint to get pprof data in protobuf format (for go tool pprof) - COMMENTED OUT
-/* async fn get_pprof_protobuf(State(state): State<Arc<AppState>>) -> Result<Response<Body>, StatusCode> {
+// Endpoint to get pprof data in protobuf format (for go tool pprof)
+async fn get_pprof_protobuf(state: Arc<AppState>) -> Result<Response<Full<Bytes>>, Infallible> {
+    let report_tx = match &state.report_tx {
+        Some(tx) => tx,
+        None => {
+            return Ok(Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .body(Full::new(Bytes::from("Profiling not enabled")))
+                .unwrap());
+        }
+    };
+    
     let (tx, rx) = oneshot::channel();
-    state.report_tx.send(ReportRequest::Protobuf(tx))
-        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    if report_tx.send(ReportRequest::Protobuf(tx)).is_err() {
+        return Ok(Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .body(Full::new(Bytes::from("Profiling service unavailable")))
+            .unwrap());
+    }
     
     match rx.await {
         Ok(Ok(data)) => {
-            Response::builder()
+            Ok(Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "application/x-protobuf")
                 .header("Content-Disposition", "attachment; filename=profile.pb.gz")
-                .body(Body::from(data))
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Full::new(Bytes::from(data)))
+                .unwrap())
         }
-        _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        _ => Ok(Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(Full::new(Bytes::from("Failed to generate profile")))
+            .unwrap()),
     }
-} */
+}
 
-// Endpoint to get flamegraph SVG - COMMENTED OUT
-/* async fn get_flamegraph(State(state): State<Arc<AppState>>) -> Result<Response<Body>, StatusCode> {
+// Endpoint to get flamegraph SVG
+async fn get_flamegraph(state: Arc<AppState>) -> Result<Response<Full<Bytes>>, Infallible> {
+    let report_tx = match &state.report_tx {
+        Some(tx) => tx,
+        None => {
+            return Ok(Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .body(Full::new(Bytes::from("Profiling not enabled")))
+                .unwrap());
+        }
+    };
+    
     let (tx, rx) = oneshot::channel();
-    state.report_tx.send(ReportRequest::Flamegraph(tx))
-        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    if report_tx.send(ReportRequest::Flamegraph(tx)).is_err() {
+        return Ok(Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .body(Full::new(Bytes::from("Profiling service unavailable")))
+            .unwrap());
+    }
     
     match rx.await {
         Ok(Ok(data)) => {
-            Response::builder()
+            Ok(Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "image/svg+xml")
                 .header("Content-Disposition", "inline; filename=flamegraph.svg")
-                .body(Body::from(data))
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Full::new(Bytes::from(data)))
+                .unwrap())
         }
-        _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        _ => Ok(Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(Full::new(Bytes::from("Failed to generate flamegraph")))
+            .unwrap()),
     }
-} */
+}
 
-// Endpoint to get text report - COMMENTED OUT
-/* async fn get_pprof_text(State(state): State<Arc<AppState>>) -> Result<Html<String>, StatusCode> {
+// Endpoint to get text report
+async fn get_pprof_text(state: Arc<AppState>) -> Result<Response<Full<Bytes>>, Infallible> {
+    let report_tx = match &state.report_tx {
+        Some(tx) => tx,
+        None => {
+            return Ok(Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .body(Full::new(Bytes::from("Profiling not enabled")))
+                .unwrap());
+        }
+    };
+    
     let (tx, rx) = oneshot::channel();
-    state.report_tx.send(ReportRequest::Text(tx))
-        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    if report_tx.send(ReportRequest::Text(tx)).is_err() {
+        return Ok(Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .body(Full::new(Bytes::from("Profiling service unavailable")))
+            .unwrap());
+    }
     
     match rx.await {
-        Ok(Ok(text)) => Ok(Html(format!("<pre>{}</pre>", text))),
-        _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(Ok(text)) => {
+            let html = format!("<pre>{}</pre>", text);
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "text/html")
+                .body(Full::new(Bytes::from(html)))
+                .unwrap())
+        }
+        _ => Ok(Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(Full::new(Bytes::from("Failed to generate text report")))
+            .unwrap()),
     }
-} */
+}
 
-// Endpoint to get heap/memory profiling data - COMMENTED OUT
-/* #[cfg(not(target_env = "msvc"))]
-async fn get_pprof_heap() -> Result<impl IntoResponse, (StatusCode, String)> {
+// Endpoint to get heap/memory profiling data
+#[cfg(not(target_env = "msvc"))]
+async fn get_pprof_heap(_state: Arc<AppState>) -> Result<Response<Full<Bytes>>, Infallible> {
     // Check if jemalloc profiling is available
-    let prof_ctl = jemalloc_pprof::PROF_CTL.as_ref()
-        .ok_or_else(|| (
-            StatusCode::SERVICE_UNAVAILABLE,
-            "jemalloc profiling not available. Ensure tikv-jemallocator is configured correctly.".to_string(),
-        ))?;
+    let prof_ctl = match jemalloc_pprof::PROF_CTL.as_ref() {
+        Some(ctl) => ctl,
+        None => {
+            return Ok(Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .body(Full::new(Bytes::from("jemalloc profiling not available. Ensure tikv-jemallocator is configured correctly.")))
+                .unwrap());
+        }
+    };
     
-    let mut prof_ctl = prof_ctl.lock().await;
+    let prof_ctl = prof_ctl.lock().await;
     
     // Verify profiling is activated
     if !prof_ctl.activated() {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Heap profiling not activated. Ensure jemalloc is configured with profiling enabled.".to_string(),
-        ));
+        return Ok(Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .body(Full::new(Bytes::from("Heap profiling not activated. Ensure jemalloc is configured with profiling enabled.")))
+            .unwrap());
     }
     
     // Generate pprof heap profile
-    let pprof_data = prof_ctl.dump_pprof()
-        .map_err(|e| (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to generate heap profile: {}", e),
-        ))?;
-    
+    match prof_ctl.dump_pprof() {
+        Ok(pprof_data) => {
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "application/x-protobuf")
+                .header("Content-Encoding", "gzip")
+                .header("Content-Disposition", "attachment; filename=heap.pb.gz")
+                .body(Full::new(Bytes::from(pprof_data)))
+                .unwrap())
+        }
+        Err(e) => {
+            Ok(Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Full::new(Bytes::from(format!("Failed to generate heap profile: {}", e))))
+                .unwrap())
+        }
+    }
+}
+
+#[cfg(target_env = "msvc")]
+async fn get_pprof_heap(_state: Arc<AppState>) -> Result<Response<Full<Bytes>>, Infallible> {
     Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/x-protobuf")
-        .header("Content-Encoding", "gzip")
-        .header("Content-Disposition", "attachment; filename=heap.pb.gz")
-        .body(Body::from(pprof_data))
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?)
-} */
+        .status(StatusCode::SERVICE_UNAVAILABLE)
+        .body(Full::new(Bytes::from("Heap profiling not available on Windows/MSVC")))
+        .unwrap())
+}
+
+// Main router function that dispatches requests based on path
+async fn router(
+    req: Request<IncomingBody>,
+    state: Arc<AppState>,
+) -> Result<Response<Full<Bytes>>, Infallible> {
+    let path = req.uri().path();
+    let method = req.method();
+    
+    // Route pprof endpoints
+    if method == Method::GET {
+        match path {
+            "/pprof/protobuf" => return get_pprof_protobuf(state).await,
+            "/pprof/flamegraph" => return get_flamegraph(state).await,
+            "/pprof/text" => return get_pprof_text(state).await,
+            #[cfg(not(target_env = "msvc"))]
+            "/pprof/heap" => return get_pprof_heap(state).await,
+            _ => {}
+        }
+    }
+    
+    // Default to retrieve_features handler
+    retrieve_features_handler(req, state).await
+}
 
 async fn retrieve_features_handler(
     req: Request<IncomingBody>,
@@ -253,80 +352,90 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
 
 
 
-    // Start profiling - guard must be kept alive for profiling to continue - COMMENTED OUT
+    // Start profiling - guard must be kept alive for profiling to continue
     // Higher frequency = more samples = better resolution
     // blocklist excludes low-level libraries to focus on application code
-    /* let guard = pprof::ProfilerGuardBuilder::default()
+    // Note: pprof adds overhead (~5-10% CPU), so it's optional
+    let (report_tx, report_rx) = mpsc::channel::<ReportRequest>(100);
+    
+    // Try to initialize pprof, but don't fail if it's not available
+    let profiler_guard = pprof::ProfilerGuardBuilder::default()
         .frequency(10000)  // Increased from 1000 to 10000 for better resolution
         .blocklist(&["libc", "libgcc", "pthread", "vdso"])
-        .build()
-        .unwrap();
-
-    // Channel for report requests - handlers send requests, background task generates reports
-    let (report_tx, report_rx) = mpsc::channel::<ReportRequest>();
-
-    // Spawn background task to handle report generation
-    // This task holds the guard (which is not Send) and generates reports on demand
-    tokio::task::spawn_blocking(move || {
-        while let Ok(request) = report_rx.recv() {
-            match request {
-                ReportRequest::Protobuf(tx) => {
-                    // For protobuf format, use the resolved report and convert to text format
-                    // Note: Full pprof protobuf format requires additional conversion libraries
-                    // For now, return text format that can be used with pprof tools
-                    match guard.report().build() {
-                        Ok(report) => {
-                            // Convert report to text format (pprof can read text format)
-                            let text_str = format!("{:?}", report);
-                            let _ = tx.send(Ok(text_str.into_bytes()));
-                        }
-                        Err(e) => {
-                            let _ = tx.send(Err(format!("Failed to build report: {:?}", e)));
-                        }
-                    }
-                }
-                ReportRequest::Flamegraph(tx) => {
-                    match guard.report().build() {
-                        Ok(report) => {
-                            let mut flamegraph = Vec::new();
-                            if report.flamegraph(&mut flamegraph).is_ok() {
-                                let _ = tx.send(Ok(flamegraph));
-                            } else {
-                                let _ = tx.send(Err("Failed to generate flamegraph".to_string()));
+        .build();
+    
+    let report_tx_final = if profiler_guard.is_ok() {
+        let guard = profiler_guard.unwrap();
+        
+        // Spawn background task to handle report generation
+        // This task holds the guard (which is not Send) and generates reports on demand
+        let report_tx_clone = report_tx.clone();
+        tokio::task::spawn_blocking(move || {
+            while let Ok(request) = report_rx.recv() {
+                match request {
+                    ReportRequest::Protobuf(tx) => {
+                        // For protobuf format, use the resolved report and convert to text format
+                        // Note: Full pprof protobuf format requires additional conversion libraries
+                        // For now, return text format that can be used with pprof tools
+                        match guard.report().build() {
+                            Ok(report) => {
+                                // Convert report to text format (pprof can read text format)
+                                let text_str = format!("{:?}", report);
+                                let _ = tx.send(Ok(text_str.into_bytes()));
+                            }
+                            Err(e) => {
+                                let _ = tx.send(Err(format!("Failed to build report: {:?}", e)));
                             }
                         }
-                        Err(e) => {
-                            let _ = tx.send(Err(format!("Failed to build report: {:?}", e)));
+                    }
+                    ReportRequest::Flamegraph(tx) => {
+                        match guard.report().build() {
+                            Ok(report) => {
+                                let mut flamegraph = Vec::new();
+                                if report.flamegraph(&mut flamegraph).is_ok() {
+                                    let _ = tx.send(Ok(flamegraph));
+                                } else {
+                                    let _ = tx.send(Err("Failed to generate flamegraph".to_string()));
+                                }
+                            }
+                            Err(e) => {
+                                let _ = tx.send(Err(format!("Failed to build report: {:?}", e)));
+                            }
                         }
                     }
-                }
-                ReportRequest::Text(tx) => {
-                    match guard.report().build() {
-                        Ok(report) => {
-                            // Use Debug trait for text output
-                            let text_str = format!("{:?}", report);
-                            let _ = tx.send(Ok(text_str));
-                        }
-                        Err(e) => {
-                            let _ = tx.send(Err(format!("Failed to build report: {:?}", e)));
+                    ReportRequest::Text(tx) => {
+                        match guard.report().build() {
+                            Ok(report) => {
+                                // Use Debug trait for text output
+                                let text_str = format!("{:?}", report);
+                                let _ = tx.send(Ok(text_str));
+                            }
+                            Err(e) => {
+                                let _ = tx.send(Err(format!("Failed to build report: {:?}", e)));
+                            }
                         }
                     }
                 }
             }
-        }
-        // Keep guard alive - it will be dropped when this task ends
-        drop(guard);
-    }); */
+            // Keep guard alive - it will be dropped when this task ends
+            drop(guard);
+        });
+        
+        Some(report_tx_clone)
+    } else {
+        eprintln!("Warning: pprof profiling not available. Profiling endpoints will be disabled.");
+        None
+    };
 
     let state = Arc::new(AppState {
         client,
         auth_token: AsciiMetadataValue::from_static("atishay"),
         caller_id: AsciiMetadataValue::from_static("test-3"),
-        // report_tx,  // Commented out - pprof related
+        report_tx: report_tx_final,
     });
 
-    // Check jemalloc heap profiling availability - COMMENTED OUT
-    /* #[cfg(not(target_env = "msvc"))]
+    // Check jemalloc heap profiling availability
+    #[cfg(not(target_env = "msvc"))]
     {
         if let Some(prof_ctl) = jemalloc_pprof::PROF_CTL.as_ref() {
             let prof_ctl = prof_ctl.lock().await;
@@ -340,13 +449,14 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    println!("Profiler started. Server will begin shortly...");
-    println!("Profiling endpoints available:");
-    println!("  - GET /pprof/protobuf - Download CPU pprof data (use with: go tool pprof http://localhost:8080/pprof/protobuf)");
-    println!("  - GET /pprof/flamegraph - View CPU flamegraph SVG in browser");
-    println!("  - GET /pprof/text - View CPU text report");
-    #[cfg(not(target_env = "msvc"))]
-    println!("  - GET /pprof/heap - Download heap/memory pprof data (use with: go tool pprof http://localhost:8080/pprof/heap)"); */
+    if state.report_tx.is_some() {
+        println!("CPU Profiler started. Profiling endpoints available:");
+        println!("  - GET /pprof/protobuf - Download CPU pprof data (use with: go tool pprof http://localhost:8080/pprof/protobuf)");
+        println!("  - GET /pprof/flamegraph - View CPU flamegraph SVG in browser");
+        println!("  - GET /pprof/text - View CPU text report");
+        #[cfg(not(target_env = "msvc"))]
+        println!("  - GET /pprof/heap - Download heap/memory pprof data (use with: go tool pprof http://localhost:8080/pprof/heap)");
+    }
 
     // Configure TCP listener
     // Hyper/Tokio handle TCP settings efficiently by default
@@ -371,7 +481,7 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
                 tokio::task::spawn(async move {
                     let service = service_fn(move |req| {
                         let state = state_clone.clone();
-                        retrieve_features_handler(req, state)
+                        router(req, state)
                     });
                     
                     // Use HTTP/1.1 connection
