@@ -1,13 +1,13 @@
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
-use hyper::{body::Incoming as IncomingBody, Method, Request, Response, StatusCode};
+use hyper::{body::Incoming as IncomingBody, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
-use http_body_util::Full;
+use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
 
 // Configure jemalloc - DISABLED profiling for production performance
@@ -156,14 +156,18 @@ async fn retrieve_features_handler(
     state: Arc<AppState>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
 
-    let body = req.collect().await.map_err(|_| {
-        Response::builder().status(StatusCode::BAD_REQUEST).body(Full::new(Bytes::from("Body Error"))).unwrap()
-    });
-    
-    let body_bytes = match body {
-        Ok(b) => b.to_bytes(),
-        Err(e) => return Ok(e),
+    let body = req.into_body();
+    let collected = match body.collect().await {
+        Ok(c) => c,
+        Err(_) => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Full::new(Bytes::from("Body Error")))
+                .unwrap());
+        }
     };
+    
+    let body_bytes = collected.to_bytes();
 
     let request_body: RetrieveFeaturesRequest = match serde_json::from_slice(&body_bytes) {
         Ok(body) => body,
