@@ -6,8 +6,6 @@ use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
 use serde::Deserialize;
 use smallvec::SmallVec;
-use serde::Deserialize;
-use std::borrow::Cow;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,30 +20,28 @@ use retrieve::feature_service_client::FeatureServiceClient;
 use retrieve::{FeatureGroup, Keys, Query};
 
 #[derive(Deserialize)]
-struct RetrieveFeaturesRequest<'a> {
+struct RetrieveFeaturesRequest {
     #[serde(rename = "entity_label")]
-    entity_label: &'a str, 
+    entity_label: String, 
     
-    #[serde(borrow)]
-    feature_groups: SmallVec<[FeatureGroupRequest<'a>; 8]>,
+    feature_groups: SmallVec<[FeatureGroupRequest; 8]>,
     
     #[serde(rename = "keys_schema")]
-    keys_schema: Vec<&'a str>,
+    keys_schema: Vec<String>,
     
-    #[serde(borrow)]
-    keys: Vec<KeysRequest<'a>>,
+    keys: Vec<KeysRequest>,
 }
 
 #[derive(Deserialize)]
-struct FeatureGroupRequest<'a> {
-    label: &'a str,
+struct FeatureGroupRequest {
+    label: String,
     #[serde(rename = "feature_labels")]
-    feature_labels: Vec<&'a str>,
+    feature_labels: Vec<String>,
 }
 
 #[derive(Deserialize)]
-struct KeysRequest<'a> {
-    cols: Vec<&'a str>,
+struct KeysRequest {
+    cols: Vec<String>,
 }
 
 struct AppState {
@@ -70,15 +66,15 @@ async fn handler(
     let request_body: RetrieveFeaturesRequest = serde_json::from_slice(&body_bytes)?;
 
     let grpc_request = Query {
-        entity_label: request_body.entity_label.clone(), // Zero CPU copy
+        entity_label: request_body.entity_label, // Zero copy - move
         feature_groups: request_body.feature_groups.into_iter().map(|fg| {
             FeatureGroup {
-                label: fg.label.clone(),
-                feature_labels: fg.feature_labels.clone(),
+                label: fg.label, // Zero copy - move
+                feature_labels: fg.feature_labels, // Zero copy - move
             }
         }).collect(),
-        keys_schema: request_body.keys_schema.clone(),
-        keys: request_body.keys.into_iter().map(|k| Keys { cols: k.cols }).collect(),
+        keys_schema: request_body.keys_schema, // Zero copy - move
+        keys: request_body.keys.into_iter().map(|k| Keys { cols: k.cols }).collect(), // Zero copy - move
     };
 
 
