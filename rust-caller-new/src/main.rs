@@ -11,16 +11,16 @@ use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
 use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
 
-// Configure jemalloc - DISABLED profiling for production performance
+// Configure jemalloc for heap profiling
 // Profiling adds significant overhead (~5-10% CPU)
-// Uncomment below for profiling, but expect lower RPS
-// #[cfg(not(target_env = "msvc"))]
-// #[global_allocator]
-// static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+// Enable for heap profiling, but expect lower RPS
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-// #[allow(non_upper_case_globals)]
-// #[export_name = "malloc_conf"]
-// pub static malloc_conf: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0";
+#[allow(non_upper_case_globals)]
+#[export_name = "malloc_conf"]
+pub static malloc_conf: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0";
 
 pub mod retrieve {
     tonic::include_proto!("retrieve");
@@ -175,12 +175,55 @@ async fn get_pprof_text(state: Arc<AppState>) -> Result<Response<Full<Bytes>>, I
 }
 
 // Endpoint to get heap/memory profiling data
-// Note: Heap profiling requires jemalloc to be configured as the global allocator
-// Uncomment jemalloc_pprof in Cargo.toml and configure jemalloc to enable this
+#[cfg(not(target_env = "msvc"))]
+async fn get_pprof_heap(_state: Arc<AppState>) -> Result<Response<Full<Bytes>>, Infallible> {
+    // Check if jemalloc profiling is available
+    // Wrap in catch_unwind to handle panics if jemalloc isn't configured
+    let prof_ctl = match std::panic::catch_unwind(|| jemalloc_pprof::PROF_CTL.as_ref()) {
+        Ok(Some(ctl)) => ctl,
+        Ok(None) | Err(_) => {
+            return Ok(Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .body(Full::new(Bytes::from("jemalloc profiling not available. Ensure tikv-jemallocator is configured correctly.")))
+                .unwrap());
+        }
+    };
+    
+    let mut prof_ctl = prof_ctl.lock().await;
+    
+    // Verify profiling is activated
+    if !prof_ctl.activated() {
+        return Ok(Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .body(Full::new(Bytes::from("Heap profiling not activated. Ensure jemalloc is configured with profiling enabled.")))
+            .unwrap());
+    }
+    
+    // Generate pprof heap profile
+    match prof_ctl.dump_pprof() {
+        Ok(pprof_data) => {
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "application/x-protobuf")
+                .header("Content-Encoding", "gzip")
+                .header("Content-Disposition", "attachment; filename=heap.pb.gz")
+                .body(Full::new(Bytes::from(pprof_data)))
+                .unwrap())
+        }
+        Err(e) => {
+            Ok(Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Full::new(Bytes::from(format!("Failed to generate heap profile: {}", e))))
+                .unwrap())
+        }
+    }
+}
+
+#[cfg(target_env = "msvc")]
 async fn get_pprof_heap(_state: Arc<AppState>) -> Result<Response<Full<Bytes>>, Infallible> {
     Ok(Response::builder()
         .status(StatusCode::SERVICE_UNAVAILABLE)
-        .body(Full::new(Bytes::from("Heap profiling not available. To enable:\n1. Uncomment jemalloc global allocator in main.rs\n2. Uncomment jemalloc_pprof dependency in Cargo.toml\n3. Rebuild the application")))
+        .body(Full::new(Bytes::from("Heap profiling not available on Windows/MSVC")))
         .unwrap())
 }
 
@@ -350,22 +393,60 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
                     ReportRequest::Flamegraph(tx) => {
                         match guard.report().build() {
                             Ok(report) => {
-                                // Generate flamegraph using inferno
+                                // Generate flamegraph using inferno with proper call stack format
                                 use pprof::flamegraph;
                                 let mut flamegraph_data = Vec::new();
-                                // Convert report data to lines format for inferno
-                                // The report.data contains the profile data that needs to be converted
                                 let mut options = flamegraph::Options::default();
-                                // Convert report to text format first, then parse as lines
-                                let report_text = format!("{:?}", report);
-                                let lines: Vec<&str> = report_text.lines().collect();
-                                match flamegraph::from_lines(&mut options, lines.iter().map(|s| *s), &mut flamegraph_data) {
+                                
+                                // Convert pprof Report to flamegraph format
+                                // The report.data contains (Frames, count) tuples
+                                // Frames contains a Vec<Vec<Symbol>> where each Vec<Symbol> is a frame
+                                // We need to format them as: "function_name;stack_depth sample_count"
+                                let mut flamegraph_lines = Vec::new();
+                                
+                                for (frames, count) in report.data.iter() {
+                                    if frames.frames.is_empty() {
+                                        continue;
+                                    }
+                                    
+                                    // Build the call stack string (semicolon-separated)
+                                    // Each frame is a Vec<Symbol>, we take the first symbol's name
+                                    let mut stack_parts = Vec::new();
+                                    for frame_symbols in frames.frames.iter().rev() {
+                                        // Get the function name from the first symbol in the frame
+                                        let frame_str = if let Some(symbol) = frame_symbols.first() {
+                                            if let Some(name_bytes) = &symbol.name {
+                                                if !name_bytes.is_empty() {
+                                                    // Convert Vec<u8> to String
+                                                    String::from_utf8_lossy(name_bytes).to_string()
+                                                } else if let Some(addr) = symbol.addr {
+                                                    format!("0x{:p}", addr)
+                                                } else {
+                                                    "unknown".to_string()
+                                                }
+                                            } else if let Some(addr) = symbol.addr {
+                                                format!("0x{:p}", addr)
+                                            } else {
+                                                "unknown".to_string()
+                                            }
+                                        } else {
+                                            "unknown".to_string()
+                                        };
+                                        stack_parts.push(frame_str);
+                                    }
+                                    
+                                    let stack_str = stack_parts.join(";");
+                                    flamegraph_lines.push(format!("{} {}", stack_str, count));
+                                }
+                                
+                                // Generate flamegraph from properly formatted lines
+                                match flamegraph::from_lines(&mut options, flamegraph_lines.iter().map(|s| s.as_str()), &mut flamegraph_data) {
                                     Ok(_) => {
                                         let _ = tx.send(Ok(flamegraph_data));
                                     }
                                     Err(e) => {
                                         // Fallback: return error
-                                        let _ = tx.send(Err(format!("Failed to generate flamegraph: {:?}. Note: Flamegraph requires proper profile data format.", e)));
+                                        let _ = tx.send(Err(format!("Failed to generate flamegraph: {:?}", e)));
                                     }
                                 }
                             }

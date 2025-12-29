@@ -13,7 +13,10 @@ http-body-util = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 pprof = { version = "0.13", features = ["flamegraph"] }
-# jemalloc_pprof = "0.8"  # Commented out - requires jemalloc to be configured as global allocator
+jemalloc_pprof = "0.8"
+# Note: jemalloc_pprof already includes tikv-jemalloc-ctl with tikv-jemalloc-sys
+# We use tikv-jemallocator with matching jemalloc-sys version to avoid conflicts
+tikv-jemallocator = { version = "0.6", default-features = false }
 
 [build-dependencies]
 tonic-build = "0.11"
