@@ -1,0 +1,107 @@
+{{- if and (.Values.canary.enabled) (eq .Values.labels.env "prod") }}
+{{- if or ( eq "nginx-internal" .Values.ingress.ingressClassName ) ( eq "nginx-external" .Values.ingress.ingressClassName ) }}
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  name: {{ .Values.namespace }}
+  namespace: {{ .Values.namespace }}
+spec:
+  provider: nginx
+  # deployment reference
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.namespace }}
+  # ingress reference
+  ingressRef:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    name: {{ .Values.namespace }}
+  # HPA reference (optional)
+  # autoscalerRef:
+  #   apiVersion: keda.sh/v1alpha1
+  #   kind: ScaledObject
+  #   name: {{ .Values.namespace }}
+  # the maximum time in seconds for the canary deployment
+  # to make progress before it is rollback (default 600s)
+  progressDeadlineSeconds: {{ .Values.canary.progressDeadlineSeconds | default 60 }}
+  service:
+    # ClusterIP port number
+    port: {{ .Values.canary.service.port }}
+    # container port number or name
+    targetPort: {{ .Values.canary.service.targetPort }}
+  # skip analysis
+  skipAnalysis: {{ .Values.canary.skipAnalysis }}
+  analysis: 
+    # schedule interval (default 60s)
+    interval: {{ .Values.canary.analysisInterval | default "10s" }}
+    # max number of failed metric checks before rollback
+    threshold: {{ .Values.canary.analysisThreshold | default 10 }}
+    # max traffic percentage routed to canary
+    # percentage (0-100)
+    maxWeight: {{ .Values.canary.analysisMaxWeight | default 20 }}
+    # canary increment step
+    # percentage (0-100)
+    stepWeight: {{ .Values.canary.analysisStepWeight | default 5 }}
+    # NGINX Prometheus checks
+    metrics:
+    - name: {{ .Values.namespace }}-requests
+      templateRef:
+        name: {{ .Values.namespace }}-requests
+      # minimum req success rate (non 5xx responses)
+      # percentage (0-100)
+      thresholdRange:
+        min: {{ .Values.canary.analysisMetrics.thresholdRangeMin | default 0.99 }}
+      interval: {{ .Values.canary.analysisMetrics.interval | default "1m" }}
+    # web hook for canary
+    {{- if and (.Values.canary.enabled) (eq .Values.canary.enableManualPromotion  true ) (eq .Values.labels.env "prod")}}
+    webhooks:
+    - name: promote-canary
+      type: confirm-promotion
+      {{- if or (eq .Values.labels.env "prod") (eq .Values.labels.env "prd") (eq .Values.labels.env "int") }}
+      url: http://{{ .Values.labels.bu }}-flagger-loadtester.{{ .Values.canary.loadtester.prodDomain | default "internal.example.com" }}/gate/check
+      {{- else }}
+      url: http://{{ .Values.labels.env }}-flagger-loadtester.{{ .Values.canary.loadtester.stagingDomain | default "stg.example.com" }}/gate/check
+      {{- end }}
+    - name: rollback-canary
+      type: rollback
+      {{- if or (eq .Values.labels.env "prod") (eq .Values.labels.env "prd") (eq .Values.labels.env "int") }}
+      url: http://{{ .Values.labels.bu }}-flagger-loadtester.{{ .Values.canary.loadtester.prodDomain | default "internal.example.com" }}/rollback/check
+      {{- else }}
+      url: http://{{ .Values.labels.env }}-flagger-loadtester.{{ .Values.canary.loadtester.stagingDomain | default "stg.example.com" }}/rollback/check 
+      {{- end }}
+    - name: close-promote-canary
+      type: post-rollout
+      {{- if or (eq .Values.labels.env "prod") (eq .Values.labels.env "prd") (eq .Values.labels.env "int") }}
+      url: http://{{ .Values.labels.bu }}-flagger-loadtester.{{ .Values.canary.loadtester.prodDomain | default "internal.example.com" }}/gate/close
+      {{- else }}
+      url: http://{{ .Values.labels.env }}-flagger-loadtester.{{ .Values.canary.loadtester.stagingDomain | default "stg.example.com" }}/gate/close 
+      {{- end }}
+    - name: close-rollback-canary
+      type: post-rollout
+      {{- if or (eq .Values.labels.env "prod") (eq .Values.labels.env "prd") (eq .Values.labels.env "int") }}
+      url: http://{{ .Values.labels.bu }}-flagger-loadtester.{{ .Values.canary.loadtester.prodDomain | default "internal.example.com" }}/rollback/close
+      {{- else }}
+      url: http://{{ .Values.labels.env }}-flagger-loadtester.{{ .Values.canary.loadtester.stagingDomain | default "stg.example.com" }}/rollback/close 
+      {{- end }}
+    {{- end }}
+    # Alerts for the above analysis
+    alerts:
+      - name: flagger-status
+        providerRef:
+          name: flagger-status
+          namespace: {{ .Values.namespace }}
+        severity: error
+      - name: flagger-status
+        providerRef:
+          name: flagger-status
+          namespace: {{ .Values.namespace }}
+        severity: warn
+      - name: flagger-status
+        providerRef:
+          name: flagger-status
+          namespace: {{ .Values.namespace }}
+        severity: info
+
+{{- end }}
+{{- end -}}

@@ -14,7 +14,6 @@ import (
 type NumerixService struct {
 	sqlConn          *infra.SQLConnection
 	prometheusClient externalcall.PrometheusClient
-	ringmasterClient externalcall.RingmasterClient
 	slackClient      externalcall.SlackClient
 	etcdClient       etcd.Manager
 }

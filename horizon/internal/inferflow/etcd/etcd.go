@@ -65,7 +65,7 @@ func (e *Etcd) CreateConfig(serviceName string, ConfigId string, InferflowConfig
 		return err
 	}
 
-	return e.inferflowInstance.CreateNode(fmt.Sprintf("/config/%s/services/%s/model-config/config-map/%s", e.appName, serviceName, ConfigId), string(configJson))
+	return e.inferflowInstance.CreateNode(fmt.Sprintf("/config/%s/services//%s/model-config/config-map/%s", e.appName, serviceName, ConfigId), string(configJson))
 }
 
 func (e *Etcd) UpdateConfig(serviceName string, ConfigId string, InferflowConfig InferflowConfig) error {

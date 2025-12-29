@@ -74,10 +74,22 @@ type Configs struct {
 
 	PhoenixServerBaseUrl string `mapstructure:"phoenix_server_base_url"`
 
+	PredatorMonitoringUrl string `mapstructure:"predator_monitoring_url"`
 	ScheduledCronExpression string `mapstructure:"scheduled_cron_expression"`
 
 	TestDeployableID    int `mapstructure:"test_deployable_id"`
 	TestGpuDeployableID int `mapstructure:"test_gpu_deployable_id"`
+
+	// Pricing Feature Retrieval Service configuration
+	PricingFeatureRetrievalBatchSize           string `mapstructure:"pricing_feature_retrieval_batch_size"`
+	PricingFeatureRetrievalDialTimeout         string `mapstructure:"pricing_feature_retrieval_dial_timeout_ms"`
+	PricingFeatureRetrievalHost                string `mapstructure:"pricing_feature_retrieval_host"`
+	PricingFeatureRetrievalIdleConnTimeout     string `mapstructure:"pricing_feature_retrieval_idle_conn_timeout_ms"`
+	PricingFeatureRetrievalMaxIdleConns        string `mapstructure:"pricing_feature_retrieval_max_idle_conns"`
+	PricingFeatureRetrievalMaxIdleConnsPerHost string `mapstructure:"pricing_feature_retrieval_max_idle_conns_per_host"`
+	PricingFeatureRetrievalPort                string `mapstructure:"pricing_feature_retrieval_port"`
+	PricingFeatureRetrievalGrpcPlainText       bool   `mapstructure:"pricing_feature_retrieval_grpc_plain_text"`
+	PricingFeatureRetrievalTimeoutMs           string `mapstructure:"pricing_feature_retrieval_timeout_in_ms"`
 
 	OnlineFeatureStoreAppName     string `mapstructure:"online_feature_store_app_name"`
 	ScyllaActiveConfIds           string `mapstructure:"scylla_active_conf_ids"`
@@ -85,8 +97,46 @@ type Configs struct {
 	DistributedCacheActiveConfIds string `mapstructure:"distributed_cache_active_conf_ids"`
 	InMemoryCacheActiveConfIds    string `mapstructure:"in_memory_cache_active_conf_ids"`
 
-	IsMeeshoEnabled     bool `mapstructure:"is_meesho_enabled"`
-	IsDummyModelEnabled bool `mapstructure:"is_dummy_model_enabled"`
+	ArgoCDAPI   string `mapstructure:"argocd_api"`
+	ArgoCDToken string `mapstructure:"argocd_token"`
+
+	WorkingEnv string `mapstructure:"working_env"`
+
+	GitHubAppID          int64  `mapstructure:"github_app_id"`
+	GitHubInstallationID int64  `mapstructure:"github_installation_id"`
+	GitHubPrivateKeyPath string `mapstructure:"github_private_key_path"`
+	GitHubOwner          string `mapstructure:"github_owner"`
+
+	ServiceConfigSource string `mapstructure:"service_config_source"`
+	ServiceConfigRepo   string `mapstructure:"service_config_repo"`
+	ServiceConfigPath   string `mapstructure:"service_config_path"`
+	GitHubCommitAuthor  string `mapstructure:"github_commit_author"`
+	GitHubCommitEmail   string `mapstructure:"github_commit_email"`
+
+	GitHubHelmChartRepo      string `mapstructure:"github_helm_chart_repo"`
+	GitHubInfraHelmChartRepo string `mapstructure:"github_infra_helm_chart_repo"`
+	GitHubArgoRepo           string `mapstructure:"github_argo_repo"`
+
+	VictoriaMetricsServerAddress string `mapstructure:"victoriametrics_server_address"`
+
+	GitHubBranchPrd    string `mapstructure:"github_branch_prd"`
+	GitHubBranchGcpPrd string `mapstructure:"github_branch_gcp_prd"`
+	GitHubBranchInt    string `mapstructure:"github_branch_int"`
+	GitHubBranchGcpInt string `mapstructure:"github_branch_gcp_int"`
+	GitHubBranchDev    string `mapstructure:"github_branch_dev"`
+	GitHubBranchGcpDev string `mapstructure:"github_branch_gcp_dev"`
+	GitHubBranchGcpStg string `mapstructure:"github_branch_gcp_stg"`
+	GitHubBranchFtr    string `mapstructure:"github_branch_ftr"`
+	GitHubBranchGcpFtr string `mapstructure:"github_branch_gcp_ftr"`
+
+	IsMeeshoEnabled bool `mapstructure:"is_meesho_enabled"`
+
+	RepositoryName string `mapstructure:"repository_name"`
+	BranchName     string `mapstructure:"branch_name"`
+
+	// DNS API configuration (for Meesho builds only)
+	DNSAPIBaseURL string `mapstructure:"dns_api_base_url"`
+	DNSAPIKey     string `mapstructure:"dns_api_key"`
 }
 
 type DynamicConfigs struct{}

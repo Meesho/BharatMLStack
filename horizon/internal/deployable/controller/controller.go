@@ -6,11 +6,22 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/Meesho/BharatMLStack/horizon/internal/constant"
 	"github.com/Meesho/BharatMLStack/horizon/internal/deployable/handler"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/servicedeployableconfig"
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
+
+var (
+	globalAppConfig configs.Configs
+)
+
+// SetAppConfig sets the global app config (called from router.Init)
+func SetAppConfig(cfg configs.Configs) {
+	globalAppConfig = cfg
+}
 
 type Config interface {
 	GetMetaData(ctx *gin.Context)
@@ -33,7 +44,12 @@ type V1 struct {
 func NewConfigController() Config {
 	if deployable == nil {
 		deployableInitOnce.Do(func() {
-			config, err := handler.NewDeployable(1)
+			// Use global config if set, otherwise create empty config (will fallback to database)
+			cfg := globalAppConfig
+			if cfg.ServiceConfigSource == "" {
+				// Config not set, will use database fallback
+			}
+			config, err := handler.NewDeployable(1, cfg)
 			if err != nil {
 				panic(fmt.Sprintf("Failed to initialize deployable config: %v", err))
 			}
@@ -60,6 +76,9 @@ func (d *V1) GetMetaData(ctx *gin.Context) {
 func (d *V1) CreateDeployable(ctx *gin.Context) {
 	var request handler.DeployableRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
+		log.Error().
+			Err(err).
+			Msg("CreateDeployable: Failed to bind JSON request")
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid request format",
 			"data":  nil,
@@ -67,7 +86,77 @@ func (d *V1) CreateDeployable(ctx *gin.Context) {
 		return
 	}
 
-	if err := d.config.CreateDeployable(&request); err != nil {
+	// Log request details for debugging
+	log.Info().
+		Str("appName", request.AppName).
+		Str("serviceName", request.ServiceName).
+		Int("environmentsCount", len(request.Environments)).
+		Str("queryWorkingEnv", ctx.Query("workingEnv")).
+		Msg("CreateDeployable: Request received")
+	
+	// Log each environment in the request for debugging
+	if len(request.Environments) > 0 {
+		for i, env := range request.Environments {
+			log.Info().
+				Str("appName", request.AppName).
+				Int("index", i).
+				Str("workingEnv", env.WorkingEnv).
+				Str("machineType", env.MachineType).
+				Str("serviceType", env.ServiceType).
+				Msg("CreateDeployable: Environment in parsed request")
+		}
+	}
+
+	// Support both new multi-environment format and legacy single-environment format
+	// If environments array is provided, use new multi-environment flow
+	// Otherwise, fall back to legacy flow with workingEnv query parameter
+	if len(request.Environments) > 0 {
+		log.Info().
+			Str("appName", request.AppName).
+			Int("environmentsCount", len(request.Environments)).
+			Msg("CreateDeployable: Detected multi-environment request, routing to CreateDeployableMultiEnvironment")
+		// New multi-environment flow
+		workflowIDs, err := d.config.CreateDeployableMultiEnvironment(&request)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Error registering deployable: %v", err),
+				"data":  nil,
+			})
+			return
+		}
+
+		ctx.JSON(http.StatusOK, gin.H{
+			"error": nil,
+			"data": gin.H{
+				"message":     "Deployable registered is in progress for multiple environments.",
+				"workflowIds": workflowIDs,
+			},
+		})
+		return
+	}
+
+	// Legacy single-environment flow (backward compatibility)
+	log.Info().
+		Str("appName", request.AppName).
+		Int("environmentsCount", len(request.Environments)).
+		Msg("CreateDeployable: No environments array detected, using legacy single-environment flow")
+	
+	workingEnv := ctx.Query("workingEnv")
+	if workingEnv == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "workingEnv query parameter is required when environments array is not provided",
+			"data":  nil,
+		})
+		return
+	}
+	
+	log.Info().
+		Str("appName", request.AppName).
+		Str("workingEnv", workingEnv).
+		Msg("CreateDeployable: Using single-environment flow")
+
+	workflowID, err := d.config.CreateDeployable(&request, workingEnv)
+	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Error registering deployable: %v", err),
 			"data":  nil,
@@ -78,7 +167,8 @@ func (d *V1) CreateDeployable(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"error": nil,
 		"data": gin.H{
-			"message": "Deployable registered is in progress.",
+			"message":    "Deployable registered is in progress.",
+			"workflowId": workflowID,
 		},
 	})
 }
@@ -93,7 +183,16 @@ func (d *V1) UpdateDeployable(ctx *gin.Context) {
 		return
 	}
 
-	if err := d.config.UpdateDeployable(&request); err != nil {
+	workingEnv := ctx.Query("workingEnv")
+	if workingEnv == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "workingEnv query parameter is required",
+			"data":  nil,
+		})
+		return
+	}
+
+	if err := d.config.UpdateDeployable(&request, workingEnv); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Error updating deployable: %v", err),
 			"data":  nil,
@@ -224,6 +323,7 @@ func (d *V1) GetDeployablesByService(ctx *gin.Context) {
 func (d *V1) RefreshDeployable(ctx *gin.Context) {
 	appName := ctx.Query("app_name")
 	serviceType := ctx.Query("service_type")
+	workingEnv := ctx.Query("workingEnv")
 
 	if appName == "" || serviceType == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -233,7 +333,15 @@ func (d *V1) RefreshDeployable(ctx *gin.Context) {
 		return
 	}
 
-	deployable, err := d.config.RefreshDeployable(appName, serviceType)
+	if workingEnv == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "workingEnv query parameter is required",
+			"data":  nil,
+		})
+		return
+	}
+
+	deployable, err := d.config.RefreshDeployable(appName, serviceType, workingEnv)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Error refreshing deployable: %v", err),
@@ -262,7 +370,18 @@ func (d *V1) TuneThresholds(ctx *gin.Context) {
 		return
 	}
 
-	if err := d.config.TuneThresholds(&request); err != nil {
+	// Get workingEnv from query parameter (required for multi-environment support)
+	workingEnv := ctx.Query("workingEnv")
+	if workingEnv == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "workingEnv query parameter is required",
+			"data":  nil,
+		})
+		return
+	}
+
+	workflowID, err := d.config.TuneThresholds(&request, workingEnv)
+	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Error updating deployable thresholds: %v", err),
 			"data":  nil,
@@ -273,7 +392,8 @@ func (d *V1) TuneThresholds(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"error": nil,
 		"data": gin.H{
-			"message": "Deployable Thresholds Updated Started.",
+			"message":    "Deployable Thresholds Update Started.",
+			"workflowId": workflowID,
 		},
 	})
 }

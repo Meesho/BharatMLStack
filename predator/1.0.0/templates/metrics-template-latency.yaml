@@ -1,0 +1,30 @@
+{{- if and .Values.canary .Values.canary.enabled }}
+apiVersion: flagger.app/v1beta1
+kind: MetricTemplate
+metadata:
+  labels:
+    {{- include "labels.common" . | nindent 4 }}
+  name: {{ .Values.namespace }}-latency
+  namespace: {{ .Values.namespace }}
+spec:
+  provider:
+    type: prometheus
+  {{- $bu := .Values.labels.bu }}
+  {{- if not (or (eq $bu "demand") (eq $bu "farmiso") (eq $bu "central") (eq $bu "dataengg") (eq $bu "datascience") (eq $bu "supply") (eq $bu "infra")) }}
+  {{- $bu = "infra" }}
+  {{- end }}
+  {{- $address := printf "http://vmselect-%s-prd-proxy.victoriametrics.svc.cluster.local:8481/select/100/prometheus/" $bu }}
+    address: {{ $address }}
+  {{- if and (.Values.ingress.enableWebsocket) (or (eq .Values.namespace "prd-voice-bot") (eq .Values.namespace "prd-devops-golang-app")) }}
+  query: |
+    avg(CALL_DURATION_value{app="{{ .Values.namespace }}", kubernetes_pod_name!~".*-primary-.*"}[1m:30s])
+  {{- else }}
+  {{- if or ( eq "contour-internal" .Values.ingress.ingressClassName ) ( eq "contour-external" .Values.ingress.ingressClassName ) ( eq "contour-internal-0" .Values.ingress.ingressClassName ) ( eq "contour-internal-1" .Values.ingress.ingressClassName ) ( eq "contour-external-0" .Values.ingress.ingressClassName ) ( eq "contour-external-1" .Values.ingress.ingressClassName ) }}
+  query: |
+    (histogram_quantile(0.99, sum(rate(envoy_cluster_upstream_rq_time_bucket{envoy_cluster_name=~"{{ .Values.namespace }}_{{ .Values.namespace }}-canary_80"})[1m]) by (envoy_cluster_name, le)) > bool sum(uptime_sla_latency_percentile_threshold{envoy_cluster_name="{{ .Values.namespace }}_{{ .Values.namespace }}-primary_80"} or 0)) * sum(uptime_sla_latency_percentile_threshold{envoy_cluster_name="{{ .Values.namespace }}_{{ .Values.namespace }}-primary_80"} or 0)
+  {{- else }}
+  query: |
+    (histogram_quantile(0.99, sum(rate(envoy_cluster_upstream_rq_time_bucket{envoy_cluster_name=~"{{ .Values.namespace }}_{{ .Values.namespace }}-canary_80"})[1m]) by (envoy_cluster_name, le)) > bool sum(uptime_sla_latency_percentile_threshold{envoy_cluster_name="{{ .Values.namespace }}_{{ .Values.namespace }}-primary_80"} or 0)) * sum(uptime_sla_latency_percentile_threshold{envoy_cluster_name="{{ .Values.namespace }}_{{ .Values.namespace }}-primary_80"} or 0)
+  {{- end }}
+  {{- end }}
+{{- end }}

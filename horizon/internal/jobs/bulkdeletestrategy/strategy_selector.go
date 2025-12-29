@@ -7,6 +7,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
 	inferflow_etcd "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
+	infrastructurehandler "github.com/Meesho/BharatMLStack/horizon/internal/infrastructure/handler"
 	numerix_etcd "github.com/Meesho/BharatMLStack/horizon/internal/numerix/etcd"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/rs/zerolog/log"
@@ -17,13 +18,14 @@ type StrategySelectorImplStrategySelector interface {
 }
 
 type StrategySelectorImpl struct {
-	sqlConn             *infra.SQLConnection
-	prometheusClient    externalcall.PrometheusClient
-	ringmasterClient    externalcall.RingmasterClient
-	slackClient         externalcall.SlackClient
-	gcsClient           externalcall.GCSClientInterface
-	InferflowEtcdClient inferflow_etcd.Manager
-	NumerixEtcdClient   numerix_etcd.Manager
+	sqlConn               *infra.SQLConnection
+	prometheusClient      externalcall.PrometheusClient
+	infrastructureHandler infrastructurehandler.InfrastructureHandler
+	workingEnv            string
+	slackClient           externalcall.SlackClient
+	gcsClient             externalcall.GCSClientInterface
+	InferflowEtcdClient   inferflow_etcd.Manager
+	NumerixEtcdClient     numerix_etcd.Manager
 }
 
 var (
@@ -53,15 +55,18 @@ func Init(config configs.Configs) StrategySelectorImpl {
 
 		inferflowEtcdClient := inferflow_etcd.NewEtcdInstance()
 		numerixEtcdClient := numerix_etcd.NewEtcdInstance()
+		infrastructureHandler := infrastructurehandler.InitInfrastructureHandler()
+		workingEnv := externalcall.GetWorkingEnvironment()
 
 		strategySelectorImpl = StrategySelectorImpl{
-			sqlConn:             sqlConn,
-			prometheusClient:    externalcall.GetPrometheusClient(),
-			ringmasterClient:    externalcall.GetRingmasterClient(),
-			slackClient:         externalcall.GetSlackClient(),
-			gcsClient:           externalcall.CreateGCSClient(config.GcsEnabled),
-			InferflowEtcdClient: inferflowEtcdClient,
-			NumerixEtcdClient:   numerixEtcdClient,
+			sqlConn:               sqlConn,
+			prometheusClient:      externalcall.GetPrometheusClient(),
+			slackClient:           externalcall.GetSlackClient(),
+			gcsClient:             externalcall.CreateGCSClient(config.GcsEnabled),
+			InferflowEtcdClient:   inferflowEtcdClient,
+			NumerixEtcdClient:     numerixEtcdClient,
+			infrastructureHandler: infrastructureHandler,
+			workingEnv:            workingEnv,
 		}
 	})
 	return strategySelectorImpl
@@ -69,11 +74,11 @@ func Init(config configs.Configs) StrategySelectorImpl {
 func (ss *StrategySelectorImpl) GetBulkDeleteStrategy(service string) (BulkDeleteStrategy, error) {
 	switch service {
 	case "INFERFLOW":
-		return &InferflowService{ss.sqlConn, ss.prometheusClient, ss.ringmasterClient, ss.slackClient, ss.InferflowEtcdClient}, nil
+		return &InferflowService{ss.sqlConn, ss.prometheusClient, ss.slackClient, ss.InferflowEtcdClient}, nil
 	case "PREDATOR":
-		return &PredatorService{ss.sqlConn, ss.prometheusClient, ss.ringmasterClient, ss.slackClient, ss.gcsClient}, nil
+		return &PredatorService{ss.sqlConn, ss.prometheusClient, ss.infrastructureHandler, ss.workingEnv, ss.slackClient, ss.gcsClient}, nil
 	case "NUMERIX":
-		return &NumerixService{ss.sqlConn, ss.prometheusClient, ss.ringmasterClient, ss.slackClient, ss.NumerixEtcdClient}, nil
+		return &NumerixService{ss.sqlConn, ss.prometheusClient, ss.slackClient, ss.NumerixEtcdClient}, nil
 	default:
 		log.Warn().Msg("Unknown service type: " + service)
 		return nil, errors.New("unknown service type: " + service)

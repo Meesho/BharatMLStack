@@ -557,6 +557,19 @@ func (v *V1) SetValue(path string, value interface{}) error {
 	return nil
 }
 
+// GetValue retrieves a value from etcd at the given path
+func (v *V1) GetValue(path string) (string, error) {
+	response, err := v.conn.Get(context.Background(), path)
+	if err != nil {
+		log.Error().Msgf("Failed to get value from node %s: %v", path, err)
+		return "", err
+	}
+	if len(response.Kvs) == 0 {
+		return "", fmt.Errorf("node not found at path: %s", path)
+	}
+	return string(response.Kvs[0].Value), nil
+}
+
 // SetValues sets the values at the given paths
 func (v *V1) SetValues(paths map[string]interface{}) error {
 	for path, value := range paths {
@@ -571,13 +584,9 @@ func (v *V1) SetValues(paths map[string]interface{}) error {
 // CreateNode creates a node at the given path with the given value
 func (v *V1) CreateNode(path string, value interface{}) error {
 	exists, err := v.IsLeafNodeExist(path)
-	if err != nil {
-		log.Error().Msgf("Error checking if node exists for %s: %v", path, err)
-		return err
-	}
-	if exists {
-		log.Error().Msgf("Node already exist for %s, not creating new node", path)
-		return fmt.Errorf("node already exists at path: %s", path)
+	if exists || err != nil {
+		log.Warn().Msgf("Node already exist for %s, not creating new node", path)
+		return nil
 	}
 	response, err := v.conn.Put(context.Background(), path, fmt.Sprintf("%v", value))
 	log.Debug().Msgf("Path Created: %v", response)

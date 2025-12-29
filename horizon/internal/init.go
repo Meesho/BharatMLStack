@@ -8,6 +8,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/numerix"
 	onlinefeaturestore "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store"
 	"github.com/Meesho/BharatMLStack/horizon/internal/predator"
+	"github.com/Meesho/BharatMLStack/horizon/internal/workflow"
 )
 
 func InitAll(config configs.Configs) {
@@ -17,4 +18,5 @@ func InitAll(config configs.Configs) {
 	predator.Init(config)
 	deployableHandler.Init(config)
 	inferflow.Init(config)
+	workflow.Init(config)
 }

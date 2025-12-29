@@ -1,0 +1,105 @@
+{{ template "common-values.tmpl" . }}
+
+{{ define "podAnnotations" }}
+    {{ if contains .nodeSelector "arm64" }}telegraf.influxdata.com/image: {{ .telegraf_image }}{{ end }}
+    {{ if .telegrafConfig }}
+    telegraf.influxdata.com/limits-cpu: {{ .telegrafConfig.limitsCpu }}
+    telegraf.influxdata.com/limits-memory: {{ .telegrafConfig.limitsMemory }}
+    telegraf.influxdata.com/requests-cpu: {{ .telegrafConfig.requestsCpu }}
+    telegraf.influxdata.com/requests-memory: {{ .telegrafConfig.requestsMemory }}
+    {{ end }}
+{{ end }}
+
+{{ define "args" }}
+{{ end }}
+
+{{ define "command" }}
+    - /bin/sh
+    - -c
+    - tritonserver --model-repository=/models --metrics-config summary_latencies=true
+{{ end }}
+
+{{ define "externalSecret" }}
+  enabled: false
+{{ end }}
+
+{{ define "env" }}
+    null
+{{ end }}
+
+{{ define "ports" }}
+  ports:
+    - containerPort: 8000
+      name: http1
+      protocol: TCP
+    - containerPort: 8001
+      name: http2
+      protocol: TCP
+    - containerPort: 8002
+      name: http3
+      protocol: TCP
+{{ end }}
+
+{{ define "probes" }}
+  probes:
+    liveness:
+      failureThreshold: {{ .liveness_failure_threshold }}
+      initialDelaySeconds: {{ .initialDelaySeconds }}
+      path: /v2/health/ready
+      periodSeconds: {{ .liveness_period_seconds }}
+      port: 8000
+      scheme: HTTP
+      successThreshold: {{ .liveness_success_threshold }}
+      timeoutSeconds: {{ .liveness_timeout_seconds }}
+    readiness:
+      failureThreshold: {{ .readiness_failure_threshold }}
+      initialDelaySeconds: {{ .initialDelaySeconds }}
+      path: /v2/health/ready
+      periodSeconds: {{ .readiness_period_seconds }}
+      port: 8000
+      scheme: HTTP
+      successThreshold: {{ .readiness_success_threshold }}
+      timeoutSeconds: {{ .readiness_timeout_seconds }}
+{{ end }}
+
+{{ define "tolerations" }}
+  tolerations:
+    - effect: NoSchedule
+      key: {{ .nodeSelector }}
+      operator: Equal
+      value: {{ .nodeSelectorValue }}
+    - effect: NoSchedule
+      key: nvidia.com/gpu
+      operator: Exists
+{{ end }}
+
+{{ define "service" }}
+service:
+  annotations:
+    projectcontour.io/upstream-protocol.h2c: "80"
+  enabled: true
+  addHeadless: {{ .addHeadless }}
+{{ if .addon_ports }}
+  {{ range .addon_ports}}
+  addons:
+    - name: {{ .name }}
+      targetPort: {{ .targetPort}}
+      type: {{ .type }}
+  {{ end }}
+{{ else }}
+  addon_ports: []
+{{ end }}
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: {{ .primary_port }}
+  type: ClusterIP
+{{ end }}
+
+# Shared Memory Configuration
+{{ if .sharedMemory }}
+sharedmemory:
+  size: {{ .sharedMemory.size }}
+{{ end }}
+
