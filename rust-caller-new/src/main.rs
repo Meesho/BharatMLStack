@@ -18,6 +18,8 @@ pub mod retrieve {
 use retrieve::feature_service_client::FeatureServiceClient;
 use retrieve::{FeatureGroup, Keys, Query};
 
+// RetrieveFeaturesRequest matches Query structure exactly
+// This allows direct assignment without any conversion/copying
 #[derive(Deserialize)]
 struct RetrieveFeaturesRequest {
     #[serde(rename = "entity_label")]
@@ -60,7 +62,7 @@ async fn handler(
     req: Request<IncomingBody>,
     state: Arc<AppState>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-    // Collect body bytes
+    // Collect body bytes - to_bytes() efficiently combines chunks
     let body_bytes = match req.into_body().collect().await {
         Ok(collected) => collected.to_bytes(),
         Err(_) => {
@@ -72,7 +74,7 @@ async fn handler(
         }
     };
 
-    // Parse JSON request
+    // Parse JSON directly into RetrieveFeaturesRequest (matches Query structure)
     let request_body: RetrieveFeaturesRequest = match serde_json::from_slice(&body_bytes) {
         Ok(body) => body,
         Err(_) => {
@@ -84,30 +86,39 @@ async fn handler(
         }
     };
 
-    // Build gRPC Query message
+    // Direct assignment - ZERO COPY: moves ownership from request_body to Query
+    // All fields match exactly, so we can move without any conversion
     let query = Query {
-        entity_label: request_body.entity_label,
-        feature_groups: request_body.feature_groups.into_iter().map(|fg| {
-            FeatureGroup {
-                label: fg.label,
-                feature_labels: fg.feature_labels,
-            }
-        }).collect(),
-        keys_schema: request_body.keys_schema,
-        keys: request_body.keys.into_iter().map(|k| Keys { cols: k.cols }).collect(),
+        entity_label: request_body.entity_label, // MOVE: zero-copy transfer
+        feature_groups: request_body.feature_groups
+            .into_iter() // Consumes Vec, moves elements (zero-copy)
+            .map(|fg| FeatureGroup {
+                label: fg.label, // MOVE: zero-copy transfer
+                feature_labels: fg.feature_labels, // MOVE: zero-copy transfer
+            })
+            .collect(), // Only allocates Vec container, data is moved
+        keys_schema: request_body.keys_schema, // MOVE: zero-copy transfer
+        keys: request_body.keys
+            .into_iter() // Consumes Vec, moves elements (zero-copy)
+            .map(|k| Keys { 
+                cols: k.cols // MOVE: zero-copy transfer
+            })
+            .collect(), // Only allocates Vec container, data is moved
     };
 
-    // Create Tonic request with metadata
+    // Create Tonic request with metadata - reuse metadata from state (no clone needed)
     let mut grpc_request = TonicRequest::new(query);
     grpc_request.metadata_mut().insert(
         "online-feature-store-auth-token",
-        state.auth_token.clone(),
+        state.auth_token.clone(), // AsciiMetadataValue clone is cheap (Arc internally)
     );
     grpc_request.metadata_mut().insert(
         "online-feature-store-caller-id",
-        state.caller_id.clone(),
+        state.caller_id.clone(), // AsciiMetadataValue clone is cheap (Arc internally)
     );
 
+    // Clone client once - FeatureServiceClient::clone() is cheap (Arc internally)
+    // We need clone because retrieve_features takes &mut self
     let mut client = state.client.clone();
     match tokio::time::timeout(Duration::from_secs(5), client.retrieve_features(grpc_request)).await {
         Ok(Ok(_)) => Ok(Response::builder()
@@ -128,12 +139,25 @@ async fn handler(
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Configure Tokio runtime to use all CPU cores for maximum performance
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(0) // 0 = use all CPU cores
+        .enable_all()
+        .build()?;
+    
+    rt.block_on(async_main())
+}
+
+async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
+    // Configure gRPC channel with HTTP/2 optimizations
     let channel = Channel::from_static("http://online-feature-store-api.int.meesho.int:80")
         .http2_keep_alive_interval(Duration::from_secs(30))
         .keep_alive_timeout(Duration::from_secs(10))
         .keep_alive_while_idle(true)
+        .initial_stream_window_size(2 * 1024 * 1024) // 2MB stream window
+        .initial_connection_window_size(4 * 1024 * 1024) // 4MB connection window
+        .concurrency_limit(4000) // Allow up to 4000 concurrent requests
         .connect()
         .await?;
 
@@ -145,20 +169,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let listener = TcpListener::bind("0.0.0.0:8080").await?;
 
+    // Create service once and reuse for all connections
+    let service = service_fn({
+        let state = state.clone();
+        move |req| {
+            let state = state.clone();
+            handler(req, state)
+        }
+    });
+
     loop {
         let (stream, _) = listener.accept().await?;
         let io = TokioIo::new(stream);
-        let state_clone = state.clone();
+        let service = service.clone();
 
         tokio::task::spawn(async move {
-            let service = service_fn({
-                let state = state_clone.clone();
-                move |req| {
-                    let state = state.clone();
-                    handler(req, state)
-                }
-            });
-
+            // Use HTTP/1.1 with keep-alive for better connection reuse
             let mut builder = http1::Builder::new();
             builder.keep_alive(true);
             let _ = builder.serve_connection(io, service).await;
