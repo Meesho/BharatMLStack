@@ -68,7 +68,7 @@ The start script provides an interactive service selector that allows you to cho
 ```
 
 **Interactive Options:**
-1. **All Services** - Starts all application services (API Server, Consumer, Horizon, Numerix, TruffleBox UI, Inferflow, Predator)
+1. **All Services** - Starts all application services (API Server, Consumer, Horizon, Numerix, TruffleBox UI, Inferflow)
 2. **Custom Selection** - Choose individual services to start
 3. **Exit** - Exit without starting
 
@@ -77,7 +77,9 @@ The start script provides an interactive service selector that allows you to cho
 **Optional Services:**
 - **Kubernetes (kind cluster)** - Local Kubernetes cluster for container orchestration
 
-During interactive mode, you'll be prompted to optionally include Kubernetes. See the "ArgoCD (Optional - Manual Installation)" section below for instructions on installing ArgoCD in the Kubernetes cluster.
+**Note:** Predator is not a Docker Compose service. It is deployed via ArgoCD in Kubernetes. If you need to set up Predator, see the [Predator Local Setup Guide](PREDATOR_SETUP.md) for complete instructions.
+
+During interactive mode, you'll be prompted to optionally include Kubernetes. For Predator setup, you'll need to follow the comprehensive guide in [PREDATOR_SETUP.md](PREDATOR_SETUP.md) which includes ArgoCD installation, GitHub App setup, and repository configuration.
 
 ### Initializing with Dummy Data
 
@@ -248,6 +250,9 @@ Once complete, you can access:
 - **etcd Workbench**: http://localhost:8081
 - **Kafka UI**: http://localhost:8084
 - **Kubernetes** (if enabled): Use `kubectl cluster-info --context kind-bharatml-stack`
+- **ArgoCD** (if installed): http://localhost:8087 (requires port-forward - see [Predator Setup Guide](PREDATOR_SETUP.md))
+
+**Note:** Predator is accessed through ArgoCD UI after completing the setup in [PREDATOR_SETUP.md](PREDATOR_SETUP.md).
 
 ### Stopping the System
 
@@ -294,11 +299,33 @@ To stop and completely purge all containers, volumes, and workspace:
   kubectl get nodes --context kind-bharatml-stack
   ```
 
-### ArgoCD (Optional - Manual Installation)
+**Note:** For Predator setup on Kubernetes, see the [Predator Local Setup Guide](PREDATOR_SETUP.md) which includes cluster creation, node labeling, ArgoCD installation, and all required configurations.
 
-ArgoCD can be installed in the Kubernetes cluster using kubectl. Follow these steps:
+### Predator and ArgoCD Setup
 
-1. **Ensure Kubernetes cluster is running** (start with `./start.sh --k8s` or enable Kubernetes in interactive mode)
+**Predator** is a service deployment and management system that runs on Kubernetes and uses ArgoCD for GitOps-based deployments. It is **not** a Docker Compose service and requires a comprehensive setup process.
+
+**For complete Predator setup instructions, see the [Predator Local Setup Guide](PREDATOR_SETUP.md).**
+
+The setup includes:
+- Creating and configuring a Kubernetes cluster (kind, minikube, or Docker Desktop)
+- Labeling Kubernetes nodes for pod scheduling
+- Installing required CRDs (Flagger, KEDA) and PriorityClass
+- Installing and configuring ArgoCD
+- Setting up GitHub App for repository access
+- Configuring ArgoCD repository connections
+- Setting up automated application onboarding
+
+**Quick Start (Basic ArgoCD Installation Only):**
+
+If you only need basic ArgoCD installation without Predator setup:
+
+1. **Create a Kubernetes cluster** (if not already running). You can use kind, minikube, or Docker Desktop Kubernetes. See [PREDATOR_SETUP.md](PREDATOR_SETUP.md) Step 1.0 for detailed cluster creation instructions.
+
+   **Quick example with kind:**
+   ```bash
+   kind create cluster --name bharatml-stack
+   ```
 
 2. **Install ArgoCD in the cluster:**
    ```bash
@@ -312,39 +339,24 @@ ArgoCD can be installed in the Kubernetes cluster using kubectl. Follow these st
    kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
    ```
 
-4. **Access ArgoCD:**
-
-   By default, ArgoCD's service is a ClusterIP (only accessible from within the cluster). You have two options:
-
-   **Option A: Port-Forward (Temporary, requires keeping terminal open)**
+4. **Port-forward ArgoCD server:**
    ```bash
    kubectl port-forward svc/argocd-server -n argocd 8087:443
    ```
    Keep this terminal session running. Access ArgoCD at http://localhost:8087
 
-   **Option B: NodePort (Persistent, no terminal needed)**
-   ```bash
-   # Change the service type to NodePort
-   kubectl patch svc argocd-server -n argocd -p '{"spec":{"type":"NodePort"}}'
-   
-   # Get the NodePort (usually in 30000-32767 range)
-   kubectl get svc argocd-server -n argocd
-   ```
-   Access ArgoCD at `https://localhost:<NODEPORT>` (use the port shown in the output, typically around 30000-32767)
-
 5. **Get the initial admin password:**
    ```bash
    kubectl -n argocd get secret argocd-initial-admin-secret \
-     -o jsonpath="{.data.password}" | base64 -d
+     -o jsonpath="{.data.password}" | base64 -d && echo
    ```
 
 6. **Access ArgoCD UI:**
-   - **If using port-forward**: http://localhost:8087
-   - **If using NodePort**: https://localhost:<NODEPORT> (use the port from step 4)
+   - URL: http://localhost:8087
    - Username: `admin`
    - Password: (from step 5)
 
-**Why port-forward?** ArgoCD's default service type (ClusterIP) only allows access from within the cluster. Port-forward creates a temporary tunnel from your local machine to the cluster. For persistent access without keeping a terminal open, use NodePort (Option B above).
+**Note:** This basic installation is sufficient for exploring ArgoCD, but **for Predator setup, you must follow the complete guide in [PREDATOR_SETUP.md](PREDATOR_SETUP.md)** which includes all required CRDs, node labeling, GitHub App configuration, and repository setup.
 
 ### Database Access
 
