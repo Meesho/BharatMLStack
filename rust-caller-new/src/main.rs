@@ -156,66 +156,55 @@ async fn retrieve_features_handler(
     state: Arc<AppState>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
 
-    if req.method() != Method::POST || req.uri().path() != "/retrieve-features" {
-        return Ok(Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Full::new(Bytes::from("Not found")))
-            .unwrap());
-    }
-
-    // 1. Efficiently collect body
-    let body_bytes = match http_body_util::BodyExt::collect(req.into_body()).await {
-        Ok(collected) => collected.to_bytes(),
-        Err(_) => return Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(Full::new(Bytes::from("Err"))).unwrap()),
+    let body = req.collect().await.map_err(|_| {
+        Response::builder().status(StatusCode::BAD_REQUEST).body(Full::new(Bytes::from("Body Error"))).unwrap()
+    });
+    
+    let body_bytes = match body {
+        Ok(b) => b.to_bytes(),
+        Err(e) => return Ok(e),
     };
-
 
     let request_body: RetrieveFeaturesRequest = match serde_json::from_slice(&body_bytes) {
         Ok(body) => body,
         Err(e) => return Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(Full::new(Bytes::from(e.to_string()))).unwrap()),
     };
 
-    // 3. ZERO-COPY TRANSFORMATION:
-    // We consume 'request_body' so that the Strings and Vecs are MOVED into the Protobuf struct,
-    // not cloned. This is the most efficient way in Rust without using unsafe.
-    // Using into_iter() moves ownership, avoiding all string/slice copies.
     let query = retrieve::Query {
-        entity_label: request_body.entity_label, // Move String (zero-copy)
+        entity_label: request_body.entity_label,
         feature_groups: request_body.feature_groups
-            .into_iter() // Consume Vec, move ownership
+            .into_iter()
             .map(|fg| FeatureGroup {
-                label: fg.label, // Move String (zero-copy)
-                feature_labels: fg.feature_labels, // Move Vec<String> (zero-copy)
+                label: fg.label,
+                feature_labels: fg.feature_labels,
             })
-            .collect::<Vec<_>>(), // Pre-allocates based on iterator size_hint()
-        keys_schema: request_body.keys_schema, // Move Vec<String> (zero-copy)
+            .collect(),
+        keys_schema: request_body.keys_schema,
         keys: request_body.keys
-            .into_iter() // Consume Vec, move ownership
-            .map(|k| Keys { cols: k.cols }) // Move Vec<String> (zero-copy)
-            .collect::<Vec<_>>(), // Pre-allocates based on iterator size_hint()
-    };  
-    
+            .into_iter()
+            .map(|k| Keys { cols: k.cols })
+            .collect(),
+    };
+
     let mut grpc_request = tonic::Request::new(query);
+    // Optimization: Add metadata using permanent AsciiMetadataValue to avoid re-parsing strings
     grpc_request.set_timeout(Duration::from_secs(10));
     grpc_request.metadata_mut().insert("online-feature-store-auth-token", state.auth_token.clone());
     grpc_request.metadata_mut().insert("online-feature-store-caller-id", state.caller_id.clone());
-
-    // Execute gRPC call
+    
     match state.client.clone().retrieve_features(grpc_request).await {
-        Ok(response) => {
-            // Immediately drop to free up the large Protobuf response buffer
-            drop(response);
-            
+        Ok(grpc_resp) => {
+            let inner_data = grpc_resp.into_inner();
             Ok(Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "application/json")
-                .body(Full::new(Bytes::from_static(b"\"success\""))) // Static bytes avoid allocation
+                .body(Full::new(Bytes::from_static(b"\"success\"")))
                 .unwrap())
         }
-        Err(_) => {
+        Err(e) => {
             Ok(Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Full::new(Bytes::from_static(b"\"error\"")))
+                .body(Full::new(Bytes::from(format!("\"gRPC Error: {}\"", e))))
                 .unwrap())
         }
     }
