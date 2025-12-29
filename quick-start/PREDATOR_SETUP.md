@@ -14,6 +14,7 @@ This guide will walk you through setting up Predator for local development, incl
 8. [Step 7: Place GitHub Private Key in Horizon Configs](#step-7-place-github-private-key-in-horizon-configs)
 9. [Step 8: Configure Docker Compose](#step-8-configure-docker-compose)
 10. [Step 9: Verify Setup](#step-9-verify-setup)
+11. [Step 10: Access Predator Service Through Contour HTTPProxy](#step-10-access-predator-service-through-contour-httpproxy)
 
 ---
 
@@ -1186,8 +1187,12 @@ The Kubernetes API could not find projectcontour.io/HTTPProxy for requested reso
 ```
 
 **Solution:**
-1. **Install Contour CRDs** (see Step 1.0):
+1. **Install Contour CRDs** (see Step 1.2):
    ```bash
+   # Install full Contour deployment (includes CRDs + Contour + Envoy)
+   kubectl apply -f https://projectcontour.io/quickstart/contour.yaml
+   
+   # Or install only CRDs if you have Contour already running:
    kubectl apply -f https://raw.githubusercontent.com/projectcontour/contour/main/examples/contour/01-crds.yaml
    ```
 
