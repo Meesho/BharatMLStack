@@ -394,68 +394,97 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
                         match guard.report().build() {
                             Ok(report) => {
                                 // Generate flamegraph using inferno
-                                // Note: For best results with function names, use /pprof/protobuf 
-                                // and convert with: go tool pprof -http=:8081 <profile.pb.gz>
+                                // Parse the report's Debug format to extract function names
+                                // The Debug format shows: "FRAME: function_name -> FRAME: function_name -> ..."
                                 use pprof::flamegraph;
                                 let mut flamegraph_data = Vec::new();
                                 let mut options = flamegraph::Options::default();
                                 
-                                // Convert pprof Report to flamegraph format
-                                // Format: "function1;function2;function3 sample_count"
+                                // Convert report to text format to parse function names
+                                let report_text = format!("{:?}", report);
+                                
+                                // Parse the text format to extract call stacks
+                                // Format in text: "FRAME: func1 -> FRAME: func2 -> ... THREAD: thread_name"
                                 let mut flamegraph_lines = Vec::new();
                                 
-                                for (frames, count) in report.data.iter() {
-                                    if frames.frames.is_empty() {
+                                // Split by lines and parse each stack trace
+                                for line in report_text.lines() {
+                                    if !line.contains("FRAME:") {
                                         continue;
                                     }
                                     
-                                    // Build the call stack string (semicolon-separated, bottom to top)
+                                    // Extract function names from "FRAME: function_name ->" pattern
                                     let mut stack_parts = Vec::new();
-                                    for frame_symbols in frames.frames.iter().rev() {
-                                        // Try all symbols in the frame to find a valid name
-                                        let mut frame_name = None;
+                                    let parts: Vec<&str> = line.split("FRAME:").collect();
+                                    
+                                    for part in parts.iter().skip(1) {
+                                        // Extract function name before "->" or end of line
+                                        let func_part = part.split("->").next().unwrap_or("").trim();
+                                        if !func_part.is_empty() && func_part != "THREAD" {
+                                            stack_parts.push(func_part.to_string());
+                                        }
+                                    }
+                                    
+                                    // Extract sample count (if available) or use 1
+                                    // The count is typically in the report.data, but we'll use 1 for now
+                                    // since we're parsing from text format
+                                    if !stack_parts.is_empty() {
+                                        // Reverse to get call stack from root to leaf
+                                        stack_parts.reverse();
+                                        let stack_str = stack_parts.join(";");
+                                        flamegraph_lines.push(format!("{} 1", stack_str));
+                                    }
+                                }
+                                
+                                // If text parsing didn't work, fall back to direct data access
+                                if flamegraph_lines.is_empty() {
+                                    // Try direct access to report.data
+                                    for (frames, count) in report.data.iter() {
+                                        if frames.frames.is_empty() {
+                                            continue;
+                                        }
                                         
-                                        for symbol in frame_symbols.iter() {
-                                            // Check if symbol has a name
-                                            if let Some(name_bytes) = &symbol.name {
-                                                if !name_bytes.is_empty() {
-                                                    let name = String::from_utf8_lossy(name_bytes);
-                                                    let trimmed = name.trim();
-                                                    // Only use non-empty, non-unknown names
-                                                    if !trimmed.is_empty() && trimmed != "unknown" && !trimmed.starts_with("0x") {
-                                                        frame_name = Some(trimmed.to_string());
-                                                        break;
+                                        let mut stack_parts = Vec::new();
+                                        for frame_symbols in frames.frames.iter().rev() {
+                                            let mut frame_name = None;
+                                            
+                                            for symbol in frame_symbols.iter() {
+                                                if let Some(name_bytes) = &symbol.name {
+                                                    if !name_bytes.is_empty() {
+                                                        let name = String::from_utf8_lossy(name_bytes).trim().to_string();
+                                                        if !name.is_empty() && name != "unknown" {
+                                                            frame_name = Some(name);
+                                                            break;
+                                                        }
                                                     }
                                                 }
                                             }
-                                        }
-                                        
-                                        // Fallback to address if no name found
-                                        let frame_str = frame_name.unwrap_or_else(|| {
-                                            if let Some(symbol) = frame_symbols.first() {
-                                                if let Some(addr) = symbol.addr {
-                                                    format!("0x{:p}", addr)
+                                            
+                                            let frame_str = frame_name.unwrap_or_else(|| {
+                                                if let Some(symbol) = frame_symbols.first() {
+                                                    if let Some(addr) = symbol.addr {
+                                                        format!("0x{:p}", addr)
+                                                    } else {
+                                                        "unknown".to_string()
+                                                    }
                                                 } else {
                                                     "unknown".to_string()
                                                 }
-                                            } else {
-                                                "unknown".to_string()
-                                            }
-                                        });
+                                            });
+                                            
+                                            stack_parts.push(frame_str);
+                                        }
                                         
-                                        stack_parts.push(frame_str);
-                                    }
-                                    
-                                    // Only add if we have valid frames (not all unknown)
-                                    if !stack_parts.is_empty() {
-                                        let stack_str = stack_parts.join(";");
-                                        flamegraph_lines.push(format!("{} {}", stack_str, count));
+                                        if !stack_parts.is_empty() {
+                                            let stack_str = stack_parts.join(";");
+                                            flamegraph_lines.push(format!("{} {}", stack_str, count));
+                                        }
                                     }
                                 }
                                 
                                 // Generate flamegraph
                                 if flamegraph_lines.is_empty() {
-                                    let _ = tx.send(Err("No call stack data found. Ensure the server is running and receiving traffic. For detailed function names, use /pprof/protobuf endpoint.".to_string()));
+                                    let _ = tx.send(Err("No call stack data found. Ensure the server is running and receiving traffic.".to_string()));
                                 } else {
                                     match flamegraph::from_lines(&mut options, flamegraph_lines.iter().map(|s| s.as_str()), &mut flamegraph_data) {
                                         Ok(_) => {
