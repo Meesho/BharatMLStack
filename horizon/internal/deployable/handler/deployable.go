@@ -30,7 +30,6 @@ type Deployable struct {
 	deployableMetaDataRepo deployablemetadata.DeployableMetadataRepository
 	serviceConfigRepo      serviceconfig.ServiceConfigRepository
 	serviceConfigLoader    configs.ServiceConfigLoader // Config-as-code loader
-	ringMasterClient       mainHandler.RingmasterClient
 	infrastructureHandler  infrastructurehandler.InfrastructureHandler
 	workflowHandler        workflowHandler.Handler // Workflow handler for async operations
 	workingEnv             string
@@ -39,7 +38,6 @@ type Deployable struct {
 func InitV1ConfigHandler(appConfig configs.Configs) Config {
 	var handler Config
 	deployableOnce.Do(func() {
-		ringMasterClient := mainHandler.GetRingmasterClient()
 		infrastructureHandler := infrastructurehandler.InitInfrastructureHandler()
 		workflowHandler := workflowHandler.GetWorkflowHandler()
 		workingEnv := mainHandler.GetWorkingEnvironment()
@@ -104,7 +102,6 @@ func InitV1ConfigHandler(appConfig configs.Configs) Config {
 			deployableMetaDataRepo: deployableMetaDataRepo,
 			serviceConfigRepo:      serviceConfigRepo,
 			serviceConfigLoader:    serviceConfigLoader,
-			ringMasterClient:       ringMasterClient,
 			infrastructureHandler:  infrastructureHandler,
 			workflowHandler:        workflowHandler,
 			workingEnv:             workingEnv,
@@ -133,7 +130,7 @@ func (d *Deployable) GetMetaData() (map[string][]string, error) {
 func (d *Deployable) CreateDeployable(request *DeployableRequest, workingEnv string) (string, error) {
 	switch request.ServiceName {
 	case "predator":
-		handler := NewHandler(d.repo, d.serviceConfigRepo, d.ringMasterClient)
+		handler := NewHandler(d.repo, d.serviceConfigRepo)
 		// Set service config loader if available
 		if d.serviceConfigLoader != nil {
 			handler.SetServiceConfigLoader(d.serviceConfigLoader)
@@ -359,7 +356,7 @@ func (d *Deployable) CreateDeployableMultiEnvironment(request *DeployableRequest
 func (d *Deployable) UpdateDeployable(request *DeployableRequest, workingEnv string) error {
 	switch request.ServiceName {
 	case "predator":
-		handler := NewHandler(d.repo, d.serviceConfigRepo, d.ringMasterClient)
+		handler := NewHandler(d.repo, d.serviceConfigRepo)
 		// Set service config loader if available
 		if d.serviceConfigLoader != nil {
 			handler.SetServiceConfigLoader(d.serviceConfigLoader)

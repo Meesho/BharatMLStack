@@ -8,7 +8,7 @@ import (
 func Init(config configs.Configs) {
 	InitPrometheusClient(config.VmselectStartDaysAgo, config.VmselectBaseUrl, config.VmselectApiKey)
 	InitSlackClient(config.SlackWebhookUrl, config.SlackChannel, config.SlackCcTags, config.DefaultModelPath)
-	InitRingmasterClient(config.RingmasterBaseUrl, config.RingmasterMiscSession, config.RingmasterAuthorization, config.RingmasterEnvironment, config.RingmasterApiKey)
+	// RingMaster client initialization removed - DNS operations now use internal configs with build tags
 
 	branchConfig := buildBranchConfig(config)
 
