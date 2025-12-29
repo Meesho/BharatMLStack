@@ -4,45 +4,22 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "signal"] }
-tonic = "0.11"
-prost = "0.12"
-hyper = { version = "1", features = ["server", "http1", "http2"] }
-hyper-util = { version = "0.1", features = ["server", "tokio", "http1", "http2"] }
-http-body-util = "0.1"
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-pprof = { version = "0.13", features = ["flamegraph"] }
-jemalloc_pprof = "0.8"
-# Note: jemalloc_pprof already includes tikv-jemalloc-ctl with tikv-jemalloc-sys
-# We use tikv-jemallocator with matching jemalloc-sys version to avoid conflicts
-tikv-jemallocator = { version = "0.6", default-features = false }
+tonic = "0.11"
+prost = "0.12"
+prost-types = "0.12"
+http-body = "1.0"
 
 [build-dependencies]
 tonic-build = "0.11"
 
-# Debug profile optimized for profiling (better symbol resolution)
-[profile.dev]
-opt-level = 1  # Some optimization but keeps function boundaries
-debug = 2      # Full debug info including line numbers
-
-# Production release profile with profiling support
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-# Keep debug symbols for production profiling
-# debug = 1: Line numbers and file names (good balance - ~10-20% larger binary)
-# debug = 2: Full debug info (larger binary ~30-50%, best for profiling)
-debug = 1
-# DO NOT strip symbols - needed for profiling to show function names
-# strip = true  # Keep commented out for profiling
-
-# Alternative: Create a separate profiling profile if you want to keep release smaller
-# Uncomment below and use: cargo build --profile profiling
-# [profile.profiling]
-# inherits = "release"
-# debug = 2  # Full debug info for best profiling visibility
 
 [workspace]
 

@@ -1,13 +1,8 @@
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
-        .build_server(true)
-        .compile(
-            &["proto/retrieve.proto"],
-            &["proto"],
-        )
-        .unwrap();
-
-    println!("cargo:rerun-if-changed=proto/retrieve.proto");
-    println!("cargo:rerun-if-changed=proto/");
+        .build_server(false)
+        .build_client(true)
+        .compile(&["proto/retrieve.proto"], &["proto"])?;
+    Ok(())
 }
 
