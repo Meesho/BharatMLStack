@@ -393,15 +393,15 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
                     ReportRequest::Flamegraph(tx) => {
                         match guard.report().build() {
                             Ok(report) => {
-                                // Generate flamegraph using inferno with proper call stack format
+                                // Generate flamegraph using inferno
+                                // Note: For best results with function names, use /pprof/protobuf 
+                                // and convert with: go tool pprof -http=:8081 <profile.pb.gz>
                                 use pprof::flamegraph;
                                 let mut flamegraph_data = Vec::new();
                                 let mut options = flamegraph::Options::default();
                                 
                                 // Convert pprof Report to flamegraph format
-                                // The report.data contains (Frames, count) tuples
-                                // Frames contains a Vec<Vec<Symbol>> where each Vec<Symbol> is a frame
-                                // We need to format them as: "function_name;stack_depth sample_count"
+                                // Format: "function1;function2;function3 sample_count"
                                 let mut flamegraph_lines = Vec::new();
                                 
                                 for (frames, count) in report.data.iter() {
@@ -409,44 +409,61 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
                                         continue;
                                     }
                                     
-                                    // Build the call stack string (semicolon-separated)
-                                    // Each frame is a Vec<Symbol>, we take the first symbol's name
+                                    // Build the call stack string (semicolon-separated, bottom to top)
                                     let mut stack_parts = Vec::new();
                                     for frame_symbols in frames.frames.iter().rev() {
-                                        // Get the function name from the first symbol in the frame
-                                        let frame_str = if let Some(symbol) = frame_symbols.first() {
+                                        // Try all symbols in the frame to find a valid name
+                                        let mut frame_name = None;
+                                        
+                                        for symbol in frame_symbols.iter() {
+                                            // Check if symbol has a name
                                             if let Some(name_bytes) = &symbol.name {
                                                 if !name_bytes.is_empty() {
-                                                    // Convert Vec<u8> to String
-                                                    String::from_utf8_lossy(name_bytes).to_string()
-                                                } else if let Some(addr) = symbol.addr {
+                                                    let name = String::from_utf8_lossy(name_bytes);
+                                                    let trimmed = name.trim();
+                                                    // Only use non-empty, non-unknown names
+                                                    if !trimmed.is_empty() && trimmed != "unknown" && !trimmed.starts_with("0x") {
+                                                        frame_name = Some(trimmed.to_string());
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
+                                        // Fallback to address if no name found
+                                        let frame_str = frame_name.unwrap_or_else(|| {
+                                            if let Some(symbol) = frame_symbols.first() {
+                                                if let Some(addr) = symbol.addr {
                                                     format!("0x{:p}", addr)
                                                 } else {
                                                     "unknown".to_string()
                                                 }
-                                            } else if let Some(addr) = symbol.addr {
-                                                format!("0x{:p}", addr)
                                             } else {
                                                 "unknown".to_string()
                                             }
-                                        } else {
-                                            "unknown".to_string()
-                                        };
+                                        });
+                                        
                                         stack_parts.push(frame_str);
                                     }
                                     
-                                    let stack_str = stack_parts.join(";");
-                                    flamegraph_lines.push(format!("{} {}", stack_str, count));
+                                    // Only add if we have valid frames (not all unknown)
+                                    if !stack_parts.is_empty() {
+                                        let stack_str = stack_parts.join(";");
+                                        flamegraph_lines.push(format!("{} {}", stack_str, count));
+                                    }
                                 }
                                 
-                                // Generate flamegraph from properly formatted lines
-                                match flamegraph::from_lines(&mut options, flamegraph_lines.iter().map(|s| s.as_str()), &mut flamegraph_data) {
-                                    Ok(_) => {
-                                        let _ = tx.send(Ok(flamegraph_data));
-                                    }
-                                    Err(e) => {
-                                        // Fallback: return error
-                                        let _ = tx.send(Err(format!("Failed to generate flamegraph: {:?}", e)));
+                                // Generate flamegraph
+                                if flamegraph_lines.is_empty() {
+                                    let _ = tx.send(Err("No call stack data found. Ensure the server is running and receiving traffic. For detailed function names, use /pprof/protobuf endpoint.".to_string()));
+                                } else {
+                                    match flamegraph::from_lines(&mut options, flamegraph_lines.iter().map(|s| s.as_str()), &mut flamegraph_data) {
+                                        Ok(_) => {
+                                            let _ = tx.send(Ok(flamegraph_data));
+                                        }
+                                        Err(e) => {
+                                            let _ = tx.send(Err(format!("Failed to generate flamegraph: {:?}", e)));
+                                        }
                                     }
                                 }
                             }
