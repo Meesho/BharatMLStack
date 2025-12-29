@@ -5,7 +5,6 @@ use hyper_util::rt::TokioIo;
 use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
 use serde::Deserialize;
-use smallvec::SmallVec;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,7 +23,8 @@ struct RetrieveFeaturesRequest {
     #[serde(rename = "entity_label")]
     entity_label: String, 
     
-    feature_groups: SmallVec<[FeatureGroupRequest; 8]>,
+    #[serde(rename = "feature_groups")]
+    feature_groups: Vec<FeatureGroupRequest>,
     
     #[serde(rename = "keys_schema")]
     keys_schema: Vec<String>,
@@ -60,27 +60,53 @@ async fn handler(
     req: Request<IncomingBody>,
     state: Arc<AppState>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-    
-    let body_bytes: Bytes = req.into_body().collect().await?.to_bytes();
-
-    let request_body: RetrieveFeaturesRequest = serde_json::from_slice(&body_bytes)?;
-
-    let grpc_request = Query {
-        entity_label: request_body.entity_label, // Zero copy - move
-        feature_groups: request_body.feature_groups.into_iter().map(|fg| {
-            FeatureGroup {
-                label: fg.label, // Zero copy - move
-                feature_labels: fg.feature_labels, // Zero copy - move
-            }
-        }).collect(),
-        keys_schema: request_body.keys_schema, // Zero copy - move
-        keys: request_body.keys.into_iter().map(|k| Keys { cols: k.cols }).collect(), // Zero copy - move
+    // Collect body bytes
+    let body_bytes = match req.into_body().collect().await {
+        Ok(collected) => collected.to_bytes(),
+        Err(_) => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .header("Content-Type", CONTENT_JSON)
+                .body(Full::new(Bytes::from_static(ERROR_BAD_REQUEST)))
+                .unwrap());
+        }
     };
 
+    // Parse JSON request
+    let request_body: RetrieveFeaturesRequest = match serde_json::from_slice(&body_bytes) {
+        Ok(body) => body,
+        Err(_) => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .header("Content-Type", CONTENT_JSON)
+                .body(Full::new(Bytes::from_static(ERROR_INVALID_JSON)))
+                .unwrap());
+        }
+    };
 
-    let metadata = grpc_request.metadata_mut();
-    metadata.insert("online-feature-store-auth-token", state.auth_token.clone());
-    metadata.insert("online-feature-store-caller-id", state.caller_id.clone());
+    // Build gRPC Query message
+    let query = Query {
+        entity_label: request_body.entity_label,
+        feature_groups: request_body.feature_groups.into_iter().map(|fg| {
+            FeatureGroup {
+                label: fg.label,
+                feature_labels: fg.feature_labels,
+            }
+        }).collect(),
+        keys_schema: request_body.keys_schema,
+        keys: request_body.keys.into_iter().map(|k| Keys { cols: k.cols }).collect(),
+    };
+
+    // Create Tonic request with metadata
+    let mut grpc_request = TonicRequest::new(query);
+    grpc_request.metadata_mut().insert(
+        "online-feature-store-auth-token",
+        state.auth_token.clone(),
+    );
+    grpc_request.metadata_mut().insert(
+        "online-feature-store-caller-id",
+        state.caller_id.clone(),
+    );
 
     let mut client = state.client.clone();
     match tokio::time::timeout(Duration::from_secs(5), client.retrieve_features(grpc_request)).await {
