@@ -5,6 +5,9 @@ use hyper_util::rt::TokioIo;
 use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
 use serde::Deserialize;
+use smallvec::SmallVec;
+use serde::Deserialize;
+use std::borrow::Cow;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,26 +22,30 @@ use retrieve::feature_service_client::FeatureServiceClient;
 use retrieve::{FeatureGroup, Keys, Query};
 
 #[derive(Deserialize)]
-struct RetrieveFeaturesRequest {
+struct RetrieveFeaturesRequest<'a> {
     #[serde(rename = "entity_label")]
-    entity_label: String,
-    #[serde(rename = "feature_groups")]
-    feature_groups: Vec<FeatureGroupRequest>,
+    entity_label: &'a str, 
+    
+    #[serde(borrow)]
+    feature_groups: SmallVec<[FeatureGroupRequest<'a>; 8]>,
+    
     #[serde(rename = "keys_schema")]
-    keys_schema: Vec<String>,
-    keys: Vec<KeysRequest>,
+    keys_schema: Vec<&'a str>,
+    
+    #[serde(borrow)]
+    keys: Vec<KeysRequest<'a>>,
 }
 
 #[derive(Deserialize)]
-struct FeatureGroupRequest {
-    label: String,
+struct FeatureGroupRequest<'a> {
+    label: &'a str,
     #[serde(rename = "feature_labels")]
-    feature_labels: Vec<String>,
+    feature_labels: Vec<&'a str>,
 }
 
 #[derive(Deserialize)]
-struct KeysRequest {
-    cols: Vec<String>,
+struct KeysRequest<'a> {
+    cols: Vec<&'a str>,
 }
 
 struct AppState {
@@ -57,43 +64,23 @@ async fn handler(
     req: Request<IncomingBody>,
     state: Arc<AppState>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-    let body_bytes = match req.into_body().collect().await {
-        Ok(c) => c.to_bytes(),
-        Err(_) => {
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body(Full::new(Bytes::from_static(ERROR_BAD_REQUEST)))
-                .unwrap());
-        }
+    
+    let body_bytes: Bytes = req.into_body().collect().await?.to_bytes();
+
+    let request_body: RetrieveFeaturesRequest = serde_json::from_slice(&body_bytes)?;
+
+    let grpc_request = Query {
+        entity_label: request_body.entity_label.clone(), // Zero CPU copy
+        feature_groups: request_body.feature_groups.into_iter().map(|fg| {
+            FeatureGroup {
+                label: fg.label.clone(),
+                feature_labels: fg.feature_labels.clone(),
+            }
+        }).collect(),
+        keys_schema: request_body.keys_schema.clone(),
+        keys: request_body.keys.into_iter().map(|k| Keys { cols: k.cols }).collect(),
     };
 
-    let request_body: RetrieveFeaturesRequest = match serde_json::from_slice(&body_bytes) {
-        Ok(b) => b,
-        Err(_) => {
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body(Full::new(Bytes::from_static(ERROR_INVALID_JSON)))
-                .unwrap());
-        }
-    };
-
-    let feature_groups: Vec<FeatureGroup> = request_body
-        .feature_groups
-        .into_iter()
-        .map(|fg| FeatureGroup {
-            label: fg.label,
-            feature_labels: fg.feature_labels,
-        })
-        .collect();
-
-    let keys: Vec<Keys> = request_body.keys.into_iter().map(|k| Keys { cols: k.cols }).collect();
-
-    let mut grpc_request = TonicRequest::new(Query {
-        entity_label: request_body.entity_label,
-        feature_groups,
-        keys_schema: request_body.keys_schema,
-        keys,
-    });
 
     let metadata = grpc_request.metadata_mut();
     metadata.insert("online-feature-store-auth-token", state.auth_token.clone());
