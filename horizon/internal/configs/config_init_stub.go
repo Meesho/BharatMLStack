@@ -68,11 +68,6 @@ func bindEnvVars() {
 	viper.BindEnv("etcd_username", "ETCD_USERNAME")
 	viper.BindEnv("etcd_watcher_enabled", "ETCD_WATCHER_ENABLED")
 
-	// Ringmaster configuration
-	viper.BindEnv("ringmaster_authorization", "RINGMASTER_AUTHORIZATION")
-	viper.BindEnv("ringmaster_base_url", "RINGMASTER_BASE_URL")
-	viper.BindEnv("ringmaster_misc_session", "RINGMASTER_MISC_SESSION")
-
 	// Slack configuration
 	viper.BindEnv("slack_cc_tags", "SLACK_CC_TAGS")
 	viper.BindEnv("slack_channel", "SLACK_CHANNEL")
@@ -156,10 +151,6 @@ func bindEnvVars() {
 	viper.BindEnv("service_config_source", "SERVICE_CONFIG_SOURCE")
 	viper.BindEnv("service_config_repo", "SERVICE_CONFIG_REPO")
 	viper.BindEnv("service_config_path", "SERVICE_CONFIG_PATH")
-
-	// Ringmaster configuration (additional fields)
-	viper.BindEnv("ringmaster_api_key", "RINGMASTER_API_KEY")
-	viper.BindEnv("ringmaster_environment", "RINGMASTER_ENVIRONMENT")
 
 	// Meesho flags
 	viper.BindEnv("is_meesho_enabled", "MEESHO_ENABLED")
