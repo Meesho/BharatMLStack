@@ -41,15 +41,16 @@ struct KeysRequest {
     cols: Vec<String>,
 }
 
-#[derive(Clone)]
 struct AppState {
-    client: Arc<FeatureServiceClient<Channel>>,
+    client: FeatureServiceClient<Channel>,
     auth_token: AsciiMetadataValue,
     caller_id: AsciiMetadataValue,
 }
 
 static SUCCESS: &[u8] = b"\"success\"";
 static ERROR_TIMEOUT: &[u8] = b"{\"error\":\"Request timeout\"}";
+static ERROR_BAD_REQUEST: &[u8] = b"Bad request";
+static ERROR_INVALID_JSON: &[u8] = b"Invalid JSON";
 static CONTENT_JSON: &str = "application/json";
 
 async fn handler(
@@ -61,7 +62,7 @@ async fn handler(
         Err(_) => {
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
-                .body(Full::new(Bytes::from_static(b"Bad request")))
+                .body(Full::new(Bytes::from_static(ERROR_BAD_REQUEST)))
                 .unwrap());
         }
     };
@@ -71,21 +72,21 @@ async fn handler(
         Err(_) => {
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
-                .body(Full::new(Bytes::from_static(b"Invalid JSON")))
+                .body(Full::new(Bytes::from_static(ERROR_INVALID_JSON)))
                 .unwrap());
         }
     };
 
-    let mut feature_groups = Vec::with_capacity(request_body.feature_groups.len());
-    feature_groups.extend(
-        request_body.feature_groups.into_iter().map(|fg| FeatureGroup {
+    let feature_groups: Vec<FeatureGroup> = request_body
+        .feature_groups
+        .into_iter()
+        .map(|fg| FeatureGroup {
             label: fg.label,
             feature_labels: fg.feature_labels,
         })
-    );
+        .collect();
 
-    let mut keys = Vec::with_capacity(request_body.keys.len());
-    keys.extend(request_body.keys.into_iter().map(|k| Keys { cols: k.cols }));
+    let keys: Vec<Keys> = request_body.keys.into_iter().map(|k| Keys { cols: k.cols }).collect();
 
     let mut grpc_request = TonicRequest::new(Query {
         entity_label: request_body.entity_label,
@@ -98,21 +99,18 @@ async fn handler(
     metadata.insert("online-feature-store-auth-token", state.auth_token.clone());
     metadata.insert("online-feature-store-caller-id", state.caller_id.clone());
 
-    let mut client = (*state.client).clone();
+    let mut client = state.client.clone();
     match tokio::time::timeout(Duration::from_secs(5), client.retrieve_features(grpc_request)).await {
         Ok(Ok(_)) => Ok(Response::builder()
             .status(StatusCode::OK)
             .header("Content-Type", CONTENT_JSON)
             .body(Full::new(Bytes::from_static(SUCCESS)))
             .unwrap()),
-        Ok(Err(e)) => {
-            let error = format!("{{\"error\":\"{}\"}}", e);
-            Ok(Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .header("Content-Type", CONTENT_JSON)
-                .body(Full::new(Bytes::from(error)))
-                .unwrap())
-        }
+        Ok(Err(_)) => Ok(Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .header("Content-Type", CONTENT_JSON)
+            .body(Full::new(Bytes::from_static(b"{\"error\":\"gRPC error\"}")))
+            .unwrap()),
         Err(_) => Ok(Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .header("Content-Type", CONTENT_JSON)
@@ -131,7 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let state = Arc::new(AppState {
-        client: Arc::new(FeatureServiceClient::new(channel)),
+        client: FeatureServiceClient::new(channel),
         auth_token: AsciiMetadataValue::from_static("atishay"),
         caller_id: AsciiMetadataValue::from_static("test-3"),
     });
@@ -144,9 +142,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let state_clone = state.clone();
 
         tokio::task::spawn(async move {
-            let service = service_fn(move |req| {
+            let service = service_fn({
                 let state = state_clone.clone();
-                handler(req, state)
+                move |req| {
+                    let state = state.clone();
+                    handler(req, state)
+                }
             });
 
             let mut builder = http1::Builder::new();
