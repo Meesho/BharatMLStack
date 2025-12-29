@@ -37,6 +37,75 @@ This guide will walk you through setting up Predator for local development, incl
 
 The Predator Helm chart uses several Custom Resource Definitions (CRDs) and a PriorityClass that must be installed in your Kubernetes cluster before ArgoCD can deploy resources.
 
+#### Install Contour CRDs and IngressClass (Required for HTTPProxy)
+
+The `HTTPProxy` resource in the Predator Helm chart requires Contour CRDs and IngressClass to be installed. ArgoCD can deploy `HTTPProxy` resources, but the CRD must exist in the cluster first.
+
+**Install Full Contour (Required for HTTPProxy to Work)**
+
+You need the full Contour deployment (not just CRDs) for HTTPProxy to be reconciled:
+
+```bash
+# Install full Contour deployment (includes CRDs + Contour + Envoy)
+kubectl apply -f https://projectcontour.io/quickstart/contour.yaml
+```
+
+**Verify installation:**
+
+```bash
+# Check that HTTPProxy CRD is installed
+kubectl get crd httpproxies.projectcontour.io
+
+# Check that Contour pods are running
+kubectl get pods -n projectcontour
+
+# Create IngressClass for contour-internal (required for HTTPProxy reconciliation)
+kubectl apply -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: contour-internal
+spec:
+  controller: projectcontour.io/ingress-controller
+EOF
+
+# Verify IngressClass was created
+kubectl get ingressclass contour-internal
+```
+
+**Important: Configure Contour to Watch for Your Ingress Class**
+
+If your HTTPProxy uses a specific ingress class (e.g., `contour-internal`), you must configure Contour to watch for that class. By default, Contour watches all HTTPProxies, but when you specify an ingress class, Contour needs to be explicitly configured.
+
+**Configure Contour for Specific Ingress Class (Only if Needed)**
+
+If you need class-based isolation with `contour-internal`, configure Contour to watch for that class:
+
+```bash
+# Check current Contour configuration
+kubectl -n projectcontour get deploy contour -o yaml | grep -A 10 "args:"
+
+# If ingress-class-name is not set, add it:
+kubectl -n projectcontour patch deploy contour --type='json' -p='[
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/args/-",
+    "value": "--ingress-class-name=contour-internal"
+  }
+]'
+
+# Restart Contour to apply changes
+kubectl -n projectcontour rollout restart deploy contour
+
+# Wait for rollout to complete
+kubectl -n projectcontour rollout status deploy contour
+```
+
+**⚠️ Note:** 
+- Without Contour CRDs, ArgoCD will fail to sync with error: `The Kubernetes API could not find projectcontour.io/HTTPProxy for requested resource...`
+- Without the IngressClass, HTTPProxy will show "NotReconciled" status even if Contour is running
+- If Contour is not configured to watch your ingress class, HTTPProxy will remain "NotReconciled"
+
 #### Install Flagger CRDs (Required for AlertProvider)
 
 The `AlertProvider` resource in the Predator Helm chart requires Flagger CRDs to be installed. ArgoCD can deploy `AlertProvider` resources, but the CRD must exist in the cluster first.
@@ -706,6 +775,39 @@ The Kubernetes API could not find flagger.app/AlertProvider for requested resour
   ```
 - Once CRDs are installed, ArgoCD will automatically deploy `AlertProvider` resources when syncing
 
+### Issue: HTTPProxy Resource Not Found - Contour CRD Missing
+
+**Error Message:**
+```
+Resource not found in cluster: projectcontour.io/v1/HTTPProxy:prd-predator-test
+The Kubernetes API could not find projectcontour.io/HTTPProxy for requested resource prd-predator-test/prd-predator-test. Make sure the "HTTPProxy" CRD is installed on the destination cluster.
+```
+
+**Solution:**
+1. **Install Contour CRDs** (see Step 1.0):
+   ```bash
+   kubectl apply -f https://raw.githubusercontent.com/projectcontour/contour/main/examples/contour/01-crds.yaml
+   ```
+
+2. **Verify installation:**
+   ```bash
+   kubectl get crd httpproxies.projectcontour.io
+   ```
+
+3. **Check your values.yaml** to ensure HTTPProxy conditions are met:
+   - `ingress.enabled: true` ✓
+   - `createContourGateway: true` ✓
+   - `ingressClassName: "contour-internal"` (or `contour-external`, `contour-internal-0`, etc.) ✓
+   - `ingress.hosts` is set (host should be generated as `<appname>.<domain>`) ✓
+
+4. **Once CRDs are installed, trigger ArgoCD sync:**
+   ```bash
+   argocd app sync prd-predator-test
+   ```
+   Or wait for automatic sync (if enabled)
+
+**Note:** The HTTPProxy template requires all three conditions to be true. If any condition fails, the HTTPProxy won't be rendered in the Helm chart output.
+
 ### Issue: Missing KEDA CRD Error
 
 **Error Message:**
@@ -987,16 +1089,319 @@ Once setup is complete, everything happens automatically via GitOps:
 
 ---
 
+## Step 10: Access Predator Service Through Contour HTTPProxy
+
+Once the HTTPProxy is created and Contour is running, you can access your Predator service through Contour's Envoy proxy.
+
+### 10.1 Check HTTPProxy Status
+
+```bash
+# Check HTTPProxy status
+kubectl get httpproxy -n prd-predator-test
+
+# Get HTTPProxy details including FQDN
+kubectl get httpproxy -n prd-predator-test -o yaml | grep -A 5 "virtualhost:"
+```
+
+The HTTPProxy should show `Valid` status once Contour controller reconciles it.
+
+### 10.2 Access via Port Forward (Local Development)
+
+For local development, the easiest way is to port-forward Contour's Envoy service:
+
+```bash
+# Port forward Envoy service (Contour's ingress proxy)
+kubectl port-forward -n projectcontour svc/envoy 8080:80
+
+# In another terminal, access your service using the FQDN as Host header
+# Replace <fqdn> with your actual FQDN (e.g., predator-test.prd.meesho.int)
+curl -H "Host: <fqdn>" http://localhost:8080/
+
+# Example for predator-test:
+curl -H "Host: predator-test.prd.meesho.int" http://localhost:8080/
+```
+
+### 10.3 Access via LoadBalancer or NodePort
+
+**Check Envoy Service Configuration:**
+
+```bash
+# Check Envoy service type and status
+kubectl get svc -n projectcontour envoy
+
+# You'll see one of:
+# - LoadBalancer with EXTERNAL-IP (cloud clusters)
+# - LoadBalancer with <pending> (local clusters - use NodePort or port-forward)
+# - NodePort with assigned port (if configured)
+```
+
+**For Local Clusters (kind/minikube/Docker Desktop):**
+
+Local clusters typically show `<pending>` for LoadBalancer. Use one of these methods:
+
+**Option A: Port Forward (Recommended - Simplest)**
+
+```bash
+# Port forward Envoy service to localhost
+kubectl port-forward -n projectcontour svc/envoy 8080:80
+
+# In another terminal, access your service with Host header
+curl -H "Host: predator-test.prd.meesho.int" http://localhost:8080/self/health
+
+# Or for other endpoints:
+curl -H "Host: predator-test.prd.meesho.int" http://localhost:8080/
+```
+
+**Option B: Use NodePort (If Available)**
+
+NodePort is automatically assigned when using LoadBalancer type in local clusters. Access methods vary by cluster type:
+
+```bash
+# Get the NodePort assigned to Envoy
+NODEPORT=$(kubectl get svc -n projectcontour envoy -o jsonpath='{.spec.ports[?(@.port==80)].nodePort}')
+echo "NodePort: $NODEPORT"
+
+# Get your HTTPProxy FQDN
+FQDN=$(kubectl get httpproxy -n prd-predator-test prd-predator-test -o jsonpath='{.spec.virtualhost.fqdn}' 2>/dev/null || echo "predator-test.prd.meesho.int")
+echo "FQDN: $FQDN"
+```
+
+**For kind clusters:**
+
+⚠️ **Important:** kind does NOT automatically expose NodePort on localhost. You have two options:
+
+**Option 1: Use Port-Forward (Recommended for kind)**
+```bash
+# This is the simplest and most reliable method for kind
+kubectl port-forward -n projectcontour svc/envoy 8080:80
+# Then in another terminal:
+curl -H "Host: $FQDN" http://localhost:8080/self/health
+```
+
+**Option 2: Configure kind with Port Mapping (Advanced)**
+
+If you want to use NodePort directly, you need to configure port mapping when creating the kind cluster:
+
+```bash
+# Create kind cluster with port mapping (example)
+cat <<EOF | kind create cluster --config=-
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  extraPortMappings:
+  - containerPort: 32558  # Your NodePort
+    hostPort: 32558
+    protocol: TCP
+EOF
+
+# Then access via localhost
+curl -H "Host: $FQDN" http://localhost:$NODEPORT/self/health
+```
+
+**Note:** For existing kind clusters, port-forward (Option 1) is much simpler than recreating the cluster with port mapping.
+
+**For minikube:**
+
+```bash
+# Method 1: Use minikube service command (automatically sets up tunnel)
+minikube service -n projectcontour envoy --url
+# This will output a URL like: http://192.168.49.2:32558
+# Use it with Host header:
+curl -H "Host: $FQDN" http://192.168.49.2:$NODEPORT/self/health
+
+# Method 2: Get minikube IP and use NodePort directly
+MINIKUBE_IP=$(minikube ip)
+curl -H "Host: $FQDN" http://$MINIKUBE_IP:$NODEPORT/self/health
+```
+
+**For Docker Desktop Kubernetes:**
+
+```bash
+# Docker Desktop exposes NodePort on localhost
+curl -H "Host: $FQDN" http://localhost:$NODEPORT/self/health
+```
+
+**Note:** NodePort access may require firewall rules or port forwarding depending on your setup. Port-forward (Option A) is more reliable for local development.
+
+**For Cloud Clusters (GKE/EKS/AKS) with LoadBalancer:**
+
+```bash
+# Wait for external IP to be assigned (may take 1-2 minutes)
+kubectl wait --for=condition=ready svc/envoy -n projectcontour --timeout=5m
+
+# Get the external IP
+EXTERNAL_IP=$(kubectl get svc -n projectcontour envoy -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+# Or for hostname-based load balancers:
+# EXTERNAL_IP=$(kubectl get svc -n projectcontour envoy -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+
+echo "External IP: $EXTERNAL_IP"
+
+# Access using the external IP with Host header
+curl -H "Host: predator-test.prd.meesho.int" http://$EXTERNAL_IP/self/health
+
+# Example for other endpoints:
+curl -H "Host: predator-test.prd.meesho.int" http://$EXTERNAL_IP/
+```
+
+**Quick Test Command:**
+
+```bash
+# Get your HTTPProxy FQDN
+FQDN=$(kubectl get httpproxy -n prd-predator-test prd-predator-test -o jsonpath='{.spec.virtualhost.fqdn}')
+echo "FQDN: $FQDN"
+
+# Test with port-forward (if using local cluster)
+kubectl port-forward -n projectcontour svc/envoy 8080:80 &
+sleep 2
+curl -H "Host: $FQDN" http://localhost:8080/self/health
+kill %1 2>/dev/null || true
+```
+
+**Summary for Local Clusters:**
+
+| Cluster Type | Recommended Method | NodePort Access |
+|-------------|-------------------|-----------------|
+| **kind** | Port-forward (Option A) | ❌ Not available on localhost (requires cluster recreation with port mapping) |
+| **minikube** | `minikube service` or port-forward | ✅ Available via `minikube service` or minikube IP |
+| **Docker Desktop** | Port-forward or NodePort | ✅ Available on localhost |
+
+**Important Notes:**
+- For local development, **port-forward (Option A) is the simplest and most reliable method** for all cluster types
+- LoadBalancer services in local clusters (kind/minikube) often show `<pending>` status indefinitely
+- The Host header **must match** the FQDN in your HTTPProxy's `virtualhost.fqdn`
+- You can verify your FQDN with: `kubectl get httpproxy -n <namespace> <name> -o jsonpath='{.spec.virtualhost.fqdn}'`
+- For kind clusters, NodePort is NOT accessible on localhost unless you configure port mapping during cluster creation
+
+### 10.4 Access via /etc/hosts (Alternative for Local Testing)
+
+For easier local testing without Host headers:
+
+```bash
+# Add to /etc/hosts (replace <EXTERNAL-IP> with Envoy external IP or use 127.0.0.1 if port-forwarding)
+echo "127.0.0.1 predator-test.prd.meesho.int" | sudo tee -a /etc/hosts
+
+# Then access directly (if using port-forward on port 8080)
+curl http://predator-test.prd.meesho.int:8080/
+```
+
+### 10.5 Verify Service is Accessible
+
+```bash
+# Check if the service is running
+kubectl get pods -n prd-predator-test
+
+# Check service endpoints
+kubectl get endpoints -n prd-predator-test
+
+# Test a health check endpoint (if available)
+curl -H "Host: predator-test.prd.meesho.int" http://localhost:8080/health
+```
+
+### 10.6 Troubleshooting HTTPProxy Access
+
+**Issue: HTTPProxy shows "NotReconciled" or "Invalid" status**
+
+```bash
+# Check Contour controller logs
+kubectl logs -n projectcontour -l app=contour | tail -50
+
+# Check HTTPProxy status details
+kubectl describe httpproxy -n prd-predator-test
+
+# Verify the service exists and has endpoints
+kubectl get svc -n prd-predator-test
+kubectl get endpoints -n prd-predator-test
+```
+
+**Issue: 404 Not Found when accessing**
+
+- Verify the FQDN matches what's in HTTPProxy: `kubectl get httpproxy -n prd-predator-test -o yaml | grep fqdn`
+- Ensure you're using the correct Host header
+- Check that the service name in HTTPProxy matches your actual service: `kubectl get svc -n prd-predator-test`
+
+**Issue: Connection refused**
+
+- Ensure Envoy is running: `kubectl get pods -n projectcontour -l app=envoy`
+- Check Envoy logs: `kubectl logs -n projectcontour -l app=envoy | tail -50`
+
+**Issue: HTTPProxy Shows "NotReconciled" / "Waiting for controller" Status**
+
+This is the most common issue with HTTPProxy. The root cause is usually that Contour is not configured to watch for your specific ingress class. To resolve:
+
+1. **Most Common Cause: Contour Not Configured for Your Ingress Class**
+
+   If your HTTPProxy uses `ingressClassName: contour-internal`, Contour must be configured to watch for that class:
+   
+   ```bash
+   # Check if Contour is configured for your ingress class
+   kubectl -n projectcontour get deploy contour -o yaml | grep ingress-class-name
+   
+   # If nothing is returned, Contour is not watching for contour-internal
+   # Configure Contour to watch for contour-internal:
+   kubectl -n projectcontour patch deploy contour --type='json' -p='[
+     {
+       "op": "add",
+       "path": "/spec/template/spec/containers/0/args/-",
+       "value": "--ingress-class-name=contour-internal"
+     }
+   ]'
+   
+   # Restart Contour
+   kubectl -n projectcontour rollout restart deploy contour
+   kubectl -n projectcontour rollout status deploy contour
+   
+   # Verify HTTPProxy status (should change to "valid" after a few seconds)
+   kubectl get httpproxy -n prd-predator-test-2
+   ```
+
+2. **Verify Contour CRD is installed:**
+   ```bash
+   kubectl get crd httpproxies.projectcontour.io
+   ```
+
+3. **Verify IngressClass exists:**
+   ```bash
+   kubectl get ingressclass contour-internal
+   # If missing, create it:
+   kubectl apply -f - <<EOF
+   apiVersion: networking.k8s.io/v1
+   kind: IngressClass
+   metadata:
+     name: contour-internal
+   spec:
+     controller: projectcontour.io/ingress-controller
+   EOF
+   ```
+
+4. **Verify HTTPProxy has virtualhost.fqdn:**
+   ```bash
+   kubectl get httpproxy -n prd-predator-test -o yaml | grep -A 3 "virtualhost:"
+   # If missing, add it:
+   kubectl patch httpproxy -n prd-predator-test prd-predator-test --type=merge -p '{"spec":{"virtualhost":{"fqdn":"predator-test.prd.meesho.int"}}}'
+   ```
+
+5. **Check Contour controller is running:**
+   ```bash
+   kubectl get pods -n projectcontour -l app=contour
+   ```
+
+**Note:** After configuring Contour with `--ingress-class-name=contour-internal`, HTTPProxy status should change from "NotReconciled" to "valid" within a few seconds.
+
+---
+
 ## Next Steps
 
 After completing this setup:
 
 1. **Test Onboarding**: Create a deployable through the Horizon API
 2. **Monitor ArgoCD**: Watch applications sync automatically in ArgoCD UI
-3. **Customize Values**: Modify Helm chart values in GitHub (ArgoCD will auto-sync)
-4. **Add More Environments**: Configure additional working environments if needed
+3. **Access Services**: Use Contour HTTPProxy to access your Predator services
+4. **Customize Values**: Modify Helm chart values in GitHub (ArgoCD will auto-sync)
+5. **Add More Environments**: Configure additional working environments if needed
 
 For more information, refer to:
 - [ArgoCD Documentation](https://argo-cd.readthedocs.io/)
+- [Contour Documentation](https://projectcontour.io/docs/)
 - [GitHub Apps Documentation](https://docs.github.com/en/apps)
 - [Predator Helm Chart](../predator/1.0.0/README.md)

@@ -4,7 +4,7 @@
 # Mandatory fields (must be provided)
 repo_name: "predator"              # GitHub repository name
 app_port: 8001                     # Application port
-ingress_class: "internal"          # Ingress class
+ingress_class: "contour-internal"          # Ingress class
 domain: "prd.meesho.int"               # Domain name for host generation (format: <appname>.<domain>)
 
 # Optional fields (with defaults)
