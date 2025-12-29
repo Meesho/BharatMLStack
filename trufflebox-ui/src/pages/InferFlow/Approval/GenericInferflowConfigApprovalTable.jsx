@@ -50,7 +50,7 @@ import { SERVICES, SCREEN_TYPES, ACTIONS } from '../../../constants/permissions'
 import * as URL_CONSTANTS from '../../../config';
 import JsonViewer from '../../../components/JsonViewer';
 
-const GenericModelConfigApprovalTable = ({ onReview }) => {
+const GenericInferflowConfigApprovalTable = ({ onReview }) => {
   const { user, hasPermission } = useAuth();
   
   const service = SERVICES.InferFlow;
@@ -1241,4 +1241,4 @@ const GenericModelConfigApprovalTable = ({ onReview }) => {
   );
 };
 
-export default GenericModelConfigApprovalTable;
+export default GenericInferflowConfigApprovalTable;

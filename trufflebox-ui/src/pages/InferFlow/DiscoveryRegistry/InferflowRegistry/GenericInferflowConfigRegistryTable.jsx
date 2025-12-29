@@ -40,7 +40,7 @@ import { SERVICES, SCREEN_TYPES, ACTIONS } from '../../../../constants/permissio
 import Modal from '@mui/material/Modal';
 import { EventAvailable as EventAvailableIcon, OpenInNew } from '@mui/icons-material';
 
-const GenericMPConfigRegistryTable = ({ 
+const GenericInferflowConfigRegistryTable = ({ 
   data, 
   excludeColumns = [], 
   onViewDetails,
@@ -432,4 +432,4 @@ const GenericMPConfigRegistryTable = ({
   );
 };
 
-export default GenericMPConfigRegistryTable;
+export default GenericInferflowConfigRegistryTable;

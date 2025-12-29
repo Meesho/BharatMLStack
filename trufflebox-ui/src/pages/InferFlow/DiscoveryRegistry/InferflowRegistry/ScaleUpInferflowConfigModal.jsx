@@ -23,7 +23,7 @@ import { useAuth } from '../../../Auth/AuthContext';
 import axios from 'axios';
 import * as URL_CONSTANTS from '../../../../config';
 
-const ScaleUpMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
+const ScaleUpInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -557,4 +557,4 @@ const ScaleUpMPConfigModal = ({ open, onClose, onSuccess, configData }) => {
   );
 };
 
-export default ScaleUpMPConfigModal; 
+export default ScaleUpInferflowConfigModal; 
