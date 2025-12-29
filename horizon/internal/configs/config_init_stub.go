@@ -94,6 +94,7 @@ func bindEnvVars() {
 
 	viper.BindEnv("gcs_model_bucket", "GCS_MODEL_BUCKET")
 	viper.BindEnv("gcs_model_base_path", "GCS_MODEL_BASE_PATH")
+	viper.BindEnv("gcs_enabled", "GCS_ENABLED")
 
 	viper.BindEnv("grafana_base_url", "GRAFANA_BASE_URL")
 

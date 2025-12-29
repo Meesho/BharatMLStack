@@ -434,9 +434,12 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   INSERT IGNORE INTO deployable_metadata (id,\`key\`, value, active, created_at, updated_at) VALUES
     (1, 'node_selectors', 'bharatml-stack-control-plane', 1, NOW(), NOW()),
     (3, 'gcs_base_path', 'NA', 1, NOW(), NOW()),
+    (4, 'gcs_base_path', 'gs://gcs-dsci-model-repository-int/dummy-tmp/*', 1, NOW(), NOW()),
     (6, 'triton_image_tags', '25.06-py3', 1, NOW(), NOW()),
     (7, 'gcs_triton_path', 'NA', 1, NOW(), NOW()),
-    (8, 'service_account', 'NA', 1, NOW(), NOW())
+    (8, 'gcs_triton_path', 'some_path', 1, NOW(), NOW()),
+    (9, 'service_account', 'NA', 1, NOW(), NOW()),
+    (10, 'service_account', 'some_service_account', 1, NOW(), NOW())
   ON DUPLICATE KEY UPDATE 
     value = VALUES(value),
     updated_at = NOW();
@@ -450,29 +453,6 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
 
   # INSERT IGNORE INTO group_id_counter (id, counter, created_at, updated_at) 
   # VALUES (1, 1, NOW(), NOW());
-
-  INSERT IGNORE INTO service_deployable_config (
-    id, name, host, service, active, created_by, updated_by,
-    created_at, updated_at, config, monitoring_url, deployable_running_status,
-    deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
-  ) VALUES (
-      3019,
-      'inferflow-service-search-organic',
-      'inferflow-service-search-organic.prd.example.int',
-      'inferflow',
-      1,
-      'admin@admin.com',
-      NULL,
-      '2025-10-24 16:57:45',
-      '2025-11-17 16:04:29',
-      '{\"cpuLimit\":\"4000\",\"gpu_limit\":\"\",\"cpuRequest\":\"3500\",\"gpu_request\":\"\",\"max_replica\":\"100\",\"memoryLimit\":\"8\",\"min_replica\":\"2\",\"cpuLimitUnit\":\"m\",\"memoryRequest\":\"6\",\"cpuRequestUnit\":\"m\",\"memoryLimitUnit\":\"G\",\"memoryRequestUnit\":\"G\"}',
-      'https://grafana-prd.example.com/d/dQ1Gux-Vk/inferflow-service?orgId=1&refresh=60s&var-service=inferflow-service-search-ct&from=now-6h&to=now',
-      1,
-      NULL,
-      NULL,
-      'DEPLOYMENT_REASON_ARGO_APP_HEALTHY',
-      'WORKFLOW_COMPLETED'
-  );
 
   INSERT IGNORE INTO service_deployable_config (
     id, name, host, service, active, created_by, updated_by,
@@ -495,29 +475,6 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
       NULL,
       'DEPLOYMENT_REASON_ARGO_APP_HEALTHY',
       'WORKFLOW_COMPLETED'
-  );
-
-
-  INSERT IGNORE INTO predator_requests (
-    request_id, group_id, model_name, payload, created_by, updated_by,
-    reviewer, request_stage, request_type, status, active, reject_reason,
-    created_at, updated_at, is_valid
-  ) VALUES (
-      128,
-      179,
-      'preprocessing_rv_ct_scale_up_v2',
-      '{\"meta_data\":{\"inputs\":[{\"dims\":[28],\"name\":\"INPUT__0\",\"data_type\":\"BYTES\"}],\"backend\":\"python\",\"outputs\":[{\"dims\":[24],\"name\":\"OUTPUT__0\",\"data_type\":\"FP32\"}],\"batch_size\":500,\"instance_type\":\"KIND_CPU\",\"instance_count\":1,\"dynamic_batching_enabled\":true},\"model_name\":\"preprocessing_rv_ct_scale_up_v2\",\"config_mapping\":{\"service_deployable_id\":59},\"model_source_path\":\"gs://gcs-model-repository-int/predator/cpu/preprocessing_rv_ct_scale_up_v2\"}',
-      'admin@admin.com',
-      'admin@admin.com',
-      'admin@admin.com',
-      'Restart Deployable',
-      'Promote',
-      'Approved',
-      0,
-      '',
-      '2025-11-26 18:18:39',
-      '2025-11-26 18:22:50',
-      1
   );
 
   INSERT IGNORE INTO discovery_config (
@@ -568,23 +525,6 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
     '2025-10-30 17:17:20'
   );
 
-  INSERT IGNORE INTO predator_config (
-    id, discovery_config_id, model_name, meta_data, active,
-    created_by, updated_by, created_at, updated_at, test_results, has_nil_data
-  ) VALUES (
-      997,
-      1104,
-      'ensemble_personalised_nqd_lgbm_v2_2',
-      '{\"inputs\":[{\"dims\":[3],\"name\":\"input__0\",\"features\":[\"ONLINE_FEATURE|user:derived_2_fp32:user__nqp\",\"ONLINE_FEATURE|catalog:derived_fp32:nqp\",\"ONLINE_FEATURE|user:derived_2_string:region\"],\"data_type\":\"BYTES\"}],\"backend\":\"\",\"outputs\":[{\"dims\":[1],\"name\":\"output__0\",\"data_type\":\"FP32\"}],\"platform\":\"ensemble\",\"batch_size\":250,\"instance_type\":\"\",\"instance_count\":0,\"ensemble_scheduling\":{\"step\":[{\"input_map\":{\"INPUT__0\":\"input__0\"},\"model_name\":\"preprocessing_personalised_nqd_lgbm_v2\",\"output_map\":{\"OUTPUT__0\":\"OUTPUT__0\"},\"model_version\":1},{\"input_map\":{\"input__0\":\"OUTPUT__0\"},\"model_name\":\"personalised_nqd_lgbm_v2\",\"output_map\":{\"output__0\":\"output__0\"},\"model_version\":1}]},\"dynamic_batching_enabled\":false}',
-      1,
-      'admin@admin.com',
-      'admin@admin.com',
-      '2025-10-30 17:17:20',
-      '2025-11-05 18:01:19',
-      '{\"is_functionally_tested\": true}',
-      0
-  );
-
   INSERT IGNORE INTO service_connection_config (
     id,
     \`default\`,
@@ -611,57 +551,8 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
       ''
   );
 
-
-  INSERT IGNORE INTO entity (
-    payload, entity_label, created_by, approved_by,
-    status, request_type, service, reject_reason
-  ) VALUES (
-    '{\"entity-label\":\"user\",\"key-map\":{\"user_id\":{\"data-type\":\"STRING\"}},\"distributed-cache\":{},\"in-memory-cache\":{}}',
-    'user','admin@admin.com','admin@admin.com','Approved','Onboard','ONLINE_FEATURE_STORE',''
-  ), (
-    '{\"entity-label\":\"catalog\",\"key-map\":{\"catalog_id\":{\"data-type\":\"STRING\"}},\"distributed-cache\":{},\"in-memory-cache\":{}}',
-    'catalog','admin@admin.com','admin@admin.com','Approved','Onboard','ONLINE_FEATURE_STORE',''
-  );
-
-  INSERT IGNORE INTO feature_group (
-    entity_label, feature_group_label, payload,
-    created_by, approved_by, status, request_type, service, reject_reason
-  ) VALUES (
-    'user',
-    'derived_2_fp32',
-    '{\"entity-label\":\"user\",\"fg-label\":\"derived_2_fp32\",\"job-id\":\"\",\"store-id\":1,\"ttl-in-seconds\":86400,\"in-memory-cache-enabled\":false,\"distributed-cache-enabled\":false,\"data-type\":\"FP32\",\"features\":{\"user__nqp\":{\"labels\":\"user__nqp\",\"feature-meta\":{\"user__nqp\":{\"sequence\":0,\"default-value\":\"\",\"string-length\":0,\"vector-length\":0}}}},\"layout-version\":1}',
-    'admin@admin.com','admin@admin.com','Approved','Onboard','ONLINE_FEATURE_STORE',''
-  ), (
-    'catalog',
-    'derived_fp32',
-    '{\"entity-label\":\"catalog\",\"fg-label\":\"derived_fp32\",\"job-id\":\"\",\"store-id\":1,\"ttl-in-seconds\":86400,\"in-memory-cache-enabled\":false,\"distributed-cache-enabled\":false,\"data-type\":\"FP32\",\"features\":{\"nqp\":{\"labels\":\"nqp\",\"feature-meta\":{\"nqp\":{\"sequence\":0,\"default-value\":\"\",\"string-length\":0,\"vector-length\":0}}}},\"layout-version\":1}',
-    'admin@admin.com','admin@admin.com','Approved','Onboard','ONLINE_FEATURE_STORE',''
-  ), (
-    'user',
-    'derived_2_string',
-    '{\"entity-label\":\"user\",\"fg-label\":\"derived_2_string\",\"job-id\":\"\",\"store-id\":1,\"ttl-in-seconds\":86400,\"in-memory-cache-enabled\":false,\"distributed-cache-enabled\":false,\"data-type\":\"STRING\",\"features\":{\"region\":{\"labels\":\"region\",\"feature-meta\":{\"region\":{\"sequence\":0,\"default-value\":\"\",\"string-length\":100,\"vector-length\":0}}}},\"layout-version\":1}',
-    'admin@admin.com','admin@admin.com','Approved','Onboard','ONLINE_FEATURE_STORE',''
-  );
-
-  INSERT IGNORE INTO features (
-    entity_label, feature_group_label, payload,
-    created_by, approved_by, status, request_type, service, reject_reason
-  ) VALUES (
-      'user',
-      'derived_2_fp32',
-      '{\"labels\":\"user__nqp\",\"default-values\":\"0.0\",\"source-base-path\":\"\",\"source-data-column\":\"\",\"storage-provider\":\"\",\"string-length\":\"0\",\"vector-length\":\"0\"}',
-      'admin@admin.com','admin@admin.com','Approved','Onboard','ONLINE_FEATURE_STORE',''
-  ), (
-      'catalog',
-      'derived_fp32',
-      '{\"labels\":\"nqp\",\"default-values\":\"0.0\",\"source-base-path\":\"\",\"source-data-column\":\"\",\"storage-provider\":\"\",\"string-length\":\"0\",\"vector-length\":\"0\"}',
-      'admin@admin.com','admin@admin.com','Approved','Onboard','ONLINE_FEATURE_STORE',''
-  ), (
-      'user',
-      'derived_2_string',
-      '{\"labels\":\"region\",\"default-values\":\"\",\"source-base-path\":\"\",\"source-data-column\":\"\",\"storage-provider\":\"\",\"string-length\":\"100\",\"vector-length\":\"0\"}',
-      'admin@admin.com','admin@admin.com','Approved','Onboard','ONLINE_FEATURE_STORE',''
-  );
+  INSERT IGNORE INTO group_id_counter (id, counter, created_at, updated_at) 
+  VALUES (1, 1, NOW(), NOW());
 "
 
 # Insert API resolvers

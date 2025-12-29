@@ -16,4 +16,3 @@ java-sdk/onfs/feature-store-core/target/
 .go.mod.appended
 horizon/pem/*.pem
 horizon/pem/*.key
-horizon/configs/

@@ -158,6 +158,11 @@ func (d *V1) CreateDeployable(ctx *gin.Context) {
 
 	workflowID, err := d.config.CreateDeployable(&request, workingEnv)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("appName", request.AppName).
+			Str("workingEnv", workingEnv).
+			Msg("CreateDeployable: Error registering deployable")
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Error registering deployable: %v", err),
 			"data":  nil,
@@ -284,6 +289,7 @@ func (d *V1) GetDeployablesByService(ctx *gin.Context) {
 				}
 			}
 
+			// TODO get directly from Argo, must be missed
 			// Get Ring Master config if needed
 			if dep.DeployableWorkFlowId != "" && dep.DeploymentRunID != "" {
 				ringMasterConfig := d.config.GetRingMasterConfig(dep.Name, dep.DeployableWorkFlowId, dep.DeploymentRunID)

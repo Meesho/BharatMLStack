@@ -158,11 +158,11 @@ func GetArgoCDResourceDetail(appName string, workingEnv string) (ArgoCDAppApiRes
 		Str("applicationName", appName).
 		Str("environment", workingEnv).
 		Str("expectedArgoCDAppName", expectedArgoCDAppName).
-		Str("apiPath", "/applications/"+expectedArgoCDAppName+"/resource-tree").
+		Str("apiPath", "/api/v1/applications/"+expectedArgoCDAppName+"/resource-tree").
 		Msg("GetArgoCDResourceDetail: Starting ArgoCD resource detail lookup")
 
 	appReq, err := getArgoCDClient(
-		"/applications/"+expectedArgoCDAppName+"/resource-tree",
+		"/api/v1/applications/"+expectedArgoCDAppName+"/resource-tree",
 		[]byte{},
 		"GET",
 		workingEnv,

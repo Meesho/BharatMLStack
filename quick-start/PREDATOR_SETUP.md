@@ -154,43 +154,67 @@ argocd login localhost:8087 --insecure
 argocd account generate-token
 ```
 
-### 1.5 Create ArgoCD Application (Alternative to Manual Creation)
+### 1.5 Set Up Automated ArgoCD Application Onboarding
 
-If you prefer to create the ArgoCD Application via CLI instead of through the UI, you can use:
+To enable automatic ArgoCD application creation when you onboard new deployables, set up an ArgoCD Application that watches your GitHub repository's `prd/applications` directory.
+
+#### 1.5.1 Update the prd-applications.yaml File
+
+1. **Navigate to the predator folder:**
+   ```bash
+   cd /Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/predator
+   ```
+
+2. **Edit `prd-applications.yaml` and update the repository URL:**
+   ```yaml
+   apiVersion: argoproj.io/v1alpha1
+   kind: Application
+   metadata:
+     name: prd-applications
+     namespace: argocd
+   spec:
+     project: default
+     source:
+       repoURL: https://github.com/<YOUR_USERNAME>/<YOUR_REPO_NAME>.git  # Update this
+       targetRevision: main  # Update if using a different branch
+       path: prd/applications  # This directory will be watched for new applications
+     destination:
+       server: https://kubernetes.default.svc
+       namespace: argocd
+     syncPolicy:
+       automated:
+         prune: true
+         selfHeal: true
+   ```
+
+   **Replace:**
+   - `<YOUR_USERNAME>` with your GitHub username or organization
+   - `<YOUR_REPO_NAME>` with your repository name (e.g., `onboarding-test`)
+   - `main` with your default branch if different
+
+#### 1.5.2 Apply the Application
 
 ```bash
-argocd app create prd-test \
-  --repo https://github.com/<REPO_OWNER>/<REPO_NAME>.git \
-  --revision main \
-  --path 1.0.0 \
-  --dest-server https://kubernetes.default.svc \
-  --dest-namespace prd-test \
-  --values ../prd/deployables/test/values.yaml \
-  --sync-policy automated \
-  --self-heal \
-  --auto-prune \
-  --sync-option CreateNamespace=true
+# From the predator directory
+kubectl apply -f prd-applications.yaml
 ```
 
-**Important:** After creating the application, you **must** add the `app_name` label manually, as the CLI command doesn't support labels. The label is required for threshold updates to work correctly:
+**What this does:**
+- Creates an ArgoCD Application named `prd-applications` that watches the `prd/applications` directory in your GitHub repo
+- When Horizon creates new application YAML files in `prd/applications/` (e.g., `prd/applications/test.yaml`), ArgoCD automatically detects and creates the corresponding ArgoCD Application
+- All applications are automatically synced with `prune` and `selfHeal` enabled
+
+#### 1.5.3 Verify the Setup
 
 ```bash
-# Add the app_name label (use the actual app name without environment prefix)
-kubectl label application prd-test app_name=test -n argocd --overwrite
+# Check that the prd-applications Application is created
+kubectl get application prd-applications -n argocd
+
+# Check its status
+kubectl get application prd-applications -n argocd -o yaml | grep -A 10 status
 ```
 
-Alternatively, you can use `kubectl patch`:
-
-```bash
-kubectl patch application prd-test -n argocd --type merge -p '{"metadata":{"labels":{"app_name":"test"}}}'
-```
-
-**Note:** Replace:
-- `prd-test` with your application name (`{env}-{appName}`)
-- `<REPO_OWNER>/<REPO_NAME>` with your GitHub repository
-- `test` with your actual app name (without environment prefix) - this is what goes in the `app_name` label
-
-**Important:** The `--values` path should be relative to the repository root. The path `prd/deployables/test/values.yaml` means the file is at the root of your repo under `prd/deployables/test/values.yaml`.
+**Note:** After onboarding a new deployable through Horizon, the application YAML will be created in your GitHub repo at `prd/applications/{appName}.yaml`, and ArgoCD will automatically create the corresponding ArgoCD Application. No manual steps required!
 
 ---
 
@@ -307,17 +331,22 @@ cd YOUR_REPO_NAME
 ```bash
 # From the BharatMLStack root directory
 # Copy the predator/1.0.0 directory to your repository
-cp -r predator/1.0.0 YOUR_REPO_NAME/
+# The chart should be at the root level as 1.0.0/ (to match ARGOCD_HELMCHART_PATH=1.0.0)
+cp -r predator/1.0.0 YOUR_REPO_NAME/1.0.0
 
 # Or if you're already in the repo directory
-cp -r ../predator/1.0.0 ./
+cp -r ../predator/1.0.0 ./1.0.0
 ```
+
+**Note:** The chart path in your repo should match `ARGOCD_HELMCHART_PATH` in `docker-compose.yml`:
+- If `ARGOCD_HELMCHART_PATH=1.0.0`, the chart should be at `1.0.0/` in your repo root
+- If `ARGOCD_HELMCHART_PATH=predator/1.0.0`, the chart should be at `predator/1.0.0/` in your repo
 
 ### 6.3 Commit and Push
 
 ```bash
 # Add the chart
-git add predator/1.0.0
+git add 1.0.0
 
 # Commit
 git commit -m "Add Predator Helm chart 1.0.0"
@@ -326,7 +355,7 @@ git commit -m "Add Predator Helm chart 1.0.0"
 git push origin main
 ```
 
-**Verify:** Check that `predator/1.0.0/` exists in your repository at the root level.
+**Verify:** Check that `1.0.0/` exists in your repository at the root level (or `predator/1.0.0/` if using that path).
 
 ---
 
@@ -369,7 +398,7 @@ horizon:
     - ARGOCD_NAMESPACE=argocd
     - ARGOCD_DESTINATION_NAME=in-cluster  # For local Kubernetes
     - ARGOCD_PROJECT=default
-    - ARGOCD_HELMCHART_PATH=predator/1.0.0  # Path to Helm chart in your repo
+    - ARGOCD_HELMCHART_PATH=1.0.0  # Path to Helm chart in your repo (should match chart location in repo)
     - ARGOCD_SYNC_POLICY_OPTIONS=CreateNamespace=true
     - ARGOCD_INSECURE=true
     
@@ -389,7 +418,44 @@ horizon:
     - GITHUB_OWNER=<YOUR_GITHUB_USERNAME>  # Your GitHub username or org
     - GITHUB_COMMIT_AUTHOR=horizon-bot  # Name for git commits
     - GITHUB_COMMIT_EMAIL=your-email@example.com  # Email for git commits
+    
+    # GCS Configuration (for model operations)
+    - GCS_ENABLED=true  # Set to false to disable GCS operations
+    - GCS_MODEL_BUCKET=your-gcs-bucket-name  # GCS bucket for models
+    - GCS_MODEL_BASE_PATH=your-base-path  # Base path in bucket
+    - CLOUDSDK_CONFIG=/root/.config/gcloud  # Path to gcloud config inside container
+  volumes:
+    - ./configs:/app/configs:ro
+    # Mount gcloud credentials for Application Default Credentials (ADC)
+    # This allows the container to use credentials from 'gcloud auth application-default login'
+    - ~/.config/gcloud:/root/.config/gcloud:ro
 ```
+
+**Important:** For GCS authentication using Application Default Credentials (ADC):
+
+1. **Authenticate on your host machine first:**
+   ```bash
+   # Run this on your host (not inside the container)
+   gcloud auth application-default login
+   ```
+   This will create credentials at `~/.config/gcloud/application_default_credentials.json`
+
+2. **Verify credentials exist:**
+   ```bash
+   ls -la ~/.config/gcloud/application_default_credentials.json
+   ```
+
+3. **The docker-compose.yml mounts your host's `~/.config/gcloud` directory into the container:**
+   - Host path: `~/.config/gcloud`
+   - Container path: `/root/.config/gcloud`
+   - The Go GCS client will automatically find and use these credentials
+
+4. **Set the correct GCP project (if needed):**
+   ```bash
+   gcloud config set project your-gcp-project-id
+   ```
+
+The `CLOUDSDK_CONFIG` environment variable tells gcloud SDK (if used) where to find the config, and the Go client library will automatically discover the ADC credentials at the standard location.
 
 ### 8.2 Copy Models to Kubernetes Node (for kind/minikube)
 
@@ -508,8 +574,10 @@ docker-compose logs horizon | grep -i error
 ### 9.4 Verify in ArgoCD UI
 
 1. Open ArgoCD UI at https://localhost:8087
-2. You should see the application created (if onboarding was successful)
-3. Or manually create an application pointing to your repository
+2. You should see:
+   - The `prd-applications` Application (watches `prd/applications` directory)
+   - Any applications automatically created from onboarding (e.g., `prd-test`)
+3. Applications are automatically synced when Horizon creates YAML files in your GitHub repo
 
 ### 9.5 Verify GitHub Repository
 
@@ -517,6 +585,14 @@ Check your GitHub repository:
 - `{workingEnv}/deployables/{appName}/values.yaml` should exist
 - `{workingEnv}/applications/{appName}.yaml` should exist
 - Example: `prd/deployables/test/values.yaml` and `prd/applications/test.yaml`
+
+**Automated Workflow:**
+1. When you onboard a deployable through Horizon, it creates:
+   - `prd/deployables/{appName}/values.yaml` - Helm values for the deployment
+   - `prd/applications/{appName}.yaml` - ArgoCD Application definition
+2. The `prd-applications` ArgoCD Application (created in Step 1.5) watches the `prd/applications` directory
+3. ArgoCD automatically detects the new application YAML and creates the ArgoCD Application
+4. The application is automatically synced, creating the namespace and deploying the service
 
 ---
 
@@ -540,9 +616,45 @@ Check your GitHub repository:
 ### Issue: ArgoCD Cannot Find Helm Chart
 
 **Solution:**
-- Verify `predator/1.0.0` exists in your repository
-- Check that `ARGOCD_HELMCHART_PATH=predator/1.0.0` matches the path in your repo
+- Verify the Helm chart exists in your repository at the path specified in `ARGOCD_HELMCHART_PATH`
+- Check that `ARGOCD_HELMCHART_PATH` in `docker-compose.yml` matches the actual path in your repo
+  - Default: `ARGOCD_HELMCHART_PATH=1.0.0` (chart at `1.0.0/` in repo root)
+  - Alternative: `ARGOCD_HELMCHART_PATH=predator/1.0.0` (chart at `predator/1.0.0/` in repo)
 - Ensure the repository is accessible (public or app has access)
+- Verify the application YAML file in `prd/applications/{appName}.yaml` references the correct chart path
+
+### Issue: Applications Not Appearing in ArgoCD After Onboarding
+
+**Symptoms:**
+- Horizon creates files in GitHub repo successfully
+- But no ArgoCD Application appears in ArgoCD UI
+
+**Solution:**
+
+1. **Verify `prd-applications` Application exists:**
+   ```bash
+   kubectl get application prd-applications -n argocd
+   ```
+
+2. **Check if `prd-applications` is synced:**
+   ```bash
+   kubectl get application prd-applications -n argocd -o yaml | grep -A 5 sync
+   ```
+   - If not synced, manually sync it: `argocd app sync prd-applications`
+
+3. **Verify the application YAML was created in GitHub:**
+   - Check `prd/applications/{appName}.yaml` exists in your repo
+   - Verify the YAML structure is correct (should be a valid ArgoCD Application resource)
+
+4. **Check ArgoCD logs for errors:**
+   ```bash
+   kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller --tail=50
+   ```
+
+5. **Manually trigger a refresh:**
+   ```bash
+   argocd app get prd-applications --refresh
+   ```
 
 ### Issue: Namespace Not Found Error
 

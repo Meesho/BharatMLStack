@@ -496,19 +496,6 @@ func (h *Handler) CreateDeployable(request *DeployableRequest, workingEnv string
 		return "", fmt.Errorf("workingEnv is required for deployable creation")
 	}
 
-	// Extract environment suffix (e.g., "gcp_stg" -> "stg", "gcp_int" -> "int", "stg" -> "stg")
-	envSuffix := workingEnv
-	if strings.Contains(workingEnv, "_") {
-		parts := strings.Split(workingEnv, "_")
-		if len(parts) > 1 {
-			envSuffix = parts[len(parts)-1] // Get last part (e.g., "stg" from "gcp_stg")
-		}
-	}
-
-	// Standard database entry name format: {env}-{appName}
-	// This ensures consistency across single and multi-environment deployables
-	dbEntryName := fmt.Sprintf("%s-%s", envSuffix, request.AppName)
-
 	// Generate host using domain from config.yaml: <appname>.<domain>
 	// Each environment defines its own domain in config.yaml, so no need to inject env into host
 	domain := serviceConfig.Domain
@@ -526,7 +513,7 @@ func (h *Handler) CreateDeployable(request *DeployableRequest, workingEnv string
 
 	log.Info().
 		Str("appName", request.AppName).
-		Str("dbEntryName", dbEntryName).
+		Str("dbEntryName", request.AppName).
 		Str("host", host).
 		Str("workingEnv", workingEnv).
 		Msg("CreateDeployable: Using unique database entry name and host per environment")
@@ -535,7 +522,7 @@ func (h *Handler) CreateDeployable(request *DeployableRequest, workingEnv string
 		host = host + ":" + strconv.Itoa(serviceConfig.AppPort)
 	}
 	deployableConfig := &servicedeployableconfig.ServiceDeployableConfig{
-		Name:                    dbEntryName, // Use environment-prefixed name for database uniqueness
+		Name:                    request.AppName,
 		Service:                 request.ServiceName,
 		Host:                    host, // Use environment-prefixed host for database uniqueness
 		Active:                  true,
@@ -886,33 +873,20 @@ func (h *Handler) UpdateDeployable(request *DeployableRequest, workingEnv string
 		return fmt.Errorf("workingEnv is required for deployable update")
 	}
 
-	// Extract environment suffix (e.g., "gcp_stg" -> "stg", "gcp_int" -> "int", "stg" -> "stg")
-	envSuffix := workingEnv
-	if strings.Contains(workingEnv, "_") {
-		parts := strings.Split(workingEnv, "_")
-		if len(parts) > 1 {
-			envSuffix = parts[len(parts)-1] // Get last part (e.g., "stg" from "gcp_stg")
-		}
-	}
-
-	// Standard database entry name format: {env}-{appName}
-	// This matches the naming pattern used in CreateDeployable
-	dbEntryName := fmt.Sprintf("%s-%s", envSuffix, request.AppName)
-
 	log.Info().
 		Str("appName", request.AppName).
-		Str("dbEntryName", dbEntryName).
+		Str("dbEntryName", request.AppName).
 		Str("workingEnv", workingEnv).
 		Msg("UpdateDeployable: Looking up deployable with environment-prefixed name")
 
 	// 3. Get existing deployable configs by service using environment-prefixed name
-	existingConfig, err := h.repo.GetByNameAndService(dbEntryName, request.ServiceName)
+	existingConfig, err := h.repo.GetByNameAndService(request.AppName, request.ServiceName)
 	if err != nil {
 		return fmt.Errorf("failed to get existing deployable configs: %w", err)
 	}
 
 	if existingConfig == nil {
-		return fmt.Errorf("deployable config not found for app: %s (searched as: %s) in environment: %s", request.AppName, dbEntryName, workingEnv)
+		return fmt.Errorf("deployable config not found for app: %s (searched as: %s) in environment: %s", request.AppName, request.AppName, workingEnv)
 	}
 
 	var config DeployableConfigPayload

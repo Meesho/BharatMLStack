@@ -365,7 +365,7 @@ initContainer:
     command:
         - /bin/sh
         - -c
-        - cp -r {{  .localModelPath }}/* /models/
+        - cp -r /local-models/* /models/
     image: docker.io/library/busybox:latest
 {{ end }}
 

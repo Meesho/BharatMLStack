@@ -371,7 +371,7 @@ services:
       - ARGOCD_NAMESPACE=argocd
       - ARGOCD_DESTINATION_NAME=in-cluster
       - ARGOCD_PROJECT=default
-      - ARGOCD_HELMCHART_PATH=predator/1.0.0
+      - ARGOCD_HELMCHART_PATH=1.0.0
       - ARGOCD_SYNC_POLICY_OPTIONS=CreateNamespace=true
       - ARGOCD_INSECURE=true
       - LOCAL_MODEL_PATH=/tmp/models
@@ -388,8 +388,22 @@ services:
       - GITHUB_OWNER=Adit2607
       - GITHUB_COMMIT_AUTHOR=horizon-bot
       - GITHUB_COMMIT_EMAIL=aditya.garg@meesho.com
+      - GCP_PROJECT_ID=meesho-datascience-dev
+      - GCS_ENABLED=true
+      - GCS_MODEL_BUCKET=gcs-dsci-model-repository-int
+      - GCS_MODEL_BASE_PATH=dummy
+      # Application Default Credentials (ADC) configuration
+      # Mounts host's gcloud credentials for ADC authentication
+      # Container runs as non-root user (nonroot), so mount to /home/nonroot/.config/gcloud
+      - CLOUDSDK_CONFIG=/home/nonroot/.config/gcloud
+      - TEST_DEPLOYABLE_ID=3
+      - TEST_GPU_DEPLOYABLE_ID=3
     volumes:
       - ./configs:/app/configs:ro
+      # Mount gcloud credentials for Application Default Credentials (ADC)
+      # Run 'gcloud auth application-default login' on host first
+      # Container runs as non-root user, so mount to /home/nonroot/.config/gcloud
+      - ~/.config/gcloud:/home/nonroot/.config/gcloud:ro
     networks:
       - onfs-network
     depends_on:

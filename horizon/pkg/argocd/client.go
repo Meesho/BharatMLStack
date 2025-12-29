@@ -163,7 +163,7 @@ func getHTTPClient() *http.Client {
 	isTlsDisabled := viper.GetBool("ARGOCD_INSECURE")
 	if isTlsDisabled {
 		transport.TLSClientConfig = &tls.Config{
-			InsecureSkipVerify: true, // #nosec G402
+			InsecureSkipVerify: true,
 		}
 	}
 
