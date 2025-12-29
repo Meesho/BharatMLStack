@@ -439,7 +439,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
     (7, 'gcs_triton_path', 'NA', 1, NOW(), NOW()),
     (8, 'gcs_triton_path', 'some_path', 1, NOW(), NOW()),
     (9, 'service_account', 'NA', 1, NOW(), NOW()),
-    (10, 'service_account', 'some_service_account', 1, NOW(), NOW())
+    (10, 'service_account', 'sa-dsci-model-inference-svc@meesho-shared-int-0525.iam.gserviceaccount.com', 1, NOW(), NOW())
   ON DUPLICATE KEY UPDATE 
     value = VALUES(value),
     updated_at = NOW();

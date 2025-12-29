@@ -1,4 +1,4 @@
-{{- if and .Values.canary (.Values.canary.enabled) .Values.canary.slackWebhookURL }}
+{{- if and .Values.canary (.Values.canary.enabled) .Values.canary.slackWebhookURL (ne .Values.canary.slackWebhookURL "") }}
 apiVersion: flagger.app/v1beta1
 kind: AlertProvider
 metadata:

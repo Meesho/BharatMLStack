@@ -56,7 +56,7 @@ func GetArgoCDResource(kind string, name string, hasCanary bool) (ArgoCDResource
 func (r ArgoCDResource) FetchResourceFromArgoCD(workingEnv string) (interface{}, error) {
 	log.Info().Str("workingEnv", workingEnv).Msg("Entered FetchResourceFromArgoCD function")
 
-	baseURL, _ := url.Parse(getArgoCDAPI(workingEnv) + "/applications/" + r.Namespace + "/resource")
+	baseURL, _ := url.Parse(getArgoCDAPI(workingEnv) + "/api/v1/applications/" + r.Namespace + "/resource")
 	params := url.Values{}
 	params.Add("name", r.Namespace)
 	params.Add("namespace", r.Namespace)
@@ -105,7 +105,7 @@ func (r ArgoCDResource) PatchArgoCDResource(payload interface{}, workingEnv stri
 		return nil, err
 	}
 
-	baseURL, _ := url.Parse(getArgoCDAPI(workingEnv) + "/applications/" + r.Namespace + "/resource")
+	baseURL, _ := url.Parse(getArgoCDAPI(workingEnv) + "/api/v1/applications/" + r.Namespace + "/resource")
 	params := url.Values{}
 	params.Add("name", r.Namespace)
 	params.Add("namespace", r.Namespace)

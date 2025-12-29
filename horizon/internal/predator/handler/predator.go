@@ -17,6 +17,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/counter"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/validationjob"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/validationlock"
+	"github.com/spf13/viper"
 	"google.golang.org/protobuf/encoding/prototext"
 
 	"net/http"
@@ -233,7 +234,7 @@ func InitV1ConfigHandler() (Config, error) {
 
 		infrastructureHandler := infrastructurehandler.InitInfrastructureHandler()
 		// Use generalized working environment
-		workingEnv := externalcall.GetWorkingEnvironment()
+		workingEnv := viper.GetString("WORKING_ENV")
 
 		predator = &Predator{
 			GcsClient:               externalcall.CreateGCSClient(pred.IsGcsEnabled),
@@ -1900,7 +1901,6 @@ func (p *Predator) releaseLockWithError(lockID uint, groupID, errorMsg string) {
 func (p *Predator) getTestDeployableID(payload *Payload) (int, error) {
 	// Get the target deployable ID from the request
 	targetDeployableID := int(payload.ConfigMapping.ServiceDeployableID)
-
 	// Fetch the service deployable config to check machine type
 	serviceDeployable, err := p.ServiceDeployableRepo.GetById(targetDeployableID)
 	if err != nil {
