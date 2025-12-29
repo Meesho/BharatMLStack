@@ -141,8 +141,8 @@ async fn handler(
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Configure Tokio runtime to use all CPU cores for maximum performance
+    // Default worker_threads() uses number of CPU cores automatically
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(0) // 0 = use all CPU cores
         .enable_all()
         .build()?;
     
