@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = "0.7"
 tokio = { version = "1", features = ["full"] }
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+hyper = { version = "1", features = ["server", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["server", "tokio", "http1", "http2"] }
+http-body-util = "0.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -15,7 +15,6 @@ serde_json = "1.0"
 tonic = "0.11"
 prost = "0.12"
 prost-types = "0.12"
-http-body = "1.0"
 
 [build-dependencies]
 tonic-build = "0.11"

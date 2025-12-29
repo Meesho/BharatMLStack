@@ -1,20 +1,16 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-    routing::post,
-    Router,
-};
-use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::{body::Incoming as IncomingBody, Request, Response, StatusCode};
+use hyper_util::rt::TokioIo;
+use http_body_util::{BodyExt, Full};
+use hyper::body::Bytes;
+use serde::Deserialize;
+use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
-use tower_http::cors::CorsLayer;
-use tower_http::trace::TraceLayer;
-use tracing::{info, Level};
-use tonic::{metadata::AsciiMetadataValue, transport::Channel, Request};
+use tokio::net::TcpListener;
+use tonic::{metadata::AsciiMetadataValue, transport::Channel, Request as TonicRequest};
 
-// Include the generated proto code
 pub mod retrieve {
     tonic::include_proto!("retrieve");
 }
@@ -22,8 +18,7 @@ pub mod retrieve {
 use retrieve::feature_service_client::FeatureServiceClient;
 use retrieve::{FeatureGroup, Keys, Query};
 
-// Request body structures for retrieve_features endpoint
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Deserialize)]
 struct RetrieveFeaturesRequest {
     #[serde(rename = "entity_label")]
     entity_label: String,
@@ -34,19 +29,18 @@ struct RetrieveFeaturesRequest {
     keys: Vec<KeysRequest>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Deserialize)]
 struct FeatureGroupRequest {
     label: String,
     #[serde(rename = "feature_labels")]
     feature_labels: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Deserialize)]
 struct KeysRequest {
     cols: Vec<String>,
 }
 
-// AppState stores gRPC client and pre-parsed metadata for zero-copy
 #[derive(Clone)]
 struct AppState {
     client: Arc<FeatureServiceClient<Channel>>,
@@ -54,83 +48,81 @@ struct AppState {
     caller_id: AsciiMetadataValue,
 }
 
-// Pre-allocated static error responses to avoid allocations
-static ERROR_TIMEOUT: &str = "Request timeout";
+static SUCCESS: &[u8] = b"\"success\"";
+static ERROR_TIMEOUT: &[u8] = b"{\"error\":\"Request timeout\"}";
+static CONTENT_JSON: &str = "application/json";
 
-impl AppState {
-    async fn handler(
-        State(state): State<AppState>,
-        Json(request_body): Json<RetrieveFeaturesRequest>,
-    ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
-        // Zero-copy optimization: Pre-allocate vectors with known capacity
-        let feature_groups_len = request_body.feature_groups.len();
-        let keys_len = request_body.keys.len();
-        
-        // Move ownership efficiently - pre-allocate to avoid reallocations
-        let mut feature_groups = Vec::with_capacity(feature_groups_len);
-        feature_groups.extend(
-            request_body.feature_groups.into_iter().map(|fg| FeatureGroup {
-                label: fg.label,
-                feature_labels: fg.feature_labels,
-            })
-        );
-        
-        let mut keys = Vec::with_capacity(keys_len);
-        keys.extend(
-            request_body.keys.into_iter().map(|k| Keys { cols: k.cols })
-        );
-
-        // Create request with moved data (zero-copy move semantics)
-        let mut request = Request::new(Query {
-            entity_label: request_body.entity_label,
-            feature_groups,
-            keys_schema: request_body.keys_schema,
-            keys,
-        });
-
-        // Zero-copy: Use pre-parsed metadata values (no string parsing per request)
-        let metadata = request.metadata_mut();
-        metadata.insert("online-feature-store-auth-token", state.auth_token.clone());
-        metadata.insert("online-feature-store-caller-id", state.caller_id.clone());
-
-        // Call gRPC service with timeout
-        // Note: tonic::Client is cheap to clone (internally uses Arc)
-        let mut client = (*state.client).clone();
-        match tokio::time::timeout(
-            Duration::from_secs(5),
-            client.retrieve_features(request)
-        ).await {
-            Ok(Ok(_response)) => Ok(Json(serde_json::json!("success"))),
-            Ok(Err(e)) => {
-                // Only allocate error string when needed
-                let error_response = serde_json::json!({
-                    "error": e.to_string()
-                });
-                Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
-            }
-            Err(_) => {
-                // Use static string reference to avoid allocation
-                let error_response = serde_json::json!({
-                    "error": ERROR_TIMEOUT
-                });
-                Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
-            }
+async fn handler(
+    req: Request<IncomingBody>,
+    state: Arc<AppState>,
+) -> Result<Response<Full<Bytes>>, Infallible> {
+    let body_bytes = match req.into_body().collect().await {
+        Ok(c) => c.to_bytes(),
+        Err(_) => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Full::new(Bytes::from_static(b"Bad request")))
+                .unwrap());
         }
+    };
+
+    let request_body: RetrieveFeaturesRequest = match serde_json::from_slice(&body_bytes) {
+        Ok(b) => b,
+        Err(_) => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Full::new(Bytes::from_static(b"Invalid JSON")))
+                .unwrap());
+        }
+    };
+
+    let mut feature_groups = Vec::with_capacity(request_body.feature_groups.len());
+    feature_groups.extend(
+        request_body.feature_groups.into_iter().map(|fg| FeatureGroup {
+            label: fg.label,
+            feature_labels: fg.feature_labels,
+        })
+    );
+
+    let mut keys = Vec::with_capacity(request_body.keys.len());
+    keys.extend(request_body.keys.into_iter().map(|k| Keys { cols: k.cols }));
+
+    let mut grpc_request = TonicRequest::new(Query {
+        entity_label: request_body.entity_label,
+        feature_groups,
+        keys_schema: request_body.keys_schema,
+        keys,
+    });
+
+    let metadata = grpc_request.metadata_mut();
+    metadata.insert("online-feature-store-auth-token", state.auth_token.clone());
+    metadata.insert("online-feature-store-caller-id", state.caller_id.clone());
+
+    let mut client = (*state.client).clone();
+    match tokio::time::timeout(Duration::from_secs(5), client.retrieve_features(grpc_request)).await {
+        Ok(Ok(_)) => Ok(Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", CONTENT_JSON)
+            .body(Full::new(Bytes::from_static(SUCCESS)))
+            .unwrap()),
+        Ok(Err(e)) => {
+            let error = format!("{{\"error\":\"{}\"}}", e);
+            Ok(Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .header("Content-Type", CONTENT_JSON)
+                .body(Full::new(Bytes::from(error)))
+                .unwrap())
+        }
+        Err(_) => Ok(Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .header("Content-Type", CONTENT_JSON)
+            .body(Full::new(Bytes::from_static(ERROR_TIMEOUT)))
+            .unwrap()),
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Starting rust-caller with 4 threads version 4");
-    
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_target(false)
-        .with_max_level(Level::INFO)
-        .init();
-
-    // Create gRPC channel with keepalive settings matching Go configuration
-    // Time: 30 seconds, Timeout: 10 seconds, PermitWithoutStream: true
     let channel = Channel::from_static("http://online-feature-store-api.int.meesho.int:80")
         .http2_keep_alive_interval(Duration::from_secs(30))
         .keep_alive_timeout(Duration::from_secs(10))
@@ -138,32 +130,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect()
         .await?;
 
-    let client = Arc::new(FeatureServiceClient::new(channel));
-    
-    // Pre-parse metadata values once (zero-copy optimization)
-    // This avoids parsing strings on every request
-    let auth_token = AsciiMetadataValue::from_static("atishay");
-    let caller_id = AsciiMetadataValue::from_static("test-3");
-    
-    let app_state = AppState {
-        client,
-        auth_token,
-        caller_id,
-    };
+    let state = Arc::new(AppState {
+        client: Arc::new(FeatureServiceClient::new(channel)),
+        auth_token: AsciiMetadataValue::from_static("atishay"),
+        caller_id: AsciiMetadataValue::from_static("test-3"),
+    });
 
-    // Build the application router
-    let app = Router::new()
-        .route("/retrieve-features", post(AppState::handler))
-        .layer(CorsLayer::permissive())
-        .layer(TraceLayer::new_for_http())
-        .with_state(app_state);
+    let listener = TcpListener::bind("0.0.0.0:8080").await?;
 
-    // Start the server
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
-    info!("🚀 Rust gRPC Client running on http://0.0.0.0:8080");
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let io = TokioIo::new(stream);
+        let state_clone = state.clone();
 
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+        tokio::task::spawn(async move {
+            let service = service_fn(move |req| {
+                let state = state_clone.clone();
+                handler(req, state)
+            });
 
-    Ok(())
+            let mut builder = http1::Builder::new();
+            builder.keep_alive(true);
+            let _ = builder.serve_connection(io, service).await;
+        });
+    }
 }
