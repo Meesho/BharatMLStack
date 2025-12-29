@@ -79,7 +79,7 @@ async fn get_pprof_protobuf(state: Arc<AppState>) -> Result<Response<Full<Bytes>
     };
     
     let (tx, rx) = oneshot::channel();
-    if report_tx.send(ReportRequest::Protobuf(tx)).is_err() {
+    if report_tx.send(ReportRequest::Protobuf(tx)).await.is_err() {
         return Ok(Response::builder()
             .status(StatusCode::SERVICE_UNAVAILABLE)
             .body(Full::new(Bytes::from("Profiling service unavailable")))
@@ -115,7 +115,7 @@ async fn get_flamegraph(state: Arc<AppState>) -> Result<Response<Full<Bytes>>, I
     };
     
     let (tx, rx) = oneshot::channel();
-    if report_tx.send(ReportRequest::Flamegraph(tx)).is_err() {
+    if report_tx.send(ReportRequest::Flamegraph(tx)).await.is_err() {
         return Ok(Response::builder()
             .status(StatusCode::SERVICE_UNAVAILABLE)
             .body(Full::new(Bytes::from("Profiling service unavailable")))
@@ -151,7 +151,7 @@ async fn get_pprof_text(state: Arc<AppState>) -> Result<Response<Full<Bytes>>, I
     };
     
     let (tx, rx) = oneshot::channel();
-    if report_tx.send(ReportRequest::Text(tx)).is_err() {
+    if report_tx.send(ReportRequest::Text(tx)).await.is_err() {
         return Ok(Response::builder()
             .status(StatusCode::SERVICE_UNAVAILABLE)
             .body(Full::new(Bytes::from("Profiling service unavailable")))
@@ -188,7 +188,7 @@ async fn get_pprof_heap(_state: Arc<AppState>) -> Result<Response<Full<Bytes>>, 
         }
     };
     
-    let prof_ctl = prof_ctl.lock().await;
+    let mut prof_ctl = prof_ctl.lock().await;
     
     // Verify profiling is activated
     if !prof_ctl.activated() {
@@ -371,7 +371,8 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
         // This task holds the guard (which is not Send) and generates reports on demand
         let report_tx_clone = report_tx.clone();
         tokio::task::spawn_blocking(move || {
-            while let Ok(request) = report_rx.recv() {
+            let mut report_rx = report_rx;
+            while let Some(request) = report_rx.blocking_recv() {
                 match request {
                     ReportRequest::Protobuf(tx) => {
                         // For protobuf format, use the resolved report and convert to text format
@@ -391,11 +392,23 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
                     ReportRequest::Flamegraph(tx) => {
                         match guard.report().build() {
                             Ok(report) => {
-                                let mut flamegraph = Vec::new();
-                                if report.flamegraph(&mut flamegraph).is_ok() {
-                                    let _ = tx.send(Ok(flamegraph));
-                                } else {
-                                    let _ = tx.send(Err("Failed to generate flamegraph".to_string()));
+                                // Generate flamegraph using inferno
+                                use pprof::flamegraph;
+                                let mut flamegraph_data = Vec::new();
+                                // Convert report data to lines format for inferno
+                                // The report.data contains the profile data that needs to be converted
+                                let mut options = flamegraph::Options::default();
+                                // Convert report to text format first, then parse as lines
+                                let report_text = format!("{:?}", report);
+                                let lines: Vec<&str> = report_text.lines().collect();
+                                match flamegraph::from_lines(&mut options, lines.iter().map(|s| *s), &mut flamegraph_data) {
+                                    Ok(_) => {
+                                        let _ = tx.send(Ok(flamegraph_data));
+                                    }
+                                    Err(e) => {
+                                        // Fallback: return error
+                                        let _ = tx.send(Err(format!("Failed to generate flamegraph: {:?}. Note: Flamegraph requires proper profile data format.", e)));
+                                    }
                                 }
                             }
                             Err(e) => {
