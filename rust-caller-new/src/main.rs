@@ -192,8 +192,8 @@ async fn router(
     let path = req.uri().path();
     let method = req.method();
     
-    // Route pprof endpoints
-    if method == Method::GET {
+    // Route pprof endpoints (support both GET and HEAD methods)
+    if method == Method::GET || method == Method::HEAD {
         match path {
             "/pprof/protobuf" => return get_pprof_protobuf(state).await,
             "/pprof/flamegraph" => return get_flamegraph(state).await,
