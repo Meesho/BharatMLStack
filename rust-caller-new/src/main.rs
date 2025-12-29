@@ -62,7 +62,7 @@ async fn handler(
     req: Request<IncomingBody>,
     state: Arc<AppState>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-    // Collect body bytes - to_bytes() efficiently combines chunks
+    // Collect body bytes efficiently - to_bytes() combines chunks optimally
     let body_bytes = match req.into_body().collect().await {
         Ok(collected) => collected.to_bytes(),
         Err(_) => {
@@ -74,7 +74,8 @@ async fn handler(
         }
     };
 
-    // Parse JSON directly into RetrieveFeaturesRequest (matches Query structure)
+    // Parse JSON directly into RetrieveFeaturesRequest - serde_json is already optimized
+    // Using from_slice is faster than from_reader for in-memory data
     let request_body: RetrieveFeaturesRequest = match serde_json::from_slice(&body_bytes) {
         Ok(body) => body,
         Err(_) => {
@@ -87,23 +88,30 @@ async fn handler(
     };
 
     // Direct assignment - ZERO COPY: moves ownership from request_body to Query
-    // All fields match exactly, so we can move without any conversion
+    // Pre-allocate Vecs with exact capacity to avoid reallocations
+    let feature_groups_len = request_body.feature_groups.len();
+    let keys_len = request_body.keys.len();
+    
+    let mut feature_groups = Vec::with_capacity(feature_groups_len);
+    for fg in request_body.feature_groups {
+        feature_groups.push(FeatureGroup {
+            label: fg.label, // MOVE: zero-copy transfer
+            feature_labels: fg.feature_labels, // MOVE: zero-copy transfer
+        });
+    }
+    
+    let mut keys = Vec::with_capacity(keys_len);
+    for k in request_body.keys {
+        keys.push(Keys { 
+            cols: k.cols // MOVE: zero-copy transfer
+        });
+    }
+    
     let query = Query {
         entity_label: request_body.entity_label, // MOVE: zero-copy transfer
-        feature_groups: request_body.feature_groups
-            .into_iter() // Consumes Vec, moves elements (zero-copy)
-            .map(|fg| FeatureGroup {
-                label: fg.label, // MOVE: zero-copy transfer
-                feature_labels: fg.feature_labels, // MOVE: zero-copy transfer
-            })
-            .collect(), // Only allocates Vec container, data is moved
+        feature_groups,
         keys_schema: request_body.keys_schema, // MOVE: zero-copy transfer
-        keys: request_body.keys
-            .into_iter() // Consumes Vec, moves elements (zero-copy)
-            .map(|k| Keys { 
-                cols: k.cols // MOVE: zero-copy transfer
-            })
-            .collect(), // Only allocates Vec container, data is moved
+        keys,
     };
 
     // Create Tonic request with metadata - reuse metadata from state (no clone needed)
@@ -121,11 +129,15 @@ async fn handler(
     // We need clone because retrieve_features takes &mut self
     let mut client = state.client.clone();
     match tokio::time::timeout(Duration::from_secs(5), client.retrieve_features(grpc_request)).await {
-        Ok(Ok(_)) => Ok(Response::builder()
-            .status(StatusCode::OK)
-            .header("Content-Type", CONTENT_JSON)
-            .body(Full::new(Bytes::from_static(SUCCESS)))
-            .unwrap()),
+        Ok(Ok(response)) => {
+            // Drop gRPC response immediately to free memory (don't wait for end of scope)
+            drop(response);
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", CONTENT_JSON)
+                .body(Full::new(Bytes::from_static(SUCCESS)))
+                .unwrap())
+        },
         Ok(Err(_)) => Ok(Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .header("Content-Type", CONTENT_JSON)
