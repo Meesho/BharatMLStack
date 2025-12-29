@@ -228,6 +228,8 @@ async fn get_pprof_heap(_state: Arc<AppState>) -> Result<Response<Full<Bytes>>, 
 }
 
 // Main router function that dispatches requests based on path
+// Prevent inlining to ensure function appears in profiles
+#[inline(never)]
 async fn router(
     req: Request<IncomingBody>,
     state: Arc<AppState>,
@@ -251,6 +253,8 @@ async fn router(
     retrieve_features_handler(req, state).await
 }
 
+// Prevent inlining to ensure function appears in profiles
+#[inline(never)]
 async fn retrieve_features_handler(
     req: Request<IncomingBody>,
     state: Arc<AppState>,
@@ -376,12 +380,16 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
             while let Some(request) = report_rx.blocking_recv() {
                 match request {
                     ReportRequest::Protobuf(tx) => {
-                        // For protobuf format, use the resolved report and convert to text format
-                        // Note: Full pprof protobuf format requires additional conversion libraries
-                        // For now, return text format that can be used with pprof tools
+                        // Generate pprof protobuf format for go tool pprof
+                        // Note: The pprof crate's Report doesn't have a direct pprof() method
+                        // We'll use the report's data to generate a format that go tool pprof can use
+                        // For now, return the report in a format that can be processed
                         match guard.report().build() {
                             Ok(report) => {
-                                // Convert report to text format (pprof can read text format)
+                                // The pprof crate doesn't directly support protobuf output
+                                // We need to use external tools or generate it manually
+                                // For now, return text format - users should use go tool pprof with the text format
+                                // or use the flamegraph endpoint for visualization
                                 let text_str = format!("{:?}", report);
                                 let _ = tx.send(Ok(text_str.into_bytes()));
                             }
@@ -448,18 +456,28 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
                                         for frame_symbols in frames.frames.iter().rev() {
                                             let mut frame_name = None;
                                             
+                                            // Try to get the best symbol name from all symbols in this frame
                                             for symbol in frame_symbols.iter() {
                                                 if let Some(name_bytes) = &symbol.name {
                                                     if !name_bytes.is_empty() {
                                                         let name = String::from_utf8_lossy(name_bytes).trim().to_string();
+                                                        // Prefer function names over closures, but include closures if that's all we have
                                                         if !name.is_empty() && name != "unknown" {
-                                                            frame_name = Some(name);
-                                                            break;
+                                                            let is_closure = name.contains("{{closure}}");
+                                                            // Prefer actual function names over closure names
+                                                            if !is_closure || frame_name.is_none() {
+                                                                frame_name = Some(name.clone());
+                                                                // If we found a non-closure name, use it
+                                                                if !is_closure {
+                                                                    break;
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }
                                             }
                                             
+                                            // Fallback to address if no name found
                                             let frame_str = frame_name.unwrap_or_else(|| {
                                                 if let Some(symbol) = frame_symbols.first() {
                                                     if let Some(addr) = symbol.addr {
