@@ -187,7 +187,8 @@ func main() {
 	// IdleTimeout (set above) controls the keep-alive period
 	srv.SetKeepAlivesEnabled(true)
 
-	// Create listener with SO_REUSEADDR and SO_REUSEPORT for better connection handling
+	// Create listener - bind to all interfaces (0.0.0.0) to accept connections from other machines
+	// Using :8081 instead of 127.0.0.1:8081 allows external connections (e.g., from 10.138.70.7)
 	listener, err := net.Listen("tcp", ":8081")
 	if err != nil {
 		log.Fatalf("Failed to create listener: %v", err)
@@ -204,15 +205,24 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
+	// Channel to signal server startup errors
+	serverErr := make(chan error, 1)
+
 	go func() {
 		log.Println("🚀 Go gRPC Client running on http://0.0.0.0:8081")
 		if err := srv.Serve(keepAliveListener); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v", err)
+			serverErr <- err
 		}
 	}()
 
-	// Wait for interrupt signal
-	<-quit
+	// Wait for interrupt signal or server error
+	select {
+	case sig := <-quit:
+		log.Printf("Received signal: %v", sig)
+	case err := <-serverErr:
+		log.Fatalf("Server failed to start: %v", err)
+	}
+
 	log.Println("Shutting down server...")
 
 	// Graceful shutdown with timeout
