@@ -198,6 +198,14 @@ func main() {
 
 	r := gin.New()
 
+	// CRITICAL: Add middleware to set Connection: keep-alive header on all responses
+	// This ensures connection reuse like Axum/hyper does automatically
+	// Without this, each request closes the connection, causing port exhaustion
+	r.Use(func(c *gin.Context) {
+		c.Header("Connection", "keep-alive")
+		c.Next()
+	})
+
 	// Health check endpoint to verify server is running
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -213,6 +221,11 @@ func main() {
 	// - Keep-alive enabled for connection reuse
 	// - No connection limits to handle high concurrency
 	// This prevents "cannot assign requested address" errors from load test clients
+	//
+	// CRITICAL DIFFERENCE FROM RUST:
+	// - Axum/hyper handles HTTP/1.1 keep-alive automatically and efficiently
+	// - Go's http.Server requires explicit configuration and proper header handling
+	// - Without proper keep-alive, each request closes connection = port exhaustion
 	srv := &http.Server{
 		Addr:           ":8080",
 		Handler:        r,
@@ -223,6 +236,8 @@ func main() {
 		// No MaxConnsPerIP limit - allow high concurrency from single client
 		// This is important for load testing where many VUs come from same machine
 	}
+	// CRITICAL: Enable keep-alive - this is what Axum does automatically
+	// This allows connections to be reused instead of closed after each request
 	srv.SetKeepAlivesEnabled(true)
 
 	// Create listener with TCP keep-alive for connection reuse
