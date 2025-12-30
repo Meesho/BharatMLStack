@@ -149,11 +149,18 @@ func main() {
 	clients := make([]retrieve.FeatureServiceClient, 0, CONNECTION_POOL_SIZE)
 	conns := make([]*grpc.ClientConn, 0, CONNECTION_POOL_SIZE)
 
+	// Create context with timeout for connection establishment
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	for i := 0; i < CONNECTION_POOL_SIZE; i++ {
 		// Optimized HTTP/2 settings for high concurrency
-		conn, err := grpc.Dial(
+		// Use DialContext to ensure connections are established with timeout
+		conn, err := grpc.DialContext(
+			ctx,
 			"online-feature-store-api.int.meesho.int:80",
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(), // Block until connection is established (like Rust's .await)
 			grpc.WithKeepaliveParams(keepalive.ClientParameters{
 				Time:                30 * time.Second, // HTTP/2 keep-alive interval
 				Timeout:             10 * time.Second, // Keep-alive timeout
@@ -190,6 +197,12 @@ func main() {
 	}
 
 	r := gin.New()
+
+	// Health check endpoint to verify server is running
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
 	r.POST("/retrieve-features", func(c *gin.Context) {
 		retrieveFeatures(c, state)
 	})
@@ -198,6 +211,7 @@ func main() {
 	// Key settings for preventing port exhaustion on client side:
 	// - Long IdleTimeout allows connections to be reused
 	// - Keep-alive enabled for connection reuse
+	// - No connection limits to handle high concurrency
 	// This prevents "cannot assign requested address" errors from load test clients
 	srv := &http.Server{
 		Addr:           ":8080",
@@ -206,6 +220,8 @@ func main() {
 		WriteTimeout:   30 * time.Second,
 		IdleTimeout:    300 * time.Second, // 5 minutes - allows long connection reuse
 		MaxHeaderBytes: 1 << 20,           // 1MB
+		// No MaxConnsPerIP limit - allow high concurrency from single client
+		// This is important for load testing where many VUs come from same machine
 	}
 	srv.SetKeepAlivesEnabled(true)
 
