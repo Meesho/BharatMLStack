@@ -7,6 +7,7 @@ use hyper::body::Bytes;
 use serde::Deserialize;
 use std::convert::Infallible;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tonic::{metadata::AsciiMetadataValue, transport::Channel, Request as TonicRequest};
@@ -17,6 +18,9 @@ pub mod retrieve {
 
 use retrieve::feature_service_client::FeatureServiceClient;
 use retrieve::{FeatureGroup, Keys, Query};
+
+const CONNECTION_POOL_SIZE: usize = 16; // Each connection can handle ~100 concurrent streams
+                                         // With 16 connections, we can handle ~1600 concurrent requests
 
 // RetrieveFeaturesRequest matches Query structure exactly
 // This allows direct assignment without any conversion/copying
@@ -46,8 +50,29 @@ struct KeysRequest {
     cols: Vec<String>,
 }
 
+// ClientPool manages a pool of gRPC clients for connection pooling
+struct ClientPool {
+    clients: Vec<FeatureServiceClient<Channel>>,
+    counter: AtomicU64, // Atomic counter for round-robin selection
+}
+
+impl ClientPool {
+    fn new(clients: Vec<FeatureServiceClient<Channel>>) -> Self {
+        Self {
+            clients,
+            counter: AtomicU64::new(0),
+        }
+    }
+
+    // Next returns the next client from the pool using round-robin
+    fn next(&self) -> FeatureServiceClient<Channel> {
+        let idx = self.counter.fetch_add(1, Ordering::Relaxed);
+        self.clients[idx as usize % self.clients.len()].clone()
+    }
+}
+
 struct AppState {
-    client: FeatureServiceClient<Channel>,
+    pool: Arc<ClientPool>,
     auth_token: AsciiMetadataValue,
     caller_id: AsciiMetadataValue,
 }
@@ -143,9 +168,9 @@ async fn handler(
         state.caller_id.clone(), // AsciiMetadataValue clone is cheap (Arc internally)
     );
 
-    // Clone client once - FeatureServiceClient::clone() is cheap (Arc internally)
-    // We need clone because retrieve_features takes &mut self
-    let mut client = state.client.clone();
+    // Get next client from pool using round-robin
+    // FeatureServiceClient::clone() is cheap (Arc internally)
+    let mut client = state.pool.next();
     match tokio::time::timeout(Duration::from_secs(5), client.retrieve_features(grpc_request)).await {
         Ok(Ok(response)) => {
             // Drop gRPC response immediately to free memory (don't wait for end of scope)
@@ -170,19 +195,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
-    // Configure gRPC channel with HTTP/2 optimizations
-    let channel = Channel::from_static("http://online-feature-store-api.int.meesho.int:80")
-        .http2_keep_alive_interval(Duration::from_secs(30))
-        .keep_alive_timeout(Duration::from_secs(10))
-        .keep_alive_while_idle(true)
-        .initial_stream_window_size(2 * 1024 * 1024) // 2MB stream window
-        .initial_connection_window_size(4 * 1024 * 1024) // 4MB connection window
-        .concurrency_limit(4000) // Allow up to 4000 concurrent requests
-        .connect()
-        .await?;
+    println!("Starting rust-caller with connection pooling (pool size: {})", CONNECTION_POOL_SIZE);
+    
+    // Create connection pool
+    let mut clients = Vec::with_capacity(CONNECTION_POOL_SIZE);
+    for i in 0..CONNECTION_POOL_SIZE {
+        let channel = Channel::from_static("http://online-feature-store-api.int.meesho.int:80")
+            .http2_keep_alive_interval(Duration::from_secs(30))
+            .keep_alive_timeout(Duration::from_secs(10))
+            .keep_alive_while_idle(true)
+            .initial_stream_window_size(2 * 1024 * 1024) // 2MB stream window
+            .initial_connection_window_size(4 * 1024 * 1024) // 4MB connection window
+            .concurrency_limit(4000) // Allow up to 4000 concurrent requests per connection
+            .connect()
+            .await?;
+        
+        clients.push(FeatureServiceClient::new(channel));
+    }
+
+    let pool = Arc::new(ClientPool::new(clients));
 
     let state = Arc::new(AppState {
-        client: FeatureServiceClient::new(channel),
+        pool,
         auth_token: AsciiMetadataValue::from_static("atishay"),
         caller_id: AsciiMetadataValue::from_static("test-3"),
     });

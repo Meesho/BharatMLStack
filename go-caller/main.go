@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	retrieve "github.com/Meesho/BharatMLStack/go-sdk/pkg/proto/onfs/retrieve" // adjust path
@@ -12,6 +13,12 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
+)
+
+const (
+	// Connection pool size - each connection can handle ~100 concurrent streams
+	// With 16 connections, we can handle ~1600 concurrent requests
+	CONNECTION_POOL_SIZE = 16
 )
 
 // Request body structures for retrieve_features endpoint
@@ -31,9 +38,21 @@ type KeysRequest struct {
 	Cols []string `json:"cols" binding:"required"`
 }
 
-// AppState stores gRPC client and metadata
+// ClientPool manages a pool of gRPC clients for connection pooling
+type ClientPool struct {
+	clients []retrieve.FeatureServiceClient
+	counter uint64 // Atomic counter for round-robin selection
+}
+
+// Next returns the next client from the pool using round-robin
+func (p *ClientPool) Next() retrieve.FeatureServiceClient {
+	idx := atomic.AddUint64(&p.counter, 1) - 1
+	return p.clients[idx%uint64(len(p.clients))]
+}
+
+// AppState stores gRPC client pool and metadata
 type AppState struct {
-	client   retrieve.FeatureServiceClient
+	pool     *ClientPool
 	metadata metadata.MD
 }
 
@@ -71,7 +90,9 @@ func (s *AppState) handler(c *gin.Context) {
 		Keys:          keys,
 	}
 
-	_, err := s.client.RetrieveFeatures(ctx, req)
+	// Get next client from pool using round-robin
+	client := s.pool.Next()
+	_, err := client.RetrieveFeatures(ctx, req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -80,24 +101,36 @@ func (s *AppState) handler(c *gin.Context) {
 }
 
 func main() {
-	print("Starting go-caller with 4 threads version 4")
+	log.Println("Starting go-caller with connection pooling (pool size:", CONNECTION_POOL_SIZE, ")")
 	gin.SetMode(gin.ReleaseMode)
 
-	conn, err := grpc.Dial(
-		"online-feature-store-api.int.meesho.int:80",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                30 * time.Second,
-			Timeout:             10 * time.Second,
-			PermitWithoutStream: true,
-		}),
-	)
-	if err != nil {
-		log.Fatal(err)
+	// Create connection pool
+	clients := make([]retrieve.FeatureServiceClient, 0, CONNECTION_POOL_SIZE)
+	for i := 0; i < CONNECTION_POOL_SIZE; i++ {
+		conn, err := grpc.Dial(
+			"online-feature-store-api.int.meesho.int:80",
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:                30 * time.Second,
+				Timeout:             10 * time.Second,
+				PermitWithoutStream: true,
+			}),
+			grpc.WithInitialWindowSize(2*1024*1024),     // 2MB stream window
+			grpc.WithInitialConnWindowSize(4*1024*1024), // 4MB connection window
+		)
+		if err != nil {
+			log.Fatalf("Failed to create connection %d: %v", i, err)
+		}
+		clients = append(clients, retrieve.NewFeatureServiceClient(conn))
+	}
+
+	pool := &ClientPool{
+		clients: clients,
+		counter: 0,
 	}
 
 	state := &AppState{
-		client: retrieve.NewFeatureServiceClient(conn),
+		pool: pool,
 		metadata: metadata.MD{
 			"online-feature-store-auth-token": []string{"atishay"},
 			"online-feature-store-caller-id":  []string{"test-3"},
