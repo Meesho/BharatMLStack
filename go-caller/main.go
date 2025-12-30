@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -193,15 +194,63 @@ func main() {
 		retrieveFeatures(c, state)
 	})
 
-	// PERFORMANCE FIX: Configure TCP listener for high concurrency
-	// The main bottleneck fix is connection pooling (done above)
-	// Gin/HTTP handle TCP settings efficiently by default
+	// PERFORMANCE FIX: Configure HTTP server for high concurrency with connection reuse
+	// Key settings for preventing port exhaustion on client side:
+	// - Long IdleTimeout allows connections to be reused
+	// - Keep-alive enabled for connection reuse
+	// This prevents "cannot assign requested address" errors from load test clients
+	srv := &http.Server{
+		Addr:           ":8080",
+		Handler:        r,
+		ReadTimeout:    30 * time.Second,
+		WriteTimeout:   30 * time.Second,
+		IdleTimeout:    300 * time.Second, // 5 minutes - allows long connection reuse
+		MaxHeaderBytes: 1 << 20,           // 1MB
+	}
+	srv.SetKeepAlivesEnabled(true)
+
+	// Create listener with TCP keep-alive for connection reuse
+	listener, err := net.Listen("tcp", "0.0.0.0:8080")
+	if err != nil {
+		log.Fatalf("Failed to create listener: %v", err)
+	}
+
+	// Wrap listener with TCP keep-alive to detect dead connections and enable socket reuse
+	tcpListener := listener.(*net.TCPListener)
+	keepAliveListener := &keepAliveListener{
+		TCPListener:     tcpListener,
+		KeepAlivePeriod: 60 * time.Second,
+	}
+
 	log.Println("Server listening on 0.0.0.0:8080")
 	log.Println("Configured for high performance:")
 	log.Printf("  - %d gRPC connection pool (main bottleneck fix)", CONNECTION_POOL_SIZE)
 	log.Println("  - HTTP/2 window sizes optimized for throughput")
+	log.Println("  - HTTP keep-alive enabled for connection reuse")
 
-	if err := http.ListenAndServe("0.0.0.0:8080", r); err != nil {
+	if err := srv.Serve(keepAliveListener); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
+}
+
+// keepAliveListener wraps TCPListener to enable TCP keep-alive
+type keepAliveListener struct {
+	*net.TCPListener
+	KeepAlivePeriod time.Duration
+}
+
+func (ln *keepAliveListener) Accept() (net.Conn, error) {
+	conn, err := ln.TCPListener.AcceptTCP()
+	if err != nil {
+		return nil, err
+	}
+	if err := conn.SetKeepAlive(true); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if err := conn.SetKeepAlivePeriod(ln.KeepAlivePeriod); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return conn, nil
 }
