@@ -4,17 +4,96 @@ This guide will walk you through setting up Predator for local development, incl
 
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Step 1: Set Up Local ArgoCD](#step-1-set-up-local-argocd)
-3. [Step 2: Create a GitHub App](#step-2-create-a-github-app)
-4. [Step 3: Configure GitHub App Permissions](#step-3-configure-github-app-permissions)
-5. [Step 4: Install GitHub App to Your Repository](#step-4-install-github-app-to-your-repository)
-6. [Step 5: Generate and Download Private Key](#step-5-generate-and-download-private-key)
-7. [Step 6: Copy Predator Helm Chart to Repository](#step-6-copy-predator-helm-chart-to-repository)
-8. [Step 7: Place GitHub Private Key in Horizon Configs](#step-7-place-github-private-key-in-horizon-configs)
-9. [Step 8: Configure Docker Compose](#step-8-configure-docker-compose)
-10. [Step 9: Verify Setup](#step-9-verify-setup)
-11. [Step 10: Access Predator Service Through Contour HTTPProxy](#step-10-access-predator-service-through-contour-httpproxy)
+1. [Quick Start: Automated Kubernetes Setup](#quick-start-automated-kubernetes-setup)
+2. [Prerequisites](#prerequisites)
+3. [Step 1: Set Up Local ArgoCD](#step-1-set-up-local-argocd)
+4. [Manual Repository Setup](#manual-repository-setup)
+5. [Step 2: Create a GitHub App](#step-2-create-a-github-app)
+6. [Step 3: Configure GitHub App Permissions](#step-3-configure-github-app-permissions)
+7. [Step 4: Install GitHub App to Your Repository](#step-4-install-github-app-to-your-repository)
+8. [Step 5: Generate and Download Private Key](#step-5-generate-and-download-private-key)
+9. [Step 6: Copy Predator Helm Chart to Repository](#step-6-copy-predator-helm-chart-to-repository)
+10. [Step 7: Place GitHub Private Key in Horizon Configs](#step-7-place-github-private-key-in-horizon-configs)
+11. [Step 8: Configure Docker Compose](#step-8-configure-docker-compose)
+12. [Step 9: Verify Setup](#step-9-verify-setup)
+13. [Step 10: Access Predator Service Through Contour HTTPProxy](#step-10-access-predator-service-through-contour-httpproxy)
+
+---
+
+## Quick Start: Automated Kubernetes Setup
+
+**🚀 For a faster setup, use the automated script that handles all basic Kubernetes configuration:**
+
+The `setup-predator-k8s.sh` script automates the following setup steps:
+- ✅ **Create Kubernetes cluster** (if not exists) - supports kind, minikube, or Docker Desktop
+- ✅ Label Kubernetes node for pod scheduling
+- ✅ Install Contour (CRDs, Contour, and Envoy)
+- ✅ Create IngressClass for contour-internal
+- ✅ Configure Contour to watch for contour-internal
+- ✅ Install Flagger CRDs (for AlertProvider)
+- ✅ Install KEDA CRDs (for ScaledObject)
+- ✅ Install PriorityClass (high-priority)
+- ✅ Install ArgoCD
+- ✅ Enable API key permissions for ArgoCD admin
+- ✅ Retrieve ArgoCD admin password
+- ✅ **Add GitHub repository to ArgoCD with GitHub App authentication**
+- ✅ Optionally set up automated ArgoCD application onboarding (prd-applications)
+
+### Usage
+
+1. **Run the setup script** (it will detect and create a cluster if needed):
+   ```bash
+   cd quick-start
+   ./setup-predator-k8s.sh
+   ```
+
+   The script will:
+   - Check if a Kubernetes cluster is already running
+   - If not, detect available tools (kind, minikube, or Docker Desktop)
+   - Prompt you to select a tool (or use the only available one)
+   - Create the cluster automatically
+   - Continue with all setup steps
+
+3. **Follow the script prompts:**
+   - The script will automatically install all required components
+   - When prompted, provide your GitHub repository details to add it to ArgoCD with GitHub App authentication:
+     - GitHub App ID
+     - GitHub App Installation ID
+     - GitHub App Private Key path (e.g., `horizon/configs/github.pem`)
+   - Optionally set up automated application onboarding (prd-applications)
+
+4. **After the script completes:**
+   - Access ArgoCD UI at https://localhost:8087 (port-forward is already running in background)
+   - Generate ArgoCD API token (see [Step 1.7](#17-generate-argocd-api-token))
+   - Continue with remaining setup steps:
+     - [Step 6](#step-6-copy-predator-helm-chart-to-repository): Copy Predator Helm chart to repository
+     - [Step 7](#step-7-place-github-private-key-in-horizon-configs): Place GitHub private key in Horizon configs
+     - [Step 8](#step-8-configure-docker-compose): Configure Docker Compose
+
+**Note:** The script automatically handles GitHub repository authentication with GitHub App. If you skipped this step, you can add the repository manually (see [Manual Repository Setup](#manual-repository-setup) below).
+
+### What the Script Does
+
+The script performs all the basic Kubernetes setup steps from [Step 1](#step-1-set-up-local-argocd) automatically:
+- **Step 1.0**: Creates a Kubernetes cluster (if not exists) - supports kind, minikube, or Docker Desktop
+- **Step 1.1**: Labels the Kubernetes node
+- **Step 1.2**: Installs all required CRDs and PriorityClass
+- **Step 1.3**: Installs ArgoCD
+- **Step 1.6**: Enables API key permissions
+- **Step 1.8**: Adds GitHub repository to ArgoCD with GitHub App authentication
+- **Step 1.9**: Optionally sets up automated application onboarding (prd-applications)
+
+**Note:** 
+- For Docker Desktop, you'll need to manually enable Kubernetes in Docker Desktop settings first. The script will guide you through this.
+- The script automatically installs ArgoCD CLI if not present:
+  - **macOS**: Uses Homebrew (`brew install argocd`)
+  - **Linux**: Downloads binary from GitHub releases to `~/.local/bin/argocd` (or `/usr/local/bin/argocd` with sudo)
+  - If installation fails, you can continue without it (repository authentication will be skipped)
+- The script uses GitHub App authentication (not PAT or SSH) to match the Horizon service configuration
+
+### Manual Setup Alternative
+
+If you prefer to set up manually or need to customize the installation, you can follow the detailed steps in [Step 1: Set Up Local ArgoCD](#step-1-set-up-local-argocd) and subsequent sections.
 
 ---
 
@@ -24,404 +103,42 @@ This guide will walk you through setting up Predator for local development, incl
 - **Docker Desktop disk allocation: At least 100GB** (required for Triton server image ~15GB)
   - Check: Docker Desktop → Settings → Resources → Advanced → "Disk image size"
   - Increase if less than 100GB (see [Docker Disk Space troubleshooting](#issue-docker-disk-space---no-space-left-on-device))
-- Kubernetes cluster running locally (e.g., minikube, kind, Docker Desktop Kubernetes)
-- Argocd cli running locally to interact with argocd
-- kubectl configured to access your local cluster
+- kubectl installed and configured
+- One of the following Kubernetes tools (optional - script will create cluster if needed):
+  - kind (recommended for local development)
+  - minikube
+  - Docker Desktop Kubernetes
 - A GitHub account
 - A GitHub repository for storing Helm charts and ArgoCD applications
+
+**Note:** 
+- ArgoCD CLI is automatically installed by the script if not present
+- The script will create a Kubernetes cluster automatically if one doesn't exist
+- For Docker Desktop, you'll need to manually enable Kubernetes in settings first (script will guide you)
 
 ---
 
 ## Step 1: Set Up Local ArgoCD
 
-### 1.0 Create a Local Kubernetes Cluster
-
-Before installing CRDs and ArgoCD, you need to have a Kubernetes cluster running locally. Choose one of the following options:
-
-#### Option 1: Using kind (Kubernetes in Docker)
-
-**kind** is a tool for running local Kubernetes clusters using Docker container "nodes".
-
-1. **Install kind** (if not already installed):
-   ```bash
-   # macOS
-   brew install kind
-   
-   # Linux
-   curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
-   chmod +x ./kind
-   sudo mv ./kind /usr/local/bin/kind
-   
-   # Windows (using Chocolatey)
-   choco install kind
-   ```
-
-2. **Create a kind cluster:**
-   ```bash
-   # Create a cluster with a custom name
-   kind create cluster --name bharatml-stack
-   
-   # Or use the default name
-   kind create cluster
-   ```
-
-3. **Verify the cluster is running:**
-   ```bash
-   kubectl cluster-info --context kind-bharatml-stack
-   # Or for default cluster:
-   kubectl cluster-info --context kind-kind
-   
-   # Check nodes
-   kubectl get nodes
-   ```
-
-4. **Set kubectl context** (if needed):
-   ```bash
-   kubectl config use-context kind-bharatml-stack
-   # Or for default:
-   kubectl config use-context kind-kind
-   ```
-
-**Note:** The cluster name will be used in node labels. If you use a custom name like `bharatml-stack`, the node name will be `bharatml-stack-control-plane`.
-
-#### Option 2: Using minikube
-
-**minikube** runs a single-node Kubernetes cluster inside a VM on your local machine.
-
-1. **Install minikube** (if not already installed):
-   ```bash
-   # macOS
-   brew install minikube
-   
-   # Linux
-   curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-   sudo install minikube-linux-amd64 /usr/local/bin/minikube
-   
-   # Windows
-   choco install minikube
-   ```
-
-2. **Start minikube:**
-   ```bash
-   # Start with default settings
-   minikube start
-   
-   # Or with specific Kubernetes version
-   minikube start --kubernetes-version=v1.28.0
-   
-   # Or with more resources
-   minikube start --memory=8192 --cpus=4
-   ```
-
-3. **Verify the cluster is running:**
-   ```bash
-   kubectl cluster-info
-   kubectl get nodes
-   ```
-
-4. **Enable minikube addons** (optional but recommended):
-   ```bash
-   minikube addons enable ingress
-   minikube addons enable metrics-server
-   ```
-
-#### Option 3: Using Docker Desktop Kubernetes
-
-Docker Desktop includes a built-in Kubernetes option that can be enabled.
-
-1. **Enable Kubernetes in Docker Desktop:**
-   - Open Docker Desktop
-   - Go to **Settings** (gear icon)
-   - Navigate to **Kubernetes**
-   - Check **"Enable Kubernetes"**
-   - Click **"Apply & Restart"**
-
-2. **Verify the cluster is running:**
-   ```bash
-   kubectl cluster-info
-   kubectl get nodes
-   ```
-
-3. **Set kubectl context** (if needed):
-   ```bash
-   kubectl config use-context docker-desktop
-   ```
-
-**Note:** Docker Desktop Kubernetes typically has access to `/Users` paths on macOS, which can be useful for mounting local files.
-
-#### Verify Your Cluster Setup
-
-After creating your cluster, verify it's working:
+**✅ All Kubernetes setup steps are automated by the script.** Simply run:
 
 ```bash
-# Check cluster connection
-kubectl cluster-info
-
-# Check nodes are ready
-kubectl get nodes
-
-# Verify kubectl is configured correctly
-kubectl config current-context
+cd quick-start
+./setup-predator-k8s.sh
 ```
 
-**Important:** Make sure your `kubectl` is configured to use your local cluster before proceeding to the next steps. The context name will vary:
-- kind: `kind-<cluster-name>` (e.g., `kind-bharatml-stack` or `kind-kind`)
-- minikube: `minikube`
-- Docker Desktop: `docker-desktop`
-
-### 1.1 Label Kubernetes Node for Pod Scheduling
-
-The Predator Helm chart uses `nodeSelector: dedicated: <value>` to schedule pods on specific nodes. To prevent pod scheduling failures, you need to label your Kubernetes node with a `dedicated` label that matches the `nodeSelectorValue` in your Helm values.
-
-**Get your node name and label it:**
-
-```bash
-# Get your node name
-NODE_NAME=$(kubectl get nodes -o name | head -1 | sed 's|node/||')
-
-# Display the node name (for reference)
-echo "Node name: $NODE_NAME"
-
-# Label the node with the dedicated label matching the node name
-# This is the default pattern used in the Helm chart
-kubectl label node $NODE_NAME dedicated=$NODE_NAME --overwrite
-
-# Verify the label was added
-kubectl get nodes --show-labels | grep dedicated
-```
-
-**What this does:**
-- Labels your node with `dedicated: <node-name>` (e.g., `dedicated: bharatml-stack-control-plane` for a kind cluster)
-- The Helm chart's default `nodeSelectorValue` typically matches the node name, so this ensures pods can be scheduled
-
-**Note:** If you later customize the `nodeSelectorValue` in your Helm values.yaml, you'll need to update this label to match. The label format is `dedicated: <your-nodeSelector-value>`.
-
-**Alternative approach:** If you prefer to use a custom value instead of the node name, you can label it with any value:
-
-```bash
-# Get your node name
-NODE_NAME=$(kubectl get nodes -o name | head -1 | sed 's|node/||')
-
-# Label with a custom value (e.g., "local-dev")
-kubectl label node $NODE_NAME dedicated=local-dev --overwrite
-
-# Then make sure your values.yaml uses: nodeSelectorValue: "local-dev"
-```
-
-**Verify the label:**
-```bash
-# Check that the label exists
-kubectl get nodes --show-labels | grep dedicated
-```
-
-You should see output like: `dedicated=bharatml-stack-control-plane` (or your node name/custom value).
-
-### 1.2 Install Required CRDs and PriorityClass
-
-The Predator Helm chart uses several Custom Resource Definitions (CRDs) and a PriorityClass that must be installed in your Kubernetes cluster before ArgoCD can deploy resources.
-
-#### Install Contour CRDs and IngressClass (Required for HTTPProxy)
-
-The `HTTPProxy` resource in the Predator Helm chart requires Contour CRDs and IngressClass to be installed. ArgoCD can deploy `HTTPProxy` resources, but the CRD must exist in the cluster first.
-
-**Install Full Contour (Required for HTTPProxy to Work)**
-
-You need the full Contour deployment (not just CRDs) for HTTPProxy to be reconciled:
-
-```bash
-# Install full Contour deployment (includes CRDs + Contour + Envoy)
-kubectl apply -f https://projectcontour.io/quickstart/contour.yaml
-```
-
-**Verify installation:**
-
-```bash
-# Check that HTTPProxy CRD is installed
-kubectl get crd httpproxies.projectcontour.io
-
-# Check that Contour pods are running
-kubectl get pods -n projectcontour
-
-# Create IngressClass for contour-internal (required for HTTPProxy reconciliation)
-kubectl apply -f - <<EOF
-apiVersion: networking.k8s.io/v1
-kind: IngressClass
-metadata:
-  name: contour-internal
-spec:
-  controller: projectcontour.io/ingress-controller
-EOF
-
-# Verify IngressClass was created
-kubectl get ingressclass contour-internal
-```
-
-**Important: Configure Contour to Watch for Your Ingress Class**
-
-If your HTTPProxy uses a specific ingress class (e.g., `contour-internal`), you must configure Contour to watch for that class. By default, Contour watches all HTTPProxies, but when you specify an ingress class, Contour needs to be explicitly configured.
-
-**Configure Contour for Specific Ingress Class (Only if Needed)**
-
-If you need class-based isolation with `contour-internal`, configure Contour to watch for that class:
-
-```bash
-# Check current Contour configuration
-kubectl -n projectcontour get deploy contour -o yaml | grep -A 10 "args:"
-
-# If ingress-class-name is not set, add it:
-kubectl -n projectcontour patch deploy contour --type='json' -p='[
-  {
-    "op": "add",
-    "path": "/spec/template/spec/containers/0/args/-",
-    "value": "--ingress-class-name=contour-internal"
-  }
-]'
-
-# Restart Contour to apply changes
-kubectl -n projectcontour rollout restart deploy contour
-
-# Wait for rollout to complete
-kubectl -n projectcontour rollout status deploy contour
-```
-
-**⚠️ Note:** 
-- Without Contour CRDs, ArgoCD will fail to sync with error: `The Kubernetes API could not find projectcontour.io/HTTPProxy for requested resource...`
-- Without the IngressClass, HTTPProxy will show "NotReconciled" status even if Contour is running
-- If Contour is not configured to watch your ingress class, HTTPProxy will remain "NotReconciled"
-
-#### Install Flagger CRDs (Required for AlertProvider)
-
-The `AlertProvider` resource in the Predator Helm chart requires Flagger CRDs to be installed. ArgoCD can deploy `AlertProvider` resources, but the CRD must exist in the cluster first.
-
-```bash
-# Install Flagger CRDs
-kubectl apply -f https://raw.githubusercontent.com/fluxcd/flagger/main/artifacts/flagger/crd.yaml
-
-# Verify installation
-kubectl get crd | grep flagger
-```
-
-You should see CRDs like:
-- `alertproviders.flagger.app`
-- `canaries.flagger.app`
-- `metrictemplates.flagger.app`
-
-#### Install KEDA CRDs (Required for ScaledObject)
-
-The `ScaledObject` resource requires KEDA CRDs to be installed. This is used for autoscaling based on custom metrics.
-
-```bash
-# Install KEDA CRDs
-kubectl apply -f https://github.com/kedacore/keda/releases/download/v2.12.0/keda-2.12.0.yaml
-
-# Or install only CRDs (lighter weight)
-kubectl apply -f https://raw.githubusercontent.com/kedacore/keda/v2.12.0/config/crd/bases/keda.sh_scaledobjects.yaml
-kubectl apply -f https://raw.githubusercontent.com/kedacore/keda/v2.12.0/config/crd/bases/keda.sh_scaledjobs.yaml
-kubectl apply -f https://raw.githubusercontent.com/kedacore/keda/v2.12.0/config/crd/bases/keda.sh_triggerauthentications.yaml
-
-# Verify installation
-kubectl get crd | grep keda
-```
-
-You should see CRDs like:
-- `scaledobjects.keda.sh`
-- `scaledjobs.keda.sh`
-- `triggerauthentications.keda.sh`
-
-#### Install PriorityClass (Required for Pod Scheduling)
-
-The Helm chart uses `priorityClassName: high-priority` for pod scheduling. You need to create this PriorityClass in your cluster.
-
-```bash
-# Create PriorityClass for high-priority pods
-kubectl apply -f - <<EOF
-apiVersion: scheduling.k8s.io/v1
-kind: PriorityClass
-metadata:
-  name: high-priority
-value: 1000
-globalDefault: false
-description: "High priority class for application pods"
-EOF
-
-# Verify installation
-kubectl get priorityclass high-priority
-```
-
-**Note:** PriorityClass is a cluster-scoped resource, so you only need to create it once per cluster. Once created, ArgoCD will successfully deploy pods with this priority class.
-
-**Note:** Once the CRDs and PriorityClass are installed, ArgoCD will successfully deploy these resources when syncing your application.
-
-### 1.3 Install ArgoCD in Your Local Kubernetes Cluster
-
-```bash
-# Create ArgoCD namespace
-kubectl create namespace argocd
-
-# Install ArgoCD
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-
-# Wait for ArgoCD to be ready (this may take a few minutes)
-kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
-```
-
-### 1.4 Port Forward ArgoCD Server
-
-```bash
-# Port forward ArgoCD server to access UI and API
-kubectl port-forward svc/argocd-server -n argocd 8087:443
-```
-
-**Note:** Keep this terminal session running. In a new terminal, you can access:
-- **ArgoCD UI**: https://localhost:8087 (accept the self-signed certificate warning)
-- **ArgoCD API**: http://localhost:8087
-
-### 1.5 Get ArgoCD Admin Password
-
-```bash
-# Get the initial admin password
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d && echo
-```
-
-**Default username:** `admin`
-
-### 1.6 Enable API Key Permissions
-
-By default, ArgoCD does not allow API key generation. You need to enable this permission for the admin account before you can generate API tokens.
-
-```bash
-# Edit the ArgoCD ConfigMap to enable API key permissions
-kubectl -n argocd edit configmap argocd-cm
-```
-
-In the editor that opens, add the following under the `data` section:
-
-```yaml
-data:
-  accounts.admin: apiKey, login
-```
-
-**Note:** If the `data` section doesn't exist, create it. The `apiKey, login` value enables both API key generation and login capabilities for the admin account.
-
-After saving and closing the editor, restart the ArgoCD server to apply the changes:
-
-```bash
-# Restart ArgoCD server to apply the configuration
-kubectl -n argocd rollout restart deployment argocd-server
-
-# Wait for the server to be ready
-kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
-```
-
-**Verify the change:**
-```bash
-# Check that the configmap was updated
-kubectl -n argocd get configmap argocd-cm -o yaml | grep accounts.admin
-```
-
-You should see `accounts.admin: apiKey, login` in the output.
+The script automatically handles:
+- Creating Kubernetes cluster (if needed)
+- Labeling nodes
+- Installing all required CRDs and PriorityClass
+- Installing and configuring ArgoCD
+- Enabling API key permissions
+- Adding GitHub repository with GitHub App authentication
+- Setting up prd-applications (optional)
 
 ### 1.7 Generate ArgoCD API Token
+
+After running the script, you need to generate an ArgoCD API token for use in docker-compose.yml:
 
 1. Log in to ArgoCD UI at https://localhost:8087
 2. Go to **User Info** (click on your username in the top right)
@@ -431,200 +148,45 @@ You should see `accounts.admin: apiKey, login` in the output.
 **Alternative (using CLI):**
 
 ```bash
-# Install ArgoCD CLI (if not already installed)
-# macOS
-brew install argocd
-
-# Login to ArgoCD
+# Login to ArgoCD (ArgoCD CLI is automatically installed by the script)
 argocd login localhost:8087 --insecure
 
 # Generate token
 argocd account generate-token
 ```
 
-### 1.8 Add GitHub Repository to ArgoCD
+**Note:** The script automatically handles repository authentication with GitHub App and can optionally set up prd-applications. If you skipped those steps during script execution, see [Manual Repository Setup](#manual-repository-setup) below.
 
-Before creating ArgoCD Applications, you must add your GitHub repository to ArgoCD with proper authentication. ArgoCD needs credentials to access your repository to sync applications and Helm charts.
+---
 
-#### Option 1: Using Personal Access Token (Recommended)
+## Manual Repository Setup
 
-1. **Create a GitHub Personal Access Token:**
-   - Go to https://github.com/settings/tokens
-   - Click **Generate new token** → **Generate new token (classic)**
-   - Give it a name (e.g., `argocd-repo-access`)
-   - Select scopes: **`repo`** (Full control of private repositories)
-   - Click **Generate token**
-   - **Copy the token immediately** (you won't be able to see it again)
+If you need to manually add or update the GitHub repository in ArgoCD (e.g., if the script failed or you skipped that step):
 
-2. **Add the repository to ArgoCD using CLI:**
-   ```bash
-   # Login to ArgoCD (if not already logged in)
-   argocd login localhost:8087 --insecure
-   
-   # Add the repository
-   argocd repo add https://github.com/<YOUR_USERNAME>/<YOUR_REPO_NAME>.git \
-     --name <YOUR_REPO_NAME> \
-     --type git \
-     --username <YOUR_GITHUB_USERNAME> \
-     --password <YOUR_PERSONAL_ACCESS_TOKEN>
-   ```
+### Using GitHub App (Recommended)
 
-   **Replace:**
-   - `<YOUR_USERNAME>` with your GitHub username or organization
-   - `<YOUR_REPO_NAME>` with your repository name (e.g., `onboarding-test`)
-   - `<YOUR_GITHUB_USERNAME>` with your GitHub username
-   - `<YOUR_PERSONAL_ACCESS_TOKEN>` with the token you just created
+```bash
+# Login to ArgoCD
+argocd login localhost:8087 --insecure
 
-3. **Verify the repository was added:**
-   ```bash
-   # List repositories
-   argocd repo list
-   
-   # You should see your repository in the list
-   ```
+# Add repository with GitHub App authentication
+argocd repo add https://github.com/<YOUR_USERNAME>/<YOUR_REPO_NAME>.git \
+  --name <YOUR_REPO_NAME> \
+  --type git \
+  --github-app-id <GITHUB_APP_ID> \
+  --github-app-installation-id <GITHUB_INSTALLATION_ID> \
+  --github-app-private-key-path <PATH_TO_PRIVATE_KEY>
+```
 
-#### Option 2: Using SSH Key
-
-1. **Generate an SSH key (if you don't have one):**
-   ```bash
-   # Generate a new SSH key for ArgoCD
-   ssh-keygen -t ed25519 -C "argocd@yourdomain.com" -f ~/.ssh/argocd_key
-   
-   # Don't set a passphrase (or ArgoCD won't be able to use it automatically)
-   ```
-
-2. **Add the SSH public key to GitHub:**
-   - Copy your public key:
-     ```bash
-     cat ~/.ssh/argocd_key.pub
-     ```
-   - Go to https://github.com/settings/keys
-   - Click **New SSH key**
-   - Paste the public key and save
-
-3. **Add the repository to ArgoCD using SSH:**
-   ```bash
-   # Login to ArgoCD (if not already logged in)
-   argocd login localhost:8087 --insecure
-   
-   # Add the repository using SSH URL
-   argocd repo add git@github.com:<YOUR_USERNAME>/<YOUR_REPO_NAME>.git \
-     --name <YOUR_REPO_NAME> \
-     --type git \
-     --ssh-private-key-path ~/.ssh/argocd_key
-   ```
-
-   **Replace:**
-   - `<YOUR_USERNAME>` with your GitHub username or organization
-   - `<YOUR_REPO_NAME>` with your repository name
-
-4. **Verify the repository was added:**
-   ```bash
-   # List repositories
-   argocd repo list
-   ```
-
-#### Option 3: Using ArgoCD UI
-
-1. **Log in to ArgoCD UI** at https://localhost:8087
-
-2. **Navigate to Settings → Repositories**
-
-3. **Click "Connect Repo"**
-
-4. **Fill in the repository details:**
-   - **Type**: Git
-   - **Project**: default
-   - **Repository URL**: `https://github.com/<YOUR_USERNAME>/<YOUR_REPO_NAME>.git`
-   - **Username**: Your GitHub username
-   - **Password**: Your Personal Access Token (if using HTTPS)
-   - Or select **SSH** and provide your SSH private key (if using SSH)
-
-5. **Click "Connect"**
-
-6. **Verify connection** - The repository should appear in the list with a green checkmark
-
-#### Verify Repository Access
-
-After adding the repository, verify ArgoCD can access it:
+### Verify Repository Access
 
 ```bash
 # Test repository connection
 argocd repo get https://github.com/<YOUR_USERNAME>/<YOUR_REPO_NAME>.git
 
-# Or using the repository name
-argocd repo get <YOUR_REPO_NAME>
+# List all repositories
+argocd repo list
 ```
-
-You should see repository details without errors. If there are authentication issues, check:
-- Token has `repo` scope (for PAT)
-- SSH key is added to GitHub
-- Repository URL is correct
-- Repository is accessible (not private without proper access)
-
-**Note:** This repository configuration is required before creating any ArgoCD Applications that reference this repository. Without it, ArgoCD will fail to sync applications with errors like "repository not found" or "authentication failed".
-
-### 1.9 Set Up Automated ArgoCD Application Onboarding
-
-To enable automatic ArgoCD application creation when you onboard new deployables, set up an ArgoCD Application that watches your GitHub repository's `prd/applications` directory.
-
-#### 1.9.1 Update the prd-applications.yaml File
-
-1. **Navigate to the predator folder:**
-   ```bash
-   cd /Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/predator
-   ```
-
-2. **Edit `prd-applications.yaml` and update the repository URL:**
-   ```yaml
-   apiVersion: argoproj.io/v1alpha1
-   kind: Application
-   metadata:
-     name: prd-applications
-     namespace: argocd
-   spec:
-     project: default
-     source:
-       repoURL: https://github.com/<YOUR_USERNAME>/<YOUR_REPO_NAME>.git  # Update this
-       targetRevision: main  # Update if using a different branch
-       path: prd/applications  # This directory will be watched for new applications
-     destination:
-       server: https://kubernetes.default.svc
-       namespace: argocd
-     syncPolicy:
-       automated:
-         prune: true
-         selfHeal: true
-   ```
-
-   **Replace:**
-   - `<YOUR_USERNAME>` with your GitHub username or organization
-   - `<YOUR_REPO_NAME>` with your repository name (e.g., `onboarding-test`)
-   - `main` with your default branch if different
-
-#### 1.9.2 Apply the Application
-
-```bash
-# From the predator directory
-kubectl apply -f prd-applications.yaml
-```
-
-**What this does:**
-- Creates an ArgoCD Application named `prd-applications` that watches the `prd/applications` directory in your GitHub repo
-- When Horizon creates new application YAML files in `prd/applications/` (e.g., `prd/applications/test.yaml`), ArgoCD automatically detects and creates the corresponding ArgoCD Application
-- All applications are automatically synced with `prune` and `selfHeal` enabled
-
-#### 1.9.3 Verify the Setup
-
-```bash
-# Check that the prd-applications Application is created
-kubectl get application prd-applications -n argocd
-
-# Check its status
-kubectl get application prd-applications -n argocd -o yaml | grep -A 10 status
-```
-
-**Note:** After onboarding a new deployable through Horizon, the application YAML will be created in your GitHub repo at `prd/applications/{appName}.yaml`, and ArgoCD will automatically create the corresponding ArgoCD Application. No manual steps required!
 
 ---
 
@@ -750,7 +312,6 @@ cp -r ../predator/1.0.0 ./1.0.0
 
 **Note:** The chart path in your repo should match `ARGOCD_HELMCHART_PATH` in `docker-compose.yml`:
 - If `ARGOCD_HELMCHART_PATH=1.0.0`, the chart should be at `1.0.0/` in your repo root
-- If `ARGOCD_HELMCHART_PATH=predator/1.0.0`, the chart should be at `predator/1.0.0/` in your repo
 
 ### 6.3 Commit and Push
 
@@ -765,7 +326,7 @@ git commit -m "Add Predator Helm chart 1.0.0"
 git push origin main
 ```
 
-**Verify:** Check that `1.0.0/` exists in your repository at the root level (or `predator/1.0.0/` if using that path).
+**Verify:** Check that `1.0.0/` exists in your repository at the root level
 
 ---
 
@@ -910,33 +471,6 @@ The `CLOUDSDK_CONFIG` environment variable tells gcloud SDK (if used) where to f
    ```yaml
    - LOCAL_MODEL_PATH=/tmp/models  # Path inside the kind node
    ```
-
-#### For Docker Desktop Kubernetes:
-
-Docker Desktop typically has access to `/Users` paths, so you can use your host path directly:
-```yaml
-- LOCAL_MODEL_PATH=/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/horizon/configs/models
-```
-
-#### For minikube:
-
-1. **SSH into minikube:**
-   ```bash
-   minikube ssh
-   ```
-
-2. **Copy models:**
-   ```bash
-   # From your host machine
-   minikube cp /path/to/your/models /tmp/models
-   ```
-
-3. **Set `LOCAL_MODEL_PATH` in docker-compose.yml:**
-   ```yaml
-   - LOCAL_MODEL_PATH=/tmp/models
-   ```
-
-**Note:** If you update your models, you'll need to copy them again to the Kubernetes node.
 
 ### 8.3 Example Configuration
 
@@ -1223,21 +757,37 @@ The Kubernetes API could not find keda.sh/ScaledObject for requested resource pr
 ```
 
 **Solution:**
-- Install KEDA CRDs (see Step 1.2):
+- Install KEDA ScaledObject CRD (see Step 1.2):
   ```bash
-  # Install KEDA CRDs (full installation)
-  kubectl apply -f https://github.com/kedacore/keda/releases/download/v2.12.0/keda-2.12.0.yaml
-  
-  # Or install only CRDs (lighter weight, recommended)
+  # Install only ScaledObject CRD (required for Predator)
+  # Note: ScaledJob CRD is skipped due to oversized annotations that exceed Kubernetes limits
   kubectl apply -f https://raw.githubusercontent.com/kedacore/keda/v2.12.0/config/crd/bases/keda.sh_scaledobjects.yaml
-  kubectl apply -f https://raw.githubusercontent.com/kedacore/keda/v2.12.0/config/crd/bases/keda.sh_scaledjobs.yaml
-  kubectl apply -f https://raw.githubusercontent.com/kedacore/keda/v2.12.0/config/crd/bases/keda.sh_triggerauthentications.yaml
   ```
 - Verify installation:
   ```bash
-  kubectl get crd | grep keda
+  kubectl get crd scaledobjects.keda.sh
   ```
 - Once CRDs are installed, ArgoCD will successfully deploy `ScaledObject` resources when syncing
+
+### Issue: KEDA ScaledJob CRD Annotation Size Error
+
+**Error Message:**
+```
+The CustomResourceDefinition "scaledjobs.keda.sh" is invalid: metadata.annotations: Too long: may not be more than 262144 bytes
+```
+
+**Solution:**
+- This error occurs because the `scaledjobs.keda.sh` CRD has oversized annotations that exceed Kubernetes limits
+- **Predator only requires `ScaledObject` CRD, not `ScaledJob`**
+- The setup script automatically installs only the required `ScaledObject` CRD
+- If you manually installed `ScaledJob` CRD and see this error, you can safely ignore it or delete the CRD:
+  ```bash
+  kubectl delete crd scaledjobs.keda.sh
+  ```
+- Only install `ScaledObject` CRD for Predator:
+  ```bash
+  kubectl apply -f https://raw.githubusercontent.com/kedacore/keda/v2.12.0/config/crd/bases/keda.sh_scaledobjects.yaml
+  ```
 
 ### Issue: PriorityClass Not Found Error
 
@@ -1461,26 +1011,26 @@ The `start.sh` script automatically copies `horizon/configs` to `workspace/confi
 
 ## Summary Checklist
 
-- [ ] Kubernetes cluster created and running
-- [ ] Node labeled with `dedicated` label (Step 1.1)
-- [ ] Required CRDs and PriorityClass installed
-- [ ] ArgoCD installed and running in local Kubernetes
-- [ ] ArgoCD port-forwarded to localhost:8087
-- [ ] ArgoCD admin password retrieved
-- [ ] API key permissions enabled for admin account
-- [ ] ArgoCD API token generated
-- [ ] GitHub repository added to ArgoCD with authentication
-- [ ] GitHub App created
-- [ ] GitHub App permissions set (Contents: Read and write)
-- [ ] GitHub App installed to repository
-- [ ] Installation ID noted
-- [ ] Private key generated and downloaded
-- [ ] Private key placed in `horizon/configs/github.pem`
-- [ ] Predator Helm chart copied to repository
-- [ ] Repository changes committed and pushed
-- [ ] docker-compose.yml updated with all configuration values
-- [ ] Services started successfully
-- [ ] Horizon logs show no errors
+### Automated by Script (✅ Done automatically)
+- [x] Kubernetes cluster created and running (if not exists)
+- [x] Node labeled with `dedicated` label
+- [x] Required CRDs and PriorityClass installed
+- [x] ArgoCD installed and running in local Kubernetes
+- [x] ArgoCD admin password retrieved
+- [x] API key permissions enabled for admin account
+- [x] GitHub repository added to ArgoCD with GitHub App authentication
+- [x] prd-applications ArgoCD Application created (optional)
+
+### Manual Steps (Still Required)
+- [ ] Run the setup script: `cd quick-start && ./setup-predator-k8s.sh`
+- [ ] Generate ArgoCD API token (see Step 1.7) - Access ArgoCD UI at https://localhost:8087
+- [ ] Create GitHub App (Step 2-5)
+- [ ] Place GitHub App private key in `horizon/configs/github.pem` (Step 7)
+- [ ] Copy Predator Helm chart to repository (Step 6)
+- [ ] Commit and push repository changes
+- [ ] Configure docker-compose.yml with all values (Step 8)
+- [ ] Start services: `cd quick-start && ./start.sh`
+- [ ] Verify Horizon logs show no errors
 - [ ] Test onboarding works
 
 ---
