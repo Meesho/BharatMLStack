@@ -63,7 +63,8 @@ func (s *AppState) handler(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Use request context instead of Background() for better cancellation handling
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, s.metadata)
 
@@ -107,6 +108,8 @@ func main() {
 	// Create connection pool
 	clients := make([]retrieve.FeatureServiceClient, 0, CONNECTION_POOL_SIZE)
 	for i := 0; i < CONNECTION_POOL_SIZE; i++ {
+		// Each Dial creates a separate connection
+		// Note: grpc.Dial is non-blocking - connections are established lazily on first use
 		conn, err := grpc.Dial(
 			"online-feature-store-api.int.meesho.int:80",
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -122,7 +125,9 @@ func main() {
 			log.Fatalf("Failed to create connection %d: %v", i, err)
 		}
 		clients = append(clients, retrieve.NewFeatureServiceClient(conn))
+		log.Printf("Created gRPC client %d/%d", i+1, CONNECTION_POOL_SIZE)
 	}
+	log.Println("Connection pool initialized with", CONNECTION_POOL_SIZE, "clients")
 
 	pool := &ClientPool{
 		clients: clients,
@@ -140,6 +145,19 @@ func main() {
 	r := gin.New()
 	r.POST("/retrieve-features", state.handler)
 
+	// Configure HTTP server for high concurrency
+	srv := &http.Server{
+		Addr:         ":8081",
+		Handler:      r,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
+		// Increase connection limits for high RPS
+		MaxHeaderBytes: 1 << 20, // 1MB
+	}
+
 	log.Println("🚀 Go gRPC Client running on http://0.0.0.0:8081")
-	r.Run(":8081")
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 }
