@@ -3,8 +3,12 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	retrieve "github.com/Meesho/BharatMLStack/go-sdk/pkg/proto/onfs/retrieve" // adjust path
@@ -41,7 +45,19 @@ type KeysRequest struct {
 // ClientPool manages a pool of gRPC clients for connection pooling
 type ClientPool struct {
 	clients []retrieve.FeatureServiceClient
-	counter uint64 // Atomic counter for round-robin selection
+	conns   []*grpc.ClientConn // Store connections for cleanup
+	counter uint64             // Atomic counter for round-robin selection
+}
+
+// Close closes all gRPC connections in the pool
+func (p *ClientPool) Close() {
+	for _, conn := range p.conns {
+		if conn != nil {
+			if err := conn.Close(); err != nil {
+				log.Printf("Error closing gRPC connection: %v", err)
+			}
+		}
+	}
 }
 
 // Next returns the next client from the pool using round-robin
@@ -107,6 +123,7 @@ func main() {
 
 	// Create connection pool
 	clients := make([]retrieve.FeatureServiceClient, 0, CONNECTION_POOL_SIZE)
+	conns := make([]*grpc.ClientConn, 0, CONNECTION_POOL_SIZE)
 	for i := 0; i < CONNECTION_POOL_SIZE; i++ {
 		// Each Dial creates a separate connection
 		// Note: grpc.Dial is non-blocking - connections are established lazily on first use
@@ -124,6 +141,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to create connection %d: %v", i, err)
 		}
+		conns = append(conns, conn)
 		clients = append(clients, retrieve.NewFeatureServiceClient(conn))
 		log.Printf("Created gRPC client %d/%d", i+1, CONNECTION_POOL_SIZE)
 	}
@@ -131,6 +149,7 @@ func main() {
 
 	pool := &ClientPool{
 		clients: clients,
+		conns:   conns,
 		counter: 0,
 	}
 
@@ -145,19 +164,80 @@ func main() {
 	r := gin.New()
 	r.POST("/retrieve-features", state.handler)
 
-	// Configure HTTP server for high concurrency
+	// Configure HTTP server for high concurrency with connection reuse
 	srv := &http.Server{
-		Addr:         ":8081",
-		Handler:      r,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  120 * time.Second,
-		// Increase connection limits for high RPS
+		Addr:           ":8081",
+		Handler:        r,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		IdleTimeout:    120 * time.Second,
 		MaxHeaderBytes: 1 << 20, // 1MB
 	}
 
-	log.Println("🚀 Go gRPC Client running on http://0.0.0.0:8081")
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Failed to start server: %v", err)
+	// Enable HTTP keep-alive for connection reuse
+	// This prevents port exhaustion by reusing connections
+	// IdleTimeout (set above) controls the keep-alive period
+	srv.SetKeepAlivesEnabled(true)
+
+	// Create listener with connection reuse settings
+	listener, err := net.Listen("tcp", ":8081")
+	if err != nil {
+		log.Fatalf("Failed to create listener: %v", err)
 	}
+
+	// Use TCP keep-alive to detect dead connections
+	tcpListener := listener.(*net.TCPListener)
+	keepAliveListener := &keepAliveListener{
+		TCPListener:     tcpListener,
+		KeepAlivePeriod: 30 * time.Second,
+	}
+
+	// Setup graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		log.Println("🚀 Go gRPC Client running on http://0.0.0.0:8081")
+		if err := srv.Serve(keepAliveListener); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	<-quit
+	log.Println("Shutting down server...")
+
+	// Graceful shutdown with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Server forced to shutdown: %v", err)
+	}
+
+	// Close all gRPC connections
+	pool.Close()
+	log.Println("Server exited")
+}
+
+// keepAliveListener wraps TCPListener to enable TCP keep-alive
+type keepAliveListener struct {
+	*net.TCPListener
+	KeepAlivePeriod time.Duration
+}
+
+func (ln *keepAliveListener) Accept() (net.Conn, error) {
+	conn, err := ln.TCPListener.AcceptTCP()
+	if err != nil {
+		return nil, err
+	}
+	if err := conn.SetKeepAlive(true); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if err := conn.SetKeepAlivePeriod(ln.KeepAlivePeriod); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return conn, nil
 }
