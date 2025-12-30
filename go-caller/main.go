@@ -73,6 +73,15 @@ type AppState struct {
 }
 
 func retrieveFeatures(c *gin.Context, state *AppState) {
+	// CRITICAL: Ensure connection is kept alive even on errors
+	// This prevents k6 from opening new connections when errors occur
+	defer func() {
+		// Ensure response is sent and connection can be reused
+		if flusher, ok := c.Writer.(http.Flusher); ok {
+			flusher.Flush()
+		}
+	}()
+
 	var requestBody RetrieveFeaturesRequest
 	if err := c.ShouldBindJSON(&requestBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -124,6 +133,8 @@ func retrieveFeatures(c *gin.Context, state *AppState) {
 	// Since we don't use the response, dropping it immediately reduces memory pressure
 	result, err := client.RetrieveFeatures(ctx, query)
 	if err != nil {
+		// CRITICAL: Even on error, ensure connection can be reused
+		// Don't close connection on error - let keep-alive handle it
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -139,12 +150,7 @@ func retrieveFeatures(c *gin.Context, state *AppState) {
 	// This ensures the HTTP connection is available for the next request from k6
 	// Without this, connections might be held open longer than necessary
 	c.JSON(http.StatusOK, SUCCESS_RESPONSE)
-
-	// Ensure response is flushed to free connection immediately
-	// This is what Axum does automatically - Go requires explicit flush
-	if flusher, ok := c.Writer.(http.Flusher); ok {
-		flusher.Flush()
-	}
+	// Flush is handled by defer at function start
 }
 
 func main() {
@@ -209,13 +215,14 @@ func main() {
 
 	// CRITICAL: Add middleware to ensure proper HTTP/1.1 keep-alive handling
 	// This is what Axum/hyper does automatically - Go requires explicit handling
-	// Key fixes:
-	// 1. Set Connection: keep-alive header (but only if client supports it)
-	// 2. Ensure response is flushed immediately to free connection
-	// 3. Don't close connection prematurely
+	//
+	// IMPORTANT: Always set Connection: keep-alive for HTTP/1.1 to ensure connection reuse
+	// Go's http.Server will handle the actual keep-alive logic, but we need to tell the client
+	// that we support keep-alive by setting this header
 	r.Use(func(c *gin.Context) {
-		// Only set keep-alive if client requests it (HTTP/1.1)
-		if c.GetHeader("Connection") == "keep-alive" || c.Request.ProtoMajor == 1 {
+		// For HTTP/1.1, always set keep-alive to enable connection reuse
+		// This prevents k6 from opening new connections for each request
+		if c.Request.ProtoMajor == 1 {
 			c.Header("Connection", "keep-alive")
 		}
 		c.Next()
@@ -242,14 +249,21 @@ func main() {
 	// - Go's http.Server requires explicit configuration and proper header handling
 	// - Without proper keep-alive, each request closes connection = port exhaustion
 	//
-	// IMPORTANT: ReadHeaderTimeout is critical - without it, slow clients can exhaust connections
-	// WriteTimeout should be longer than ReadTimeout to allow slow responses
+	// IMPORTANT: Timeout configuration is critical for connection reuse
+	// - ReadHeaderTimeout: Prevents slow-loris attacks, closes slow connections quickly
+	// - ReadTimeout: Must be longer than ReadHeaderTimeout
+	// - WriteTimeout: Must be long enough for gRPC calls to complete (10s gRPC timeout + buffer)
+	// - IdleTimeout: How long to keep idle connections open for reuse
+	//
+	// CRITICAL: WriteTimeout must be longer than the gRPC call timeout (10s) to prevent
+	// premature connection closure. If WriteTimeout is too short, connections close before
+	// response is sent, causing k6 to open new connections = port exhaustion
 	srv := &http.Server{
 		Addr:              ":8080",
 		Handler:           r,
 		ReadHeaderTimeout: 10 * time.Second,  // Timeout for reading request headers (prevents slow-loris)
 		ReadTimeout:       30 * time.Second,  // Timeout for reading entire request body
-		WriteTimeout:      30 * time.Second,  // Timeout for writing response
+		WriteTimeout:      60 * time.Second,  // CRITICAL: Must be > gRPC timeout (10s) + buffer
 		IdleTimeout:       300 * time.Second, // 5 minutes - allows long connection reuse
 		MaxHeaderBytes:    1 << 20,           // 1MB
 		// No MaxConnsPerIP limit - allow high concurrency from single client
