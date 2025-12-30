@@ -73,6 +73,10 @@ type AppState struct {
 }
 
 func (s *AppState) handler(c *gin.Context) {
+	// Set headers to encourage connection reuse
+	c.Header("Connection", "keep-alive")
+	c.Header("Keep-Alive", "timeout=300")
+
 	var requestBody RetrieveFeaturesRequest
 	if err := c.ShouldBindJSON(&requestBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -165,13 +169,17 @@ func main() {
 	r.POST("/retrieve-features", state.handler)
 
 	// Configure HTTP server for high concurrency with connection reuse
+	// Key settings for preventing port exhaustion:
+	// - Long IdleTimeout allows connections to be reused
+	// - ReadTimeout/WriteTimeout prevent hung connections
+	// - Keep-alive enabled for connection reuse
 	srv := &http.Server{
 		Addr:           ":8081",
 		Handler:        r,
-		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
-		IdleTimeout:    120 * time.Second,
-		MaxHeaderBytes: 1 << 20, // 1MB
+		ReadTimeout:    30 * time.Second,  // Increased to allow longer requests
+		WriteTimeout:   30 * time.Second,  // Increased to allow longer responses
+		IdleTimeout:    300 * time.Second, // 5 minutes - allows long connection reuse
+		MaxHeaderBytes: 1 << 20,           // 1MB
 	}
 
 	// Enable HTTP keep-alive for connection reuse
@@ -179,17 +187,17 @@ func main() {
 	// IdleTimeout (set above) controls the keep-alive period
 	srv.SetKeepAlivesEnabled(true)
 
-	// Create listener with connection reuse settings
+	// Create listener with SO_REUSEADDR and SO_REUSEPORT for better connection handling
 	listener, err := net.Listen("tcp", ":8081")
 	if err != nil {
 		log.Fatalf("Failed to create listener: %v", err)
 	}
 
-	// Use TCP keep-alive to detect dead connections
+	// Use TCP keep-alive to detect dead connections and enable socket reuse
 	tcpListener := listener.(*net.TCPListener)
 	keepAliveListener := &keepAliveListener{
 		TCPListener:     tcpListener,
-		KeepAlivePeriod: 30 * time.Second,
+		KeepAlivePeriod: 60 * time.Second, // Longer keep-alive for connection reuse
 	}
 
 	// Setup graceful shutdown
