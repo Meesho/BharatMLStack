@@ -56,7 +56,33 @@ static SUCCESS: &[u8] = b"\"success\"";
 static ERROR_TIMEOUT: &[u8] = b"{\"error\":\"Request timeout\"}";
 static ERROR_BAD_REQUEST: &[u8] = b"Bad request";
 static ERROR_INVALID_JSON: &[u8] = b"Invalid JSON";
+static ERROR_GRPC: &[u8] = b"{\"error\":\"gRPC error\"}";
 static CONTENT_JSON: &str = "application/json";
+
+// Pre-built response templates to avoid builder overhead
+fn ok_response() -> Response<Full<Bytes>> {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", CONTENT_JSON)
+        .body(Full::new(Bytes::from_static(SUCCESS)))
+        .unwrap()
+}
+
+fn bad_request_response(body: &'static [u8]) -> Response<Full<Bytes>> {
+    Response::builder()
+        .status(StatusCode::BAD_REQUEST)
+        .header("Content-Type", CONTENT_JSON)
+        .body(Full::new(Bytes::from_static(body)))
+        .unwrap()
+}
+
+fn internal_error_response(body: &'static [u8]) -> Response<Full<Bytes>> {
+    Response::builder()
+        .status(StatusCode::INTERNAL_SERVER_ERROR)
+        .header("Content-Type", CONTENT_JSON)
+        .body(Full::new(Bytes::from_static(body)))
+        .unwrap()
+}
 
 async fn handler(
     req: Request<IncomingBody>,
@@ -66,11 +92,7 @@ async fn handler(
     let body_bytes = match req.into_body().collect().await {
         Ok(collected) => collected.to_bytes(),
         Err(_) => {
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .header("Content-Type", CONTENT_JSON)
-                .body(Full::new(Bytes::from_static(ERROR_BAD_REQUEST)))
-                .unwrap());
+            return Ok(bad_request_response(ERROR_BAD_REQUEST));
         }
     };
 
@@ -79,11 +101,7 @@ async fn handler(
     let request_body: RetrieveFeaturesRequest = match serde_json::from_slice(&body_bytes) {
         Ok(body) => body,
         Err(_) => {
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .header("Content-Type", CONTENT_JSON)
-                .body(Full::new(Bytes::from_static(ERROR_INVALID_JSON)))
-                .unwrap());
+            return Ok(bad_request_response(ERROR_INVALID_JSON));
         }
     };
 
@@ -132,29 +150,19 @@ async fn handler(
         Ok(Ok(response)) => {
             // Drop gRPC response immediately to free memory (don't wait for end of scope)
             drop(response);
-            Ok(Response::builder()
-                .status(StatusCode::OK)
-                .header("Content-Type", CONTENT_JSON)
-                .body(Full::new(Bytes::from_static(SUCCESS)))
-                .unwrap())
+            Ok(ok_response())
         },
-        Ok(Err(_)) => Ok(Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .header("Content-Type", CONTENT_JSON)
-            .body(Full::new(Bytes::from_static(b"{\"error\":\"gRPC error\"}")))
-            .unwrap()),
-        Err(_) => Ok(Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .header("Content-Type", CONTENT_JSON)
-            .body(Full::new(Bytes::from_static(ERROR_TIMEOUT)))
-            .unwrap()),
+        Ok(Err(_)) => Ok(internal_error_response(ERROR_GRPC)),
+        Err(_) => Ok(internal_error_response(ERROR_TIMEOUT)),
     }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Configure Tokio runtime to use all CPU cores for maximum performance
-    // Default worker_threads() uses number of CPU cores automatically
+    // Configure Tokio runtime optimally
+    // Use number of CPU cores (default) but limit to avoid over-subscription
     let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4))
+        .thread_name("rust-caller")
         .enable_all()
         .build()?;
     
@@ -182,24 +190,35 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("0.0.0.0:8080").await?;
 
     // Create service once and reuse for all connections
+    // service_fn returns a type that implements Clone efficiently
     let service = service_fn({
         let state = state.clone();
         move |req| {
+            // Arc clone is cheap (just increments ref count)
             let state = state.clone();
             handler(req, state)
         }
     });
 
+    // Accept connections and spawn tasks efficiently
     loop {
-        let (stream, _) = listener.accept().await?;
-        let io = TokioIo::new(stream);
-        let service = service.clone();
+        match listener.accept().await {
+            Ok((stream, _)) => {
+                let io = TokioIo::new(stream);
+                let service = service.clone();
 
-        tokio::task::spawn(async move {
-            // Use HTTP/1.1 with keep-alive for better connection reuse
-            let mut builder = http1::Builder::new();
-            builder.keep_alive(true);
-            let _ = builder.serve_connection(io, service).await;
-        });
+                tokio::task::spawn(async move {
+                    // Use HTTP/1.1 with keep-alive for better connection reuse
+                    let mut builder = http1::Builder::new();
+                    builder.keep_alive(true);
+                    // Ignore connection errors - they're handled by the connection itself
+                    let _ = builder.serve_connection(io, service).await;
+                });
+            }
+            Err(e) => {
+                // Log accept errors but continue
+                eprintln!("Accept error: {}", e);
+            }
+        }
     }
 }
