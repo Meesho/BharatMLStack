@@ -2,256 +2,355 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Incoming as IncomingBody, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
-use http_body_util::{BodyExt, Full};
-use hyper::body::Bytes;
-use serde::Deserialize;
 use std::convert::Infallible;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tonic::{metadata::AsciiMetadataValue, transport::Channel, Request as TonicRequest};
-
+use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
+use http_body_util::{BodyExt, Full};
+use hyper::body::Bytes;
+// Configure jemalloc - DISABLED profiling for production performance
+// Profiling adds significant overhead (~5-10% CPU)
+// Uncomment below for profiling, but expect lower RPS
+// #[cfg(not(target_env = "msvc"))]
+// #[global_allocator]
+// static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+// #[allow(non_upper_case_globals)]
+// #[export_name = "malloc_conf"]
+// pub static malloc_conf: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0";
 pub mod retrieve {
     tonic::include_proto!("retrieve");
 }
-
-use retrieve::feature_service_client::FeatureServiceClient;
-use retrieve::{FeatureGroup, Keys, Query};
-
-const CONNECTION_POOL_SIZE: usize = 16; // Each connection can handle ~100 concurrent streams
-                                         // With 16 connections, we can handle ~1600 concurrent requests
-
-// RetrieveFeaturesRequest matches Query structure exactly
-// This allows direct assignment without any conversion/copying
-#[derive(Deserialize)]
+use retrieve::feature_service_client::FeatureServiceClient as RetrieveClient;
+use retrieve::{FeatureGroup, Keys};
+use serde::Deserialize;
+// Request body structure for retrieve_features endpoint
+#[derive(Debug, Deserialize)]
 struct RetrieveFeaturesRequest {
-    #[serde(rename = "entity_label")]
-    entity_label: String, 
-    
-    #[serde(rename = "feature_groups")]
+    entity_label: String,
     feature_groups: Vec<FeatureGroupRequest>,
-    
-    #[serde(rename = "keys_schema")]
     keys_schema: Vec<String>,
-    
     keys: Vec<KeysRequest>,
 }
-
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct FeatureGroupRequest {
     label: String,
-    #[serde(rename = "feature_labels")]
     feature_labels: Vec<String>,
 }
-
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct KeysRequest {
     cols: Vec<String>,
 }
-
-// ClientPool manages a pool of gRPC clients for connection pooling
-struct ClientPool {
-    clients: Vec<FeatureServiceClient<Channel>>,
-    counter: AtomicU64, // Atomic counter for round-robin selection
-}
-
-impl ClientPool {
-    fn new(clients: Vec<FeatureServiceClient<Channel>>) -> Self {
-        Self {
-            clients,
-            counter: AtomicU64::new(0),
-        }
-    }
-
-    // Next returns the next client from the pool using round-robin
-    fn next(&self) -> FeatureServiceClient<Channel> {
-        let idx = self.counter.fetch_add(1, Ordering::Relaxed);
-        self.clients[idx as usize % self.clients.len()].clone()
-    }
-}
-
+// Report request types - COMMENTED OUT (pprof related)
+// enum ReportRequest {
+//     Protobuf(oneshot::Sender<Result<Vec<u8>, String>>),
+//     Flamegraph(oneshot::Sender<Result<Vec<u8>, String>>),
+//     Text(oneshot::Sender<Result<String, String>>),
+// }
+#[derive(Clone)]
 struct AppState {
-    pool: Arc<ClientPool>,
+    client: RetrieveClient<Channel>,
     auth_token: AsciiMetadataValue,
     caller_id: AsciiMetadataValue,
+    // report_tx: mpsc::Sender<ReportRequest>,  // Commented out - pprof related
 }
-
-static SUCCESS: &[u8] = b"\"success\"";
-static ERROR_TIMEOUT: &[u8] = b"{\"error\":\"Request timeout\"}";
-static ERROR_BAD_REQUEST: &[u8] = b"Bad request";
-static ERROR_INVALID_JSON: &[u8] = b"Invalid JSON";
-static ERROR_GRPC: &[u8] = b"{\"error\":\"gRPC error\"}";
-static CONTENT_JSON: &str = "application/json";
-
-// Pre-built response templates to avoid builder overhead
-fn ok_response() -> Response<Full<Bytes>> {
-    Response::builder()
+// Endpoint to get pprof data in protobuf format (for go tool pprof) - COMMENTED OUT
+/* async fn get_pprof_protobuf(State(state): State<Arc<AppState>>) -> Result<Response<Body>, StatusCode> {
+    let (tx, rx) = oneshot::channel();
+    state.report_tx.send(ReportRequest::Protobuf(tx))
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    
+    match rx.await {
+        Ok(Ok(data)) => {
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "application/x-protobuf")
+                .header("Content-Disposition", "attachment; filename=profile.pb.gz")
+                .body(Body::from(data))
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        }
+        _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+} */
+// Endpoint to get flamegraph SVG - COMMENTED OUT
+/* async fn get_flamegraph(State(state): State<Arc<AppState>>) -> Result<Response<Body>, StatusCode> {
+    let (tx, rx) = oneshot::channel();
+    state.report_tx.send(ReportRequest::Flamegraph(tx))
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    
+    match rx.await {
+        Ok(Ok(data)) => {
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "image/svg+xml")
+                .header("Content-Disposition", "inline; filename=flamegraph.svg")
+                .body(Body::from(data))
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        }
+        _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+} */
+// Endpoint to get text report - COMMENTED OUT
+/* async fn get_pprof_text(State(state): State<Arc<AppState>>) -> Result<Html<String>, StatusCode> {
+    let (tx, rx) = oneshot::channel();
+    state.report_tx.send(ReportRequest::Text(tx))
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    
+    match rx.await {
+        Ok(Ok(text)) => Ok(Html(format!("<pre>{}</pre>", text))),
+        _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+} */
+// Endpoint to get heap/memory profiling data - COMMENTED OUT
+/* #[cfg(not(target_env = "msvc"))]
+async fn get_pprof_heap() -> Result<impl IntoResponse, (StatusCode, String)> {
+    // Check if jemalloc profiling is available
+    let prof_ctl = jemalloc_pprof::PROF_CTL.as_ref()
+        .ok_or_else(|| (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "jemalloc profiling not available. Ensure tikv-jemallocator is configured correctly.".to_string(),
+        ))?;
+    
+    let mut prof_ctl = prof_ctl.lock().await;
+    
+    // Verify profiling is activated
+    if !prof_ctl.activated() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Heap profiling not activated. Ensure jemalloc is configured with profiling enabled.".to_string(),
+        ));
+    }
+    
+    // Generate pprof heap profile
+    let pprof_data = prof_ctl.dump_pprof()
+        .map_err(|e| (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to generate heap profile: {}", e),
+        ))?;
+    
+    Ok(Response::builder()
         .status(StatusCode::OK)
-        .header("Content-Type", CONTENT_JSON)
-        .body(Full::new(Bytes::from_static(SUCCESS)))
-        .unwrap()
-}
-
-fn bad_request_response(body: &'static [u8]) -> Response<Full<Bytes>> {
-    Response::builder()
-        .status(StatusCode::BAD_REQUEST)
-        .header("Content-Type", CONTENT_JSON)
-        .body(Full::new(Bytes::from_static(body)))
-        .unwrap()
-}
-
-fn internal_error_response(body: &'static [u8]) -> Response<Full<Bytes>> {
-    Response::builder()
-        .status(StatusCode::INTERNAL_SERVER_ERROR)
-        .header("Content-Type", CONTENT_JSON)
-        .body(Full::new(Bytes::from_static(body)))
-        .unwrap()
-}
-
-async fn handler(
+        .header("Content-Type", "application/x-protobuf")
+        .header("Content-Encoding", "gzip")
+        .header("Content-Disposition", "attachment; filename=heap.pb.gz")
+        .body(Body::from(pprof_data))
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?)
+} */
+async fn retrieve_features_handler(
     req: Request<IncomingBody>,
     state: Arc<AppState>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-    // Collect body bytes efficiently - to_bytes() combines chunks optimally
-    let body_bytes = match req.into_body().collect().await {
-        Ok(collected) => collected.to_bytes(),
+    let body = req.into_body();
+    let collected = match body.collect().await {
+        Ok(c) => c,
         Err(_) => {
-            return Ok(bad_request_response(ERROR_BAD_REQUEST));
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Full::new(Bytes::from("Body Error")))
+                .unwrap());
         }
     };
-
-    // Parse JSON directly into RetrieveFeaturesRequest - serde_json is already optimized
-    // Using from_slice is faster than from_reader for in-memory data
+    
+    let body_bytes = collected.to_bytes();
     let request_body: RetrieveFeaturesRequest = match serde_json::from_slice(&body_bytes) {
         Ok(body) => body,
-        Err(_) => {
-            return Ok(bad_request_response(ERROR_INVALID_JSON));
+        Err(e) => return Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(Full::new(Bytes::from(e.to_string()))).unwrap()),
+    };
+    let query = retrieve::Query {
+        entity_label: request_body.entity_label,
+        feature_groups: request_body.feature_groups
+            .into_iter()
+            .map(|fg| FeatureGroup {
+                label: fg.label,
+                feature_labels: fg.feature_labels,
+            })
+            .collect(),
+        keys_schema: request_body.keys_schema,
+        keys: request_body.keys
+            .into_iter()
+            .map(|k| Keys { cols: k.cols })
+            .collect(),
+    };
+    let mut grpc_request = tonic::Request::new(query);
+    // Optimization: Add metadata using permanent AsciiMetadataValue to avoid re-parsing strings
+    grpc_request.set_timeout(Duration::from_secs(10));
+    grpc_request.metadata_mut().insert("online-feature-store-auth-token", state.auth_token.clone());
+    grpc_request.metadata_mut().insert("online-feature-store-caller-id", state.caller_id.clone());
+
+    match state.client.clone().retrieve_features(grpc_request).await {
+        Ok(grpc_resp) => {
+            let _inner_data = grpc_resp.into_inner();
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "application/json")
+                .body(Full::new(Bytes::from_static(b"\"success\"")))
+                .unwrap())
         }
-    };
-
-    // Direct assignment - ZERO COPY: moves ownership from request_body to Query
-    // Pre-allocate Vecs with exact capacity to avoid reallocations
-    let feature_groups_len = request_body.feature_groups.len();
-    let keys_len = request_body.keys.len();
-    
-    let mut feature_groups = Vec::with_capacity(feature_groups_len);
-    for fg in request_body.feature_groups {
-        feature_groups.push(FeatureGroup {
-            label: fg.label, // MOVE: zero-copy transfer
-            feature_labels: fg.feature_labels, // MOVE: zero-copy transfer
-        });
-    }
-    
-    let mut keys = Vec::with_capacity(keys_len);
-    for k in request_body.keys {
-        keys.push(Keys { 
-            cols: k.cols // MOVE: zero-copy transfer
-        });
-    }
-    
-    let query = Query {
-        entity_label: request_body.entity_label, // MOVE: zero-copy transfer
-        feature_groups,
-        keys_schema: request_body.keys_schema, // MOVE: zero-copy transfer
-        keys,
-    };
-
-    // Create Tonic request with metadata - reuse metadata from state (no clone needed)
-    let mut grpc_request = TonicRequest::new(query);
-    grpc_request.metadata_mut().insert(
-        "online-feature-store-auth-token",
-        state.auth_token.clone(), // AsciiMetadataValue clone is cheap (Arc internally)
-    );
-    grpc_request.metadata_mut().insert(
-        "online-feature-store-caller-id",
-        state.caller_id.clone(), // AsciiMetadataValue clone is cheap (Arc internally)
-    );
-
-    // Get next client from pool using round-robin
-    // FeatureServiceClient::clone() is cheap (Arc internally)
-    let mut client = state.pool.next();
-    match tokio::time::timeout(Duration::from_secs(5), client.retrieve_features(grpc_request)).await {
-        Ok(Ok(response)) => {
-            // Drop gRPC response immediately to free memory (don't wait for end of scope)
-            drop(response);
-            Ok(ok_response())
-        },
-        Ok(Err(_)) => Ok(internal_error_response(ERROR_GRPC)),
-        Err(_) => Ok(internal_error_response(ERROR_TIMEOUT)),
+        Err(e) => {
+            Ok(Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Full::new(Bytes::from(format!("\"gRPC Error: {}\"", e))))
+                .unwrap())
+        }
     }
 }
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Configure Tokio runtime optimally
-    // Use number of CPU cores (default) but limit to avoid over-subscription
+    // Configure Tokio runtime explicitly for high performance
+    // This ensures optimal CPU utilization
+    // Note: Not setting worker_threads uses all available CPU cores by default
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4))
-        .thread_name("rust-caller")
         .enable_all()
         .build()?;
     
     rt.block_on(async_main())
 }
-
 async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Starting rust-caller with connection pooling (pool size: {})", CONNECTION_POOL_SIZE);
+    println!("Connecting to feature store version 4...");
+    // Single gRPC connection with optimizations enabled
+    // NOTE: HTTP/2 has a hard limit of ~100 concurrent streams per connection
+    // This limits throughput to ~1,000-1,500 RPS depending on latency
+    // For higher throughput, consider using connection pooling
+    let channel = Endpoint::from_static("http://online-feature-store-api.int.meesho.int:80")
+        .timeout(Duration::from_secs(10))
+        // Keep-alive settings (standard optimization)
+        .http2_keep_alive_interval(Duration::from_secs(30))
+        .keep_alive_timeout(Duration::from_secs(10))
+        .keep_alive_while_idle(true)
+        // Window sizes optimization for better throughput - ENABLED
+        .initial_stream_window_size(1024 * 1024 * 2) // 2MB (default: 65,535 bytes)
+        .initial_connection_window_size(1024 * 1024 * 4) // 4MB (default: 65,535 bytes)
+        .concurrency_limit(4000) // Allow up to 4000 concurrent requests
+        .connect()
+        .await?;
     
-    // Create connection pool
-    let mut clients = Vec::with_capacity(CONNECTION_POOL_SIZE);
-    for i in 0..CONNECTION_POOL_SIZE {
-        let channel = Channel::from_static("http://online-feature-store-api.int.meesho.int:80")
-            .http2_keep_alive_interval(Duration::from_secs(30))
-            .keep_alive_timeout(Duration::from_secs(10))
-            .keep_alive_while_idle(true)
-            .initial_stream_window_size(2 * 1024 * 1024) // 2MB stream window
-            .initial_connection_window_size(4 * 1024 * 1024) // 4MB connection window
-            .concurrency_limit(4000) // Allow up to 4000 concurrent requests per connection
-            .connect()
-            .await?;
-        
-        clients.push(FeatureServiceClient::new(channel));
-    }
-
-    let pool = Arc::new(ClientPool::new(clients));
-
+    let client = RetrieveClient::new(channel);
+    
+    // Start profiling - guard must be kept alive for profiling to continue - COMMENTED OUT
+    // Higher frequency = more samples = better resolution
+    // blocklist excludes low-level libraries to focus on application code
+    /* let guard = pprof::ProfilerGuardBuilder::default()
+        .frequency(10000)  // Increased from 1000 to 10000 for better resolution
+        .blocklist(&["libc", "libgcc", "pthread", "vdso"])
+        .build()
+        .unwrap();
+    // Channel for report requests - handlers send requests, background task generates reports
+    let (report_tx, report_rx) = mpsc::channel::<ReportRequest>();
+    // Spawn background task to handle report generation
+    // This task holds the guard (which is not Send) and generates reports on demand
+    tokio::task::spawn_blocking(move || {
+        while let Ok(request) = report_rx.recv() {
+            match request {
+                ReportRequest::Protobuf(tx) => {
+                    // For protobuf format, use the resolved report and convert to text format
+                    // Note: Full pprof protobuf format requires additional conversion libraries
+                    // For now, return text format that can be used with pprof tools
+                    match guard.report().build() {
+                        Ok(report) => {
+                            // Convert report to text format (pprof can read text format)
+                            let text_str = format!("{:?}", report);
+                            let _ = tx.send(Ok(text_str.into_bytes()));
+                        }
+                        Err(e) => {
+                            let _ = tx.send(Err(format!("Failed to build report: {:?}", e)));
+                        }
+                    }
+                }
+                ReportRequest::Flamegraph(tx) => {
+                    match guard.report().build() {
+                        Ok(report) => {
+                            let mut flamegraph = Vec::new();
+                            if report.flamegraph(&mut flamegraph).is_ok() {
+                                let _ = tx.send(Ok(flamegraph));
+                            } else {
+                                let _ = tx.send(Err("Failed to generate flamegraph".to_string()));
+                            }
+                        }
+                        Err(e) => {
+                            let _ = tx.send(Err(format!("Failed to build report: {:?}", e)));
+                        }
+                    }
+                }
+                ReportRequest::Text(tx) => {
+                    match guard.report().build() {
+                        Ok(report) => {
+                            // Use Debug trait for text output
+                            let text_str = format!("{:?}", report);
+                            let _ = tx.send(Ok(text_str));
+                        }
+                        Err(e) => {
+                            let _ = tx.send(Err(format!("Failed to build report: {:?}", e)));
+                        }
+                    }
+                }
+            }
+        }
+        // Keep guard alive - it will be dropped when this task ends
+        drop(guard);
+    }); */
     let state = Arc::new(AppState {
-        pool,
+        client,
         auth_token: AsciiMetadataValue::from_static("atishay"),
         caller_id: AsciiMetadataValue::from_static("test-3"),
+        // report_tx,  // Commented out - pprof related
     });
-
-    let listener = TcpListener::bind("0.0.0.0:8080").await?;
-
-    // Create service once and reuse for all connections
-    // service_fn returns a type that implements Clone efficiently
-    let service = service_fn({
-        let state = state.clone();
-        move |req| {
-            // Arc clone is cheap (just increments ref count)
-            let state = state.clone();
-            handler(req, state)
+    // Check jemalloc heap profiling availability - COMMENTED OUT
+    /* #[cfg(not(target_env = "msvc"))]
+    {
+        if let Some(prof_ctl) = jemalloc_pprof::PROF_CTL.as_ref() {
+            let prof_ctl = prof_ctl.lock().await;
+            if prof_ctl.activated() {
+                println!("Heap profiling: Enabled");
+            } else {
+                println!("Heap profiling: Configured but not activated");
+            }
+        } else {
+            println!("Heap profiling: Not available (jemalloc not configured)");
         }
-    });
-
-    // Accept connections and spawn tasks efficiently
+    }
+    println!("Profiler started. Server will begin shortly...");
+    println!("Profiling endpoints available:");
+    println!("  - GET /pprof/protobuf - Download CPU pprof data (use with: go tool pprof http://localhost:8080/pprof/protobuf)");
+    println!("  - GET /pprof/flamegraph - View CPU flamegraph SVG in browser");
+    println!("  - GET /pprof/text - View CPU text report");
+    #[cfg(not(target_env = "msvc"))]
+    println!("  - GET /pprof/heap - Download heap/memory pprof data (use with: go tool pprof http://localhost:8080/pprof/heap)"); */
+    // Configure TCP listener
+    // Hyper/Tokio handle TCP settings efficiently by default
+    let listener = TcpListener::bind("0.0.0.0:8080").await?;
+    
+    println!("Server listening on 0.0.0.0:8080");
+    println!("Configured for high performance:");
+    println!("  - Single gRPC connection (limited to ~100 concurrent streams)");
+    println!("  - Tokio runtime using all CPU cores");
+    println!("  - HTTP/2 window sizes optimized: 2MB stream, 4MB connection");
+    println!("  - concurrency_limit: 4000 (client-side protection)");
+    println!("  - Using raw Hyper for maximum performance");
+    
+    // Accept connections in a loop
     loop {
         match listener.accept().await {
             Ok((stream, _)) => {
                 let io = TokioIo::new(stream);
-                let service = service.clone();
-
+                let state_clone = state.clone();
+                
+                // Spawn a task to handle each connection
                 tokio::task::spawn(async move {
-                    // Use HTTP/1.1 with keep-alive for better connection reuse
-                    let mut builder = http1::Builder::new();
-                    builder.keep_alive(true);
-                    // Ignore connection errors - they're handled by the connection itself
-                    let _ = builder.serve_connection(io, service).await;
+                    let service = service_fn(move |req| {
+                        let state = state_clone.clone();
+                        retrieve_features_handler(req, state)
+                    });
+                    
+                    // Use HTTP/1.1 connection
+                    if let Err(err) = http1::Builder::new()
+                        .serve_connection(io, service)
+                        .await
+                    {
+                        eprintln!("Error serving connection: {:?}", err);
+                    }
                 });
             }
             Err(e) => {
-                // Log accept errors but continue
-                eprintln!("Accept error: {}", e);
+                eprintln!("Error accepting connection: {:?}", e);
             }
         }
     }
