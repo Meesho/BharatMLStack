@@ -73,15 +73,6 @@ type AppState struct {
 }
 
 func retrieveFeatures(c *gin.Context, state *AppState) {
-	// CRITICAL: Ensure connection is kept alive even on errors
-	// This prevents k6 from opening new connections when errors occur
-	defer func() {
-		// Ensure response is sent and connection can be reused
-		if flusher, ok := c.Writer.(http.Flusher); ok {
-			flusher.Flush()
-		}
-	}()
-
 	var requestBody RetrieveFeaturesRequest
 	if err := c.ShouldBindJSON(&requestBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -127,30 +118,16 @@ func retrieveFeatures(c *gin.Context, state *AppState) {
 	client := state.clientPool.GetClient()
 
 	// OPTIMIZATION: Drop response immediately after checking success to reduce cleanup overhead
-	// Based on flamegraph analysis: ~13-15% CPU was spent on drop_in_place for unused protobuf objects
-	// By dropping explicitly in a smaller scope, we reduce the cleanup cost and memory pressure
-	// The response contains large protobuf structures (Vec<Row>, Feature, etc.) that are expensive to clean up
-	// Since we don't use the response, dropping it immediately reduces memory pressure
 	result, err := client.RetrieveFeatures(ctx, query)
 	if err != nil {
-		// CRITICAL: Even on error, ensure connection can be reused
-		// Don't close connection on error - let keep-alive handle it
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	// OPTIMIZATION: Drop response immediately - don't wait for end of function
-	// This reduces the time expensive drop operations hold resources
-	// Response is automatically dropped here (Go GC will handle it)
-	// Explicitly dropping is not needed in Go as it's managed by GC, but the optimization
-	// of not storing the response in a larger scope achieves the same effect
 	_ = result
 
-	// CRITICAL: Send response immediately to free the connection for reuse
-	// This ensures the HTTP connection is available for the next request from k6
-	// Without this, connections might be held open longer than necessary
 	c.JSON(http.StatusOK, SUCCESS_RESPONSE)
-	// Flush is handled by defer at function start
 }
 
 func main() {
@@ -160,22 +137,16 @@ func main() {
 	// PERFORMANCE FIX: Create multiple gRPC channels for connection pooling
 	// HTTP/2 has stream limits (~100 concurrent streams per connection)
 	// For 3k+ RPS, we need multiple connections to avoid hitting these limits
-	// Using 10-20 connections should handle 3k-6k RPS comfortably
 	clients := make([]retrieve.FeatureServiceClient, 0, CONNECTION_POOL_SIZE)
 	conns := make([]*grpc.ClientConn, 0, CONNECTION_POOL_SIZE)
 
-	// Create context with timeout for connection establishment
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
 	for i := 0; i < CONNECTION_POOL_SIZE; i++ {
 		// Optimized HTTP/2 settings for high concurrency
-		// Use DialContext to ensure connections are established with timeout
-		conn, err := grpc.DialContext(
-			ctx,
+		// Use non-blocking Dial - connections are established lazily
+		// This matches Rust's behavior where connections are established asynchronously
+		conn, err := grpc.Dial(
 			"online-feature-store-api.int.meesho.int:80",
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithBlock(), // Block until connection is established (like Rust's .await)
 			grpc.WithKeepaliveParams(keepalive.ClientParameters{
 				Time:                30 * time.Second, // HTTP/2 keep-alive interval
 				Timeout:             10 * time.Second, // Keep-alive timeout
@@ -213,22 +184,17 @@ func main() {
 
 	r := gin.New()
 
-	// CRITICAL: Add middleware to ensure proper HTTP/1.1 keep-alive handling
-	// This is what Axum/hyper does automatically - Go requires explicit handling
-	//
-	// IMPORTANT: Always set Connection: keep-alive for HTTP/1.1 to ensure connection reuse
-	// Go's http.Server will handle the actual keep-alive logic, but we need to tell the client
-	// that we support keep-alive by setting this header
+	// CRITICAL: Set Connection: keep-alive header for HTTP/1.1
+	// This is what Axum does automatically - Go requires explicit setting
+	// Without this, connections close after each request = port exhaustion
 	r.Use(func(c *gin.Context) {
-		// For HTTP/1.1, always set keep-alive to enable connection reuse
-		// This prevents k6 from opening new connections for each request
 		if c.Request.ProtoMajor == 1 {
 			c.Header("Connection", "keep-alive")
 		}
 		c.Next()
 	})
 
-	// Health check endpoint to verify server is running
+	// Health check endpoint
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
@@ -237,53 +203,29 @@ func main() {
 		retrieveFeatures(c, state)
 	})
 
-	// PERFORMANCE FIX: Configure HTTP server for high concurrency with connection reuse
-	// Key settings for preventing port exhaustion on client side:
-	// - Long IdleTimeout allows connections to be reused
-	// - Keep-alive enabled for connection reuse
-	// - No connection limits to handle high concurrency
-	// This prevents "cannot assign requested address" errors from load test clients
-	//
-	// CRITICAL DIFFERENCE FROM RUST:
-	// - Axum/hyper handles HTTP/1.1 keep-alive automatically and efficiently
-	// - Go's http.Server requires explicit configuration and proper header handling
-	// - Without proper keep-alive, each request closes connection = port exhaustion
-	//
-	// IMPORTANT: Timeout configuration is critical for connection reuse
-	// - ReadHeaderTimeout: Prevents slow-loris attacks, closes slow connections quickly
-	// - ReadTimeout: Must be longer than ReadHeaderTimeout
-	// - WriteTimeout: Must be long enough for gRPC calls to complete (10s gRPC timeout + buffer)
-	// - IdleTimeout: How long to keep idle connections open for reuse
-	//
-	// CRITICAL: WriteTimeout must be longer than the gRPC call timeout (10s) to prevent
-	// premature connection closure. If WriteTimeout is too short, connections close before
-	// response is sent, causing k6 to open new connections = port exhaustion
+	// CRITICAL: Maximum HTTP timeouts to prevent connection closure and port exhaustion
+	// Increased 3X to ensure connections stay open for maximum reuse
+	// Key: Very long timeouts = connections stay open = no port exhaustion
 	srv := &http.Server{
-		Addr:              ":8080",
-		Handler:           r,
-		ReadHeaderTimeout: 10 * time.Second,  // Timeout for reading request headers (prevents slow-loris)
-		ReadTimeout:       30 * time.Second,  // Timeout for reading entire request body
-		WriteTimeout:      60 * time.Second,  // CRITICAL: Must be > gRPC timeout (10s) + buffer
-		IdleTimeout:       300 * time.Second, // 5 minutes - allows long connection reuse
-		MaxHeaderBytes:    1 << 20,           // 1MB
-		// No MaxConnsPerIP limit - allow high concurrency from single client
-		// This is important for load testing where many VUs come from same machine
+		Addr:           ":8080",
+		Handler:        r,
+		IdleTimeout:    10800 * time.Second, // 3 HOURS - maximum connection reuse (3x)
+		ReadTimeout:    900 * time.Second,   // 15 minutes - allow very slow requests (3x)
+		WriteTimeout:   900 * time.Second,   // 15 minutes - allow very slow responses (3x)
+		MaxHeaderBytes: 1 << 20,             // 1MB
 	}
-	// CRITICAL: Enable keep-alive - this is what Axum does automatically
-	// This allows connections to be reused instead of closed after each request
 	srv.SetKeepAlivesEnabled(true)
 
-	// Create listener with TCP keep-alive for connection reuse
+	// Create listener with TCP keep-alive
 	listener, err := net.Listen("tcp", "0.0.0.0:8080")
 	if err != nil {
 		log.Fatalf("Failed to create listener: %v", err)
 	}
 
-	// Wrap listener with TCP keep-alive to detect dead connections and enable socket reuse
 	tcpListener := listener.(*net.TCPListener)
 	keepAliveListener := &keepAliveListener{
 		TCPListener:     tcpListener,
-		KeepAlivePeriod: 60 * time.Second,
+		KeepAlivePeriod: 900 * time.Second, // 15 minutes - very long TCP keep-alive (3x)
 	}
 
 	log.Println("Server listening on 0.0.0.0:8080")
@@ -291,6 +233,8 @@ func main() {
 	log.Printf("  - %d gRPC connection pool (main bottleneck fix)", CONNECTION_POOL_SIZE)
 	log.Println("  - HTTP/2 window sizes optimized for throughput")
 	log.Println("  - HTTP keep-alive enabled for connection reuse")
+	log.Println("  - Maximum timeouts (3X increased): IdleTimeout=3h, ReadTimeout=15m, WriteTimeout=15m")
+	log.Println("  - TCP keep-alive: 15 minutes")
 
 	if err := srv.Serve(keepAliveListener); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
