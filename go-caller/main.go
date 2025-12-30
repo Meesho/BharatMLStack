@@ -135,7 +135,16 @@ func retrieveFeatures(c *gin.Context, state *AppState) {
 	// of not storing the response in a larger scope achieves the same effect
 	_ = result
 
+	// CRITICAL: Send response immediately to free the connection for reuse
+	// This ensures the HTTP connection is available for the next request from k6
+	// Without this, connections might be held open longer than necessary
 	c.JSON(http.StatusOK, SUCCESS_RESPONSE)
+
+	// Ensure response is flushed to free connection immediately
+	// This is what Axum does automatically - Go requires explicit flush
+	if flusher, ok := c.Writer.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 func main() {
@@ -198,11 +207,17 @@ func main() {
 
 	r := gin.New()
 
-	// CRITICAL: Add middleware to set Connection: keep-alive header on all responses
-	// This ensures connection reuse like Axum/hyper does automatically
-	// Without this, each request closes the connection, causing port exhaustion
+	// CRITICAL: Add middleware to ensure proper HTTP/1.1 keep-alive handling
+	// This is what Axum/hyper does automatically - Go requires explicit handling
+	// Key fixes:
+	// 1. Set Connection: keep-alive header (but only if client supports it)
+	// 2. Ensure response is flushed immediately to free connection
+	// 3. Don't close connection prematurely
 	r.Use(func(c *gin.Context) {
-		c.Header("Connection", "keep-alive")
+		// Only set keep-alive if client requests it (HTTP/1.1)
+		if c.GetHeader("Connection") == "keep-alive" || c.Request.ProtoMajor == 1 {
+			c.Header("Connection", "keep-alive")
+		}
 		c.Next()
 	})
 
@@ -226,13 +241,17 @@ func main() {
 	// - Axum/hyper handles HTTP/1.1 keep-alive automatically and efficiently
 	// - Go's http.Server requires explicit configuration and proper header handling
 	// - Without proper keep-alive, each request closes connection = port exhaustion
+	//
+	// IMPORTANT: ReadHeaderTimeout is critical - without it, slow clients can exhaust connections
+	// WriteTimeout should be longer than ReadTimeout to allow slow responses
 	srv := &http.Server{
-		Addr:           ":8080",
-		Handler:        r,
-		ReadTimeout:    30 * time.Second,
-		WriteTimeout:   30 * time.Second,
-		IdleTimeout:    300 * time.Second, // 5 minutes - allows long connection reuse
-		MaxHeaderBytes: 1 << 20,           // 1MB
+		Addr:              ":8080",
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,  // Timeout for reading request headers (prevents slow-loris)
+		ReadTimeout:       30 * time.Second,  // Timeout for reading entire request body
+		WriteTimeout:      30 * time.Second,  // Timeout for writing response
+		IdleTimeout:       300 * time.Second, // 5 minutes - allows long connection reuse
+		MaxHeaderBytes:    1 << 20,           // 1MB
 		// No MaxConnsPerIP limit - allow high concurrency from single client
 		// This is important for load testing where many VUs come from same machine
 	}
