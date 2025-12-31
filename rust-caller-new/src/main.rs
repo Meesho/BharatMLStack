@@ -17,11 +17,16 @@ pub mod retrieve {
 }
 
 use retrieve::feature_service_client::FeatureServiceClient as RetrieveClient;
-use retrieve::{FeatureGroup, Keys};
-use serde::Deserialize;
+use retrieve::{FeatureGroup, Keys, Result as RetrieveResult};
+use serde::{Deserialize, Serialize};
 
-// Constants to avoid repeated string allocations
-const SUCCESS_RESPONSE: &str = "success";
+// Response structure matching Go's response format
+#[derive(Serialize)]
+struct RetrieveFeaturesResponse {
+    status: String,
+    response: RetrieveResult,
+}
+
 // Request body structure for retrieve_features endpoint
 #[derive(Debug, Deserialize)]
 struct RetrieveFeaturesRequest {
@@ -138,7 +143,7 @@ async fn get_pprof_heap() -> Result<impl IntoResponse, (StatusCode, String)> {
 async fn retrieve_features(
     State(state): State<Arc<AppState>>,
     Json(request_body): Json<RetrieveFeaturesRequest>,
-) -> Result<Json<String>, StatusCode> {
+) -> Result<Json<RetrieveFeaturesResponse>, StatusCode> {
     // Convert request body to protobuf Query
     let mut feature_groups = Vec::new();
     for fg in request_body.feature_groups {
@@ -166,20 +171,15 @@ async fn retrieve_features(
     request.metadata_mut().insert("online-feature-store-auth-token", state.auth_token.clone());
     request.metadata_mut().insert("online-feature-store-caller-id", state.caller_id.clone());
 
-    // OPTIMIZATION: Drop response immediately after checking success to reduce cleanup overhead
-    // Based on flamegraph analysis: ~13-15% CPU was spent on drop_in_place for unused protobuf objects
-    // (drop_in_place<Result>, drop_in_place<Response>, drop_in_place<Vec<Row>>, etc.)
-    // By dropping explicitly in a smaller scope, we reduce the cleanup cost and memory pressure
     let result = state.client.clone().retrieve_features(request).await;
 
     match result {
         Ok(response) => {
-            // OPTIMIZATION: Drop response immediately - don't wait for end of function
-            // This reduces the time expensive drop operations hold resources
-            // The response contains large protobuf structures (Vec<Row>, Feature, etc.) that are expensive to clean up
-            // Since we don't use the response, dropping it immediately reduces memory pressure
-            drop(response);
-            Ok(Json(SUCCESS_RESPONSE.to_string()))
+            let result = response.into_inner();
+            Ok(Json(RetrieveFeaturesResponse {
+                status: "success".to_string(),
+                response: result,
+            }))
         }
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
@@ -191,7 +191,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // worker_threads = 0 means use all available CPU cores
     // This allows better CPU utilization for high RPS scenarios
 
-    println!("Connecting to feature store version 4...");
+    println!("Connecting to feature store version 8...");
 
     // Create a single gRPC channel
     let channel = Endpoint::from_static("http://online-feature-store-api.int.meesho.int:80")
