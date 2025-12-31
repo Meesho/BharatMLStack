@@ -70,16 +70,16 @@ func (s *AppState) handler(c *gin.Context) {
 		Keys:          keys,
 	}
 
-	resp, err := s.client.RetrieveFeatures(ctx, req)
+	_, err := s.client.RetrieveFeatures(ctx, req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "response": resp})
+	c.JSON(http.StatusOK, gin.H{"status": "success", "response": "resp"})
 }
 
 func main() {
-	log.Println("Starting go-caller with 4 threads version 5")
+	log.Println("Starting go-caller with 4 threads version 6")
 	gin.SetMode(gin.ReleaseMode)
 
 	conn, err := grpc.NewClient(
