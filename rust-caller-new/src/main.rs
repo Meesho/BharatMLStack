@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::time::Duration;
 // use tokio::sync::oneshot;  // Commented out - pprof related
 use tonic::{metadata::AsciiMetadataValue, transport::{Channel, Endpoint}};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 // Configure jemalloc with profiling enabled
 #[cfg(not(target_env = "msvc"))]
@@ -47,24 +46,9 @@ struct KeysRequest {
 //     Text(oneshot::Sender<Result<String, String>>),
 // }
 
-// Connection pool for gRPC clients to handle high concurrency
-// HTTP/2 has stream limits per connection, so multiple connections are needed for 3k+ RPS
-struct ClientPool {
-    clients: Vec<RetrieveClient<Channel>>,
-    counter: AtomicUsize,
-}
-
-impl ClientPool {
-    fn get_client(&self) -> RetrieveClient<Channel> {
-        // Round-robin selection to distribute load across connections
-        let idx = self.counter.fetch_add(1, Ordering::Relaxed) % self.clients.len();
-        self.clients[idx].clone()
-    }
-}
-
 #[derive(Clone)]
 struct AppState {
-    client_pool: Arc<ClientPool>,
+    client: RetrieveClient<Channel>,
     auth_token: AsciiMetadataValue,
     caller_id: AsciiMetadataValue,
     // report_tx: mpsc::Sender<ReportRequest>,  // Commented out - pprof related
@@ -182,15 +166,11 @@ async fn retrieve_features(
     request.metadata_mut().insert("online-feature-store-auth-token", state.auth_token.clone());
     request.metadata_mut().insert("online-feature-store-caller-id", state.caller_id.clone());
 
-    // OPTIMIZATION: Use connection pool to distribute load across multiple HTTP/2 connections
-    // This prevents hitting HTTP/2 stream limits on a single connection
-    let client = state.client_pool.get_client();
-
     // OPTIMIZATION: Drop response immediately after checking success to reduce cleanup overhead
     // Based on flamegraph analysis: ~13-15% CPU was spent on drop_in_place for unused protobuf objects
     // (drop_in_place<Result>, drop_in_place<Response>, drop_in_place<Vec<Row>>, etc.)
     // By dropping explicitly in a smaller scope, we reduce the cleanup cost and memory pressure
-    let result = client.clone().retrieve_features(request).await;
+    let result = state.client.clone().retrieve_features(request).await;
 
     match result {
         Ok(response) => {
@@ -213,40 +193,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Connecting to feature store version 4...");
 
-    // PERFORMANCE FIX: Create multiple gRPC channels for connection pooling
-    // HTTP/2 has stream limits (~100 concurrent streams per connection)
-    // For 3k+ RPS, we need multiple connections to avoid hitting these limits
-    // Using 10-20 connections should handle 3k-6k RPS comfortably
-    const CONNECTION_POOL_SIZE: usize = 16;
+    // Create a single gRPC channel
+    let channel = Endpoint::from_static("http://online-feature-store-api.int.meesho.int:80")
+        .timeout(Duration::from_secs(10))
+        // Optimized HTTP/2 settings for high concurrency
+        .http2_keep_alive_interval(Duration::from_secs(30))
+        .keep_alive_timeout(Duration::from_secs(10))
+        .keep_alive_while_idle(true)
+        .connect()
+        .await?;
 
-    let mut clients = Vec::with_capacity(CONNECTION_POOL_SIZE);
-
-    for i in 0..CONNECTION_POOL_SIZE {
-        let channel = Endpoint::from_static("http://online-feature-store-api.int.meesho.int:80")
-            .timeout(Duration::from_secs(10))
-            // Optimized HTTP/2 settings for high concurrency
-            .http2_keep_alive_interval(Duration::from_secs(30))
-            .keep_alive_timeout(Duration::from_secs(10))
-            .keep_alive_while_idle(true)
-            // Increase initial window size for better throughput
-            .initial_stream_window_size(Some(1024 * 1024 * 2)) // 2MB
-            .initial_connection_window_size(Some(1024 * 1024 * 4)) // 4MB
-            .connect()
-            .await?;
-
-        clients.push(RetrieveClient::new(channel));
-
-        if (i + 1) % 4 == 0 {
-            println!("Created {} gRPC connections...", i + 1);
-        }
-    }
-
-    println!("Created {} gRPC connections for connection pooling", CONNECTION_POOL_SIZE);
-
-    let client_pool = Arc::new(ClientPool {
-        clients,
-        counter: AtomicUsize::new(0),
-    });
+    let client = RetrieveClient::new(channel);
+    println!("Created gRPC connection");
 
     // Start profiling - guard must be kept alive for profiling to continue - COMMENTED OUT
     // Higher frequency = more samples = better resolution
@@ -312,7 +270,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }); */
 
     let state = Arc::new(AppState {
-        client_pool,
+        client,
         auth_token: AsciiMetadataValue::from_static("atishay"),
         caller_id: AsciiMetadataValue::from_static("test-3"),
         // report_tx,  // Commented out - pprof related
@@ -359,7 +317,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Server listening on 0.0.0.0:8080");
     println!("Configured for high performance:");
-    println!("  - {} gRPC connection pool (main bottleneck fix)", CONNECTION_POOL_SIZE);
+    println!("  - Single gRPC connection");
     println!("  - Tokio runtime using all CPU cores");
     println!("  - HTTP/2 window sizes optimized for throughput");
 
