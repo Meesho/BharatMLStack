@@ -70,7 +70,7 @@ async fn retrieve_features(
 
     let mut request = tonic::Request::new(query);
     // Increased timeout to 10s to handle high load scenarios without premature timeouts
-    request.set_timeout(Duration::from_secs(10));
+    request.set_timeout(Duration::from_secs(5));
     request.metadata_mut().insert("online-feature-store-auth-token", state.auth_token.clone());
     request.metadata_mut().insert("online-feature-store-caller-id", state.caller_id.clone());
 
