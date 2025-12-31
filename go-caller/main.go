@@ -79,7 +79,7 @@ func (s *AppState) handler(c *gin.Context) {
 }
 
 func main() {
-	log.Println("Starting go-caller with 4 threads version 4")
+	log.Println("Starting go-caller with 4 threads version 5")
 	gin.SetMode(gin.ReleaseMode)
 
 	conn, err := grpc.NewClient(
