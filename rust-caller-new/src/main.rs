@@ -92,7 +92,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .http2_keep_alive_interval(Duration::from_secs(30))
         .keep_alive_timeout(Duration::from_secs(10))
         .keep_alive_while_idle(true)
-        .concurrency_limit(4000)
         .connect()
         .await?;
 
