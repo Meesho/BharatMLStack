@@ -92,7 +92,7 @@ async fn retrieve_features(
     request.metadata_mut().insert("online-feature-store-caller-id", state.caller_id.clone());
 
     // Use round-robin client selection from connection pool
-    let client = state.get_client();
+    let mut client = state.get_client();
     let result = client.retrieve_features(request).await;
 
     match result {
