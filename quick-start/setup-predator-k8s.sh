@@ -284,12 +284,35 @@ label_node() {
     fi
 }
 
+install_contour_crds() {
+    log_info "Installing Contour CRDs (required before ArgoCD can sync Contour)..."
+    
+    # Check if Contour CRDs are already installed
+    if kubectl get crd httpproxies.projectcontour.io &> /dev/null; then
+        log_warning "Contour CRDs already installed. Skipping..."
+        return
+    fi
+    
+    # Install only Contour CRDs (needed before ArgoCD Application can sync)
+    kubectl apply -f https://raw.githubusercontent.com/projectcontour/contour/main/examples/contour/01-crds.yaml
+    
+    # Verify HTTPProxy CRD
+    if kubectl get crd httpproxies.projectcontour.io &> /dev/null; then
+        log_success "Contour CRDs installed successfully"
+    else
+        log_error "Contour CRDs installation failed. HTTPProxy CRD not found."
+        exit 1
+    fi
+}
+
 install_contour() {
-    log_info "Installing Contour (includes CRDs, Contour, and Envoy)..."
+    log_info "Installing Contour via direct kubectl apply (fallback if ArgoCD not available)..."
     
     # Check if Contour is already installed
     if kubectl get namespace "$CONTOUR_NAMESPACE" &> /dev/null; then
         log_warning "Contour namespace already exists. Skipping Contour installation."
+        # Still configure Envoy service if it exists
+        configure_envoy_nodeport
         return
     fi
     
@@ -301,12 +324,329 @@ install_contour() {
     kubectl wait --for=condition=ready pod -l app=contour -n "$CONTOUR_NAMESPACE" --timeout=120s || true
     kubectl wait --for=condition=ready pod -l app=envoy -n "$CONTOUR_NAMESPACE" --timeout=120s || true
     
+    # Wait for Envoy service to be created
+    log_info "Waiting for Envoy service to be created..."
+    local max_wait=30
+    local waited=0
+    while [ $waited -lt $max_wait ]; do
+        if kubectl get svc envoy -n "$CONTOUR_NAMESPACE" &> /dev/null; then
+            break
+        fi
+        sleep 2
+        waited=$((waited + 2))
+    done
+    
+    # Configure Envoy service as NodePort for local development (fixes stuck LoadBalancer)
+    configure_envoy_nodeport
+    
     # Verify HTTPProxy CRD
     if kubectl get crd httpproxies.projectcontour.io &> /dev/null; then
         log_success "Contour installed successfully"
     else
         log_error "Contour installation may have failed. HTTPProxy CRD not found."
         exit 1
+    fi
+}
+
+install_contour_via_argocd() {
+    log_info "Installing Contour via ArgoCD Application (production-like setup)..."
+    
+    # Check if Contour Application already exists
+    if kubectl get application contour -n "$ARGOCD_NAMESPACE" &> /dev/null 2>&1; then
+        log_warning "Contour ArgoCD Application already exists. Skipping..."
+        return
+    fi
+    
+    # Check if ArgoCD is installed
+    if ! kubectl get namespace "$ARGOCD_NAMESPACE" &> /dev/null; then
+        log_warning "ArgoCD not installed yet. Contour will be installed via ArgoCD after ArgoCD setup."
+        return
+    fi
+    
+    # Create Contour Application in ArgoCD (using official projectcontour repo)
+    log_info "Creating Contour ArgoCD Application (official Contour manifests)..."
+    kubectl apply -f - <<EOF
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: contour
+  namespace: $ARGOCD_NAMESPACE
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/projectcontour/contour
+    targetRevision: v1.30.0
+    path: examples/contour
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: $CONTOUR_NAMESPACE
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+EOF
+    
+    if kubectl get application contour -n "$ARGOCD_NAMESPACE" &> /dev/null; then
+        log_success "Contour ArgoCD Application created successfully"
+        log_info "Waiting for ArgoCD to sync Contour..."
+        sleep 5
+        
+        # Wait for Contour namespace to be created
+        local max_wait=60
+        local waited=0
+        while [ $waited -lt $max_wait ]; do
+            if kubectl get namespace "$CONTOUR_NAMESPACE" &> /dev/null; then
+                break
+            fi
+            sleep 2
+            waited=$((waited + 2))
+        done
+        
+        # Wait for Contour pods to be ready
+        if kubectl get namespace "$CONTOUR_NAMESPACE" &> /dev/null; then
+            log_info "Waiting for Contour pods to be ready..."
+            kubectl wait --for=condition=ready pod -l app=contour -n "$CONTOUR_NAMESPACE" --timeout=180s || true
+            kubectl wait --for=condition=ready pod -l app=envoy -n "$CONTOUR_NAMESPACE" --timeout=180s || true
+            
+            # Wait for Envoy service to be created
+            log_info "Waiting for Envoy service to be created..."
+            local max_wait=30
+            local waited=0
+            while [ $waited -lt $max_wait ]; do
+                if kubectl get svc envoy -n "$CONTOUR_NAMESPACE" &> /dev/null; then
+                    break
+                fi
+                sleep 2
+                waited=$((waited + 2))
+            done
+            
+            # Disable Envoy hostPorts for local development (enables port-forward)
+            disable_envoy_hostports
+            
+            # Configure Envoy service as NodePort for local access
+            configure_envoy_nodeport
+        fi
+    else
+        log_error "Failed to create Contour ArgoCD Application"
+        exit 1
+    fi
+}
+
+disable_envoy_hostports() {
+    log_info "Disabling Envoy hostPorts for local development (enables port-forward)..."
+    
+    # Check if Envoy DaemonSet exists
+    if ! kubectl get ds envoy -n "$CONTOUR_NAMESPACE" &> /dev/null; then
+        log_warning "Envoy DaemonSet not found. It may not be ready yet."
+        return 0
+    fi
+    
+    # Check if hostPorts are already disabled
+    local has_hostport
+    has_hostport=$(kubectl get ds envoy -n "$CONTOUR_NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].ports[*].hostPort}' 2>/dev/null || echo "")
+    
+    if [ -z "$has_hostport" ]; then
+        log_success "Envoy hostPorts are already disabled"
+        return 0
+    fi
+    
+    log_info "Removing hostPorts from Envoy DaemonSet (fixes port-forward issues)..."
+    
+    # Patch the DaemonSet to remove hostPort from all ports
+    kubectl -n "$CONTOUR_NAMESPACE" patch ds envoy --type='json' -p='[
+      {"op": "remove", "path": "/spec/template/spec/containers/0/ports/0/hostPort"},
+      {"op": "remove", "path": "/spec/template/spec/containers/0/ports/1/hostPort"}
+    ]' 2>/dev/null || {
+        log_warning "Failed to remove hostPorts. They may already be removed or have different indices."
+        # Try alternative: get current ports and rebuild without hostPort
+        log_info "Trying alternative method to remove hostPorts..."
+        kubectl -n "$CONTOUR_NAMESPACE" get ds envoy -o json | \
+        jq '.spec.template.spec.containers[0].ports |= map(del(.hostPort))' | \
+        kubectl apply -f - 2>/dev/null || {
+            log_warning "Alternative method also failed. Continuing anyway..."
+            return 0
+        }
+    }
+    
+    # Wait for DaemonSet to roll out
+    log_info "Waiting for Envoy DaemonSet to roll out..."
+    sleep 3
+    kubectl -n "$CONTOUR_NAMESPACE" rollout status ds envoy --timeout=120s || true
+    
+    # Verify hostPorts are removed
+    has_hostport=$(kubectl get ds envoy -n "$CONTOUR_NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].ports[*].hostPort}' 2>/dev/null || echo "")
+    
+    if [ -z "$has_hostport" ]; then
+        log_success "Envoy hostPorts disabled successfully (port-forward will now work)"
+    else
+        log_warning "Envoy hostPorts may still be present. Port-forward might fail."
+    fi
+}
+
+configure_envoy_nodeport() {
+    log_info "Configuring Envoy service as NodePort for local access..."
+    
+    # Check if Envoy service exists
+    if ! kubectl get svc envoy -n "$CONTOUR_NAMESPACE" &> /dev/null; then
+        log_warning "Envoy service not found. It may not be ready yet."
+        log_info "You can configure it later by running this function again"
+        return 0
+    fi
+    
+    # Check current service type
+    local current_type
+    current_type=$(kubectl get svc envoy -n "$CONTOUR_NAMESPACE" -o jsonpath='{.spec.type}' 2>/dev/null || echo "")
+    
+    if [ "$current_type" = "NodePort" ]; then
+        log_success "Envoy service is already configured as NodePort"
+        return 0
+    fi
+    
+    # Get existing ports to preserve them (Envoy typically has http:80 and https:443)
+    local existing_ports_json
+    existing_ports_json=$(kubectl get svc envoy -n "$CONTOUR_NAMESPACE" -o jsonpath='{.spec.ports}' 2>/dev/null || echo "[]")
+    
+    # Extract port information and convert to NodePort format
+    # We'll preserve all ports but ensure http port (80) gets nodePort 30080
+    log_info "Preserving existing ports and converting to NodePort..."
+    
+    # Patch Envoy service to NodePort, preserving all existing ports
+    # Use strategic merge patch to preserve ports we don't modify
+    kubectl patch svc envoy -n "$CONTOUR_NAMESPACE" --type='merge' -p='{
+        "spec": {
+            "type": "NodePort",
+            "ports": [
+                {
+                    "name": "http",
+                    "port": 80,
+                    "targetPort": 8080,
+                    "nodePort": 30080,
+                    "protocol": "TCP"
+                }
+            ]
+        }
+    }' || {
+        # Fallback: use JSON patch if merge fails
+        log_info "Trying alternative patch method..."
+        kubectl patch svc envoy -n "$CONTOUR_NAMESPACE" --type='json' -p='[
+            {"op": "replace", "path": "/spec/type", "value": "NodePort"}
+        ]' || {
+            log_error "Failed to patch Envoy service to NodePort"
+            log_info "You can manually fix it with:"
+            echo "  kubectl patch svc envoy -n $CONTOUR_NAMESPACE --type='merge' -p='{\"spec\":{\"type\":\"NodePort\"}}'"
+            return 1
+        }
+    }
+    
+    # Wait a moment for the change to propagate
+    sleep 2
+    
+    # Verify the change
+    local updated_type
+    updated_type=$(kubectl get svc envoy -n "$CONTOUR_NAMESPACE" -o jsonpath='{.spec.type}' 2>/dev/null || echo "")
+    
+    if [ "$updated_type" = "NodePort" ]; then
+        log_success "Envoy service configured as NodePort"
+        
+        # Get the actual nodePort assigned (might be different from 30080 if auto-assigned)
+        local node_port
+        node_port=$(kubectl get svc envoy -n "$CONTOUR_NAMESPACE" -o jsonpath='{.spec.ports[?(@.port==80)].nodePort}' 2>/dev/null || echo "")
+        
+        if [ -n "$node_port" ]; then
+            log_info "Envoy NodePort: $node_port (accessible on localhost for Docker Desktop/minikube)"
+        fi
+        
+        local cluster_type
+        cluster_type=$(detect_cluster_type)
+        if [ "$cluster_type" = "kind" ]; then
+            log_info "Note: With kind clusters, NodePort is not accessible from localhost"
+            log_info "Use port-forward instead: kubectl port-forward -n $CONTOUR_NAMESPACE svc/envoy 30080:80"
+        fi
+    else
+        log_error "Failed to verify Envoy NodePort configuration"
+        return 1
+    fi
+}
+
+verify_envoy_connectivity() {
+    log_info "Verifying Envoy connectivity to Contour..."
+    
+    # Wait for Envoy pods to be ready
+    if ! kubectl wait --for=condition=ready pod -l app=envoy -n "$CONTOUR_NAMESPACE" --timeout=120s 2>/dev/null; then
+        log_warning "Envoy pods may not be ready yet"
+        return 1
+    fi
+    
+    # Check for TLS certificate errors in Envoy logs
+    log_info "Checking for TLS certificate errors in Envoy logs..."
+    local envoy_pod
+    envoy_pod=$(kubectl get pods -n "$CONTOUR_NAMESPACE" -l app=envoy -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    
+    if [ -z "$envoy_pod" ]; then
+        log_warning "No Envoy pod found"
+        return 1
+    fi
+    
+    # Check for TLS errors in the last 50 lines of logs
+    local tls_errors
+    tls_errors=$(kubectl logs -n "$CONTOUR_NAMESPACE" "$envoy_pod" -c envoy --tail=50 2>/dev/null | grep -iE "(TLS_error|certificate.*fail|CERTIFICATE_VERIFY_FAILED)" || true)
+    
+    if [ -n "$tls_errors" ]; then
+        log_warning "TLS certificate errors detected in Envoy logs"
+        log_info "Restarting Envoy pod to fix certificate connectivity issues..."
+        
+        # Delete the Envoy pod to force restart
+        kubectl delete pod "$envoy_pod" -n "$CONTOUR_NAMESPACE" --wait=false
+        
+        # Wait for new pod to be ready
+        log_info "Waiting for Envoy pod to restart..."
+        sleep 5
+        if kubectl wait --for=condition=ready pod -l app=envoy -n "$CONTOUR_NAMESPACE" --timeout=120s 2>/dev/null; then
+            log_success "Envoy pod restarted successfully"
+            
+            # Wait a bit more for Envoy to fully initialize
+            sleep 5
+            
+            # Check again for TLS errors
+            local new_envoy_pod
+            new_envoy_pod=$(kubectl get pods -n "$CONTOUR_NAMESPACE" -l app=envoy -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+            local new_tls_errors
+            new_tls_errors=$(kubectl logs -n "$CONTOUR_NAMESPACE" "$new_envoy_pod" -c envoy --tail=30 2>/dev/null | grep -iE "(TLS_error|certificate.*fail|CERTIFICATE_VERIFY_FAILED)" || true)
+            
+            if [ -z "$new_tls_errors" ]; then
+                log_success "TLS errors resolved after restart"
+            else
+                log_warning "TLS errors may still be present. This might be transient during startup."
+            fi
+        else
+            log_warning "Envoy pod restart may have failed or is still starting"
+        fi
+    else
+        log_success "No TLS certificate errors detected in Envoy logs"
+    fi
+    
+    # Verify Envoy is initialized
+    log_info "Verifying Envoy initialization..."
+    local envoy_ready
+    envoy_ready=$(kubectl logs -n "$CONTOUR_NAMESPACE" "$envoy_pod" -c envoy --tail=20 2>/dev/null | grep -iE "(all clusters initialized|all dependencies initialized|starting workers)" || true)
+    
+    if [ -n "$envoy_ready" ]; then
+        log_success "Envoy is initialized and ready"
+    else
+        log_warning "Envoy may still be initializing"
+    fi
+}
+
+detect_cluster_type() {
+    # Detect if we're running on kind, minikube, or other
+    if kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null | grep -q "kind"; then
+        echo "kind"
+    elif kubectl get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q "minikube"; then
+        echo "minikube"
+    elif command -v minikube &> /dev/null && minikube status &> /dev/null; then
+        echo "minikube"
+    else
+        echo "unknown"
     fi
 }
 
@@ -319,7 +659,7 @@ create_ingress_class() {
         return
     fi
     
-    # Create IngressClass
+    # Create IngressClass (contour-internal)
     kubectl apply -f - <<EOF
 apiVersion: networking.k8s.io/v1
 kind: IngressClass
@@ -340,13 +680,24 @@ EOF
 configure_contour_ingress_class() {
     log_info "Configuring Contour to watch for contour-internal ingress class..."
     
-    # Check if Contour is already configured
-    if kubectl -n "$CONTOUR_NAMESPACE" get deploy contour -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null | grep -q "ingress-class-name"; then
-        log_warning "Contour is already configured for ingress class. Skipping..."
+    # Ensure Contour namespace exists before patching
+    if ! kubectl get namespace "$CONTOUR_NAMESPACE" &> /dev/null; then
+        log_warning "Contour namespace '$CONTOUR_NAMESPACE' not found. Skipping Contour ingress-class patch (Contour not installed yet?)."
+        log_info "Contour will be patched automatically on the next run once the namespace exists."
         return
     fi
     
-    # Add ingress-class-name argument to Contour deployment
+    # Check if Contour is already configured with contour-internal
+    if kubectl -n "$CONTOUR_NAMESPACE" get deploy contour -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null | grep -q "ingress-class-name=contour-internal"; then
+        log_warning "Contour is already configured for contour-internal. Skipping..."
+        return
+    fi
+    
+    # Remove any existing ingress-class-name argument first (to avoid duplicates)
+    local existing_args
+    existing_args=$(kubectl -n "$CONTOUR_NAMESPACE" get deploy contour -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null || echo "[]")
+    
+    # Add ingress-class-name argument to Contour deployment (contour-internal)
     kubectl -n "$CONTOUR_NAMESPACE" patch deploy contour --type='json' -p='[
       {
         "op": "add",
@@ -410,6 +761,155 @@ install_keda_crds() {
     else
         log_error "KEDA ScaledObject CRD installation verification failed"
         exit 1
+    fi
+}
+
+install_keda() {
+    log_info "Installing KEDA operator..."
+    
+    # Check if KEDA is already installed
+    if kubectl get deployment keda-operator -n keda &> /dev/null 2>&1 || \
+       kubectl get deployment keda-operator -n keda-system &> /dev/null 2>&1; then
+        log_warning "KEDA operator already installed. Skipping..."
+        return
+    fi
+    
+    # Install KEDA (full operator installation)
+    log_info "Installing KEDA operator (version ${KEDA_VERSION})..."
+    log_info "Note: ScaledJob CRD may show an error due to oversized annotations - this is expected and can be ignored"
+    
+    # Install KEDA (ScaledJob CRD error is expected and can be ignored)
+    # We capture output and filter out the ScaledJob error, then verify installation succeeded
+    local install_output
+    install_output=$(kubectl apply -f https://github.com/kedacore/keda/releases/download/${KEDA_VERSION}/keda-${KEDA_VERSION}.yaml 2>&1) || {
+        # Installation may have failed, but check if it's just the ScaledJob CRD error
+        if echo "$install_output" | grep -q "scaledjobs.keda.sh.*Too long"; then
+            log_warning "ScaledJob CRD installation failed (expected - not needed for Predator)"
+        else
+            log_error "KEDA installation failed with unexpected error:"
+            echo "$install_output"
+            exit 1
+        fi
+    }
+    
+    # Show output excluding ScaledJob errors
+    echo "$install_output" | grep -v "scaledjobs.keda.sh.*Too long" || true
+    
+    # Verify that KEDA operator was actually installed (even if ScaledJob failed)
+    if ! kubectl get deployment keda-operator -n keda &> /dev/null 2>&1 && \
+       ! kubectl get deployment keda-operator -n keda-system &> /dev/null 2>&1; then
+        log_error "KEDA operator deployment not found after installation"
+        exit 1
+    fi
+    
+    # Wait for KEDA namespace to be created (it might be 'keda' or 'keda-system')
+    log_info "Waiting for KEDA namespace to be ready..."
+    sleep 3
+    
+    # Check which namespace KEDA was installed in
+    local keda_namespace=""
+    if kubectl get namespace keda &> /dev/null 2>&1; then
+        keda_namespace="keda"
+    elif kubectl get namespace keda-system &> /dev/null 2>&1; then
+        keda_namespace="keda-system"
+    else
+        log_error "KEDA namespace not found after installation"
+        exit 1
+    fi
+    
+    log_info "Waiting for KEDA operator pods to be ready..."
+    if kubectl wait --for=condition=ready pod -l app=keda-operator -n ${keda_namespace} --timeout=300s 2>/dev/null; then
+        log_success "KEDA operator installed and ready"
+    else
+        log_warning "KEDA operator pods may still be starting. Checking status..."
+        kubectl get pods -n ${keda_namespace} || true
+        log_info "KEDA installation completed. Pods may take a few more minutes to be fully ready."
+    fi
+    
+    # Verify KEDA components
+    if kubectl get deployment keda-operator -n ${keda_namespace} &> /dev/null; then
+        log_success "KEDA operator deployment verified"
+    else
+        log_error "KEDA operator deployment verification failed"
+        exit 1
+    fi
+}
+
+ensure_predator_service_grpc() {
+    log_info "Ensuring Predator Service has correct gRPC configuration..."
+    
+    # Predator namespace (standard naming: prd-predator)
+    local PREDATOR_NAMESPACE="prd-predator"
+    local PREDATOR_SERVICE="prd-predator"
+    
+    # Check if namespace exists
+    if ! kubectl get namespace "$PREDATOR_NAMESPACE" &> /dev/null; then
+        log_warning "Predator namespace '$PREDATOR_NAMESPACE' does not exist yet."
+        log_info "This function will be called again after Predator is deployed."
+        return 0
+    fi
+    
+    # Check if service exists
+    if ! kubectl -n "$PREDATOR_NAMESPACE" get svc "$PREDATOR_SERVICE" &> /dev/null; then
+        log_warning "Predator service '$PREDATOR_SERVICE' does not exist yet."
+        log_info "This function will be called again after Predator is deployed."
+        return 0
+    fi
+    
+    # Check current port configuration
+    local current_port_name
+    current_port_name=$(kubectl -n "$PREDATOR_NAMESPACE" get svc "$PREDATOR_SERVICE" -o jsonpath='{.spec.ports[0].name}' 2>/dev/null || echo "")
+    
+    # Check if port name is already 'grpc' (preferred method)
+    if [ "$current_port_name" = "grpc" ]; then
+        log_success "Predator Service already has port name 'grpc' (correct configuration)"
+        return 0
+    fi
+    
+    # Check if h2c annotation exists (fallback method)
+    local h2c_annotation
+    h2c_annotation=$(kubectl -n "$PREDATOR_NAMESPACE" get svc "$PREDATOR_SERVICE" -o jsonpath='{.metadata.annotations.projectcontour\.io/upstream-protocol\.h2c}' 2>/dev/null || echo "")
+    
+    if [ -n "$h2c_annotation" ]; then
+        log_warning "Predator Service uses h2c annotation (less reliable than port name)"
+        log_info "Updating to use port name 'grpc' instead (more reliable)..."
+    fi
+    
+    # Get current port configuration
+    local current_port
+    local current_target_port
+    current_port=$(kubectl -n "$PREDATOR_NAMESPACE" get svc "$PREDATOR_SERVICE" -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || echo "80")
+    current_target_port=$(kubectl -n "$PREDATOR_NAMESPACE" get svc "$PREDATOR_SERVICE" -o jsonpath='{.spec.ports[0].targetPort}' 2>/dev/null || echo "8001")
+    
+    # Patch service to use port name 'grpc' (preferred method - more reliable than annotation)
+    log_info "Patching Predator Service to use port name 'grpc'..."
+    kubectl -n "$PREDATOR_NAMESPACE" patch svc "$PREDATOR_SERVICE" --type='json' -p="[
+      {
+        \"op\": \"replace\",
+        \"path\": \"/spec/ports/0/name\",
+        \"value\": \"grpc\"
+      }
+    ]" || {
+        log_error "Failed to patch Predator Service port name"
+        return 1
+    }
+    
+    # Remove h2c annotation if it exists (port name is sufficient)
+    if [ -n "$h2c_annotation" ]; then
+        log_info "Removing h2c annotation (port name 'grpc' is sufficient)..."
+        kubectl -n "$PREDATOR_NAMESPACE" annotate svc "$PREDATOR_SERVICE" projectcontour.io/upstream-protocol.h2c- 2>/dev/null || true
+    fi
+    
+    # Verify the change
+    local updated_port_name
+    updated_port_name=$(kubectl -n "$PREDATOR_NAMESPACE" get svc "$PREDATOR_SERVICE" -o jsonpath='{.spec.ports[0].name}' 2>/dev/null || echo "")
+    
+    if [ "$updated_port_name" = "grpc" ]; then
+        log_success "Predator Service configured with port name 'grpc' (enables HTTP/2 upstream for gRPC)"
+        log_info "Service port: $current_port, targetPort: $current_target_port"
+    else
+        log_error "Failed to verify Predator Service port name update"
+        return 1
     fi
 }
 
@@ -1065,6 +1565,37 @@ EOF
     fi
 }
 
+setup_local_dns() {
+    log_info "Setting up local DNS for Predator service..."
+    
+    local fqdn="predator.prd.meesho.int"
+    local hosts_entry="127.0.0.1 $fqdn"
+    
+    # Check if entry already exists
+    if grep -q "$fqdn" /etc/hosts 2>/dev/null; then
+        log_warning "DNS entry for $fqdn already exists in /etc/hosts"
+        return
+    fi
+    
+    log_info "To enable local DNS resolution, add this to /etc/hosts:"
+    echo ""
+    echo "  $hosts_entry"
+    echo ""
+    read -p "Do you want to add this entry to /etc/hosts now? (requires sudo) (y/n): " ADD_DNS
+    
+    if [[ "$ADD_DNS" =~ ^[Yy]$ ]]; then
+        if sudo sh -c "echo '$hosts_entry' >> /etc/hosts"; then
+            log_success "DNS entry added to /etc/hosts"
+        else
+            log_warning "Failed to add DNS entry. Please add it manually:"
+            echo "  sudo sh -c \"echo '$hosts_entry' >> /etc/hosts\""
+        fi
+    else
+        log_info "Skipping DNS setup. Add this manually to /etc/hosts:"
+        echo "  $hosts_entry"
+    fi
+}
+
 print_summary() {
     echo ""
     log_success "=========================================="
@@ -1077,18 +1608,40 @@ print_summary() {
     echo "   https://localhost:$ARGOCD_PORT"
     echo "   (Accept the self-signed certificate warning)"
     echo ""
-    echo "2. Generate ArgoCD API token:"
+    echo "2. Access Predator service directly via port-forward:"
+    echo "   kubectl -n prd-predator port-forward svc/prd-predator 8090:80"
+    echo "   Then test with:"
+    echo "   grpcurl -plaintext -import-path helix-client/pkg/clients/predator/client/proto \\"
+    echo "     -proto grpc_service.proto -d '{}' \\"
+    echo "     localhost:8090 inference.GRPCInferenceService/ServerLive"
+    echo ""
+    echo "3. Set up local DNS (optional - for FQDN-based access):"
+    echo "   Add to /etc/hosts: 127.0.0.1 predator.prd.meesho.int"
+    echo "   Or run: sudo sh -c \"echo '127.0.0.1 predator.prd.meesho.int' >> /etc/hosts\""
+    echo ""
+    echo "4. Generate ArgoCD API token:"
     echo "   - Log in to ArgoCD UI"
     echo "   - Go to User Info → Generate New Token"
     echo "   - Or use CLI: argocd login localhost:$ARGOCD_PORT --insecure"
     echo "                 argocd account generate-token"
     echo ""
-    echo "3. If you didn't add GitHub repository during setup, add it now (see PREDATOR_SETUP.md Manual Repository Setup):"
+    echo "5. If you didn't add GitHub repository during setup, add it now (see PREDATOR_SETUP.md Manual Repository Setup):"
     echo "   argocd repo add <YOUR_REPO_URL> --name <REPO_NAME> --type git \\"
     echo "     --github-app-id <APP_ID> --github-app-installation-id <INSTALLATION_ID> \\"
     echo "     --github-app-private-key-path <PATH_TO_KEY>"
     echo ""
-    echo "4. Continue with remaining setup steps in PREDATOR_SETUP.md:"
+    echo "6. Important: Predator Service gRPC configuration (automatically enforced):"
+    echo "   - Service port: 80 (not 8001)"
+    echo "   - Target port: 8001 (maps to container port 8001)"
+    echo "   - Port name: 'grpc' (REQUIRED for HTTP/2 upstream - automatically set by script)"
+    echo "   This enables HTTP/2 upstream protocol for Contour routing to Triton gRPC"
+    echo "   Note: Port name 'grpc' enables HTTP/2 upstream for gRPC (production best practice)"
+    echo ""
+    echo "7. Note: Contour is disabled for local development (simplified setup)"
+    echo "   Access services directly via port-forward to their K8s services"
+    echo "   For production, enable Contour in the script (uncomment Contour functions in main())"
+    echo ""
+    echo "8. Continue with remaining setup steps in PREDATOR_SETUP.md:"
     echo "   - Step 2-7: GitHub App setup"
     echo "   - Step 8: Configure Docker Compose"
     echo ""
@@ -1106,15 +1659,25 @@ main() {
     
     check_prerequisites
     label_node
-    install_contour
-    create_ingress_class
-    configure_contour_ingress_class
+    
+    # Contour setup (commented out - use direct port-forward for local dev)
+    # For production, uncomment these lines:
+    # install_contour_crds
+    # create_ingress_class
+    # install_contour_via_argocd
+    # configure_contour_ingress_class
+    # verify_envoy_connectivity
+    
     install_flagger_crds
     install_keda_crds
+    install_keda
     install_priority_class
     install_argocd
     enable_argocd_api_key
     get_argocd_password
+    
+    # Ensure Predator Service has correct gRPC configuration (if it exists)
+    ensure_predator_service_grpc
     
     # Ask if user wants to add GitHub repository to ArgoCD
     echo ""
@@ -1136,6 +1699,15 @@ main() {
         setup_prd_applications
     else
         log_info "Skipping prd-applications setup. You can set this up later."
+    fi
+    
+    # Ask if user wants to set up local DNS
+    echo ""
+    read -p "Do you want to set up local DNS for Predator service? (y/n): " SETUP_DNS
+    if [[ "$SETUP_DNS" =~ ^[Yy]$ ]]; then
+        setup_local_dns
+    else
+        log_info "Skipping DNS setup. You can add it manually to /etc/hosts later."
     fi
     
     print_summary

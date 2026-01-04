@@ -538,6 +538,26 @@ Check your GitHub repository:
 3. ArgoCD automatically detects the new application YAML and creates the ArgoCD Application
 4. The application is automatically synced, creating the namespace and deploying the service
 
+### 9.6 Access Your Deployed Application
+
+Once your application is deployed via ArgoCD, you can access it using one of these methods:
+
+#### Via Contour HTTPProxy (Production-like)
+
+If your application has an HTTPProxy configured (see Step 10 for details):
+
+```bash
+# Step 1: Port-forward Envoy service (Contour's ingress proxy)
+kubectl port-forward -n projectcontour svc/envoy 8090:80
+
+# Step 2: Get your HTTPProxy FQDN
+FQDN=$(kubectl get httpproxy -n prd-predator -o jsonpath='{.items[0].spec.virtualhost.fqdn}')
+echo "FQDN: $FQDN"
+
+# Step 3: Access with Host header
+curl -H "Host: $FQDN" http://localhost:8080/health
+```
+
 ---
 
 ## Troubleshooting
@@ -1053,430 +1073,117 @@ Once setup is complete, everything happens automatically via GitOps:
 
 ---
 
-## Step 10: Access Predator Service Through Contour HTTPProxy
+## Step 10: Access Predator Service Directly
 
-Once the HTTPProxy is created and Contour is running, you can access your Predator service through Contour's Envoy proxy.
+For local development, access services directly via port-forward (no Contour/Envoy needed).
 
-### 10.1 Check HTTPProxy Status
+### 10.1 Direct Access via Port Forward (Recommended for Local Development)
 
-```bash
-# List all HTTPProxies (find your namespace)
-kubectl get httpproxy -A
-
-# Check HTTPProxy status in your namespace
-kubectl get httpproxy -n <your-namespace>
-
-# Get HTTPProxy details including FQDN
-kubectl get httpproxy -n <your-namespace> <httpproxy-name> -o yaml | grep -A 5 "virtualhost:"
-
-# Get FQDN directly
-kubectl get httpproxy -n <your-namespace> <httpproxy-name> -o jsonpath='{.spec.virtualhost.fqdn}'
-```
-
-The HTTPProxy should show `Valid` status once Contour controller reconciles it.
-
-### 10.2 Access via Port Forward (Recommended for Local Development)
-
-For local development, especially with kind clusters, port-forward is the most reliable method:
-
-**Prerequisites:** Ensure Contour is installed (see Step 1.0)
+This is the simplest method for local development and works with all cluster types:
 
 ```bash
-# Step 1: Verify Contour is installed
-kubectl get namespace projectcontour
-kubectl get pods -n projectcontour
+# Step 1: Verify Predator is deployed and running
+kubectl get pods -n prd-predator
+kubectl get svc -n prd-predator
 
-# If namespace doesn't exist, install Contour first:
-kubectl apply -f https://projectcontour.io/quickstart/contour.yaml
+# Step 2: Port forward Predator service directly
+# Run this in a terminal and keep it running (pick any free local port, e.g., 8090):
+kubectl -n prd-predator port-forward svc/prd-predator 8090:80 &
 
-# Wait for Contour pods to be ready
-kubectl wait --for=condition=ready pod -l app=contour -n projectcontour --timeout=120s
-kubectl wait --for=condition=ready pod -l app=envoy -n projectcontour --timeout=120s
+# Step 3: Test gRPC access from your host machine
+# Predator exposes Triton gRPC on port 8001 (service port 80 -> targetPort 8001)
+grpcurl -plaintext \
+  -import-path helix-client/pkg/clients/predator/client/proto \
+  -proto grpc_service.proto \
+  -d '{}' \
+  localhost:8090 inference.GRPCInferenceService/ServerLive
 
-# Create IngressClass and configure Contour (see Step 1.0 for details)
-kubectl apply -f - <<EOF
-apiVersion: networking.k8s.io/v1
-kind: IngressClass
-metadata:
-  name: contour-internal
-spec:
-  controller: projectcontour.io/ingress-controller
-EOF
+# Test server readiness
+grpcurl -plaintext \
+  -import-path helix-client/pkg/clients/predator/client/proto \
+  -proto grpc_service.proto \
+  -d '{}' \
+  localhost:8090 inference.GRPCInferenceService/ServerReady
 
-# Configure Contour to watch for contour-internal
-# First check if the argument already exists
-if ! kubectl -n projectcontour get deploy contour -o jsonpath='{.spec.template.spec.containers[0].args}' | grep -q "ingress-class-name"; then
-  kubectl -n projectcontour patch deploy contour --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--ingress-class-name=contour-internal"}]'
-else
-  echo "Contour already configured for ingress class"
-fi
+# List available services
+grpcurl -plaintext \
+  -import-path helix-client/pkg/clients/predator/client/proto \
+  -proto grpc_service.proto \
+  localhost:8090 list
 
-# Restart Contour to apply changes
-kubectl -n projectcontour rollout restart deploy contour
-kubectl -n projectcontour rollout status deploy contour --timeout=120s
-
-# Verify the configuration (should show --ingress-class-name=contour-internal only once)
-kubectl -n projectcontour get deploy contour -o jsonpath='{.spec.template.spec.containers[0].args}' | grep ingress-class-name
-
-# Step 2: Port forward Envoy service (Contour's ingress proxy)
-# Run this in a terminal and keep it running, or run in background:
-# Format: kubectl port-forward -n projectcontour svc/envoy <LOCAL_PORT>:<SERVICE_PORT>
-# Envoy service exposes port 80 (HTTP) and 443 (HTTPS)
-
-# Option A: Use port 8080 (if available)
-kubectl port-forward -n projectcontour svc/envoy 8080:80
-
-
-# Step 2: Get your HTTPProxy FQDN
-# Automatically find the first HTTPProxy with an FQDN (works for most cases)
-FQDN=$(kubectl get httpproxy -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.spec.virtualhost.fqdn}{"\n"}{end}' | grep -v "^$" | awk '{print $3}' | head -1)
-echo "FQDN: $FQDN"
-
-# Alternative: List all HTTPProxies to find yours
-kubectl get httpproxy -A -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,FQDN:.spec.virtualhost.fqdn
-
-# Step 3: Access your service using the FQDN as Host header
-curl -H "Host: $FQDN" http://localhost:8080/
-
-# Example for health check (adjust path based on your service):
-curl -H "Host: $FQDN" http://localhost:8080/v2/self/health
-# or
-curl -H "Host: $FQDN" http://localhost:8080/self/health
-
-# Note: If you see "grpc-status" in the response, the endpoint is gRPC-only
-# Use a gRPC client (like grpcurl) instead of curl for gRPC endpoints
+# Note: Predator uses Triton gRPC (port 8001), not HTTP
+# HTTP health checks are on port 8000 (not exposed by default service port 80)
 ```
 
-### 10.3 Access via LoadBalancer or NodePort
+### 10.2 Access from Inferflow Container (Docker)
 
-**Check Envoy Service Configuration:**
+For inferflow running in Docker Compose to reach Predator in K8s via port-forward:
+
+**Step 1: Update inferflow configuration in docker-compose.yml**
+
+The `extra_hosts` section is already configured to map `predator.prd.meesho.int` to the host:
+
+```yaml
+inferflow:
+  extra_hosts:
+    - "predator.prd.meesho.int:host-gateway"  # Maps FQDN to host IP
+  environment:
+    - EXTERNAL_SERVICE_PREDATOR_PORT=8090  # Port-forward local port
+```
+
+**Step 2: Configure model endpoint in etcd**
+
+When creating a model in inferflow that uses Predator, set the `ModelEndpoint` to the FQDN:
+
+```json
+{
+  "model_name": "your-model",
+  "components": [{
+    "type": "predator",
+    "config": {
+      "ModelEndpoint": "predator.prd.meesho.int"
+    }
+  }]
+}
+```
+
+**Step 3: Start port-forward before starting inferflow**
 
 ```bash
-# Check Envoy service type and status
-kubectl get svc -n projectcontour envoy
+# Start port-forward
+kubectl -n prd-predator port-forward svc/prd-predator 8090:80 &
 
-# You'll see one of:
-# - LoadBalancer with EXTERNAL-IP (cloud clusters)
-# - LoadBalancer with <pending> (local clusters - use NodePort or port-forward)
-# - NodePort with assigned port (if configured)
+# Start inferflow (it will connect to predator.prd.meesho.int:8090 -> host -> K8s service)
+docker-compose up inferflow
 ```
 
-**For Local Clusters (kind/minikube/Docker Desktop):**
+**How it works:**
+- Port-forward: `localhost:8090` → K8s service `prd-predator:80` → pod `8001`
+- Docker `extra_hosts`: `predator.prd.meesho.int` → host IP
+- Inferflow connects to: `predator.prd.meesho.int:8090` → reaches host's `localhost:8090` → K8s Predator gRPC
 
-Local clusters typically show `<pending>` for LoadBalancer. Use one of these methods:
+**For Linux hosts:** `host-gateway` may not work on older Docker versions. Use:
+```yaml
+extra_hosts:
+  - "predator.prd.meesho.int:172.17.0.1"  # Docker bridge IP
+```
 
-**Option A: Port Forward (Recommended - Simplest)**
+### 10.2 Access Multiple Services (Optional)
+
+For accessing multiple deployables, you can either:
+
+**Multiple Port-Forwards (Simple)**
 
 ```bash
-# Port forward Envoy service to localhost
-kubectl port-forward -n projectcontour svc/envoy 8080:80
+# Start port-forwards for each service on different local ports
+kubectl -n prd-predator port-forward svc/prd-predator 8090:80 &
+kubectl -n prd-service2 port-forward svc/prd-service2 8091:80 &
+kubectl -n prd-service3 port-forward svc/prd-service3 8092:80 &
 
-# In another terminal, access your service with Host header
-curl -H "Host: predator-test.prd.meesho.int" http://localhost:8080/self/health
-
-# Or for other endpoints:
-curl -H "Host: predator-test.prd.meesho.int" http://localhost:8080/
+# Access each on its dedicated port
+grpcurl -plaintext -d '{}' localhost:8090 inference.GRPCInferenceService/ServerLive
+grpcurl -plaintext -d '{}' localhost:8091 some.Service/Method
 ```
-
-**Option B: Use NodePort (If Available)**
-
-NodePort is automatically assigned when using LoadBalancer type in local clusters. Access methods vary by cluster type:
-
-```bash
-# Get the NodePort assigned to Envoy
-NODEPORT=$(kubectl get svc -n projectcontour envoy -o jsonpath='{.spec.ports[?(@.port==80)].nodePort}')
-echo "NodePort: $NODEPORT"
-
-# Get your HTTPProxy FQDN
-FQDN=$(kubectl get httpproxy -n prd-predator-test prd-predator-test -o jsonpath='{.spec.virtualhost.fqdn}' 2>/dev/null || echo "predator-test.prd.meesho.int")
-echo "FQDN: $FQDN"
-```
-
-**For kind clusters:**
-
-⚠️ **Important:** kind does NOT automatically expose NodePort on localhost. NodePort access will fail with "Empty reply from server" or connection errors.
-
-**✅ Use Port-Forward (Recommended and Only Working Method for kind)**
-
-This is the ONLY reliable method for kind clusters. NodePort will NOT work on localhost.
-
-```bash
-# Step 1: Port forward Envoy service to localhost (run in background or separate terminal)
-kubectl port-forward -n projectcontour svc/envoy 8080:80
-
-# Step 2: Get your HTTPProxy FQDN
-# Automatically get the first HTTPProxy FQDN (works for most cases)
-FQDN=$(kubectl get httpproxy -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.spec.virtualhost.fqdn}{"\n"}{end}' | grep -v "^$" | awk '{print $3}' | head -1)
-echo "Using FQDN: $FQDN"
-
-# Alternative: List all HTTPProxies to find yours
-kubectl get httpproxy -A -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,FQDN:.spec.virtualhost.fqdn
-
-# Step 3: Access your service with Host header
-# Replace 8080 with your actual local port if you used a different one
-LOCAL_PORT=8080  # Change to 8081, 9090, etc. if 8080 is in use
-
-# For HTTP endpoints:
-curl -H "Host: $FQDN" http://localhost:$LOCAL_PORT/
-
-# For health check (adjust path based on your service):
-curl -H "Host: $FQDN" http://localhost:$LOCAL_PORT/v2/self/health
-# or
-curl -H "Host: $FQDN" http://localhost:$LOCAL_PORT/self/health
-
-# Note: If you get "grpc-status: 2" or "Bad method header", the endpoint might be gRPC-only
-# Use a gRPC client instead of curl for gRPC endpoints
-```
-
-**Why NodePort Doesn't Work on kind:**
-
-When you try to access NodePort on kind:
-```bash
-NODEPORT=$(kubectl get svc -n projectcontour envoy -o jsonpath='{.spec.ports[?(@.port==80)].nodePort}')
-curl -H "Host: $FQDN" http://localhost:$NODEPORT/v2/self/health
-# Result: curl: (52) Empty reply from server
-```
-
-This happens because:
-- kind runs nodes in Docker containers
-- NodePort services are only accessible from within the Docker network
-- localhost doesn't have access to the kind node's network namespace
-- Port-forward creates a tunnel that bridges this gap
-
-**Solution: Always use port-forward for kind clusters**
-
-**Alternative: Configure kind with Port Mapping (Not Recommended for Existing Clusters)**
-
-If you really need NodePort access, you must recreate your kind cluster with port mapping:
-
-```bash
-# Create kind cluster with port mapping (example)
-cat <<EOF | kind create cluster --config=-
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-nodes:
-- role: control-plane
-  extraPortMappings:
-  - containerPort: 32558  # Your NodePort (must match exactly)
-    hostPort: 32558
-    protocol: TCP
-EOF
-
-# Then access via localhost
-curl -H "Host: $FQDN" http://localhost:32558/v2/self/health
-```
-
-**⚠️ Warning:** This requires:
-- Destroying your existing cluster
-- Recreating all resources (ArgoCD, Contour, applications, etc.)
-- Reconfiguring everything
-
-**Recommendation:** Use port-forward instead - it's simpler and works immediately without cluster recreation.
-
-**For minikube:**
-
-```bash
-# Method 1: Use minikube service command (automatically sets up tunnel)
-minikube service -n projectcontour envoy --url
-# This will output a URL like: http://192.168.49.2:32558
-# Use it with Host header:
-curl -H "Host: $FQDN" http://192.168.49.2:$NODEPORT/self/health
-
-# Method 2: Get minikube IP and use NodePort directly
-MINIKUBE_IP=$(minikube ip)
-curl -H "Host: $FQDN" http://$MINIKUBE_IP:$NODEPORT/self/health
-```
-
-**For Docker Desktop Kubernetes:**
-
-```bash
-# Docker Desktop exposes NodePort on localhost
-curl -H "Host: $FQDN" http://localhost:$NODEPORT/self/health
-```
-
-**Note:** NodePort access may require firewall rules or port forwarding depending on your setup. Port-forward (Option A) is more reliable for local development.
-
-**For Cloud Clusters (GKE/EKS/AKS) with LoadBalancer:**
-
-```bash
-# Wait for external IP to be assigned (may take 1-2 minutes)
-kubectl wait --for=condition=ready svc/envoy -n projectcontour --timeout=5m
-
-# Get the external IP
-EXTERNAL_IP=$(kubectl get svc -n projectcontour envoy -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-# Or for hostname-based load balancers:
-# EXTERNAL_IP=$(kubectl get svc -n projectcontour envoy -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-
-echo "External IP: $EXTERNAL_IP"
-
-# Access using the external IP with Host header
-curl -H "Host: predator-test.prd.meesho.int" http://$EXTERNAL_IP/self/health
-
-# Example for other endpoints:
-curl -H "Host: predator-test.prd.meesho.int" http://$EXTERNAL_IP/
-```
-
-**Quick Test Command:**
-
-```bash
-# Get your HTTPProxy FQDN
-FQDN=$(kubectl get httpproxy -n prd-predator-test prd-predator-test -o jsonpath='{.spec.virtualhost.fqdn}')
-echo "FQDN: $FQDN"
-
-# Test with port-forward (if using local cluster)
-kubectl port-forward -n projectcontour svc/envoy 8080:80 &
-sleep 2
-curl -H "Host: $FQDN" http://localhost:8080/self/health
-kill %1 2>/dev/null || true
-```
-
-**Summary for Local Clusters:**
-
-| Cluster Type | Recommended Method | NodePort Access |
-|-------------|-------------------|-----------------|
-| **kind** | Port-forward (Option A) | ❌ Not available on localhost (requires cluster recreation with port mapping) |
-| **minikube** | `minikube service` or port-forward | ✅ Available via `minikube service` or minikube IP |
-| **Docker Desktop** | Port-forward or NodePort | ✅ Available on localhost |
-
-**Important Notes:**
-- For local development, **port-forward (Option A) is the simplest and most reliable method** for all cluster types
-- LoadBalancer services in local clusters (kind/minikube) often show `<pending>` status indefinitely
-- The Host header **must match** the FQDN in your HTTPProxy's `virtualhost.fqdn`
-- You can verify your FQDN with: `kubectl get httpproxy -n <namespace> <name> -o jsonpath='{.spec.virtualhost.fqdn}'`
-- For kind clusters, NodePort is NOT accessible on localhost unless you configure port mapping during cluster creation
-
-### 10.4 Access via /etc/hosts (Alternative for Local Testing)
-
-For easier local testing without Host headers:
-
-```bash
-# Add to /etc/hosts (replace <EXTERNAL-IP> with Envoy external IP or use 127.0.0.1 if port-forwarding)
-echo "127.0.0.1 predator-test.prd.meesho.int" | sudo tee -a /etc/hosts
-
-# Then access directly (if using port-forward on port 8080)
-curl http://predator-test.prd.meesho.int:8080/
-```
-
-### 10.5 Verify Service is Accessible
-
-```bash
-# Check if the service is running
-kubectl get pods -n prd-predator-test
-
-# Check service endpoints
-kubectl get endpoints -n prd-predator-test
-
-# Test a health check endpoint (if available)
-curl -H "Host: predator-test.prd.meesho.int" http://localhost:8080/health
-```
-
-### 10.6 Troubleshooting HTTPProxy Access
-
-**Issue: HTTPProxy shows "NotReconciled" or "Invalid" status**
-
-```bash
-# Check Contour controller logs
-kubectl logs -n projectcontour -l app=contour | tail -50
-
-# Check HTTPProxy status details
-kubectl describe httpproxy -n prd-predator-test
-
-# Verify the service exists and has endpoints
-kubectl get svc -n prd-predator-test
-kubectl get endpoints -n prd-predator-test
-```
-
-**Issue: 404 Not Found when accessing**
-
-- Verify the FQDN matches what's in HTTPProxy: `kubectl get httpproxy -n prd-predator-test -o yaml | grep fqdn`
-- Ensure you're using the correct Host header
-- Check that the service name in HTTPProxy matches your actual service: `kubectl get svc -n prd-predator-test`
-
-**Issue: Connection refused**
-
-- Ensure Envoy is running: `kubectl get pods -n projectcontour -l app=envoy`
-- Check Envoy logs: `kubectl logs -n projectcontour -l app=envoy | tail -50`
-
-**Issue: Port 8080 Already in Use**
-
-If you get `bind: address already in use` when trying to port-forward:
-
-```bash
-# Find what's using port 8080
-lsof -i :8080
-
-# Use a different local port (8081, 9090, 8888, etc.)
-kubectl port-forward -n projectcontour svc/envoy 8081:80
-
-# Then access using the new port
-curl -H "Host: $FQDN" http://localhost:8081/
-```
-
-**Note:** The Envoy service exposes port 80 (HTTP) and 443 (HTTPS). Always use `:80` as the service port in port-forward commands.
-
-**Issue: HTTPProxy Shows "NotReconciled" / "Waiting for controller" Status**
-
-This is the most common issue with HTTPProxy. The root cause is usually that Contour is not configured to watch for your specific ingress class. To resolve:
-
-1. **Most Common Cause: Contour Not Configured for Your Ingress Class**
-
-   If your HTTPProxy uses `ingressClassName: contour-internal`, Contour must be configured to watch for that class:
-   
-   ```bash
-   # Check if Contour is configured for your ingress class
-   kubectl -n projectcontour get deploy contour -o yaml | grep ingress-class-name
-   
-   # If nothing is returned, Contour is not watching for contour-internal
-   # Configure Contour to watch for contour-internal:
-   kubectl -n projectcontour patch deploy contour --type='json' -p='[
-     {
-       "op": "add",
-       "path": "/spec/template/spec/containers/0/args/-",
-       "value": "--ingress-class-name=contour-internal"
-     }
-   ]'
-   
-   # Restart Contour
-   kubectl -n projectcontour rollout restart deploy contour
-   kubectl -n projectcontour rollout status deploy contour
-   
-   # Verify HTTPProxy status (should change to "valid" after a few seconds)
-   kubectl get httpproxy -n prd-predator-test-2
-   ```
-
-2. **Verify Contour CRD is installed:**
-   ```bash
-   kubectl get crd httpproxies.projectcontour.io
-   ```
-
-3. **Verify IngressClass exists:**
-   ```bash
-   kubectl get ingressclass contour-internal
-   # If missing, create it:
-   kubectl apply -f - <<EOF
-   apiVersion: networking.k8s.io/v1
-   kind: IngressClass
-   metadata:
-     name: contour-internal
-   spec:
-     controller: projectcontour.io/ingress-controller
-   EOF
-   ```
-
-4. **Verify HTTPProxy has virtualhost.fqdn:**
-   ```bash
-   kubectl get httpproxy -n prd-predator-test -o yaml | grep -A 3 "virtualhost:"
-   # If missing, add it:
-   kubectl patch httpproxy -n prd-predator-test prd-predator-test --type=merge -p '{"spec":{"virtualhost":{"fqdn":"predator-test.prd.meesho.int"}}}'
-   ```
-
-5. **Check Contour controller is running:**
-   ```bash
-   kubectl get pods -n projectcontour -l app=contour
-   ```
-
-**Note:** After configuring Contour with `--ingress-class-name=contour-internal`, HTTPProxy status should change from "NotReconciled" to "valid" within a few seconds.
-
 ---
 
 ## Next Steps

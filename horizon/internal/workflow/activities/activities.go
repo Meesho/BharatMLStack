@@ -1281,7 +1281,8 @@ func IamBinding(payload map[string]interface{}, workingEnv string) error {
 		Namespace:      namespace,
 		KSAName:        ksaName,
 	}
-
+	
+	if serviceAccount!="NA" {
 	// Create service account service and bind
 	gcpService := gcp.NewServiceAccountService(serviceAccountConfig)
 	ctx := context.Background()
@@ -1294,6 +1295,7 @@ func IamBinding(payload map[string]interface{}, workingEnv string) error {
 			Msg("IamBinding: Failed to bind service account")
 		return fmt.Errorf("failed to bind service account: %w", err)
 	}
+}
 
 	log.Info().
 		Str("appName", appName).

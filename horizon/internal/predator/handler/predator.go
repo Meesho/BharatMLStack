@@ -1167,16 +1167,19 @@ func (p *Predator) processGCSCloneStage(requestIdPayloadMap map[uint]*Payload, p
 
 			srcBucket, srcPath, srcModelName := extractGCSDetails(requestIdPayloadMap[requestModel.RequestID].ModelSource)
 			destBucket, destPath := extractGCSPath(strings.TrimSuffix(deployableConfig.GCSBucketPath, "/*"))
-			log.Info().Msgf("srcBucket: %s, srcPath: %s, srcModelName: %s, destBucket: %s, destPath: %s", srcBucket, srcPath, srcModelName, destBucket, destPath)
-			if srcBucket == constant.EmptyString || srcPath == constant.EmptyString || srcModelName == constant.EmptyString || destBucket == constant.EmptyString || destPath == constant.EmptyString || requestIdPayloadMap[requestModel.RequestID].ModelName == constant.EmptyString {
-				log.Error().Err(errors.New(errModelPathFormat)).Msg(errInvalidGcsBucketPath)
-				return transferredGcsModelData, errors.New(errModelPathFormat)
-			}
 
-			if err := p.GcsClient.TransferFolder(srcBucket, srcPath, srcModelName, destBucket, destPath,
-				requestIdPayloadMap[requestModel.RequestID].ModelName); err != nil {
-				log.Error().Err(err).Msg(errGCSCopyFailed)
-				return transferredGcsModelData, err
+			if deployableConfig.GCSBucketPath != "NA" {
+				log.Info().Msgf("srcBucket: %s, srcPath: %s, srcModelName: %s, destBucket: %s, destPath: %s", srcBucket, srcPath, srcModelName, destBucket, destPath)
+				if srcBucket == constant.EmptyString || srcPath == constant.EmptyString || srcModelName == constant.EmptyString || destBucket == constant.EmptyString || destPath == constant.EmptyString || requestIdPayloadMap[requestModel.RequestID].ModelName == constant.EmptyString {
+					log.Error().Err(errors.New(errModelPathFormat)).Msg(errInvalidGcsBucketPath)
+					return transferredGcsModelData, errors.New(errModelPathFormat)
+				}
+
+				if err := p.GcsClient.TransferFolder(srcBucket, srcPath, srcModelName, destBucket, destPath,
+					requestIdPayloadMap[requestModel.RequestID].ModelName); err != nil {
+					log.Error().Err(err).Msg(errGCSCopyFailed)
+					return transferredGcsModelData, err
+				}
 			}
 
 			transferredGcsModelData = append(transferredGcsModelData, GcsModelData{
@@ -2136,13 +2139,15 @@ func (p *Predator) clearTemporaryDeployable(testDeployableID int) error {
 		return fmt.Errorf("failed to parse temporary deployable config: %w", err)
 	}
 
-	// Extract bucket and path from temporary deployable config
-	tempBucket, tempPath := extractGCSPath(strings.TrimSuffix(tempDeployableConfig.GCSBucketPath, "/*"))
+	if tempDeployableConfig.GCSBucketPath != "NA" {
+		// Extract bucket and path from temporary deployable config
+		tempBucket, tempPath := extractGCSPath(strings.TrimSuffix(tempDeployableConfig.GCSBucketPath, "/*"))
 
-	// Clear all models from temporary deployable
-	log.Info().Msgf("Clearing temporary deployable GCS path: gs://%s/%s", tempBucket, tempPath)
-	if err := p.GcsClient.DeleteFolder(tempBucket, tempPath, ""); err != nil {
-		return fmt.Errorf("failed to clear temporary deployable GCS path: %w", err)
+		// Clear all models from temporary deployable
+		log.Info().Msgf("Clearing temporary deployable GCS path: gs://%s/%s", tempBucket, tempPath)
+		if err := p.GcsClient.DeleteFolder(tempBucket, tempPath, ""); err != nil {
+			return fmt.Errorf("failed to clear temporary deployable GCS path: %w", err)
+		}
 	}
 
 	return nil
@@ -2172,12 +2177,16 @@ func (p *Predator) copyExistingModelsToTemporary(targetDeployableID, tempDeploya
 		return fmt.Errorf("failed to parse temporary deployable config: %w", err)
 	}
 
-	// Extract GCS paths
-	targetBucket, targetPath := extractGCSPath(strings.TrimSuffix(targetDeployableConfig.GCSBucketPath, "/*"))
-	tempBucket, tempPath := extractGCSPath(strings.TrimSuffix(tempDeployableConfig.GCSBucketPath, "/*"))
+	if targetDeployableConfig.GCSBucketPath != "NA" {
+		// Extract GCS paths
+		targetBucket, targetPath := extractGCSPath(strings.TrimSuffix(targetDeployableConfig.GCSBucketPath, "/*"))
+		tempBucket, tempPath := extractGCSPath(strings.TrimSuffix(tempDeployableConfig.GCSBucketPath, "/*"))
 
-	// Copy all existing models from target to temporary deployable
-	return p.copyAllModelsFromActualToStaging(targetBucket, targetPath, tempBucket, tempPath)
+		// Copy all existing models from target to temporary deployable
+		return p.copyAllModelsFromActualToStaging(targetBucket, targetPath, tempBucket, tempPath)
+	} else {
+		return nil
+	}
 }
 
 // copyRequestModelsToTemporary copies the requested models to temporary deployable
@@ -2193,19 +2202,21 @@ func (p *Predator) copyRequestModelsToTemporary(requests []predatorrequest.Preda
 		return fmt.Errorf("failed to parse temporary deployable config: %w", err)
 	}
 
-	tempBucket, tempPath := extractGCSPath(strings.TrimSuffix(tempDeployableConfig.GCSBucketPath, "/*"))
+	if tempDeployableConfig.GCSBucketPath != "NA" {
+		tempBucket, tempPath := extractGCSPath(strings.TrimSuffix(tempDeployableConfig.GCSBucketPath, "/*"))
 
-	// Copy each requested model from default GCS location to temporary deployable
-	for _, request := range requests {
-		modelName := request.ModelName
-		sourceBucket := pred.GcsModelBucket
-		sourcePath := pred.GcsModelBasePath
+		// Copy each requested model from default GCS location to temporary deployable
+		for _, request := range requests {
+			modelName := request.ModelName
+			sourceBucket := pred.GcsModelBucket
+			sourcePath := pred.GcsModelBasePath
 
-		log.Info().Msgf("Copying requested model %s from gs://%s/%s to temporary deployable gs://%s/%s",
-			modelName, sourceBucket, sourcePath, tempBucket, tempPath)
+			log.Info().Msgf("Copying requested model %s from gs://%s/%s to temporary deployable gs://%s/%s",
+				modelName, sourceBucket, sourcePath, tempBucket, tempPath)
 
-		if err := p.GcsClient.TransferFolder(sourceBucket, sourcePath, modelName, tempBucket, tempPath, modelName); err != nil {
-			return fmt.Errorf("failed to copy requested model %s to temporary deployable: %w", modelName, err)
+			if err := p.GcsClient.TransferFolder(sourceBucket, sourcePath, modelName, tempBucket, tempPath, modelName); err != nil {
+				return fmt.Errorf("failed to copy requested model %s to temporary deployable: %w", modelName, err)
+			}
 		}
 	}
 
