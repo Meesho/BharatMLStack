@@ -1,0 +1,74 @@
+app:
+  env: stg
+  log:
+    level: ERROR
+  metric:
+    sampling:
+      rate: 100
+  name: interaction-store
+mq:
+  api:
+    auth:
+      token: ${MQ_API_AUTH_TOKEN}
+  batch:
+    size: 20
+  cache:
+    refresh:
+      initial: 60
+      schedule: 10000
+  consumer:
+    enabled: true
+    version: 1
+  enabled: true
+  env: STAGING
+  flush:
+    interval:
+      millis: 1000
+  keep:
+    alive:
+      duration: 50000
+  max:
+    idle:
+      connections: 50000
+  open:
+    circuit:
+      duration: 10000
+  producer:
+    enabled: false
+    version: 1
+  queue:
+    size:
+      log:
+        delay:
+          seconds: 60
+  server:
+    api:
+      url: mq-server.stg.meesho.int
+    connection:
+      timeouts: 10000
+port: 8080
+profiling:
+  enabled: true
+  port: 8000
+click:
+  consumer:
+    mq:
+      id: 
+order:
+  consumer:
+    mq:
+      id: 
+storage:
+  scylla:
+    contact:
+      points: scyl-dev-sandbox.stg.meesho.int
+    keyspace: interaction_store_test
+    num:
+      conns: 1
+    port: 9042
+    timeout:
+      in:
+        ms: 300
+
+---
+deployable-name: interaction-store-timeseries-consumer

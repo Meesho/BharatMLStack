@@ -1,0 +1,92 @@
+syntax = "proto3";
+package proto;
+
+option go_package = "github.com/Meesho/interaction-store/pkg/proto/timeseries";
+
+enum InteractionTypeProto {
+  CLICK = 0;
+  ORDER = 1;
+}
+
+message PersistClickDataRequest {
+    string user_id = 1;
+    repeated ClickData data = 2;
+}
+
+message ClickData {
+    int32 catalog_id = 1;
+    int32 product_id = 2;
+    int64 timestamp = 3;
+}
+
+message PersistOrderDataRequest {
+    string user_id = 1;
+    repeated OrderData data = 2;
+}
+
+message OrderData {
+    int32 catalog_id = 1;
+    int32 product_id = 2;
+    string sub_order_num = 3;
+    int64 timestamp = 4;
+}
+
+message PersistDataResponse {
+    string message = 1;
+}
+
+message RetrieveDataRequest {
+    string user_id = 1;
+    InteractionTypeProto interaction_type = 2;
+    int64 start_timestamp = 3;
+    int64 end_timestamp = 4;
+    int32 limit = 5;
+}
+
+message RetrieveInteractionsRequest {
+    string user_id = 1;
+    repeated InteractionTypeProto interaction_types = 2;
+    int64 start_timestamp = 3;
+    int64 end_timestamp = 4;
+    int32 limit = 5;
+}
+
+message RetrieveInteractionsResponse {
+    map<string, InteractionData> data = 1; 
+}
+
+message InteractionData {
+    repeated ClickEvent click_events = 1;
+    repeated OrderEvent order_events = 2;
+}
+
+message RetrieveClickDataResponse {
+    repeated ClickEvent data = 1;
+}
+
+message ClickEvent {
+    string user_id = 1;
+    int32 catalog_id = 2;
+    int32 product_id = 3;
+    int64 timestamp = 4;
+}
+
+message RetrieveOrderDataResponse {
+    repeated OrderEvent data = 1;
+}
+
+message OrderEvent {
+    string user_id = 1;
+    int32 catalog_id = 2;
+    int32 product_id = 3;
+    string sub_order_num = 4;
+    int64 timestamp = 5;
+}
+
+service TimeSeriesService {
+    rpc PersistClickData(PersistClickDataRequest) returns (PersistDataResponse) {};
+    rpc PersistOrderData(PersistOrderDataRequest) returns (PersistDataResponse) {};
+    rpc RetrieveClickInteractions(RetrieveDataRequest) returns (RetrieveClickDataResponse) {};
+    rpc RetrieveOrderInteractions(RetrieveDataRequest) returns (RetrieveOrderDataResponse) {};
+    rpc RetrieveInteractions(RetrieveInteractionsRequest) returns (RetrieveInteractionsResponse) {};
+}
