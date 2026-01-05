@@ -484,7 +484,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   ) VALUES (
       3019,
       'inferflow',
-      'inferflow.int.meesho.int',
+      'inferflow:8085',
       'inferflow',
       1,
       'admin@admin.com',
@@ -699,6 +699,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   ('admin', 'inferflow', 'inferflow-config-approval', 'reject'),
   ('admin', 'inferflow', 'inferflow-config-approval', 'cancel'),
   ('admin', 'inferflow', 'inferflow-config-approval', 'view'),
+  ('admin', 'inferflow', 'inferflow-config-approval', 'review'),
 
   -- Numerix permissions 
   ('admin', 'numerix', 'numerix-config-approval', 'view'),

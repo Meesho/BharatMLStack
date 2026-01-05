@@ -396,8 +396,8 @@ services:
       # Mounts host's gcloud credentials for ADC authentication
       # Container runs as non-root user (nonroot), so mount to /home/nonroot/.config/gcloud
       - CLOUDSDK_CONFIG=/home/nonroot/.config/gcloud
-      - TEST_DEPLOYABLE_ID=3021
-      - TEST_GPU_DEPLOYABLE_ID=3021
+      - TEST_DEPLOYABLE_ID=3020
+      - TEST_GPU_DEPLOYABLE_ID=3020
     volumes:
       - ./configs:/app/configs:ro
       # Mount gcloud credentials for Application Default Credentials (ADC)

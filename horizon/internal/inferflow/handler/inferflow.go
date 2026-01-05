@@ -51,7 +51,7 @@ const (
 	adminRole                         = "ADMIN"
 	activeTrue                        = true
 	activeFalse                       = false
-	inferFlowRetrieveModelScoreMethod = "/InferFlow/RetrieveModelScore"
+	inferFlowRetrieveModelScoreMethod = "/Inferflow/RetrieveModelScore"
 	setFunctionalTest                 = "FunctionalTest"
 )
 
@@ -961,7 +961,7 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 				ep = ep[:idx]
 			}
 		}
-		port := ":8080"
+		port := ":8085"
 		env := strings.ToLower(strings.TrimSpace(inferflowPkg.AppEnv))
 		if env == "stg" || env == "int" {
 			port = ":80"
@@ -970,6 +970,7 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 		return ep
 	}(request.EndPoint)
 
+	log.Info().Msgf("normalized endpoint: %s", normalizedEndpoint)
 	conn, err := grpc.GetConnection(normalizedEndpoint)
 	if err != nil {
 		response.Error = err.Error()
@@ -1012,12 +1013,15 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 	defer cancel()
-
+	log.Info().Msgf("proto request: %v", protoRequest)
 	err = grpc.SendGRPCRequest(ctx, conn, inferFlowRetrieveModelScoreMethod, protoRequest, protoResponse, md)
 	if err != nil {
 		response.Error = err.Error()
+		log.Error().Msgf("error: %v", err)
 		return response, errors.New("failed to send grpc request: " + err.Error())
 	}
+
+	log.Info().Msgf("proto response: %v", protoResponse)
 
 	for _, compData := range protoResponse.GetComponentData() {
 		response.ComponentData = append(response.ComponentData, ComponentData{
