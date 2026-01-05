@@ -12,6 +12,13 @@ tonic = "0.11"
 prost = "0.12"
 prost-types = "0.12"
 base64 = "0.21"
+quinn = "0.11"
+rustls = "0.23"
+rustls-pemfile = "2.0"
+rustls-native-certs = "0.6"
+clap = { version = "4", features = ["derive"] }
+tonic-h3 = { version = "*", default-features = false, features = ["quinn"] }
+h3-quinn = "0.4"
 
 [build-dependencies]
 tonic-build = "0.11"
