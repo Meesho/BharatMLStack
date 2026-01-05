@@ -956,21 +956,29 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 			ep = strings.TrimPrefix(ep, "https://")
 		}
 		ep = strings.TrimSuffix(ep, "/")
+
+		// Check if port is already present
+		hasPort := false
 		if idx := strings.LastIndex(ep, ":"); idx != -1 {
+			// Ensure the colon is part of a port, not in a hostname
 			if idx < len(ep)-1 {
-				ep = ep[:idx]
+				hasPort = true
 			}
 		}
-		port := ":8085"
-		env := strings.ToLower(strings.TrimSpace(inferflowPkg.AppEnv))
-		if env == "stg" || env == "int" {
-			port = ":80"
+
+		// Only add port if not already present
+		if !hasPort {
+			port := ":8080"
+			env := strings.ToLower(strings.TrimSpace(inferflowPkg.AppEnv))
+			if env == "stg" || env == "int" {
+				port = ":80"
+			}
+			ep = ep + port
 		}
-		ep = ep + port
+
 		return ep
 	}(request.EndPoint)
 
-	log.Info().Msgf("normalized endpoint: %s", normalizedEndpoint)
 	conn, err := grpc.GetConnection(normalizedEndpoint)
 	if err != nil {
 		response.Error = err.Error()
@@ -1013,15 +1021,12 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 	defer cancel()
-	log.Info().Msgf("proto request: %v", protoRequest)
 	err = grpc.SendGRPCRequest(ctx, conn, inferFlowRetrieveModelScoreMethod, protoRequest, protoResponse, md)
 	if err != nil {
 		response.Error = err.Error()
 		log.Error().Msgf("error: %v", err)
 		return response, errors.New("failed to send grpc request: " + err.Error())
 	}
-
-	log.Info().Msgf("proto response: %v", protoResponse)
 
 	for _, compData := range protoResponse.GetComponentData() {
 		response.ComponentData = append(response.ComponentData, ComponentData{
