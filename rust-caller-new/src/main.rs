@@ -2,7 +2,8 @@ use axum::{extract::State, http::StatusCode, response::Json, routing::post, Rout
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
-use tonic::{metadata::AsciiMetadataValue, transport::Channel};
+use tokio::sync::Mutex;
+use tonic::{metadata::AsciiMetadataValue};
 use clap::Parser;
 use http::Uri;
 
@@ -22,10 +23,23 @@ struct Args {
 }
 
 // Response structure matching Go's response format
+// Note: RetrieveResult is a protobuf type, so we serialize it manually
 #[derive(Serialize)]
 struct RetrieveFeaturesResponse {
     status: String,
+    #[serde(serialize_with = "serialize_protobuf_result")]
     response: RetrieveResult,
+}
+
+// Helper function to serialize protobuf Result
+fn serialize_protobuf_result<S>(result: &RetrieveResult, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    // Convert protobuf to JSON bytes and serialize
+    use prost::Message;
+    let bytes = result.encode_to_vec();
+    serializer.serialize_bytes(&bytes)
 }
 
 // Request body structure for retrieve_features endpoint
@@ -48,9 +62,8 @@ struct KeysRequest {
     cols: Vec<String>,
 }
 
-#[derive(Clone)]
 struct AppState {
-    client: RetrieveClient<Channel>,
+    client: Arc<Mutex<RetrieveClient<tonic_h3::H3Channel<tonic_h3::quinn::H3QuinnConnector>>>>,
     auth_token: AsciiMetadataValue,
     caller_id: AsciiMetadataValue,
 }
@@ -84,7 +97,9 @@ async fn retrieve_features(
     request.metadata_mut().insert("online-feature-store-auth-token", state.auth_token.clone());
     request.metadata_mut().insert("online-feature-store-caller-id", state.caller_id.clone());
 
-    let result = state.client.clone().retrieve_features(request).await;
+    // Get mutable access to the client via Mutex
+    let mut client = state.client.lock().await;
+    let result = client.retrieve_features(request).await;
 
     match result {
         Ok(response) => {
@@ -109,9 +124,12 @@ async fn retrieve_features(
 //
 // Implementation uses tonic-h3 library (https://github.com/youyuanwu/tonic-h3)
 // which provides experimental gRPC over HTTP/3 support using QUIC
-async fn create_channel(server: &str) -> Result<Channel, Box<dyn std::error::Error>> {
-    use h3_quinn::quinn::{ClientConfig, Endpoint as QuinnEndpoint};
-    use rustls::{ClientConfig as RustlsClientConfig, RootCertStore};
+async fn create_channel(server: &str) -> Result<tonic_h3::H3Channel<tonic_h3::quinn::H3QuinnConnector>, Box<dyn std::error::Error>> {
+    // Use quinn types directly as shown in tonic-h3 test examples
+    // See: https://github.com/youyuanwu/tonic-h3
+    use quinn::{ClientConfig, Endpoint};
+    use quinn::crypto::rustls::QuicClientConfig;
+    use rustls::{pki_types::CertificateDer, ClientConfig as RustlsClientConfig, RootCertStore};
     use std::net::SocketAddr;
     
     println!("🚀 Using HTTP/3 (QUIC) via tonic-h3");
@@ -125,22 +143,28 @@ async fn create_channel(server: &str) -> Result<Channel, Box<dyn std::error::Err
     
     // Create QUIC client configuration with TLS
     let mut root_store = RootCertStore::empty();
-    root_store.extend(rustls_native_certs::load_native_certs()?);
+    // Load system certificates - convert Certificate to CertificateDer
+    for cert in rustls_native_certs::load_native_certs()? {
+        root_store.add(CertificateDer::from(cert.0))?;
+    }
     
-    let client_config = RustlsClientConfig::builder()
-        .with_safe_defaults()
+    // Build rustls client config (rustls 0.23 API)
+    let rustls_config = RustlsClientConfig::builder()
         .with_root_certificates(root_store)
         .with_no_client_auth();
     
-    let quic_client_config = ClientConfig::new(Arc::new(client_config));
+    // Create quinn ClientConfig using rustls crypto (as shown in test examples)
+    let quic_client_config = ClientConfig::new(Arc::new(
+        QuicClientConfig::try_from(Arc::new(rustls_config))?
+    ));
     
     // Create QUIC endpoint with client configuration
-    let client_endpoint = QuinnEndpoint::client(SocketAddr::from(([0, 0, 0, 0], 0)))?
-        .with_default_client_config(quic_client_config);
+    // Use quinn::Endpoint directly (as in test examples)
+    let mut client_endpoint = Endpoint::client(SocketAddr::from(([0, 0, 0, 0], 0)))?;
+    client_endpoint.set_default_client_config(quic_client_config);
     
     // Build the full URI for gRPC (QUIC requires HTTPS)
     let grpc_uri = if server.starts_with("http://") {
-        // Convert http:// to https:// for QUIC (QUIC requires TLS)
         format!("https://{}:{}", host, port)
     } else {
         server.to_string()
@@ -149,9 +173,21 @@ async fn create_channel(server: &str) -> Result<Channel, Box<dyn std::error::Err
     let grpc_uri: Uri = grpc_uri.parse()?;
     
     // Create HTTP/3 channel using tonic-h3
-    // Note: This is experimental - server must support HTTP/3/QUIC
-    // If the server doesn't support HTTP/3, this will fail at connection time
-    let channel = tonic_h3::quinn::new_quinn_h3_channel(grpc_uri.clone(), client_endpoint);
+    // Based on actual source code from tonic-h3-tests/examples/client.rs
+    // 1. Create H3QuinnConnector (re-exported from tonic_h3::quinn)
+    // 2. Create H3Channel from the connector
+    // Convert quinn::Endpoint to h3_quinn::quinn::Endpoint for the connector
+    // h3-quinn wraps quinn, so we need to use h3-quinn's endpoint type
+    use h3_quinn::quinn::Endpoint as H3Endpoint;
+    
+    // Create h3-quinn endpoint from quinn endpoint
+    // The types are compatible since h3-quinn wraps quinn
+    let h3_endpoint: H3Endpoint = unsafe { std::mem::transmute(client_endpoint) };
+    
+    let server_name = host.to_string();
+    // H3QuinnConnector is re-exported from tonic_h3::quinn (which re-exports h3_util::quinn)
+    let connector = tonic_h3::quinn::H3QuinnConnector::new(grpc_uri.clone(), server_name, h3_endpoint.clone());
+    let channel = tonic_h3::H3Channel::new(connector, grpc_uri.clone());
     
     println!("✅ HTTP/3 channel created successfully");
     println!("   Server URI: {}", grpc_uri);
@@ -174,7 +210,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✅ Created gRPC connection using HTTP/3 (QUIC)");
 
     let state = Arc::new(AppState {
-        client,
+        client: Arc::new(Mutex::new(client)),
         auth_token: AsciiMetadataValue::from_static("atishay"),
         caller_id: AsciiMetadataValue::from_static("test-3"),
     });
