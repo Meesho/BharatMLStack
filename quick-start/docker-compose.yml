@@ -367,7 +367,7 @@ services:
       - INFERFLOW_APP_NAME=inferflow
       - IS_DUMMY_MODEL_ENABLED=true
       - ARGOCD_API=http://host.docker.internal:8087
-      - ARGOCD_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhcmdvY2QiLCJzdWIiOiJhZG1pbjphcGlLZXkiLCJuYmYiOjE3NjcwOTQ1OTMsImlhdCI6MTc2NzA5NDU5MywianRpIjoiNDE5ZDA2YjQtZWZmMy00MzFmLWI3MjgtNWYxOTMyNTJjZTI4In0.g85g_U6Sw6fz7eTkGlJlyAdNJJnMwb4-qILf3rBChWA
+      - ARGOCD_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9....
       - ARGOCD_NAMESPACE=argocd
       - ARGOCD_DESTINATION_NAME=in-cluster
       - ARGOCD_PROJECT=default

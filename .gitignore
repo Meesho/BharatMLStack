@@ -4,6 +4,7 @@ trufflebox-ui/node_modules/
 dist/
 .env*
 .idea/
+.vscode/
 workspace/
 __pycache__/
 java-sdk/onfs/feature-store-client/target/
