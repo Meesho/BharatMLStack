@@ -17,8 +17,7 @@ rustls = "0.23"
 rustls-pemfile = "2.0"
 rustls-native-certs = "0.6"
 clap = { version = "4", features = ["derive"] }
-tonic-h3 = { version = "*", default-features = false, features = ["quinn"] }
-h3-quinn = "0.4"
+tonic-h3 = { git = "https://github.com/youyuanwu/tonic-h3.git", default-features = false, features = ["quinn"] }
 
 [build-dependencies]
 tonic-build = "0.11"
