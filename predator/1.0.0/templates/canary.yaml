@@ -86,6 +86,8 @@ spec:
       {{- end }}
     {{- end }}
     # Alerts for the above analysis
+    # Only include alerts if AlertProvider exists (i.e., slackWebhookURL is set)
+    {{- if and .Values.canary .Values.canary.slackWebhookURL (ne .Values.canary.slackWebhookURL "") }}
     alerts:
       - name: flagger-status
         providerRef:
@@ -102,6 +104,7 @@ spec:
           name: flagger-status
           namespace: {{ .Values.namespace }}
         severity: info
+    {{- end }}
 
 {{- end }}
 {{- end -}}

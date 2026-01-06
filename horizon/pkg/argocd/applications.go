@@ -77,7 +77,7 @@ type ArgoCDApplicationListDto struct {
 func GetArgoCDApplication(name string, workingEnv string) (ArgoCDApplicationWrapper, error) {
 	log.Info().Str("workingEnv", workingEnv).Str("app name", name).Msg("In GetArgoCDApplication")
 	req, err := getArgoCDClient(
-		"/applications/"+name+"?fields=items.metadata.name,items.metadata.labels",
+		"/api/v1/applications/"+name+"?fields=items.metadata.name,items.metadata.labels",
 		[]byte{},
 		"GET",
 		workingEnv,

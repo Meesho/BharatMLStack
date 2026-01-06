@@ -328,8 +328,7 @@ services:
       - "8082:8082"
     environment:
       - APP_NAME=horizon
-      - APP_ENVIRONMENT=PROD
-      - APP_ENV=production
+      - APP_ENV=PROD
       - APP_PORT=8082
       - APP_LOG_LEVEL=DEBUG
       - APP_METRIC_SAMPLING_RATE=1
@@ -351,6 +350,7 @@ services:
       - ETCD_WATCHER_ENABLED=true
       - ETCD_SERVER=etcd:2379
       - ONLINE_FEATURE_STORE_APP_NAME=onfs
+      - REDIS_FAILOVER_ACTIVE_CONFIG_IDS=4
       - SCYLLA_1_CONTACT_POINTS=scylla
       - SCYLLA_1_KEYSPACE=onfs
       - SCYLLA_1_NUM_CONNS=1
@@ -361,6 +361,49 @@ services:
       - SCYLLA_ACTIVE_CONFIG_IDS=1
       - DISTRIBUTED_CACHE_ACTIVE_CONFIG_IDS=2
       - IN_MEMORY_CACHE_ACTIVE_CONFIG_IDS=3
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+      - HORIZON_APP_NAME=horizon
+      - NUMERIX_APP_NAME=numerix
+      - INFERFLOW_APP_NAME=inferflow
+      - IS_DUMMY_MODEL_ENABLED=true
+      - ARGOCD_API=http://host.docker.internal:8087
+      - ARGOCD_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9....
+      - ARGOCD_NAMESPACE=argocd
+      - ARGOCD_DESTINATION_NAME=in-cluster
+      - ARGOCD_PROJECT=default
+      - ARGOCD_HELMCHART_PATH=1.0.0
+      - ARGOCD_SYNC_POLICY_OPTIONS=CreateNamespace=true
+      - ARGOCD_INSECURE=true
+      - LOCAL_MODEL_PATH=/tmp/models
+      - SUPPORTED_ENVIRONMENTS=prd,stg,int
+      - WORKING_ENV=prd
+      - SERVICE_CONFIG_SOURCE=local
+      - SERVICE_CONFIG_REPO=BharatMLStack-configs
+      - SERVICE_CONFIG_PATH=/app/configs
+      - REPOSITORY_NAME=onboarding-test
+      - BRANCH_NAME=main
+      - GITHUB_APP_ID=2546855
+      - GITHUB_INSTALLATION_ID=101432634
+      - GITHUB_PRIVATE_KEY_PATH=/app/configs/github.pem
+      - GITHUB_OWNER=Adit2607
+      - GITHUB_COMMIT_AUTHOR=horizon-bot
+      - GITHUB_COMMIT_EMAIL=aditya.garg@meesho.com
+      - GCP_PROJECT_ID=meesho-datascience-dev
+      - GCS_ENABLED=true
+      - GCS_MODEL_BUCKET=gcs-dsci-model-repository-int
+      - GCS_MODEL_BASE_PATH=dummy
+      # Application Default Credentials (ADC) configuration
+      # Mounts host's gcloud credentials for ADC authentication
+      # Container runs as non-root user (nonroot), so mount to /home/nonroot/.config/gcloud
+      - CLOUDSDK_CONFIG=/home/nonroot/.config/gcloud
+      - TEST_DEPLOYABLE_ID=3020
+      - TEST_GPU_DEPLOYABLE_ID=3020
+    volumes:
+      - ./configs:/app/configs:ro
+      # Mount gcloud credentials for Application Default Credentials (ADC)
+      # Run 'gcloud auth application-default login' on host first
+      # Container runs as non-root user, so mount to /home/nonroot/.config/gcloud
+      - ~/.config/gcloud:/home/nonroot/.config/gcloud:ro
     networks:
       - onfs-network
     depends_on:
@@ -427,6 +470,12 @@ services:
     container_name: inferflow
     ports:
       - "8085:8085"
+    extra_hosts:
+      # Allow inferflow to reach K8s services via host port-forward
+      # Use: kubectl -n prd-predator port-forward svc/prd-predator 8090:80
+      - "predator.prd.meesho.int:host-gateway"
+      # Add more services as needed:
+      # - "another-service.prd.meesho.int:host-gateway"
     environment:
       - APP_GC_PERCENTAGE=1
       - ETCD_SERVER=http://etcd:2379
@@ -451,10 +500,14 @@ services:
       - EXTERNAL_SERVICE_ONFS_FS_HOST=onfs-api-server
       - EXTERNAL_SERVICE_ONFS_FS_PORT=8089
       - EXTERNAL_SERVICE_ONFS_FS_DEAD_LINE=200
-      - EXTERNAL_SERVICE_PREDATOR_PORT=8001
+      # Predator config: Port must match K8s service port 80 (not targetPort 8001)
+      # Since we forward localhost:8090 -> K8s service:80 -> pod:8001
+      # The model endpoint in etcd must be configured as: predator.prd.meesho.int:8090
+      - EXTERNAL_SERVICE_PREDATOR_PORT=8090
       - EXTERNAL_SERVICE_PREDATOR_GRPC_PLAIN_TEXT=true
       - EXTERNAL_SERVICE_PREDATOR_CALLER_ID=inferflow
       - EXTERNAL_SERVICE_PREDATOR_CALLER_TOKEN=inferflow
+      - EXTERNAL_SERVICE_PREDATOR_DEADLINE=200
       - METRIC_SAMPLING_RATE=1
     networks:
       - onfs-network
@@ -485,7 +538,7 @@ services:
     ports:
       - "3000:80"
     environment:
-      - REACT_APP_ENVIRONMENT=staging
+      - REACT_APP_ENVIRONMENT=production
       - REACT_APP_HORIZON_BASE_URL=http://localhost:8082
       - REACT_APP_ONLINE_FEATURE_STORE_ENABLED=true
       - REACT_APP_INFERFLOW_ENABLED=true

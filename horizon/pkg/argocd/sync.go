@@ -51,7 +51,8 @@ func (a ArgoCDObject) Refresh(workingEnv string, workingBU string, zone string) 
 		return err
 	}
 
-	client := &http.Client{}
+	// Use getHTTPClient() which handles TLS verification based on ARGOCD_INSECURE env var
+	client := getHTTPClient()
 	response, err := client.Do(req)
 	if err != nil {
 		log.Error().Err(err).Msg("Refresh: Failed to get refresh call response from ArgoCD")

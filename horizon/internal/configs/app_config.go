@@ -74,7 +74,7 @@ type Configs struct {
 
 	PhoenixServerBaseUrl string `mapstructure:"phoenix_server_base_url"`
 
-	PredatorMonitoringUrl string `mapstructure:"predator_monitoring_url"`
+	PredatorMonitoringUrl   string `mapstructure:"predator_monitoring_url"`
 	ScheduledCronExpression string `mapstructure:"scheduled_cron_expression"`
 
 	TestDeployableID    int `mapstructure:"test_deployable_id"`
@@ -106,6 +106,7 @@ type Configs struct {
 	GitHubInstallationID int64  `mapstructure:"github_installation_id"`
 	GitHubPrivateKeyPath string `mapstructure:"github_private_key_path"`
 	GitHubOwner          string `mapstructure:"github_owner"`
+	LocalModelPath       string `mapstructure:"local_model_path"`
 
 	ServiceConfigSource string `mapstructure:"service_config_source"`
 	ServiceConfigRepo   string `mapstructure:"service_config_repo"`

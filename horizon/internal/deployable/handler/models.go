@@ -21,7 +21,7 @@ type DeployableRequest struct {
 	MinReplica         string            `json:"min_replica,omitempty"`
 	MaxReplica         string            `json:"max_replica,omitempty"`
 	GCSBucketPath      string            `json:"gcs_bucket_path,omitempty"`
-	GCSTritonPath      bool              `json:"gcs_triton_path,omitempty"`
+	GCSTritonPath      string            `json:"gcs_triton_path,omitempty"`
 	TritonImageTag     string            `json:"triton_image_tag,omitempty"`
 	ServiceAccount     string            `json:"serviceAccount,omitempty"`
 	NodeSelectorValue  string            `json:"nodeSelectorValue,omitempty"`
@@ -49,7 +49,7 @@ type EnvironmentConfig struct {
 	MinReplica         string            `json:"min_replica,omitempty"`
 	MaxReplica         string            `json:"max_replica,omitempty"`
 	GCSBucketPath      string            `json:"gcs_bucket_path,omitempty"`
-	GCSTritonPath      bool              `json:"gcs_triton_path,omitempty"`
+	GCSTritonPath      string            `json:"gcs_triton_path,omitempty"`
 	TritonImageTag     string            `json:"triton_image_tag,omitempty"`
 	ServiceAccount     string            `json:"serviceAccount,omitempty"`
 	NodeSelectorValue  string            `json:"nodeSelectorValue,omitempty"`
@@ -85,7 +85,7 @@ type DeployableConfigPayload struct {
 	TritonImageTag     string `json:"triton_image_tag"`
 	ServiceAccount     string `json:"serviceAccount"`
 	NodeSelectorValue  string `json:"nodeSelectorValue"`
-	GCSTritonPath      bool   `json:"gcs_triton_path"`
+	GCSTritonPath      string `json:"gcs_triton_path"`
 	CPUThreshold       string `json:"cpu_threshold"`
 	GPUThreshold       string `json:"gpu_threshold"`
 	DeploymentStrategy string `json:"deploymentStrategy"`

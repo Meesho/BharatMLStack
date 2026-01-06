@@ -51,27 +51,44 @@ spec:
             name: {{ .Values.namespace }}-jmx
       {{- end }}
       volumes:
+      {{- if .Values.localModelPath }}
+         # For local development: mount local models as source volume
+         - name: local-model-source
+           hostPath:
+             path: {{ .Values.localModelPath }}
+             type: DirectoryOrCreate
+         # Shared volume for init container to copy to and main container to use
          - name: shared-volume
            emptyDir: {}
+      {{- else }}
+         # For production: use emptyDir, init container will populate it from GCS
+         - name: shared-volume
+           emptyDir: {}
+      {{- end }}
       {{- if .Values.sharedmemory }}
          - emptyDir:
              medium: Memory
              sizeLimit: {{ .Values.sharedmemory.size}}
            name: cache-volume
       {{- end }}
+      {{- if .Values.initContainer.command }}
       initContainers:
         - name: s3-copy-container
           image: {{ .Values.initContainer.image | default "amazon/aws-cli:latest" }}
-          {{- if .Values.initContainer.command }}
           command: {{- include "application.tplvalues.render" (dict "value" .Values.initContainer.command "context" $) | nindent 12 }}
-          {{- end }}
           volumeMounts:
             - name: shared-volume
               mountPath: /models
+          {{- if .Values.localModelPath }}
+            - name: local-model-source
+              mountPath: /local-models
+              readOnly: true
+          {{- end }}
           {{- if .Values.sharedmemory }}
             - mountPath: /dev/shm
               name: cache-volume
           {{- end }}
+      {{- end }}
       containers:
         - name: {{ .Values.applicationName }}
         {{- if .Values.jmxconfig.enabled }}

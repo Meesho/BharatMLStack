@@ -1,3 +1,4 @@
+{{- if and .Values.canary (.Values.canary.enabled) .Values.canary.slackWebhookURL (ne .Values.canary.slackWebhookURL "") }}
 apiVersion: flagger.app/v1beta1
 kind: AlertProvider
 metadata:
@@ -5,8 +6,11 @@ metadata:
   namespace: {{ .Values.namespace }}
 spec:
   type: slack
+  {{- if .Values.canary.slackChannel }}
   channel: {{ .Values.canary.slackChannel }}
+  {{- end }}
   username: flagger
-  # webhook address (ignored if secretRef is specified)
+  # webhook address (required - AlertProvider requires either address or secretRef)
   # or https://slack.com/api/chat.postMessage if you use token in the secret
-  address: {{ .Values.canary.slackWebhookURL | default "" }}
+  address: {{ .Values.canary.slackWebhookURL }}
+{{- end }}

@@ -11,6 +11,26 @@ A quick way to get the BharatML Stack Online Feature Store platform up and runni
 - Bash shell
 - `grpcurl` for testing gRPC API endpoints (install from [https://github.com/fullstorydev/grpcurl](https://github.com/fullstorydev/grpcurl))
 
+### Optional Prerequisites
+
+**For Kubernetes support:**
+
+- **kind** (Kubernetes in Docker) - Required if you want to use Kubernetes features
+
+  **macOS:**
+  ```bash
+  brew install kind
+  ```
+
+  **Linux:**
+  ```bash
+  curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+  chmod +x ./kind
+  sudo mv ./kind /usr/local/bin/kind
+  ```
+
+  For other platforms or the latest version, visit: https://kind.sigs.k8s.io/docs/user/quick-start/#installation
+
 ## System Components
 
 BharatMLStack's Online Feature Store consists of several interconnected services:
@@ -33,6 +53,7 @@ BharatMLStack's Online Feature Store consists of several interconnected services
 **Management Tools:**
 - **etcd Workbench**: etcd management interface (runs on port 8081)
 - **Kafka UI**: Kafka cluster management interface (runs on port 8084)
+- **Kubernetes (kind)**: Local Kubernetes cluster (optional, requires kind installation)
 
 All services are orchestrated using Docker Compose with pre-built images from GitHub Container Registry (GHCR).
 
@@ -52,6 +73,13 @@ The start script provides an interactive service selector that allows you to cho
 3. **Exit** - Exit without starting
 
 **Infrastructure services (ScyllaDB, MySQL, Redis, etcd, Kafka) and Management Tools (etcd-workbench, kafka-ui) are always started.**
+
+**Optional Services:**
+- **Kubernetes (kind cluster)** - Local Kubernetes cluster for container orchestration
+
+**Note:** Predator is not a Docker Compose service. It is deployed via ArgoCD in Kubernetes. If you need to set up Predator, see the [Predator Local Setup Guide](PREDATOR_SETUP.md) for complete instructions.
+
+During interactive mode, you'll be prompted to optionally include Kubernetes. For Predator setup, you'll need to follow the comprehensive guide in [PREDATOR_SETUP.md](PREDATOR_SETUP.md) which includes ArgoCD installation, GitHub App setup, and repository configuration.
 
 ### Initializing with Dummy Data
 
@@ -221,6 +249,10 @@ Once complete, you can access:
 - **Inferflow**: http://localhost:8085
 - **etcd Workbench**: http://localhost:8081
 - **Kafka UI**: http://localhost:8084
+- **Kubernetes** (if enabled): Use `kubectl cluster-info --context kind-bharatml-stack`
+- **ArgoCD** (if installed): http://localhost:8087 (requires port-forward - see [Predator Setup Guide](PREDATOR_SETUP.md))
+
+**Note:** Predator is accessed through ArgoCD UI after completing the setup in [PREDATOR_SETUP.md](PREDATOR_SETUP.md).
 
 ### Stopping the System
 
@@ -255,6 +287,194 @@ To stop and completely purge all containers, volumes, and workspace:
   - Health check: http://localhost:8083/health
 - **Inferflow**: http://localhost:8085
   - Health check: http://localhost:8085/health/self
+
+### Kubernetes (Optional)
+
+**Kubernetes (kind cluster):**
+- **Cluster Name**: `bharatml-stack`
+- **Context**: `kind-bharatml-stack`
+- **Access**: Use `kubectl` commands with the context:
+  ```bash
+  kubectl cluster-info --context kind-bharatml-stack
+  kubectl get nodes --context kind-bharatml-stack
+  ```
+
+**Note:** For Predator setup on Kubernetes, see the [Predator Local Setup Guide](PREDATOR_SETUP.md) which includes cluster creation, node labeling, ArgoCD installation, and all required configurations.
+
+### Predator and ArgoCD Setup
+
+**Predator** is a service deployment and management system that runs on Kubernetes and uses ArgoCD for GitOps-based deployments. It is **not** a Docker Compose service and requires a comprehensive setup process.
+
+**For complete Predator and ArgoCD setup instructions, see the [Predator Local Setup Guide](PREDATOR_SETUP.md).**
+
+The PREDATOR_SETUP.md guide includes:
+- Automated setup script for quick installation
+- Step-by-step manual setup instructions
+- Creating and configuring a Kubernetes cluster (kind, minikube, or Docker Desktop)
+- Installing and configuring ArgoCD
+- Setting up GitHub App for repository access
+- Installing required CRDs (Flagger, KEDA) and PriorityClass
+- Configuring ArgoCD repository connections
+- Setting up automated application onboarding
+- Complete Predator deployment workflow
+
+The setup script handles all the complexity and provides an easy one-command installation. Follow the guide for detailed instructions.
+
+### Connecting Inferflow to Kubernetes-Hosted Predator
+
+Once you have Predator deployed in Kubernetes (via ArgoCD), you can connect Inferflow (running in Docker) to Predator for model inference. This setup enables Inferflow to call ML models hosted in your Kubernetes cluster.
+
+#### Prerequisites
+
+1. **Kubernetes cluster running** with Predator deployed (follow [PREDATOR_SETUP.md](PREDATOR_SETUP.md))
+2. **ArgoCD installed** and accessible
+3. **Predator service deployed** via ArgoCD with `app_name: predator` in your namespace (e.g., `prd-predator`)
+
+#### Why Extra Hosts Configuration?
+
+Inferflow runs in a Docker container, while Predator runs in Kubernetes. By default, Docker containers cannot reach services running on the host machine (localhost). The `extra_hosts` configuration in `docker-compose.yml` creates a special network route that maps a hostname to `host-gateway`, which is Docker's special DNS name that resolves to the host machine's IP address.
+
+This is why you'll see this configuration in the Inferflow service:
+
+```yaml
+inferflow:
+  extra_hosts:
+    - "predator.prd.meesho.int:host-gateway"
+```
+
+This allows the Inferflow container to reach Predator services running on your host machine (via port-forward).
+
+#### Step-by-Step Integration
+
+**1. Deploy Predator in Kubernetes**
+
+Follow the complete [Predator Setup Guide](PREDATOR_SETUP.md) to deploy Predator. Ensure your Predator deployment has:
+- **App Name**: `predator` (or your chosen name matching the namespace)
+- **Namespace**: `prd-predator` (or your environment-specific namespace)
+- **Service exposed**: The Predator service should be accessible via Kubernetes service
+
+**2. Port-Forward Predator Service to Host**
+
+Predator services in Kubernetes are not directly accessible from Docker containers. You need to create a port-forward tunnel from your host machine to the Kubernetes service:
+
+```bash
+# Port-forward Predator service to localhost:8090
+# Format: kubectl -n <namespace> port-forward svc/<service-name> <local-port>:<service-port>
+kubectl -n prd-predator port-forward svc/prd-predator 8090:80 &
+```
+
+**Important Notes:**
+- Port `8090` is the local port on your host machine
+- Port `80` is the Kubernetes service port (not the target pod port 8001)
+- Keep this terminal session running or run it in the background with `&`
+- The port-forward must be active for Inferflow to reach Predator
+
+**3. Configure Model Endpoint in etcd**
+
+In your Inferflow model configuration (stored in etcd), set the endpoint to match the `extra_hosts` configuration:
+
+```json
+{
+  "model_end_point": "predator.prd.meesho.int:8090"
+}
+```
+
+**Key Points:**
+- Use the hostname from `extra_hosts` configuration: `predator.prd.meesho.int`
+- Use port `8090` (the local port from port-forward command)
+- Inferflow will resolve this hostname to the host gateway and connect via port-forward
+
+**4. Update Inferflow Deadline (if needed)**
+
+If you experience `DeadlineExceeded` errors, increase the timeout in `workspace/docker-compose.yml`:
+
+```yaml
+inferflow:
+  environment:
+    - EXTERNAL_SERVICE_PREDATOR_DEADLINE=5000  # Increase from 200ms to 5000ms
+```
+
+Port-forwarding to Kubernetes adds latency, so higher timeouts are recommended.
+
+**5. Configure Horizon with Deployable ID**
+
+After deploying Predator through Horizon's deployment workflow, you'll receive a `deployable_id`. This ID is stored in the `service_deployable_configs` table in MySQL.
+
+**To configure Horizon for testing:**
+
+a. **Find the Deployable ID:**
+   ```bash
+   # Connect to MySQL
+   docker exec -it mysql mysql -uroot -proot testdb
+   
+   # Query for your Predator deployable
+   SELECT id, service_name, app_name, environment 
+   FROM service_deployable_configs 
+   WHERE service_name = 'predator' 
+   ORDER BY id DESC LIMIT 5;
+   ```
+
+b. **Copy the `id` value** from the query result
+
+c. **Update Horizon's environment variable** in `workspace/docker-compose.yml`:
+   ```yaml
+   horizon:
+     environment:
+       - TEST_DEPLOYABLE_ID=<your-deployable-id>
+       - TEST_GPU_DEPLOYABLE_ID=<your-deployable-id>  # If using GPU
+   ```
+
+d. **Restart Horizon:**
+   ```bash
+   cd workspace && docker-compose restart horizon
+   ```
+
+**6. Verify the Connection**
+
+Test the connectivity from Inferflow to Predator:
+
+```bash
+# Check if port-forward is active
+netstat -an | grep 8090
+
+# Test from within Docker network
+docker exec inferflow-healthcheck nc -zv 172.18.0.1 8090
+
+# Check Inferflow logs for connection status
+docker logs inferflow 2>&1 | grep -i "predator\|deadline" | tail -20
+```
+
+**7. Monitor for Issues**
+
+Common issues and their solutions:
+
+| Issue | Solution |
+|-------|----------|
+| `DeadlineExceeded` errors | Increase `EXTERNAL_SERVICE_PREDATOR_DEADLINE` to 5000+ ms |
+| `connection refused` | Verify port-forward is running: `ps aux \| grep port-forward` |
+| `Invalid auth token` | Check Predator authentication configuration |
+| DNS resolution fails | Verify `extra_hosts` in docker-compose.yml |
+
+**8. Complete Configuration Example**
+
+Your final `workspace/docker-compose.yml` should have:
+
+```yaml
+inferflow:
+  extra_hosts:
+    - "predator.prd.meesho.int:host-gateway"
+  environment:
+    - EXTERNAL_SERVICE_PREDATOR_PORT=8090
+    - EXTERNAL_SERVICE_PREDATOR_GRPC_PLAIN_TEXT=true
+    - EXTERNAL_SERVICE_PREDATOR_CALLER_ID=inferflow
+    - EXTERNAL_SERVICE_PREDATOR_CALLER_TOKEN=inferflow
+    - EXTERNAL_SERVICE_PREDATOR_DEADLINE=5000  # 5 seconds
+
+horizon:
+  environment:
+    - TEST_DEPLOYABLE_ID=<your-deployable-id>
+    - TEST_GPU_DEPLOYABLE_ID=<your-deployable-id>
+```
 
 ### Database Access
 
