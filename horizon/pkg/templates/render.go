@@ -14,7 +14,6 @@ import (
 )
 
 // RenderTemplate renders a template with the given bindings and pushes to GitHub
-// This is similar to RingMaster's utils.RenderTemplate function
 func RenderTemplate(bindings map[string]interface{}, templateName string, repo string, branch string, path string) error {
 	log.Info().
 		Str("templateName", templateName).
@@ -25,7 +24,7 @@ func RenderTemplate(bindings map[string]interface{}, templateName string, repo s
 
 	commonTemplate := "common-values.tmpl"
 
-	// Template function map (same as RingMaster)
+	// Template function map
 	funcMap := template.FuncMap{
 		"toYAML":   ToYAML,
 		"toLower":  strings.ToLower,

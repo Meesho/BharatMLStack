@@ -88,6 +88,19 @@ setup_workspace() {
   fi
   cp -r ./predator-dummy "$WORKSPACE_DIR"/
   
+  # Copy horizon configs directory for service config loading
+  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local project_root="$(cd "$script_dir/.." && pwd)"
+  if [ -d "$project_root/horizon/configs" ]; then
+    if [ -d "$WORKSPACE_DIR/configs" ]; then
+      rm -rf "$WORKSPACE_DIR/configs"
+    fi
+    cp -r "$project_root/horizon/configs" "$WORKSPACE_DIR"/
+    echo "   ✅ Copied horizon configs to workspace"
+  else
+    echo "   ⚠️  Warning: horizon/configs directory not found at $project_root/horizon/configs"
+  fi
+  
   echo "✅ Workspace setup complete"
 }
 
@@ -245,6 +258,7 @@ if start_trufflebox == 'true' and trufflebox_version == 'local':
 
 # Inferflow
 if start_inferflow == 'true' and inferflow_version == 'local':
+    # Match inferflow service definition with image line (same pattern as other services)
     pattern = r'(  inferflow:\s*\n)\s+(image:.*\n)'
     replacement = r'\1    build:\n      context: ./inferflow\n      dockerfile: cmd/inferflow/Dockerfile\n    # \2'
     content = re.sub(pattern, replacement, content)
@@ -265,7 +279,11 @@ if start_numerix == 'true' and numerix_version == 'local' and 'build:' in conten
 if start_trufflebox == 'true' and trufflebox_version == 'local' and 'build:' in content and 'trufflebox-ui:' in content:
     changes_made = True
 if start_inferflow == 'true' and inferflow_version == 'local' and 'build:' in content and 'inferflow:' in content:
-    changes_made = True
+    # Check if the replacement actually happened by looking for the build context
+    if './inferflow' in content:
+        changes_made = True
+    else:
+        sys.stderr.write("Warning: inferflow build context not found after replacement\n")
 
 if not changes_made and (start_onfs == 'true' or start_onfs_consumer == 'true' or start_horizon == 'true' or 
                          start_numerix == 'true' or start_trufflebox == 'true' or start_inferflow == 'true'):
@@ -308,6 +326,9 @@ get_user_choice() {
         START_TRUFFLEBOX=true
         START_INFERFLOW=true
         START_PREDATOR=true
+        echo ""
+        echo "🔧 Optional Infrastructure:"
+        ask_dummy_data
         break
         ;;
       2)
@@ -390,12 +411,35 @@ custom_selection() {
     echo "✅ Added: Predator"
   fi
   
+  
   echo ""
   if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false && $START_INFERFLOW == false && $START_PREDATOR == false ]]; then
     echo "🎯 Custom selection complete: Only infrastructure services will be started"
   else
     echo "🎯 Custom selection complete!"
   fi
+  
+  ask_dummy_data
+}
+
+ask_dummy_data() {
+  echo ""
+  echo "📦 Dummy Data Initialization"
+  echo "============================"
+  echo ""
+  echo "Would you like to initialize databases with dummy data?"
+  echo "This will populate MySQL, ScyllaDB, and etcd with example entities,"
+  echo "features, and configurations for testing purposes."
+  echo ""
+  read -p "Initialize dummy data? [y/N]: " init_dummy
+  if [[ $init_dummy =~ ^[Yy]$ ]]; then
+    INIT_DUMMY_DATA=true
+    echo "✅ Dummy data initialization enabled"
+  else
+    INIT_DUMMY_DATA=false
+    echo "⏭️  Skipping dummy data initialization"
+  fi
+  echo ""
 }
 
 start_init_services_if_missing() {
@@ -518,8 +562,8 @@ start_selected_services() {
     (cd "$WORKSPACE_DIR" && INIT_DUMMY_DATA=true docker-compose build db-init)
   fi
   
-  # Pass INIT_DUMMY_DATA to docker-compose so it gets passed to the db-init container
-  (cd "$WORKSPACE_DIR" && INIT_DUMMY_DATA="${INIT_DUMMY_DATA:-false}" docker-compose up -d --build $SELECTED_SERVICES)
+  # Pass INIT_DUMMY_DATA to docker-compose
+  (cd "$WORKSPACE_DIR" && INIT_DUMMY_DATA="${INIT_DUMMY_DATA:-false}" CLUSTER_NAME="${CLUSTER_NAME:-bharatml-stack}" docker-compose up -d --build $SELECTED_SERVICES)
   start_init_services_if_missing
   
   echo ""
@@ -638,8 +682,15 @@ show_access_info() {
   fi
   echo ""
   echo "📋 Access Information:"
+  echo ""
+  echo "   Management Tools:"
   echo "   🔧 etcd Workbench:    http://localhost:8081"
   echo "   📊 Kafka UI:          http://localhost:8084"
+  
+  if [[ $START_ONFS == true || $START_ONFS_CONSUMER == true || $START_HORIZON == true || $START_NUMERIX == true || $START_TRUFFLEBOX == true || $START_INFERFLOW == true || $START_PREDATOR == true ]]; then
+    echo ""
+    echo "   Application Services:"
+  fi
   
   if [[ $START_ONFS == true ]]; then
     echo "   🚀 ONFS gRPC API:     http://localhost:8089"
@@ -708,6 +759,7 @@ if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   echo "  • Numerix Matrix Operations"
   echo "  • TruffleBox UI"
   echo "  • Inferflow"
+  echo "  • Predator (Dummy gRPC Inference Server)"
   echo ""
   echo "Dummy Data Initialization:"
   echo "  Use --dummy-data flag to initialize databases with sample data for testing."
@@ -781,7 +833,11 @@ if [[ "$START_ONFS" == false && "$START_ONFS_CONSUMER" == false && "$START_HORIZ
 fi
 
 # Setup local builds AFTER service selection (so START_* flags are set)
-if [[ "$ENABLE_LOCAL_BUILD" = true ]]; then
+# Check if any version is set to "local" or if ENABLE_LOCAL_BUILD is true
+if [[ "$ENABLE_LOCAL_BUILD" = true || \
+      "$ONFS_VERSION" == "local" || "$ONFS_CONSUMER_VERSION" == "local" || \
+      "$HORIZON_VERSION" == "local" || "$NUMERIX_VERSION" == "local" || \
+      "$TRUFFLEBOX_VERSION" == "local" || "$INFERFLOW_VERSION" == "local" ]]; then
   setup_local_builds
 fi
 

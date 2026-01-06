@@ -28,6 +28,9 @@ spec:
     repoURL: {{ .argocd_source_repoURL }}
     targetRevision: {{ .argocd_source_targetRevision }}
   syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
     syncOptions:
     {{- range .argocd_sync_policy_options }}
     - {{ . }}

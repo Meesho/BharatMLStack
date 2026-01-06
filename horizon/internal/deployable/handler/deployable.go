@@ -387,54 +387,28 @@ func (d *Deployable) RefreshDeployable(appName, serviceType, workingEnv string) 
 		Str("workingEnv", workingEnv).
 		Msg("RefreshDeployable: Starting refresh - received parameters")
 
-	// Standard: All APIs accept just appName (without env prefix) for consistency
-	// Database entries are stored as {workingEnv}-{appName}
-	// ArgoCD applications are named as {workingEnv}-{appName}
-	// This function handles backward compatibility: if appName already has env prefix, extract it
-
-	var dbEntryName string
-	var actualAppName string
-
 	// Check if appName already starts with workingEnv prefix (backward compatibility)
-	expectedPrefix := fmt.Sprintf("%s-", workingEnv)
-	if strings.HasPrefix(appName, expectedPrefix) {
-		// Backward compatibility: appName already has the environment prefix
-		// Extract actual app name by removing the environment prefix
-		actualAppName = strings.TrimPrefix(appName, expectedPrefix)
-		dbEntryName = appName // Use as-is for database lookup
-		log.Info().
-			Str("appName", appName).
-			Str("workingEnv", workingEnv).
-			Str("dbEntryName", dbEntryName).
-			Str("actualAppName", actualAppName).
-			Msg("RefreshDeployable: Detected env-prefixed appName (backward compatibility), extracted actual appName")
-	} else {
-		// Standard case: appName is just the app name (without env prefix)
-		// Construct database entry name using standard format: {workingEnv}-{appName}
-		dbEntryName = fmt.Sprintf("%s-%s", workingEnv, appName)
-		actualAppName = appName
-		log.Info().
-			Str("appName", appName).
-			Str("workingEnv", workingEnv).
-			Str("dbEntryName", dbEntryName).
-			Str("actualAppName", actualAppName).
-			Msg("RefreshDeployable: Using standard format - constructed database entry name")
-	}
+	// Standard case: appName is just the app name (without env prefix)
+	// Construct database entry name using standard format: {workingEnv}-{appName}
+	log.Info().
+		Str("appName", appName).
+		Str("workingEnv", workingEnv).
+		Str("dbEntryName", appName).
+		Msg("RefreshDeployable: Using standard format - constructed database entry name")
 
 	log.Info().
 		Str("appName", appName).
 		Str("workingEnv", workingEnv).
-		Str("dbEntryName", dbEntryName).
-		Str("actualAppName", actualAppName).
+		Str("dbEntryName", appName).
 		Str("serviceType", serviceType).
 		Msg("RefreshDeployable: Looking up deployable in database")
 
 	// Get deployable config using the database entry name
-	deployable, err := d.repo.GetByNameAndService(dbEntryName, serviceType)
+	deployable, err := d.repo.GetByNameAndService(appName, serviceType)
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("dbEntryName", dbEntryName).
+			Str("dbEntryName", appName).
 			Str("serviceType", serviceType).
 			Str("appName", appName).
 			Str("workingEnv", workingEnv).
@@ -444,20 +418,18 @@ func (d *Deployable) RefreshDeployable(appName, serviceType, workingEnv string) 
 
 	if deployable == nil {
 		log.Error().
-			Str("dbEntryName", dbEntryName).
+			Str("dbEntryName", appName).
 			Str("serviceType", serviceType).
 			Str("appName", appName).
 			Str("workingEnv", workingEnv).
-			Str("actualAppName", actualAppName).
 			Msg("RefreshDeployable: Deployable not found in database")
-		return nil, fmt.Errorf("deployable not found with name: %s (searched as: %s) and service: %s in environment: %s", appName, dbEntryName, serviceType, workingEnv)
+		return nil, fmt.Errorf("deployable not found with name: %s (searched as: %s) and service: %s in environment: %s", appName, appName, serviceType, workingEnv)
 	}
 
 	log.Info().
 		Str("appName", appName).
 		Str("workingEnv", workingEnv).
-		Str("dbEntryName", dbEntryName).
-		Str("actualAppName", actualAppName).
+		Str("dbEntryName", appName).
 		Int("deployableID", deployable.ID).
 		Str("deployableName", deployable.Name).
 		Msg("RefreshDeployable: Found deployable in database, now fetching resource detail from ArgoCD")
@@ -465,24 +437,21 @@ func (d *Deployable) RefreshDeployable(appName, serviceType, workingEnv string) 
 	// Use the actual app name (without env prefix) and workingEnv for ArgoCD lookup
 	// ArgoCD functions will construct the application name as {workingEnv}-{actualAppName}
 	log.Info().
-		Str("actualAppName", actualAppName).
 		Str("workingEnv", workingEnv).
-		Str("expectedArgoCDAppName", fmt.Sprintf("%s-%s", workingEnv, actualAppName)).
+		Str("expectedArgoCDAppName", fmt.Sprintf("%s-%s", workingEnv, appName)).
 		Msg("RefreshDeployable: Calling GetResourceDetail to connect to ArgoCD")
 
-	result, err := d.infrastructureHandler.GetResourceDetail(actualAppName, workingEnv)
+	result, err := d.infrastructureHandler.GetResourceDetail(appName, workingEnv)
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("actualAppName", actualAppName).
 			Str("workingEnv", workingEnv).
-			Str("expectedArgoCDAppName", fmt.Sprintf("%s-%s", workingEnv, actualAppName)).
+			Str("expectedArgoCDAppName", fmt.Sprintf("%s-%s", workingEnv, appName)).
 			Msg("RefreshDeployable: Failed to get resource detail from ArgoCD - ArgoCD connection or lookup failed")
 		return nil, fmt.Errorf("failed to get resource detail from ArgoCD: %w", err)
 	}
 
 	log.Info().
-		Str("actualAppName", actualAppName).
 		Str("workingEnv", workingEnv).
 		Int("nodeCount", len(result.Nodes)).
 		Msg("RefreshDeployable: Successfully connected to ArgoCD and retrieved resource detail")
@@ -533,33 +502,20 @@ func (d *Deployable) TuneThresholds(request *TuneThresholdsRequest, workingEnv s
 		return "", fmt.Errorf("workingEnv is required for TuneThresholds")
 	}
 
-	// Extract environment suffix (e.g., "gcp_stg" -> "stg", "gcp_int" -> "int", "stg" -> "stg")
-	envSuffix := workingEnv
-	if strings.Contains(workingEnv, "_") {
-		parts := strings.Split(workingEnv, "_")
-		if len(parts) > 1 {
-			envSuffix = parts[len(parts)-1] // Get last part (e.g., "stg" from "gcp_stg")
-		}
-	}
-
-	// Standard database entry name format: {env}-{appName}
-	// This matches the naming pattern used in CreateDeployable and UpdateDeployable
-	dbEntryName := fmt.Sprintf("%s-%s", envSuffix, request.AppName)
-
 	log.Info().
 		Str("appName", request.AppName).
-		Str("dbEntryName", dbEntryName).
+		Str("dbEntryName", request.AppName).
 		Str("workingEnv", workingEnv).
 		Msg("TuneThresholds: Looking up deployable with environment-prefixed name")
 
-	deployable, err := d.repo.GetByNameAndService(dbEntryName, request.ServiceName)
+	deployable, err := d.repo.GetByNameAndService(request.AppName, request.ServiceName)
 	if err != nil {
-		log.Error().Err(err).Str("dbEntryName", dbEntryName).Msg("Failed to get deployable by name and service")
+		log.Error().Err(err).Str("dbEntryName", request.AppName).Msg("Failed to get deployable by name and service")
 		return "", fmt.Errorf("failed to get deployable: %w", err)
 	}
 
 	if deployable == nil {
-		return "", fmt.Errorf("deployable config not found for app: %s (searched as: %s) in environment: %s", request.AppName, dbEntryName, workingEnv)
+		return "", fmt.Errorf("deployable config not found for app: %s (searched as: %s) in environment: %s", request.AppName, request.AppName, workingEnv)
 	}
 
 	// Use deployable.CreatedBy as email for commit author, fallback to empty string if not available

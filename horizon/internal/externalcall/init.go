@@ -3,6 +3,7 @@ package externalcall
 import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/github"
+	"github.com/spf13/viper"
 )
 
 func Init(config configs.Configs) {
@@ -27,6 +28,13 @@ func Init(config configs.Configs) {
 	// This ensures all commits (onboarding and threshold updates) go to the same repository and branch
 	// These values come from REPOSITORY_NAME and BRANCH_NAME environment variables (mandatory)
 	github.InitRepositoryAndBranch(config.RepositoryName, config.BranchName)
+
+	// Initialize working environment from config
+	// This is used by Predator handler and other components that need workingEnv
+	workingEnv := viper.GetString("WORKING_ENV")
+	if workingEnv != "" {
+		InitWorkingEnvironment(workingEnv)
+	}
 
 	// Initialize feature validation client with local online feature store
 	InitFeatureValidationClient()

@@ -39,3 +39,17 @@ type UserListingResponse struct {
 	IsActive  bool   `json:"is_active"`
 	Role      string `json:"role"`
 }
+type PermissionResponse struct {
+	Role        string       `json:"role"`
+	Permissions []ServiceSet `json:"permissions"`
+}
+
+type ServiceSet struct {
+	Service string       `json:"service"`
+	Screens []ScreenInfo `json:"screens"`
+}
+
+type ScreenInfo struct {
+	ScreenType     string   `json:"screenType"`
+	AllowedActions []string `json:"allowedActions"`
+}

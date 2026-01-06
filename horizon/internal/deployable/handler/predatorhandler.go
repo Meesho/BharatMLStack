@@ -9,6 +9,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/Meesho/BharatMLStack/horizon/internal/workflow/activities"
 	workflowHandler "github.com/Meesho/BharatMLStack/horizon/internal/workflow/handler"
+	"github.com/spf13/viper"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/serviceconfig"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/servicedeployableconfig"
@@ -490,19 +491,6 @@ func (h *Handler) CreateDeployable(request *DeployableRequest, workingEnv string
 		return "", fmt.Errorf("workingEnv is required for deployable creation")
 	}
 
-	// Extract environment suffix (e.g., "gcp_stg" -> "stg", "gcp_int" -> "int", "stg" -> "stg")
-	envSuffix := workingEnv
-	if strings.Contains(workingEnv, "_") {
-		parts := strings.Split(workingEnv, "_")
-		if len(parts) > 1 {
-			envSuffix = parts[len(parts)-1] // Get last part (e.g., "stg" from "gcp_stg")
-		}
-	}
-
-	// Standard database entry name format: {env}-{appName}
-	// This ensures consistency across single and multi-environment deployables
-	dbEntryName := fmt.Sprintf("%s-%s", envSuffix, request.AppName)
-
 	// Generate host using domain from config.yaml: <appname>.<domain>
 	// Each environment defines its own domain in config.yaml, so no need to inject env into host
 	domain := serviceConfig.Domain
@@ -520,17 +508,19 @@ func (h *Handler) CreateDeployable(request *DeployableRequest, workingEnv string
 
 	log.Info().
 		Str("appName", request.AppName).
-		Str("dbEntryName", dbEntryName).
+		Str("dbEntryName", request.AppName).
 		Str("host", host).
 		Str("workingEnv", workingEnv).
 		Msg("CreateDeployable: Using unique database entry name and host per environment")
 
+	// if serviceConfig.AppPort != 0 {
+	// 	host = host + ":" + strconv.Itoa(serviceConfig.AppPort)
+	// }
 	deployableConfig := &servicedeployableconfig.ServiceDeployableConfig{
-		Name:                    dbEntryName, // Use environment-prefixed name for database uniqueness
+		Name:                    request.AppName,
 		Service:                 request.ServiceName,
 		Host:                    host, // Use environment-prefixed host for database uniqueness
 		Active:                  true,
-		Port:                    serviceConfig.AppPort, // Set port from service_config
 		CreatedBy:               request.CreatedBy,
 		Config:                  configJSON,
 		DeployableRunningStatus: false,
@@ -545,7 +535,6 @@ func (h *Handler) CreateDeployable(request *DeployableRequest, workingEnv string
 		Str("appName", request.AppName).
 		Str("host", deployableConfig.Host).
 		Str("service", deployableConfig.Service).
-		Int("port", deployableConfig.Port).
 		Msg("CreateDeployable: Creating deployable entry in database")
 
 	if err := h.repo.Create(deployableConfig); err != nil {
@@ -673,6 +662,33 @@ func (h *Handler) CreateDeployable(request *DeployableRequest, workingEnv string
 	workflowPayload["nodeSelectorValue"] = request.NodeSelectorValue
 	workflowPayload["deploymentStrategy"] = request.DeploymentStrategy
 	workflowPayload["gcs_triton_path"] = request.GCSTritonPath
+
+	// Check if GCS fields are "NA" or empty, if so use localModelPath from config.yaml
+	gcsBucketPath := strings.TrimSpace(request.GCSBucketPath)
+	gcsTritonPath := strings.TrimSpace(request.GCSTritonPath)
+	serviceAccount := strings.TrimSpace(request.ServiceAccount)
+
+	// Check if any GCS-related field is "NA" or empty
+	useLocalModelPath := false
+	if gcsBucketPath == "" || strings.EqualFold(gcsBucketPath, "NA") ||
+		gcsTritonPath == "" || strings.EqualFold(gcsTritonPath, "NA") ||
+		serviceAccount == "" || strings.EqualFold(serviceAccount, "NA") {
+		useLocalModelPath = true
+		log.Info().
+			Str("appName", request.AppName).
+			Str("gcs_bucket_path", gcsBucketPath).
+			Str("gcs_triton_path", gcsTritonPath).
+			Str("serviceAccount", serviceAccount).
+			Msg("GCS fields are NA or empty, will use localModelPath from config.yaml for local development")
+	}
+
+	if useLocalModelPath {
+		workflowPayload["localModelPath"] = viper.GetString("LOCAL_MODEL_PATH")
+		log.Info().
+			Str("appName", request.AppName).
+			Str("localModelPath", viper.GetString("LOCAL_MODEL_PATH")).
+			Msg("Using localModelPath from config.yaml for local development")
+	}
 
 	// Add probe configuration from serviceConfig (read from config.yaml)
 	// These values come from config.yaml and have defaults applied in ApplyDefaults()
@@ -852,33 +868,20 @@ func (h *Handler) UpdateDeployable(request *DeployableRequest, workingEnv string
 		return fmt.Errorf("workingEnv is required for deployable update")
 	}
 
-	// Extract environment suffix (e.g., "gcp_stg" -> "stg", "gcp_int" -> "int", "stg" -> "stg")
-	envSuffix := workingEnv
-	if strings.Contains(workingEnv, "_") {
-		parts := strings.Split(workingEnv, "_")
-		if len(parts) > 1 {
-			envSuffix = parts[len(parts)-1] // Get last part (e.g., "stg" from "gcp_stg")
-		}
-	}
-
-	// Standard database entry name format: {env}-{appName}
-	// This matches the naming pattern used in CreateDeployable
-	dbEntryName := fmt.Sprintf("%s-%s", envSuffix, request.AppName)
-
 	log.Info().
 		Str("appName", request.AppName).
-		Str("dbEntryName", dbEntryName).
+		Str("dbEntryName", request.AppName).
 		Str("workingEnv", workingEnv).
 		Msg("UpdateDeployable: Looking up deployable with environment-prefixed name")
 
 	// 3. Get existing deployable configs by service using environment-prefixed name
-	existingConfig, err := h.repo.GetByNameAndService(dbEntryName, request.ServiceName)
+	existingConfig, err := h.repo.GetByNameAndService(request.AppName, request.ServiceName)
 	if err != nil {
 		return fmt.Errorf("failed to get existing deployable configs: %w", err)
 	}
 
 	if existingConfig == nil {
-		return fmt.Errorf("deployable config not found for app: %s (searched as: %s) in environment: %s", request.AppName, dbEntryName, workingEnv)
+		return fmt.Errorf("deployable config not found for app: %s (searched as: %s) in environment: %s", request.AppName, request.AppName, workingEnv)
 	}
 
 	var config DeployableConfigPayload

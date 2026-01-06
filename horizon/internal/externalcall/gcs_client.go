@@ -61,14 +61,54 @@ func CreateGCSClient(isGcsEnabled bool) GCSClientInterface {
 		}
 	}
 	ctx := context.Background()
+
+	// Check for Application Default Credentials path
+	credsPath := os.Getenv("CLOUDSDK_CONFIG")
+	if credsPath == "" {
+		home := os.Getenv("HOME")
+		if home == "" {
+			home = "/root"
+		}
+		credsPath = home + "/.config/gcloud"
+	}
+	adcPath := credsPath + "/application_default_credentials.json"
+
+	// Check if ADC file exists
+	_, err := os.Stat(adcPath)
+	adcExists := err == nil
+
+	log.Info().
+		Str("CLOUDSDK_CONFIG", os.Getenv("CLOUDSDK_CONFIG")).
+		Str("HOME", os.Getenv("HOME")).
+		Str("adcPath", adcPath).
+		Bool("adcFileExists", adcExists).
+		Msg("Creating GCS client with Application Default Credentials")
+
+	if !adcExists {
+		log.Warn().
+			Str("adcPath", adcPath).
+			Msg("ADC credentials file not found - GCS operations may fail. Run 'gcloud auth application-default login' on host and ensure ~/.config/gcloud is mounted")
+	}
+
 	client, err := storage.NewClient(ctx)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to create GCS client")
+		log.Error().
+			Err(err).
+			Str("adcPath", adcPath).
+			Bool("adcFileExists", adcExists).
+			Msg("Failed to create GCS client - check ADC credentials")
 		return &GCSClient{
 			client: nil,
 			ctx:    ctx,
 		}
 	}
+
+	// Log successful creation with credential info
+	log.Info().
+		Str("adcPath", adcPath).
+		Bool("adcFileExists", adcExists).
+		Msg("GCS client created successfully with Application Default Credentials")
+
 	return &GCSClient{
 		client: client,
 		ctx:    ctx,

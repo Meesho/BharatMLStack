@@ -102,7 +102,34 @@ func UpdateFileYaml(argocdApplication argocd.ArgoCDApplicationMetadata, data map
 	// BU and Team are ignored in new structure - only environment and appName matter
 	appName := argocdApplication.Labels.AppName
 	if appName == "" {
-		return fmt.Errorf("appName not found in ArgoCD application labels")
+		// Fallback: Extract appName from ArgoCD application name
+		// ArgoCD apps are typically named like "prd-appname", "int-appname", etc.
+		// Extract the actual app name by removing the environment prefix
+		appNameFromLabel := argocdApplication.Name
+		if appNameFromLabel != "" {
+			// Extract environment prefix from application name and remove it
+			// Examples: "prd-test" -> "test", "int-appname" -> "appname"
+			parts := strings.Split(appNameFromLabel, "-")
+			if len(parts) > 1 {
+				// Remove the first part (environment prefix) and join the rest
+				appName = strings.Join(parts[1:], "-")
+				log.Info().
+					Str("argocdAppName", appNameFromLabel).
+					Str("extractedAppName", appName).
+					Str("envDir", envDir).
+					Msg("UpdateFileYaml: Extracted appName from ArgoCD application name (label was missing)")
+			} else {
+				// If no dash found, use the name as-is (shouldn't happen, but handle gracefully)
+				appName = appNameFromLabel
+				log.Warn().
+					Str("argocdAppName", appNameFromLabel).
+					Str("extractedAppName", appName).
+					Msg("UpdateFileYaml: No dash found in ArgoCD application name, using as-is")
+			}
+		}
+		if appName == "" {
+			return fmt.Errorf("appName not found in ArgoCD application labels and could not extract from application name: %s", argocdApplication.Name)
+		}
 	}
 	basePath := GetBasePath("", "", envDir, appName)
 	if basePath == "" {

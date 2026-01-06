@@ -56,7 +56,7 @@ func GetArgoCDResource(kind string, name string, hasCanary bool) (ArgoCDResource
 func (r ArgoCDResource) FetchResourceFromArgoCD(workingEnv string) (interface{}, error) {
 	log.Info().Str("workingEnv", workingEnv).Msg("Entered FetchResourceFromArgoCD function")
 
-	baseURL, _ := url.Parse(getArgoCDAPI(workingEnv) + "/applications/" + r.Namespace + "/resource")
+	baseURL, _ := url.Parse(getArgoCDAPI(workingEnv) + "/api/v1/applications/" + r.Namespace + "/resource")
 	params := url.Values{}
 	params.Add("name", r.Namespace)
 	params.Add("namespace", r.Namespace)
@@ -105,7 +105,7 @@ func (r ArgoCDResource) PatchArgoCDResource(payload interface{}, workingEnv stri
 		return nil, err
 	}
 
-	baseURL, _ := url.Parse(getArgoCDAPI(workingEnv) + "/applications/" + r.Namespace + "/resource")
+	baseURL, _ := url.Parse(getArgoCDAPI(workingEnv) + "/api/v1/applications/" + r.Namespace + "/resource")
 	params := url.Values{}
 	params.Add("name", r.Namespace)
 	params.Add("namespace", r.Namespace)
@@ -158,11 +158,11 @@ func GetArgoCDResourceDetail(appName string, workingEnv string) (ArgoCDAppApiRes
 		Str("applicationName", appName).
 		Str("environment", workingEnv).
 		Str("expectedArgoCDAppName", expectedArgoCDAppName).
-		Str("apiPath", "/applications/"+expectedArgoCDAppName+"/resource-tree").
+		Str("apiPath", "/api/v1/applications/"+expectedArgoCDAppName+"/resource-tree").
 		Msg("GetArgoCDResourceDetail: Starting ArgoCD resource detail lookup")
 
 	appReq, err := getArgoCDClient(
-		"/applications/"+expectedArgoCDAppName+"/resource-tree",
+		"/api/v1/applications/"+expectedArgoCDAppName+"/resource-tree",
 		[]byte{},
 		"GET",
 		workingEnv,

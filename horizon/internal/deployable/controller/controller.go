@@ -12,6 +12,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/servicedeployableconfig"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -93,7 +94,7 @@ func (d *V1) CreateDeployable(ctx *gin.Context) {
 		Int("environmentsCount", len(request.Environments)).
 		Str("queryWorkingEnv", ctx.Query("workingEnv")).
 		Msg("CreateDeployable: Request received")
-	
+
 	// Log each environment in the request for debugging
 	if len(request.Environments) > 0 {
 		for i, env := range request.Environments {
@@ -140,8 +141,8 @@ func (d *V1) CreateDeployable(ctx *gin.Context) {
 		Str("appName", request.AppName).
 		Int("environmentsCount", len(request.Environments)).
 		Msg("CreateDeployable: No environments array detected, using legacy single-environment flow")
-	
-	workingEnv := ctx.Query("workingEnv")
+
+	workingEnv := viper.GetString("WORKING_ENV")
 	if workingEnv == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"error": "workingEnv query parameter is required when environments array is not provided",
@@ -149,7 +150,7 @@ func (d *V1) CreateDeployable(ctx *gin.Context) {
 		})
 		return
 	}
-	
+
 	log.Info().
 		Str("appName", request.AppName).
 		Str("workingEnv", workingEnv).
@@ -157,6 +158,11 @@ func (d *V1) CreateDeployable(ctx *gin.Context) {
 
 	workflowID, err := d.config.CreateDeployable(&request, workingEnv)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("appName", request.AppName).
+			Str("workingEnv", workingEnv).
+			Msg("CreateDeployable: Error registering deployable")
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Error registering deployable: %v", err),
 			"data":  nil,
@@ -183,7 +189,7 @@ func (d *V1) UpdateDeployable(ctx *gin.Context) {
 		return
 	}
 
-	workingEnv := ctx.Query("workingEnv")
+	workingEnv := viper.GetString("WORKING_ENV")
 	if workingEnv == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"error": "workingEnv query parameter is required",
@@ -283,6 +289,7 @@ func (d *V1) GetDeployablesByService(ctx *gin.Context) {
 				}
 			}
 
+			// TODO get directly from Argo, must be missed
 			// Get Ring Master config if needed
 			if dep.DeployableWorkFlowId != "" && dep.DeploymentRunID != "" {
 				ringMasterConfig := d.config.GetRingMasterConfig(dep.Name, dep.DeployableWorkFlowId, dep.DeploymentRunID)
@@ -323,7 +330,7 @@ func (d *V1) GetDeployablesByService(ctx *gin.Context) {
 func (d *V1) RefreshDeployable(ctx *gin.Context) {
 	appName := ctx.Query("app_name")
 	serviceType := ctx.Query("service_type")
-	workingEnv := ctx.Query("workingEnv")
+	workingEnv := viper.GetString("WORKING_ENV")
 
 	if appName == "" || serviceType == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -371,7 +378,7 @@ func (d *V1) TuneThresholds(ctx *gin.Context) {
 	}
 
 	// Get workingEnv from query parameter (required for multi-environment support)
-	workingEnv := ctx.Query("workingEnv")
+	workingEnv := viper.GetString("WORKING_ENV")
 	if workingEnv == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"error": "workingEnv query parameter is required",
