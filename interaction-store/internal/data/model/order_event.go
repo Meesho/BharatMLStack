@@ -29,3 +29,29 @@ type OrderDetail struct {
 type CatalogDetails struct {
 	CatalogID int `json:"catalog_id"`
 }
+
+// FlatOrderEvent is the flattened structure used for storage (one per product in an order)
+type FlatOrderEvent struct {
+	CatalogID   int32
+	ProductID   int32
+	SubOrderNum string
+	OrderedAt   int64
+}
+
+// FlattenOrderPlacedEvent converts a nested OrderPlacedEvent into a slice of FlatOrderEvent
+func FlattenOrderPlacedEvent(event OrderPlacedEvent) []FlatOrderEvent {
+	var flattened []FlatOrderEvent
+	timestamp := event.OrderKafkaMetaData.Timestamp
+
+	for _, split := range event.OrderPlacedEventData.OrderSplits {
+		for _, detail := range split.OrderDetails {
+			flattened = append(flattened, FlatOrderEvent{
+				CatalogID:   int32(detail.CatalogDetails.CatalogID),
+				ProductID:   int32(detail.ProductID),
+				SubOrderNum: detail.SubOrderNum,
+				OrderedAt:   timestamp,
+			})
+		}
+	}
+	return flattened
+}

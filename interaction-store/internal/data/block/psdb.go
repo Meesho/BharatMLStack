@@ -87,12 +87,10 @@ func (p *PermanentStorageDataBlock) serializeClickEvents() error {
 	catalogIds := make([]int32, p.DataLength)
 	productIds := make([]int32, p.DataLength)
 	timestamps := make([]int64, p.DataLength)
-	// metadata := make([]string, p.DataLength)
 	for i, event := range clickEvents {
 		catalogIds[i] = event.ClickEventData.Payload.CatalogId
 		productIds[i] = event.ClickEventData.Payload.ProductId
 		timestamps[i] = event.ClickEventData.Payload.ClickedAt
-		// metadata[i] = ""
 	}
 	if err := serializeInt32Vector(catalogIds, p); err != nil {
 		return err
@@ -103,13 +101,34 @@ func (p *PermanentStorageDataBlock) serializeClickEvents() error {
 	if err := serializeInt64Vector(timestamps, p); err != nil {
 		return err
 	}
-	// if err := serializeStringVector(metadata, p); err != nil {
-	// 	return err
-	// }
 	return nil
 }
 
 func (p *PermanentStorageDataBlock) serializeOrderEvents() error {
+	orderEvents := p.Data.([]model.FlatOrderEvent)
+	p.DataLength = uint16(len(orderEvents))
+	catalogIds := make([]int32, p.DataLength)
+	productIds := make([]int32, p.DataLength)
+	timestamps := make([]int64, p.DataLength)
+	subOrderNums := make([]string, p.DataLength)
+	for i, event := range orderEvents {
+		catalogIds[i] = event.CatalogID
+		productIds[i] = event.ProductID
+		timestamps[i] = event.OrderedAt
+		subOrderNums[i] = event.SubOrderNum
+	}
+	if err := serializeInt32Vector(catalogIds, p); err != nil {
+		return err
+	}
+	if err := serializeInt32Vector(productIds, p); err != nil {
+		return err
+	}
+	if err := serializeInt64Vector(timestamps, p); err != nil {
+		return err
+	}
+	if err := serializeStringVector(subOrderNums, p); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -200,28 +219,24 @@ func serializeInt64Vector(values []int64, p *PermanentStorageDataBlock) error {
 	return nil
 }
 
-// serializeStringVectorV2 serializes string vector data into a byte slice, using pascal string encoding.
+// serializeStringVector serializes string vector data into a byte slice, using pascal string encoding.
 // Format: [len1][len2]...[lenN][str1][str2]...[strN]
-// func serializeStringVector(values []string, p *PermanentStorageDataBlock) error {
-// 	if len(values) == 0 {
-// 		return fmt.Errorf("string vector data is empty")
-// 	}
-// 	if len(values) != int(p.DataLength) {
-// 		return fmt.Errorf("mismatch in number of elements (%d) and defined data length (%d)",
-// 			len(values), p.DataLength)
-// 	}
-// 	strLenOffsetIdx := len(p.OriginalData)
-// 	strDataOffsetIdx := len(p.OriginalData) + (int(p.DataLength) * 2) // Start of string data after all length prefixes
-// 	for _, v := range values {
-// 		strLen := len(v)
-// 		utils.ByteOrder.PutUint16(p.OriginalData[strLenOffsetIdx:], uint16(strLen))
-// 		copy(p.OriginalData[strDataOffsetIdx:], []byte(v))
-// 		strLenOffsetIdx += 2
-// 		strDataOffsetIdx += strLen
-// 	}
-// 	p.OriginalData = p.OriginalData[:strDataOffsetIdx]
-// 	return nil
-// }
+func serializeStringVector(values []string, p *PermanentStorageDataBlock) error {
+	if len(values) != int(p.DataLength) {
+		return fmt.Errorf("mismatch in number of elements (%d) and defined data length (%d)",
+			len(values), p.DataLength)
+	}
+	for _, v := range values {
+		strLen := uint16(len(v))
+		lenBytes := make([]byte, 2)
+		utils.ByteOrder.PutUint16(lenBytes, strLen)
+		p.OriginalData = append(p.OriginalData, lenBytes...)
+	}
+	for _, v := range values {
+		p.OriginalData = append(p.OriginalData, []byte(v)...)
+	}
+	return nil
+}
 
 // func serializeBoolVector(values []bool, p *PermanentStorageDataBlock) error {
 // 	if len(values) == 0 {

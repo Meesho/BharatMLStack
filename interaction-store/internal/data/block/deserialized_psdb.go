@@ -132,6 +132,63 @@ func (dPsdb *DeserializedPSDB) retrieveClickEventData() ([]model.ClickEvent, err
 	return events, nil
 }
 
-func (dPsdb *DeserializedPSDB) retrieveOrderEventData() ([]model.OrderPlacedEvent, error) {
-	return nil, nil
+func (dPsdb *DeserializedPSDB) retrieveOrderEventData() ([]model.FlatOrderEvent, error) {
+	idx := 0
+	deltaLength := int(dPsdb.DataLength) * enum.DataTypeInt32Vector.Size()
+	catalogIds := utils.ByteOrder.Int32Vector(dPsdb.OriginalData[idx : idx+deltaLength])
+	idx += deltaLength
+	deltaLength = int(dPsdb.DataLength) * enum.DataTypeInt32Vector.Size()
+	productIds := utils.ByteOrder.Int32Vector(dPsdb.OriginalData[idx : idx+deltaLength])
+	idx += deltaLength
+	deltaLength = int(dPsdb.DataLength) * enum.DataTypeInt64Vector.Size()
+	timestamps := utils.ByteOrder.Int64Vector(dPsdb.OriginalData[idx : idx+deltaLength])
+	idx += deltaLength
+
+	subOrderNums, err := deserializeStringVector(dPsdb.OriginalData[idx:], int(dPsdb.DataLength))
+	if err != nil {
+		return nil, fmt.Errorf("failed to deserialize sub_order_num: %w", err)
+	}
+
+	if dPsdb.DataLength != uint16(len(catalogIds)) || dPsdb.DataLength != uint16(len(productIds)) || dPsdb.DataLength != uint16(len(timestamps)) {
+		return nil, fmt.Errorf("data length mismatch")
+	}
+
+	events := make([]model.FlatOrderEvent, dPsdb.DataLength)
+	for i := 0; i < int(dPsdb.DataLength); i++ {
+		events[i] = model.FlatOrderEvent{
+			CatalogID:   catalogIds[i],
+			ProductID:   productIds[i],
+			OrderedAt:   timestamps[i],
+			SubOrderNum: subOrderNums[i],
+		}
+	}
+	return events, nil
+}
+
+// deserializeStringVector reads pascal-encoded strings: [len1][len2]...[lenN][str1][str2]...[strN]
+func deserializeStringVector(data []byte, count int) ([]string, error) {
+	if count == 0 {
+		return []string{}, nil
+	}
+	lengthsSize := count * 2
+	if len(data) < lengthsSize {
+		return nil, fmt.Errorf("data too short to contain string lengths")
+	}
+
+	lengths := make([]uint16, count)
+	for i := 0; i < count; i++ {
+		lengths[i] = utils.ByteOrder.Uint16(data[i*2 : i*2+2])
+	}
+
+	result := make([]string, count)
+	strOffset := lengthsSize
+	for i := 0; i < count; i++ {
+		strLen := int(lengths[i])
+		if strOffset+strLen > len(data) {
+			return nil, fmt.Errorf("data too short to contain string at index %d", i)
+		}
+		result[i] = string(data[strOffset : strOffset+strLen])
+		strOffset += strLen
+	}
+	return result, nil
 }

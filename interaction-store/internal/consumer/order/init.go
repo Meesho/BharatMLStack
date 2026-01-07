@@ -21,8 +21,7 @@ func Init(config config.Configs) {
 func NewConsumer(version int) Consumer {
 	switch version {
 	case DefaultVersion:
-		// return newOrderConsumer()
-		return nil
+		return newOrderConsumer()
 	default:
 		return nil
 	}
