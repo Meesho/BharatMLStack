@@ -3,8 +3,10 @@ package main
 import (
 	http2 "net/http"
 
-	consumer "github.com/Meesho/BharatMLStack/interaction-store/internal"
+	kafka "github.com/Meesho/BharatMLStack/interaction-store/internal"
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/config"
+	click "github.com/Meesho/BharatMLStack/interaction-store/internal/consumer/click"
+	order "github.com/Meesho/BharatMLStack/interaction-store/internal/consumer/order"
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/scylla"
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/server/http"
 	muxserver "github.com/Meesho/BharatMLStack/interaction-store/internal/server/mux"
@@ -40,7 +42,9 @@ func main() {
 	logger.Init()
 	metric.Init()
 	profiling.Init()
-	consumer.Init(appConfig.Configs)
+	click.Init(appConfig.Configs)
+	order.Init(appConfig.Configs)
+	kafka.Init(appConfig.Configs)
 	http.Init(appConfig.Configs)
 	// Initialize and run mux server
 	mux, err := muxserver.Init(appConfig.Configs)
