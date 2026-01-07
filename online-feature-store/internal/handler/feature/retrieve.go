@@ -856,8 +856,13 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 					return
 				}
 			} else {
+				defaultValue, err := h.config.GetDefaultValueByte(data.EntityLabel, fgId, int(version), featureLabel)
+				if err != nil {
+					log.Error().Err(err).Msgf("Error while getting default value for feature %s", featureLabel)
+					return
+				}
 				// Get feature in original datatype
-				fdata, err = GetFeature(ddb.DataType, ddb, seq, numOfFeatures, stringLengths, vectorLengths)
+				fdata, err = GetFeature(ddb.DataType, ddb, seq, numOfFeatures, stringLengths, vectorLengths, defaultValue)
 				if err != nil {
 					log.Error().Err(err).Msgf("Error while getting feature for sequence no %d from ddb [feature: %s]", seq, featureLabel)
 					return
@@ -965,7 +970,7 @@ func (h *RetrieveHandler) persistToDistributedCache(entityLabel string, retrieve
 
 // ... existing code ...
 
-func GetFeature(dataType types.DataType, ddb *blocks.DeserializedPSDB, seq, numOfFeatures int, stringLengths []uint16, vectorLengths []uint16) ([]byte, error) {
+func GetFeature(dataType types.DataType, ddb *blocks.DeserializedPSDB, seq, numOfFeatures int, stringLengths []uint16, vectorLengths []uint16, defaultValue []byte) ([]byte, error) {
 	switch dataType {
 	case types.DataTypeBool:
 		data, err := ddb.GetBoolScalarFeature(seq)
@@ -975,21 +980,21 @@ func GetFeature(dataType types.DataType, ddb *blocks.DeserializedPSDB, seq, numO
 		return data, nil
 
 	case types.DataTypeInt8, types.DataTypeInt16, types.DataTypeInt32, types.DataTypeInt64:
-		data, err := ddb.GetNumericScalarFeature(seq)
+		data, err := ddb.GetNumericScalarFeature(seq, numOfFeatures, defaultValue)
 		if err != nil {
 			return nil, err
 		}
 		return data, nil
 
 	case types.DataTypeUint8, types.DataTypeUint16, types.DataTypeUint32, types.DataTypeUint64:
-		data, err := ddb.GetNumericScalarFeature(seq)
+		data, err := ddb.GetNumericScalarFeature(seq, numOfFeatures, defaultValue)
 		if err != nil {
 			return nil, err
 		}
 		return data, nil
 
 	case types.DataTypeFP16, types.DataTypeFP32, types.DataTypeFP64, types.DataTypeFP8E4M3, types.DataTypeFP8E5M2:
-		data, err := ddb.GetNumericScalarFeature(seq)
+		data, err := ddb.GetNumericScalarFeature(seq, numOfFeatures, defaultValue)
 		if err != nil {
 			return nil, err
 		}
