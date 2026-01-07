@@ -391,7 +391,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 			validate: func(t *testing.T, d *DeserializedPSDB) {
 				// Test each position
 				for pos := 0; pos < 3; pos++ {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt32(feature)
 					require.NoError(t, err)
@@ -563,7 +563,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 			validate: func(t *testing.T, d *DeserializedPSDB) {
 				expectedValues := []float32{1.1, 2.2, 3.3}
 				for pos := 0; pos < 3; pos++ {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeFloat32(feature)
 					require.NoError(t, err)
@@ -587,7 +587,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 			validate: func(t *testing.T, d *DeserializedPSDB) {
 				expectedValues := []float64{1.1, 2.2, 3.3}
 				for pos := 0; pos < 3; pos++ {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeFloat64(feature)
 					require.NoError(t, err)
@@ -611,7 +611,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 			validate: func(t *testing.T, d *DeserializedPSDB) {
 				expectedValues := []int8{1, 2, 3}
 				for pos := 0; pos < 3; pos++ {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt8(feature)
 					require.NoError(t, err)
@@ -635,7 +635,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 			validate: func(t *testing.T, d *DeserializedPSDB) {
 				expectedValues := []int16{1, 2, 3}
 				for pos := 0; pos < 3; pos++ {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt16(feature)
 					require.NoError(t, err)
@@ -659,7 +659,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 			validate: func(t *testing.T, d *DeserializedPSDB) {
 				expectedValues := []int64{1, 2, 3}
 				for pos := 0; pos < 3; pos++ {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt64(feature)
 					require.NoError(t, err)
@@ -996,7 +996,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 			validate: func(t *testing.T, d *DeserializedPSDB) {
 				// Test random positions
 				for _, pos := range []int{0, 100, 1000, 9999} {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt32(feature)
 					require.NoError(t, err)
@@ -1101,7 +1101,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 			validate: func(t *testing.T, d *DeserializedPSDB) {
 				// Test random positions
 				for _, pos := range []int{0, 100, 1000, 9999} {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeFloat32(feature)
 					require.NoError(t, err)
@@ -1128,7 +1128,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 			validate: func(t *testing.T, d *DeserializedPSDB) {
 				// Test random positions
 				for _, pos := range []int{0, 100, 1000, 9999} {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeFloat64(feature)
 					require.NoError(t, err)
@@ -1155,7 +1155,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 			validate: func(t *testing.T, d *DeserializedPSDB) {
 				// Test random positions
 				for _, pos := range []int{0, 50, 100, 999} {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt8(feature)
 					require.NoError(t, err)
@@ -1182,7 +1182,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 			validate: func(t *testing.T, d *DeserializedPSDB) {
 				// Test random positions
 				for _, pos := range []int{0, 100, 1000, 4999} {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt16(feature)
 					require.NoError(t, err)
@@ -1209,7 +1209,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 			validate: func(t *testing.T, d *DeserializedPSDB) {
 				// Test random positions
 				for _, pos := range []int{0, 100, 1000, 9999} {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt64(feature)
 					require.NoError(t, err)

@@ -16,7 +16,8 @@ type DeserializedPSDB struct {
 	Header         []byte
 	CompressedData []byte
 	OriginalData   []byte
-
+	// NEW (optional)
+	BitmapMeta byte
 	// 16-bit field
 	FeatureSchemaVersion uint16
 
@@ -45,6 +46,8 @@ func DeserializePSDB(data []byte) (*DeserializedPSDB, error) {
 	switch layoutVersion {
 	case 1:
 		ddb, err = deserializePSDBForLayout1(data)
+	case 2:
+		ddb, err = deserializePSDBForLayout2(data)
 	default:
 		err = fmt.Errorf("unsupported layout version: %d", layoutVersion)
 	}
@@ -125,6 +128,68 @@ func deserializePSDBForLayout1(data []byte) (*DeserializedPSDB, error) {
 		DataType:             dataType,
 		Header:               header,
 		CompressedData:       compressedData,
+		NegativeCache:        false,
+		Expired:              isExpired,
+	}, nil
+}
+
+func deserializePSDBForLayout2(data []byte) (*DeserializedPSDB, error) {
+	if len(data) < PSDBLayout1LengthBytes {
+		return nil, fmt.Errorf("data is too short to contain a valid PSDB header")
+	}
+	featureSchemaVersion := system.ByteOrder.Uint16(data[0:2])
+	expiryAt, err := system.DecodeExpiry(data[2:7])
+	isExpired := system.IsExpired(data[2:7])
+	if err != nil {
+		return nil, err
+	}
+	layoutVersion := (data[7] & 0xF0) >> 4
+	compressionType := compression.Type((data[7] & 0x0E) >> 1)
+
+	dtT := (data[7] & 0x01) << 4
+	dtT |= ((data[8] & 0xF0) >> 4)
+	dataType := types.DataType(dtT)
+	headerLen := PSDBLayout1LengthBytes
+	var bitmapMeta byte
+
+	if layoutVersion == 2 {
+		if len(data) < PSDBLayout1LengthBytes+PSDBLayout2ExtraBytes {
+			return nil, fmt.Errorf("data too short for layout-2 header")
+		}
+		bitmapMeta = data[PSDBLayout1LengthBytes]
+		headerLen += PSDBLayout2ExtraBytes
+	}
+
+	header := data[:headerLen]
+	var originalData []byte
+	var compressedData []byte
+
+	payload := data[headerLen:]
+
+	if compressionType == compression.TypeNone {
+		originalData = payload
+		compressedData = payload
+	} else {
+		dec, err := compression.GetDecoder(compressionType)
+		if err != nil {
+			return nil, err
+		}
+		compressedData = payload
+		originalData, err = dec.Decode(payload)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &DeserializedPSDB{
+		FeatureSchemaVersion: featureSchemaVersion,
+		LayoutVersion:        layoutVersion,
+		ExpiryAt:             expiryAt,
+		CompressionType:      compressionType,
+		DataType:             dataType,
+		Header:               header,
+		CompressedData:       compressedData,
+		OriginalData:         originalData,
+		BitmapMeta:           bitmapMeta,
 		NegativeCache:        false,
 		Expired:              isExpired,
 	}, nil
@@ -260,14 +325,83 @@ func (d *DeserializedPSDB) GetStringVectorFeature(pos int, noOfFeatures int, vec
 	}
 	return data, nil
 }
-func (dd *DeserializedPSDB) GetNumericScalarFeature(pos int) ([]byte, error) {
+
+func (dd *DeserializedPSDB) GetNumericScalarFeature(
+	pos int,
+	numFeatures int,
+	defaultValue []byte,
+) ([]byte, error) {
+
 	size := dd.DataType.Size()
-	start := pos * size
-	end := start + size
-	if start >= len(dd.OriginalData) || end > len(dd.OriginalData) {
+	data := dd.OriginalData
+	offset := 0
+
+	// ─────────────────────────────
+	// Layout-2 bitmap handling
+	// ─────────────────────────────
+	if dd.LayoutVersion == 2 && (dd.BitmapMeta&0x08) != 0 {
+
+		bitmapSize := (numFeatures + 7) / 8
+		if len(data) < bitmapSize {
+			return nil, fmt.Errorf("corrupt bitmap payload")
+		}
+
+		bitmap := data[:bitmapSize]
+		dense := data[bitmapSize:]
+
+		byteIdx := pos / 8
+		bitIdx := pos % 8
+
+		if byteIdx >= len(bitmap) {
+			return nil, fmt.Errorf("bitmap index out of bounds")
+		}
+
+		// Feature is default
+		if (bitmap[byteIdx] & (1 << bitIdx)) == 0 {
+			return defaultValue, nil
+		}
+
+		denseIdx := countSetBitsBefore(bitmap, pos, numFeatures)
+		start := denseIdx * size
+		end := start + size
+
+		if end > len(dense) {
+			return nil, fmt.Errorf(
+				"dense offset out of bounds (idx=%d start=%d len=%d)",
+				denseIdx, start, len(dense),
+			)
+		}
+
+		return dense[start:end], nil
+	}
+
+	// ─────────────────────────────
+	// Dense value access
+	// ─────────────────────────────
+	offset = pos * size
+	end := offset + size
+
+	if offset < 0 || end > len(data) {
 		return nil, fmt.Errorf("position out of bounds")
 	}
-	return dd.OriginalData[start:end], nil
+
+	return data[offset:end], nil
+}
+
+func countSetBitsBefore(bitmap []byte, pos int, numFeatures int) int {
+	count := 0
+
+	for i := 0; i < pos; i++ {
+		if i >= numFeatures {
+			break
+		}
+		byteIdx := i / 8
+		bitIdx := i % 8
+		if (bitmap[byteIdx] & (1 << bitIdx)) != 0 {
+			count++
+		}
+	}
+	return count
 }
 
 func (dd *DeserializedPSDB) GetNumericVectorFeature(pos int, vectorLengths []uint16) ([]byte, error) {

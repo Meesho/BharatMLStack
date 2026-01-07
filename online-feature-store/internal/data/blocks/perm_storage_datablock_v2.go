@@ -18,8 +18,15 @@ import (
 //[68-71]bits [8th byte] - Bool Dtype Last Index
 //Total 9 bytes Header Length
 
+//Data Layout 2 Additional Bytes
+// bitmapMeta (1 byte):
+// bits 0–2 : bitmapLastBitIndex (1–8)
+// bit 3    : bitmapPresent
+// bits 4–7 : reserved (future)
+
 const (
 	PSDBLayout1LengthBytes = 9
+	PSDBLayout2ExtraBytes  = 1
 	maxStringLength        = 65535
 	layoutVersionIdx       = 7
 )
@@ -28,6 +35,7 @@ type PermStorageDataBlock struct {
 	// 64-bit aligned fields
 	expiryAt       uint64
 	Data           interface{}
+	bitmap         []byte // NEW, optional, nil by default
 	buf            []byte
 	originalData   []byte
 	compressedData []byte
@@ -48,6 +56,7 @@ type PermStorageDataBlock struct {
 	compressionType  compression.Type
 	dataType         types.DataType
 	boolDtypeLastIdx uint8
+	bitmapMeta       byte // NEW: layout-2 bitmap metadata
 }
 
 func (p *PermStorageDataBlock) Clear() {
@@ -60,8 +69,12 @@ func (p *PermStorageDataBlock) Clear() {
 	p.boolDtypeLastIdx = 0
 	p.originalDataLen = 0
 	p.compressedDataLen = 0
-	if len(p.buf) > PSDBLayout1LengthBytes {
-		p.buf = p.buf[:PSDBLayout1LengthBytes]
+	headerLen := PSDBLayout1LengthBytes
+	if p.layoutVersion == 2 {
+		headerLen = PSDBLayout1LengthBytes + PSDBLayout2ExtraBytes
+	}
+	if len(p.buf) > headerLen {
+		p.buf = p.buf[:headerLen]
 	}
 	if len(p.originalData) > 0 {
 		p.originalData = p.originalData[:0]
@@ -72,10 +85,47 @@ func (p *PermStorageDataBlock) Clear() {
 	p.Data = nil
 	p.stringLengths = nil
 	p.vectorLengths = nil
+	p.bitmap = nil
+	p.bitmapMeta = byte(0)
 }
+
+func (b *PermStorageDataBlockBuilder) SetBitmap(bitmap []byte) *PermStorageDataBlockBuilder {
+	if len(bitmap) > 0 {
+		b.psdb.bitmap = bitmap
+	} else {
+		b.psdb.bitmap = make([]byte, 0)
+	}
+	return b
+}
+
+func (b *PermStorageDataBlockBuilder) SetupBitmapMeta(numFeatures int) *PermStorageDataBlockBuilder {
+	// Bitmap meta is only valid for layout-2
+	if b.psdb.layoutVersion != 2 {
+		return b
+	}
+
+	if len(b.psdb.bitmap) == 0 {
+		b.psdb.bitmapMeta = 0 // bitmapPresent = 0
+		return b
+	}
+
+	lastBits := numFeatures % 8
+	if lastBits == 0 {
+		lastBits = 8
+	}
+
+	meta := byte(0)
+	meta |= 1 << 3                // bitmapPresent
+	meta |= byte(lastBits & 0x07) // last bit count (1–8)
+	b.psdb.bitmapMeta = meta
+	return b
+}
+
 func (p *PermStorageDataBlock) Serialize() ([]byte, error) {
 	switch p.layoutVersion {
 	case 1:
+		return p.serializeLayout1()
+	case 2:
 		return p.serializeLayout1()
 	default:
 		return nil, fmt.Errorf("unsupported layout version: %d", p.layoutVersion)
@@ -214,10 +264,45 @@ func serializeFP32AndLessV2(p *PermStorageDataBlock) ([]byte, error) {
 	}
 	idx := 0
 	putFloat, _ := system.GetToByteFP32AndLess(p.dataType)
-	for _, v := range values {
-		putFloat(p.originalData[idx:idx+unitSize], v)
-		idx += unitSize
+
+	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
+
+		for i, v := range values {
+			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
+				continue
+			}
+			putFloat(p.originalData[idx:idx+unitSize], v)
+			idx += unitSize
+		}
+
+		p.originalData = p.originalData[:idx]
+	} else {
+		for _, v := range values {
+			putFloat(p.originalData[idx:idx+unitSize], v)
+			idx += unitSize
+		}
 	}
+
+	// ─────────────────────────────
+	// Step 2: layout-2 payload handling
+	// ─────────────────────────────
+	if p.layoutVersion == 2 {
+		// prepend bitmap to payload if present
+		if len(p.bitmap) > 0 {
+			p.bitmapMeta = p.bitmapMeta | 1<<3 // bitmapPresent = 1
+			tmp := make([]byte, 0, len(p.bitmap)+len(p.originalData))
+			tmp = append(tmp, p.bitmap...)
+			tmp = append(tmp, p.originalData...)
+			p.originalData = tmp
+		}
+
+		// append bitmapMeta to header
+		if len(p.buf) != PSDBLayout1LengthBytes {
+			return nil, fmt.Errorf("invalid base header length for layout-2")
+		}
+		p.buf = append(p.buf, p.bitmapMeta)
+	}
+
 	return encodeData(p, enc)
 }
 

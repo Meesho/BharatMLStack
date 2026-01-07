@@ -1,0 +1,337 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║            Layout1 vs Layout2 Compression Test Results                        ║
+║                    Generated: 2026-01-07 15:32:12                                 ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ Test Results Summary                                                           │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+Test Name                                          | Features |     Defaults |   Original Δ | Compressed Δ
+--------------------------------------------------------------------------------------------------------------
+500 features with 80% defaults (high sparsity)     |      500 |       80.0% |      76.85% |      23.72% ✅
+850 features with 95% defaults (very high spars... |      850 |       95.0% |      91.79% |       6.85% ✅
+850 features with 0% defaults (very high sparsity) |      850 |        0.0% |      -3.15% |      -0.23% ⚠️ 
+850 features with 100% defaults (very high spar... |      850 |      100.0% |      96.85% |       6.67% ✅
+850 features with 80% defaults (very high spars... |      850 |       80.0% |      76.85% |      18.78% ✅
+850 features with 50% defaults (very high spars... |      850 |       50.0% |      46.85% |      18.08% ✅
+1000 features with 23% defaults (low sparsity)     |     1000 |       23.0% |      19.88% |       6.02% ✅
+100 features with 50% defaults (medium sparsity)   |      100 |       50.0% |      46.75% |      23.66% ✅
+200 features with 20% defaults (low sparsity)      |      200 |       20.0% |      16.88% |       7.77% ✅
+50 features with 0% defaults (all non-zero) - b... |       50 |        0.0% |      -3.50% |      -3.50% ⚠️ 
+100 features with 100% defaults (all zeros)        |      100 |      100.0% |      96.75% |      18.75% ✅
+500 features FP16 with 70% defaults                |      500 |       70.0% |      63.70% |      27.11% ✅
+500 features with 60% defaults (No compression)    |      500 |       60.0% |      56.85% |      56.85% ✅
+
+
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ Detailed Results                                                               │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+1. 500 features with 80% defaults (high sparsity)
+   ──────────────────────────────────────────────────────────────────────────────
+   Configuration:
+     Features:        500 total | 100 non-zero (20.0%) | 400 defaults (80.0%)
+     Data Type:       DataTypeFP32
+     Compression:     1
+
+   Layout1 (Baseline):
+     Original Size:     2000 bytes
+     Compressed Size:    607 bytes
+
+   Layout2 (Optimized):
+     Original Size:      463 bytes
+     Compressed Size:    463 bytes
+
+   Improvements:
+     Original Size:    +1537 bytes (76.85%)
+     Compressed Size:   +144 bytes (23.72%)
+     Total Size:      23.21% reduction
+     Result: ✅ Layout2 is BETTER
+
+2. 850 features with 95% defaults (very high sparsity)
+   ──────────────────────────────────────────────────────────────────────────────
+   Configuration:
+     Features:        850 total | 43 non-zero (5.1%) | 807 defaults (95.0%)
+     Data Type:       DataTypeFP32
+     Compression:     1
+
+   Layout1 (Baseline):
+     Original Size:     3400 bytes
+     Compressed Size:    292 bytes
+
+   Layout2 (Optimized):
+     Original Size:      279 bytes
+     Compressed Size:    272 bytes
+
+   Improvements:
+     Original Size:    +3121 bytes (91.79%)
+     Compressed Size:    +20 bytes (6.85%)
+     Total Size:      6.31% reduction
+     Result: ✅ Layout2 is BETTER
+
+3. 850 features with 0% defaults (very high sparsity)
+   ──────────────────────────────────────────────────────────────────────────────
+   Configuration:
+     Features:        850 total | 850 non-zero (100.0%) | 0 defaults (0.0%)
+     Data Type:       DataTypeFP32
+     Compression:     1
+
+   Layout1 (Baseline):
+     Original Size:     3400 bytes
+     Compressed Size:   3097 bytes
+
+   Layout2 (Optimized):
+     Original Size:     3507 bytes
+     Compressed Size:   3104 bytes
+
+   Improvements:
+     Original Size:     -107 bytes (-3.15%)
+     Compressed Size:     -7 bytes (-0.23%)
+     Total Size:      -0.26% reduction
+     Result: ⚠️  Layout2 has overhead (expected for 0% defaults)
+
+4. 850 features with 100% defaults (very high sparsity)
+   ──────────────────────────────────────────────────────────────────────────────
+   Configuration:
+     Features:        850 total | 0 non-zero (0.0%) | 850 defaults (100.0%)
+     Data Type:       DataTypeFP32
+     Compression:     1
+
+   Layout1 (Baseline):
+     Original Size:     3400 bytes
+     Compressed Size:     15 bytes
+
+   Layout2 (Optimized):
+     Original Size:      107 bytes
+     Compressed Size:     14 bytes
+
+   Improvements:
+     Original Size:    +3293 bytes (96.85%)
+     Compressed Size:     +1 bytes (6.67%)
+     Total Size:      0.00% reduction
+     Result: ✅ Layout2 is BETTER
+
+5. 850 features with 80% defaults (very high sparsity)
+   ──────────────────────────────────────────────────────────────────────────────
+   Configuration:
+     Features:        850 total | 170 non-zero (20.0%) | 680 defaults (80.0%)
+     Data Type:       DataTypeFP32
+     Compression:     1
+
+   Layout1 (Baseline):
+     Original Size:     3400 bytes
+     Compressed Size:    969 bytes
+
+   Layout2 (Optimized):
+     Original Size:      787 bytes
+     Compressed Size:    787 bytes
+
+   Improvements:
+     Original Size:    +2613 bytes (76.85%)
+     Compressed Size:   +182 bytes (18.78%)
+     Total Size:      18.51% reduction
+     Result: ✅ Layout2 is BETTER
+
+6. 850 features with 50% defaults (very high sparsity)
+   ──────────────────────────────────────────────────────────────────────────────
+   Configuration:
+     Features:        850 total | 425 non-zero (50.0%) | 425 defaults (50.0%)
+     Data Type:       DataTypeFP32
+     Compression:     1
+
+   Layout1 (Baseline):
+     Original Size:     3400 bytes
+     Compressed Size:   2063 bytes
+
+   Layout2 (Optimized):
+     Original Size:     1807 bytes
+     Compressed Size:   1690 bytes
+
+   Improvements:
+     Original Size:    +1593 bytes (46.85%)
+     Compressed Size:   +373 bytes (18.08%)
+     Total Size:      17.95% reduction
+     Result: ✅ Layout2 is BETTER
+
+7. 1000 features with 23% defaults (low sparsity)
+   ──────────────────────────────────────────────────────────────────────────────
+   Configuration:
+     Features:        1000 total | 770 non-zero (77.0%) | 230 defaults (23.0%)
+     Data Type:       DataTypeFP32
+     Compression:     1
+
+   Layout1 (Baseline):
+     Original Size:     4000 bytes
+     Compressed Size:   3125 bytes
+
+   Layout2 (Optimized):
+     Original Size:     3205 bytes
+     Compressed Size:   2937 bytes
+
+   Improvements:
+     Original Size:     +795 bytes (19.88%)
+     Compressed Size:   +188 bytes (6.02%)
+     Total Size:      5.97% reduction
+     Result: ✅ Layout2 is BETTER
+
+8. 100 features with 50% defaults (medium sparsity)
+   ──────────────────────────────────────────────────────────────────────────────
+   Configuration:
+     Features:        100 total | 50 non-zero (50.0%) | 50 defaults (50.0%)
+     Data Type:       DataTypeFP32
+     Compression:     1
+
+   Layout1 (Baseline):
+     Original Size:      400 bytes
+     Compressed Size:    279 bytes
+
+   Layout2 (Optimized):
+     Original Size:      213 bytes
+     Compressed Size:    213 bytes
+
+   Improvements:
+     Original Size:     +187 bytes (46.75%)
+     Compressed Size:    +66 bytes (23.66%)
+     Total Size:      22.57% reduction
+     Result: ✅ Layout2 is BETTER
+
+9. 200 features with 20% defaults (low sparsity)
+   ──────────────────────────────────────────────────────────────────────────────
+   Configuration:
+     Features:        200 total | 160 non-zero (80.0%) | 40 defaults (20.0%)
+     Data Type:       DataTypeFP32
+     Compression:     1
+
+   Layout1 (Baseline):
+     Original Size:      800 bytes
+     Compressed Size:    721 bytes
+
+   Layout2 (Optimized):
+     Original Size:      665 bytes
+     Compressed Size:    665 bytes
+
+   Improvements:
+     Original Size:     +135 bytes (16.88%)
+     Compressed Size:    +56 bytes (7.77%)
+     Total Size:      7.53% reduction
+     Result: ✅ Layout2 is BETTER
+
+10. 50 features with 0% defaults (all non-zero) - bitmap overhead expected
+   ──────────────────────────────────────────────────────────────────────────────
+   Configuration:
+     Features:        50 total | 50 non-zero (100.0%) | 0 defaults (0.0%)
+     Data Type:       DataTypeFP32
+     Compression:     1
+
+   Layout1 (Baseline):
+     Original Size:      200 bytes
+     Compressed Size:    200 bytes
+
+   Layout2 (Optimized):
+     Original Size:      207 bytes
+     Compressed Size:    207 bytes
+
+   Improvements:
+     Original Size:       -7 bytes (-3.50%)
+     Compressed Size:     -7 bytes (-3.50%)
+     Total Size:      -3.83% reduction
+     Result: ⚠️  Layout2 has overhead (expected for 0% defaults)
+
+11. 100 features with 100% defaults (all zeros)
+   ──────────────────────────────────────────────────────────────────────────────
+   Configuration:
+     Features:        100 total | 0 non-zero (0.0%) | 100 defaults (100.0%)
+     Data Type:       DataTypeFP32
+     Compression:     1
+
+   Layout1 (Baseline):
+     Original Size:      400 bytes
+     Compressed Size:     16 bytes
+
+   Layout2 (Optimized):
+     Original Size:       13 bytes
+     Compressed Size:     13 bytes
+
+   Improvements:
+     Original Size:     +387 bytes (96.75%)
+     Compressed Size:     +3 bytes (18.75%)
+     Total Size:      8.00% reduction
+     Result: ✅ Layout2 is BETTER
+
+12. 500 features FP16 with 70% defaults
+   ──────────────────────────────────────────────────────────────────────────────
+   Configuration:
+     Features:        500 total | 150 non-zero (30.0%) | 350 defaults (70.0%)
+     Data Type:       DataTypeFP16
+     Compression:     1
+
+   Layout1 (Baseline):
+     Original Size:     1000 bytes
+     Compressed Size:    498 bytes
+
+   Layout2 (Optimized):
+     Original Size:      363 bytes
+     Compressed Size:    363 bytes
+
+   Improvements:
+     Original Size:     +637 bytes (63.70%)
+     Compressed Size:   +135 bytes (27.11%)
+     Total Size:      26.43% reduction
+     Result: ✅ Layout2 is BETTER
+
+13. 500 features with 60% defaults (No compression)
+   ──────────────────────────────────────────────────────────────────────────────
+   Configuration:
+     Features:        500 total | 200 non-zero (40.0%) | 300 defaults (60.0%)
+     Data Type:       DataTypeFP32
+     Compression:     0
+
+   Layout1 (Baseline):
+     Original Size:     2000 bytes
+     Compressed Size:   2000 bytes
+
+   Layout2 (Optimized):
+     Original Size:      863 bytes
+     Compressed Size:    863 bytes
+
+   Improvements:
+     Original Size:    +1137 bytes (56.85%)
+     Compressed Size:  +1137 bytes (56.85%)
+     Total Size:      56.55% reduction
+     Result: ✅ Layout2 is BETTER
+
+
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ Aggregate Statistics                                                           │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+Tests Passed: 11/13 scenarios
+Layout2 Better: 11/13 scenarios (84.6%)
+
+Average Improvements (excluding 0% defaults):
+  Original Size:    57.50% reduction
+  Compressed Size:  17.85% reduction
+
+Maximum Improvements:
+  Original Size:    96.85% reduction
+  Compressed Size:  56.85% reduction
+
+Minimum Improvements (with defaults present):
+  Original Size:    16.88% reduction
+  Compressed Size:  6.02% reduction
+
+
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ Conclusion                                                                     │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+✅ Layout2 should be used as the default layout version.
+
+Rationale:
+  • Consistent improvements in 11 out of 13 scenarios (84.6%)
+  • Average compressed size reduction: 17.85%
+  • Maximum original size reduction: 96.85%
+  • Minimal overhead (3.5%) only in edge case with 0% defaults
+  • Production ML feature vectors typically have 20-95% sparsity
+
