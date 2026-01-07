@@ -7,11 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rs/zerolog/log"
-
-	"github.com/Meesho/go-core/metric"
-	"github.com/Meesho/go-core/scylla"
+	"github.com/Meesho/BharatMLStack/interaction-store/pkg/metric"
+	"github.com/Meesho/BharatMLStack/interaction-store/pkg/scylla"
 	"github.com/gocql/gocql"
+	"github.com/rs/zerolog/log"
 )
 
 var (

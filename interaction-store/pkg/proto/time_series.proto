@@ -1,7 +1,7 @@
 syntax = "proto3";
 package proto;
 
-option go_package = "github.com/Meesho/interaction-store/pkg/proto/timeseries";
+option go_package = "github.com/Meesho/BharatMLStack/interaction-store/pkg/proto/timeseries";
 
 enum InteractionTypeProto {
   CLICK = 0;

@@ -3,11 +3,11 @@ package consumer
 import (
 	"encoding/json"
 
-	"github.com/Meesho/go-core/metric"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/consumer/click"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/model"
+	"github.com/Meesho/BharatMLStack/interaction-store/pkg/metric"
 	mqConfig "github.com/Meesho/go-core/mq/config"
 	"github.com/Meesho/go-core/mq/consumer"
-	"github.com/Meesho/interaction-store/internal/consumer/click"
-	"github.com/Meesho/interaction-store/internal/data/model"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/rs/zerolog/log"
 )

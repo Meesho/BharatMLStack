@@ -1,40 +1,55 @@
 package main
 
 import (
-	"os"
+	http2 "net/http"
 
-	"github.com/Meesho/interaction-store/internal/config"
-	// "github.com/Meesho/interaction-store/internal/consumer"
-	conf "github.com/Meesho/go-core/config"
-	"github.com/Meesho/go-core/httpframework"
-	"github.com/Meesho/go-core/logger"
-	"github.com/Meesho/go-core/metric"
-	"github.com/Meesho/interaction-store/internal/consumer/click"
-	"github.com/Meesho/interaction-store/internal/controller/health"
-	"github.com/Meesho/interaction-store/internal/controller/middleware"
-	"github.com/Meesho/interaction-store/internal/data/scylla"
+	consumer "github.com/Meesho/BharatMLStack/interaction-store/internal"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/config"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/scylla"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/server/http"
+	muxserver "github.com/Meesho/BharatMLStack/interaction-store/internal/server/mux"
+	"github.com/Meesho/BharatMLStack/interaction-store/pkg/logger"
+	"github.com/Meesho/BharatMLStack/interaction-store/pkg/metric"
+	"github.com/Meesho/BharatMLStack/interaction-store/pkg/profiling"
+	"github.com/rs/zerolog/log"
+)
 
-	// mqConsumer "github.com/Meesho/go-core/mq/consumer"
-	"github.com/Meesho/go-core/profiling"
+type AppConfig struct {
+	Configs        config.Configs
+	DynamicConfigs config.DynamicConfigs
+}
+
+func (cfg *AppConfig) GetStaticConfig() interface{} {
+	return &cfg.Configs
+}
+
+func (cfg *AppConfig) GetDynamicConfig() interface{} {
+	return &cfg.DynamicConfigs
+}
+
+var (
+	appConfig AppConfig
 )
 
 func main() {
-	os.Setenv("ENVIRONMENT", "stg")
-	os.Setenv("DEPLOYABLE_NAME", "interaction-store-timeseries-consumer")
-	os.Setenv("CONFIG_LOCATION", "/Users/shubamkaushik/Desktop/interaction-store/configs/consumers")
-	os.Setenv("MQ_API_AUTH_TOKEN", "test-token")
-	appConfig := config.GetAppConfig()
-	conf.InitGlobalConfig(appConfig)
-	scylla.Init()
-	click.Init()
-	// order.Init()
+	config.InitConfig(&appConfig)
+	go func() {
+		http2.ListenAndServe(":8080", nil)
+	}()
+	scylla.Init(appConfig.Configs)
 	logger.Init()
 	metric.Init()
 	profiling.Init()
-	// mqConsumer.Init()
-	// var stringType string
-	// mqConsumer.ConsumeBatchWithManualAck(appConfig.Configs.ClickConsumerMqId, consumer.ProcessClickEvents, stringType, stringType)
-	httpframework.Init()
-	health.Init()
-	middleware.InitServer(appConfig.Configs.Port)
+	consumer.Init(appConfig.Configs)
+	http.Init(appConfig.Configs)
+	// Initialize and run mux server
+	mux, err := muxserver.Init(appConfig.Configs)
+	if err != nil {
+		log.Panic().Err(err).Msg("Failed to initialize mux server")
+	}
+	mux.RegisterServices()
+	if err := mux.Run(); err != nil {
+		log.Panic().Err(err).Msg("Error running interaction-store mux server")
+	}
+	log.Info().Msgf("interaction-store timeseries consumer started.")
 }

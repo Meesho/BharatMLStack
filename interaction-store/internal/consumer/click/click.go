@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Meesho/interaction-store/internal/data/model"
-	"github.com/Meesho/interaction-store/internal/handler/persist"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/model"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/handler/persist"
 	"github.com/rs/zerolog/log"
 )
 

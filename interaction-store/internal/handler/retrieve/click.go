@@ -6,11 +6,11 @@ import (
 	"strconv"
 	"sync"
 
-	blocks "github.com/Meesho/interaction-store/internal/data/block"
-	"github.com/Meesho/interaction-store/internal/data/enum"
-	"github.com/Meesho/interaction-store/internal/data/model"
-	"github.com/Meesho/interaction-store/internal/data/scylla"
-	"github.com/Meesho/interaction-store/internal/utils"
+	blocks "github.com/Meesho/BharatMLStack/interaction-store/internal/data/block"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/enum"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/model"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/scylla"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/utils"
 )
 
 var (
@@ -22,7 +22,7 @@ type ClickRetrieveHandler struct {
 	scyllaDb scylla.Database
 }
 
-func InitClickRetrieveHandler() RetrieveHandler {
+func InitClickRetrieveHandler() *ClickRetrieveHandler {
 	if clickRetrieveHandler == nil {
 		clickOnce.Do(func() {
 			clickRetrieveHandler = &ClickRetrieveHandler{
@@ -140,7 +140,7 @@ func (c *ClickRetrieveHandler) fetchDataInParallel(tablesToFields map[string][]s
 		wg.Add(1)
 		go func(tblName string, cols []string) {
 			defer wg.Done()
-			data, err := c.scyllaDb.Retrieve(tblName, userId, cols)
+			data, err := c.scyllaDb.RetrieveInteractions(tblName, userId, cols)
 			if err != nil {
 				resultChan <- fetchResult{
 					tableName: tblName,

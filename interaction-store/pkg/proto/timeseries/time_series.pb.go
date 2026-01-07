@@ -898,7 +898,7 @@ const file_pkg_proto_time_series_proto_rawDesc = "" +
 	"\x10PersistOrderData\x12\x1e.proto.PersistOrderDataRequest\x1a\x1a.proto.PersistDataResponse\"\x00\x12[\n" +
 	"\x19RetrieveClickInteractions\x12\x1a.proto.RetrieveDataRequest\x1a .proto.RetrieveClickDataResponse\"\x00\x12[\n" +
 	"\x19RetrieveOrderInteractions\x12\x1a.proto.RetrieveDataRequest\x1a .proto.RetrieveOrderDataResponse\"\x00\x12a\n" +
-	"\x14RetrieveInteractions\x12\".proto.RetrieveInteractionsRequest\x1a#.proto.RetrieveInteractionsResponse\"\x00B:Z8github.com/Meesho/interaction-store/pkg/proto/timeseriesb\x06proto3"
+	"\x14RetrieveInteractions\x12\".proto.RetrieveInteractionsRequest\x1a#.proto.RetrieveInteractionsResponse\"\x00BHZFgithub.com/Meesho/BharatMLStack/interaction-store/pkg/proto/timeseriesb\x06proto3"
 
 var (
 	file_pkg_proto_time_series_proto_rawDescOnce sync.Once

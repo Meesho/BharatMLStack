@@ -1,8 +1,8 @@
 package blocks
 
 import (
-	"github.com/Meesho/interaction-store/internal/compression"
-	"github.com/Meesho/interaction-store/internal/data/enum"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/compression"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/enum"
 )
 
 const (

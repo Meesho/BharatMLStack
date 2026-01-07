@@ -3,10 +3,10 @@ package blocks
 import (
 	"fmt"
 
-	"github.com/Meesho/interaction-store/internal/compression"
-	"github.com/Meesho/interaction-store/internal/data/enum"
-	"github.com/Meesho/interaction-store/internal/data/model"
-	"github.com/Meesho/interaction-store/internal/utils"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/compression"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/enum"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/model"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/utils"
 )
 
 // LAYOUT : 4 bits layout version, 3 bits compression, 9 bits data length (total header 2 bytes)

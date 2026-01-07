@@ -6,12 +6,12 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/Meesho/interaction-store/internal/compression"
-	blocks "github.com/Meesho/interaction-store/internal/data/block"
-	"github.com/Meesho/interaction-store/internal/data/enum"
-	"github.com/Meesho/interaction-store/internal/data/model"
-	"github.com/Meesho/interaction-store/internal/data/scylla"
-	"github.com/Meesho/interaction-store/internal/utils"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/compression"
+	blocks "github.com/Meesho/BharatMLStack/interaction-store/internal/data/block"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/enum"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/model"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/scylla"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/utils"
 )
 
 var (

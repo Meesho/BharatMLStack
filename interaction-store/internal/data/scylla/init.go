@@ -3,7 +3,7 @@ package scylla
 import (
 	"sync"
 
-	"github.com/Meesho/interaction-store/internal/config"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/config"
 )
 
 var (
@@ -11,9 +11,9 @@ var (
 	initOnce  sync.Once
 )
 
-func Init() {
+func Init(config config.Configs) {
 	initOnce.Do(func() {
-		appConfig = config.GetAppConfig().Configs
+		appConfig = config
 	})
 }
 
