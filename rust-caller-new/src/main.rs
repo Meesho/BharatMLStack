@@ -198,6 +198,10 @@ async fn create_channel(server: &str) -> Result<tonic_h3::H3Channel<tonic_h3::qu
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize rustls crypto provider (required for rustls 0.23)
+    // This must be called before any rustls operations
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    
     let args = Args::parse();
     
     println!("Starting rust-caller with HTTP/3 (QUIC)...");

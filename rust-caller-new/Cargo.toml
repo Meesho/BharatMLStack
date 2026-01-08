@@ -14,7 +14,7 @@ prost = "0.14"
 prost-types = "0.14"
 base64 = "0.21"
 quinn = "0.11"
-rustls = "0.23"
+rustls = { version = "0.23", features = ["ring"] }
 rustls-pemfile = "2.0"
 rustls-native-certs = "0.6"
 clap = { version = "4", features = ["derive"] }

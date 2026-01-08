@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -32,9 +34,93 @@ type KeysRequest struct {
 	Cols []string `json:"cols" binding:"required"`
 }
 
-// AppState stores gRPC client and metadata
+const (
+	// CONNECTION_POOL_SIZE defines the number of gRPC connections in the pool
+	// Each HTTP/2 connection supports ~100 concurrent streams
+	// With 16 connections: 16 * 100 = 1,600 concurrent streams capacity
+	CONNECTION_POOL_SIZE = 16
+)
+
+// ClientPool manages a pool of gRPC clients for load distribution
+type ClientPool struct {
+	clients []retrieve.FeatureServiceClient
+	conns   []*grpc.ClientConn
+	counter uint64 // Atomic counter for round-robin selection
+}
+
+// NewClientPool creates a new pool of gRPC connections and clients
+func NewClientPool(address string) (*ClientPool, error) {
+	clients := make([]retrieve.FeatureServiceClient, 0, CONNECTION_POOL_SIZE)
+	conns := make([]*grpc.ClientConn, 0, CONNECTION_POOL_SIZE)
+
+	for i := 0; i < CONNECTION_POOL_SIZE; i++ {
+		conn, err := grpc.NewClient(
+			address,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:                30 * time.Second,
+				Timeout:             10 * time.Second,
+				PermitWithoutStream: true,
+			}),
+			grpc.WithInitialWindowSize(2*1024*1024),     // 2MB stream window
+			grpc.WithInitialConnWindowSize(4*1024*1024), // 4MB connection window
+		)
+		if err != nil {
+			// Cleanup already created connections on error
+			for _, c := range conns {
+				_ = c.Close()
+			}
+			return nil, err
+		}
+		conns = append(conns, conn)
+		clients = append(clients, retrieve.NewFeatureServiceClient(conn))
+	}
+
+	return &ClientPool{
+		clients: clients,
+		conns:   conns,
+	}, nil
+}
+
+// Next returns the next client from the pool using round-robin distribution
+func (p *ClientPool) Next() retrieve.FeatureServiceClient {
+	idx := atomic.AddUint64(&p.counter, 1) - 1
+	return p.clients[idx%uint64(len(p.clients))]
+}
+
+// Close closes all connections in the pool
+func (p *ClientPool) Close() error {
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(p.conns))
+
+	for i := range p.conns {
+		wg.Add(1)
+		go func(c *grpc.ClientConn) {
+			defer wg.Done()
+			if err := c.Close(); err != nil {
+				errChan <- err
+			}
+		}(p.conns[i])
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Collect any errors
+	var errs []error
+	for err := range errChan {
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		return errs[0] // Return first error
+	}
+	return nil
+}
+
+// AppState stores gRPC client pool and metadata
 type AppState struct {
-	client   retrieve.FeatureServiceClient
+	pool     *ClientPool
 	metadata metadata.MD
 }
 
@@ -70,7 +156,8 @@ func (s *AppState) handler(c *gin.Context) {
 		Keys:          keys,
 	}
 
-	resp, err := s.client.RetrieveFeatures(ctx, req)
+	client := s.pool.Next()
+	resp, err := client.RetrieveFeatures(ctx, req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -79,29 +166,22 @@ func (s *AppState) handler(c *gin.Context) {
 }
 
 func main() {
-	log.Println("Starting go-caller with 4 threads version 8")
+	log.Printf("Starting go-caller with connection pool (size: %d)", CONNECTION_POOL_SIZE)
 	gin.SetMode(gin.ReleaseMode)
 
-	conn, err := grpc.NewClient(
-		"online-feature-store-api.int.meesho.int:80",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                30 * time.Second,
-			Timeout:             10 * time.Second,
-			PermitWithoutStream: true,
-		}),
-	)
+	pool, err := NewClientPool("online-feature-store-api.int.meesho.int:80")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to create gRPC connection pool: %v", err)
 	}
 	defer func() {
-		if err := conn.Close(); err != nil {
-			log.Printf("Error closing gRPC connection: %v", err)
+		log.Println("Closing gRPC connection pool...")
+		if err := pool.Close(); err != nil {
+			log.Printf("Error closing gRPC connection pool: %v", err)
 		}
 	}()
 
 	state := &AppState{
-		client: retrieve.NewFeatureServiceClient(conn),
+		pool: pool,
 		metadata: metadata.MD{
 			"online-feature-store-auth-token": []string{"atishay"},
 			"online-feature-store-caller-id":  []string{"test-3"},
