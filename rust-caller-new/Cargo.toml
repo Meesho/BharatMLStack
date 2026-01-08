@@ -4,19 +4,24 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1", features = ["full", "tracing"] }
-tonic = "0.11"
-prost = "0.12"
-tower = "0.4"
 axum = "0.7"
+tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tower-http = { version = "0.5", features = ["cors", "trace"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tonic = "0.14"
+tonic-prost = "0.14"
+prost = "0.14"
+prost-types = "0.14"
+base64 = "0.21"
+quinn = "0.11"
+rustls = { version = "0.23", features = ["ring"] }
+rustls-pemfile = "2.0"
+rustls-native-certs = "0.6"
+clap = { version = "4", features = ["derive"] }
+http = "1.0"
+h3-quinn = "0.0"
+tonic-h3 = { git = "https://github.com/youyuanwu/tonic-h3.git", default-features = false, features = ["quinn"] }
 
 [build-dependencies]
-tonic-build = "0.11"
-
-[workspace]
+tonic-prost-build = "0.14"
 
