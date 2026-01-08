@@ -1,0 +1,39 @@
+# Default values for predator helm chart
+# This file contains default values that can be overridden in environment-specific values files
+
+# Infrastructure configuration
+infrastructure:
+  # Vault/Secret Store configuration
+  secretStore:
+    name: vault-backend  # ClusterSecretStore name
+    kind: ClusterSecretStore
+  
+  # Vault path configuration
+  vault:
+    # Base path for external secrets (e.g., "org/prd/service" or "company/prd/cntr/devop")
+    basePath: ""
+    # Path for OTEL/Coralogix token (e.g., "org/prd/cntr/devop/coralogix-token")
+    otelTokenPath: ""
+    # DR path replacement pattern (e.g., "org/prd/" -> "org/dr/")
+    drPathReplacement:
+      from: ""
+      to: ""
+
+# Canary/Flagger configuration
+canary:
+  # Prometheus metrics URL
+  promURL: ""  # Will be set based on environment if not provided
+  
+  # Slack configuration
+  slackChannel: ""  # Slack channel for canary notifications
+  slackWebhookURL: ""  # Slack incoming webhook URL (set in environment-specific values files)
+  
+  # Loadtester webhook URLs
+  loadtester:
+    # Production/Integration loadtester domain (e.g., "internal.example.com")
+    prodDomain: ""
+    # Staging/Development loadtester domain (e.g., "stg.example.com")
+    stagingDomain: ""
+    # Contour-specific production domain (e.g., "prd.example.int")
+    contourProdDomain: ""
+

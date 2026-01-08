@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+option go_package = "../grpc";
+
+// skye-gateway
+
+message SkyeRequest {
+  string entity = 1;
+  repeated string candidateIds = 2;
+  int32 limit = 3;
+  string modelName = 4;
+  string variant = 5;
+  repeated Filters filters = 6;
+  repeated string attribute = 7;
+  repeated Embedding embeddings = 8;
+  Filters globalFilters = 9;
+}
+
+message Embedding {
+  repeated double embedding = 1;
+}
+
+message Filters {
+  repeated Filter filter = 1;
+}
+
+message Filter {
+  string field = 1;
+  Operator op = 2;
+  repeated string values = 3;
+
+  enum Operator {
+    IN = 0;
+    NIN = 1;
+    EX = 2;
+    SEARCH = 3;
+    LTE = 4;
+    GTE = 5;
+    BTWE = 6;
+    BTW = 7;
+    LT = 8;
+    GT = 9;
+    LAST_X_DAYS = 10;
+    WTHN = 11;
+  }
+}
+
+
+message CandidateResponse{
+  repeated Candidate candidates = 1;
+
+  message Candidate {
+    string id = 1;
+    Meta meta = 2;
+
+    message Meta {
+      double score = 1;
+      map<string, string> attributesMap = 2;
+    }
+  }
+}
+message SkyeResponse {
+  repeated CandidateResponse responses = 1;
+}
+
+// embedding dot product
+
+message EmbeddingDotProductRequest {
+  string entity = 1;
+  repeated string candidateIds = 2;
+  repeated double embedding = 3;
+  string modelName = 4;
+  string variant = 5;
+}
+
+message CandidateEmbeddingScore {
+  string candidateId = 1;
+  double score = 2;
+}
+
+message EmbeddingDotProductResponse {
+  repeated CandidateEmbeddingScore candidateEmbeddingScores = 1;
+}
+
+message SkyeBulkEmbeddingRequest {
+  string entity =1;
+  repeated string candidateIds = 2;
+  string modelName = 4;
+  string variant =5;
+}
+
+message SkyeBulkEmbeddingResponse {
+  repeated CandidateEmbedding candidatesEmbedding =1;
+}
+
+message CandidateEmbedding {
+  string id = 1;
+  repeated double embedding = 2;
+  repeated double searchEmbedding =3;
+}
+
+service SkyeSimilarCandidateService {
+  rpc getSimilarCandidates(SkyeRequest) returns (SkyeResponse);
+}
+
+service SkyeEmbeddingService {
+  rpc getCandidateEmbeddingScores(EmbeddingDotProductRequest) returns (EmbeddingDotProductResponse);
+  rpc getEmbeddingsForCandidates(SkyeBulkEmbeddingRequest) returns (SkyeBulkEmbeddingResponse);
+}

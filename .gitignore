@@ -4,4 +4,17 @@ trufflebox-ui/node_modules/
 dist/
 .env*
 .idea/
+.vscode/
 workspace/
+__pycache__/
+java-sdk/onfs/feature-store-client/target/
+java-sdk/onfs/feature-store-flink-connector-sdk-flink1x/target/
+java-sdk/onfs/feature-store-core/target/
+
+# Dev toggle script artifacts
+.internal-configs/
+.dev-toggle-state
+.go.mod.appended
+horizon/pem/*.pem
+horizon/pem/*.key
+horizon/configs/*.pem

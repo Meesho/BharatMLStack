@@ -1,0 +1,155 @@
+app_name: {{ .appName }}
+app_port: {{ .appPort }}
+{{ if .appConfigEnabled }}
+appConfigEnabled : {{ .appConfigEnabled }}
+{{ end }}
+health_check: {{ .healthCheck }}
+bu: {{ .bu }}
+team: {{ .team }}
+priority: {{ .priority }}
+priority_v2: {{ .priorityV2 }}
+service_type:
+    {{ range .service_type }}
+        - {{ . }}
+    {{ end }}
+primary_owner: {{ .primaryOwner }}
+secondary_owner: {{ .secondaryOwner }}
+initialDelaySeconds: {{ .initialDelaySeconds }}
+replica_count: {{ .replica_count }}
+environment:
+  ftr:
+    as_enabled: {{ .asEnabled }}
+    as_min: 1
+    as_max: 5
+    cpu_limit: 500m
+    cpu_request: 500m
+    memory_limit: {{ .memoryLimit }}{{ .memoryLimitUnit }}
+    memory_request: {{ .memoryRequest }}{{ .memoryRequestUnit }}
+    deploymentStrategy: rollingUpdate
+    {{ if eq .appType "python" }}
+    supervisord_config_path: /app/configurations/supervisord/supervisord.conf
+    {{ end }}
+    appMetrics: {{ .appMetrics }}
+    {{ if .deployment_args }}
+    deployment_args:
+    {{ range .deployment_args }}
+        - {{ . }}
+    {{ end }}
+    {{ else }}
+    deployment_args: false
+    {{ end }}
+
+  dev:
+    as_enabled: {{ .asEnabled }}
+    as_min: 1
+    as_max: 5
+    cpu_limit: 500m
+    cpu_request: 500m
+    memory_limit: {{ .memoryLimit }}{{ .memoryLimitUnit }}
+    memory_request: {{ .memoryRequest }}{{ .memoryRequestUnit }}
+    deploymentStrategy: rollingUpdate
+    appMetrics: {{ .appMetrics }}
+    {{ if eq .appType "python" }}
+    supervisord_config_path: /app/configurations/supervisord/supervisord.conf
+    {{ end }} 
+    {{ if .deployment_args }}   
+    deployment_args:
+    {{ range .deployment_args }}
+        - {{ . }}
+    {{ end }}
+    {{ else }}
+    deployment_args: false
+    {{ end }}
+
+  stg:
+    as_enabled: {{ .asEnabled }}
+    as_min: 1
+    as_max: 5
+    cpu_limit: 500m
+    cpu_request: 500m
+    memory_limit: {{ .memoryLimit }}{{ .memoryLimitUnit }}
+    memory_request: {{ .memoryRequest }}{{ .memoryRequestUnit }}
+    {{ if .gpu_request }}
+    gpu_request: {{ .gpu_request }}
+    gpu_limit: {{ .gpu_limit }}
+    {{ end }}
+    deploymentStrategy: rollingUpdate
+    appMetrics: {{ .appMetrics }}
+    {{ if eq .appType "python" }}
+    supervisord_config_path: /app/configurations/supervisord/supervisord.conf
+    {{ end }} 
+    {{ if .deployment_args }}   
+    deployment_args:
+    {{ range .deployment_args }}
+        - {{ . }}
+    {{ end }}
+    {{ else }}
+    deployment_args: false
+    {{ end }}
+    {{ if .command }}
+        - {{ .command }}
+    {{ end }}
+    
+  int:
+    as_enabled: {{ .asEnabled }}
+    as_min: 1
+    as_max: 5
+    cpu_limit: 1
+    cpu_request: 1
+    memory_limit: {{ .memoryLimit }}{{ .memoryLimitUnit }}
+    memory_request: {{ .memoryRequest }}{{ .memoryRequestUnit }}
+    {{ if .gpu_request }}
+    gpu_request: {{ .gpu_request }}
+    gpu_limit: {{ .gpu_limit }}
+    {{ end }}
+    deploymentStrategy: rollingUpdate
+    {{ if eq .appType "python" }}
+    supervisord_config_path: /app/configurations/supervisord/supervisord.conf
+    {{ end }}
+    appMetrics: {{ .appMetrics }}
+    {{ if .deployment_args }}
+    deployment_args:
+    {{ range .deployment_args }}
+        - {{ . }}
+    {{ end }}
+    {{ else }}
+    deployment_args: false
+    {{ end }}
+    
+  prd:
+    as_enabled: {{ .asEnabled }}
+    as_min: {{ .minReplica }}
+    as_max: {{ .maxReplica }}
+    cpu_limit: {{ .cpuLimit }}{{ .cpuLimitUnit }}
+    cpu_request: {{ .cpuRequest }}{{ .cpuRequestUnit }}
+    memory_limit: {{ .memoryLimit }}{{ .memoryLimitUnit }}
+    memory_request: {{ .memoryRequest }}{{ .memoryRequestUnit }}
+    {{ if .gpu_request }}
+    gpu_request: {{ .gpu_request }}
+    gpu_limit: {{ .gpu_limit }}
+    {{ end }}
+    deploymentStrategy: {{ .deploymentStrategy }}
+    {{ if eq .appType "python" }}
+    supervisord_config_path: {{ .supervisord_config_path }}
+    {{ end }}    
+    appMetrics: {{ .appMetrics }}
+    {{ if .deployment_args }}
+    deployment_args:
+    {{ range .deployment_args }}
+        - {{ . }}
+    {{ end }}
+    {{ else }}
+    deployment_args: false
+    {{ end }}
+
+#Only Applicable for modelinference
+
+{{ if .gcs_bucket_path }}
+gcs_bucket_path: {{ .gcs_bucket_path }}
+gcs_triton_path: {{ .gcs_triton_path }}
+{{ end }}
+{{ if .triton_image_tag }}
+sharedMemory: true
+triton_image_tag: {{ .triton_image_tag }}
+{{ end }}
+

@@ -4,7 +4,6 @@ go 1.24.4
 
 require (
 	github.com/DataDog/datadog-go/v5 v5.5.0
-	github.com/Meesho/gocql v1.15.3
 	github.com/apache/arrow/go/v17 v17.0.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/confluentinc/confluent-kafka-go/v2 v2.6.1
@@ -50,7 +49,6 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/flatbuffers v24.3.25+incompatible // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
@@ -94,5 +92,3 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/redis/go-redis/v9 v9.5.1 => github.com/Meesho/go-redis/v9 v9.6.2

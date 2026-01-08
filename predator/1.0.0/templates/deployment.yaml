@@ -1,0 +1,275 @@
+{{- if and .Values.deployment .Values.deployment.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.namespace }}
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ include "labels.common" . | indent 4 }}
+{{ include "labels.chart" . | indent 4 }}
+{{- include "labels.selector" . | nindent 4 }}
+spec:
+  {{- with .Values.deployment.minReadySeconds }}
+  minReadySeconds: {{ . }}
+  {{- end }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: {{ .Values.deployment.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+{{- include "labels.selector" . | nindent 6 }}
+{{- with .Values.deployment.updateStrategy }}
+{{ toYaml . | indent 2 -}}
+{{- end }}
+  template:
+    metadata:
+      annotations:
+      {{- with .Values.deployment.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+        telegraf.influxdata.com/class: "infra"
+      labels:
+        {{- include "labels.common" . | nindent 8 }}
+    spec:
+      priorityClassName: high-priority
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+{{- include "labels.selector" . | nindent 12 }}
+      {{- if .Values.deployment.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.deployment.image.pullSecret }}
+      {{- end }}
+      {{- if .Values.jmxconfig.enabled }}
+      volumes:
+        - name: {{ .Values.namespace }}-jmx
+          configMap:
+            name: {{ .Values.namespace }}-jmx
+      {{- end }}
+      volumes:
+      {{- if .Values.localModelPath }}
+         # For local development: mount local models as source volume
+         - name: local-model-source
+           hostPath:
+             path: {{ .Values.localModelPath }}
+             type: DirectoryOrCreate
+         # Shared volume for init container to copy to and main container to use
+         - name: shared-volume
+           emptyDir: {}
+      {{- else }}
+         # For production: use emptyDir, init container will populate it from GCS
+         - name: shared-volume
+           emptyDir: {}
+      {{- end }}
+      {{- if .Values.sharedmemory }}
+         - emptyDir:
+             medium: Memory
+             sizeLimit: {{ .Values.sharedmemory.size}}
+           name: cache-volume
+      {{- end }}
+      {{- if .Values.initContainer.command }}
+      initContainers:
+        - name: s3-copy-container
+          image: {{ .Values.initContainer.image | default "amazon/aws-cli:latest" }}
+          command: {{- include "application.tplvalues.render" (dict "value" .Values.initContainer.command "context" $) | nindent 12 }}
+          volumeMounts:
+            - name: shared-volume
+              mountPath: /models
+          {{- if .Values.localModelPath }}
+            - name: local-model-source
+              mountPath: /local-models
+              readOnly: true
+          {{- end }}
+          {{- if .Values.sharedmemory }}
+            - mountPath: /dev/shm
+              name: cache-volume
+          {{- end }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.applicationName }}
+        {{- if .Values.jmxconfig.enabled }}
+          volumeMounts:
+          - name: {{ .Values.namespace }}-jmx
+            mountPath: "/jmx"
+        {{- end }}
+          volumeMounts:
+            - name: shared-volume
+              mountPath: /models
+          {{- if .Values.sharedmemory }}
+            - mountPath: /dev/shm
+              name: cache-volume  
+          {{- end }}
+          {{- if .Values.deployment.command }}
+          command: {{- include "application.tplvalues.render" (dict "value" .Values.deployment.command "context" $) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.deployment.args }}
+          args: {{- include "application.tplvalues.render" (dict "value" .Values.deployment.args "context" $) | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.deployment.image.repository }}:{{ .Values.deployment.image.tag }}"
+          imagePullPolicy: {{ .Values.deployment.image.pullPolicy }}
+          {{- if .Values.deployment.lifecycle }}
+          lifecycle: {{ toYaml .Values.deployment.lifecycle | nindent 12 }}
+          {{- end }}
+          {{- with .Values.deployment.probes }}
+          {{- with .liveness }}
+          livenessProbe:
+            {{- with .failureThreshold }}
+            failureThreshold: {{ . }}
+            {{- end }}
+            httpGet:
+              path: {{ .path }}
+              port: {{ .port }}
+              scheme: {{ .scheme }}
+            {{- with .periodSeconds }}
+            periodSeconds: {{ . }}
+            {{- end }}
+            {{- with .successThreshold }}
+            successThreshold: {{ . }}
+            {{- end }}
+            {{- with .timeoutSeconds }}
+            timeoutSeconds: {{ . }}
+            {{- end }}
+            initialDelaySeconds: {{ .initialDelaySeconds }}
+          {{- end }}
+          {{- end }}
+          {{- if or .Values.externalSecret.enabled .Values.otel_enabled }}
+          envFrom:
+            {{- if .Values.externalSecret.enabled }}
+            - secretRef:
+                name: {{ .Values.deployment.envFrom.secretRef }}
+            {{- if ( default false (.Values.disasterRecovery).enabled ) }}
+            - secretRef:
+                name: {{ .Values.deployment.envFrom.secretRef }}-dr
+            {{- end }}
+            {{- end }}
+            {{- if .Values.otel_enabled }}
+            - secretRef:
+                name: {{ .Values.deployment.envFrom.secretRef }}-otel
+            {{- end }}
+         {{- else }}
+         {{- end }}
+          env:
+            - name: TZ
+              value: Asia/Kolkata
+            - name: TELEGRAF_UDP_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            {{- if .Values.otel_enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://$(NODE_IP):4317
+            {{- end }}
+          {{- with .Values.deployment.env }}
+            {{- range . }}
+            - name: {{ .name }}
+              value: "{{ .value }}"
+            {{- end }}
+          {{- end }}
+          {{- with .Values.deployment.ports }}
+          ports:
+            {{- range . }}
+          - containerPort: {{ .containerPort }}
+            name: {{ .name }}
+            protocol: {{ .protocol }}
+            {{- end }}
+          {{- end }}
+          - containerPort: 9273
+            name: telegraf-sc
+            protocol: TCP
+          {{- with .Values.deployment.probes }}
+          {{- with .readiness }}
+          readinessProbe:
+            {{- with .failureThreshold }}
+            failureThreshold: {{ . }}
+            {{- end }}
+            httpGet:
+              path: {{ .path }}
+              port: {{ .port }}
+              scheme: {{ .scheme }}
+            {{- with .periodSeconds }}
+            periodSeconds: {{ . }}
+            {{- end }}
+            {{- with .successThreshold }}
+            successThreshold: {{ . }}
+            {{- end }}
+            {{- with .timeoutSeconds}}
+            timeoutSeconds: {{ . }}
+            {{- end }}
+            initialDelaySeconds: {{ .initialDelaySeconds }}
+          {{- end }}
+          {{- end }}
+          {{- with .Values.deployment.resources }}
+          resources:
+            {{- with .limits }}
+            limits:
+              {{- with .memory }}
+              memory: "{{ . }}"
+              {{- end }}
+              {{- with .cpu }}
+              cpu: "{{ . }}"
+              {{- end }}
+              {{- with .gpu }}
+              nvidia.com/gpu: "{{ . }}"
+              {{- end }}
+            {{- end }}
+            {{- with .requests }}
+            requests:
+              {{- with .memory }}
+              memory: "{{ . }}"
+              {{- end }}
+              {{- with .cpu }}
+              cpu: "{{ . }}"
+              {{- end }}
+              {{- with .gpu }}
+              nvidia.com/gpu: "{{ . }}"
+              {{- end }}
+            {{- end }}
+          {{- end }}
+
+      {{- with .Values.deployment.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.deployment.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.deployment.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.deployment.terminationGracePeriodSeconds | default "300" }}
+      {{- if .Values.deployment.serviceAccount.enabled }}
+      serviceAccountName: {{ .Values.namespace }}
+      {{- end }}
+      podSecurityContext:
+      {{- toYaml .Values.securityContext | nindent 12 }}
+{{- end }}

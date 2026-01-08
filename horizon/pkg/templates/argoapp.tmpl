@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .env_ns }}-{{ .app_name }}
+  namespace: {{ .argocd_namespace }}
+  labels:
+    bu: {{ .bu_norm }}
+    team: {{ .team_norm }}
+    app_name: {{ .app_name }}
+    service: {{ .app_name }}
+    env: {{ .env_ns }}
+    priority_v2: {{ .priority_v2 }} 
+    primary_owner: {{ .primaryowner }}
+    secondary_owner: {{ .secondaryowner }}
+    region: {{ .zone }}
+spec:
+  destination:
+    namespace: {{ .destination_namespace }}
+    name: {{ .destination_name }}
+  project: {{ .argocd_project }}
+  source:
+    helm:
+      valueFiles:
+      {{- range .values_files }}
+      - {{ . }}
+      {{- end }}
+    path: {{ .argocd_source_path }}
+    repoURL: {{ .argocd_source_repoURL }}
+    targetRevision: {{ .argocd_source_targetRevision }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    {{- range .argocd_sync_policy_options }}
+    - {{ . }}
+    {{- end }}
+

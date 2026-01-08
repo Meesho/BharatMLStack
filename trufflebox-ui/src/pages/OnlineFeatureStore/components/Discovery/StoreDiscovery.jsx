@@ -60,7 +60,8 @@ const StoreDiscovery = () => {
   const filteredStores = storeData.filter(store => 
     store.ConfId.toString().includes(searchTerm) ||
     store.DbType.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    store.Table.toLowerCase().includes(searchTerm.toLowerCase())
+    store.Table.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    store.StoreId.toString().includes(searchTerm)
   );
 
   return (

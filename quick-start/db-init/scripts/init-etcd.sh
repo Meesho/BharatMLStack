@@ -11,29 +11,26 @@ etcdctl --endpoints=http://etcd:2379 put /config/onfs "{}"
 echo "  📋 Creating /reader keys..."
 etcdctl --endpoints=http://etcd:2379 put /config/onfs/security/reader/test "{\"token\":\"test\"}"
 
-echo "  📋 Creating /entity keys..."
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/label "user"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/distributed-cache/enabled "true"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/distributed-cache/ttl-in-seconds "3600"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/distributed-cache/jitter-percentage "1"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/distributed-cache/conf-id "2"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/in-memory-cache/enabled "true"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/in-memory-cache/ttl-in-seconds "3600"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/in-memory-cache/jitter-percentage "1"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/in-memory-cache/conf-id "3"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/p2p-cache/enabled "true"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/p2p-cache/ttl-in-seconds "3600"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/p2p-cache/jitter-percentage "1"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/p2p-cache/conf-id "5"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/keys/user_id/sequence "0"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/keys/user_id/entity-label "user_id"
-etcdctl --endpoints=http://etcd:2379 put /config/onfs/entities/user/keys/user_id/column-label "id"
+echo "  📋 Creating /config/numerix configuration key..."
+etcdctl --endpoints=http://etcd:2379 put /config/numerix/expression-config/1 "{\"expression\":\"a b c * *\"}"
 
 # Verify etcd initialization
 echo "  🔍 Verifying etcd configuration..."
 if etcdctl --endpoints=http://etcd:2379 get /config/onfs > /dev/null 2>&1; then
   echo "  ✅ etcd configuration key '/config/onfs' created successfully"
 else
-  echo "  ❌ Failed to create etcd configuration key"
+  echo "  ❌ Failed to create etcd configuration key '/config/onfs'"
   exit 1
-fi 
+fi
+
+echo "  📋 Creating /config/horizon/inferflow/inferflow-components/catalog configuration key..."
+etcdctl --endpoints=http://etcd:2379 put /config/horizon/inferflow/inferflow-components/catalog/component-id "catalog_id"
+etcdctl --endpoints=http://etcd:2379 put /config/horizon/inferflow/inferflow-components/catalog/composite-id "false"
+etcdctl --endpoints=http://etcd:2379 put /config/horizon/inferflow/inferflow-components/catalog/execution-dependency "feature_initializer"
+etcdctl --endpoints=http://etcd:2379 put /config/horizon/inferflow/inferflow-components/catalog/fs-flatten-res-keys/0 "catalog_id"
+etcdctl --endpoints=http://etcd:2379 put /config/horizon/inferflow/inferflow-components/catalog/fs-id-schema-to-value-columns/0/data-type "FP32"
+etcdctl --endpoints=http://etcd:2379 put /config/horizon/inferflow/inferflow-components/catalog/fs-id-schema-to-value-columns/0/schema "catalog_id"
+etcdctl --endpoints=http://etcd:2379 put /config/horizon/inferflow/inferflow-components/catalog/fs-id-schema-to-value-columns/0/value-col "catalog_id"
+etcdctl --endpoints=http://etcd:2379 put /config/horizon/inferflow/inferflow-components/catalog/override-component/reel '{"component-id":"reel:derived_int32:reel__hero_catalog_id"}'
+
+echo "  ✅ etcd initialization completed successfully" 

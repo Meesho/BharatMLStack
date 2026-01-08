@@ -1,0 +1,32 @@
+package http
+
+// Header constants
+const (
+	HeaderContentType            = "Content-Type"
+	HeaderAuthorization          = "Authorization"
+	HeaderAuthentication         = "Authentication"
+	HeaderCountry                = "ISO-COUNTRY-CODE"
+	HeaderLanguage               = "ISO-LANGUAGE-CODE"
+	HeaderUserId                 = "USER-ID"
+	HeaderUserContext            = "USER-CONTEXT"
+	HeaderAppVersionCode         = "APP-VERSION-CODE"
+	HeaderUserCity               = "USER-CITY"
+	HeaderUserPincode            = "USER-PINCODE"
+	HeaderUserLatitude           = "USER-LATITUDE"
+	HeaderUserLongitude          = "USER-LONGITUDE"
+	HeaderUserAddressId          = "USER-ADDRESS-ID"
+	HeaderUserStateCode          = "USER-STATE-CODE"
+	HeaderParentCatalogId        = "PARENT-CATALOG-ID"
+	HeaderRealEstate             = "REAL-ESTATE"
+	HeaderUpstream               = "UPSTREAM"
+	HeaderClpId                  = "CLP-ID"
+	HeaderClientId               = "CLIENT-ID"
+	HeaderTenantContext          = "TENANT-CONTEXT"
+	HeaderValueApplicationJson   = "application/json"
+	HeaderRankingHoldoutAudience = "RANKING-HOLDOUT-AUDIENCE"
+	HeaderFeedSession            = "FEED-SESSION-ID"
+	HeaderAppSession             = "APP-SESSION-ID"
+	HeaderInstanceId             = "INSTANCE-ID"
+	HeaderSessionId              = "SESSION-ID"
+	HeaderAppUserLocation        = "APP-USER-LOCATION"
+)

@@ -3,10 +3,7 @@ package infra
 import (
 	"errors"
 	"strings"
-	"time"
 
-	gocql_v2 "github.com/Meesho/gocql"
-	"github.com/gocql/gocql"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
@@ -17,11 +14,12 @@ import (
 // <STORAGE_SCYLLA_1_KEYSPACE> =
 // <STORAGE_SCYLLA_1_MAJOR_VERSION> = Scylla major version (e.g., 5, 6)
 const (
+	ismeeshoEnabled              = "IS_MEESHO_ENABLED"
 	storageScyllaPrefix          = "STORAGE_SCYLLA_"
 	contactPointsSuffix          = "_CONTACT_POINTS"
 	portSuffix                   = "_PORT"
 	keyspaceSuffix               = "_KEYSPACE"
-	majorVersionSuffix           = "_MAJOR_VERSION"
+	scyllaVersionSuffix          = "_SCYLLA_VERSION"
 	timeoutSuffix                = "_TIMEOUT_IN_MS"
 	connectTimeoutSuffix         = "_CONNECT_TIMEOUT_IN_MS"
 	numConnsSuffix               = "_NUM_CONNS"
@@ -40,108 +38,7 @@ type ScyllaClusterConfig struct {
 	Config   interface{} // Will hold either gocql or gocql_v2 config
 	Version  int         // Major version number (e.g., 5, 6)
 	Keyspace string
-}
-
-// buildGocqlClusterConfig creates and configures a cluster config using the standard gocql/gocql library
-func buildGocqlClusterConfig(hosts []string, envPrefix string, keyspace string) (*gocql.ClusterConfig, error) {
-	cfg := gocql.NewCluster(hosts...)
-	cfg.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
-	cfg.Consistency = gocql.One
-
-	// Set port
-	if !viper.IsSet(envPrefix + portSuffix) {
-		return nil, errors.New(envPrefix + portSuffix + " not set")
-	}
-	cfg.Port = viper.GetInt(envPrefix + portSuffix)
-	cfg.Keyspace = keyspace
-
-	// Set optional configurations
-	if viper.IsSet(envPrefix + timeoutSuffix) {
-		cfg.Timeout = time.Duration(viper.GetInt(envPrefix+timeoutSuffix)) * time.Millisecond
-	}
-	if viper.IsSet(envPrefix + connectTimeoutSuffix) {
-		cfg.ConnectTimeout = time.Duration(viper.GetInt(envPrefix+connectTimeoutSuffix)) * time.Millisecond
-	}
-	if viper.IsSet(envPrefix + numConnsSuffix) {
-		cfg.NumConns = viper.GetInt(envPrefix + numConnsSuffix)
-	}
-	if viper.IsSet(envPrefix + maxPreparedStmtsSuffix) {
-		cfg.MaxPreparedStmts = viper.GetInt(envPrefix + maxPreparedStmtsSuffix)
-	}
-	if viper.IsSet(envPrefix + maxRoutingKeyInfoSuffix) {
-		cfg.MaxRoutingKeyInfo = viper.GetInt(envPrefix + maxRoutingKeyInfoSuffix)
-	}
-	if viper.IsSet(envPrefix + pageSizeSuffix) {
-		cfg.PageSize = viper.GetInt(envPrefix + pageSizeSuffix)
-	}
-	if viper.IsSet(envPrefix + maxWaitSchemaAgreementSuffix) {
-		cfg.MaxWaitSchemaAgreement = time.Duration(viper.GetInt(envPrefix+maxWaitSchemaAgreementSuffix)) * time.Second
-	}
-	if viper.IsSet(envPrefix + reconnectIntervalSuffix) {
-		cfg.ReconnectInterval = time.Duration(viper.GetInt(envPrefix+reconnectIntervalSuffix)) * time.Second
-	}
-	if viper.IsSet(envPrefix + writeCoalesceWaitTimeSuffix) {
-		cfg.WriteCoalesceWaitTime = time.Duration(viper.GetInt(envPrefix+writeCoalesceWaitTimeSuffix)) * time.Microsecond
-	}
-	if viper.IsSet(envPrefix+username) && viper.IsSet(envPrefix+password) {
-		cfg.Authenticator = gocql.PasswordAuthenticator{
-			Username: viper.GetString(envPrefix + username),
-			Password: viper.GetString(envPrefix + password),
-		}
-	}
-
-	return cfg, nil
-}
-
-// buildGocqlV2ClusterConfig creates and configures a cluster config using the gocql_v2 library
-func buildGocqlV2ClusterConfig(hosts []string, envPrefix string, keyspace string) (*gocql_v2.ClusterConfig, error) {
-	cfg := gocql_v2.NewCluster(hosts...)
-	cfg.PoolConfig.HostSelectionPolicy = gocql_v2.TokenAwareHostPolicy(gocql_v2.RoundRobinHostPolicy())
-	cfg.Consistency = gocql_v2.One
-
-	// Set port
-	if !viper.IsSet(envPrefix + portSuffix) {
-		return nil, errors.New(envPrefix + portSuffix + " not set")
-	}
-	cfg.Port = viper.GetInt(envPrefix + portSuffix)
-	cfg.Keyspace = keyspace
-
-	// Set optional configurations
-	if viper.IsSet(envPrefix + timeoutSuffix) {
-		cfg.Timeout = time.Duration(viper.GetInt(envPrefix+timeoutSuffix)) * time.Millisecond
-	}
-	if viper.IsSet(envPrefix + connectTimeoutSuffix) {
-		cfg.ConnectTimeout = time.Duration(viper.GetInt(envPrefix+connectTimeoutSuffix)) * time.Millisecond
-	}
-	if viper.IsSet(envPrefix + numConnsSuffix) {
-		cfg.NumConns = viper.GetInt(envPrefix + numConnsSuffix)
-	}
-	if viper.IsSet(envPrefix + maxPreparedStmtsSuffix) {
-		cfg.MaxPreparedStmts = viper.GetInt(envPrefix + maxPreparedStmtsSuffix)
-	}
-	if viper.IsSet(envPrefix + maxRoutingKeyInfoSuffix) {
-		cfg.MaxRoutingKeyInfo = viper.GetInt(envPrefix + maxRoutingKeyInfoSuffix)
-	}
-	if viper.IsSet(envPrefix + pageSizeSuffix) {
-		cfg.PageSize = viper.GetInt(envPrefix + pageSizeSuffix)
-	}
-	if viper.IsSet(envPrefix + maxWaitSchemaAgreementSuffix) {
-		cfg.MaxWaitSchemaAgreement = time.Duration(viper.GetInt(envPrefix+maxWaitSchemaAgreementSuffix)) * time.Second
-	}
-	if viper.IsSet(envPrefix + reconnectIntervalSuffix) {
-		cfg.ReconnectInterval = time.Duration(viper.GetInt(envPrefix+reconnectIntervalSuffix)) * time.Second
-	}
-	if viper.IsSet(envPrefix + writeCoalesceWaitTimeSuffix) {
-		cfg.WriteCoalesceWaitTime = time.Duration(viper.GetInt(envPrefix+writeCoalesceWaitTimeSuffix)) * time.Microsecond
-	}
-	if viper.IsSet(envPrefix+username) && viper.IsSet(envPrefix+password) {
-		cfg.Authenticator = gocql_v2.PasswordAuthenticator{
-			Username: viper.GetString(envPrefix + username),
-			Password: viper.GetString(envPrefix + password),
-		}
-	}
-
-	return cfg, nil
+	IsMeesho bool
 }
 
 // BuildClusterConfigFromEnv constructs a ScyllaDB cluster configuration
@@ -175,12 +72,12 @@ func BuildClusterConfigFromEnv(envPrefix string) (*ScyllaClusterConfig, error) {
 	log.Debug().Msgf("building scylla cluster config from env, env prefix - %s", envPrefix)
 
 	// Check for version first - this determines which gocql library to use
-	if !viper.IsSet(envPrefix + majorVersionSuffix) {
-		return nil, errors.New(envPrefix + majorVersionSuffix + " not set")
+	if !viper.IsSet(envPrefix + scyllaVersionSuffix) {
+		return nil, errors.New(envPrefix + scyllaVersionSuffix + " not set")
 	}
-	majorVersion := viper.GetInt(envPrefix + majorVersionSuffix)
-	if majorVersion <= 0 {
-		return nil, errors.New(envPrefix + majorVersionSuffix + " must be a positive integer")
+	scyllaVersion := viper.GetInt(envPrefix + scyllaVersionSuffix)
+	if scyllaVersion != 5 && scyllaVersion != 6 {
+		return nil, errors.New(envPrefix + scyllaVersionSuffix + " must be 5 or 6")
 	}
 
 	if !viper.IsSet(envPrefix + contactPointsSuffix) {
@@ -194,30 +91,31 @@ func BuildClusterConfigFromEnv(envPrefix string) (*ScyllaClusterConfig, error) {
 		return nil, errors.New(envPrefix + keyspaceSuffix + " not set")
 	}
 	keyspace := viper.GetString(envPrefix + keyspaceSuffix)
-
+	isMeesho := viper.GetBool(ismeeshoEnabled)
 	// Use the appropriate gocql library based on version
 	// Version >= 6 uses gocql_v2, else uses standard gocql
 	var cfg interface{}
 	var err error
-	if majorVersion >= 6 {
-		// Use gocql_v2 for Scylla 6.0+
+	if scyllaVersion == 6 && isMeesho {
+		// Use gocql_v2 for Meesho version
 		cfg, err = buildGocqlV2ClusterConfig(hosts, envPrefix, keyspace)
 		if err != nil {
 			return nil, err
 		}
-		log.Debug().Msgf("Using gocql_v2 library for Scylla version: %d (major: %d)", majorVersion, majorVersion)
+		log.Debug().Msgf("Using gocql_v2 library for Scylla version: %v (major: %d)", isMeesho, scyllaVersion)
 	} else {
-		// Use standard gocql for Scylla < 6.0
+		// Use standard gocql for non-Meesho version
 		cfg, err = buildGocqlClusterConfig(hosts, envPrefix, keyspace)
 		if err != nil {
 			return nil, err
 		}
-		log.Debug().Msgf("Using standard gocql library for Scylla version: %d (major: %d)", majorVersion, majorVersion)
+		log.Debug().Msgf("Using standard gocql library for Scylla version: %v (major: %d)", isMeesho, scyllaVersion)
 	}
 
 	return &ScyllaClusterConfig{
 		Config:   cfg,
-		Version:  majorVersion,
+		Version:  scyllaVersion,
+		IsMeesho: isMeesho,
 		Keyspace: keyspace,
 	}, nil
 }

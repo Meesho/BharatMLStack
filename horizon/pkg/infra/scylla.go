@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/gocql/gocql"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -49,8 +49,8 @@ func (s *ScyllaConnectors) GetConnection(configId int) (ConnectionFacade, error)
 	return conn, nil
 }
 
-func initScyllaClusterConns() {
-	activeConfIdsStr := viper.GetString(storageScyllaPrefix + activeConfIds)
+func initScyllaClusterConns(config configs.Configs) {
+	activeConfIdsStr := config.ScyllaActiveConfIds
 	if activeConfIdsStr == "" {
 		return
 	}

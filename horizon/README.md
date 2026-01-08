@@ -206,6 +206,7 @@ docker build -t horizon -f cmd/horizon/Dockerfile .
 # Run container with environment variables
 docker run -p 8080:8080 \
   --env-file ./cmd/horizon/.env \
+  --network onfs-network \
   horizon
 ```
 

@@ -484,13 +484,6 @@ func (e *Etcd) GetNormalizedEntities() error {
 	return nil
 }
 
-func isEntityValid(entity *Entity) bool {
-	if entity == nil || entity.Label == "" || entity.Keys == nil || len(entity.Keys) == 0 {
-		return false
-	}
-	return true
-}
-
 func (e *Etcd) GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error) {
 	entity, err := e.GetEntity(entityLabel)
 	if err != nil {
@@ -503,6 +496,13 @@ func (e *Etcd) GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error) {
 	}
 
 	return allFGIds, nil
+}
+
+func isEntityValid(entity *Entity) bool {
+	if entity == nil || entity.Label == "" || entity.Keys == nil || len(entity.Keys) == 0 {
+		return false
+	}
+	return true
 }
 
 func (e *Etcd) GetCircuitBreakerConfigs() map[string]circuitbreaker.Config {
