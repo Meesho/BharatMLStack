@@ -18,9 +18,9 @@ import NumerixConfigApproval from './pages/Numerix/Approval/NumerixConfigApprova
 import UserManagement from './pages/UserManagement';
 import ErrorBoundary from './common/ErrorBoundary';
 import ClientDiscovery from './pages/OnlineFeatureStore/components/Discovery/ClientDiscovery';
-import DeployableModelProxyRegistry from './pages/InferFlow/DiscoveryRegistry/Deployable/DeployableModelProxyRegistry';
-import ModelConfigApproval from './pages/InferFlow/Approval/ModelConfigApproval';
-import MPConfigRegistry from './pages/InferFlow/DiscoveryRegistry/MPConfigRegistry/ModelProxyConfigRegistry';
+import DeployableInferflowRegistry from './pages/InferFlow/DiscoveryRegistry/Deployable/DeployableInferflowRegistry';
+import InferflowConfigApproval from './pages/InferFlow/Approval/InferflowConfigApproval';
+import InferflowConfigRegistry from './pages/InferFlow/DiscoveryRegistry/InferflowRegistry/InferflowConfigRegistry';
 import DeployableRegistry from './pages/Predator/components/Registry/DeployableRegistry';
 import ModelRegistry from './pages/Predator/components/Registry/ModelRegistry';
 import ModelApproval from './pages/Predator/components/Approval/ModelApproval';
@@ -257,23 +257,23 @@ function App() {
                   path="/inferflow/deployable"
                   element={
                     <ProtectedRoute service="inferflow" screenType="deployable">
-                      <DeployableModelProxyRegistry />
+                      <DeployableInferflowRegistry />
                     </ProtectedRoute>
                   }
                 />
                 <Route
                   path="/inferflow/config-registry"
                   element={
-                    <ProtectedRoute service="inferflow" screenType="mp-config">
-                      <MPConfigRegistry />
+                    <ProtectedRoute service="inferflow" screenType="inferflow-config">
+                      <InferflowConfigRegistry />
                     </ProtectedRoute>
                   }
                 />
                 <Route
                   path="/inferflow/config-approval"
                   element={
-                    <ProtectedRoute service="inferflow" screenType="mp-config-approval">
-                      <ModelConfigApproval />
+                    <ProtectedRoute service="inferflow" screenType="inferflow-config-approval">
+                      <InferflowConfigApproval />
                     </ProtectedRoute>
                   }
                 />

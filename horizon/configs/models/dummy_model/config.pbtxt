@@ -1,0 +1,53 @@
+name: "dummy_model"
+backend: "fil"
+max_batch_size: 200
+
+dynamic_batching {
+  max_queue_delay_microseconds: 100
+}
+
+input [
+ {
+    name: "input__0"
+    data_type: TYPE_FP32
+    dims: [ 22 ]
+  }
+]
+output [
+ {
+    name: "output__0"
+    data_type: TYPE_FP32
+    dims: [ 1 ]
+  }
+]
+response_cache {
+  enable: false
+}
+instance_group [
+  {
+    count: 1
+    kind : KIND_CPU
+  }
+]
+parameters [
+  {
+    key: "model_type"
+    value: { string_value: "lightgbm" }
+  },
+  {
+    key: "predict_proba"
+    value: { string_value: "false" }
+  },
+  {
+    key: "output_class"
+    value: { string_value: "false" }
+  },
+  {
+    key: "storage_type"
+    value: { string_value: "AUTO" }
+  },
+  {
+    key: "use_experimental_optimizations"
+    value: { string_value: "true" }
+  }
+]

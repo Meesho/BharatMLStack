@@ -23,9 +23,23 @@ type ExpressionVariablesResponse struct {
 	Data  []string `json:"data"`
 }
 
+type GetAllConfigsRequest struct {
+	Page     int `form:"page"`
+	PageSize int `form:"limit"`
+	ConfigID int `form:"config_id"`
+}
+
+type PaginationMeta struct {
+	Page       int   `json:"page"`
+	PageSize   int   `json:"limit"`
+	TotalCount int64 `json:"total_count"`
+	TotalPages int   `json:"total_pages"`
+}
+
 type GetAllConfigsResponse struct {
-	Error string          `json:"error"`
-	Data  []NumerixConfig `json:"data"`
+	Error      string          `json:"error"`
+	Data       []NumerixConfig `json:"data"`
+	Pagination *PaginationMeta `json:"pagination,omitempty"`
 }
 
 type NumerixConfig struct {
@@ -168,24 +182,4 @@ type ComputationalScoreData struct {
 
 type ComputationalScore struct {
 	Data Data `json:"data"`
-}
-
-type BinaryOp struct {
-	Operator   string `json:"operator"`
-	Precedence uint   `json:"precedence"`
-}
-
-type UnaryOp struct {
-	Operator   string `json:"operator"`
-	Parameters uint   `json:"parameters"`
-}
-
-type GetBinaryOpsResponse struct {
-	Error string     `json:"error"`
-	Data  []BinaryOp `json:"data"`
-}
-
-type GetUnaryOpsResponse struct {
-	Error string    `json:"error"`
-	Data  []UnaryOp `json:"data"`
 }

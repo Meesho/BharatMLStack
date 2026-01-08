@@ -3,7 +3,8 @@ package handler
 type Config interface {
 	Onboard(OnboardConfigRequest) (Response, error)
 	Promote(PromoteConfigRequest) (Response, error)
-	GetAll() (GetAllConfigsResponse, error)
+	GetAll(GetAllConfigsRequest) (GetAllConfigsResponse, error)
+	GenerateExpression(ExpressionGenerateRequest) (ExpressionGenerateResponse, error)
 	GetExpressionVariables(ExpressionVariablesRequest) (ExpressionVariablesResponse, error)
 	ReviewRequest(ReviewRequestConfigRequest) (Response, error)
 	Edit(EditConfigRequest) (Response, error)
@@ -11,6 +12,4 @@ type Config interface {
 	GetAllRequests(GetAllRequestConfigsRequest) (GetAllRequestConfigsResponse, error)
 	GenerateFuncitonalTestRequest(RequestGenerationRequest) (FuncitonalRequestGenerationResponse, error)
 	ExecuteFuncitonalTestRequest(ExecuteRequestFunctionalRequest) (ExecuteRequestFunctionalResponse, error)
-	GetBinaryOps() (GetBinaryOpsResponse, error)
-	GetUnaryOps() (GetUnaryOpsResponse, error)
 }

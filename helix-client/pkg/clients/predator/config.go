@@ -6,4 +6,5 @@ type Config struct {
 	PlainText   bool
 	CallerId    string
 	CallerToken string
+	DeadLine    int
 }
