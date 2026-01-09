@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/allocators"
@@ -33,18 +34,39 @@ type ShardCache struct {
 }
 
 type Stats struct {
-	KeyNotFoundCount int
-	KeyExpiredCount  int
-	BadDataCount     int
-	BadLengthCount   int
-	BadCR32Count     int
-	BadKeyCount      int
-	MemIdCount       map[uint32]int
-	LastDeletedMemId uint32
-	DeletedKeyCount  int
-	BadCRCMemIds     map[uint32]int
-	BadKeyMemIds     map[uint32]int
+	KeyNotFoundCount atomic.Int64
+	KeyExpiredCount  atomic.Int64
+	BadDataCount     atomic.Int64
+	BadLengthCount   atomic.Int64
+	BadCR32Count     atomic.Int64
+	BadKeyCount      atomic.Int64
+	MemIdCount       sync.Map // key: uint32, value: *atomic.Int64
+	LastDeletedMemId atomic.Uint32
+	DeletedKeyCount  atomic.Int64
+	BadCRCMemIds     sync.Map // key: uint32, value: *atomic.Int64
+	BadKeyMemIds     sync.Map // key: uint32, value: *atomic.Int64
 	BatchTracker     *BatchTracker
+}
+
+// Helper method to increment a counter in a sync.Map
+func (s *Stats) incMapCounter(m *sync.Map, key uint32) {
+	val, _ := m.LoadOrStore(key, &atomic.Int64{})
+	val.(*atomic.Int64).Add(1)
+}
+
+// IncMemIdCount atomically increments the counter for the given memId
+func (s *Stats) IncMemIdCount(memId uint32) {
+	s.incMapCounter(&s.MemIdCount, memId)
+}
+
+// IncBadCRCMemIds atomically increments the bad CRC counter for the given memId
+func (s *Stats) IncBadCRCMemIds(memId uint32) {
+	s.incMapCounter(&s.BadCRCMemIds, memId)
+}
+
+// IncBadKeyMemIds atomically increments the bad key counter for the given memId
+func (s *Stats) IncBadKeyMemIds(memId uint32) {
+	s.incMapCounter(&s.BadKeyMemIds, memId)
 }
 
 type ShardCacheConfig struct {
@@ -108,9 +130,7 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 		predictor:         config.Predictor,
 		startAt:           time.Now().Unix(),
 		Stats: &Stats{
-			MemIdCount:   make(map[uint32]int),
-			BadCRCMemIds: make(map[uint32]int),
-			BadKeyMemIds: make(map[uint32]int),
+			// sync.Map fields have zero values that are ready to use
 			BatchTracker: NewBatchTracker(),
 		},
 	}
@@ -125,10 +145,10 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 
 	if config.EnableLockless {
 
-	sc.ReadCh = make(chan *ReadRequestV2, 500)
-	sc.WriteCh = make(chan *WriteRequestV2, 500)
+		sc.ReadCh = make(chan *ReadRequestV2, 500)
+		sc.WriteCh = make(chan *WriteRequestV2, 500)
 
-	go sc.startReadWriteRoutines()
+		go sc.startReadWriteRoutines()
 	}
 
 	return sc
@@ -169,19 +189,19 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	indices.ByteOrder.PutUint32(buf[0:4], crc)
 	fc.keyIndex.Put(key, length, ttlMinutes, mtId, uint32(offset))
 	fc.dm.IncMemtableKeyCount(mtId)
-	fc.Stats.MemIdCount[mtId]++
+	fc.Stats.IncMemIdCount(mtId)
 	return nil
 }
 
 func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 	if status == indices.StatusNotFound {
-		fc.Stats.KeyNotFoundCount++
+		fc.Stats.KeyNotFoundCount.Add(1)
 		return false, nil, 0, false, false
 	}
 
 	if status == indices.StatusExpired {
-		fc.Stats.KeyExpiredCount++
+		fc.Stats.KeyExpiredCount.Add(1)
 		return false, nil, 0, true, false
 	}
 
@@ -202,7 +222,7 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
 		n := fc.readFromDisk(int64(fileOffset), length, buf)
 		if n != int(length) {
-			fc.Stats.BadLengthCount++
+			fc.Stats.BadLengthCount.Add(1)
 			return false, nil, 0, false, shouldReWrite
 		}
 	} else {
@@ -215,13 +235,13 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	computedCR32 := crc32.ChecksumIEEE(buf[4:])
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotCR32 != computedCR32 {
-		fc.Stats.BadCR32Count++
-		fc.Stats.BadCRCMemIds[memId]++
+		fc.Stats.BadCR32Count.Add(1)
+		fc.Stats.IncBadCRCMemIds(memId)
 		return false, nil, 0, false, shouldReWrite
 	}
 	if gotKey != key {
-		fc.Stats.BadKeyCount++
-		fc.Stats.BadKeyMemIds[memId]++
+		fc.Stats.BadKeyCount.Add(1)
+		fc.Stats.IncBadKeyMemIds(memId)
 		return false, nil, 0, false, shouldReWrite
 	}
 	valLen := int(length) - 4 - len(key)
@@ -234,12 +254,12 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 func (fc *ShardCache) GetFastPath(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 	if status == indices.StatusNotFound {
-		fc.Stats.KeyNotFoundCount++
+		fc.Stats.KeyNotFoundCount.Add(1)
 		return false, nil, 0, false, false // needsSlowPath = false (not found)
 	}
 
 	if status == indices.StatusExpired {
-		fc.Stats.KeyExpiredCount++
+		fc.Stats.KeyExpiredCount.Add(1)
 		return false, nil, 0, true, false // needsSlowPath = false (expired)
 	}
 
@@ -260,8 +280,8 @@ func (fc *ShardCache) GetFastPath(key string) (bool, []byte, uint16, bool, bool)
 	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
 	computedCR32 := crc32.ChecksumIEEE(buf[4:])
 	if gotCR32 != computedCR32 {
-		fc.Stats.BadCR32Count++
-		fc.Stats.BadCRCMemIds[memId]++
+		fc.Stats.BadCR32Count.Add(1)
+		fc.Stats.IncBadCRCMemIds(memId)
 		_, currMemId, _ := fc.mm.GetMemtable()
 		shouldReWrite := fc.predictor.Predict(uint64(freq), uint64(lastAccess), memId, currMemId)
 		_ = shouldReWrite // Not returning shouldReWrite in fast path for simplicity
@@ -270,8 +290,8 @@ func (fc *ShardCache) GetFastPath(key string) (bool, []byte, uint16, bool, bool)
 
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotKey != key {
-		fc.Stats.BadKeyCount++
-		fc.Stats.BadKeyMemIds[memId]++
+		fc.Stats.BadKeyCount.Add(1)
+		fc.Stats.IncBadKeyMemIds(memId)
 		return false, nil, 0, false, false
 	}
 
@@ -284,12 +304,12 @@ func (fc *ShardCache) GetFastPath(key string) (bool, []byte, uint16, bool, bool)
 func (fc *ShardCache) GetSlowPath(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 	if status == indices.StatusNotFound {
-		fc.Stats.KeyNotFoundCount++
+		fc.Stats.KeyNotFoundCount.Add(1)
 		return false, nil, 0, false, false
 	}
 
 	if status == indices.StatusExpired {
-		fc.Stats.KeyExpiredCount++
+		fc.Stats.KeyExpiredCount.Add(1)
 		return false, nil, 0, true, false
 	}
 
@@ -314,7 +334,7 @@ func (fc *ShardCache) GetSlowPath(key string) (bool, []byte, uint16, bool, bool)
 	fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
 	n := fc.readFromDisk(int64(fileOffset), length, buf)
 	if n != int(length) {
-		fc.Stats.BadLengthCount++
+		fc.Stats.BadLengthCount.Add(1)
 		return false, nil, 0, false, shouldReWrite
 	}
 
@@ -326,15 +346,15 @@ func (fc *ShardCache) validateAndReturnBuffer(key string, buf []byte, length uin
 	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
 	computedCR32 := crc32.ChecksumIEEE(buf[4:])
 	if gotCR32 != computedCR32 {
-		fc.Stats.BadCR32Count++
-		fc.Stats.BadCRCMemIds[memId]++
+		fc.Stats.BadCR32Count.Add(1)
+		fc.Stats.IncBadCRCMemIds(memId)
 		return false, nil, 0, false, shouldReWrite
 	}
 
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotKey != key {
-		fc.Stats.BadKeyCount++
-		fc.Stats.BadKeyMemIds[memId]++
+		fc.Stats.BadKeyCount.Add(1)
+		fc.Stats.IncBadKeyMemIds(memId)
 		return false, nil, 0, false, shouldReWrite
 	}
 
@@ -366,11 +386,11 @@ func (fc *ShardCache) processBuffer(key string, buf []byte, length uint16) ReadR
 	gotKey := string(buf[4 : 4+len(key)])
 
 	if gotCR32 != computedCR32 {
-		fc.Stats.BadCR32Count++
+		fc.Stats.BadCR32Count.Add(1)
 		return ReadResult{Found: false, Error: fmt.Errorf("crc mismatch")}
 	}
 	if gotKey != key {
-		fc.Stats.BadKeyCount++
+		fc.Stats.BadKeyCount.Add(1)
 		return ReadResult{Found: false, Error: fmt.Errorf("key mismatch")}
 	}
 
