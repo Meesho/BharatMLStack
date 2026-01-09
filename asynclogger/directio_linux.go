@@ -16,8 +16,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// alignmentSize is the required alignment for O_DIRECT on Linux
-// For ext4 filesystem, this must be 4096 bytes (4KB), not 512 bytes!
+// For ext4 filesystem, this must be 4096 bytes (4KB)
 // O_DIRECT requires alignment to filesystem block size, not just sector size
 const alignmentSize = 4096
 
@@ -29,6 +28,7 @@ const alignmentSize = 4096
 func openDirectIO(path string) (*os.File, int64, error) {
 	// Ensure parent directory exists
 	dir := filepath.Dir(path)
+	// TODO: do we have to use 0o755 instead of 0755?
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, 0, fmt.Errorf("failed to create directory: %w", err)
 	}
@@ -36,6 +36,7 @@ func openDirectIO(path string) (*os.File, int64, error) {
 	// Open with O_DIRECT, O_DSYNC, O_WRONLY, O_CREAT, O_TRUNC
 	// O_TRUNC ensures file starts at offset 0 (aligned) for O_DIRECT compliance
 	// This avoids alignment issues when opening existing files
+	// TODO: change to use unix instead of syscall
 	fd, err := syscall.Open(path,
 		syscall.O_WRONLY|syscall.O_CREAT|syscall.O_TRUNC|syscall.O_DIRECT|syscall.O_DSYNC,
 		0644)
@@ -86,6 +87,7 @@ func writevAlignedWithOffset(fd int, buffers [][]byte, offset int64) (int, error
 	// Filter out empty buffers
 	nonEmptyBuffers := make([][]byte, 0, len(buffers))
 	for _, buf := range buffers {
+		// TODO: check if this is always true, as we send GetData() which returns entire buffer capacity
 		if len(buf) > 0 {
 			nonEmptyBuffers = append(nonEmptyBuffers, buf)
 		}
@@ -167,6 +169,7 @@ func NewFileWriter(config Config) (*FileWriter, error) {
 	}
 
 	// Open initial file
+	// TODO: initialOffset is expected to be 0 either new file or existing file as we are using O_TRUNC, check if this can be removed
 	file, initialOffset, err := openDirectIO(config.LogFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open initial file: %w", err)
@@ -187,6 +190,8 @@ func NewFileWriter(config Config) (*FileWriter, error) {
 
 	return fw, nil
 }
+
+// TODO: add rotation support for file size based rotation and fallocate for pre-allocating space
 
 // rotateIfNeeded checks if rotation is needed and performs it if necessary
 func (fw *FileWriter) rotateIfNeeded() error {

@@ -29,6 +29,7 @@ type Buffer struct {
 	readyForFlush atomic.Bool
 
 	// writeCount tracks the number of writes to this buffer for statistics
+	// TODO: this can be removed as we can use writesCompleted to track the number of writes
 	writeCount atomic.Int64
 
 	// writesStarted tracks the number of writes that have reserved space (CAS succeeded)
@@ -44,6 +45,8 @@ type Buffer struct {
 func NewBuffer(capacity int, id uint32) *Buffer {
 	// Reserve 8 bytes for header, then round total capacity to 512-byte alignment
 	// This ensures the buffer is aligned and header space is reserved
+
+	// TODO: use 8 bytes for header with in the capacity instead of adding extra space
 	totalCapacity := capacity + 8 // Add header space
 	alignedCap := alignSize(totalCapacity)
 
@@ -152,6 +155,7 @@ func (b *Buffer) Reset() {
 	b.readyForFlush.Store(false)
 	b.writesStarted.Store(0)
 	b.writesCompleted.Store(0)
+	// TODO: reset write count to 0
 }
 
 // Offset returns the current write offset

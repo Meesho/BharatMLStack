@@ -63,6 +63,7 @@ type Logger struct {
 	stats Statistics
 
 	// Next set ID for tracking
+	// TODO: is nextID being used? Can this be removed with out affecting the functionality?
 	nextID atomic.Uint32
 
 	// Swap in progress flag
@@ -233,6 +234,7 @@ func (l *Logger) trySwap() {
 	}
 
 	// Assign new ID to next set
+	// TODO: nextID value is already set to 2, check if this is correct to add 1 again
 	nextSet.SetID(l.nextID.Add(1))
 
 	// Atomically swap the active set
@@ -244,6 +246,7 @@ func (l *Logger) trySwap() {
 	l.stats.SetSwaps.Add(1)
 
 	// Send the old set for flushing (non-blocking)
+	// TODO: is select and case required here? Can we just use a channel to send the set for flushing?
 	select {
 	case l.flushChan <- currentSet:
 		// Successfully queued for flush
