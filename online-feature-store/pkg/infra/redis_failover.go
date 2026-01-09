@@ -3,8 +3,6 @@ package infra
 import (
 	"context"
 	"errors"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/redis/go-redis/extra/redisprometheus/v9"
 	"github.com/redis/go-redis/v9"
 	"strconv"
 	"strings"
@@ -70,10 +68,6 @@ func initRedisFailoverConns() {
 			panic(err)
 		}
 		failoverClient := redis.NewFailoverClusterClient(cfg)
-		// metrics will be built using {namespace}_{subsystem}_{metric}
-		// e.g.: onfs_redis_2_pool_hit_total
-		collector := redisprometheus.NewCollector("onfs", "redis_"+configIdStr, failoverClient)
-		prometheus.MustRegister(collector)
 		configId, err := strconv.Atoi(configIdStr)
 		if err != nil {
 			log.Error().Err(err).Msg("Error converting configId")
