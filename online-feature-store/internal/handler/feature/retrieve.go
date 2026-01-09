@@ -783,6 +783,11 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 		if _, exists := data.ReqFGIdToFeatureLabels[fgId]; !exists {
 			continue
 		}
+
+		// Validity metrics: check Expired before NegativeCache because expired data has both flags set.
+		// - Expired=true (from DB): validity="expired" (first fetch, data was in DB but expired)
+		// - NegativeCache=true only: validity="negative_cache" (data never existed or cached expired)
+		// - Neither: validity="valid"
 		if ddb.Expired {
 			metric.Count("online.feature.store.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel, "validity", "expired"})
 		} else if ddb.NegativeCache {
