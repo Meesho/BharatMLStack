@@ -64,6 +64,9 @@ type ShardCacheConfig struct {
 	EnableBatching bool
 	BatchWindow    time.Duration
 	MaxBatchSize   int
+
+	//lockless
+	EnableLockless bool
 }
 
 func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
@@ -120,10 +123,13 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 		}, sc, sl)
 	}
 
+	if config.EnableLockless {
+
 	sc.ReadCh = make(chan *ReadRequestV2, 500)
 	sc.WriteCh = make(chan *WriteRequestV2, 500)
 
 	go sc.startReadWriteRoutines()
+	}
 
 	return sc
 }
