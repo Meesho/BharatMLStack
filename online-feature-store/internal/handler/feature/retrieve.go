@@ -112,14 +112,14 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		_, err = h.retrieveFromDB(allKeys, retrieveData, reqDbFGIds, fgDataChan)
 		h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
 		if err != nil {
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		return retrieveData.Result, nil
 	} else if ReqInMemEmpty && !ReqDistEmpty {
 		missingDistKeys, err := h.retrieveFromDistributedCache(allKeys, retrieveData, reqDistCachedFGIds, fgDataChan)
 		if err != nil {
 			h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		missingKeyExists := len(missingDistKeys) > 0
 		reqDbFGIdsExists := !reqDbFGIds.IsEmpty()
@@ -142,7 +142,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		}
 		h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
 		if err != nil {
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		if len(missingDistKeys) > 0 {
 			go h.persistToDistributedCache(retrieveData.EntityLabel, retrieveData, allDistFGIds, missingDistKeys)
@@ -152,7 +152,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		missingInMemKeys, err := h.retrieveFromInMemoryCache(allKeys, retrieveData, retrieveData.ReqInMemCachedFGIds, fgDataChan, isP2PEnabled)
 		if err != nil {
 			h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		missingKeyExists := len(missingInMemKeys) > 0
 		reqDbFGIdsExists := !reqDbFGIds.IsEmpty()
@@ -174,7 +174,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		}
 		h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
 		if err != nil {
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		if len(missingInMemKeys) > 0 {
 			go h.persistToInMemoryCache(retrieveData.EntityLabel, retrieveData, retrieveData.ReqInMemCachedFGIds, missingInMemKeys, isP2PEnabled)
@@ -185,7 +185,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		missingInMemKeys, err := h.retrieveFromInMemoryCache(allKeys, retrieveData, retrieveData.ReqInMemCachedFGIds, fgDataChan, isP2PEnabled)
 		if err != nil {
 			h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		missingInMemKeyExists := len(missingInMemKeys) > 0
 		exclusiveDistFGIds := reqDistCachedFGIds.Difference(retrieveData.ReqInMemCachedFGIds)
@@ -207,7 +207,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		}
 		if err != nil {
 			h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		missingDistKeyExists := len(missingDistKeys) > 0
 		if !missingDistKeyExists && !reqDbFGIdsExists && !exclusiveInMemExists {
@@ -240,7 +240,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		}
 		h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
 		if err != nil {
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		if len(missingInMemKeys) > 0 {
 			go h.persistToInMemoryCache(retrieveData.EntityLabel, retrieveData, retrieveData.ReqInMemCachedFGIds, missingInMemKeys, isP2PEnabled)
@@ -270,6 +270,7 @@ func (h *RetrieveHandler) retrieveFromInMemoryCache(keys []*retrieve.Keys, retri
 		return h.retrieveFromP2PCache(keys, retrieveData, fgIds, fgDataChan)
 	}
 	entityLabel := retrieveData.EntityLabel
+	metric.Count("feature.retrieve.cache.requests.total", 1, []string{"entity_name", entityLabel, "cache_type", "in_memory"})
 	cache, err := h.imcProvider.GetCache(entityLabel)
 	if err != nil {
 		return nil, err
@@ -351,6 +352,7 @@ func (h *RetrieveHandler) retrieveFromP2PCache(keys []*retrieve.Keys, retrieveDa
 func (h *RetrieveHandler) retrieveFromDistributedCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int], fgDataChan chan *FGData) ([]*retrieve.Keys, error) {
 	log.Debug().Msgf("Retrieving features from distributed cache for keys %v and fgIds %v", keys, fgIds)
 	entityLabel := retrieveData.EntityLabel
+	metric.Count("feature.retrieve.cache.requests.total", 1, []string{"entity_name", entityLabel, "cache_type", "distributed"})
 	cache, err := h.dcProvider.GetCache(entityLabel)
 	if err != nil {
 		return nil, err
@@ -446,6 +448,7 @@ func (h *RetrieveHandler) retrieveFromDB(keys []*retrieve.Keys, retrieveData *Re
 		log.Debug().Msgf("Retrieving features from DB for store: %s and fgIds: %v", storeId, storeFgIds)
 		store, err := h.dbProvider.GetStore(storeId)
 		if err != nil {
+			wg.Wait()
 			return nil, err
 		}
 
@@ -453,6 +456,7 @@ func (h *RetrieveHandler) retrieveFromDB(keys []*retrieve.Keys, retrieveData *Re
 			// Use BatchRetrieveV2 for Redis
 			results, err := store.BatchRetrieveV2(entityLabel, pkMaps, storeFgIds)
 			if err != nil {
+				wg.Wait()
 				return nil, err
 			}
 
