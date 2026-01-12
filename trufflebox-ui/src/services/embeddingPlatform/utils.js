@@ -21,11 +21,15 @@ import {
 export const validateStorePayload = (payload) => {
   const errors = {};
 
-  // Validate conf_id (must be 2)
+  // Validate conf_id (must be 1)
+  // Convert to number for comparison to handle both string and number types
   if (!payload.conf_id) {
     errors.conf_id = ERROR_MESSAGES.REQUIRED_FIELD;
-  } else if (payload.conf_id !== BUSINESS_RULES.STORE.REQUIRED_CONF_ID) {
-    errors.conf_id = ERROR_MESSAGES.CONF_ID_FIXED;
+  } else {
+    const confIdNum = Number(payload.conf_id);
+    if (isNaN(confIdNum) || confIdNum !== BUSINESS_RULES.STORE.REQUIRED_CONF_ID) {
+      errors.conf_id = ERROR_MESSAGES.CONF_ID_FIXED;
+    }
   }
 
   // Validate database type

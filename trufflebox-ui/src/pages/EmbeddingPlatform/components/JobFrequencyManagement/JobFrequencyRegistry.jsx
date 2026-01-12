@@ -366,9 +366,12 @@ const JobFrequencyRegistry = () => {
 
     try {
       const payload = {
-        job_frequency: frequencyData.job_frequency,
+        requestor: user?.email,
         reason: frequencyData.reason,
-        created_by: user?.email || 'user@example.com'
+        request_type: "CREATE",
+        payload: {
+          job_frequency: frequencyData.job_frequency
+        }
       };
 
       await embeddingPlatformAPI.registerJobFrequency(payload);

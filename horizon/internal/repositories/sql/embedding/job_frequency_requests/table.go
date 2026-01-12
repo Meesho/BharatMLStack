@@ -34,4 +34,3 @@ func (JobFrequencyRequest) BeforeUpdate(tx *gorm.DB) (err error) {
 	tx.Statement.SetColumn(constant.UpdatedAt, time.Now())
 	return
 }
-

@@ -10,7 +10,7 @@
 export const BUSINESS_RULES = {
   // Store Management
   STORE: {
-    REQUIRED_CONF_ID: 2, // Only conf_id = 2 is allowed
+    REQUIRED_CONF_ID: 1, // Only conf_id = 1 is allowed
     SUPPORTED_DATABASES: ['scylla'],
   },
 
@@ -146,7 +146,7 @@ export const ERROR_MESSAGES = {
   INVALID_FORMAT: 'Invalid format',
   INVALID_NUMBER: 'Please enter a valid number',
   POSITIVE_NUMBER_REQUIRED: 'Must be a positive number',
-  CONF_ID_FIXED: 'Configuration ID must be 2',
+  CONF_ID_FIXED: 'Configuration ID must be 1',
   PARTITIONS_FIXED: 'Number of partitions is fixed at 24',
   VECTOR_DB_FIXED: 'Vector DB type is fixed as QDRANT',
   TYPE_FIXED: 'Type is fixed as EXPERIMENT',

@@ -70,12 +70,12 @@ const EntityRegistry = () => {
 
   const fetchStores = useCallback(async () => {
     try {
-      const response = await embeddingPlatformAPI.getStoresFromETCD();
+      const response = await embeddingPlatformAPI.getStores();
       if (response.stores) {
         setStores(response.stores);
       }
     } catch (error) {
-      console.error('Error fetching stores from ETCD:', error);
+      console.error('Error fetching stores:', error);
     }
   }, []);
 

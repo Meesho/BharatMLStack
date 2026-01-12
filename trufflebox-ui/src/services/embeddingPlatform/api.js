@@ -86,13 +86,6 @@ class EmbeddingPlatformAPI {
   }
 
   /**
-   * Get Stores from ETCD
-   */
-  async getStoresFromETCD() {
-    return this.makeRequest('/data/stores/etcd');
-  }
-
-  /**
    * Get Store Requests
    */
   async getStoreRequests() {
@@ -436,7 +429,6 @@ export const {
   registerStore,
   approveStore,
   getStores,
-  getStoresFromETCD,
   getStoreRequests,
   
   // Entity Management

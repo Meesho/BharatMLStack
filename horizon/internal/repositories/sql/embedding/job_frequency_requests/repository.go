@@ -73,4 +73,3 @@ func (r *jobFrequencyRequestRepo) GetAll() ([]JobFrequencyRequest, error) {
 	err := r.db.Find(&requests).Error
 	return requests, err
 }
-

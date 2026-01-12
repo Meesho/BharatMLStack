@@ -157,8 +157,30 @@ const VariantRegistry = () => {
   const fetchFilters = async () => {
     try {
       const response = await embeddingPlatformAPI.getFilters();
-      if (response.filters) {
+      
+      // Transform filter_groups response to flat array format
+      if (response.filter_groups && Array.isArray(response.filter_groups)) {
+        const transformedFilters = response.filter_groups.flatMap((group, groupIndex) => 
+          group.filters.map((filter, filterIndex) => ({
+            id: `${group.entity}_${filterIndex}`,
+            filter_id: `${group.entity}_${filterIndex}`,
+            entity: group.entity,
+            column_name: filter.column_name,
+            filter_value: filter.filter_value,
+            default_value: filter.default_value,
+            filter: {
+              column_name: filter.column_name,
+              filter_value: filter.filter_value,
+              default_value: filter.default_value
+            }
+          }))
+        );
+        setFilters(transformedFilters);
+      } else if (response.filters) {
+        // Fallback for old response format
         setFilters(response.filters);
+      } else {
+        setFilters([]);
       }
     } catch (error) {
       console.error('Error fetching filters:', error);
@@ -169,8 +191,31 @@ const VariantRegistry = () => {
   const fetchFiltersForEntity = async (entityName) => {
     try {
       const response = await embeddingPlatformAPI.getFilters({ entity: entityName });
-      if (response.filters) {
+      
+      // Transform filter_groups response to flat array format
+      if (response.filter_groups && Array.isArray(response.filter_groups)) {
+        const transformedFilters = response.filter_groups.flatMap((group, groupIndex) => 
+          group.filters.map((filter, filterIndex) => ({
+            id: `${group.entity}_${filterIndex}`,
+            filter_id: `${group.entity}_${filterIndex}`,
+            entity: group.entity,
+            column_name: filter.column_name,
+            filter_value: filter.filter_value,
+            default_value: filter.default_value,
+            filter: {
+              column_name: filter.column_name,
+              filter_value: filter.filter_value,
+              default_value: filter.default_value
+            }
+          }))
+        );
         // Store entity-specific filters separately or filter existing ones
+        setFilters(prevFilters => [
+          ...prevFilters.filter(f => f.entity !== entityName),
+          ...transformedFilters
+        ]);
+      } else if (response.filters) {
+        // Fallback for old response format
         setFilters(prevFilters => [
           ...prevFilters.filter(f => f.entity !== entityName),
           ...response.filters
@@ -1014,9 +1059,9 @@ const VariantRegistry = () => {
                       const criteria = selectedFilters.map(filterId => {
                         const filter = filters.find(f => f.id === filterId || f.filter_id === filterId);
                         return filter ? {
-                          column: filter.filter?.column_name || filter.column_name,
+                          column_name: filter.filter?.column_name || filter.column_name,
                           operator: 'equals',
-                          value: filter.filter?.filter_value || filter.filter_value,
+                          filter_value: filter.filter?.filter_value || filter.filter_value,
                           default_value: filter.filter?.default_value || filter.default_value
                         } : null;
                       }).filter(Boolean);
