@@ -72,6 +72,8 @@ type Configs struct {
 
 	InferflowAppName string `mapstructure:"inferflow_app_name"`
 
+	SkyeAppName string `mapstructure:"skye_app_name"`
+
 	PhoenixServerBaseUrl string `mapstructure:"phoenix_server_base_url"`
 
 	PredatorMonitoringUrl   string `mapstructure:"predator_monitoring_url"`

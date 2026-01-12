@@ -19,6 +19,8 @@ import (
 	ofsConfig "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/config"
 	ofsRouter "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/router"
 	predatorRouter "github.com/Meesho/BharatMLStack/horizon/internal/predator/route"
+	skyeConfig "github.com/Meesho/BharatMLStack/horizon/internal/skye/etcd"
+	skyeRouter "github.com/Meesho/BharatMLStack/horizon/internal/skye/route"
 	workflowPkg "github.com/Meesho/BharatMLStack/horizon/internal/workflow"
 	workflowEtcd "github.com/Meesho/BharatMLStack/horizon/internal/workflow/etcd"
 	workflowHandler "github.com/Meesho/BharatMLStack/horizon/internal/workflow/handler"
@@ -56,6 +58,7 @@ func main() {
 	etcd.InitFromAppName(&inferflowConfig.ModelConfigRegistery{}, appConfig.Configs.InferflowAppName, appConfig.Configs)
 	etcd.InitFromAppName(&inferflowConfig.HorizonRegistry{}, appConfig.Configs.HorizonAppName, appConfig.Configs)
 	etcd.InitFromAppName(&workflowEtcd.WorkflowRegistry{}, workflowPkg.WorkflowAppName, appConfig.Configs)
+	etcd.InitFromAppName(&skyeConfig.SkyeConfigRegistry{}, appConfig.Configs.SkyeAppName, appConfig.Configs)
 	horizonConfig.InitAll(appConfig.Configs)
 	logger.Init(appConfig.Configs)
 	metric.Init(appConfig.Configs)
@@ -72,6 +75,7 @@ func main() {
 	infrastructureRouter.Init()
 	dnsRouter.Init()
 	workflowRouter.Init()
+	skyeRouter.Init()
 	scheduler.Init(appConfig.Configs)
 	httpframework.Instance().Run(":" + strconv.Itoa(appConfig.Configs.AppPort))
 }
