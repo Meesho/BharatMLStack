@@ -14,9 +14,6 @@ type MetricAverager struct {
 }
 
 func (ma *MetricAverager) Add(value float64) {
-	if value == 0 {
-		return // Ignore zero values
-	}
 	ma.mu.Lock()
 	defer ma.mu.Unlock()
 	ma.sum += value
@@ -25,13 +22,11 @@ func (ma *MetricAverager) Add(value float64) {
 }
 
 func (ma *MetricAverager) AddDuration(value time.Duration) {
-	if value == 0 {
-		return // Ignore zero values
-	}
 	ma.mu.Lock()
 	defer ma.mu.Unlock()
 	ma.sum += float64(value)
 	ma.count++
+	ma.lastValue = float64(value)
 }
 
 func (ma *MetricAverager) Average() float64 {

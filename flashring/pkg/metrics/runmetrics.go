@@ -42,15 +42,16 @@ type MetricsCollectorConfig struct {
 
 // ShardMetrics holds observation metrics for a single shard
 type ShardMetrics struct {
-	RP99        time.Duration
-	RP50        time.Duration
-	RP25        time.Duration
-	WP99        time.Duration
-	WP50        time.Duration
-	WP25        time.Duration
-	RThroughput float64
-	WThroughput float64
-	HitRate     float64
+	RP99          time.Duration
+	RP50          time.Duration
+	RP25          time.Duration
+	WP99          time.Duration
+	WP50          time.Duration
+	WP25          time.Duration
+	RThroughput   float64
+	WThroughput   float64
+	HitRate       float64
+	ActiveEntries float64
 }
 
 // Define your parameter structure
@@ -76,15 +77,16 @@ type ShardDurationValue struct {
 
 // MetricChannels holds separate channels for each metric type (per-shard)
 type MetricChannels struct {
-	RP99        chan ShardDurationValue
-	RP50        chan ShardDurationValue
-	RP25        chan ShardDurationValue
-	WP99        chan ShardDurationValue
-	WP50        chan ShardDurationValue
-	WP25        chan ShardDurationValue
-	RThroughput chan ShardMetricValue
-	WThroughput chan ShardMetricValue
-	HitRate     chan ShardMetricValue
+	RP99          chan ShardDurationValue
+	RP50          chan ShardDurationValue
+	RP25          chan ShardDurationValue
+	WP99          chan ShardDurationValue
+	WP50          chan ShardDurationValue
+	WP25          chan ShardDurationValue
+	RThroughput   chan ShardMetricValue
+	WThroughput   chan ShardMetricValue
+	HitRate       chan ShardMetricValue
+	ActiveEntries chan ShardMetricValue
 }
 
 // MetricsCollector collects and averages all metrics (per-shard)
@@ -130,15 +132,16 @@ func NewMetricsCollector(config MetricsCollectorConfig, bufferSize int) *Metrics
 	mc := &MetricsCollector{
 		Config: config,
 		channels: MetricChannels{
-			RP99:        make(chan ShardDurationValue, bufferSize),
-			RP50:        make(chan ShardDurationValue, bufferSize),
-			RP25:        make(chan ShardDurationValue, bufferSize),
-			WP99:        make(chan ShardDurationValue, bufferSize),
-			WP50:        make(chan ShardDurationValue, bufferSize),
-			WP25:        make(chan ShardDurationValue, bufferSize),
-			RThroughput: make(chan ShardMetricValue, bufferSize),
-			WThroughput: make(chan ShardMetricValue, bufferSize),
-			HitRate:     make(chan ShardMetricValue, bufferSize),
+			RP99:          make(chan ShardDurationValue, bufferSize),
+			RP50:          make(chan ShardDurationValue, bufferSize),
+			RP25:          make(chan ShardDurationValue, bufferSize),
+			WP99:          make(chan ShardDurationValue, bufferSize),
+			WP50:          make(chan ShardDurationValue, bufferSize),
+			WP25:          make(chan ShardDurationValue, bufferSize),
+			RThroughput:   make(chan ShardMetricValue, bufferSize),
+			WThroughput:   make(chan ShardMetricValue, bufferSize),
+			HitRate:       make(chan ShardMetricValue, bufferSize),
+			ActiveEntries: make(chan ShardMetricValue, bufferSize),
 		},
 		averagedMetrics: make(map[string]*MetricAverager),
 		instantMetrics:  make(map[int]map[string]*MetricAverager),
@@ -146,7 +149,7 @@ func NewMetricsCollector(config MetricsCollectorConfig, bufferSize int) *Metrics
 	}
 
 	// Initialize averagedMetrics with MetricAverager instances
-	metricNames := []string{"RP99", "RP50", "RP25", "WP99", "WP50", "WP25", "RThroughput", "WThroughput", "HitRate"}
+	metricNames := []string{"RP99", "RP50", "RP25", "WP99", "WP50", "WP25", "RThroughput", "WThroughput", "HitRate", "ActiveEntries"}
 	for _, name := range metricNames {
 		mc.averagedMetrics[name] = &MetricAverager{}
 	}
@@ -166,7 +169,7 @@ func NewMetricsCollector(config MetricsCollectorConfig, bufferSize int) *Metrics
 // Start begins collecting metrics from all channels
 func (mc *MetricsCollector) Start() {
 	// Start a goroutine for each metric channel
-	mc.wg.Add(9)
+	mc.wg.Add(10)
 
 	go mc.collectShardDuration(mc.channels.RP99, "RP99")
 	go mc.collectShardDuration(mc.channels.RP50, "RP50")
@@ -177,6 +180,7 @@ func (mc *MetricsCollector) Start() {
 	go mc.collectShardMetric(mc.channels.RThroughput, "RThroughput")
 	go mc.collectShardMetric(mc.channels.WThroughput, "WThroughput")
 	go mc.collectShardMetric(mc.channels.HitRate, "HitRate")
+	go mc.collectShardMetric(mc.channels.ActiveEntries, "ActiveEntries")
 }
 
 func (mc *MetricsCollector) collectShardMetric(ch chan ShardMetricValue, name string) {
@@ -286,6 +290,14 @@ func (mc *MetricsCollector) RecordHitRate(shardIdx int, value float64) {
 	}
 }
 
+// RecordActiveEntries sends a value to the ActiveEntries channel for a specific shard
+func (mc *MetricsCollector) RecordActiveEntries(shardIdx int, value float64) {
+	select {
+	case mc.channels.ActiveEntries <- ShardMetricValue{ShardIdx: shardIdx, Value: value}:
+	default:
+	}
+}
+
 func (mc *MetricsCollector) GetMetrics() RunMetrics {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
@@ -297,29 +309,31 @@ func (mc *MetricsCollector) GetMetrics() RunMetrics {
 	for shardIdx := 0; shardIdx < shards; shardIdx++ {
 		if instants, exists := mc.instantMetrics[shardIdx]; exists {
 			shardMetrics[shardIdx] = ShardMetrics{
-				RP99:        time.Duration(instants["RP99"].Latest()),
-				RP50:        time.Duration(instants["RP50"].Latest()),
-				RP25:        time.Duration(instants["RP25"].Latest()),
-				WP99:        time.Duration(instants["WP99"].Latest()),
-				WP50:        time.Duration(instants["WP50"].Latest()),
-				WP25:        time.Duration(instants["WP25"].Latest()),
-				RThroughput: instants["RThroughput"].Latest(),
-				WThroughput: instants["WThroughput"].Latest(),
-				HitRate:     instants["HitRate"].Latest(),
+				RP99:          time.Duration(instants["RP99"].Latest()),
+				RP50:          time.Duration(instants["RP50"].Latest()),
+				RP25:          time.Duration(instants["RP25"].Latest()),
+				WP99:          time.Duration(instants["WP99"].Latest()),
+				WP50:          time.Duration(instants["WP50"].Latest()),
+				WP25:          time.Duration(instants["WP25"].Latest()),
+				RThroughput:   instants["RThroughput"].Latest(),
+				WThroughput:   instants["WThroughput"].Latest(),
+				HitRate:       instants["HitRate"].Latest(),
+				ActiveEntries: instants["ActiveEntries"].Latest(),
 			}
 		}
 	}
 
 	averagedMetrics := ShardMetrics{
-		RP99:        time.Duration(mc.averagedMetrics["RP99"].Average()),
-		RP50:        time.Duration(mc.averagedMetrics["RP50"].Average()),
-		RP25:        time.Duration(mc.averagedMetrics["RP25"].Average()),
-		WP99:        time.Duration(mc.averagedMetrics["WP99"].Average()),
-		WP50:        time.Duration(mc.averagedMetrics["WP50"].Average()),
-		WP25:        time.Duration(mc.averagedMetrics["WP25"].Average()),
-		RThroughput: mc.averagedMetrics["RThroughput"].Average(),
-		WThroughput: mc.averagedMetrics["WThroughput"].Average(),
-		HitRate:     mc.averagedMetrics["HitRate"].Average(),
+		RP99:          time.Duration(mc.averagedMetrics["RP99"].Average()),
+		RP50:          time.Duration(mc.averagedMetrics["RP50"].Average()),
+		RP25:          time.Duration(mc.averagedMetrics["RP25"].Average()),
+		WP99:          time.Duration(mc.averagedMetrics["WP99"].Average()),
+		WP50:          time.Duration(mc.averagedMetrics["WP50"].Average()),
+		WP25:          time.Duration(mc.averagedMetrics["WP25"].Average()),
+		RThroughput:   mc.averagedMetrics["RThroughput"].Average(),
+		WThroughput:   mc.averagedMetrics["WThroughput"].Average(),
+		HitRate:       mc.averagedMetrics["HitRate"].Average(),
+		ActiveEntries: mc.averagedMetrics["ActiveEntries"].Average(),
 	}
 
 	return RunMetrics{

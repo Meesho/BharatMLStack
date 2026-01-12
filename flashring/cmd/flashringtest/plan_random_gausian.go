@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	metrics "github.com/Meesho/BharatMLStack/flashring/internal/metrics"
 	cachepkg "github.com/Meesho/BharatMLStack/flashring/pkg/cache"
+	metrics "github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )

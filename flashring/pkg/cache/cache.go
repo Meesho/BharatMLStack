@@ -12,7 +12,7 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/rs/zerolog/log"
 
-	metrics "github.com/Meesho/BharatMLStack/flashring/internal/metrics"
+	metrics "github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 )
 
 /*
@@ -70,6 +70,9 @@ type WrapCacheConfig struct {
 	EnableBatching    bool
 	BatchWindowMicros int // in microseconds
 	MaxBatchSize      int
+
+	//lockless mode for PutLL/GetLL
+	EnableLockless bool
 
 	// Optional metrics recorder
 	MetricsRecorder metrics.MetricsRecorder
@@ -172,6 +175,9 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 			EnableBatching: config.EnableBatching,
 			BatchWindow:    batchWindow,
 			MaxBatchSize:   config.MaxBatchSize,
+
+			//lockless mode for PutLL/GetLL
+			EnableLockless: config.EnableLockless,
 		}, &shardLocks[i])
 	}
 
@@ -198,29 +204,15 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 				time.Sleep(sleepDuration)
 
 				for i := 0; i < config.NumShards; i++ {
-					log.Info().Msgf("Shard %d has %d active entries", i, wc.stats[i].ShardWiseActiveEntries.Load())
 					total := wc.stats[i].TotalGets.Load()
-					// hits := wc.stats[i].Hits.Load()
-					// hitRate := float64(0)
-					// if total > 0 {
-					// 	hitRate = float64(hits) / float64(total)
-					// }
-					// log.Info().Msgf("Shard %d HitRate: %v", i, hitRate)
-					// log.Info().Msgf("Shard %d ReWrites: %v", i, wc.stats[i].ReWrites.Load())
-					// log.Info().Msgf("Shard %d Expired: %v", i, wc.stats[i].Expired.Load())
-					// log.Info().Msgf("Shard %d Total: %v", i, total)
-					// log.Info().Msgf("Gets/sec: %v", float64(total-perShardPrevTotalGets[i])/float64(sleepDuration.Seconds()))
-					// log.Info().Msgf("Puts/sec: %v", float64(wc.stats[i].TotalPuts.Load()-perShardPrevTotalPuts[i])/float64(sleepDuration.Seconds()))
+
+					activeEntries := float64(wc.stats[i].ShardWiseActiveEntries.Load())
+
 					perShardPrevTotalGets[i] = total
 					perShardPrevTotalPuts[i] = wc.stats[i].TotalPuts.Load()
 
 					getP25, getP50, getP99 := wc.stats[i].LatencyTracker.GetLatencyPercentiles()
 					putP25, putP50, putP99 := wc.stats[i].LatencyTracker.PutLatencyPercentiles()
-
-					// log.Info().Msgf("Get Count: %v", wc.stats[i].TotalGets.Load())
-					// log.Info().Msgf("Put Count: %v", wc.stats[i].TotalPuts.Load())
-					// log.Info().Msgf("Get Latencies - P25: %v, P50: %v, P99: %v", getP25, getP50, getP99)
-					// log.Info().Msgf("Put Latencies - P25: %v, P50: %v, P99: %v", putP25, putP50, putP99)
 
 					shardGets := wc.stats[i].TotalGets.Load()
 					shardPuts := wc.stats[i].TotalPuts.Load()
@@ -245,6 +237,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 					wc.metricsCollector.RecordRThroughput(i, rThroughput)
 					wc.metricsCollector.RecordWThroughput(i, wThroughput)
 					wc.metricsCollector.RecordHitRate(i, shardHitRate)
+					wc.metricsCollector.RecordActiveEntries(i, activeEntries)
 
 				}
 

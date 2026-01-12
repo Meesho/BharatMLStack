@@ -6,11 +6,12 @@ import (
 )
 
 const (
-	KEY_READ_LATENCY  = "flashringread_latency"
-	KEY_WRITE_LATENCY = "flashringwrite_latency"
-	KEY_RTHROUGHPUT   = "flashring_rthroughput"
-	KEY_WTHROUGHPUT   = "flashring_wthroughput"
-	KEY_HITRATE       = "flashring_hitrate"
+	KEY_READ_LATENCY   = "flashringread_latency"
+	KEY_WRITE_LATENCY  = "flashringwrite_latency"
+	KEY_RTHROUGHPUT    = "flashring_rthroughput"
+	KEY_WTHROUGHPUT    = "flashring_wthroughput"
+	KEY_HITRATE        = "flashring_hitrate"
+	KEY_ACTIVE_ENTRIES = "flashring_active_entries"
 
 	TAG_LATENCY_PERCENTILE = "latency_percentile"
 	TAG_VALUE_P25          = "p25"
@@ -47,6 +48,7 @@ func RunStatsdLogger(metricsCollector *MetricsCollector) {
 				Gauge(KEY_RTHROUGHPUT, shard.RThroughput, BuildTag(NewTag(TAG_SHARD_IDX, shardIdx)))
 				Gauge(KEY_WTHROUGHPUT, shard.WThroughput, BuildTag(NewTag(TAG_SHARD_IDX, shardIdx)))
 				Gauge(KEY_HITRATE, shard.HitRate, BuildTag(NewTag(TAG_SHARD_IDX, shardIdx)))
+				Gauge(KEY_ACTIVE_ENTRIES, shard.ActiveEntries, BuildTag(NewTag(TAG_SHARD_IDX, shardIdx)))
 			}
 
 		}

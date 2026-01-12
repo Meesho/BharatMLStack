@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	metrics "github.com/Meesho/BharatMLStack/flashring/internal/metrics"
 	cachepkg "github.com/Meesho/BharatMLStack/flashring/pkg/cache"
+	metrics "github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -37,7 +37,7 @@ func planLockless() {
 	)
 
 	flag.StringVar(&mountPoint, "mount", "/mnt/disks/nvme", "data directory for shard files")
-	flag.IntVar(&numShards, "shards", 500, "number of shards")
+	flag.IntVar(&numShards, "shards", 100, "number of shards")
 	flag.IntVar(&keysPerShard, "keys-per-shard", 10_00_00, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 2, "file size in GiB per shard")
@@ -95,6 +95,9 @@ func planLockless() {
 		ReWriteScoreThreshold: 0.8,
 		GridSearchEpsilon:     0.0001,
 		SampleDuration:        time.Duration(sampleSecs) * time.Second,
+
+		//lockless mode for PutLL/GetLL
+		EnableLockless: true,
 	}
 
 	metricsConfig := metrics.MetricsCollectorConfig{

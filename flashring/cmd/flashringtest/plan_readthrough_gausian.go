@@ -17,7 +17,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	metrics "github.com/Meesho/BharatMLStack/flashring/internal/metrics"
+	metrics "github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 )
 
 func planReadthroughGaussian() {
