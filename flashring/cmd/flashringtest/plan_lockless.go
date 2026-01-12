@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	metrics "github.com/Meesho/BharatMLStack/flashring/internal/metrics"
 	cachepkg "github.com/Meesho/BharatMLStack/flashring/pkg/cache"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -35,7 +36,7 @@ func planLockless() {
 		cpuProfile         string
 	)
 
-	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul/", "data directory for shard files")
+	flag.StringVar(&mountPoint, "mount", "/mnt/disks/nvme", "data directory for shard files")
 	flag.IntVar(&numShards, "shards", 500, "number of shards")
 	flag.IntVar(&keysPerShard, "keys-per-shard", 10_00_00, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
@@ -94,22 +95,24 @@ func planLockless() {
 		ReWriteScoreThreshold: 0.8,
 		GridSearchEpsilon:     0.0001,
 		SampleDuration:        time.Duration(sampleSecs) * time.Second,
-
-		// Pass the metrics collector to record cache metrics
-		MetricsRecorder: InitMetricsCollector(),
 	}
 
-	// Set additional input parameters that the cache doesn't know about
-	metricsCollector.SetShards(numShards)
-	metricsCollector.SetKeysPerShard(keysPerShard)
-	metricsCollector.SetReadWorkers(readWorkers)
-	metricsCollector.SetWriteWorkers(writeWorkers)
-	metricsCollector.SetPlan("lockless")
-
-	// Start background goroutine to wait for shutdown signal and export CSV
-	go RunmetricsWaitForShutdown()
-
-	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, logStats)
+	metricsConfig := metrics.MetricsCollectorConfig{
+		StatsEnabled:    true,
+		CsvLogging:      true,
+		ConsoleLogging:  true,
+		StatsdLogging:   true,
+		InstantMetrics:  true,
+		AveragedMetrics: true,
+		Metadata: map[string]any{
+			"shards":         numShards,
+			"keys-per-shard": keysPerShard,
+			"read-workers":   readWorkers,
+			"write-workers":  writeWorkers,
+			"plan":           "lockless"},
+	}
+	metricsCollector := metrics.InitMetricsCollector(metricsConfig)
+	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, metricsCollector)
 	if err != nil {
 		panic(err)
 	}

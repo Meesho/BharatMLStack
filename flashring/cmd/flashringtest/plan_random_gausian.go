@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	metrics "github.com/Meesho/BharatMLStack/flashring/internal/metrics"
 	cachepkg "github.com/Meesho/BharatMLStack/flashring/pkg/cache"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -95,7 +96,23 @@ func planRandomGaussian() {
 		SampleDuration:        time.Duration(sampleSecs) * time.Second,
 	}
 
-	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, logStats)
+	metricsConfig := metrics.MetricsCollectorConfig{
+		StatsEnabled:    true,
+		CsvLogging:      true,
+		ConsoleLogging:  true,
+		StatsdLogging:   false,
+		InstantMetrics:  false,
+		AveragedMetrics: true,
+		Metadata: map[string]any{
+			"shards":         numShards,
+			"keys-per-shard": keysPerShard,
+			"read-workers":   readWorkers,
+			"write-workers":  writeWorkers,
+			"plan":           "random-gausian"},
+	}
+	metricsCollector := metrics.InitMetricsCollector(metricsConfig)
+
+	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, metricsCollector)
 	if err != nil {
 		panic(err)
 	}
