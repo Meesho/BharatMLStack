@@ -242,7 +242,7 @@ func (e *Etcd) DeleteStoreConfig(storeId string) error {
 
 func (e *Etcd) StoreExists(storeId string) (bool, error) {
 	path := fmt.Sprintf("/config/%s/storage/stores/%s", e.appName, storeId)
-	return e.instance.IsNodeExist(path)
+	return e.instance.IsLeafNodeExist(path)
 }
 
 // GetStores retrieves all the available stores from the configuration.
