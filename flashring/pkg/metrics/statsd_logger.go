@@ -31,6 +31,14 @@ func RunStatsdLogger(metricsCollector *MetricsCollector) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
+	//prev values per shard
+	prevActiveEntries := make(map[int]int64)
+	prevExpiredEntries := make(map[int]int64)
+	prevRewrites := make(map[int]int64)
+	prevGets := make(map[int]int64)
+	prevPuts := make(map[int]int64)
+	prevHits := make(map[int]int64)
+
 	for {
 		select {
 		case <-metricsCollector.stopCh:
@@ -43,12 +51,12 @@ func RunStatsdLogger(metricsCollector *MetricsCollector) {
 				shardIdx := strconv.Itoa(idx)
 				shardBuildTag := NewTag(TAG_SHARD_IDX, shardIdx)
 
-				Count(KEY_ACTIVE_ENTRIES, shard.ActiveEntries, BuildTag(shardBuildTag))
-				Count(KEY_EXPIRED_ENTRIES, shard.ExpiredEntries, BuildTag(shardBuildTag))
-				Count(KEY_REWRITES, shard.Rewrites, BuildTag(shardBuildTag))
-				Count(KEY_GETS, shard.Gets, BuildTag(shardBuildTag))
-				Count(KEY_PUTS, shard.Puts, BuildTag(shardBuildTag))
-				Count(KEY_HITS, shard.Hits, BuildTag(shardBuildTag))
+				Count(KEY_ACTIVE_ENTRIES, shard.ActiveEntries-prevActiveEntries[idx], BuildTag(shardBuildTag))
+				Count(KEY_EXPIRED_ENTRIES, shard.ExpiredEntries-prevExpiredEntries[idx], BuildTag(shardBuildTag))
+				Count(KEY_REWRITES, shard.Rewrites-prevRewrites[idx], BuildTag(shardBuildTag))
+				Count(KEY_GETS, shard.Gets-prevGets[idx], BuildTag(shardBuildTag))
+				Count(KEY_PUTS, shard.Puts-prevPuts[idx], BuildTag(shardBuildTag))
+				Count(KEY_HITS, shard.Hits-prevHits[idx], BuildTag(shardBuildTag))
 
 				Timing(KEY_READ_LATENCY, shard.RP99, BuildTag(NewTag(TAG_LATENCY_PERCENTILE, TAG_VALUE_P99), shardBuildTag))
 				Timing(KEY_READ_LATENCY, shard.RP50, BuildTag(NewTag(TAG_LATENCY_PERCENTILE, TAG_VALUE_P50), shardBuildTag))
@@ -56,6 +64,13 @@ func RunStatsdLogger(metricsCollector *MetricsCollector) {
 				Timing(KEY_WRITE_LATENCY, shard.WP99, BuildTag(NewTag(TAG_LATENCY_PERCENTILE, TAG_VALUE_P99), shardBuildTag))
 				Timing(KEY_WRITE_LATENCY, shard.WP50, BuildTag(NewTag(TAG_LATENCY_PERCENTILE, TAG_VALUE_P50), shardBuildTag))
 				Timing(KEY_WRITE_LATENCY, shard.WP25, BuildTag(NewTag(TAG_LATENCY_PERCENTILE, TAG_VALUE_P25), shardBuildTag))
+
+				prevActiveEntries[idx] = shard.ActiveEntries
+				prevExpiredEntries[idx] = shard.ExpiredEntries
+				prevRewrites[idx] = shard.Rewrites
+				prevGets[idx] = shard.Gets
+				prevPuts[idx] = shard.Puts
+				prevHits[idx] = shard.Hits
 
 			}
 
