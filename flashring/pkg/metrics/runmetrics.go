@@ -193,9 +193,9 @@ func (mc *MetricsCollector) collectShardMetric(ch chan ShardMetricValue, name st
 			if !ok {
 				return
 			}
-
+			mc.mu.Lock()
 			mc.instantMetrics[sv.ShardIdx][name] = sv.value
-
+			mc.mu.Unlock()
 		}
 	}
 }
