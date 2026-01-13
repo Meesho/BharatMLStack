@@ -17,8 +17,115 @@ import (
 // --- CSV Configuration ---
 const CSVFileName = "performance_results.csv"
 
+type CsvLogger struct {
+	prevGetsTotal          uint64
+	prevPutsTotal          uint64
+	prevHitsTotal          uint64
+	prevExpiredTotal       uint64
+	prevReWritesTotal      uint64
+	prevActiveEntriesTotal uint64
+
+	samplesRthroguhput    []float64
+	samplesWthroguhput    []float64
+	samplesHitRate        []float64
+	samplesActiveEntries  []float64
+	samplesExpiredEntries []float64
+	samplesReWrites       []float64
+	samplesRP99           []time.Duration
+	samplesRP50           []time.Duration
+	samplesRP25           []time.Duration
+	samplesWP99           []time.Duration
+	samplesWP50           []time.Duration
+	samplesWP25           []time.Duration
+
+	totalSamples int
+
+	metricsCollector *MetricsCollector
+}
+
+func (c *CsvLogger) collectMetrics() *time.Ticker {
+
+	//tickered every 30 seconds
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		shards := metricsCollector.Config.Metadata["shards"].(int)
+		currentMetrics = metricsCollector.GetMetrics()
+
+		getsTotal := uint64(0)
+		putsTotal := uint64(0)
+		hitsTotal := uint64(0)
+		expiredTotal := uint64(0)
+		reWritesTotal := uint64(0)
+		activeEntriesTotal := uint64(0)
+
+		rp99 := time.Duration(0)
+		rp50 := time.Duration(0)
+		rp25 := time.Duration(0)
+		wp99 := time.Duration(0)
+		wp50 := time.Duration(0)
+		wp25 := time.Duration(0)
+
+		for _, shard := range currentMetrics.ShardMetrics {
+			getsTotal += uint64(shard.Gets)
+			putsTotal += uint64(shard.Puts)
+			hitsTotal += uint64(shard.Hits)
+			expiredTotal += uint64(shard.ExpiredEntries)
+			reWritesTotal += uint64(shard.Rewrites)
+			activeEntriesTotal += uint64(shard.ActiveEntries)
+
+			rp99 += shard.RP99
+			rp50 += shard.RP50
+			rp25 += shard.RP25
+			wp99 += shard.WP99
+			wp50 += shard.WP50
+			wp25 += shard.WP25
+		}
+
+		rThroughput := float64(getsTotal-c.prevGetsTotal) / float64(30)
+		wThroughput := float64(putsTotal-c.prevPutsTotal) / float64(30)
+		hitRate := float64(hitsTotal-c.prevHitsTotal) / float64(getsTotal-c.prevGetsTotal)
+		activeEntries := float64(activeEntriesTotal - c.prevActiveEntriesTotal)
+		expiredEntries := float64(expiredTotal - c.prevExpiredTotal)
+		reWrites := float64(reWritesTotal - c.prevReWritesTotal)
+
+		rp99 = rp99 / time.Duration(shards)
+		rp50 = rp50 / time.Duration(shards)
+		rp25 = rp25 / time.Duration(shards)
+		wp99 = wp99 / time.Duration(shards)
+		wp50 = wp50 / time.Duration(shards)
+		wp25 = wp25 / time.Duration(shards)
+
+		c.samplesRthroguhput = append(c.samplesRthroguhput, rThroughput)
+		c.samplesWthroguhput = append(c.samplesWthroguhput, wThroughput)
+		c.samplesHitRate = append(c.samplesHitRate, hitRate)
+		c.samplesActiveEntries = append(c.samplesActiveEntries, activeEntries)
+		c.samplesExpiredEntries = append(c.samplesExpiredEntries, expiredEntries)
+		c.samplesReWrites = append(c.samplesReWrites, reWrites)
+		c.samplesRP99 = append(c.samplesRP99, rp99)
+		c.samplesRP50 = append(c.samplesRP50, rp50)
+		c.samplesRP25 = append(c.samplesRP25, rp25)
+		c.samplesWP99 = append(c.samplesWP99, wp99)
+		c.samplesWP50 = append(c.samplesWP50, wp50)
+		c.samplesWP25 = append(c.samplesWP25, wp25)
+
+		c.prevGetsTotal = getsTotal
+		c.prevPutsTotal = putsTotal
+		c.prevHitsTotal = hitsTotal
+		c.prevExpiredTotal = expiredTotal
+		c.prevReWritesTotal = reWritesTotal
+		c.prevActiveEntriesTotal = activeEntriesTotal
+	}
+
+	return ticker
+
+}
+
 // RunCSVLoggerWaitForShutdown waits for shutdown signal and logs final metrics to CSV
-func RunCSVLoggerWaitForShutdown() {
+func (c *CsvLogger) RunCSVLoggerWaitForShutdown() {
+
+	ticker := c.collectMetrics()
 	// --- Set up Signal Handling ---
 	stopChan := make(chan os.Signal, 1)
 	signal.Notify(stopChan, syscall.SIGINT, syscall.SIGTERM)
@@ -31,14 +138,12 @@ func RunCSVLoggerWaitForShutdown() {
 
 	// Stop the metrics collector
 	if metricsCollector != nil {
+		ticker.Stop()
 		metricsCollector.Stop()
-
-		// Get final averaged metrics
-		currentMetrics = metricsCollector.GetMetrics()
 	}
 
 	// --- Log Data to CSV ---
-	if err := LogResultsToCSV(metricsCollector.Config.Metadata); err != nil {
+	if err := c.LogResultsToCSV(); err != nil {
 		log.Fatalf("FATAL: Failed to log results to CSV: %v", err)
 	}
 
@@ -48,7 +153,7 @@ func RunCSVLoggerWaitForShutdown() {
 	os.Exit(0)
 }
 
-func LogResultsToCSV(metadata map[string]any) error {
+func (c *CsvLogger) LogResultsToCSV() error {
 	// 1. Check if the file exists to determine if we need a header row.
 	file, err := os.OpenFile(CSVFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -74,6 +179,7 @@ func LogResultsToCSV(metadata map[string]any) error {
 		}
 	}
 
+	metadata := c.metricsCollector.Config.Metadata
 	timestamp := time.Now().In(time.FixedZone("IST", 5*60*60+30*60)).Format("2006-01-02 15:04:05")
 
 	dataRow := []string{
@@ -85,15 +191,16 @@ func LogResultsToCSV(metadata map[string]any) error {
 		metadata["plan"].(string),
 
 		// averaged observation parameters
-		fmt.Sprintf("%v", currentMetrics.AveragedMetrics.RThroughput),
-		fmt.Sprintf("%v", currentMetrics.AveragedMetrics.RP99),
-		fmt.Sprintf("%v", currentMetrics.AveragedMetrics.RP50),
-		fmt.Sprintf("%v", currentMetrics.AveragedMetrics.RP25),
-		fmt.Sprintf("%v", currentMetrics.AveragedMetrics.WThroughput),
-		fmt.Sprintf("%v", currentMetrics.AveragedMetrics.WP99),
-		fmt.Sprintf("%v", currentMetrics.AveragedMetrics.WP50),
-		fmt.Sprintf("%v", currentMetrics.AveragedMetrics.WP25),
-		fmt.Sprintf("%v", currentMetrics.AveragedMetrics.HitRate),
+		//sum sample and divide by total samples
+		fmt.Sprintf("%v", averageFloat64(c.samplesRthroguhput)),
+		fmt.Sprintf("%v", averageDuration(c.samplesRP99)),
+		fmt.Sprintf("%v", averageDuration(c.samplesRP50)),
+		fmt.Sprintf("%v", averageDuration(c.samplesRP25)),
+		fmt.Sprintf("%v", averageFloat64(c.samplesWthroguhput)),
+		fmt.Sprintf("%v", averageDuration(c.samplesWP99)),
+		fmt.Sprintf("%v", averageDuration(c.samplesWP50)),
+		fmt.Sprintf("%v", averageDuration(c.samplesWP25)),
+		fmt.Sprintf("%v", averageFloat64(c.samplesHitRate)),
 		fmt.Sprintf("%v", getCPUUsagePercent()),
 		fmt.Sprintf("%v", getMemoryUsageMB()),
 		timestamp,
@@ -104,6 +211,22 @@ func LogResultsToCSV(metadata map[string]any) error {
 	}
 
 	return nil
+}
+
+func averageFloat64(samples []float64) float64 {
+	sum := 0.0
+	for _, sample := range samples {
+		sum += sample
+	}
+	return sum / float64(len(samples))
+}
+
+func averageDuration(samples []time.Duration) time.Duration {
+	sum := time.Duration(0)
+	for _, sample := range samples {
+		sum += sample
+	}
+	return sum / time.Duration(len(samples))
 }
 
 // getMemoryUsageMB returns the current memory usage of this process in MB

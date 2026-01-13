@@ -197,19 +197,11 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 
 		go func() {
 			sleepDuration := 10 * time.Second
-			perShardPrevTotalGets := make([]uint64, config.NumShards)
-			perShardPrevTotalPuts := make([]uint64, config.NumShards)
 
 			for {
 				time.Sleep(sleepDuration)
 
 				for i := 0; i < config.NumShards; i++ {
-					total := wc.stats[i].TotalGets.Load()
-
-					activeEntries := float64(wc.stats[i].ShardWiseActiveEntries.Load())
-
-					perShardPrevTotalGets[i] = total
-					perShardPrevTotalPuts[i] = wc.stats[i].TotalPuts.Load()
 
 					getP25, getP50, getP99 := wc.stats[i].LatencyTracker.GetLatencyPercentiles()
 					putP25, putP50, putP99 := wc.stats[i].LatencyTracker.PutLatencyPercentiles()
@@ -217,16 +209,9 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 					shardGets := wc.stats[i].TotalGets.Load()
 					shardPuts := wc.stats[i].TotalPuts.Load()
 					shardHits := wc.stats[i].Hits.Load()
-
-					// Calculate per-shard throughput
-					rThroughput := float64(shardGets) / sleepDuration.Seconds()
-					wThroughput := float64(shardPuts) / sleepDuration.Seconds()
-
-					// Calculate per-shard hit rate
-					shardHitRate := float64(0)
-					if shardGets > 0 {
-						shardHitRate = float64(shardHits) / float64(shardGets)
-					}
+					shardExpired := wc.stats[i].Expired.Load()
+					shardReWrites := wc.stats[i].ReWrites.Load()
+					shardActiveEntries := wc.stats[i].ShardWiseActiveEntries.Load()
 
 					wc.metricsCollector.RecordRP25(i, getP25)
 					wc.metricsCollector.RecordRP50(i, getP50)
@@ -234,10 +219,13 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 					wc.metricsCollector.RecordWP25(i, putP25)
 					wc.metricsCollector.RecordWP50(i, putP50)
 					wc.metricsCollector.RecordWP99(i, putP99)
-					wc.metricsCollector.RecordRThroughput(i, rThroughput)
-					wc.metricsCollector.RecordWThroughput(i, wThroughput)
-					wc.metricsCollector.RecordHitRate(i, shardHitRate)
-					wc.metricsCollector.RecordActiveEntries(i, activeEntries)
+
+					wc.metricsCollector.RecordActiveEntries(i, int64(shardActiveEntries))
+					wc.metricsCollector.RecordExpiredEntries(i, int64(shardExpired))
+					wc.metricsCollector.RecordRewrites(i, int64(shardReWrites))
+					wc.metricsCollector.RecordGets(i, int64(shardGets))
+					wc.metricsCollector.RecordPuts(i, int64(shardPuts))
+					wc.metricsCollector.RecordHits(i, int64(shardHits))
 
 				}
 
