@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Meesho/BharatMLStack/horizon/internal/skye"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/etcd"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 )
 
 type Etcd struct {
@@ -19,9 +19,9 @@ type Etcd struct {
 
 func NewEtcdInstance() *Etcd {
 	return &Etcd{
-		instance: etcd.Instance()[viper.GetString("SKYE_APP_NAME")],
-		appName:  viper.GetString("SKYE_APP_NAME"),
-		env:      viper.GetString("APP_ENV"),
+		instance: etcd.Instance()[skye.SkyeAppName],
+		appName:  skye.SkyeAppName,
+		env:      skye.AppEnv,
 	}
 }
 

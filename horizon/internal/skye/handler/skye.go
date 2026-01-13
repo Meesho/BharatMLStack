@@ -19,10 +19,10 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_onboarding_requests"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_promotion_requests"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_requests"
+	"github.com/Meesho/BharatMLStack/horizon/internal/skye"
 	skyeEtcd "github.com/Meesho/BharatMLStack/horizon/internal/skye/etcd"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 )
 
 const (
@@ -114,7 +114,7 @@ func InitV1ConfigHandler() Config {
 		activeScyllaConfigIDs := make(map[int]bool)
 
 		// Get active Scylla config IDs from environment
-		activeScyllaConfIds := viper.GetString("SCYLLA_ACTIVE_CONFIG_IDS")
+		activeScyllaConfIds := skye.ScyllaActiveConfigIds
 		if activeScyllaConfIds != "" {
 			confIds := strings.Split(activeScyllaConfIds, ",")
 			for _, confIdStr := range confIds {
@@ -2088,7 +2088,7 @@ func generateJobFrequencyDescription(frequency string) string {
 
 func appendJobFrequencyToFile(frequency string) error {
 	// Create directory if it doesn't exist
-	appName := viper.GetString("SKYE_APP_NAME")
+	appName := skye.SkyeAppName
 	if appName == "" {
 		return fmt.Errorf("SKYE_APP_NAME is not configured")
 	}
@@ -2191,7 +2191,7 @@ func sanitizeFilePath(path string) (string, error) {
 		return "", fmt.Errorf("absolute paths not allowed: %s", path)
 	}
 
-	appName := viper.GetString("SKYE_APP_NAME")
+	appName := skye.SkyeAppName
 	if appName == "" {
 		return "", fmt.Errorf("SKYE_APP_NAME is not configured")
 	}

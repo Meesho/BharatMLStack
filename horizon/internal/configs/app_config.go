@@ -140,6 +140,13 @@ type Configs struct {
 	// DNS API configuration (for Meesho builds only)
 	DNSAPIBaseURL string `mapstructure:"dns_api_base_url"`
 	DNSAPIKey     string `mapstructure:"dns_api_key"`
+
+	ScyllaActiveConfigIds string `mapstructure:"scylla_active_config_ids"`
+	Scylla1ContactPoints  string `mapstructure:"scylla_1_contact_points"`
+	Scylla1Port           int    `mapstructure:"scylla_1_port"`
+	Scylla1Keyspace       string `mapstructure:"scylla_1_keyspace"`
+	Scylla1Username       string `mapstructure:"scylla_1_username"`
+	Scylla1Password       string `mapstructure:"scylla_1_password"`
 }
 
 type DynamicConfigs struct{}

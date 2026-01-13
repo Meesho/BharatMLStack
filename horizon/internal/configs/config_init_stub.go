@@ -160,4 +160,11 @@ func bindEnvVars() {
 	// DNS API configuration
 	viper.BindEnv("dns_api_base_url", "DNS_API_BASE_URL")
 	viper.BindEnv("dns_api_key", "DNS_API_KEY")
+
+	viper.BindEnv("scylla_active_config_ids", "SCYLLA_ACTIVE_CONFIG_IDS")
+	viper.BindEnv("scylla_1_contact_points", "SCYLLA_1_CONTACT_POINTS")
+	viper.BindEnv("scylla_1_port", "SCYLLA_1_PORT")
+	viper.BindEnv("scylla_1_keyspace", "SCYLLA_1_KEYSPACE")
+	viper.BindEnv("scylla_1_username", "SCYLLA_1_USERNAME")
+	viper.BindEnv("scylla_1_password", "SCYLLA_1_PASSWORD")
 }
