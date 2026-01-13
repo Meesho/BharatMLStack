@@ -23,8 +23,8 @@ const (
 var (
 	// it is safe to use one client from multiple goroutines simultaneously
 	statsDClient = getDefaultClient()
-	// by default full sampling
-	samplingRate    = 0.0
+	// by default full sampling (1.0 = 100%)
+	samplingRate    = 1.0
 	telegrafAddress = "localhost:8125"
 	appName         = ""
 	initialized     = false
