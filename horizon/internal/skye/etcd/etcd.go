@@ -792,8 +792,8 @@ func (e *Etcd) EntityExists(entityName string) (bool, error) {
 	path := fmt.Sprintf("/config/%s/entity/%s/store-id", e.appName, entityName)
 	log.Info().Msgf("Checking if entity exists at path: %s", path)
 
-	// Use IsNodeExist method to check if the entity's store_id file exists
-	exists, err := e.instance.IsNodeExist(path)
+	// Use IsLeafNodeExist method to check if the entity's store_id file exists (it's a leaf node)
+	exists, err := e.instance.IsLeafNodeExist(path)
 	if err != nil {
 		log.Error().Err(err).Msgf("Error checking if entity %s exists in ETCD", entityName)
 		return false, fmt.Errorf("error checking entity existence: %w", err)
@@ -819,8 +819,8 @@ func (e *Etcd) ModelExists(entityName string, modelName string) (bool, error) {
 	path := fmt.Sprintf("/config/%s/entity/%s/models/%s/model-type", e.appName, entityName, modelName)
 	log.Info().Msgf("Checking if model exists by checking model_type node at path: %s", path)
 
-	// Use IsNodeExist method to check if the model's model_type node exists
-	exists, err := e.instance.IsNodeExist(path)
+	// Use IsLeafNodeExist method to check if the model's model_type node exists (it's a leaf node)
+	exists, err := e.instance.IsLeafNodeExist(path)
 	if err != nil {
 		log.Error().Err(err).Msgf("Error checking if model %s exists in entity %s", modelName, entityName)
 		return false, fmt.Errorf("error checking model existence: %w", err)
@@ -846,8 +846,8 @@ func (e *Etcd) VariantExists(entityName string, modelName string, variantName st
 	path := fmt.Sprintf("/config/%s/entity/%s/models/%s/variants/%s/vector-db-type", e.appName, entityName, modelName, variantName)
 	log.Info().Msgf("Checking if variant exists by checking vector_db_type node at path: %s", path)
 
-	// Use IsNodeExist method to check if the variant's vector_db_type node exists
-	exists, err := e.instance.IsNodeExist(path)
+	// Use IsLeafNodeExist method to check if the variant's vector_db_type node exists (it's a leaf node)
+	exists, err := e.instance.IsLeafNodeExist(path)
 	if err != nil {
 		log.Error().Err(err).Msgf("Error checking if variant %s exists in model %s, entity %s", variantName, modelName, entityName)
 		return false, fmt.Errorf("error checking variant existence: %w", err)
@@ -871,7 +871,8 @@ func (e *Etcd) FilterExistsByColumnName(entityName string, columnName string) (b
 	filterPath := fmt.Sprintf("/config/%s/entity/%s/filters/%s", e.appName, entityName, columnName)
 	log.Info().Msgf("Checking if filter with column_name '%s' exists in entity '%s' at path: %s", columnName, entityName, filterPath)
 
-	exists, err := e.instance.IsNodeExist(filterPath)
+	// Use IsLeafNodeExist since filters are stored as leaf nodes with JSON values
+	exists, err := e.instance.IsLeafNodeExist(filterPath)
 	if err != nil {
 		log.Error().Err(err).Msgf("Error checking if filter exists at path: %s", filterPath)
 		return false, fmt.Errorf("error checking filter existence at path %s: %w", filterPath, err)
