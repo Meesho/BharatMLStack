@@ -6,17 +6,27 @@ import (
 )
 
 const (
-	KEY_READ_LATENCY       = "flashringread_latency"
-	KEY_WRITE_LATENCY      = "flashringwrite_latency"
-	KEY_RTHROUGHPUT        = "flashring_rthroughput"
-	KEY_WTHROUGHPUT        = "flashring_wthroughput"
-	KEY_HITRATE            = "flashring_hitrate"
-	KEY_ACTIVE_ENTRIES     = "flashring_active_entries"
-	KEY_EXPIRED_ENTRIES    = "flashring_expired_entries"
-	KEY_REWRITES           = "flashring_rewrites"
-	KEY_GETS               = "flashring_gets"
-	KEY_PUTS               = "flashring_puts"
-	KEY_HITS               = "flashring_hits"
+	KEY_READ_LATENCY    = "flashringread_latency"
+	KEY_WRITE_LATENCY   = "flashringwrite_latency"
+	KEY_RTHROUGHPUT     = "flashring_rthroughput"
+	KEY_WTHROUGHPUT     = "flashring_wthroughput"
+	KEY_HITRATE         = "flashring_hitrate"
+	KEY_ACTIVE_ENTRIES  = "flashring_active_entries"
+	KEY_EXPIRED_ENTRIES = "flashring_expired_entries"
+	KEY_REWRITES        = "flashring_rewrites"
+	KEY_GETS            = "flashring_gets"
+	KEY_PUTS            = "flashring_puts"
+	KEY_HITS            = "flashring_hits"
+
+	KEY_KEY_NOT_FOUND_COUNT = "flashring_key_not_found_count"
+	KEY_KEY_EXPIRED_COUNT   = "flashring_key_expired_count"
+	KEY_BAD_DATA_COUNT      = "flashring_bad_data_count"
+	KEY_BAD_LENGTH_COUNT    = "flashring_bad_length_count"
+	KEY_BAD_CR32_COUNT      = "flashring_bad_cr32_count"
+	KEY_BAD_KEY_COUNT       = "flashring_bad_key_count"
+	KEY_DELETED_KEY_COUNT   = "flashring_deleted_key_count"
+	KEY_BAD_CRC_MEM_IDS     = "flashring_bad_crc_mem_ids"
+
 	TAG_LATENCY_PERCENTILE = "latency_percentile"
 	TAG_VALUE_P25          = "p25"
 	TAG_VALUE_P50          = "p50"
@@ -38,6 +48,14 @@ func RunStatsdLogger(metricsCollector *MetricsCollector) {
 	prevGets := make(map[int]int64)
 	prevPuts := make(map[int]int64)
 	prevHits := make(map[int]int64)
+
+	prevKeyNotFoundCount := make(map[int]int64)
+	prevKeyExpiredCount := make(map[int]int64)
+	prevBadDataCount := make(map[int]int64)
+	prevBadLengthCount := make(map[int]int64)
+	prevBadCR32Count := make(map[int]int64)
+	prevBadKeyCount := make(map[int]int64)
+	prevDeletedKeyCount := make(map[int]int64)
 
 	for {
 		select {
@@ -74,7 +92,28 @@ func RunStatsdLogger(metricsCollector *MetricsCollector) {
 
 			}
 
-		}
+			for idx, shard := range currentMetrics.ShardIndexMetrics {
+				shardIdx := strconv.Itoa(idx)
+				shardBuildTag := NewTag(TAG_SHARD_IDX, shardIdx)
 
+				Count(KEY_KEY_NOT_FOUND_COUNT, shard.KeyNotFoundCount-prevKeyNotFoundCount[idx], BuildTag(shardBuildTag))
+				Count(KEY_KEY_EXPIRED_COUNT, shard.KeyExpiredCount-prevKeyExpiredCount[idx], BuildTag(shardBuildTag))
+				Count(KEY_BAD_DATA_COUNT, shard.BadDataCount-prevBadDataCount[idx], BuildTag(shardBuildTag))
+				Count(KEY_BAD_LENGTH_COUNT, shard.BadLengthCount-prevBadLengthCount[idx], BuildTag(shardBuildTag))
+				Count(KEY_BAD_CR32_COUNT, shard.BadCR32Count-prevBadCR32Count[idx], BuildTag(shardBuildTag))
+				Count(KEY_BAD_KEY_COUNT, shard.BadKeyCount-prevBadKeyCount[idx], BuildTag(shardBuildTag))
+				Count(KEY_DELETED_KEY_COUNT, shard.DeletedKeyCount-prevDeletedKeyCount[idx], BuildTag(shardBuildTag))
+
+				prevKeyNotFoundCount[idx] = shard.KeyNotFoundCount
+				prevKeyExpiredCount[idx] = shard.KeyExpiredCount
+				prevBadDataCount[idx] = shard.BadDataCount
+				prevBadLengthCount[idx] = shard.BadLengthCount
+				prevBadCR32Count[idx] = shard.BadCR32Count
+				prevBadKeyCount[idx] = shard.BadKeyCount
+				prevDeletedKeyCount[idx] = shard.DeletedKeyCount
+
+			}
+
+		}
 	}
 }

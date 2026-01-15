@@ -26,6 +26,15 @@ type MetricsRecorder interface {
 	RecordWP99(shardIdx int, value time.Duration)
 	RecordWP50(shardIdx int, value time.Duration)
 	RecordWP25(shardIdx int, value time.Duration)
+
+	//shard level index and rb data
+	RecordKeyNotFoundCount(shardIdx int, value int64)
+	RecordKeyExpiredCount(shardIdx int, value int64)
+	RecordBadDataCount(shardIdx int, value int64)
+	RecordBadLengthCount(shardIdx int, value int64)
+	RecordBadCR32Count(shardIdx int, value int64)
+	RecordBadKeyCount(shardIdx int, value int64)
+	RecordDeletedKeyCount(shardIdx int, value int64)
 }
 
 type MetricsCollectorConfig struct {
@@ -59,10 +68,21 @@ type ShardMetrics struct {
 	WP25           time.Duration
 }
 
+type ShardIndexMetrics struct {
+	KeyNotFoundCount int64
+	KeyExpiredCount  int64
+	BadDataCount     int64
+	BadLengthCount   int64
+	BadCR32Count     int64
+	BadKeyCount      int64
+	DeletedKeyCount  int64
+}
+
 // Define your parameter structure
 type RunMetrics struct {
 	// Per-shard observation parameters
-	ShardMetrics []ShardMetrics
+	ShardMetrics      []ShardMetrics
+	ShardIndexMetrics []ShardIndexMetrics
 }
 
 // ShardMetricValue represents a metric value for a specific shard
@@ -85,6 +105,15 @@ type MetricChannels struct {
 	WP99           chan ShardMetricValue
 	WP50           chan ShardMetricValue
 	WP25           chan ShardMetricValue
+
+	KeyNotFoundCount chan ShardMetricValue
+	KeyExpiredCount  chan ShardMetricValue
+	BadDataCount     chan ShardMetricValue
+	BadLengthCount   chan ShardMetricValue
+	BadCR32Count     chan ShardMetricValue
+	BadKeyCount      chan ShardMetricValue
+	DeletedKeyCount  chan ShardMetricValue
+	BadCRCMemIds     chan ShardMetricValue
 }
 
 // MetricsCollector collects and averages all metrics (per-shard)
@@ -142,6 +171,14 @@ func NewMetricsCollector(config MetricsCollectorConfig, bufferSize int) *Metrics
 			WP99:           make(chan ShardMetricValue, bufferSize),
 			WP50:           make(chan ShardMetricValue, bufferSize),
 			WP25:           make(chan ShardMetricValue, bufferSize),
+
+			KeyNotFoundCount: make(chan ShardMetricValue, bufferSize),
+			KeyExpiredCount:  make(chan ShardMetricValue, bufferSize),
+			BadDataCount:     make(chan ShardMetricValue, bufferSize),
+			BadLengthCount:   make(chan ShardMetricValue, bufferSize),
+			BadCR32Count:     make(chan ShardMetricValue, bufferSize),
+			BadKeyCount:      make(chan ShardMetricValue, bufferSize),
+			DeletedKeyCount:  make(chan ShardMetricValue, bufferSize),
 		},
 
 		instantMetrics: make(map[int]map[string]int64),
@@ -158,6 +195,14 @@ func NewMetricsCollector(config MetricsCollectorConfig, bufferSize int) *Metrics
 		for _, name := range metricNames {
 			mc.instantMetrics[shardIdx][name] = 0
 		}
+
+		mc.instantMetrics[shardIdx]["KeyNotFoundCount"] = 0
+		mc.instantMetrics[shardIdx]["KeyExpiredCount"] = 0
+		mc.instantMetrics[shardIdx]["BadDataCount"] = 0
+		mc.instantMetrics[shardIdx]["BadLengthCount"] = 0
+		mc.instantMetrics[shardIdx]["BadCR32Count"] = 0
+		mc.instantMetrics[shardIdx]["BadKeyCount"] = 0
+		mc.instantMetrics[shardIdx]["DeletedKeyCount"] = 0
 	}
 
 	return mc
@@ -181,6 +226,14 @@ func (mc *MetricsCollector) Start() {
 	go mc.collectShardMetric(mc.channels.Gets, "Gets")
 	go mc.collectShardMetric(mc.channels.Puts, "Puts")
 	go mc.collectShardMetric(mc.channels.Hits, "Hits")
+
+	go mc.collectShardMetric(mc.channels.KeyNotFoundCount, "KeyNotFoundCount")
+	go mc.collectShardMetric(mc.channels.KeyExpiredCount, "KeyExpiredCount")
+	go mc.collectShardMetric(mc.channels.BadDataCount, "BadDataCount")
+	go mc.collectShardMetric(mc.channels.BadLengthCount, "BadLengthCount")
+	go mc.collectShardMetric(mc.channels.BadCR32Count, "BadCR32Count")
+	go mc.collectShardMetric(mc.channels.BadKeyCount, "BadKeyCount")
+	go mc.collectShardMetric(mc.channels.DeletedKeyCount, "DeletedKeyCount")
 }
 
 func (mc *MetricsCollector) collectShardMetric(ch chan ShardMetricValue, name string) {
@@ -296,6 +349,55 @@ func (mc *MetricsCollector) RecordRewrites(shardIdx int, value int64) {
 	}
 }
 
+func (mc *MetricsCollector) RecordKeyNotFoundCount(shardIdx int, value int64) {
+	select {
+	case mc.channels.KeyNotFoundCount <- ShardMetricValue{ShardIdx: shardIdx, value: value}:
+	default:
+	}
+}
+
+func (mc *MetricsCollector) RecordKeyExpiredCount(shardIdx int, value int64) {
+	select {
+	case mc.channels.KeyExpiredCount <- ShardMetricValue{ShardIdx: shardIdx, value: value}:
+	default:
+	}
+}
+
+func (mc *MetricsCollector) RecordBadDataCount(shardIdx int, value int64) {
+	select {
+	case mc.channels.BadDataCount <- ShardMetricValue{ShardIdx: shardIdx, value: value}:
+	default:
+	}
+}
+
+func (mc *MetricsCollector) RecordBadLengthCount(shardIdx int, value int64) {
+	select {
+	case mc.channels.BadLengthCount <- ShardMetricValue{ShardIdx: shardIdx, value: value}:
+	default:
+	}
+}
+
+func (mc *MetricsCollector) RecordBadCR32Count(shardIdx int, value int64) {
+	select {
+	case mc.channels.BadCR32Count <- ShardMetricValue{ShardIdx: shardIdx, value: value}:
+	default:
+	}
+}
+
+func (mc *MetricsCollector) RecordBadKeyCount(shardIdx int, value int64) {
+	select {
+	case mc.channels.BadKeyCount <- ShardMetricValue{ShardIdx: shardIdx, value: value}:
+	default:
+	}
+}
+
+func (mc *MetricsCollector) RecordDeletedKeyCount(shardIdx int, value int64) {
+	select {
+	case mc.channels.DeletedKeyCount <- ShardMetricValue{ShardIdx: shardIdx, value: value}:
+	default:
+	}
+}
+
 func (mc *MetricsCollector) GetMetrics() RunMetrics {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
@@ -304,6 +406,7 @@ func (mc *MetricsCollector) GetMetrics() RunMetrics {
 
 	// Build per-shard metrics
 	shardMetrics := make([]ShardMetrics, shards)
+	shardIndexMetrics := make([]ShardIndexMetrics, shards)
 	for shardIdx := 0; shardIdx < shards; shardIdx++ {
 		if instants, exists := mc.instantMetrics[shardIdx]; exists {
 			shardMetrics[shardIdx] = ShardMetrics{
@@ -320,11 +423,22 @@ func (mc *MetricsCollector) GetMetrics() RunMetrics {
 				ExpiredEntries: instants["ExpiredEntries"],
 				Rewrites:       instants["Rewrites"],
 			}
+
+			shardIndexMetrics[shardIdx] = ShardIndexMetrics{
+				KeyNotFoundCount: instants["KeyNotFoundCount"],
+				KeyExpiredCount:  instants["KeyExpiredCount"],
+				BadDataCount:     instants["BadDataCount"],
+				BadLengthCount:   instants["BadLengthCount"],
+				BadCR32Count:     instants["BadCR32Count"],
+				BadKeyCount:      instants["BadKeyCount"],
+				DeletedKeyCount:  instants["DeletedKeyCount"],
+			}
 		}
 	}
 
 	return RunMetrics{
-		ShardMetrics: shardMetrics,
+		ShardMetrics:      shardMetrics,
+		ShardIndexMetrics: shardIndexMetrics,
 	}
 }
 
