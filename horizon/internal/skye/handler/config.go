@@ -56,4 +56,8 @@ type Config interface {
 	ApproveJobFrequencyRequest(int, ApprovalRequest) (ApprovalResponse, error)
 	GetJobFrequencies() (JobFrequencyListResponse, error)
 	GetAllJobFrequencyRequests() (JobFrequencyRequestListResponse, error)
+
+	GetMQIdTopics() (MQIdTopicsResponse, error)
+
+	GetVariantsList() (VariantsListResponse, error)
 }

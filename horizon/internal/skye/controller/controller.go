@@ -50,6 +50,10 @@ type Config interface {
 	GetJobFrequencies(ctx *gin.Context)
 	GetAllJobFrequencyRequests(ctx *gin.Context)
 
+	GetMQIdTopics(ctx *gin.Context)
+
+	GetVariantsList(ctx *gin.Context)
+
 	// ==================== DEPLOYMENT OPERATIONS ====================
 	CreateQdrantCluster(ctx *gin.Context)
 	ApproveQdrantClusterRequest(ctx *gin.Context)
@@ -756,6 +760,34 @@ func (c *V1) GetJobFrequencies(ctx *gin.Context) {
 
 func (c *V1) GetAllJobFrequencyRequests(ctx *gin.Context) {
 	response, err := c.Config.GetAllJobFrequencyRequests()
+	if err != nil {
+		ctx.JSON(api.NewInternalServerError(err.Error()).StatusCode, handler.Response{
+			Error: err.Error(),
+			Data:  handler.Message{Message: emptyResponse},
+		})
+		return
+	}
+
+	ctx.JSON(200, response)
+}
+
+func (c *V1) GetMQIdTopics(ctx *gin.Context) {
+	response, err := c.Config.GetMQIdTopics()
+	if err != nil {
+		ctx.JSON(api.NewInternalServerError(err.Error()).StatusCode, handler.Response{
+			Error: err.Error(),
+			Data:  handler.Message{Message: emptyResponse},
+		})
+		return
+	}
+
+	ctx.JSON(200, response)
+}
+
+// ==================== VARIANTS LIST OPERATIONS ====================
+
+func (c *V1) GetVariantsList(ctx *gin.Context) {
+	response, err := c.Config.GetVariantsList()
 	if err != nil {
 		ctx.JSON(api.NewInternalServerError(err.Error()).StatusCode, handler.Response{
 			Error: err.Error(),

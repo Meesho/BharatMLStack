@@ -56,6 +56,7 @@ const VariantRegistry = () => {
   const [entities, setEntities] = useState([]);
   const [models, setModels] = useState([]);
   const [filters, setFilters] = useState([]);
+  const [variantsList, setVariantsList] = useState([]);
   const { user } = useAuth();
   const [notification, setNotification] = useState({ open: false, message: "", severity: "success" });
   
@@ -96,6 +97,7 @@ const VariantRegistry = () => {
   useEffect(() => {
     fetchData();
     fetchFilters();
+    fetchVariantsList();
   }, []);
 
   useEffect(() => {
@@ -127,7 +129,7 @@ const VariantRegistry = () => {
         const availableEntities = entitiesResponse.entities?.map(entity => ({
           name: entity.name,
           store_id: entity.store_id,
-          label: `${entity.name} (Store ${entity.store_id})`
+          label: entity.name
         })) || [];
         setEntities(availableEntities);
       }
@@ -136,6 +138,20 @@ const VariantRegistry = () => {
       setError('Failed to load variant data. Please refresh the page.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchVariantsList = async () => {
+    try {
+      const response = await embeddingPlatformAPI.getVariantsList();
+      if (response.variants) {
+        setVariantsList(response.variants);
+      } else {
+        setVariantsList([]);
+      }
+    } catch (error) {
+      console.error('Error fetching variants list:', error);
+      setVariantsList([]);
     }
   };
 
@@ -790,18 +806,23 @@ const VariantRegistry = () => {
                 </Grid>
 
               <Grid item xs={6}>
-                  <TextField
-                  fullWidth
-                  required
-                  size="small"
+                <FormControl fullWidth required size="small">
+                  <InputLabel>Variant Name</InputLabel>
+                  <Select
                     name="variant"
-                  label="Variant Name"
                     value={variantData.variant}
                     onChange={handleChange}
-                  helperText="e.g., experiment_v1"
-                  placeholder="experiment_v1"
-                  />
-                </Grid>
+                    label="Variant Name"
+                  >
+                    {variantsList.map((variant) => (
+                      <MenuItem key={variant} value={variant}>
+                        {variant}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  <FormHelperText>Select a variant from the available list</FormHelperText>
+                </FormControl>
+              </Grid>
 
               <Grid item xs={6}>
                 <FormControl fullWidth required size="small">

@@ -84,6 +84,124 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (request_id)
   );
   
+  -- Skye/Embedding Platform request tables
+  CREATE TABLE IF NOT EXISTS store_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS entity_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS model_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS variant_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS filter_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS job_frequency_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS qdrant_cluster_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS variant_promotion_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS variant_onboarding_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
   CREATE TABLE IF NOT EXISTS users (
     id bigint unsigned NOT NULL AUTO_INCREMENT,
     first_name varchar(50) NOT NULL,
@@ -703,7 +821,11 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   ('POST', '/api/v1/horizon/skye/requests/variant/onboard', 'SkyeVariantOnboardResolver'),
   ('POST', '/api/v1/horizon/skye/requests/variant/onboard/approve', 'SkyeVariantOnboardApproveResolver'),
   ('GET', '/api/v1/horizon/skye/data/variant-onboarding/requests', 'SkyeVariantOnboardRequestDiscoveryResolver'),
-  ('GET', '/api/v1/horizon/skye/data/variant-onboarding/variants', 'SkyeVariantOnboardDiscoveryResolver');
+  ('GET', '/api/v1/horizon/skye/data/variant-onboarding/variants', 'SkyeVariantOnboardDiscoveryResolver'),
+
+  -- MQ ID to Topics and Variants List APIs
+  ('GET', '/api/v1/horizon/skye/data/mq-id-topics', 'SkyeMQIdTopicsDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/skye/data/variants-list', 'SkyeVariantsListDiscoveryResolver');
 "
 
 # Insert role permissions for admin role
@@ -834,7 +956,11 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   ('admin', 'embedding_platform', 'onboard-variant-to-db', 'onboard'),
   ('admin', 'embedding_platform', 'onboard-variant-to-db', 'view'),
   ('admin', 'embedding_platform', 'onboard-variant-approval', 'review'),
-  ('admin', 'embedding_platform', 'onboard-variant-approval', 'view');
+  ('admin', 'embedding_platform', 'onboard-variant-approval', 'view'),
+
+  -- MQ ID to Topics and Variants List permissions
+  ('admin', 'embedding_platform', 'model-discovery', 'view'),
+  ('admin', 'embedding_platform', 'variant-discovery', 'view');
 "
 
 # Verify initialization

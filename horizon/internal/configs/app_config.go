@@ -147,6 +147,12 @@ type Configs struct {
 	Scylla1Keyspace       string `mapstructure:"scylla_1_keyspace"`
 	Scylla1Username       string `mapstructure:"scylla_1_username"`
 	Scylla1Password       string `mapstructure:"scylla_1_password"`
+
+	// MQ ID to Topic mapping configuration
+	MQIdTopicsMapping string `mapstructure:"mq_id_topics_mapping"`
+
+	// Variant list configuration
+	VariantsList string `mapstructure:"variants_list"`
 }
 
 type DynamicConfigs struct{}

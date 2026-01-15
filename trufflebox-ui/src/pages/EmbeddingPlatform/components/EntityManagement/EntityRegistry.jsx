@@ -505,7 +505,7 @@ const EntityRegistry = () => {
             '&:hover': {
               backgroundColor: '#380730'
             },
-            minWidth: '150px'
+            minWidth: 'fit-content'
           }}
         >
           Register Entity

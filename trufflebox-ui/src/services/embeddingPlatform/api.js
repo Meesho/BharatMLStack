@@ -418,6 +418,28 @@ class EmbeddingPlatformAPI {
     return this.makeRequest('/data/variant-onboarding/variants');
   }
 
+  // =============================================================================
+  // MQ ID TO TOPICS MAPPING ENDPOINTS
+  // =============================================================================
+
+  /**
+   * Get MQ ID to Topics Mapping
+   */
+  async getMQIdTopics() {
+    return this.makeRequest('/data/mq-id-topics');
+  }
+
+  // =============================================================================
+  // VARIANTS LIST ENDPOINTS
+  // =============================================================================
+
+  /**
+   * Get Variants List
+   */
+  async getVariantsList() {
+    return this.makeRequest('/data/variants-list');
+  }
+
 }
 
 // Create singleton instance
@@ -476,6 +498,12 @@ export const {
   approveVariantOnboarding,
   getAllVariantOnboardingRequests,
   getOnboardedVariants,
+  
+  // MQ ID to Topics Mapping
+  getMQIdTopics,
+  
+  // Variants List
+  getVariantsList,
 } = embeddingPlatformAPI;
 
 export default embeddingPlatformAPI;

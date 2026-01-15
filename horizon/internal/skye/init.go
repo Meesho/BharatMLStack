@@ -11,6 +11,8 @@ var (
 	SkyeAppName           string
 	AppEnv                string
 	ScyllaActiveConfigIds string
+	MQIdTopicsMapping     string
+	VariantsList          string
 )
 
 func Init(config configs.Configs) {
@@ -18,5 +20,7 @@ func Init(config configs.Configs) {
 		SkyeAppName = config.SkyeAppName
 		AppEnv = config.AppEnv
 		ScyllaActiveConfigIds = config.ScyllaActiveConfigIds
+		MQIdTopicsMapping = config.MQIdTopicsMapping
+		VariantsList = config.VariantsList
 	})
 }

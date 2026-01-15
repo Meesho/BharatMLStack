@@ -269,13 +269,46 @@ func (e *Etcd) GetEtcdInstance() *SkyeConfigRegistry {
 }
 
 // GetJobFrequencies retrieves all the available job frequencies from the configuration.
+// Reads from /config/{appName}/storage/frequencies as a comma-separated string and parses it into a map.
 // Returns a map of frequency names to their associated data or an error if frequencies are not found.
 func (e *Etcd) GetJobFrequencies() (map[string]JobFrequencyConfig, error) {
-	skyeConfigRegistry := e.GetEtcdInstance()
-	frequencies := skyeConfigRegistry.JobFrequencyConfigs
-	if frequencies == nil {
-		return nil, fmt.Errorf("job frequencies not found in configuration")
+	if e.instance == nil {
+		log.Error().Msg("ETCD instance is nil - not initialized properly")
+		return nil, fmt.Errorf("ETCD instance not initialized")
 	}
+
+	// Read from /config/{appName}/storage/frequencies
+	frequenciesPath := fmt.Sprintf("/config/%s/storage/frequencies", e.appName)
+	log.Info().Msgf("Reading job frequencies from ETCD path: %s", frequenciesPath)
+
+	frequenciesString, err := e.instance.GetValue(frequenciesPath)
+	if err != nil {
+		log.Warn().Err(err).Msgf("Failed to get frequencies from ETCD at path: %s, returning empty map", frequenciesPath)
+		// Return empty map instead of error if frequencies don't exist yet
+		return make(map[string]JobFrequencyConfig), nil
+	}
+
+	if frequenciesString == "" {
+		log.Info().Msg("No frequencies found in ETCD, returning empty map")
+		return make(map[string]JobFrequencyConfig), nil
+	}
+
+	// Parse comma-separated string into map
+	frequencies := make(map[string]JobFrequencyConfig)
+	frequencyIds := strings.Split(frequenciesString, ",")
+
+	for _, freqId := range frequencyIds {
+		trimmedFreqId := strings.TrimSpace(freqId)
+		if trimmedFreqId != "" {
+			// Create JobFrequencyConfig with just the frequency ID (description not used in API response)
+			frequencies[trimmedFreqId] = JobFrequencyConfig{
+				JobFrequency: trimmedFreqId,
+				Description:  "", // Not used in API response
+			}
+		}
+	}
+
+	log.Info().Msgf("Successfully parsed %d job frequencies from ETCD", len(frequencies))
 	return frequencies, nil
 }
 
@@ -283,7 +316,7 @@ func (e *Etcd) GetJobFrequencies() (map[string]JobFrequencyConfig, error) {
 func (e *Etcd) GetJobFrequenciesAsString() (string, error) {
 	frequencies, err := e.GetJobFrequencies()
 	if err != nil {
-		return "", err
+		return "", nil
 	}
 
 	if len(frequencies) == 0 {
@@ -1296,11 +1329,36 @@ func (e *Etcd) CreateJobFrequencyConfig(frequencyId string, frequencyConfig JobF
 	// Path for frequencies file: /config/{appName}/storage/frequencies
 	frequenciesPath := fmt.Sprintf("/config/%s/storage/frequencies", e.appName)
 
-	// Update or create the frequencies file in ETCD
-	if currentFrequencies == "" {
-		err = e.instance.CreateNode(frequenciesPath, updatedFrequencies)
-	} else {
+	// Check if node exists to determine whether to create or update
+	nodeExists, err := e.instance.IsLeafNodeExist(frequenciesPath)
+	if err != nil {
+		log.Warn().Err(err).Msgf("Error checking if frequencies node exists, will attempt to update anyway")
+		nodeExists = true
+	}
+
+	if nodeExists {
 		err = e.instance.SetValue(frequenciesPath, updatedFrequencies)
+	} else {
+		// Node doesn't exist, try CreateNode first
+		err = e.instance.CreateNode(frequenciesPath, updatedFrequencies)
+		if err == nil {
+			exists, checkErr := e.instance.IsLeafNodeExist(frequenciesPath)
+			if checkErr == nil && !exists {
+				log.Warn().Msgf("CreateNode returned success but node doesn't exist, using SetValue")
+				err = e.instance.SetValue(frequenciesPath, updatedFrequencies)
+			} else if checkErr == nil && exists {
+				existingValue, getErr := e.instance.GetValue(frequenciesPath)
+				if getErr == nil && existingValue != updatedFrequencies {
+					log.Info().Msgf("Node exists but value differs, updating with SetValue")
+					err = e.instance.SetValue(frequenciesPath, updatedFrequencies)
+				}
+			}
+		}
+		// If CreateNode failed, try SetValue as fallback
+		if err != nil {
+			log.Warn().Err(err).Msgf("CreateNode failed, trying SetValue as fallback")
+			err = e.instance.SetValue(frequenciesPath, updatedFrequencies)
+		}
 	}
 
 	if err != nil {

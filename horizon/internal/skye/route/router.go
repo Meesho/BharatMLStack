@@ -122,6 +122,18 @@ func Init() {
 				jobFrequencyRequestsData.GET("", controller.NewConfigController().GetAllJobFrequencyRequests)
 			}
 
+			// ==================== MQ ID TO TOPICS OPERATIONS ====================
+
+			mqIdTopicsData := v1.Group("/data/mq-id-topics")
+			{
+				mqIdTopicsData.GET("", controller.NewConfigController().GetMQIdTopics)
+			}
+
+			variantsListData := v1.Group("/data/variants-list")
+			{
+				variantsListData.GET("", controller.NewConfigController().GetVariantsList)
+			}
+
 			// ==================== DEPLOYMENT OPERATIONS ====================
 
 			// Qdrant Cluster Operations

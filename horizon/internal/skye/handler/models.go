@@ -1,6 +1,8 @@
 package handler
 
-import "time"
+import (
+	"time"
+)
 
 // Common response structures
 type Response struct {
@@ -412,8 +414,8 @@ type JobFrequencyInfo struct {
 }
 
 type JobFrequencyListResponse struct {
-	JobFrequencies []JobFrequencyInfo `json:"job_frequencies"`
-	TotalCount     int                `json:"total_count"`
+	JobFrequencies []string `json:"job_frequencies"`
+	TotalCount     int      `json:"total_count"`
 }
 
 // Add structure for individual job frequency request from database
@@ -583,4 +585,21 @@ type OnboardedVariantInfo struct {
 type OnboardedVariantListResponse struct {
 	OnboardedVariants []OnboardedVariantInfo `json:"onboarded_variants"`
 	TotalCount        int                    `json:"total_count"`
+}
+
+// MQ ID TO TOPIC OPERATIONS
+type MQIdTopicMapping struct {
+	MQID  int    `json:"mq_id"`
+	Topic string `json:"topic"`
+}
+
+type MQIdTopicsResponse struct {
+	Mappings   []MQIdTopicMapping `json:"mappings"`
+	TotalCount int                `json:"total_count"`
+}
+
+// VARIANTS LIST OPERATIONS
+type VariantsListResponse struct {
+	Variants   []string `json:"variants"`
+	TotalCount int      `json:"total_count"`
 }

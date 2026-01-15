@@ -3,8 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -47,7 +45,9 @@ type skyeConfig struct {
 	VariantOnboardingRequestRepo variant_onboarding_requests.VariantOnboardingRequestRepository
 	EtcdConfig                   skyeEtcd.Manager
 	ScyllaStores                 map[int]scylla.Store
-	ActiveScyllaConfigIDs        map[int]bool // Set of active Scylla config IDs for validation
+	ActiveScyllaConfigIDs        map[int]bool
+	MQIdTopicsMapping            map[int]string
+	VariantsList                 []string
 }
 
 func InitV1ConfigHandler() Config {
@@ -109,7 +109,6 @@ func InitV1ConfigHandler() Config {
 		log.Info().Msgf("ETCD config initialized: %+v", etcdConfig)
 
 		// Initialize Scylla stores
-		log.Info().Msg("Initializing Scylla stores...")
 		scyllaStores := make(map[int]scylla.Store)
 		activeScyllaConfigIDs := make(map[int]bool)
 
@@ -150,7 +149,37 @@ func InitV1ConfigHandler() Config {
 			log.Warn().Msg("SCYLLA_ACTIVE_CONFIG_IDS not configured, running without Scylla stores")
 		}
 
-		log.Info().Msgf("Initialized %d Scylla stores", len(scyllaStores))
+		mqIdTopicsMapping := make(map[int]string)
+		mqIdTopicsMappingStr := skye.MQIdTopicsMapping
+		if mqIdTopicsMappingStr != "" {
+			var mqIdTopicsList []struct {
+				MQID  int    `json:"mq_id"`
+				Topic string `json:"topic"`
+			}
+			if err := json.Unmarshal([]byte(mqIdTopicsMappingStr), &mqIdTopicsList); err != nil {
+				log.Error().Err(err).Msg("Error parsing MQ_ID_TOPICS_MAPPING JSON, running without MQ ID to topic mapping")
+			} else {
+				for _, mapping := range mqIdTopicsList {
+					mqIdTopicsMapping[mapping.MQID] = mapping.Topic
+					log.Info().Msgf("Loaded MQ ID %d with topic %s", mapping.MQID, mapping.Topic)
+				}
+			}
+		} else {
+			log.Warn().Msg("MQ_ID_TOPICS_MAPPING not configured, running without MQ ID to topic mapping")
+		}
+
+		// Initialize Variants List
+		variantsList := []string{}
+		variantsListStr := skye.VariantsList
+		if variantsListStr != "" {
+			if err := json.Unmarshal([]byte(variantsListStr), &variantsList); err != nil {
+				log.Error().Err(err).Msg("Error parsing VARIANTS_LIST JSON, running without variants list")
+			} else {
+				log.Info().Msgf("Loaded %d variants", len(variantsList))
+			}
+		} else {
+			log.Warn().Msg("VARIANTS_LIST not configured, running without variants list")
+		}
 
 		config = &skyeConfig{
 			StoreRequestRepo:             storeRequestRepo,
@@ -165,6 +194,8 @@ func InitV1ConfigHandler() Config {
 			EtcdConfig:                   etcdConfig,
 			ScyllaStores:                 scyllaStores,
 			ActiveScyllaConfigIDs:        activeScyllaConfigIDs,
+			MQIdTopicsMapping:            mqIdTopicsMapping,
+			VariantsList:                 variantsList,
 		}
 		log.Info().Msg("Config initialization completed")
 	} else {
@@ -584,6 +615,35 @@ func (s *skyeConfig) GetEntities() (EntityListResponse, error) {
 	log.Info().Msgf("Successfully retrieved %d entities from ETCD", len(entities))
 	return EntityListResponse{
 		Entities: entities,
+	}, nil
+}
+
+func (s *skyeConfig) GetMQIdTopics() (MQIdTopicsResponse, error) {
+	log.Info().Msg("Fetching MQ ID to Topic mapping from configuration")
+
+	// Convert map[int]string to []MQIdTopicMapping
+	var mappings []MQIdTopicMapping
+	for mqID, topic := range s.MQIdTopicsMapping {
+		mappings = append(mappings, MQIdTopicMapping{
+			MQID:  mqID,
+			Topic: topic,
+		})
+	}
+
+	log.Info().Msgf("Successfully retrieved %d MQ ID to topic mappings", len(mappings))
+	return MQIdTopicsResponse{
+		Mappings:   mappings,
+		TotalCount: len(mappings),
+	}, nil
+}
+
+func (s *skyeConfig) GetVariantsList() (VariantsListResponse, error) {
+	log.Info().Msg("Fetching Variants List from configuration")
+
+	log.Info().Msgf("Successfully retrieved %d variants", len(s.VariantsList))
+	return VariantsListResponse{
+		Variants:   s.VariantsList,
+		TotalCount: len(s.VariantsList),
 	}, nil
 }
 
@@ -1948,7 +2008,7 @@ func (s *skyeConfig) ApproveJobFrequencyRequest(requestID int, approval Approval
 		// Create ETCD configuration FIRST
 		jobFrequencyConfig := skyeEtcd.JobFrequencyConfig{
 			JobFrequency: payload.JobFrequency,
-			Description:  generateJobFrequencyDescription(payload.JobFrequency),
+			Description:  "",
 		}
 
 		frequencyId = payload.JobFrequency
@@ -1958,14 +2018,6 @@ func (s *skyeConfig) ApproveJobFrequencyRequest(requestID int, approval Approval
 			return ApprovalResponse{}, fmt.Errorf("failed to create ETCD job frequency configuration: %w", err)
 		}
 		log.Info().Msgf("Successfully created ETCD job frequency configuration for frequency_id: %s", frequencyId)
-
-		// Append to file storage
-		err = appendJobFrequencyToFile(payload.JobFrequency)
-		if err != nil {
-			log.Error().Err(err).Msgf("Failed to append job frequency to file: %s", payload.JobFrequency)
-			return ApprovalResponse{}, fmt.Errorf("failed to append job frequency to file: %w", err)
-		}
-		log.Info().Msgf("Successfully appended job frequency to file: %s", payload.JobFrequency)
 	}
 
 	// TRANSACTIONAL: Update database status ONLY if ETCD and file operations succeed
@@ -2001,26 +2053,16 @@ func (s *skyeConfig) ApproveJobFrequencyRequest(requestID int, approval Approval
 }
 
 func (s *skyeConfig) GetJobFrequencies() (JobFrequencyListResponse, error) {
-	// Fetch APPROVED job frequency requests from database
-	approvedRequests, err := s.JobFrequencyRequestRepo.GetByStatus("APPROVED")
+	// Fetch job frequencies from ETCD
+	frequenciesMap, err := s.EtcdConfig.GetJobFrequencies()
 	if err != nil {
-		return JobFrequencyListResponse{}, fmt.Errorf("failed to get approved job frequencies: %w", err)
+		return JobFrequencyListResponse{}, fmt.Errorf("failed to get job frequencies from ETCD: %w", err)
 	}
 
-	var jobFrequencies []JobFrequencyInfo
-	for _, request := range approvedRequests {
-		var payload JobFrequencyRequestPayload
-		if err := json.Unmarshal([]byte(request.Payload), &payload); err != nil {
-			continue // Skip invalid payloads
-		}
-
-		jobFrequencies = append(jobFrequencies, JobFrequencyInfo{
-			ID:          fmt.Sprintf("freq_%d", request.RequestID),
-			Frequency:   payload.JobFrequency,
-			Description: generateJobFrequencyDescription(payload.JobFrequency),
-			IsActive:    true,
-			CreatedAt:   request.CreatedAt,
-		})
+	// Extract only the frequency strings from the map
+	var jobFrequencies []string
+	for frequencyId := range frequenciesMap {
+		jobFrequencies = append(jobFrequencies, frequencyId)
 	}
 
 	return JobFrequencyListResponse{
@@ -2061,81 +2103,6 @@ func (s *skyeConfig) GetAllJobFrequencyRequests() (JobFrequencyRequestListRespon
 	}, nil
 }
 
-// ==================== JOB FREQUENCY HELPER FUNCTIONS ====================
-
-func generateJobFrequencyDescription(frequency string) string {
-	descriptions := map[string]string{
-		"FREQ_1D":  "Daily job frequency - runs once per day",
-		"FREQ_2D":  "Bi-daily job frequency - runs every 2 days",
-		"FREQ_3D":  "Tri-daily job frequency - runs every 3 days",
-		"FREQ_7D":  "Weekly job frequency - runs every 7 days",
-		"FREQ_1W":  "Weekly job frequency - runs once per week",
-		"FREQ_2W":  "Bi-weekly job frequency - runs every 2 weeks",
-		"FREQ_1M":  "Monthly job frequency - runs once per month",
-		"FREQ_3M":  "Quarterly job frequency - runs every 3 months",
-		"FREQ_6M":  "Semi-annual job frequency - runs every 6 months",
-		"FREQ_1Y":  "Annual job frequency - runs once per year",
-		"FREQ_1H":  "Hourly job frequency - runs once per hour",
-		"FREQ_6H":  "Every 6 hours job frequency",
-		"FREQ_12H": "Twice daily job frequency - runs every 12 hours",
-	}
-
-	if desc, exists := descriptions[frequency]; exists {
-		return desc
-	}
-	return fmt.Sprintf("Custom job frequency: %s", frequency)
-}
-
-func appendJobFrequencyToFile(frequency string) error {
-	// Create directory if it doesn't exist
-	appName := skye.SkyeAppName
-	if appName == "" {
-		return fmt.Errorf("SKYE_APP_NAME is not configured")
-	}
-
-	// Create directory if it doesn't exist
-	storageDir := fmt.Sprintf("%s/storage", appName)
-	err := createDirectoryIfNotExists(storageDir)
-	if err != nil {
-		return fmt.Errorf("failed to create storage directory: %w", err)
-	}
-
-	filePath := fmt.Sprintf("%s/storage/frequencies", appName)
-
-	// Check if file exists and read current contents
-	var currentFrequencies []string
-	if fileExists(filePath) {
-		content, err := readFileContents(filePath)
-		if err != nil {
-			return fmt.Errorf("failed to read existing frequencies file: %w", err)
-		}
-		if content != "" {
-			currentFrequencies = strings.Split(strings.TrimSpace(content), ",")
-		}
-	}
-
-	// Check if frequency already exists (avoid duplicates)
-	for _, existingFreq := range currentFrequencies {
-		if strings.TrimSpace(existingFreq) == frequency {
-			log.Info().Msgf("Frequency %s already exists in file, skipping duplicate", frequency)
-			return nil // Not an error, just skip duplicate
-		}
-	}
-
-	// Append new frequency
-	currentFrequencies = append(currentFrequencies, frequency)
-
-	// Write back to file (comma-separated)
-	newContent := strings.Join(currentFrequencies, ",")
-	err = writeFileContents(filePath, newContent)
-	if err != nil {
-		return fmt.Errorf("failed to write frequencies to file: %w", err)
-	}
-
-	log.Info().Msgf("Successfully appended frequency '%s' to file: %s", frequency, filePath)
-	return nil
-}
-
 // getNextStoreId generates the next incremental store ID by finding the highest existing store ID
 func (s *skyeConfig) getNextStoreId() (int, error) {
 	log.Info().Msg("Generating next incremental store ID...")
@@ -2171,84 +2138,6 @@ func (s *skyeConfig) getNextStoreId() (int, error) {
 	log.Info().Msgf("Found %d existing stores, highest store_id: %d, next store_id: %d", len(storeConfigs), maxStoreId, nextStoreId)
 
 	return nextStoreId, nil
-}
-
-func sanitizeFilePath(path string) (string, error) {
-	cleaned := filepath.Clean(path)
-
-	// Check for path traversal attempts after cleaning
-	if strings.Contains(cleaned, "..") {
-		return "", fmt.Errorf("path traversal detected in path: %s", path)
-	}
-
-	// Reject absolute paths (security: prevent access to system directories)
-	if filepath.IsAbs(cleaned) {
-		return "", fmt.Errorf("absolute paths not allowed: %s", path)
-	}
-
-	// Ensure path doesn't start with / (Unix-style absolute path)
-	if strings.HasPrefix(cleaned, "/") {
-		return "", fmt.Errorf("absolute paths not allowed: %s", path)
-	}
-
-	appName := skye.SkyeAppName
-	if appName == "" {
-		return "", fmt.Errorf("SKYE_APP_NAME is not configured")
-	}
-
-	// Additional validation: ensure path is within allowed directory structure
-	expectedPrefix := fmt.Sprintf("%s/", appName)
-	if !strings.HasPrefix(cleaned, expectedPrefix) {
-		return "", fmt.Errorf("path must be within %s/ directory: %s", appName, path)
-	}
-
-	return cleaned, nil
-}
-
-// File utility functions
-func createDirectoryIfNotExists(dirPath string) error {
-	sanitizedPath, err := sanitizeFilePath(dirPath)
-	if err != nil {
-		return fmt.Errorf("invalid directory path: %w", err)
-	}
-
-	if _, err := os.Stat(sanitizedPath); os.IsNotExist(err) {
-		return os.MkdirAll(sanitizedPath, 0755)
-	}
-	return nil
-}
-
-func fileExists(filePath string) bool {
-	sanitizedPath, err := sanitizeFilePath(filePath)
-	if err != nil {
-		log.Error().Err(err).Msgf("Invalid file path: %s", filePath)
-		return false
-	}
-
-	_, err = os.Stat(sanitizedPath)
-	return !os.IsNotExist(err)
-}
-
-func readFileContents(filePath string) (string, error) {
-	sanitizedPath, err := sanitizeFilePath(filePath)
-	if err != nil {
-		return "", fmt.Errorf("invalid file path: %w", err)
-	}
-
-	data, err := os.ReadFile(sanitizedPath)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-func writeFileContents(filePath, content string) error {
-	sanitizedPath, err := sanitizeFilePath(filePath)
-	if err != nil {
-		return fmt.Errorf("invalid file path: %w", err)
-	}
-
-	return os.WriteFile(sanitizedPath, []byte(content), 0644)
 }
 
 // ==================== VARIANT ONBOARDING DATA OPERATIONS ====================

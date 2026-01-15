@@ -79,6 +79,10 @@ const (
 	resolverSkyeVariantOnboardApprove          = "SkyeVariantOnboardApproveResolver"
 	resolverSkyeVariantOnboardRequestDiscovery = "SkyeVariantOnboardRequestDiscoveryResolver"
 	resolverSkyeVariantOnboardDiscovery        = "SkyeVariantOnboardDiscoveryResolver"
+
+	// Resolvers - MQ ID to Topics and Variants List
+	resolverSkyeMQIdTopicsDiscovery   = "SkyeMQIdTopicsDiscoveryResolver"
+	resolverSkyeVariantsListDiscovery = "SkyeVariantsListDiscoveryResolver"
 )
 
 type SkyeResolver struct {
@@ -144,5 +148,9 @@ func (r *SkyeResolver) GetResolvers() map[string]Func {
 		resolverSkyeVariantOnboardApprove:          StaticResolver(screenTypeOnboardVariantApproval, moduleReview, serviceEmbeddingPlatform),
 		resolverSkyeVariantOnboardRequestDiscovery: StaticResolver(screenTypeOnboardVariantApproval, moduleView, serviceEmbeddingPlatform),
 		resolverSkyeVariantOnboardDiscovery:        StaticResolver(screenTypeOnboardVariantToDB, moduleView, serviceEmbeddingPlatform),
+
+		// MQ ID to Topics and Variants List resolvers
+		resolverSkyeMQIdTopicsDiscovery:   StaticResolver(screenTypeModelDiscovery, moduleView, serviceEmbeddingPlatform),
+		resolverSkyeVariantsListDiscovery: StaticResolver(screenTypeVariantDiscovery, moduleView, serviceEmbeddingPlatform),
 	}
 }

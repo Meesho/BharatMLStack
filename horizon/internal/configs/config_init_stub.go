@@ -167,4 +167,12 @@ func bindEnvVars() {
 	viper.BindEnv("scylla_1_keyspace", "SCYLLA_1_KEYSPACE")
 	viper.BindEnv("scylla_1_username", "SCYLLA_1_USERNAME")
 	viper.BindEnv("scylla_1_password", "SCYLLA_1_PASSWORD")
+
+	// MQ ID to Topic mapping configuration
+	viper.BindEnv("mq_id_topics_mapping", "MQ_ID_TOPICS_MAPPING")
+
+	// Variant list configuration
+	viper.BindEnv("variants_list", "VARIANTS_LIST")
+
+	viper.BindEnv("skye_app_name", "SKYE_APP_NAME")
 }
