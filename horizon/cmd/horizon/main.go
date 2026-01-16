@@ -10,6 +10,7 @@ import (
 	connectionConfigRouter "github.com/Meesho/BharatMLStack/horizon/internal/connectionconfig/route"
 	deployableRouter "github.com/Meesho/BharatMLStack/horizon/internal/deployable/router"
 	dnsRouter "github.com/Meesho/BharatMLStack/horizon/internal/dns"
+	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
 	inferflowConfig "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
 	inferflowRouter "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/route"
 	infrastructureRouter "github.com/Meesho/BharatMLStack/horizon/internal/infrastructure/router"
@@ -58,13 +59,14 @@ func main() {
 	etcd.InitFromAppName(&inferflowConfig.ModelConfigRegistery{}, appConfig.Configs.InferflowAppName, appConfig.Configs)
 	etcd.InitFromAppName(&inferflowConfig.HorizonRegistry{}, appConfig.Configs.HorizonAppName, appConfig.Configs)
 	etcd.InitFromAppName(&workflowEtcd.WorkflowRegistry{}, workflowPkg.WorkflowAppName, appConfig.Configs)
-	etcd.InitFromAppName(&skyeConfig.SkyeConfigRegistry{}, appConfig.Configs.SkyeAppName, appConfig.Configs)
+	etcd.InitFromAppName(&skyeConfig.Skye{}, appConfig.Configs.SkyeAppName, appConfig.Configs)
 	horizonConfig.InitAll(appConfig.Configs)
 	logger.Init(appConfig.Configs)
 	metric.Init(appConfig.Configs)
 	httpframework.Init(middleware.NewMiddleware().GetMiddleWares()...)
 	workflowHandler.InitV1WorkflowHandler()
 	deployableRouter.Init(appConfig.Configs)
+	externalcall.Init(appConfig.Configs)
 	inferflowRouter.Init()
 	numerixRouter.Init()
 	applicationRouter.Init()
@@ -75,7 +77,7 @@ func main() {
 	infrastructureRouter.Init()
 	dnsRouter.Init()
 	workflowRouter.Init()
-	skyeRouter.Init()
+	skyeRouter.Init(appConfig.Configs)
 	scheduler.Init(appConfig.Configs)
 	httpframework.Instance().Run(":" + strconv.Itoa(appConfig.Configs.AppPort))
 }

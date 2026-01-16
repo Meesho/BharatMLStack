@@ -1,43 +1,32 @@
 package etcd
 
-// Manager interface defines all ETCD operations for Skye
+import "github.com/Meesho/BharatMLStack/horizon/internal/skye/etcd/enums"
+
 type Manager interface {
-	// Store operations
-	CreateStoreConfig(storeId string, storeConfig StoreConfig) error
-	UpdateStoreConfig(storeId string, storeConfig StoreConfig) error
-	DeleteStoreConfig(storeId string) error
-	StoreExists(storeId string) (bool, error)
-	GetStores() (map[string]StoreConfig, error)
-
-	// Entity operations
-	CreateEntityConfig(entityId string, entityConfig EntityConfig) error
-	UpdateEntityConfig(entityId string, entityConfig EntityConfig) error
-	DeleteEntityConfig(entityId string) error
-	EntityExists(entityName string) (bool, error)
-	GetEntities() (map[string]EntityConfig, error)
-
-	// Model operations
-	CreateModelConfig(modelId string, modelConfig ModelConfig) error
-	UpdateModelConfig(modelId string, modelConfig ModelConfig) error
-	ModelExists(entityName string, modelName string) (bool, error)
-	GetModels() (map[string]ModelConfig, error)
-
-	// Variant operations
-	CreateVariantConfig(variantId string, variantConfig VariantConfig) error
-	UpdateVariantConfig(variantId string, variantConfig VariantConfig) error
-	VariantExists(entityName string, modelName string, variantName string) (bool, error)
-	GetVariants() (map[string]VariantConfig, error)
-
-	// Filter operations
-	CreateFilterConfig(filterId string, filterConfig FilterConfig) error
-	UpdateFilterConfig(filterId string, filterConfig FilterConfig) error
-	FilterExistsByColumnName(entityName string, columnName string) (bool, error)
-	GetFilters() (map[string]FilterConfig, error)
-
-	// Job Frequency operations
-	CreateJobFrequencyConfig(frequencyId string, frequencyConfig JobFrequencyConfig) error
-	UpdateJobFrequencyConfig(frequencyId string, frequencyConfig JobFrequencyConfig) error
-	DeleteJobFrequencyConfig(frequencyId string) error
-	GetJobFrequencies() (map[string]JobFrequencyConfig, error)
-	GetJobFrequenciesAsString() (string, error)
+	GetSkyeConfig() (*Skye, error)
+	GetEntities() (map[string]Models, error)
+	GetEntityConfig(entity string) (*Models, error)
+	GetModelConfig(entity, model string) (*Model, error)
+	GetVariantConfig(entity, model, variant string) (*Variant, error)
+	GetAllFiltersForActiveVariants(entity string) (map[string]map[string][]Criteria, error)
+	SetVariantOnboarded(entity string, model string, variant string, onboarded bool) error
+	UpdateVariantState(entity string, model string, variant string, variantState enums.VariantState) error
+	UpdateVariantReadVersion(entity string, model string, variant string, version int) error
+	UpdateVariantWriteVersion(entity string, model string, variant string, version int) error
+	RegisterStore(confId int, db string, embeddingTable string, aggregatorTable string) error
+	RegisterFrequency(frequency string) error
+	RegisterEntity(entity string, storeId string) error
+	RegisterModel(string, string, bool, int, ModelConfig, string, int, string, Metadata, string, int, int, string) error
+	RegisterVariant(string, string, string, VectorDbConfig, string, []Criteria, enums.Type, bool, int, bool, int, int, RateLimiter) error
+	UpdateEmbeddingVersion(entity, model string, version int) error
+	UpdateVariantEmbeddingStoreReadVersion(entity string, model string, variant string, version int) error
+	UpdateVariantEmbeddingStoreWriteVersion(entity string, model string, variant string, version int) error
+	UpdateVariantStates(entity string, model string, variant map[string]string, state int) error
+	UpdatePartitionState(entity string, model string, partition string, state int) error
+	GetRateLimiters() map[int]RateLimiter
+	UpdateVectorDbConfig(entity string, model string, variant string, vectorDbConfig VectorDbConfig) error
+	GetStores() (map[string]Data, error)
+	RegisterFilter(entity string, columnName string, filterValue string, defaultValue string) error
+	GetFilters(entity string) (map[string]Criteria, error)
+	GetFrequencies() (map[string]string, error)
 }

@@ -168,11 +168,16 @@ func bindEnvVars() {
 	viper.BindEnv("scylla_1_username", "SCYLLA_1_USERNAME")
 	viper.BindEnv("scylla_1_password", "SCYLLA_1_PASSWORD")
 
-	// MQ ID to Topic mapping configuration
+	viper.BindEnv("prism_base_url", "PRISM_BASE_URL")
+	viper.BindEnv("prism_app_user_id", "PRISM_APP_USER_ID")
+	viper.BindEnv("airflow_base_url", "AIRFLOW_BASE_URL")
+	viper.BindEnv("airflow_username", "AIRFLOW_USERNAME")
+	viper.BindEnv("airflow_password", "AIRFLOW_PASSWORD")
+	viper.BindEnv("prism_job_id", "PRISM_JOB_ID")
+	viper.BindEnv("prism_step_id", "PRISM_STEP_ID")
+	viper.BindEnv("airflow_dag_id", "AIRFLOW_DAG_ID")
+	viper.BindEnv("variant_onboarding_cron_expression", "VARIANT_ONBOARDING_CRON_EXPRESSION")
 	viper.BindEnv("mq_id_topics_mapping", "MQ_ID_TOPICS_MAPPING")
-
-	// Variant list configuration
 	viper.BindEnv("variants_list", "VARIANTS_LIST")
-
 	viper.BindEnv("skye_app_name", "SKYE_APP_NAME")
 }

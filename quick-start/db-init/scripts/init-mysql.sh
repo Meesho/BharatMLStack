@@ -136,6 +136,19 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (request_id)
   );
+
+  CREATE TABLE IF NOT EXISTS variant_onboarding_tasks (
+    task_id INT AUTO_INCREMENT PRIMARY KEY,
+    entity VARCHAR(255) NOT NULL,
+    model VARCHAR(255) NOT NULL,
+    variant VARCHAR(255) NOT NULL,
+    payload TEXT,
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_status (status),
+    INDEX idx_created_at (created_at)
+  );
   
   CREATE TABLE IF NOT EXISTS filter_requests (
     request_id int unsigned NOT NULL AUTO_INCREMENT,

@@ -148,11 +148,17 @@ type Configs struct {
 	Scylla1Username       string `mapstructure:"scylla_1_username"`
 	Scylla1Password       string `mapstructure:"scylla_1_password"`
 
-	// MQ ID to Topic mapping configuration
-	MQIdTopicsMapping string `mapstructure:"mq_id_topics_mapping"`
-
-	// Variant list configuration
-	VariantsList string `mapstructure:"variants_list"`
+	PrismBaseUrl                    string `mapstructure:"prism_base_url"`
+	PrismAppUserID                  string `mapstructure:"prism_app_user_id"`
+	AirflowBaseUrl                  string `mapstructure:"airflow_base_url"`
+	AirflowUsername                 string `mapstructure:"airflow_username"`
+	AirflowPassword                 string `mapstructure:"airflow_password"`
+	PrismJobID                      int    `mapstructure:"prism_job_id"`
+	PrismStepID                     int    `mapstructure:"prism_step_id"`
+	AirflowDAGID                    string `mapstructure:"airflow_dag_id"`
+	VariantOnboardingCronExpression string `mapstructure:"variant_onboarding_cron_expression"`
+	MQIdTopicsMapping               string `mapstructure:"mq_id_topics_mapping"`
+	VariantsList                    string `mapstructure:"variants_list"`
 }
 
 type DynamicConfigs struct{}

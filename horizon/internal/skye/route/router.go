@@ -1,106 +1,101 @@
 package route
 
 import (
+	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/Meesho/BharatMLStack/horizon/internal/skye/controller"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/httpframework"
 )
 
-func Init() {
+func Init(appConfig configs.Configs) {
 	api := httpframework.Instance().Group("/api")
+	controller := controller.NewConfigController(appConfig)
 	{
 		v1 := api.Group("/v1/horizon/skye")
 		{
-			// ==================== PLATFORM REGISTRATION OPERATIONS ====================
-
-			// Store Registration and Management
 			storeRequests := v1.Group("/requests/store")
 			{
-				storeRequests.POST("/register", controller.NewConfigController().RegisterStore)
-				storeRequests.POST("/approve", controller.NewConfigController().ApproveStoreRequest)
+				storeRequests.POST("/register", controller.RegisterStore)
+				storeRequests.POST("/approve", controller.ApproveStoreRequest)
 			}
-
 			storeData := v1.Group("/data/stores")
 			{
-				storeData.GET("", controller.NewConfigController().GetStores)
+				storeData.GET("", controller.GetStores)
 			}
-
 			storeRequestsData := v1.Group("/data/store-requests")
 			{
-				storeRequestsData.GET("", controller.NewConfigController().GetAllStoreRequests)
+				storeRequestsData.GET("", controller.GetAllStoreRequests)
 			}
-
-			// Entity Registration and Management
 			entityRequests := v1.Group("/requests/entity")
 			{
-				entityRequests.POST("/register", controller.NewConfigController().RegisterEntity)
-				entityRequests.POST("/approve", controller.NewConfigController().ApproveEntityRequest)
+				entityRequests.POST("/register", controller.RegisterEntity)
+				entityRequests.POST("/approve", controller.ApproveEntityRequest)
 			}
 
 			entityData := v1.Group("/data/entities")
 			{
-				entityData.GET("", controller.NewConfigController().GetEntities)
+				entityData.GET("", controller.GetEntities)
 			}
 
 			entityRequestsData := v1.Group("/data/entity-requests")
 			{
-				entityRequestsData.GET("", controller.NewConfigController().GetAllEntityRequests)
+				entityRequestsData.GET("", controller.GetAllEntityRequests)
 			}
 
 			// Model Registration and Management
 			modelRequests := v1.Group("/requests/model")
 			{
-				modelRequests.POST("/register", controller.NewConfigController().RegisterModel)
-				modelRequests.POST("/edit", controller.NewConfigController().EditModel)
-				modelRequests.POST("/approve", controller.NewConfigController().ApproveModelRequest)
-				modelRequests.POST("/edit/approve", controller.NewConfigController().ApproveModelEditRequest)
+				modelRequests.POST("/register", controller.RegisterModel)
+				modelRequests.POST("/edit", controller.EditModel)
+				modelRequests.POST("/approve", controller.ApproveModelRequest)
+				modelRequests.POST("/edit/approve", controller.ApproveModelEditRequest)
 			}
 
 			modelData := v1.Group("/data/models")
 			{
-				modelData.GET("", controller.NewConfigController().GetModels)
+				modelData.GET("", controller.GetModels)
 			}
 
 			modelRequestsData := v1.Group("/data/model-requests")
 			{
-				modelRequestsData.GET("", controller.NewConfigController().GetAllModelRequests)
+				modelRequestsData.GET("", controller.GetAllModelRequests)
 			}
 
 			// Variant Registration and Management
 			variantRequests := v1.Group("/requests/variant")
 			{
-				variantRequests.POST("/register", controller.NewConfigController().RegisterVariant)
-				variantRequests.POST("/edit", controller.NewConfigController().EditVariant)
-				variantRequests.POST("/approve", controller.NewConfigController().ApproveVariantRequest)
-				variantRequests.POST("/edit/approve", controller.NewConfigController().ApproveVariantEditRequest)
+				variantRequests.POST("/register", controller.RegisterVariant)
+				variantRequests.POST("/edit", controller.EditVariant)
+				variantRequests.POST("/approve", controller.ApproveVariantRequest)
+				variantRequests.POST("/edit/approve", controller.ApproveVariantEditRequest)
 			}
 
 			variantData := v1.Group("/data/variants")
 			{
-				variantData.GET("", controller.NewConfigController().GetVariants)
+				variantData.GET("", controller.GetVariants)
 			}
 
 			// Added new group for variant requests
 			variantRequestsData := v1.Group("/data/variant-requests")
 			{
-				variantRequestsData.GET("", controller.NewConfigController().GetAllVariantRequests)
+				variantRequestsData.GET("", controller.GetAllVariantRequests)
 			}
 
 			// Filter Registration and Management
 			filterRequests := v1.Group("/requests/filter")
 			{
-				filterRequests.POST("/register", controller.NewConfigController().RegisterFilter)
-				filterRequests.POST("/approve", controller.NewConfigController().ApproveFilterRequest)
+				filterRequests.POST("/register", controller.RegisterFilter)
+				filterRequests.POST("/approve", controller.ApproveFilterRequest)
 			}
 
 			filterData := v1.Group("/data/filters")
 			{
-				filterData.GET("", controller.NewConfigController().GetFilters)
+				filterData.GET("", controller.GetFilters)
 			}
 
 			// Added new group for filter requests
 			filterRequestsData := v1.Group("/data/filter-requests")
 			{
-				filterRequestsData.GET("", controller.NewConfigController().GetAllFilterRequests)
+				filterRequestsData.GET("", controller.GetAllFilterRequests)
 			}
 
 			// ==================== JOB FREQUENCY OPERATIONS ====================
@@ -108,65 +103,50 @@ func Init() {
 			// Job Frequency Registration and Management
 			jobFrequencyRequests := v1.Group("/requests/job-frequency")
 			{
-				jobFrequencyRequests.POST("/register", controller.NewConfigController().RegisterJobFrequency)
-				jobFrequencyRequests.POST("/approve", controller.NewConfigController().ApproveJobFrequencyRequest)
+				jobFrequencyRequests.POST("/register", controller.RegisterJobFrequency)
+				jobFrequencyRequests.POST("/approve", controller.ApproveJobFrequencyRequest)
 			}
 
 			jobFrequencyData := v1.Group("/data/job-frequencies")
 			{
-				jobFrequencyData.GET("", controller.NewConfigController().GetJobFrequencies)
+				jobFrequencyData.GET("", controller.GetJobFrequencies)
 			}
 
 			jobFrequencyRequestsData := v1.Group("/data/job-frequency-requests")
 			{
-				jobFrequencyRequestsData.GET("", controller.NewConfigController().GetAllJobFrequencyRequests)
+				jobFrequencyRequestsData.GET("", controller.GetAllJobFrequencyRequests)
 			}
 
 			// ==================== MQ ID TO TOPICS OPERATIONS ====================
 
 			mqIdTopicsData := v1.Group("/data/mq-id-topics")
 			{
-				mqIdTopicsData.GET("", controller.NewConfigController().GetMQIdTopics)
+				mqIdTopicsData.GET("", controller.GetMQIdTopics)
 			}
 
 			variantsListData := v1.Group("/data/variants-list")
 			{
-				variantsListData.GET("", controller.NewConfigController().GetVariantsList)
+				variantsListData.GET("", controller.GetVariantsList)
 			}
-
-			// ==================== DEPLOYMENT OPERATIONS ====================
-
-			// Qdrant Cluster Operations
-			qdrantRequests := v1.Group("/requests/qdrant")
-			{
-				qdrantRequests.POST("/create-cluster", controller.NewConfigController().CreateQdrantCluster)
-				qdrantRequests.POST("/approve", controller.NewConfigController().ApproveQdrantClusterRequest)
-			}
-
-			qdrantData := v1.Group("/data/qdrant")
-			{
-				qdrantData.GET("/clusters", controller.NewConfigController().GetQdrantClusters)
-			}
-
 			// Variant Promotion Operations
 			variantPromotionRequests := v1.Group("/requests/variant")
 			{
-				variantPromotionRequests.POST("/promote", controller.NewConfigController().PromoteVariant)
-				variantPromotionRequests.POST("/promote/approve", controller.NewConfigController().ApproveVariantPromotionRequest)
+				variantPromotionRequests.POST("/promote", controller.PromoteVariant)
+				variantPromotionRequests.POST("/promote/approve", controller.ApproveVariantPromotionRequest)
 			}
 
 			// Variant Onboarding Operations
 			variantOnboardingRequests := v1.Group("/requests/variant")
 			{
-				variantOnboardingRequests.POST("/onboard", controller.NewConfigController().OnboardVariant)
-				variantOnboardingRequests.POST("/onboard/approve", controller.NewConfigController().ApproveVariantOnboardingRequest)
+				variantOnboardingRequests.POST("/onboard", controller.OnboardVariant)
+				variantOnboardingRequests.POST("/onboard/approve", controller.ApproveVariantOnboardingRequest)
 			}
 
 			// Variant Onboarding Data Operations
 			variantOnboardingData := v1.Group("/data/variant-onboarding")
 			{
-				variantOnboardingData.GET("/requests", controller.NewConfigController().GetAllVariantOnboardingRequests)
-				variantOnboardingData.GET("/variants", controller.NewConfigController().GetOnboardedVariants)
+				variantOnboardingData.GET("/requests", controller.GetAllVariantOnboardingRequests)
+				variantOnboardingData.GET("/tasks", controller.GetVariantOnboardingTasks)
 			}
 		}
 	}
