@@ -1,0 +1,17 @@
+---
+description: "Guidelines for maintaining code quality, clarity, and consistency across imports, function usage, and documentation"
+globs:
+alwaysApply: false
+---
+
+### Import statements quality
+1. Do not change the import order of existing import files and packages, just add the new ones
+2. Avoid wild card imports
+
+### Functions usage
+1. Do not change the private functions to public unless we want other packages to use it
+2. If the same package is using the function then keep it private
+
+### Code comments and documentation
+1. Add comments only when necessary, do not add comments when the code itself gives the understanding
+2. Add comments for architectural decision
