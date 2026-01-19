@@ -216,9 +216,8 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		memtableExists = false
 	}
 	if !memtableExists {
-		bufPtr := BufPool.Get().(*[]byte)
-		buf = *bufPtr
-		defer BufPool.Put(bufPtr)
+		// Allocate buffer of exact size needed - no pool since readFromDisk already copies once
+		buf = make([]byte, length)
 		fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
 		n := fc.readFromDisk(int64(fileOffset), length, buf)
 		if n != int(length) {
@@ -232,7 +231,7 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		}
 	}
 	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
-	computedCR32 := crc32.ChecksumIEEE(buf[4:])
+	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotCR32 != computedCR32 {
 		fc.Stats.BadCR32Count.Add(1)
@@ -327,10 +326,8 @@ func (fc *ShardCache) GetSlowPath(key string) (bool, []byte, uint16, bool, bool)
 		return fc.validateAndReturnBuffer(key, buf, length, memId, remainingTTL, shouldReWrite)
 	}
 
-	// Read from disk
-	bufPtr := BufPool.Get().(*[]byte)
-	buf := *bufPtr
-	defer BufPool.Put(bufPtr)
+	// Read from disk - allocate buffer of exact size needed (no pool since readFromDisk already copies once)
+	buf := make([]byte, length)
 	fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
 	n := fc.readFromDisk(int64(fileOffset), length, buf)
 	if n != int(length) {
@@ -344,7 +341,7 @@ func (fc *ShardCache) GetSlowPath(key string) (bool, []byte, uint16, bool, bool)
 // validateAndReturnBuffer validates CRC and key, then returns the value
 func (fc *ShardCache) validateAndReturnBuffer(key string, buf []byte, length uint16, memId uint32, remainingTTL uint16, shouldReWrite bool) (bool, []byte, uint16, bool, bool) {
 	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
-	computedCR32 := crc32.ChecksumIEEE(buf[4:])
+	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
 	if gotCR32 != computedCR32 {
 		fc.Stats.BadCR32Count.Add(1)
 		fc.Stats.IncBadCRCMemIds(memId)
