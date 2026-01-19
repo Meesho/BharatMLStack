@@ -227,14 +227,14 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 					wc.metricsCollector.RecordPuts(i, int64(shardPuts))
 					wc.metricsCollector.RecordHits(i, int64(shardHits))
 
-					//shard level index and rb data
-					wc.shards[i].Stats.KeyNotFoundCount.Load()
-					wc.shards[i].Stats.KeyExpiredCount.Load()
-					wc.shards[i].Stats.BadDataCount.Load()
-					wc.shards[i].Stats.BadLengthCount.Load()
-					wc.shards[i].Stats.BadCR32Count.Load()
-					wc.shards[i].Stats.BadKeyCount.Load()
-					wc.shards[i].Stats.DeletedKeyCount.Load()
+					//shard level index and rb data - actually send to metrics collector!
+					wc.metricsCollector.RecordKeyNotFoundCount(i, wc.shards[i].Stats.KeyNotFoundCount.Load())
+					wc.metricsCollector.RecordKeyExpiredCount(i, wc.shards[i].Stats.KeyExpiredCount.Load())
+					wc.metricsCollector.RecordBadDataCount(i, wc.shards[i].Stats.BadDataCount.Load())
+					wc.metricsCollector.RecordBadLengthCount(i, wc.shards[i].Stats.BadLengthCount.Load())
+					wc.metricsCollector.RecordBadCR32Count(i, wc.shards[i].Stats.BadCR32Count.Load())
+					wc.metricsCollector.RecordBadKeyCount(i, wc.shards[i].Stats.BadKeyCount.Load())
+					wc.metricsCollector.RecordDeletedKeyCount(i, wc.shards[i].Stats.DeletedKeyCount.Load())
 
 				}
 

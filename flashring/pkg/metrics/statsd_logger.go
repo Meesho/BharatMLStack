@@ -25,7 +25,6 @@ const (
 	KEY_BAD_CR32_COUNT      = "flashring_bad_cr32_count"
 	KEY_BAD_KEY_COUNT       = "flashring_bad_key_count"
 	KEY_DELETED_KEY_COUNT   = "flashring_deleted_key_count"
-	KEY_BAD_CRC_MEM_IDS     = "flashring_bad_crc_mem_ids"
 
 	TAG_LATENCY_PERCENTILE = "latency_percentile"
 	TAG_VALUE_P25          = "p25"

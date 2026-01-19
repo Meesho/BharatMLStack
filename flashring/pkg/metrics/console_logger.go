@@ -66,10 +66,10 @@ func RunConsoleLogger(metricsCollector *MetricsCollector) {
 			wp50 = wp50 / time.Duration(shards)
 			wp25 = wp25 / time.Duration(shards)
 
-			rThroughput := float64(getsTotal-prevGetsTotal) / float64(30)
-			wThroughput := float64(putsTotal-prevPutsTotal) / float64(30)
+			rThroughput := int(float64(getsTotal-prevGetsTotal) / float64(30))
+			wThroughput := int(float64(putsTotal-prevPutsTotal) / float64(30))
 			hitRate := float64(hitsTotal-prevHitsTotal) / float64(getsTotal-prevGetsTotal)
-			activeEntries := float64(activeEntriesTotal - prevActiveEntriesTotal)
+			activeEntries := float64(activeEntriesTotal-prevActiveEntriesTotal) / float64(30)
 			expiredEntries := float64(expiredTotal - prevExpiredTotal)
 			reWrites := float64(reWritesTotal - prevReWritesTotal)
 
@@ -85,6 +85,53 @@ func RunConsoleLogger(metricsCollector *MetricsCollector) {
 			log.Info().Msgf("ActiveEntries: %v", activeEntries)
 			log.Info().Msgf("ExpiredEntries: %v", expiredEntries)
 			log.Info().Msgf("ReWrites: %v", reWrites)
+
+			keyNotFoundTotal := int64(0)
+			keyExpiredTotal := int64(0)
+			badDataTotal := int64(0)
+			badLengthTotal := int64(0)
+			badCR32Total := int64(0)
+			badKeyTotal := int64(0)
+			deletedKeyTotal := int64(0)
+
+			for _, shard := range currentMetrics.ShardIndexMetrics {
+				keyNotFoundTotal += shard.KeyNotFoundCount
+				keyExpiredTotal += shard.KeyExpiredCount
+				badDataTotal += shard.BadDataCount
+				badLengthTotal += shard.BadLengthCount
+				badCR32Total += shard.BadCR32Count
+				badKeyTotal += shard.BadKeyCount
+				deletedKeyTotal += shard.DeletedKeyCount
+			}
+
+			log.Info().Msgf("KeyNotFoundTotal: %v", keyNotFoundTotal)
+			log.Info().Msgf("KeyExpiredTotal: %v", keyExpiredTotal)
+			log.Info().Msgf("BadDataTotal: %v", badDataTotal)
+			log.Info().Msgf("BadLengthTotal: %v", badLengthTotal)
+			log.Info().Msgf("BadCR32Total: %v", badCR32Total)
+			log.Info().Msgf("BadKeyTotal: %v", badKeyTotal)
+			log.Info().Msgf("DeletedKeyTotal: %v", deletedKeyTotal)
+
+			// Debug: Log cumulative totals to understand the issue
+			log.Info().Msgf("DEBUG - GetsTotal: %v, HitsTotal: %v, PutsTotal: %v, ActiveEntriesTotal: %v", getsTotal, hitsTotal, putsTotal, activeEntriesTotal)
+
+			// Debug: Log per-shard ActiveEntries to check distribution (first 5 shards)
+			if len(currentMetrics.ShardMetrics) >= 5 {
+				log.Info().Msgf("DEBUG PER-SHARD ActiveEntries - shard0: %d, shard1: %d, shard2: %d, shard3: %d, shard4: %d",
+					currentMetrics.ShardMetrics[0].ActiveEntries,
+					currentMetrics.ShardMetrics[1].ActiveEntries,
+					currentMetrics.ShardMetrics[2].ActiveEntries,
+					currentMetrics.ShardMetrics[3].ActiveEntries,
+					currentMetrics.ShardMetrics[4].ActiveEntries)
+			}
+
+			// Update prev values for next iteration
+			prevGetsTotal = getsTotal
+			prevPutsTotal = putsTotal
+			prevHitsTotal = hitsTotal
+			prevExpiredTotal = expiredTotal
+			prevReWritesTotal = reWritesTotal
+			prevActiveEntriesTotal = activeEntriesTotal
 		}
 	}
 }

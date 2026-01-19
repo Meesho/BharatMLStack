@@ -38,7 +38,7 @@ func planLockless() {
 
 	flag.StringVar(&mountPoint, "mount", "/mnt/disks/nvme", "data directory for shard files")
 	flag.IntVar(&numShards, "shards", 100, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 10_00_00, "keys per shard")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 50_00_00, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 2, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 8, "number of read workers")
@@ -85,7 +85,7 @@ func planLockless() {
 	}
 
 	memtableSizeInBytes := int32(memtableMB) * 1024 * 1024
-	fileSizeInBytes := int64(fileSizeMultiplier) * int64(memtableSizeInBytes)
+	fileSizeInBytes := int64(fileSizeMultiplier) * 1024 * 1024 * 1024 // fileSizeMultiplier in GiB
 
 	cfg := cachepkg.WrapCacheConfig{
 		NumShards:             numShards,
