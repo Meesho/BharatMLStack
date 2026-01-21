@@ -50,10 +50,10 @@ Repository = "https://github.com/Meesho/BharatMLStack"
 Issues = "https://github.com/Meesho/BharatMLStack/issues"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+# Package is directly in the root directory, no src/ directory needed
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
 
 [tool.black]
 line-length = 100
