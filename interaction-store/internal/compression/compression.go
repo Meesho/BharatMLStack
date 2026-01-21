@@ -22,7 +22,7 @@ func GetEncoder(compressionType Type) (Encoder, error) {
 	case TypeZSTD:
 		return NewZStdEncoder()
 	default:
-		return nil, fmt.Errorf("Unsupported compression type: %d", compressionType)
+		return nil, fmt.Errorf("unsupported compression type: %d", compressionType)
 	}
 }
 
@@ -31,6 +31,6 @@ func GetDecoder(compressionType Type) (Decoder, error) {
 	case TypeZSTD:
 		return NewZStdDecoder()
 	default:
-		return nil, fmt.Errorf("Unsupported compression type: %d", compressionType)
+		return nil, fmt.Errorf("unsupported compression type: %d", compressionType)
 	}
 }

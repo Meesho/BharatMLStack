@@ -2,10 +2,10 @@ name: Numerix CI
 
 on:
   pull_request:
-    branches: [master, develop]
+    branches: [main, develop]
     paths: ['numerix/**']
   push:
-    branches: [master, develop]
+    branches: [main, develop]
     paths: ['numerix/**']
 
 jobs:

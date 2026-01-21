@@ -195,23 +195,23 @@ func encodeData(p *PermanentStorageDataBlock, enc compression.Encoder) ([]byte, 
 	return p.Buf, nil
 }
 
-func serializeFP32Vector(values []float32, p *PermanentStorageDataBlock) error {
-	if len(values) == 0 {
-		return fmt.Errorf("fp32 vector data is empty")
-	}
-	if len(values) != int(p.DataLength) {
-		return fmt.Errorf("mismatch in number of elements (%d) and defined data length (%d)", len(values), p.DataLength)
-	}
-	unitSize := enum.DataTypeFP32Vector.Size()
-	totalSize := len(values) * unitSize
-	startIdx := len(p.OriginalData)
-	p.OriginalData = append(p.OriginalData, make([]byte, totalSize)...)
-	for _, v := range values {
-		utils.ByteOrder.PutFloat32(p.OriginalData[startIdx:startIdx+unitSize], v)
-		startIdx += unitSize
-	}
-	return nil
-}
+// func serializeFP32Vector(values []float32, p *PermanentStorageDataBlock) error {
+// 	if len(values) == 0 {
+// 		return fmt.Errorf("fp32 vector data is empty")
+// 	}
+// 	if len(values) != int(p.DataLength) {
+// 		return fmt.Errorf("mismatch in number of elements (%d) and defined data length (%d)", len(values), p.DataLength)
+// 	}
+// 	unitSize := enum.DataTypeFP32Vector.Size()
+// 	totalSize := len(values) * unitSize
+// 	startIdx := len(p.OriginalData)
+// 	p.OriginalData = append(p.OriginalData, make([]byte, totalSize)...)
+// 	for _, v := range values {
+// 		utils.ByteOrder.PutFloat32(p.OriginalData[startIdx:startIdx+unitSize], v)
+// 		startIdx += unitSize
+// 	}
+// 	return nil
+// }
 
 func serializeInt32Vector(values []int32, p *PermanentStorageDataBlock) error {
 	if len(values) == 0 {
@@ -231,23 +231,23 @@ func serializeInt32Vector(values []int32, p *PermanentStorageDataBlock) error {
 	return nil
 }
 
-func serializeFP64Vector(values []float64, p *PermanentStorageDataBlock) error {
-	if len(values) == 0 {
-		return fmt.Errorf("fp64 vector data is empty")
-	}
-	if len(values) != int(p.DataLength) {
-		return fmt.Errorf("mismatch in number of elements (%d) and defined data length (%d)", len(values), p.DataLength)
-	}
-	unitSize := enum.DataTypeFP64Vector.Size()
-	totalSize := len(values) * unitSize
-	startIdx := len(p.OriginalData)
-	p.OriginalData = append(p.OriginalData, make([]byte, totalSize)...)
-	for _, v := range values {
-		utils.ByteOrder.PutFloat64(p.OriginalData[startIdx:startIdx+unitSize], v)
-		startIdx += unitSize
-	}
-	return nil
-}
+// func serializeFP64Vector(values []float64, p *PermanentStorageDataBlock) error {
+// 	if len(values) == 0 {
+// 		return fmt.Errorf("fp64 vector data is empty")
+// 	}
+// 	if len(values) != int(p.DataLength) {
+// 		return fmt.Errorf("mismatch in number of elements (%d) and defined data length (%d)", len(values), p.DataLength)
+// 	}
+// 	unitSize := enum.DataTypeFP64Vector.Size()
+// 	totalSize := len(values) * unitSize
+// 	startIdx := len(p.OriginalData)
+// 	p.OriginalData = append(p.OriginalData, make([]byte, totalSize)...)
+// 	for _, v := range values {
+// 		utils.ByteOrder.PutFloat64(p.OriginalData[startIdx:startIdx+unitSize], v)
+// 		startIdx += unitSize
+// 	}
+// 	return nil
+// }
 
 func serializeInt64Vector(values []int64, p *PermanentStorageDataBlock) error {
 	if len(values) == 0 {
@@ -286,25 +286,25 @@ func serializeStringVector(values []string, p *PermanentStorageDataBlock) error 
 	return nil
 }
 
-func serializeBoolVector(values []bool, p *PermanentStorageDataBlock) error {
-	if len(values) == 0 {
-		return fmt.Errorf("bool vector data is empty")
-	}
-	if len(values) != int(p.DataLength) {
-		return fmt.Errorf("mismatch in number of elements (%d) and defined data length (%d)",
-			len(values), p.DataLength)
-	}
-	unitSize := enum.DataTypeBoolVector.Size()
-	totalSize := len(values) * unitSize
-	startIdx := len(p.OriginalData)
-	p.OriginalData = append(p.OriginalData, make([]byte, totalSize)...)
-	for _, v := range values {
-		if v {
-			p.OriginalData[startIdx] = 1
-		} else {
-			p.OriginalData[startIdx] = 0
-		}
-		startIdx += unitSize
-	}
-	return nil
-}
+// func serializeBoolVector(values []bool, p *PermanentStorageDataBlock) error {
+// 	if len(values) == 0 {
+// 		return fmt.Errorf("bool vector data is empty")
+// 	}
+// 	if len(values) != int(p.DataLength) {
+// 		return fmt.Errorf("mismatch in number of elements (%d) and defined data length (%d)",
+// 			len(values), p.DataLength)
+// 	}
+// 	unitSize := enum.DataTypeBoolVector.Size()
+// 	totalSize := len(values) * unitSize
+// 	startIdx := len(p.OriginalData)
+// 	p.OriginalData = append(p.OriginalData, make([]byte, totalSize)...)
+// 	for _, v := range values {
+// 		if v {
+// 			p.OriginalData[startIdx] = 1
+// 		} else {
+// 			p.OriginalData[startIdx] = 0
+// 		}
+// 		startIdx += unitSize
+// 	}
+// 	return nil
+// }

@@ -8,13 +8,12 @@ import (
 
 var (
 	DefaultVersion = 1
-	appConfig      config.Configs
 	initOnce       sync.Once
 )
 
-func Init(config config.Configs) {
+func Init(_ config.Configs) {
 	initOnce.Do(func() {
-		appConfig = config
+		// Configuration initialized
 	})
 }
 
