@@ -5,6 +5,8 @@ package maths
 import (
 	"math"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -75,6 +77,7 @@ func (g *GridSearchEstimator) RecordHitRate(hitRate float64) {
 		stat.HitRate = (stat.HitRate*float64(stat.Trials) + hitRate) / float64(stat.Trials+1)
 		stat.Trials++
 		if stat.HitRate < g.bestHitRate*0.9 {
+			log.Error().Msgf("GridSearchRestarted: hitRate %v bestHitRate %v", stat.HitRate, g.bestHitRate)
 			g.RestartGridSearch()
 		}
 		return
@@ -130,6 +133,10 @@ func (g *GridSearchEstimator) GenerateRefinedGrid(base WeightTuple, steps int, d
 	refined := make([]WeightTuple, 0, (2*steps+1)*(2*steps+1))
 	for i := -steps; i <= steps; i++ {
 		for j := -steps; j <= steps; j++ {
+
+			if i == 0 && j == 0 {
+				continue
+			}
 			wf := base.WFreq + float64(i)*delta
 			la := base.WLA + float64(j)*delta
 			if math.Abs(wf-base.WFreq) < g.epsilon && math.Abs(la-base.WLA) < g.epsilon {

@@ -55,6 +55,10 @@ type CacheStats struct {
 	ShardWiseActiveEntries atomic.Uint64
 	LatencyTracker         *filecache.LatencyTracker
 	BatchTracker           *filecache.BatchTracker
+
+	PrevHits      atomic.Uint64
+	PrevTotalGets atomic.Uint64
+	timeStarted   time.Time
 }
 
 type WrapCacheConfig struct {
@@ -238,7 +242,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 
 				}
 
-				log.Info().Msgf("GridSearchActive: %v", wc.predictor.GridSearchEstimator.IsGridSearchActive())
+				log.Error().Msgf("GridSearchActive: %v", wc.predictor.GridSearchEstimator.IsGridSearchActive())
 			}
 		}()
 	}
@@ -363,8 +367,8 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 
 		keyFound, val, remainingTTL, expired, shouldReWrite = result.Found, result.Data, result.TTL, result.Expired, result.ShouldRewrite
 	} else {
-		wc.shardLocks[shardIdx].RLock()
-		defer wc.shardLocks[shardIdx].RUnlock()
+		wc.shardLocks[shardIdx].Lock()
+		defer wc.shardLocks[shardIdx].Unlock()
 		keyFound, val, remainingTTL, expired, shouldReWrite = wc.shards[shardIdx].Get(key)
 	}
 
@@ -375,11 +379,20 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 		wc.stats[shardIdx].Expired.Add(1)
 	}
 	wc.stats[shardIdx].TotalGets.Add(1)
-	if false && shouldReWrite {
+	if shouldReWrite {
 		wc.stats[shardIdx].ReWrites.Add(1)
 		wc.putLocked(shardIdx, h32, key, val, remainingTTL)
 	}
-	wc.predictor.Observe(float64(wc.stats[shardIdx].Hits.Load()) / float64(wc.stats[shardIdx].TotalGets.Load()))
+
+	if time.Since(wc.stats[shardIdx].timeStarted) > 10*time.Second {
+		//observing hit rate every call can be avoided because average remains the same
+		hitRate := float64(wc.stats[shardIdx].Hits.Load()-wc.stats[shardIdx].PrevHits.Load()) / float64(wc.stats[shardIdx].TotalGets.Load()-wc.stats[shardIdx].PrevTotalGets.Load())
+		wc.predictor.Observe(hitRate)
+
+		wc.stats[shardIdx].timeStarted = time.Now()
+		wc.stats[shardIdx].PrevHits.Store(wc.stats[shardIdx].Hits.Load())
+		wc.stats[shardIdx].PrevTotalGets.Store(wc.stats[shardIdx].TotalGets.Load())
+	}
 	return val, keyFound, expired
 }
 
