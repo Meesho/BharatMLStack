@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "inference-logging-client"
 version = "0.1.0"
 description = "Decode MPLog feature logs from proto, arrow, or parquet format"
-readme = "README.md"
+readme = "readme.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
@@ -45,9 +45,9 @@ dev = [
 inference-logging-client = "inference_logging_client.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/Meesho/inference-logging-client"
-Repository = "https://github.com/Meesho/inference-logging-client"
-Issues = "https://github.com/Meesho/inference-logging-client/issues"
+Homepage = "https://github.com/Meesho/BharatMLStack"
+Repository = "https://github.com/Meesho/BharatMLStack"
+Issues = "https://github.com/Meesho/BharatMLStack/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
