@@ -349,7 +349,11 @@ func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) erro
 	wc.shardLocks[shardIdx].Lock()
 	defer wc.shardLocks[shardIdx].Unlock()
 
-	wc.shards[shardIdx].Put(key, value, exptimeInMinutes)
+	err := wc.shards[shardIdx].Put(key, value, exptimeInMinutes)
+	if err != nil {
+		log.Error().Err(err).Msgf("Put failed for key: %s", key)
+		return fmt.Errorf("put failed for key: %s", key)
+	}
 	wc.stats[shardIdx].TotalPuts.Add(1)
 	if h32%100 < 10 {
 		wc.stats[shardIdx].ShardWiseActiveEntries.Store(uint64(wc.shards[shardIdx].GetRingBufferActiveEntries()))

@@ -96,6 +96,9 @@ func (i *Index) Get(key string) (length, lastAccess, remainingTTL uint16, freq u
 }
 
 func (ix *Index) Delete(count int) (uint32, int) {
+	if count == 0 {
+		return 0, 0
+	}
 	for i := 0; i < count; i++ {
 		deleted, deletedHashNextPrev, deletedIdx, next := ix.rb.Delete()
 		if deleted == nil {

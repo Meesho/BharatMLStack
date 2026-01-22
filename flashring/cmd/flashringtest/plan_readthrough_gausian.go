@@ -26,7 +26,7 @@ func planReadthroughGaussian() {
 		numShards          int
 		keysPerShard       int
 		memtableMB         int
-		fileSizeMultiplier int
+		fileSizeMultiplier float64
 		readWorkers        int
 		writeWorkers       int
 		sampleSecs         int
@@ -39,9 +39,9 @@ func planReadthroughGaussian() {
 
 	flag.StringVar(&mountPoint, "mount", "/mnt/disks/nvme/", "data directory for shard files")
 	flag.IntVar(&numShards, "shards", 100, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 5_00_000, "keys per shard")
-	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
-	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 1, "file size in GiB per shard")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 2_00_000, "keys per shard")
+	flag.IntVar(&memtableMB, "memtable-mb", 2, "memtable size in MiB")
+	flag.Float64Var(&fileSizeMultiplier, "file-size-multiplier", 0.25, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 8, "number of read workers")
 	flag.IntVar(&writeWorkers, "writers", 8, "number of write workers")
 	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
@@ -86,7 +86,7 @@ func planReadthroughGaussian() {
 	}
 
 	memtableSizeInBytes := int32(memtableMB) * 1024 * 1024
-	fileSizeInBytes := int64(fileSizeMultiplier) * 1024 * 1024 * 1024 // fileSizeMultiplier in GiB
+	fileSizeInBytes := int64(float64(fileSizeMultiplier) * 1024 * 1024 * 1024) // fileSizeMultiplier in GiB
 
 	metricsConfig := metrics.MetricsCollectorConfig{
 		StatsEnabled:    true,
