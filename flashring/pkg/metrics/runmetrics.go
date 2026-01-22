@@ -76,6 +76,9 @@ type ShardIndexMetrics struct {
 	BadCR32Count     int64
 	BadKeyCount      int64
 	DeletedKeyCount  int64
+
+	WriteCount     int64
+	PunchHoleCount int64
 }
 
 // Define your parameter structure
@@ -114,6 +117,9 @@ type MetricChannels struct {
 	BadKeyCount      chan ShardMetricValue
 	DeletedKeyCount  chan ShardMetricValue
 	BadCRCMemIds     chan ShardMetricValue
+
+	WriteCount     chan ShardMetricValue
+	PunchHoleCount chan ShardMetricValue
 }
 
 // MetricsCollector collects and averages all metrics (per-shard)
@@ -179,6 +185,9 @@ func NewMetricsCollector(config MetricsCollectorConfig, bufferSize int) *Metrics
 			BadCR32Count:     make(chan ShardMetricValue, bufferSize),
 			BadKeyCount:      make(chan ShardMetricValue, bufferSize),
 			DeletedKeyCount:  make(chan ShardMetricValue, bufferSize),
+
+			WriteCount:     make(chan ShardMetricValue, bufferSize),
+			PunchHoleCount: make(chan ShardMetricValue, bufferSize),
 		},
 
 		instantMetrics: make(map[int]map[string]int64),
@@ -203,6 +212,9 @@ func NewMetricsCollector(config MetricsCollectorConfig, bufferSize int) *Metrics
 		mc.instantMetrics[shardIdx]["BadCR32Count"] = 0
 		mc.instantMetrics[shardIdx]["BadKeyCount"] = 0
 		mc.instantMetrics[shardIdx]["DeletedKeyCount"] = 0
+
+		mc.instantMetrics[shardIdx]["WriteCount"] = 0
+		mc.instantMetrics[shardIdx]["PunchHoleCount"] = 0
 	}
 
 	return mc
@@ -234,6 +246,9 @@ func (mc *MetricsCollector) Start() {
 	go mc.collectShardMetric(mc.channels.BadCR32Count, "BadCR32Count")
 	go mc.collectShardMetric(mc.channels.BadKeyCount, "BadKeyCount")
 	go mc.collectShardMetric(mc.channels.DeletedKeyCount, "DeletedKeyCount")
+
+	go mc.collectShardMetric(mc.channels.WriteCount, "WriteCount")
+	go mc.collectShardMetric(mc.channels.PunchHoleCount, "PunchHoleCount")
 }
 
 func (mc *MetricsCollector) collectShardMetric(ch chan ShardMetricValue, name string) {
@@ -398,6 +413,21 @@ func (mc *MetricsCollector) RecordDeletedKeyCount(shardIdx int, value int64) {
 	}
 }
 
+func (mc *MetricsCollector) RecordWriteCount(shardIdx int, value int64) {
+	select {
+	case mc.channels.WriteCount <- ShardMetricValue{ShardIdx: shardIdx, value: value}:
+	default:
+	}
+}
+
+func (mc *MetricsCollector) RecordPunchHoleCount(shardIdx int, value int64) {
+
+	select {
+	case mc.channels.PunchHoleCount <- ShardMetricValue{ShardIdx: shardIdx, value: value}:
+	default:
+	}
+}
+
 func (mc *MetricsCollector) GetMetrics() RunMetrics {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
@@ -432,6 +462,9 @@ func (mc *MetricsCollector) GetMetrics() RunMetrics {
 				BadCR32Count:     instants["BadCR32Count"],
 				BadKeyCount:      instants["BadKeyCount"],
 				DeletedKeyCount:  instants["DeletedKeyCount"],
+
+				WriteCount:     instants["WriteCount"],
+				PunchHoleCount: instants["PunchHoleCount"],
 			}
 		}
 	}

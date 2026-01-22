@@ -69,7 +69,10 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 		if memIdAtHead != dm.toBeDeletedMemId {
 			return fmt.Errorf("memIdAtHead: %d, toBeDeletedMemId: %d", memIdAtHead, dm.toBeDeletedMemId)
 		}
-		dm.wrapFile.TrimHead()
+
+		if trimNeeded {
+			dm.wrapFile.TrimHead()
+		}
 		return nil
 	}
 	return nil

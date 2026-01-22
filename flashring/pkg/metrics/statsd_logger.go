@@ -31,6 +31,9 @@ const (
 	TAG_VALUE_P50          = "p50"
 	TAG_VALUE_P99          = "p99"
 	TAG_SHARD_IDX          = "shard_idx"
+
+	KEY_WRITE_COUNT      = "flashring_write_count"
+	KEY_PUNCH_HOLE_COUNT = "flashring_punch_hole_count"
 )
 
 func RunStatsdLogger(metricsCollector *MetricsCollector) {
@@ -55,6 +58,9 @@ func RunStatsdLogger(metricsCollector *MetricsCollector) {
 	prevBadCR32Count := make(map[int]int64)
 	prevBadKeyCount := make(map[int]int64)
 	prevDeletedKeyCount := make(map[int]int64)
+
+	prevWriteCount := make(map[int]int64)
+	prevPunchHoleCount := make(map[int]int64)
 
 	for {
 		select {
@@ -102,6 +108,8 @@ func RunStatsdLogger(metricsCollector *MetricsCollector) {
 				Count(KEY_BAD_CR32_COUNT, shard.BadCR32Count-prevBadCR32Count[idx], BuildTag(shardBuildTag))
 				Count(KEY_BAD_KEY_COUNT, shard.BadKeyCount-prevBadKeyCount[idx], BuildTag(shardBuildTag))
 				Count(KEY_DELETED_KEY_COUNT, shard.DeletedKeyCount-prevDeletedKeyCount[idx], BuildTag(shardBuildTag))
+				Count(KEY_WRITE_COUNT, shard.WriteCount-prevWriteCount[idx], BuildTag(shardBuildTag))
+				Count(KEY_PUNCH_HOLE_COUNT, shard.PunchHoleCount-prevPunchHoleCount[idx], BuildTag(shardBuildTag))
 
 				prevKeyNotFoundCount[idx] = shard.KeyNotFoundCount
 				prevKeyExpiredCount[idx] = shard.KeyExpiredCount
@@ -110,7 +118,8 @@ func RunStatsdLogger(metricsCollector *MetricsCollector) {
 				prevBadCR32Count[idx] = shard.BadCR32Count
 				prevBadKeyCount[idx] = shard.BadKeyCount
 				prevDeletedKeyCount[idx] = shard.DeletedKeyCount
-
+				prevWriteCount[idx] = shard.WriteCount
+				prevPunchHoleCount[idx] = shard.PunchHoleCount
 			}
 
 		}

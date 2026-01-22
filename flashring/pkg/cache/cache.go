@@ -253,6 +253,10 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 					wc.metricsCollector.RecordBadKeyCount(i, wc.shards[i].Stats.BadKeyCount.Load())
 					wc.metricsCollector.RecordDeletedKeyCount(i, wc.shards[i].Stats.DeletedKeyCount.Load())
 
+					//wrapAppendFilt stats
+					wc.metricsCollector.RecordWriteCount(i, wc.shards[i].GetFileStat().WriteCount)
+					wc.metricsCollector.RecordPunchHoleCount(i, wc.shards[i].GetFileStat().PunchHoleCount)
+
 				}
 
 				log.Error().Msgf("GridSearchActive: %v", wc.predictor.GridSearchEstimator.IsGridSearchActive())
@@ -344,16 +348,14 @@ func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) erro
 
 	wc.shardLocks[shardIdx].Lock()
 	defer wc.shardLocks[shardIdx].Unlock()
-	wc.putLocked(shardIdx, h32, key, value, exptimeInMinutes)
-	return nil
-}
 
-func (wc *WrapCache) putLocked(shardIdx uint32, h32 uint32, key string, value []byte, exptimeInMinutes uint16) {
 	wc.shards[shardIdx].Put(key, value, exptimeInMinutes)
 	wc.stats[shardIdx].TotalPuts.Add(1)
 	if h32%100 < 10 {
 		wc.stats[shardIdx].ShardWiseActiveEntries.Store(uint64(wc.shards[shardIdx].GetRingBufferActiveEntries()))
 	}
+
+	return nil
 }
 
 func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
@@ -367,6 +369,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 
 	var keyFound bool
 	var val []byte
+	var valCopy []byte
 	var remainingTTL uint16
 	var expired bool
 	var shouldReWrite bool
@@ -377,12 +380,27 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 			Result: reqChan,
 		}
 		result := <-reqChan
-
 		keyFound, val, remainingTTL, expired, shouldReWrite = result.Found, result.Data, result.TTL, result.Expired, result.ShouldRewrite
+		if shouldReWrite {
+			valCopy = make([]byte, len(val))
+			copy(valCopy, val)
+		}
 	} else {
-		wc.shardLocks[shardIdx].Lock()
-		defer wc.shardLocks[shardIdx].Unlock()
-		keyFound, val, remainingTTL, expired, shouldReWrite = wc.shards[shardIdx].Get(key)
+
+		func(key string, shardIdx uint32) {
+			wc.shardLocks[shardIdx].RLock()
+			defer wc.shardLocks[shardIdx].RUnlock()
+			keyFound, val, remainingTTL, expired, shouldReWrite = wc.shards[shardIdx].Get(key)
+
+			if shouldReWrite {
+				//copy val into a safe variable because we are unlocking the shard
+				// at the end of anon function execution
+				valCopy = make([]byte, len(val))
+				copy(valCopy, val)
+				val = valCopy
+			}
+		}(key, shardIdx)
+
 	}
 
 	if keyFound && !expired {
@@ -394,7 +412,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	wc.stats[shardIdx].TotalGets.Add(1)
 	if shouldReWrite {
 		wc.stats[shardIdx].ReWrites.Add(1)
-		wc.putLocked(shardIdx, h32, key, val, remainingTTL)
+		wc.Put(key, valCopy, remainingTTL)
 	}
 
 	if time.Since(wc.stats[shardIdx].timeStarted) > 10*time.Second {

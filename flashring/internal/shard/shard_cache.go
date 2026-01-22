@@ -400,3 +400,7 @@ func (fc *ShardCache) processBuffer(key string, buf []byte, length uint16) ReadR
 		Data:  value,
 	}
 }
+
+func (fc *ShardCache) GetFileStat() *fs.Stat {
+	return fc.file.Stat
+}
