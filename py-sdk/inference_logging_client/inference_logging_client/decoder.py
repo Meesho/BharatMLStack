@@ -317,6 +317,12 @@ def decode_vector_or_string(value_bytes: bytes, feature_type: str) -> Any:
         except UnicodeDecodeError:
             return value_bytes.hex()
     
+    if normalized in {"BYTES"}:
+        # BYTES type: value_bytes already contains the actual bytes
+        # (size prefix was already read and stripped in formats.py)
+        # Convert to hex string for DataFrame compatibility
+        return value_bytes.hex()
+    
     # Check if this is a vector type
     is_vector = "VECTOR" in normalized
     
