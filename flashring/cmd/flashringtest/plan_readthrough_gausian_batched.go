@@ -13,7 +13,8 @@ import (
 	"sync"
 	"time"
 
-	cachepkg "github.com/Meesho/BharatMLStack/flashring/internal/cache"
+	cachepkg "github.com/Meesho/BharatMLStack/flashring/pkg/cache"
+	metrics "github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -93,7 +94,7 @@ func planReadthroughGaussianBatched() {
 	}
 
 	memtableSizeInBytes := int32(memtableMB) * 1024 * 1024
-	fileSizeInBytes := int64(fileSizeMultiplier) * int64(memtableSizeInBytes)
+	fileSizeInBytes := int64(fileSizeMultiplier) * 1024 * 1024 * 1024 // fileSizeMultiplier in GiB
 
 	cfg := cachepkg.WrapCacheConfig{
 		NumShards:             numShards,
@@ -108,22 +109,25 @@ func planReadthroughGaussianBatched() {
 		EnableBatching:    enableBatching,
 		BatchWindowMicros: batchWindowMicros,
 		MaxBatchSize:      maxBatchSize,
-
-		// Pass the metrics collector to record cache metrics
-		MetricsRecorder: InitMetricsCollector(),
 	}
 
-	// Set additional input parameters that the cache doesn't know about
-	metricsCollector.SetShards(numShards)
-	metricsCollector.SetKeysPerShard(keysPerShard)
-	metricsCollector.SetReadWorkers(readWorkers)
-	metricsCollector.SetWriteWorkers(writeWorkers)
-	metricsCollector.SetPlan("readthrough-batched")
+	metricsConfig := metrics.MetricsCollectorConfig{
+		StatsEnabled:    true,
+		CsvLogging:      true,
+		ConsoleLogging:  true,
+		StatsdLogging:   false,
+		InstantMetrics:  false,
+		AveragedMetrics: true,
+		Metadata: map[string]any{
+			"shards":         numShards,
+			"keys-per-shard": keysPerShard,
+			"read-workers":   readWorkers,
+			"write-workers":  writeWorkers,
+			"plan":           "readthrough-batched"},
+	}
+	metricsCollector := metrics.InitMetricsCollector(metricsConfig)
 
-	// Start background goroutine to wait for shutdown signal and export CSV
-	go RunmetricsWaitForShutdown()
-
-	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, logStats)
+	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, metricsCollector)
 	if err != nil {
 		panic(err)
 	}

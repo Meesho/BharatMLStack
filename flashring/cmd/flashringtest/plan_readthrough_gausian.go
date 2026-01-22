@@ -13,9 +13,11 @@ import (
 	"sync"
 	"time"
 
-	cachepkg "github.com/Meesho/BharatMLStack/flashring/internal/cache"
+	cachepkg "github.com/Meesho/BharatMLStack/flashring/pkg/cache"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	metrics "github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 )
 
 func planReadthroughGaussian() {
@@ -24,7 +26,7 @@ func planReadthroughGaussian() {
 		numShards          int
 		keysPerShard       int
 		memtableMB         int
-		fileSizeMultiplier int
+		fileSizeMultiplier float64
 		readWorkers        int
 		writeWorkers       int
 		sampleSecs         int
@@ -35,11 +37,11 @@ func planReadthroughGaussian() {
 		cpuProfile         string
 	)
 
-	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul/", "data directory for shard files")
-	flag.IntVar(&numShards, "shards", 500, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 4_00_00, "keys per shard")
-	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
-	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 2, "file size in GiB per shard")
+	flag.StringVar(&mountPoint, "mount", "/mnt/disks/nvme/", "data directory for shard files")
+	flag.IntVar(&numShards, "shards", 100, "number of shards")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 2_00_000, "keys per shard")
+	flag.IntVar(&memtableMB, "memtable-mb", 2, "memtable size in MiB")
+	flag.Float64Var(&fileSizeMultiplier, "file-size-multiplier", 0.25, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 8, "number of read workers")
 	flag.IntVar(&writeWorkers, "writers", 8, "number of write workers")
 	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
@@ -84,7 +86,22 @@ func planReadthroughGaussian() {
 	}
 
 	memtableSizeInBytes := int32(memtableMB) * 1024 * 1024
-	fileSizeInBytes := int64(fileSizeMultiplier) * int64(memtableSizeInBytes)
+	fileSizeInBytes := int64(float64(fileSizeMultiplier) * 1024 * 1024 * 1024) // fileSizeMultiplier in GiB
+
+	metricsConfig := metrics.MetricsCollectorConfig{
+		StatsEnabled:    true,
+		CsvLogging:      true,
+		ConsoleLogging:  true,
+		StatsdLogging:   true,
+		InstantMetrics:  false,
+		AveragedMetrics: true,
+		Metadata: map[string]any{
+			"shards":         numShards,
+			"keys-per-shard": keysPerShard,
+			"read-workers":   readWorkers,
+			"write-workers":  writeWorkers,
+			"plan":           "readthrough"},
+	}
 
 	cfg := cachepkg.WrapCacheConfig{
 		NumShards:             numShards,
@@ -94,22 +111,11 @@ func planReadthroughGaussian() {
 		ReWriteScoreThreshold: 0.8,
 		GridSearchEpsilon:     0.0001,
 		SampleDuration:        time.Duration(sampleSecs) * time.Second,
-
-		// Pass the metrics collector to record cache metrics
-		MetricsRecorder: InitMetricsCollector(),
 	}
 
-	// Set additional input parameters that the cache doesn't know about
-	metricsCollector.SetShards(numShards)
-	metricsCollector.SetKeysPerShard(keysPerShard)
-	metricsCollector.SetReadWorkers(readWorkers)
-	metricsCollector.SetWriteWorkers(writeWorkers)
-	metricsCollector.SetPlan("readthrough")
+	metricsCollector := metrics.InitMetricsCollector(metricsConfig)
 
-	// Start background goroutine to wait for shutdown signal and export CSV
-	go RunmetricsWaitForShutdown()
-
-	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, logStats)
+	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, metricsCollector)
 	if err != nil {
 		panic(err)
 	}

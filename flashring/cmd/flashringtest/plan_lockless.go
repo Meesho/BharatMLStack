@@ -13,7 +13,8 @@ import (
 	"sync"
 	"time"
 
-	cachepkg "github.com/Meesho/BharatMLStack/flashring/internal/cache"
+	cachepkg "github.com/Meesho/BharatMLStack/flashring/pkg/cache"
+	metrics "github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -35,9 +36,9 @@ func planLockless() {
 		cpuProfile         string
 	)
 
-	flag.StringVar(&mountPoint, "mount", "/media/a0d00kc/trishul/", "data directory for shard files")
-	flag.IntVar(&numShards, "shards", 500, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 10_00_00, "keys per shard")
+	flag.StringVar(&mountPoint, "mount", "/mnt/disks/nvme", "data directory for shard files")
+	flag.IntVar(&numShards, "shards", 100, "number of shards")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 50_00_00, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 2, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 8, "number of read workers")
@@ -84,7 +85,7 @@ func planLockless() {
 	}
 
 	memtableSizeInBytes := int32(memtableMB) * 1024 * 1024
-	fileSizeInBytes := int64(fileSizeMultiplier) * int64(memtableSizeInBytes)
+	fileSizeInBytes := int64(fileSizeMultiplier) * 1024 * 1024 * 1024 // fileSizeMultiplier in GiB
 
 	cfg := cachepkg.WrapCacheConfig{
 		NumShards:             numShards,
@@ -95,21 +96,26 @@ func planLockless() {
 		GridSearchEpsilon:     0.0001,
 		SampleDuration:        time.Duration(sampleSecs) * time.Second,
 
-		// Pass the metrics collector to record cache metrics
-		MetricsRecorder: InitMetricsCollector(),
+		//lockless mode for PutLL/GetLL
+		EnableLockless: true,
 	}
 
-	// Set additional input parameters that the cache doesn't know about
-	metricsCollector.SetShards(numShards)
-	metricsCollector.SetKeysPerShard(keysPerShard)
-	metricsCollector.SetReadWorkers(readWorkers)
-	metricsCollector.SetWriteWorkers(writeWorkers)
-	metricsCollector.SetPlan("lockless")
-
-	// Start background goroutine to wait for shutdown signal and export CSV
-	go RunmetricsWaitForShutdown()
-
-	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, logStats)
+	metricsConfig := metrics.MetricsCollectorConfig{
+		StatsEnabled:    true,
+		CsvLogging:      true,
+		ConsoleLogging:  true,
+		StatsdLogging:   true,
+		InstantMetrics:  true,
+		AveragedMetrics: true,
+		Metadata: map[string]any{
+			"shards":         numShards,
+			"keys-per-shard": keysPerShard,
+			"read-workers":   readWorkers,
+			"write-workers":  writeWorkers,
+			"plan":           "lockless"},
+	}
+	metricsCollector := metrics.InitMetricsCollector(metricsConfig)
+	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, metricsCollector)
 	if err != nil {
 		panic(err)
 	}
