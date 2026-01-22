@@ -2,6 +2,8 @@ package internal
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -110,6 +112,17 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 	if config.FileSize%BLOCK_SIZE != 0 {
 		return nil, ErrFileSizeNotMultipleOf4KB
 	}
+
+	//clear existing data
+	files, err := os.ReadDir(mountPoint)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to read directory")
+		panic(err)
+	}
+	for _, file := range files {
+		os.Remove(filepath.Join(mountPoint, file.Name()))
+	}
+
 	weights := []maths.WeightTuple{
 		{
 			WFreq: 0.1,
