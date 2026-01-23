@@ -140,7 +140,7 @@ func executePersistInteractions(preparedQuery *gocql.Query, sortedColumns []stri
 	boundValues = append(boundValues, userId)
 	preparedQuery.Bind(boundValues...)
 	preparedQuery.Consistency(gocql.Quorum)
-	_, err := preparedQuery.Iter().SliceMap()
+	err := preparedQuery.Exec()
 	if err != nil {
 		log.Error().Msgf("error executing cql query %v: %v\n", preparedQuery, err)
 		return err
@@ -150,7 +150,7 @@ func executePersistInteractions(preparedQuery *gocql.Query, sortedColumns []stri
 
 func executeUpdateInteractions(preparedQuery *gocql.Query, value interface{}, userId string) error {
 	preparedQuery.Bind(value, userId).Consistency(gocql.Quorum)
-	_, err := preparedQuery.Iter().SliceMap()
+	err := preparedQuery.Exec()
 	if err != nil {
 		log.Error().Msgf("error executing cql query %v: %v\n", preparedQuery, err)
 		return err
@@ -178,7 +178,7 @@ func executePersistMetadata(preparedQuery *gocql.Query, sortedColumns []string, 
 	}
 	boundValues = append(boundValues, userId)
 	preparedQuery.Bind(boundValues...).Consistency(gocql.Quorum)
-	_, err := preparedQuery.Iter().SliceMap()
+	err := preparedQuery.Exec()
 	if err != nil {
 		log.Error().Msgf("error executing cql query %v: %v", preparedQuery, err)
 		return err
@@ -188,7 +188,7 @@ func executePersistMetadata(preparedQuery *gocql.Query, sortedColumns []string, 
 
 func executeUpdateMetadata(preparedQuery *gocql.Query, value interface{}, userId string) error {
 	preparedQuery.Bind(value, userId).Consistency(gocql.Quorum)
-	_, err := preparedQuery.Iter().SliceMap()
+	err := preparedQuery.Exec()
 	if err != nil {
 		log.Error().Msgf("error executing cql query %v: %v", preparedQuery, err)
 		return err
