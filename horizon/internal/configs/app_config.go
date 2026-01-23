@@ -72,6 +72,8 @@ type Configs struct {
 
 	InferflowAppName string `mapstructure:"inferflow_app_name"`
 
+	SkyeAppName string `mapstructure:"skye_app_name"`
+
 	PhoenixServerBaseUrl string `mapstructure:"phoenix_server_base_url"`
 
 	PredatorMonitoringUrl   string `mapstructure:"predator_monitoring_url"`
@@ -138,6 +140,25 @@ type Configs struct {
 	// DNS API configuration (for Meesho builds only)
 	DNSAPIBaseURL string `mapstructure:"dns_api_base_url"`
 	DNSAPIKey     string `mapstructure:"dns_api_key"`
+
+	ScyllaActiveConfigIds string `mapstructure:"scylla_active_config_ids"`
+	Scylla1ContactPoints  string `mapstructure:"scylla_1_contact_points"`
+	Scylla1Port           int    `mapstructure:"scylla_1_port"`
+	Scylla1Keyspace       string `mapstructure:"scylla_1_keyspace"`
+	Scylla1Username       string `mapstructure:"scylla_1_username"`
+	Scylla1Password       string `mapstructure:"scylla_1_password"`
+
+	PrismBaseUrl                    string `mapstructure:"prism_base_url"`
+	PrismAppUserID                  string `mapstructure:"prism_app_user_id"`
+	AirflowBaseUrl                  string `mapstructure:"airflow_base_url"`
+	AirflowUsername                 string `mapstructure:"airflow_username"`
+	AirflowPassword                 string `mapstructure:"airflow_password"`
+	PrismJobID                      int    `mapstructure:"prism_job_id"`
+	PrismStepID                     int    `mapstructure:"prism_step_id"`
+	AirflowDAGID                    string `mapstructure:"airflow_dag_id"`
+	VariantOnboardingCronExpression string `mapstructure:"variant_onboarding_cron_expression"`
+	MQIdTopicsMapping               string `mapstructure:"mq_id_topics_mapping"`
+	VariantsList                    string `mapstructure:"variants_list"`
 }
 
 type DynamicConfigs struct{}

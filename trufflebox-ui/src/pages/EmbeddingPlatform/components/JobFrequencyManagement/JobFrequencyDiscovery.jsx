@@ -11,8 +11,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
-  Chip
+  Paper
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ScheduleIcon from '@mui/icons-material/Schedule';
@@ -66,11 +65,8 @@ const JobFrequencyDiscovery = () => {
   const filteredFrequencies = jobFrequencies.filter(freq => {
     if (!searchQuery) return true;
     const searchLower = searchQuery.toLowerCase();
-    return (
-      freq.frequency?.toLowerCase().includes(searchLower) ||
-      freq.description?.toLowerCase().includes(searchLower) ||
-      generateDescription(freq.frequency || freq.id).toLowerCase().includes(searchLower)
-    );
+    const description = generateDescription(freq);
+    return freq.toLowerCase().includes(searchLower) || description.toLowerCase().includes(searchLower);
   });
 
   if (loading) {
@@ -131,23 +127,17 @@ const JobFrequencyDiscovery = () => {
           <TableHead>
             <TableRow>
               <TableCell sx={{ backgroundColor: '#E6EBF2', fontWeight: 'bold', color: '#031022', borderRight: '1px solid rgba(224, 224, 224, 1)' }}>
-                Frequency ID
-              </TableCell>
-              <TableCell sx={{ backgroundColor: '#E6EBF2', fontWeight: 'bold', color: '#031022', borderRight: '1px solid rgba(224, 224, 224, 1)' }}>
-                Description
-              </TableCell>
-              <TableCell sx={{ backgroundColor: '#E6EBF2', fontWeight: 'bold', color: '#031022', borderRight: '1px solid rgba(224, 224, 224, 1)' }}>
-                Status
+                Frequency Name
               </TableCell>
               <TableCell sx={{ backgroundColor: '#E6EBF2', fontWeight: 'bold', color: '#031022' }}>
-                Created At
+                Description
               </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {filteredFrequencies.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={2} align="center" sx={{ py: 4 }}>
                   <Typography color="text.secondary">
                     {jobFrequencies.length === 0 ? 'No job frequencies available' : 'No job frequencies match your search'}
                   </Typography>
@@ -155,7 +145,7 @@ const JobFrequencyDiscovery = () => {
               </TableRow>
             ) : (
               filteredFrequencies.map((frequency, index) => (
-                <TableRow key={frequency.id || frequency.frequency || index} hover>
+                <TableRow key={frequency || index} hover>
                   <TableCell sx={{ borderRight: '1px solid rgba(224, 224, 224, 1)' }}>
                     <Typography
                       variant="body2"
@@ -169,25 +159,11 @@ const JobFrequencyDiscovery = () => {
                         display: 'inline-block'
                       }}
                     >
-                      {frequency.frequency || frequency.id}
+                      {frequency}
                     </Typography>
                   </TableCell>
-                  <TableCell sx={{ borderRight: '1px solid rgba(224, 224, 224, 1)' }}>
-                    {frequency.description || generateDescription(frequency.frequency || frequency.id)}
-                  </TableCell>
-                  <TableCell sx={{ borderRight: '1px solid rgba(224, 224, 224, 1)' }}>
-                    <Chip
-                      label={frequency.is_active ? 'Active' : 'Inactive'}
-                      size="small"
-                      sx={{
-                        backgroundColor: frequency.is_active ? '#E7F6E7' : '#F5F5F5',
-                        color: frequency.is_active ? '#2E7D32' : '#666666',
-                        fontWeight: 600
-                      }}
-                    />
-                  </TableCell>
                   <TableCell>
-                    {frequency.created_at ? new Date(frequency.created_at).toLocaleString() : 'N/A'}
+                    {generateDescription(frequency)}
                   </TableCell>
                 </TableRow>
               ))
