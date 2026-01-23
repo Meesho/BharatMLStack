@@ -35,6 +35,10 @@ func InitClickRetrieveHandler() *ClickRetrieveHandler {
 }
 
 func (c *ClickRetrieveHandler) Retrieve(userId string, startTimestampMs int64, endTimestampMs int64, limit int32) ([]model.ClickEvent, error) {
+	if err := validateTimeRange(startTimestampMs, endTimestampMs); err != nil {
+		return nil, err
+	}
+
 	limit = capLimit(limit, 2000)
 	tablesToFields := c.buildTableToFieldsMapping(startTimestampMs, endTimestampMs, getTableName)
 
@@ -76,13 +80,6 @@ func (c *ClickRetrieveHandler) Retrieve(userId string, startTimestampMs int64, e
 	return filteredEvents, nil
 }
 
-// capLimit ensures the limit doesn't exceed the maximum allowed value
-func capLimit(limit int32, maxLimit int32) int32 {
-	if limit > maxLimit {
-		return maxLimit
-	}
-	return limit
-}
 
 // buildTableToFieldsMapping creates a mapping of table names to week field names
 // based on the timestamp range. It handles both normal ranges and wrap-around scenarios.

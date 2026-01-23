@@ -35,6 +35,10 @@ func InitOrderRetrieveHandler() *OrderRetrieveHandler {
 }
 
 func (o *OrderRetrieveHandler) Retrieve(userId string, startTimestampMs int64, endTimestampMs int64, limit int32) ([]model.FlattenedOrderEvent, error) {
+	if err := validateTimeRange(startTimestampMs, endTimestampMs); err != nil {
+		return nil, err
+	}
+
 	limit = capLimit(limit, 2000)
 	tablesToFields := o.buildTableToFieldsMapping(startTimestampMs, endTimestampMs, getOrderTableName)
 
