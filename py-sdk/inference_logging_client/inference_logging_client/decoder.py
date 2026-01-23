@@ -318,10 +318,19 @@ def decode_vector_or_string(value_bytes: bytes, feature_type: str) -> Any:
             return value_bytes.hex()
     
     if normalized in {"BYTES"}:
-        # BYTES type: value_bytes already contains the actual bytes
-        # (size prefix was already read and stripped in formats.py)
-        # Convert to hex string for DataFrame compatibility
-        return value_bytes.hex()
+        # BYTES type: first 2 bytes are the length prefix, remaining bytes are the string content
+        if len(value_bytes) < 2:
+            return None
+        # Read 2-byte little-endian length prefix
+        length = struct.unpack('<H', value_bytes[:2])[0]
+        string_bytes = value_bytes[2:]
+        # Use the length to extract the string (or all remaining bytes if length exceeds available)
+        actual_bytes = string_bytes[:length] if length <= len(string_bytes) else string_bytes
+        try:
+            return actual_bytes.decode('utf-8')
+        except UnicodeDecodeError:
+            # Fallback to hex if not valid UTF-8
+            return actual_bytes.hex()
     
     # Check if this is a vector type
     is_vector = "VECTOR" in normalized
