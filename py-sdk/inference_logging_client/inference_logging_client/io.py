@@ -18,6 +18,7 @@ from .exceptions import SchemaFetchError, SchemaNotFoundError
 
 
 # Thread-safe LRU cache for schemas with max size limit
+# Key: (model_config_id, version) - host/path intentionally excluded as schemas are canonical
 _schema_cache: OrderedDict[tuple[str, int], list[FeatureInfo]] = OrderedDict()
 _schema_cache_lock = threading.Lock()
 _SCHEMA_CACHE_MAX_SIZE = 100  # Maximum number of cached schemas
@@ -72,15 +73,21 @@ def _fetch_schema_with_retry(url: str, max_retries: int = _MAX_RETRIES) -> dict:
 def get_feature_schema(model_config_id: str, version: int, inference_host: Optional[str] = None, api_path: Optional[str] = None) -> list[FeatureInfo]:
     """Fetch feature schema from inference API with caching.
     
-    Results are cached per (model_config_id, version) combination
-    to avoid repeated API calls for the same model proxy and version.
+    Results are cached per (model_config_id, version) combination only.
+    The inference_host and api_path are NOT part of the cache key because
+    schemas are canonical for a given model config and version, regardless
+    of which host serves them. This avoids redundant API calls for the same
+    model proxy and version across different environments.
+    
     Cache is thread-safe and has a maximum size limit with LRU eviction.
     
     Args:
         model_config_id: The model proxy config ID
         version: The schema version
         inference_host: Inference service host URL. If None, reads from INFERENCE_HOST env var.
+            Note: Not included in cache key - schemas are cached by (model_config_id, version) only.
         api_path: API path. If None, reads from INFERENCE_PATH env var or uses default.
+            Note: Not included in cache key - schemas are cached by (model_config_id, version) only.
         
     Raises:
         SchemaFetchError: If schema fetch fails after retries
@@ -93,6 +100,8 @@ def get_feature_schema(model_config_id: str, version: int, inference_host: Optio
     if api_path is None:
         api_path = os.getenv("INFERENCE_PATH", "/api/v1/inference/mp-config-registry/get_feature_schema")
     
+    # Cache key is (model_config_id, version) only - host/path intentionally excluded
+    # because schemas are canonical for a given model config and version
     cache_key = (model_config_id, version)
     
     # Thread-safe cache lookup

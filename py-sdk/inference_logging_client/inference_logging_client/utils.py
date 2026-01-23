@@ -111,7 +111,8 @@ def unpack_metadata_byte(metadata_byte: int) -> tuple[bool, int, int]:
     """
     Unpack compression flag, version, and format type from metadata byte.
     Bit layout:
-      - Bits 0-1: compression flag (00=disabled, 01=enabled, 10/11=reserved)
+      - Bit 0: compression flag (0=disabled, 1=enabled)
+      - Bit 1: reserved
       - Bits 2-5: version (4 bits, 0-15)
       - Bits 6-7: format type (00=proto, 01=arrow, 10=parquet)
     """

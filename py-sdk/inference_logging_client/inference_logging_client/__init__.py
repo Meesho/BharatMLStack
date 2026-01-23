@@ -94,7 +94,8 @@ def decode_mplog(
     version: int,
     format_type: Optional[Format] = None,
     inference_host: Optional[str] = None,
-    decompress: bool = True
+    decompress: bool = True,
+    schema: Optional[list] = None
 ) -> pd.DataFrame:
     """
     Main function to decode MPLog bytes to a DataFrame.
@@ -106,6 +107,7 @@ def decode_mplog(
         format_type: The encoding format (proto, arrow, parquet). If None, auto-detect from metadata.
         inference_host: The inference service host URL. If None, reads from INFERENCE_HOST env var.
         decompress: Whether to attempt zstd decompression
+        schema: Optional pre-fetched schema (list of FeatureInfo). If provided, skips schema fetch.
     
     Returns:
         pandas DataFrame with entity_id as first column and features as remaining columns
@@ -155,8 +157,9 @@ def decode_mplog(
             # Default to proto if format type is unknown
             detected_format = Format.PROTO
     
-    # Fetch schema from inference service
-    schema = get_feature_schema(model_proxy_id, version, inference_host)
+    # Use provided schema or fetch from inference service
+    if schema is None:
+        schema = get_feature_schema(model_proxy_id, version, inference_host)
     
     # Decode based on format
     if detected_format == Format.PROTO:
@@ -240,6 +243,50 @@ def decode_mplog_dataframe(
     if missing_columns:
         raise ValueError(f"Missing required columns: {missing_columns}")
     
+    # Pre-fetch schemas for unique (mp_config_id, version) combinations to avoid
+    # redundant HTTP requests during row iteration.
+    # Key: (mp_config_id, version) only - host/path intentionally excluded as schemas are canonical
+    schema_cache: dict[tuple[str, int], list[FeatureInfo]] = {}
+    
+    # First pass: collect unique (mp_config_id, version) pairs
+    for idx, row in df.iterrows():
+        # Extract metadata byte to get version
+        metadata_data = row[metadata_column]
+        metadata_byte = 0
+        if not pd.isna(metadata_data):
+            if isinstance(metadata_data, (int, float)):
+                metadata_byte = int(metadata_data)
+            elif isinstance(metadata_data, bytes) and len(metadata_data) > 0:
+                metadata_byte = metadata_data[0]
+            elif isinstance(metadata_data, (bytearray, memoryview)) and len(metadata_data) > 0:
+                metadata_byte = metadata_data[0]
+            elif isinstance(metadata_data, str):
+                try:
+                    metadata_byte = int(metadata_data)
+                except ValueError:
+                    pass
+        
+        _, version, _ = unpack_metadata_byte(metadata_byte)
+        
+        # Skip invalid versions
+        if not (0 <= version <= _MAX_SCHEMA_VERSION):
+            continue
+        
+        # Extract mp_config_id
+        mp_config_id = row[mp_config_id_column]
+        if pd.isna(mp_config_id):
+            continue
+        mp_config_id = str(mp_config_id)
+        
+        cache_key = (mp_config_id, version)
+        if cache_key not in schema_cache:
+            # Pre-fetch schema and store in local cache
+            try:
+                schema_cache[cache_key] = get_feature_schema(mp_config_id, version, inference_host)
+            except Exception as e:
+                # Log warning but don't fail - will be caught again in main loop
+                warnings.warn(f"Failed to pre-fetch schema for {cache_key}: {e}", UserWarning)
+    
     all_decoded_rows = []
     
     for idx, row in df.iterrows():
@@ -305,7 +352,11 @@ def decode_mplog_dataframe(
             continue
         mp_config_id = str(mp_config_id)
         
-        # Decode this row's features
+        # Lookup cached schema
+        cache_key = (mp_config_id, version)
+        cached_schema = schema_cache.get(cache_key)
+        
+        # Decode this row's features using cached schema
         try:
             decoded_df = decode_mplog(
                 log_data=features_bytes,
@@ -313,7 +364,8 @@ def decode_mplog_dataframe(
                 version=version,
                 format_type=None,  # Auto-detect from metadata
                 inference_host=inference_host,
-                decompress=decompress
+                decompress=decompress,
+                schema=cached_schema  # Pass cached schema to avoid redundant fetches
             )
             
             # Add original row metadata to each decoded entity row

@@ -200,11 +200,15 @@ def decode_scalar_value(value_bytes: bytes, feature_type: str) -> Any:
         return None
 
 
-def decode_binary_vector(value_bytes: bytes, feature_type: str) -> list:
+def decode_binary_vector(value_bytes: bytes, feature_type: str) -> list | None:
     """
     Decode a binary-encoded vector based on element type.
     
     Binary vectors are packed element bytes in sequence.
+    
+    Returns:
+        list: Decoded vector elements (may be empty for zero-length input).
+        None: If the vector type is unsupported/unknown.
     """
     normalized = normalize_type(feature_type)
     
@@ -296,8 +300,8 @@ def decode_binary_vector(value_bytes: bytes, feature_type: str) -> list:
         result = list(value_bytes)
     
     else:
-        # Unknown vector type, return empty
-        return []
+        # Unknown vector type, return None to signal unsupported type
+        return None
     
     return result
 
@@ -353,10 +357,10 @@ def decode_vector_or_string(value_bytes: bytes, feature_type: str) -> Any:
         
         # Try binary vector decoding
         decoded = decode_binary_vector(value_bytes, feature_type)
-        if decoded:
+        if decoded is not None:
             return decoded
         
-        # Fallback to hex if binary decoding returned empty
+        # Fallback to hex if binary decoding returned None (unsupported type)
         return value_bytes.hex()
     
     # For non-vector sized types, try JSON decode first

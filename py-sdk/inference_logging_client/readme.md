@@ -10,7 +10,7 @@ A Python package for decoding MPLog feature logs from proto, arrow, or parquet f
   - **Parquet**: Parquet format with feature map
 - Automatic format detection from metadata
 - Support for zstd compression
-- Fetch feature schemas from custodian API
+- Fetch feature schemas from inference API
 - Convert decoded logs to pandas DataFrames
 - Command-line interface for easy usage
 
@@ -75,8 +75,8 @@ echo "BASE64_DATA" | inference-logging-client --model-proxy-id my-model --versio
 
 The package uses environment variables for configuration:
 
-- `CUSTODIAN_HOST`: Custodian service host URL (default: `http://localhost:8082`)
-- `CUSTODIAN_API_PATH`: API path for schema fetching (default: `/api/v1/custodian/mp-config-registry/get_feature_schema`)
+- `INFERENCE_HOST`: Inference service host URL (default: `http://localhost:8082`)
+- `INFERENCE_PATH`: API path for schema fetching (default: `/api/v1/inference/mp-config-registry/get_feature_schema`)
 
 ## API Reference
 
@@ -89,8 +89,9 @@ Decode MPLog bytes to a pandas DataFrame.
 - `model_proxy_id` (str): The model proxy config ID
 - `version` (int): The schema version
 - `format_type` (Format, optional): The encoding format. If None, auto-detect from metadata.
-- `custodian_host` (str, optional): The custodian service host URL
+- `inference_host` (str, optional): The inference service host URL
 - `decompress` (bool): Whether to attempt zstd decompression (default: True)
+- `schema` (list, optional): Pre-fetched schema (list of FeatureInfo). If provided, skips schema fetch.
 
 **Returns:**
 - `pd.DataFrame`: DataFrame with `entity_id` as first column and features as remaining columns
@@ -101,7 +102,7 @@ Decode MPLog features from a DataFrame with specific column structure.
 
 **Parameters:**
 - `df` (pd.DataFrame): Input DataFrame with MPLog data columns
-- `custodian_host` (str, optional): The custodian service host URL
+- `inference_host` (str, optional): The inference service host URL
 - `decompress` (bool): Whether to attempt zstd decompression (default: True)
 - `features_column` (str): Name of the column containing encoded features (default: "features")
 - `metadata_column` (str): Name of the column containing metadata byte (default: "metadata")
