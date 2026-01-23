@@ -173,10 +173,40 @@ const VariantApproval = () => {
       const defaultVectorDbConfig = {
         read_host: "",
         write_host: "",
-        port: "6333",
-        api_key: "",
-        timeout: 30,
-        collection_name: `${request.payload.entity}_${request.payload.variant}_embeddings`
+        port: "6334",
+        http2config: {
+          deadline: 200,
+          write_deadline: 5000,
+          keep_alive_time: "30000",
+          thread_pool_size: "32",
+          is_plain_text: true
+        },
+        http1config: {
+          timeout_in_ms: 0,
+          dial_timeout_in_ms: 0,
+          max_idle_connections: 0,
+          max_idle_connections_per_host: 0,
+          idle_conn_timeout_in_ms: 0,
+          keep_alive_timeout_in_ms: 0
+        },
+        params: {
+          default_indexing_threshold: "100",
+          indexing_threshold: "100",
+          max_indexing_threads: "2",
+          max_segment_size_in_mb: "100",
+          on_disk_payload: "false",
+          replication_factor: "3",
+          search_indexed_only: "true",
+          segment_number: "16",
+          shard_number: "1",
+          write_consistency_factor: "2"
+        },
+        payload: {
+          sc: {
+            field_schema: "keyword",
+            default_value: ""
+          }
+        }
       };
       
       setAdminConfig(prev => ({
@@ -209,7 +239,7 @@ const VariantApproval = () => {
       const parsed = JSON.parse(jsonString);
       
       // Check required fields
-      const requiredFields = ['read_host', 'write_host', 'port', 'collection_name'];
+      const requiredFields = ['read_host', 'write_host', 'port'];
       const missingFields = requiredFields.filter(field => !parsed[field]);
       
       if (missingFields.length > 0) {

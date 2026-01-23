@@ -47,9 +47,9 @@ const StoreDiscovery = () => {
     try {
       setLoading(true);
       setError('');
-      const response = await embeddingPlatformAPI.getStoresFromETCD();
+      const response = await embeddingPlatformAPI.getStores();
       
-      // Get stores from ETCD /data/stores/etcd API
+      // Get stores from /data/stores API
       if (response.stores) {
         const storesData = response.stores || [];
         setStores(storesData);

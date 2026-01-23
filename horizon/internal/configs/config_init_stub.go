@@ -160,4 +160,24 @@ func bindEnvVars() {
 	// DNS API configuration
 	viper.BindEnv("dns_api_base_url", "DNS_API_BASE_URL")
 	viper.BindEnv("dns_api_key", "DNS_API_KEY")
+
+	viper.BindEnv("scylla_active_config_ids", "SCYLLA_ACTIVE_CONFIG_IDS")
+	viper.BindEnv("scylla_1_contact_points", "SCYLLA_1_CONTACT_POINTS")
+	viper.BindEnv("scylla_1_port", "SCYLLA_1_PORT")
+	viper.BindEnv("scylla_1_keyspace", "SCYLLA_1_KEYSPACE")
+	viper.BindEnv("scylla_1_username", "SCYLLA_1_USERNAME")
+	viper.BindEnv("scylla_1_password", "SCYLLA_1_PASSWORD")
+
+	viper.BindEnv("prism_base_url", "PRISM_BASE_URL")
+	viper.BindEnv("prism_app_user_id", "PRISM_APP_USER_ID")
+	viper.BindEnv("airflow_base_url", "AIRFLOW_BASE_URL")
+	viper.BindEnv("airflow_username", "AIRFLOW_USERNAME")
+	viper.BindEnv("airflow_password", "AIRFLOW_PASSWORD")
+	viper.BindEnv("prism_job_id", "PRISM_JOB_ID")
+	viper.BindEnv("prism_step_id", "PRISM_STEP_ID")
+	viper.BindEnv("airflow_dag_id", "AIRFLOW_DAG_ID")
+	viper.BindEnv("variant_onboarding_cron_expression", "VARIANT_ONBOARDING_CRON_EXPRESSION")
+	viper.BindEnv("mq_id_topics_mapping", "MQ_ID_TOPICS_MAPPING")
+	viper.BindEnv("variants_list", "VARIANTS_LIST")
+	viper.BindEnv("skye_app_name", "SKYE_APP_NAME")
 }

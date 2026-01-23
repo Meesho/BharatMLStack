@@ -13,6 +13,7 @@ import (
 
 	"encoding/json"
 
+	interactionstore "github.com/Meesho/BharatMLStack/go-sdk/pkg/interaction-store"
 	"github.com/Meesho/BharatMLStack/go-sdk/pkg/onfs"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -25,14 +26,28 @@ type CLIConfig struct {
 	BatchSize int
 	Mode      string
 	InputFile string
+	// Interaction Store specific config
+	ISHost string
+	ISPort string
 }
 
+// ServiceType indicates which service to use
+type ServiceType int
+
+const (
+	ServiceONFS ServiceType = iota
+	ServiceInteractionStore
+)
+
 type Session struct {
-	CallerID    string
-	CallerToken string
-	Client      onfs.Client
-	IsLoggedIn  bool
-	AppName     string
+	CallerID       string
+	CallerToken    string
+	Client         onfs.Client
+	ISClient       interactionstore.Client
+	IsONFSLoggedIn bool
+	IsISLoggedIn   bool
+	AppName        string
+	ActiveService  ServiceType
 }
 
 // EtcdConfig holds etcd connection configuration
@@ -259,10 +274,13 @@ func (e *EtcdSchemaResolver) GetKeySchema(entityLabel string) ([]string, error) 
 func main() {
 	config := parseCLIArgs()
 
-	fmt.Println("🚀 ONFS CLI Tool - SQL-like Interface")
+	fmt.Println("🚀 BharatMLStack CLI Tool - SQL-like Interface")
+	fmt.Println("Supports: Online Feature Store (ONFS) & Interaction Store (IS)")
 	fmt.Println("Type 'help' for available commands or 'exit' to quit")
 
-	session := &Session{}
+	session := &Session{
+		ActiveService: ServiceONFS,
+	}
 
 	if config.Mode == "interactive" {
 		runInteractiveMode(config, session)
@@ -278,6 +296,8 @@ func parseCLIArgs() *CLIConfig {
 
 	flag.StringVar(&config.Host, "host", "localhost", "ONFS service host")
 	flag.StringVar(&config.Port, "port", "8089", "ONFS service port")
+	flag.StringVar(&config.ISHost, "is-host", "localhost", "Interaction Store service host")
+	flag.StringVar(&config.ISPort, "is-port", "9700", "Interaction Store service port")
 	flag.BoolVar(&config.PlainText, "plaintext", true, "Use plaintext connection (no TLS)")
 	flag.IntVar(&config.Timeout, "timeout", 30000, "Request timeout in milliseconds")
 	flag.IntVar(&config.BatchSize, "batch-size", 50, "Batch size for requests")
@@ -293,11 +313,8 @@ func runInteractiveMode(config *CLIConfig, session *Session) {
 	scanner := bufio.NewScanner(os.Stdin)
 
 	for {
-		if session.IsLoggedIn {
-			fmt.Printf("onfs[%s]> ", session.CallerID)
-		} else {
-			fmt.Print("onfs> ")
-		}
+		prompt := getPrompt(session)
+		fmt.Print(prompt)
 
 		if !scanner.Scan() {
 			break
@@ -315,6 +332,27 @@ func runInteractiveMode(config *CLIConfig, session *Session) {
 
 		executeCommand(config, session, command)
 	}
+}
+
+func getPrompt(session *Session) string {
+	var service string
+	var loggedIn bool
+	var callerID string
+
+	if session.ActiveService == ServiceInteractionStore {
+		service = "is"
+		loggedIn = session.IsISLoggedIn
+		callerID = session.CallerID
+	} else {
+		service = "onfs"
+		loggedIn = session.IsONFSLoggedIn
+		callerID = session.CallerID
+	}
+
+	if loggedIn {
+		return fmt.Sprintf("%s[%s]> ", service, callerID)
+	}
+	return fmt.Sprintf("%s> ", service)
 }
 
 func runFileMode(config *CLIConfig, session *Session) {
@@ -338,18 +376,41 @@ func runFileMode(config *CLIConfig, session *Session) {
 
 func executeCommand(config *CLIConfig, session *Session, command string) {
 	command = strings.TrimSpace(command)
+	lowerCmd := strings.ToLower(command)
 
 	switch {
 	case command == "help":
 		showHelp()
-	case strings.HasPrefix(strings.ToLower(command), "login"):
+	// Service switching commands
+	case lowerCmd == "use onfs":
+		session.ActiveService = ServiceONFS
+		fmt.Println("🔄 Switched to Online Feature Store (ONFS)")
+	case lowerCmd == "use is" || lowerCmd == "use interaction-store":
+		session.ActiveService = ServiceInteractionStore
+		fmt.Println("🔄 Switched to Interaction Store")
+	// ONFS commands
+	case strings.HasPrefix(lowerCmd, "login") && session.ActiveService == ServiceONFS:
 		handleLogin(config, session, command)
-	case strings.HasPrefix(strings.ToLower(command), "insert"):
+	case strings.HasPrefix(lowerCmd, "insert") && session.ActiveService == ServiceONFS:
 		handleInsert(session, command)
-	case strings.HasPrefix(strings.ToLower(command), "select_decoded"):
+	case strings.HasPrefix(lowerCmd, "select_decoded") && session.ActiveService == ServiceONFS:
 		handleSelect(session, command, true)
-	case strings.HasPrefix(strings.ToLower(command), "select"):
+	case strings.HasPrefix(lowerCmd, "select") && session.ActiveService == ServiceONFS:
 		handleSelect(session, command, false)
+	// Interaction Store commands
+	case strings.HasPrefix(lowerCmd, "login") && session.ActiveService == ServiceInteractionStore:
+		handleISLogin(config, session, command)
+	case strings.HasPrefix(lowerCmd, "persist_click"):
+		handleISPersistClick(session, command)
+	case strings.HasPrefix(lowerCmd, "persist_order"):
+		handleISPersistOrder(session, command)
+	case strings.HasPrefix(lowerCmd, "retrieve_clicks"):
+		handleISRetrieveClicks(session, command)
+	case strings.HasPrefix(lowerCmd, "retrieve_orders"):
+		handleISRetrieveOrders(session, command)
+	case strings.HasPrefix(lowerCmd, "retrieve_interactions"):
+		handleISRetrieveInteractions(session, command)
+	// Common commands
 	case command == "status":
 		showStatus(session)
 	case command == "logout":
@@ -360,14 +421,21 @@ func executeCommand(config *CLIConfig, session *Session, command string) {
 }
 
 func showHelp() {
-	fmt.Println("\n📖 ONFS CLI Commands:")
+	fmt.Println("\n📖 BharatMLStack CLI Commands:")
+	fmt.Println()
+	fmt.Println("🔀 Service Selection:")
+	fmt.Println("  use onfs                                     - Switch to Online Feature Store")
+	fmt.Println("  use is                                       - Switch to Interaction Store")
 	fmt.Println()
 	fmt.Println("🔐 Session Management:")
 	fmt.Println("  login <app_name> <caller_id> <caller_token>  - Login with credentials and app context")
 	fmt.Println("  logout                                       - Logout from current session")
 	fmt.Println("  status                                       - Show current session status")
 	fmt.Println()
-	fmt.Println("�� Data Operations:")
+	fmt.Println("═══════════════════════════════════════════════════════════════")
+	fmt.Println("📦 ONLINE FEATURE STORE (ONFS) Commands:")
+	fmt.Println("═══════════════════════════════════════════════════════════════")
+	fmt.Println()
 	fmt.Println("  INSERT Syntax:")
 	fmt.Println("    insert into <entity>.<fg> (<features>) values (<values>)")
 	fmt.Println("    insert into <entity>.<fg1,fg2> (<features>) values (<values>)")
@@ -376,18 +444,44 @@ func showHelp() {
 	fmt.Println("    select <features> from <entity>.<fg> where <key_schema>=<key_values>")
 	fmt.Println("    select_decoded <features> from <entity>.<fg> where <key_schema>=<key_values>")
 	fmt.Println()
-	fmt.Println("📚 Examples:")
-	fmt.Println("  login onfs onfs-cli test")
-	fmt.Println("  insert into user.profile (age,location) values (25,'NYC')")
-	fmt.Println("  insert into user.profile,preferences (age,location,theme) values (25,'NYC','dark')")
-	fmt.Println("  select age,location from user.profile where user_id=123")
-	fmt.Println("  select_decoded age,location from user.profile where user_id=123")
+	fmt.Println("  Examples:")
+	fmt.Println("    use onfs")
+	fmt.Println("    login onfs onfs-cli test")
+	fmt.Println("    insert into user.profile (age,location) values (25,'NYC')")
+	fmt.Println("    select age,location from user.profile where user_id=123")
+	fmt.Println()
+	fmt.Println("═══════════════════════════════════════════════════════════════")
+	fmt.Println("🔄 INTERACTION STORE Commands:")
+	fmt.Println("═══════════════════════════════════════════════════════════════")
+	fmt.Println()
+	fmt.Println("  PERSIST Commands:")
+	fmt.Println("    persist_click <user_id> <catalog_id> <product_id> <timestamp> [metadata]")
+	fmt.Println("    persist_order <user_id> <catalog_id> <product_id> <sub_order_num> <timestamp> [metadata]")
+	fmt.Println()
+	fmt.Println("  RETRIEVE Commands:")
+	fmt.Println("    retrieve_clicks <user_id> <start_ts> <end_ts> <limit>")
+	fmt.Println("    retrieve_orders <user_id> <start_ts> <end_ts> <limit>")
+	fmt.Println("    retrieve_interactions <user_id> <types> <start_ts> <end_ts> <limit>")
+	fmt.Println("      (types: click,order or click or order)")
+	fmt.Println()
+	fmt.Println("  Examples:")
+	fmt.Println("    use is")
+	fmt.Println("    login is-app is-caller")
+	fmt.Println("    persist_click user123 100 200 1704067200000")
+	fmt.Println("    persist_click user123 100 200 1704067200000 '{\"source\":\"homepage\"}'")
+	fmt.Println("    persist_order user123 100 200 SUB001 1704067200000")
+	fmt.Println("    persist_order user123 100 200 SUB001 1704067200000 '{\"payment\":\"upi\"}'")
+	fmt.Println("    retrieve_clicks user123 1704067200000 1704153600000 100")
+	fmt.Println("    retrieve_orders user123 1704067200000 1704153600000 100")
+	fmt.Println("    retrieve_interactions user123 click,order 1704067200000 1704153600000 100")
 	fmt.Println()
 	fmt.Println("💡 Data Types:")
 	fmt.Println("  Strings: 'value' or \"value\"")
 	fmt.Println("  Numbers: 123, 45.67")
 	fmt.Println("  Booleans: true, false")
 	fmt.Println("  Arrays: [1,2,3] or ['a','b','c']")
+	fmt.Println("  Timestamps: Unix milliseconds (e.g., 1704067200000)")
+	fmt.Println("  Metadata: JSON string (e.g., '{\"source\":\"homepage\"}')")
 	fmt.Println()
 	fmt.Println("🚪 Other:")
 	fmt.Println("  help                              - Show this help")
@@ -467,7 +561,7 @@ func handleLogin(config *CLIConfig, session *Session, command string) {
 	session.CallerID = callerID
 	session.CallerToken = callerToken
 	session.Client = client
-	session.IsLoggedIn = true
+	session.IsONFSLoggedIn = true
 	session.AppName = appName
 
 	fmt.Printf("✅ Successfully logged in as %s for app %s\n", callerID, appName)
@@ -581,34 +675,72 @@ func contains(slice []string, item string) bool {
 }
 
 func handleLogout(session *Session) {
-	if !session.IsLoggedIn {
-		fmt.Println("❌ Not logged in")
-		return
+	if session.ActiveService == ServiceInteractionStore {
+		if !session.IsISLoggedIn {
+			fmt.Println("❌ Not logged in to Interaction Store")
+			return
+		}
+		fmt.Printf("👋 Logging out %s from Interaction Store\n", session.CallerID)
+		session.IsISLoggedIn = false
+		session.ISClient = nil
+	} else {
+		if !session.IsONFSLoggedIn {
+			fmt.Println("❌ Not logged in to ONFS")
+			return
+		}
+		fmt.Printf("👋 Logging out %s from app %s\n", session.CallerID, session.AppName)
+		session.IsONFSLoggedIn = false
+		session.Client = nil
 	}
 
-	fmt.Printf("👋 Logging out %s from app %s\n", session.CallerID, session.AppName)
-	session.IsLoggedIn = false
-	session.CallerID = ""
-	session.CallerToken = ""
-	session.AppName = ""
-	session.Client = nil
+	// Clear shared fields if both are logged out
+	if !session.IsONFSLoggedIn && !session.IsISLoggedIn {
+		session.CallerID = ""
+		session.CallerToken = ""
+		session.AppName = ""
+	}
 }
 
 func showStatus(session *Session) {
 	fmt.Println("\n📊 Session Status:")
-	if session.IsLoggedIn {
-		fmt.Printf("  Status: ✅ Logged in\n")
-		fmt.Printf("  App Name: %s\n", session.AppName)
-		fmt.Printf("  Caller ID: %s\n", session.CallerID)
-		fmt.Printf("  Token: %s\n", session.CallerToken)
+
+	// Show active service
+	if session.ActiveService == ServiceInteractionStore {
+		fmt.Println("  Active Service: 🔄 Interaction Store")
 	} else {
-		fmt.Printf("  Status: ❌ Not logged in\n")
-		fmt.Println("  Use 'login <app_name> <caller_id> <caller_token>' to authenticate")
+		fmt.Println("  Active Service: 📦 Online Feature Store (ONFS)")
 	}
+
+	fmt.Println()
+
+	// ONFS Status
+	fmt.Println("  📦 ONFS:")
+	if session.IsONFSLoggedIn {
+		fmt.Printf("    Status: ✅ Logged in\n")
+		fmt.Printf("    App Name: %s\n", session.AppName)
+		fmt.Printf("    Caller ID: %s\n", session.CallerID)
+	} else {
+		fmt.Printf("    Status: ❌ Not logged in\n")
+	}
+
+	fmt.Println()
+
+	// Interaction Store Status
+	fmt.Println("  🔄 Interaction Store:")
+	if session.IsISLoggedIn {
+		fmt.Printf("    Status: ✅ Logged in\n")
+		fmt.Printf("    Caller ID: %s\n", session.CallerID)
+	} else {
+		fmt.Printf("    Status: ❌ Not logged in\n")
+	}
+
+	fmt.Println()
+	fmt.Println("  Use 'use onfs' or 'use is' to switch services")
+	fmt.Println("  Use 'login <app_name> <caller_id> <caller_token>' to authenticate")
 }
 
 func handleInsert(session *Session, command string) {
-	if !session.IsLoggedIn {
+	if !session.IsONFSLoggedIn {
 		fmt.Println("❌ Please login first using: login <app_name> <caller_id> <caller_token>")
 		return
 	}
@@ -886,7 +1018,7 @@ func handleInsertWithTypeInference(session *Session, command string) {
 }
 
 func handleSelect(session *Session, command string, decoded bool) {
-	if !session.IsLoggedIn {
+	if !session.IsONFSLoggedIn {
 		fmt.Println("❌ Please login first using: login <app_name> <caller_id> <caller_token>")
 		return
 	}
@@ -1164,5 +1296,435 @@ func printDecodedResult(result *onfs.DecodedResult) {
 		fmt.Printf("  Row %d:\n", i+1)
 		fmt.Printf("    Keys: %v\n", row.Keys)
 		fmt.Printf("    Values: %v\n", row.Columns)
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INTERACTION STORE HANDLERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// handleISLogin handles login for Interaction Store
+func handleISLogin(config *CLIConfig, session *Session, command string) {
+	parts := strings.Fields(command)
+	if len(parts) != 3 {
+		fmt.Println("❌ Usage: login <app_name> <caller_id>")
+		return
+	}
+
+	appName := parts[1]
+	callerID := parts[2]
+
+	fmt.Printf("🔐 Logging in to Interaction Store as %s...\n", callerID)
+
+	// Create Interaction Store client
+	isConfig := &interactionstore.Config{
+		Host:      config.ISHost,
+		Port:      config.ISPort,
+		DeadLine:  config.Timeout,
+		PlainText: config.PlainText,
+		CallerId:  callerID,
+	}
+
+	timing := func(name string, value time.Duration, tags []string) {
+		fmt.Printf("📊 [METRIC] %s: %v\n", name, value)
+	}
+
+	count := func(name string, value int64, tags []string) {
+		fmt.Printf("📊 [METRIC] %s: %d\n", name, value)
+	}
+
+	// Reset registry for re-initialization
+	interactionstore.ResetRegistry()
+
+	client := interactionstore.InitClient(interactionstore.Version1, isConfig, timing, count)
+
+	session.CallerID = callerID
+	session.ISClient = client
+	session.IsISLoggedIn = true
+	session.AppName = appName
+
+	fmt.Printf("✅ Successfully logged in to Interaction Store as %s\n", callerID)
+}
+
+// handleISPersistClick handles persist_click command
+func handleISPersistClick(session *Session, command string) {
+	if !session.IsISLoggedIn {
+		fmt.Println("❌ Please login to Interaction Store first using: use is && login <app_name> <caller_id>")
+		return
+	}
+
+	// Parse: persist_click <user_id> <catalog_id> <product_id> <timestamp> [metadata]
+	parts := strings.Fields(command)
+	if len(parts) < 5 {
+		fmt.Println("❌ Usage: persist_click <user_id> <catalog_id> <product_id> <timestamp> [metadata]")
+		return
+	}
+
+	userID := parts[1]
+	catalogID, err := strconv.ParseInt(parts[2], 10, 32)
+	if err != nil {
+		fmt.Printf("❌ Invalid catalog_id: %v\n", err)
+		return
+	}
+	productID, err := strconv.ParseInt(parts[3], 10, 32)
+	if err != nil {
+		fmt.Printf("❌ Invalid product_id: %v\n", err)
+		return
+	}
+	timestamp, err := strconv.ParseInt(parts[4], 10, 64)
+	if err != nil {
+		fmt.Printf("❌ Invalid timestamp: %v\n", err)
+		return
+	}
+
+	metadata := ""
+	if len(parts) > 5 {
+		metadata = strings.Join(parts[5:], " ")
+		metadata = strings.Trim(metadata, "'\"")
+	}
+
+	request := &interactionstore.PersistClickDataRequest{
+		UserId: userID,
+		Data: []interactionstore.ClickData{
+			{
+				CatalogId: int32(catalogID),
+				ProductId: int32(productID),
+				Timestamp: timestamp,
+				Metadata:  metadata,
+			},
+		},
+	}
+
+	fmt.Printf("📝 Persisting click data for user: %s\n", userID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	response, err := session.ISClient.PersistClickData(ctx, request)
+	if err != nil {
+		fmt.Printf("❌ Error persisting click data: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✅ Click data persisted: %s\n", response.Message)
+}
+
+// handleISPersistOrder handles persist_order command
+func handleISPersistOrder(session *Session, command string) {
+	if !session.IsISLoggedIn {
+		fmt.Println("❌ Please login to Interaction Store first using: use is && login <app_name> <caller_id>")
+		return
+	}
+
+	// Parse: persist_order <user_id> <catalog_id> <product_id> <sub_order_num> <timestamp> [metadata]
+	parts := strings.Fields(command)
+	if len(parts) < 6 {
+		fmt.Println("❌ Usage: persist_order <user_id> <catalog_id> <product_id> <sub_order_num> <timestamp> [metadata]")
+		return
+	}
+
+	userID := parts[1]
+	catalogID, err := strconv.ParseInt(parts[2], 10, 32)
+	if err != nil {
+		fmt.Printf("❌ Invalid catalog_id: %v\n", err)
+		return
+	}
+	productID, err := strconv.ParseInt(parts[3], 10, 32)
+	if err != nil {
+		fmt.Printf("❌ Invalid product_id: %v\n", err)
+		return
+	}
+	subOrderNum := parts[4]
+	timestamp, err := strconv.ParseInt(parts[5], 10, 64)
+	if err != nil {
+		fmt.Printf("❌ Invalid timestamp: %v\n", err)
+		return
+	}
+
+	metadata := ""
+	if len(parts) > 6 {
+		metadata = strings.Join(parts[6:], " ")
+		metadata = strings.Trim(metadata, "'\"")
+	}
+
+	request := &interactionstore.PersistOrderDataRequest{
+		UserId: userID,
+		Data: []interactionstore.OrderData{
+			{
+				CatalogId:   int32(catalogID),
+				ProductId:   int32(productID),
+				SubOrderNum: subOrderNum,
+				Timestamp:   timestamp,
+				Metadata:    metadata,
+			},
+		},
+	}
+
+	fmt.Printf("📝 Persisting order data for user: %s\n", userID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	response, err := session.ISClient.PersistOrderData(ctx, request)
+	if err != nil {
+		fmt.Printf("❌ Error persisting order data: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✅ Order data persisted: %s\n", response.Message)
+}
+
+// handleISRetrieveClicks handles retrieve_clicks command
+func handleISRetrieveClicks(session *Session, command string) {
+	if !session.IsISLoggedIn {
+		fmt.Println("❌ Please login to Interaction Store first using: use is && login <app_name> <caller_id>")
+		return
+	}
+
+	// Parse: retrieve_clicks <user_id> <start_ts> <end_ts> <limit>
+	parts := strings.Fields(command)
+	if len(parts) != 5 {
+		fmt.Println("❌ Usage: retrieve_clicks <user_id> <start_ts> <end_ts> <limit>")
+		return
+	}
+
+	userID := parts[1]
+	startTS, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil {
+		fmt.Printf("❌ Invalid start_timestamp: %v\n", err)
+		return
+	}
+	endTS, err := strconv.ParseInt(parts[3], 10, 64)
+	if err != nil {
+		fmt.Printf("❌ Invalid end_timestamp: %v\n", err)
+		return
+	}
+	limit, err := strconv.ParseInt(parts[4], 10, 32)
+	if err != nil {
+		fmt.Printf("❌ Invalid limit: %v\n", err)
+		return
+	}
+
+	request := &interactionstore.RetrieveDataRequest{
+		UserId:         userID,
+		StartTimestamp: startTS,
+		EndTimestamp:   endTS,
+		Limit:          int32(limit),
+	}
+
+	fmt.Printf("🔍 Retrieving click interactions for user: %s\n", userID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	response, err := session.ISClient.RetrieveClickInteractions(ctx, request)
+	if err != nil {
+		fmt.Printf("❌ Error retrieving click data: %v\n", err)
+		return
+	}
+
+	printClickResults(response)
+}
+
+// handleISRetrieveOrders handles retrieve_orders command
+func handleISRetrieveOrders(session *Session, command string) {
+	if !session.IsISLoggedIn {
+		fmt.Println("❌ Please login to Interaction Store first using: use is && login <app_name> <caller_id>")
+		return
+	}
+
+	// Parse: retrieve_orders <user_id> <start_ts> <end_ts> <limit>
+	parts := strings.Fields(command)
+	if len(parts) != 5 {
+		fmt.Println("❌ Usage: retrieve_orders <user_id> <start_ts> <end_ts> <limit>")
+		return
+	}
+
+	userID := parts[1]
+	startTS, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil {
+		fmt.Printf("❌ Invalid start_timestamp: %v\n", err)
+		return
+	}
+	endTS, err := strconv.ParseInt(parts[3], 10, 64)
+	if err != nil {
+		fmt.Printf("❌ Invalid end_timestamp: %v\n", err)
+		return
+	}
+	limit, err := strconv.ParseInt(parts[4], 10, 32)
+	if err != nil {
+		fmt.Printf("❌ Invalid limit: %v\n", err)
+		return
+	}
+
+	request := &interactionstore.RetrieveDataRequest{
+		UserId:         userID,
+		StartTimestamp: startTS,
+		EndTimestamp:   endTS,
+		Limit:          int32(limit),
+	}
+
+	fmt.Printf("🔍 Retrieving order interactions for user: %s\n", userID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	response, err := session.ISClient.RetrieveOrderInteractions(ctx, request)
+	if err != nil {
+		fmt.Printf("❌ Error retrieving order data: %v\n", err)
+		return
+	}
+
+	printOrderResults(response)
+}
+
+// handleISRetrieveInteractions handles retrieve_interactions command
+func handleISRetrieveInteractions(session *Session, command string) {
+	if !session.IsISLoggedIn {
+		fmt.Println("❌ Please login to Interaction Store first using: use is && login <app_name> <caller_id>")
+		return
+	}
+
+	// Parse: retrieve_interactions <user_id> <types> <start_ts> <end_ts> <limit>
+	parts := strings.Fields(command)
+	if len(parts) != 6 {
+		fmt.Println("❌ Usage: retrieve_interactions <user_id> <types> <start_ts> <end_ts> <limit>")
+		fmt.Println("   types: click,order or click or order")
+		return
+	}
+
+	userID := parts[1]
+	typesStr := parts[2]
+	startTS, err := strconv.ParseInt(parts[3], 10, 64)
+	if err != nil {
+		fmt.Printf("❌ Invalid start_timestamp: %v\n", err)
+		return
+	}
+	endTS, err := strconv.ParseInt(parts[4], 10, 64)
+	if err != nil {
+		fmt.Printf("❌ Invalid end_timestamp: %v\n", err)
+		return
+	}
+	limit, err := strconv.ParseInt(parts[5], 10, 32)
+	if err != nil {
+		fmt.Printf("❌ Invalid limit: %v\n", err)
+		return
+	}
+
+	// Parse interaction types
+	var interactionTypes []interactionstore.InteractionType
+	typesParts := strings.Split(typesStr, ",")
+	for _, t := range typesParts {
+		t = strings.TrimSpace(strings.ToLower(t))
+		switch t {
+		case "click":
+			interactionTypes = append(interactionTypes, interactionstore.InteractionTypeClick)
+		case "order":
+			interactionTypes = append(interactionTypes, interactionstore.InteractionTypeOrder)
+		default:
+			fmt.Printf("❌ Unknown interaction type: %s (use: click, order)\n", t)
+			return
+		}
+	}
+
+	request := &interactionstore.RetrieveInteractionsRequest{
+		UserId:           userID,
+		InteractionTypes: interactionTypes,
+		StartTimestamp:   startTS,
+		EndTimestamp:     endTS,
+		Limit:            int32(limit),
+	}
+
+	fmt.Printf("🔍 Retrieving interactions for user: %s (types: %s)\n", userID, typesStr)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	response, err := session.ISClient.RetrieveInteractions(ctx, request)
+	if err != nil {
+		fmt.Printf("❌ Error retrieving interactions: %v\n", err)
+		return
+	}
+
+	printInteractionsResults(response)
+}
+
+// printClickResults prints click interaction results
+func printClickResults(response *interactionstore.RetrieveClickDataResponse) {
+	fmt.Println("\n📊 Click Interactions Result:")
+	fmt.Printf("Total Events: %d\n", len(response.Data))
+
+	if len(response.Data) == 0 {
+		fmt.Println("  No click events found.")
+		return
+	}
+
+	fmt.Println("\n📝 Events:")
+	for i, event := range response.Data {
+		fmt.Printf("  %d. CatalogID=%d, ProductID=%d, Timestamp=%d",
+			i+1, event.CatalogId, event.ProductId, event.Timestamp)
+		if event.Metadata != "" {
+			fmt.Printf(", Metadata=%s", event.Metadata)
+		}
+		fmt.Println()
+	}
+}
+
+// printOrderResults prints order interaction results
+func printOrderResults(response *interactionstore.RetrieveOrderDataResponse) {
+	fmt.Println("\n📊 Order Interactions Result:")
+	fmt.Printf("Total Events: %d\n", len(response.Data))
+
+	if len(response.Data) == 0 {
+		fmt.Println("  No order events found.")
+		return
+	}
+
+	fmt.Println("\n📝 Events:")
+	for i, event := range response.Data {
+		fmt.Printf("  %d. CatalogID=%d, ProductID=%d, SubOrderNum=%s, Timestamp=%d",
+			i+1, event.CatalogId, event.ProductId, event.SubOrderNum, event.Timestamp)
+		if event.Metadata != "" {
+			fmt.Printf(", Metadata=%s", event.Metadata)
+		}
+		fmt.Println()
+	}
+}
+
+// printInteractionsResults prints mixed interaction results
+func printInteractionsResults(response *interactionstore.RetrieveInteractionsResponse) {
+	fmt.Println("\n📊 Interactions Result:")
+
+	if len(response.Data) == 0 {
+		fmt.Println("  No interactions found.")
+		return
+	}
+
+	for interactionType, data := range response.Data {
+		fmt.Printf("\n📁 %s:\n", interactionType)
+
+		if len(data.ClickEvents) > 0 {
+			fmt.Printf("  Click Events (%d):\n", len(data.ClickEvents))
+			for i, event := range data.ClickEvents {
+				fmt.Printf("    %d. CatalogID=%d, ProductID=%d, Timestamp=%d",
+					i+1, event.CatalogId, event.ProductId, event.Timestamp)
+				if event.Metadata != "" {
+					fmt.Printf(", Metadata=%s", event.Metadata)
+				}
+				fmt.Println()
+			}
+		}
+
+		if len(data.OrderEvents) > 0 {
+			fmt.Printf("  Order Events (%d):\n", len(data.OrderEvents))
+			for i, event := range data.OrderEvents {
+				fmt.Printf("    %d. CatalogID=%d, ProductID=%d, SubOrderNum=%s, Timestamp=%d",
+					i+1, event.CatalogId, event.ProductId, event.SubOrderNum, event.Timestamp)
+				if event.Metadata != "" {
+					fmt.Printf(", Metadata=%s", event.Metadata)
+				}
+				fmt.Println()
+			}
+		}
 	}
 }

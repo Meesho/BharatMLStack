@@ -23,4 +23,5 @@ type Etcd interface {
 	IsLeafNodeExist(path string) (bool, error)
 	RegisterWatchPathCallback(path string, callback func() error) error
 	DeleteNode(path string) error
+	GetWatcherDataMaps() (dataMap map[string]string, metaMap map[string]string, err error)
 }

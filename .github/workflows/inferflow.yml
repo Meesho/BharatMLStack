@@ -2,10 +2,10 @@ name: Inferflow CI
 
 on:
   pull_request:
-    branches: [master, develop]
+    branches: [main, develop]
     paths: ['inferflow/**']
   push:
-    branches: [master, develop]
+    branches: [main, develop]
     paths: ['inferflow/**']
 
 jobs:

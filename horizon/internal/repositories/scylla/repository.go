@@ -38,6 +38,8 @@ func NewRepository(connection *infra.ScyllaClusterConnection) (Store, error) {
 
 // CreateTable implements the Store interface method to create a table
 func (s *Scylla) CreateTable(tableName string, pkColumns []string, defaultTimeToLive int) error {
+	log.Info().Msgf("Creating Scylla table: %s in keyspace: %s", tableName, s.keySpace)
+
 	// Build the column definitions
 	var columnDefs []string
 
@@ -69,20 +71,34 @@ func (s *Scylla) CreateTable(tableName string, pkColumns []string, defaultTimeTo
 	var tableNameResult string
 	err := s.session.Query(tableExistsQuery).Scan(&tableNameResult)
 	if err == nil && tableNameResult == tableName {
-		return fmt.Errorf("table %s already exists in keyspace %s", tableName, s.keySpace)
+		log.Warn().Msgf("Table %s already exists in keyspace %s, skipping creation", tableName, s.keySpace)
+		return nil // Don't treat as error, just skip creation
 	}
 
 	// Execute the query
 	err = s.session.Query(query).Exec()
 	if err != nil {
-		log.Error().Msgf("Error Creating Table for %s , %s with Error %v", s.keySpace, tableName, err)
-		return err
+		log.Error().Err(err).Msgf("Error creating Scylla table %s in keyspace %s", tableName, s.keySpace)
+		return fmt.Errorf("failed to create Scylla table %s: %w", tableName, err)
 	}
+
+	log.Info().Msgf("Successfully created Scylla table: %s in keyspace: %s", tableName, s.keySpace)
 	return nil
 }
 
 // AddColumn implements the Store interface method to add a column to the table
 func (s *Scylla) AddColumn(tableName string, column string) error {
+	log.Info().Msgf("Adding column %s to Scylla table: %s.%s", column, s.keySpace, tableName)
+
 	query := fmt.Sprintf(addColumnQuery, s.keySpace, tableName, column)
-	return s.session.Query(query).Exec()
+	log.Info().Msgf("Executing Scylla add column query: %s", query)
+
+	err := s.session.Query(query).Exec()
+	if err != nil {
+		log.Error().Err(err).Msgf("Error adding column %s to Scylla table %s.%s", column, s.keySpace, tableName)
+		return fmt.Errorf("failed to add column %s to Scylla table %s: %w", column, tableName, err)
+	}
+
+	log.Info().Msgf("Successfully added column %s to Scylla table: %s.%s", column, s.keySpace, tableName)
+	return nil
 }

@@ -1,0 +1,36 @@
+# Stage 1: Build the Go binary
+FROM golang:1.24.4-bullseye AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
+ENV CGO_ENABLED=1 \
+    GOOS=${TARGETOS} \
+    GOARCH=${TARGETARCH}
+
+# Install build dependencies for cgo
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        gcc libc6-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# Build the binary for the consumer
+RUN go build -o interaction-store-consumer ./cmd/consumer/main.go
+
+# Stage 2: Minimal runtime image
+FROM gcr.io/distroless/base-debian12:nonroot
+
+WORKDIR /
+
+# Copy only the binary from builder
+COPY --from=builder /app/interaction-store-consumer .
+
+# Run the consumer
+EXPOSE 8080 8090
+ENTRYPOINT ["/interaction-store-consumer"]

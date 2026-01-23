@@ -56,6 +56,7 @@ const VariantRegistry = () => {
   const [entities, setEntities] = useState([]);
   const [models, setModels] = useState([]);
   const [filters, setFilters] = useState([]);
+  const [variantsList, setVariantsList] = useState([]);
   const { user } = useAuth();
   const [notification, setNotification] = useState({ open: false, message: "", severity: "success" });
   
@@ -96,6 +97,7 @@ const VariantRegistry = () => {
   useEffect(() => {
     fetchData();
     fetchFilters();
+    fetchVariantsList();
   }, []);
 
   useEffect(() => {
@@ -127,7 +129,7 @@ const VariantRegistry = () => {
         const availableEntities = entitiesResponse.entities?.map(entity => ({
           name: entity.name,
           store_id: entity.store_id,
-          label: `${entity.name} (Store ${entity.store_id})`
+          label: entity.name
         })) || [];
         setEntities(availableEntities);
       }
@@ -136,6 +138,20 @@ const VariantRegistry = () => {
       setError('Failed to load variant data. Please refresh the page.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchVariantsList = async () => {
+    try {
+      const response = await embeddingPlatformAPI.getVariantsList();
+      if (response.variants) {
+        setVariantsList(response.variants);
+      } else {
+        setVariantsList([]);
+      }
+    } catch (error) {
+      console.error('Error fetching variants list:', error);
+      setVariantsList([]);
     }
   };
 
@@ -157,8 +173,30 @@ const VariantRegistry = () => {
   const fetchFilters = async () => {
     try {
       const response = await embeddingPlatformAPI.getFilters();
-      if (response.filters) {
+      
+      // Transform filter_groups response to flat array format
+      if (response.filter_groups && Array.isArray(response.filter_groups)) {
+        const transformedFilters = response.filter_groups.flatMap((group, groupIndex) => 
+          group.filters.map((filter, filterIndex) => ({
+            id: `${group.entity}_${filterIndex}`,
+            filter_id: `${group.entity}_${filterIndex}`,
+            entity: group.entity,
+            column_name: filter.column_name,
+            filter_value: filter.filter_value,
+            default_value: filter.default_value,
+            filter: {
+              column_name: filter.column_name,
+              filter_value: filter.filter_value,
+              default_value: filter.default_value
+            }
+          }))
+        );
+        setFilters(transformedFilters);
+      } else if (response.filters) {
+        // Fallback for old response format
         setFilters(response.filters);
+      } else {
+        setFilters([]);
       }
     } catch (error) {
       console.error('Error fetching filters:', error);
@@ -169,8 +207,31 @@ const VariantRegistry = () => {
   const fetchFiltersForEntity = async (entityName) => {
     try {
       const response = await embeddingPlatformAPI.getFilters({ entity: entityName });
-      if (response.filters) {
+      
+      // Transform filter_groups response to flat array format
+      if (response.filter_groups && Array.isArray(response.filter_groups)) {
+        const transformedFilters = response.filter_groups.flatMap((group, groupIndex) => 
+          group.filters.map((filter, filterIndex) => ({
+            id: `${group.entity}_${filterIndex}`,
+            filter_id: `${group.entity}_${filterIndex}`,
+            entity: group.entity,
+            column_name: filter.column_name,
+            filter_value: filter.filter_value,
+            default_value: filter.default_value,
+            filter: {
+              column_name: filter.column_name,
+              filter_value: filter.filter_value,
+              default_value: filter.default_value
+            }
+          }))
+        );
         // Store entity-specific filters separately or filter existing ones
+        setFilters(prevFilters => [
+          ...prevFilters.filter(f => f.entity !== entityName),
+          ...transformedFilters
+        ]);
+      } else if (response.filters) {
+        // Fallback for old response format
         setFilters(prevFilters => [
           ...prevFilters.filter(f => f.entity !== entityName),
           ...response.filters
@@ -745,18 +806,23 @@ const VariantRegistry = () => {
                 </Grid>
 
               <Grid item xs={6}>
-                  <TextField
-                  fullWidth
-                  required
-                  size="small"
+                <FormControl fullWidth required size="small">
+                  <InputLabel>Variant Name</InputLabel>
+                  <Select
                     name="variant"
-                  label="Variant Name"
                     value={variantData.variant}
                     onChange={handleChange}
-                  helperText="e.g., experiment_v1"
-                  placeholder="experiment_v1"
-                  />
-                </Grid>
+                    label="Variant Name"
+                  >
+                    {variantsList.map((variant) => (
+                      <MenuItem key={variant} value={variant}>
+                        {variant}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  <FormHelperText>Select a variant from the available list</FormHelperText>
+                </FormControl>
+              </Grid>
 
               <Grid item xs={6}>
                 <FormControl fullWidth required size="small">
@@ -1014,9 +1080,9 @@ const VariantRegistry = () => {
                       const criteria = selectedFilters.map(filterId => {
                         const filter = filters.find(f => f.id === filterId || f.filter_id === filterId);
                         return filter ? {
-                          column: filter.filter?.column_name || filter.column_name,
+                          column_name: filter.filter?.column_name || filter.column_name,
                           operator: 'equals',
-                          value: filter.filter?.filter_value || filter.filter_value,
+                          filter_value: filter.filter?.filter_value || filter.filter_value,
                           default_value: filter.filter?.default_value || filter.default_value
                         } : null;
                       }).filter(Boolean);

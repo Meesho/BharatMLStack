@@ -70,6 +70,7 @@ const ModelRegistry = () => {
   const [modelData, setModelData] = useState(getDefaultFormValues('model'));
   const [entities, setEntities] = useState([]);
   const [jobFrequencies, setJobFrequencies] = useState([]);
+  const [mqIdTopicsMapping, setMqIdTopicsMapping] = useState([]);
   const [isEditMode, setIsEditMode] = useState(false);
   const { user } = useAuth();
   const [notification, setNotification] = useState({ open: false, message: "", severity: "success" });
@@ -86,14 +87,27 @@ const ModelRegistry = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (modelData.mq_id && mqIdTopicsMapping.length > 0 && !modelData.topic_name) {
+      const mapping = mqIdTopicsMapping.find(m => m.mq_id === parseInt(modelData.mq_id, 10));
+      if (mapping && mapping.topic) {
+        setModelData(prev => ({
+          ...prev,
+          topic_name: mapping.topic
+        }));
+      }
+    }
+  }, [modelData.mq_id, mqIdTopicsMapping]);
+
   const fetchData = async () => {
     try {
       setLoading(true);
       setError('');
-      const [modelsResponse, entitiesResponse, jobFrequenciesResponse] = await Promise.all([
+      const [modelsResponse, entitiesResponse, jobFrequenciesResponse, mqIdTopicsResponse] = await Promise.all([
         embeddingPlatformAPI.getModels(),
         embeddingPlatformAPI.getEntities(),
-        embeddingPlatformAPI.getJobFrequencies()
+        embeddingPlatformAPI.getJobFrequencies(),
+        embeddingPlatformAPI.getMQIdTopics()
       ]);
 
       if (modelsResponse.models) {
@@ -106,7 +120,7 @@ const ModelRegistry = () => {
         const availableEntities = entitiesResponse.entities?.map(entity => ({
           name: entity.name,
           store_id: entity.store_id,
-          label: `${entity.name} (Store ${entity.store_id})`
+          label: entity.name
         })) || [];
         setEntities(availableEntities);
       }
@@ -115,6 +129,12 @@ const ModelRegistry = () => {
         setJobFrequencies(jobFrequenciesResponse.job_frequencies);
       } else {
         setJobFrequencies([]);
+      }
+
+      if (mqIdTopicsResponse.mappings) {
+        setMqIdTopicsMapping(mqIdTopicsResponse.mappings);
+      } else {
+        setMqIdTopicsMapping([]);
       }
     } catch (error) {
       console.error('Error fetching model data:', error);
@@ -409,11 +429,32 @@ const ModelRegistry = () => {
         }
       }));
     } else {
-      setModelData(prev => ({
-        ...prev,
-        [name]: type === 'checkbox' ? checked : (type === 'number' ? parseInt(value, 10) || '' : value)
-      }));
+      // If MQ ID changes, automatically populate topic_name
+      if (name === 'mq_id') {
+        const mqIdValue = type === 'number' ? parseInt(value, 10) || '' : value;
+        // Find the topic for the selected MQ ID
+        const mapping = mqIdTopicsMapping.find(m => m.mq_id === parseInt(mqIdValue, 10));
+        const topicName = mapping ? mapping.topic : '';
+        
+        setModelData(prev => ({
+          ...prev,
+          [name]: mqIdValue,
+          topic_name: topicName // Auto-populate topic when MQ ID is selected
+        }));
+      } else {
+        setModelData(prev => ({
+          ...prev,
+          [name]: type === 'checkbox' ? checked : (type === 'number' ? parseInt(value, 10) || '' : value)
+        }));
+      }
     }
+  };
+
+  // Get topic for selected MQ ID
+  const getTopicForMqId = () => {
+    if (!modelData.mq_id) return '';
+    const mapping = mqIdTopicsMapping.find(m => m.mq_id === parseInt(modelData.mq_id, 10));
+    return mapping ? mapping.topic : '';
   };
 
   const handleSubmit = async () => {
@@ -778,8 +819,8 @@ const ModelRegistry = () => {
                     onChange={handleChange}
                     label="Job Frequency"
                   >
-                    {jobFrequencies && jobFrequencies.map((freq) => (
-                      <MenuItem key={freq.id} value={freq.frequency}>{freq.frequency}</MenuItem>
+                    {jobFrequencies && jobFrequencies.map((freq, index) => (
+                      <MenuItem key={freq || index} value={freq}>{freq}</MenuItem>
                     ))}
                   </Select>
                   {validationErrors.job_frequency && (
@@ -826,19 +867,28 @@ const ModelRegistry = () => {
 
               {/* Row 4 */}
               <Grid item xs={6}>
-                <TextField
-                  fullWidth
-                  required
-                  type="number"
-                  size="small"
-                  name="mq_id"
-                  label="MQ ID"
-                  value={modelData.mq_id}
-                  onChange={handleChange}
-                  error={!!validationErrors.mq_id}
-                  helperText={validationErrors.mq_id || (isEditMode ? "Cannot be changed" : "")}
-                  disabled={isEditMode}
-                />
+                <FormControl fullWidth required error={!!validationErrors.mq_id} size="small">
+                  <InputLabel>MQ ID</InputLabel>
+                  <Select
+                    name="mq_id"
+                    value={modelData.mq_id || ''}
+                    onChange={handleChange}
+                    label="MQ ID"
+                    disabled={isEditMode}
+                  >
+                    {mqIdTopicsMapping.map((mapping) => (
+                      <MenuItem key={mapping.mq_id} value={mapping.mq_id}>
+                        {mapping.mq_id}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {validationErrors.mq_id && (
+                    <FormHelperText>{validationErrors.mq_id}</FormHelperText>
+                  )}
+                  {!validationErrors.mq_id && isEditMode && (
+                    <FormHelperText>Cannot be changed</FormHelperText>
+                  )}
+                </FormControl>
               </Grid>
 
               <Grid item xs={6}>
@@ -848,11 +898,16 @@ const ModelRegistry = () => {
                   size="small"
                   name="topic_name"
                   label="Topic Name"
-                  value={modelData.topic_name}
-                  onChange={handleChange}
+                  value={modelData.topic_name || ''}
+                  disabled={true}
                   error={!!validationErrors.topic_name}
-                  helperText={validationErrors.topic_name || (isEditMode ? "Cannot be changed" : "")}
-                  disabled={isEditMode}
+                  helperText={
+                    validationErrors.topic_name 
+                      ? validationErrors.topic_name 
+                      : modelData.mq_id 
+                        ? 'Automatically populated from selected MQ ID' 
+                        : 'Select an MQ ID to auto-populate topic'
+                  }
                 />
               </Grid>
 

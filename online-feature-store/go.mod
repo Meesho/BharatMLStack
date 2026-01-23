@@ -13,7 +13,7 @@ require (
 	github.com/gocql/gocql v1.7.0
 	github.com/klauspost/compress v1.17.11
 	github.com/panjf2000/gnet/v2 v2.9.2
-	github.com/redis/go-redis/v9 v9.5.5
+	github.com/redis/go-redis/v9 v9.17.2
 	github.com/rs/zerolog v1.34.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/viper v1.20.1

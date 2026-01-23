@@ -2,9 +2,9 @@ name: Integration & Coordination CI
 
 on:
   pull_request:
-    branches: [master, develop]
+    branches: [main, develop]
   push:
-    branches: [master, develop]
+    branches: [main, develop]
   workflow_dispatch:  # Allow manual triggering
 
 env:

@@ -76,7 +76,9 @@ const VariantDiscovery = () => {
       setError('');
       const response = await embeddingPlatformAPI.getVariants();
 
-      if (response.data && response.data.variants) {
+      if (response.variants) {
+        setVariants(response.variants);
+      } else if (response.data && response.data.variants) {
         setVariants(response.data.variants);
       } else {
         setVariants([]);

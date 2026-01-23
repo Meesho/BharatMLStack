@@ -645,3 +645,22 @@ func (v *V1) DeleteNode(path string) error {
 	}
 	return nil
 }
+
+// GetWatcherDataMaps returns copies of the watcher's dataMap and metaMap
+func (v *V1) GetWatcherDataMaps() (map[string]string, map[string]string, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	// Create copies to prevent external modification
+	dataMapCopy := make(map[string]string, len(v.dataMap))
+	for k, v := range v.dataMap {
+		dataMapCopy[k] = v
+	}
+
+	metaMapCopy := make(map[string]string, len(v.metaMap))
+	for k, v := range v.metaMap {
+		metaMapCopy[k] = v
+	}
+
+	return dataMapCopy, metaMapCopy, nil
+}

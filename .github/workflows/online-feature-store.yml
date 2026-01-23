@@ -2,10 +2,10 @@ name: Online Feature Store CI
 
 on:
   pull_request:
-    branches: [master, develop]
+    branches: [main, develop]
     paths: ['online-feature-store/**']
   push:
-    branches: [master, develop]
+    branches: [main, develop]
     paths: ['online-feature-store/**']
 
 jobs:

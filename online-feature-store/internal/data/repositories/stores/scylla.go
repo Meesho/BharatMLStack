@@ -149,7 +149,17 @@ func (s *ScyllaStore) RetrieveV2(entityLabel string, pkMap map[string]string, fg
 			// log.Error().Err(err2).Msgf("Error while deserializing PSDB for entity: %s and fgId: %d", entityLabel, fgId)
 			return nil, err2
 		}
-		fgIdToDDB[fgId] = ddb
+		// Convert expired data to negative cache at source.
+		// This prevents expired data from being cached with stale timestamps,
+		// which would cause infinite cache miss → DB fetch loops.
+		if ddb.Expired {
+			fgIdToDDB[fgId] = &blocks.DeserializedPSDB{
+				NegativeCache: true,
+				Expired:       true,
+			}
+		} else {
+			fgIdToDDB[fgId] = ddb
+		}
 	}
 	metric.Timing("db_retrieve_latency", time.Since(t1), []string{"entity_label", entityLabel, "db_type", "scylla"})
 	return fgIdToDDB, nil

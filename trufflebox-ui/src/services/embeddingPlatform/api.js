@@ -86,13 +86,6 @@ class EmbeddingPlatformAPI {
   }
 
   /**
-   * Get Stores from ETCD
-   */
-  async getStoresFromETCD() {
-    return this.makeRequest('/data/stores/etcd');
-  }
-
-  /**
    * Get Store Requests
    */
   async getStoreRequests() {
@@ -425,6 +418,28 @@ class EmbeddingPlatformAPI {
     return this.makeRequest('/data/variant-onboarding/variants');
   }
 
+  // =============================================================================
+  // MQ ID TO TOPICS MAPPING ENDPOINTS
+  // =============================================================================
+
+  /**
+   * Get MQ ID to Topics Mapping
+   */
+  async getMQIdTopics() {
+    return this.makeRequest('/data/mq-id-topics');
+  }
+
+  // =============================================================================
+  // VARIANTS LIST ENDPOINTS
+  // =============================================================================
+
+  /**
+   * Get Variants List
+   */
+  async getVariantsList() {
+    return this.makeRequest('/data/variants-list');
+  }
+
 }
 
 // Create singleton instance
@@ -436,7 +451,6 @@ export const {
   registerStore,
   approveStore,
   getStores,
-  getStoresFromETCD,
   getStoreRequests,
   
   // Entity Management
@@ -484,6 +498,12 @@ export const {
   approveVariantOnboarding,
   getAllVariantOnboardingRequests,
   getOnboardedVariants,
+  
+  // MQ ID to Topics Mapping
+  getMQIdTopics,
+  
+  // Variants List
+  getVariantsList,
 } = embeddingPlatformAPI;
 
 export default embeddingPlatformAPI;

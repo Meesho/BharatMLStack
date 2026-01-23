@@ -19,7 +19,7 @@ const (
 	contactPointsSuffix          = "_CONTACT_POINTS"
 	portSuffix                   = "_PORT"
 	keyspaceSuffix               = "_KEYSPACE"
-	scyllaVersionSuffix          = "_SCYLLA_VERSION"
+	scyllaVersionSuffix          = "_MAJOR_VERSION"
 	timeoutSuffix                = "_TIMEOUT_IN_MS"
 	connectTimeoutSuffix         = "_CONNECT_TIMEOUT_IN_MS"
 	numConnsSuffix               = "_NUM_CONNS"

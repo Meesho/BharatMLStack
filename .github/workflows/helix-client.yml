@@ -2,10 +2,10 @@ name: Helix Client CI
 
 on:
   pull_request:
-    branches: [master, develop]
+    branches: [main, develop]
     paths: ['helix-client/**']
   push:
-    branches: [master, develop]
+    branches: [main, develop]
     paths: ['helix-client/**']
 
 jobs:

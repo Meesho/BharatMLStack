@@ -139,7 +139,7 @@ func BuildRedisFailoverOptionsFromEnv(envPrefix string) (*redis.FailoverOptions,
 		failoverOptions.ConnMaxIdleTime = time.Duration(viper.GetInt(envPrefix+redisMaxConnIdleTimeoutEnvSuffix)) * time.Minute
 	}
 	if viper.IsSet(envPrefix + redisDisableIdentityEnvSuffix) {
-		failoverOptions.DisableIdentity = viper.GetBool(envPrefix + redisDisableIdentityEnvSuffix)
+		failoverOptions.DisableIndentity = viper.GetBool(envPrefix + redisDisableIdentityEnvSuffix)
 	}
 
 	log.Info().Msgf("redis failover cluster options built from env, env prefix - %s, options - %+v", envPrefix, failoverOptions)
