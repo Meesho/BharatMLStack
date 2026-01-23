@@ -153,7 +153,8 @@ Extract metadata from MPLog bytes without full decoding.
 ## Metadata Byte Layout
 
 The metadata byte encodes:
-- Bits 0-1: compression flag (00=disabled, 01=enabled)
+- Bit 0: compression flag (0=disabled, 1=enabled)
+- Bit 1: reserved
 - Bits 2-5: version (4 bits, 0-15)
 - Bits 6-7: format type (00=proto, 01=arrow, 10=parquet)
 

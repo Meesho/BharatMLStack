@@ -319,10 +319,10 @@ def decode_vector_or_string(value_bytes: bytes, feature_type: str) -> Any:
     """Decode a vector or string value from bytes."""
     normalized = normalize_type(feature_type)
     
-    if len(value_bytes) == 0:
-        return None
-    
+    # Handle STRING type (including empty bytes -> empty string)
     if normalized in {"STRING", "STR"}:
+        if len(value_bytes) == 0:
+            return ""
         try:
             return value_bytes.decode('utf-8')
         except UnicodeDecodeError:
@@ -347,6 +347,10 @@ def decode_vector_or_string(value_bytes: bytes, feature_type: str) -> Any:
     is_vector = "VECTOR" in normalized
     
     if is_vector:
+        # Handle empty bytes -> empty vector
+        if len(value_bytes) == 0:
+            return []
+        
         # For vectors, check if it's JSON or binary encoded
         # JSON vectors start with '[' (0x5b)
         if is_likely_json(value_bytes):
@@ -376,10 +380,16 @@ def decode_vector_or_string(value_bytes: bytes, feature_type: str) -> Any:
 
 def decode_feature_value(value_bytes: bytes, feature_type: str) -> Any:
     """Decode a feature value based on its type."""
-    if value_bytes is None or len(value_bytes) == 0:
+    if value_bytes is None:
         return None
     
+    # For sized types (VECTOR/STRING), delegate even for empty bytes
+    # decode_vector_or_string handles empty bytes appropriately per type
     if is_sized_type(feature_type):
         return decode_vector_or_string(value_bytes, feature_type)
+    
+    # For non-sized scalar types, empty bytes means absent value
+    if len(value_bytes) == 0:
+        return None
     
     return decode_scalar_value(value_bytes, feature_type)
