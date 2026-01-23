@@ -2,7 +2,7 @@ package order
 
 import (
 	"fmt"
-	"strings"
+	"strconv"
 	"sync"
 
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/model"
@@ -59,7 +59,11 @@ func (c *OrderConsumer) preprocessAndValidateEvents(events []model.OrderPlacedEv
 }
 
 func (c *OrderConsumer) extractAndValidateUserID(event model.OrderPlacedEvent) string {
-	return strings.TrimSpace(event.OrderPlacedEventData.UserID)
+	userID := event.OrderPlacedEventData.UserID
+	if userID == 0 {
+		return ""
+	}
+	return strconv.FormatInt(userID, 10)
 }
 
 // persistUserEvents persists events for each user in parallel

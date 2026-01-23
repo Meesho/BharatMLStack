@@ -4,7 +4,7 @@ WITH replication = {
     'replication_factor': 2
 };
 
-USE interaction_store_test;
+USE interaction_store;
 
 CREATE TABLE click_interactions_bucket1 (
     user_id text PRIMARY KEY,

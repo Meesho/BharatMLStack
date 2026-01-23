@@ -10,7 +10,7 @@ type OrderKafkaMetaData struct {
 }
 
 type OrderEventData struct {
-	UserID      string       `json:"user_id"`
+	UserID      int64        `json:"user_id"`
 	OrderSplits []OrderSplit `json:"order_splits"`
 }
 
