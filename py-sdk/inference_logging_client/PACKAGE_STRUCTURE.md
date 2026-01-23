@@ -4,23 +4,22 @@ This document describes the refactored package structure.
 
 ## Directory Structure
 
-```
+```text
 inference-logging-client/
 ├── LICENSE
 ├── MANIFEST.in
 ├── pyproject.toml          # Package configuration and metadata
 ├── README.md               # Package documentation
 ├── .gitignore              # Git ignore rules
-└── src/
-    └── inference_logging_client/  # Main package (note: underscores for Python imports)
-        ├── __init__.py     # Main API exports
-        ├── __main__.py     # Package execution entry point
-        ├── types.py        # Type definitions (enums, dataclasses)
-        ├── utils.py        # Utility functions (type normalization, formatting)
-        ├── decoder.py      # Core decoding utilities (ByteReader, value decoders)
-        ├── io.py           # I/O operations (schema fetching, protobuf parsing)
-        ├── formats.py      # Format-specific decoders (proto, arrow, parquet)
-        └── cli.py          # Command-line interface
+└── inference_logging_client/  # Main package (note: underscores for Python imports)
+    ├── __init__.py         # Main API exports
+    ├── __main__.py         # Package execution entry point
+    ├── types.py            # Type definitions (enums, dataclasses)
+    ├── utils.py            # Utility functions (type normalization, formatting)
+    ├── decoder.py          # Core decoding utilities (ByteReader, value decoders)
+    ├── io.py               # I/O operations (schema fetching, protobuf parsing)
+    ├── formats.py          # Format-specific decoders (proto, arrow, parquet)
+    └── cli.py              # Command-line interface
 ```
 
 ## Module Breakdown

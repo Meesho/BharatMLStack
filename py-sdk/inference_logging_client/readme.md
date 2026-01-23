@@ -146,7 +146,7 @@ Extract metadata from MPLog bytes without full decoding.
 - Each column contains raw feature value bytes
 
 ### Parquet Format
-- Parquet file with Features column (map[int][]byte)
+- Parquet file with Features column (`map[int][]byte`)
 - Each row represents an entity
 
 ## Metadata Byte Layout
@@ -181,7 +181,7 @@ MIT License
 
 ## Repository
 
-https://github.com/Meesho/inference-logging-client
+[https://github.com/Meesho/BharatMLStack](https://github.com/Meesho/BharatMLStack)
 
 ## Contributing
 

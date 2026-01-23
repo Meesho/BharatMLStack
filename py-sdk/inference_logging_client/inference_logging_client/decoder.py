@@ -83,10 +83,17 @@ class ByteReader:
 
 
 def read_varint(reader: ByteReader) -> int:
-    """Read a protobuf varint."""
+    """Read a protobuf varint.
+    
+    Raises:
+        ValueError: If varint exceeds maximum allowed size (malformed data)
+    """
     result = 0
     shift = 0
+    max_shift = 70  # Maximum 10 bytes for 64-bit varint (10 * 7 = 70 bits)
     while True:
+        if shift > max_shift:
+            raise ValueError("Malformed varint: exceeds maximum size")
         byte = reader.read_uint8()
         result |= (byte & 0x7f) << shift
         if not (byte & 0x80):

@@ -12,28 +12,80 @@ Main functions:
     - get_mplog_metadata: Extract metadata from MPLog bytes
 """
 
+import warnings
 from typing import Optional
 
 import pandas as pd
 
+# Check for zstandard availability at import time for clear error messages
+try:
+    import zstandard as zstd
+    _ZSTD_AVAILABLE = True
+except ImportError:
+    _ZSTD_AVAILABLE = False
+    zstd = None
+
 from .types import Format, FeatureInfo, DecodedMPLog, FORMAT_TYPE_MAP
-from .io import get_feature_schema, parse_mplog_protobuf, get_mplog_metadata
+from .io import get_feature_schema, parse_mplog_protobuf, get_mplog_metadata, clear_schema_cache
 from .formats import decode_proto_format, decode_arrow_format, decode_parquet_format
 from .utils import format_dataframe_floats, get_format_name, unpack_metadata_byte
+from .exceptions import (
+    InferenceLoggingError,
+    SchemaFetchError,
+    SchemaNotFoundError,
+    DecodeError,
+    FormatError,
+    ProtobufError,
+)
 
 __version__ = "0.1.0"
+
+# Maximum supported schema version (4 bits = 0-15)
+_MAX_SCHEMA_VERSION = 15
 
 __all__ = [
     "decode_mplog",
     "decode_mplog_dataframe",
     "get_mplog_metadata",
     "get_feature_schema",
+    "clear_schema_cache",
     "Format",
     "FeatureInfo",
     "DecodedMPLog",
     "get_format_name",
     "unpack_metadata_byte",
+    # Exceptions
+    "InferenceLoggingError",
+    "SchemaFetchError",
+    "SchemaNotFoundError",
+    "DecodeError",
+    "FormatError",
+    "ProtobufError",
 ]
+
+
+def _decompress_zstd(data: bytes) -> bytes:
+    """Decompress zstd-compressed data.
+    
+    Args:
+        data: Potentially zstd-compressed bytes
+        
+    Returns:
+        Decompressed bytes, or original data if not compressed or zstd unavailable
+        
+    Raises:
+        ImportError: If data is zstd-compressed but zstandard is not installed
+    """
+    # Check for zstd magic number: 0x28 0xB5 0x2F 0xFD
+    if len(data) >= 4 and data[:4] == b'\x28\xB5\x2F\xFD':
+        if not _ZSTD_AVAILABLE:
+            raise ImportError(
+                "Data appears to be zstd-compressed but the 'zstandard' package is not installed. "
+                "Install it with: pip install zstandard"
+            )
+        decompressor = zstd.ZstdDecompressor()
+        return decompressor.decompress(data)
+    return data
 
 
 def decode_mplog(
@@ -50,13 +102,18 @@ def decode_mplog(
     Args:
         log_data: The MPLog bytes (possibly compressed)
         model_proxy_id: The model proxy config ID
-        version: The schema version
+        version: The schema version (0-15)
         format_type: The encoding format (proto, arrow, parquet). If None, auto-detect from metadata.
         inference_host: The inference service host URL. If None, reads from INFERENCE_HOST env var.
         decompress: Whether to attempt zstd decompression
     
     Returns:
         pandas DataFrame with entity_id as first column and features as remaining columns
+    
+    Raises:
+        ValueError: If version is out of valid range (0-15)
+        ImportError: If data is zstd-compressed but zstandard is not installed
+        FormatError: If format is unsupported or data cannot be parsed
     
     Example:
         >>> import inference_logging_client
@@ -70,7 +127,13 @@ def decode_mplog(
         >>> print(df.head())
     """
     import os
-    import zstandard as zstd
+    
+    # Validate version range
+    if not (0 <= version <= _MAX_SCHEMA_VERSION):
+        raise ValueError(
+            f"Version {version} is out of valid range (0-{_MAX_SCHEMA_VERSION}). "
+            f"Version is encoded in 4 bits of the metadata byte."
+        )
     
     # Read from environment variable if not provided
     if inference_host is None:
@@ -79,15 +142,7 @@ def decode_mplog(
     # Attempt decompression if enabled
     working_data = log_data
     if decompress:
-        try:
-            # Try to detect if data is zstd compressed
-            # zstd magic number: 0x28 0xB5 0x2F 0xFD
-            if len(log_data) >= 4 and log_data[:4] == b'\x28\xB5\x2F\xFD':
-                decompressor = zstd.ZstdDecompressor()
-                working_data = decompressor.decompress(log_data)
-        except Exception:
-            # Not compressed or decompression failed, use original data
-            working_data = log_data
+        working_data = _decompress_zstd(log_data)
     
     # If format_type is None, parse the protobuf to get format from metadata
     detected_format = format_type
@@ -111,7 +166,7 @@ def decode_mplog(
     elif detected_format == Format.PARQUET:
         entity_ids, decoded_rows = decode_parquet_format(working_data, schema)
     else:
-        raise ValueError(f"Unsupported format: {detected_format}")
+        raise FormatError(f"Unsupported format: {detected_format}")
     
     if not decoded_rows:
         # Return empty DataFrame with correct columns
@@ -173,6 +228,9 @@ def decode_mplog_dataframe(
     if inference_host is None:
         inference_host = os.getenv("INFERENCE_HOST", "http://localhost:8082")
     
+    # Track decode errors for summary
+    decode_errors = []
+    
     if df.empty:
         return pd.DataFrame()
     
@@ -231,6 +289,15 @@ def decode_mplog_dataframe(
         
         # Extract version from metadata byte
         _, version, _ = unpack_metadata_byte(metadata_byte)
+        
+        # Validate version range
+        if not (0 <= version <= _MAX_SCHEMA_VERSION):
+            warnings.warn(
+                f"Row {idx}: Version {version} extracted from metadata is out of valid range (0-{_MAX_SCHEMA_VERSION}). "
+                f"This may indicate corrupted metadata.",
+                UserWarning
+            )
+            continue
         
         # Extract mp_config_id
         mp_config_id = row[mp_config_id_column]
@@ -299,8 +366,9 @@ def decode_mplog_dataframe(
                 
                 all_decoded_rows.append(decoded_df)
         except Exception as e:
-            # Log error but continue processing other rows
-            print(f"Warning: Failed to decode row {idx}: {e}", file=sys.stderr)
+            # Track error but continue processing other rows
+            decode_errors.append((idx, str(e)))
+            warnings.warn(f"Failed to decode row {idx}: {e}", UserWarning)
             continue
     
     if not all_decoded_rows:

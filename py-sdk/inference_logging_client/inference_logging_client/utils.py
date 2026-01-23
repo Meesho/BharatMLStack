@@ -51,7 +51,17 @@ SIZED_TYPES = {
 
 
 def normalize_type(feature_type: str) -> str:
-    """Normalize feature type string for consistent comparison."""
+    """Normalize feature type string for consistent comparison.
+    
+    Args:
+        feature_type: The feature type string to normalize
+        
+    Returns:
+        Normalized uppercase string with underscores and DATATYPE prefix removed.
+        Returns empty string if feature_type is None.
+    """
+    if feature_type is None:
+        return ""
     return feature_type.upper().replace("_", "").replace("DATATYPE", "")
 
 

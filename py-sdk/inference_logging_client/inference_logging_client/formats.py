@@ -1,6 +1,8 @@
 """Format-specific decoders for proto, arrow, and parquet formats."""
 
 import io
+import sys
+import warnings
 from typing import Any
 
 import pyarrow as pa
@@ -11,6 +13,7 @@ from .types import Format, FeatureInfo
 from .io import parse_mplog_protobuf
 from .decoder import ByteReader, decode_scalar_value, decode_vector_or_string, decode_feature_value
 from .utils import is_sized_type, get_scalar_size
+from .exceptions import FormatError
 
 
 def decode_proto_features(encoded_bytes: bytes, schema: list[FeatureInfo]) -> dict[str, Any]:
@@ -30,10 +33,12 @@ def decode_proto_features(encoded_bytes: bytes, schema: list[FeatureInfo]) -> di
     result = {}
     
     # Read generated flag (first byte)
+    # The generated flag indicates: 1 = no generated values, 0 = has generated values
+    # Currently unused but reserved for future feature generation tracking
     if reader.remaining() < 1:
         return {f.name: None for f in schema}
     
-    generated_flag = reader.read_uint8()
+    _generated_flag = reader.read_uint8()  # Prefixed with _ to indicate intentionally unused
     
     for feature in schema:
         if not reader.has_more():
@@ -86,7 +91,8 @@ def decode_proto_format(mplog_data: bytes, schema: list[FeatureInfo]) -> tuple[l
     """
     parsed = parse_mplog_protobuf(mplog_data)
     
-    entity_ids = parsed.entities
+    # Create a copy to avoid mutating the parsed object's entities list
+    entity_ids = list(parsed.entities)
     encoded_features_list = getattr(parsed, '_encoded_features', [])
     
     decoded_rows = []
@@ -95,8 +101,16 @@ def decode_proto_format(mplog_data: bytes, schema: list[FeatureInfo]) -> tuple[l
         decoded_rows.append(decoded)
     
     # Ensure entity_ids matches decoded_rows count
+    original_entity_count = len(entity_ids)
     while len(entity_ids) < len(decoded_rows):
         entity_ids.append(f"entity_{len(entity_ids)}")
+    
+    if original_entity_count != len(decoded_rows):
+        warnings.warn(
+            f"Entity count mismatch: {original_entity_count} entity IDs for {len(decoded_rows)} rows. "
+            f"Generated synthetic IDs for missing entities.",
+            UserWarning
+        )
     
     return entity_ids[:len(decoded_rows)], decoded_rows
 
@@ -115,11 +129,20 @@ def decode_arrow_format(mplog_data: bytes, schema: list[FeatureInfo]) -> tuple[l
     """
     parsed = parse_mplog_protobuf(mplog_data)
     
-    entity_ids = parsed.entities
+    # Create a copy to avoid mutating the parsed object's entities list
+    entity_ids = list(parsed.entities)
     encoded_features_list = getattr(parsed, '_encoded_features', [])
     
     if not encoded_features_list:
         return [], []
+    
+    # Warn if multiple blobs exist (only first is used)
+    if len(encoded_features_list) > 1:
+        warnings.warn(
+            f"Arrow format contains {len(encoded_features_list)} encoded feature blobs, "
+            f"but only the first will be processed. This may indicate unexpected data.",
+            UserWarning
+        )
     
     # Arrow format stores all entities in a single IPC blob
     arrow_bytes = encoded_features_list[0]
@@ -131,7 +154,7 @@ def decode_arrow_format(mplog_data: bytes, schema: list[FeatureInfo]) -> tuple[l
         reader = pa.ipc.open_stream(io.BytesIO(arrow_bytes))
         table = reader.read_all()
     except Exception as e:
-        raise Exception(f"Failed to read Arrow IPC data: {e}")
+        raise FormatError(f"Failed to read Arrow IPC data: {e}")
     
     num_rows = table.num_rows
     decoded_rows = []
@@ -161,8 +184,16 @@ def decode_arrow_format(mplog_data: bytes, schema: list[FeatureInfo]) -> tuple[l
         decoded_rows.append(row_data)
     
     # Ensure entity_ids matches decoded_rows count
+    original_entity_count = len(entity_ids)
     while len(entity_ids) < len(decoded_rows):
         entity_ids.append(f"entity_{len(entity_ids)}")
+    
+    if original_entity_count != len(decoded_rows):
+        warnings.warn(
+            f"Entity count mismatch: {original_entity_count} entity IDs for {len(decoded_rows)} rows. "
+            f"Generated synthetic IDs for missing entities.",
+            UserWarning
+        )
     
     return entity_ids[:len(decoded_rows)], decoded_rows
 
@@ -181,11 +212,20 @@ def decode_parquet_format(mplog_data: bytes, schema: list[FeatureInfo]) -> tuple
     """
     parsed = parse_mplog_protobuf(mplog_data)
     
-    entity_ids = parsed.entities
+    # Create a copy to avoid mutating the parsed object's entities list
+    entity_ids = list(parsed.entities)
     encoded_features_list = getattr(parsed, '_encoded_features', [])
     
     if not encoded_features_list:
         return [], []
+    
+    # Warn if multiple blobs exist (only first is used)
+    if len(encoded_features_list) > 1:
+        warnings.warn(
+            f"Parquet format contains {len(encoded_features_list)} encoded feature blobs, "
+            f"but only the first will be processed. This may indicate unexpected data.",
+            UserWarning
+        )
     
     # Parquet format stores all entities in a single blob
     parquet_bytes = encoded_features_list[0]
@@ -196,7 +236,7 @@ def decode_parquet_format(mplog_data: bytes, schema: list[FeatureInfo]) -> tuple
     try:
         table = pq.read_table(io.BytesIO(parquet_bytes))
     except Exception as e:
-        raise Exception(f"Failed to read Parquet data: {e}")
+        raise FormatError(f"Failed to read Parquet data: {e}")
     
     num_rows = table.num_rows
     decoded_rows = []
@@ -274,7 +314,15 @@ def decode_parquet_format(mplog_data: bytes, schema: list[FeatureInfo]) -> tuple
             decoded_rows.append(row_data)
     
     # Ensure entity_ids matches decoded_rows count
+    original_entity_count = len(entity_ids)
     while len(entity_ids) < len(decoded_rows):
         entity_ids.append(f"entity_{len(entity_ids)}")
+    
+    if original_entity_count != len(decoded_rows):
+        warnings.warn(
+            f"Entity count mismatch: {original_entity_count} entity IDs for {len(decoded_rows)} rows. "
+            f"Generated synthetic IDs for missing entities.",
+            UserWarning
+        )
     
     return entity_ids[:len(decoded_rows)], decoded_rows
