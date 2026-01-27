@@ -204,3 +204,84 @@ func (fc *ShardCache) readFromDisk(fileOffset int64, length uint16, buf []byte) 
 func (fc *ShardCache) GetRingBufferActiveEntries() int {
 	return fc.keyIndex.GetRB().ActiveEntries()
 }
+
+// GetMetadata returns index metadata and checks if data is in memtable
+// Returns: (found, expired, inMemtable, val, remainingTTL, shouldReWrite, memId, offset, length)
+func (fc *ShardCache) GetMetadata(key string) (bool, bool, bool, []byte, uint16, bool, uint32, uint32, uint16) {
+	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
+
+	if status == indices.StatusNotFound {
+		metrics.Count("flashring.shard.get.key_not_found.count", 1, []string{})
+		return false, false, false, nil, 0, false, 0, 0, 0
+	}
+
+	if status == indices.StatusExpired {
+		metrics.Count("flashring.shard.get.key_expired.count", 1, []string{})
+		return false, true, false, nil, 0, false, 0, 0, 0
+	}
+
+	_, currMemId, _ := fc.mm.GetMemtable()
+	shouldReWrite := fc.predictor.Predict(uint64(freq), uint64(lastAccess), memId, currMemId)
+
+	// Check if data is in memtable (RAM)
+	mt := fc.mm.GetMemtableById(memId)
+	if mt != nil {
+		// Data in RAM - read it now
+		metrics.Count("flashring.shard.get.source", 1, []string{"source", "ram"})
+		buf, exists := mt.GetBufForRead(int(offset), length)
+		if !exists {
+			return false, false, false, nil, 0, false, 0, 0, 0
+		}
+		// Validate CRC
+		gotCRC := indices.ByteOrder.Uint32(buf[0:4])
+		computedCRC := crc32.ChecksumIEEE(buf[4:length])
+		if gotCRC != computedCRC {
+			metrics.Count("flashring.shard.get.bad_crc.count", 1, []string{"source", "ram"})
+			return false, false, false, nil, 0, shouldReWrite, 0, 0, 0
+		}
+		gotKey := string(buf[4 : 4+len(key)])
+		if gotKey != key {
+			metrics.Count("flashring.shard.get.bad_key.count", 1, []string{"source", "ram"})
+			return false, false, false, nil, 0, shouldReWrite, 0, 0, 0
+		}
+		valLen := int(length) - 4 - len(key)
+		return true, false, true, buf[4+len(key) : 4+len(key)+valLen], remainingTTL, shouldReWrite, 0, 0, 0
+	}
+
+	// Data on SSD - return metadata for lock-free read
+	return true, false, false, nil, remainingTTL, shouldReWrite, memId, offset, length
+}
+
+// ReadFromSSD reads data from SSD without holding lock - validates with CRC
+func (fc *ShardCache) ReadFromSSD(key string, memId uint32, offset uint32, length uint16) ([]byte, bool) {
+	metrics.Count("flashring.shard.get.source", 1, []string{"source", "ssd"})
+	start := time.Now()
+
+	buf := make([]byte, length)
+	fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
+	n := fc.readFromDisk(int64(fileOffset), length, buf)
+
+	metrics.Timing("flashring.shard.get.read.latency", time.Since(start), []string{"source", "ssd"})
+
+	if n != int(length) {
+		metrics.Count("flashring.shard.get.bad_length.count", 1, []string{"source", "ssd"})
+		return nil, false
+	}
+
+	// Validate CRC
+	gotCRC := indices.ByteOrder.Uint32(buf[0:4])
+	computedCRC := crc32.ChecksumIEEE(buf[4:length])
+	if gotCRC != computedCRC {
+		metrics.Count("flashring.shard.get.bad_crc.count", 1, []string{"source", "ssd"})
+		return nil, false
+	}
+
+	gotKey := string(buf[4 : 4+len(key)])
+	if gotKey != key {
+		metrics.Count("flashring.shard.get.bad_key.count", 1, []string{"source", "ssd"})
+		return nil, false
+	}
+
+	valLen := int(length) - 4 - len(key)
+	return buf[4+len(key) : 4+len(key)+valLen], true
+}
