@@ -92,6 +92,7 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	mt, mtId, _ := fc.mm.GetMemtable()
 	err := fc.dm.ExecuteDeleteIfNeeded()
 	if err != nil {
+		log.Error().Err(err).Msg("Failed to execute delete if needed")
 		return err
 	}
 	buf, offset, length, readyForFlush := mt.GetBufForAppend(uint16(size))
@@ -133,19 +134,25 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	}
 	if !memtableExists {
 		// Allocate buffer of exact size needed - no pool since readFromDisk already copies once
+		metrics.Count("flashring.shard.get.source", 1, []string{"source", "ssd"})
+		start := time.Now()
 		buf = make([]byte, length)
 		fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
 		n := fc.readFromDisk(int64(fileOffset), length, buf)
+		metrics.Timing("flashring.shard.get.read.latency", time.Since(start), []string{"source", "ssd"})
 		if n != int(length) {
 			metrics.Count("flashring.shard.get.bad_length.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
 			return false, nil, 0, false, shouldReWrite
 		}
 	} else {
+		metrics.Count("flashring.shard.get.source", 1, []string{"source", "ram"})
 		var exists bool
+		start := time.Now()
 		buf, exists = mt.GetBufForRead(int(offset), length)
 		if !exists {
 			panic("memtable exists but buf not found")
 		}
+		metrics.Timing("flashring.shard.get.read.latency", time.Since(start), []string{"source", "ram"})
 	}
 	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
 	computedCR32 := crc32.ChecksumIEEE(buf[4:length])

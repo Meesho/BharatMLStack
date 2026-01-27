@@ -1,8 +1,11 @@
 package memtables
 
 import (
+	"strconv"
+
 	"github.com/Meesho/BharatMLStack/flashring/internal/allocators"
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
+	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 	"github.com/rs/zerolog/log"
 )
 
@@ -92,7 +95,8 @@ func (mm *MemtableManager) flushConsumer(memtable *Memtable) {
 	memtable.Id = mm.nextId
 	mm.nextId++
 	mm.nextFileOffset += int64(n)
-	mm.stats.Flushes++
+	metrics.Count("flashring.memtable.flush.count", 1, []string{"memtable_id", strconv.Itoa(int(memtable.Id))})
+	//mm.stats.Flushes++
 }
 func (mm *MemtableManager) Flush() error {
 
