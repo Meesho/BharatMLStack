@@ -4,7 +4,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	filecache "github.com/Meesho/BharatMLStack/flashring/internal/shard"
 	badger "github.com/dgraph-io/badger/v4"
 	"github.com/rs/zerolog/log"
 )
@@ -49,7 +48,6 @@ func NewBadger(config WrapCacheConfig, logStats bool) (*Badger, error) {
 			ReWrites:               atomic.Uint64{},
 			Expired:                atomic.Uint64{},
 			ShardWiseActiveEntries: atomic.Uint64{},
-			LatencyTracker:         filecache.NewLatencyTracker(),
 		},
 	}
 
@@ -71,13 +69,8 @@ func NewBadger(config WrapCacheConfig, logStats bool) (*Badger, error) {
 				log.Info().Msgf("Gets/sec: %v", getsPerSec)
 				log.Info().Msgf("Puts/sec: %v", putsPerSec)
 
-				getP25, getP50, getP99 := bc.stats.LatencyTracker.GetLatencyPercentiles()
-				putP25, putP50, putP99 := bc.stats.LatencyTracker.PutLatencyPercentiles()
-
 				log.Info().Msgf("Get Count: %v", totalGets)
 				log.Info().Msgf("Put Count: %v", totalPuts)
-				log.Info().Msgf("Get Latencies - P25: %v, P50: %v, P99: %v", getP25, getP50, getP99)
-				log.Info().Msgf("Put Latencies - P25: %v, P50: %v, P99: %v", putP25, putP50, putP99)
 
 				prevTotalGets = totalGets
 				prevTotalPuts = totalPuts
@@ -89,12 +82,6 @@ func NewBadger(config WrapCacheConfig, logStats bool) (*Badger, error) {
 }
 
 func (b *Badger) Put(key string, value []byte, exptimeInMinutes uint16) error {
-
-	start := time.Now()
-	defer func() {
-		b.stats.LatencyTracker.RecordPut(time.Since(start))
-	}()
-
 	b.stats.TotalPuts.Add(1)
 	err := b.cache.Update(func(txn *badger.Txn) error {
 		entry := badger.NewEntry([]byte(key), value).WithTTL(time.Duration(exptimeInMinutes) * time.Minute)
@@ -105,12 +92,6 @@ func (b *Badger) Put(key string, value []byte, exptimeInMinutes uint16) error {
 }
 
 func (b *Badger) Get(key string) ([]byte, bool, bool) {
-
-	start := time.Now()
-	defer func() {
-		b.stats.LatencyTracker.RecordGet(time.Since(start))
-	}()
-
 	b.stats.TotalGets.Add(1)
 
 	val := make([]byte, 0)

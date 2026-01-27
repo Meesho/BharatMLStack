@@ -6,7 +6,6 @@ toolchain go1.24.9
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
-	github.com/coocood/freecache v1.2.4
 	github.com/rs/zerolog v1.34.0
 	github.com/zeebo/xxh3 v1.0.2
 	golang.org/x/sys v0.38.0
@@ -29,7 +28,7 @@ require (
 
 require (
 	github.com/DataDog/datadog-go/v5 v5.8.2
-	github.com/dgraph-io/badger/v4 v4.9.0 // indirect
+	github.com/dgraph-io/badger/v4 v4.9.0
 	github.com/dgraph-io/ristretto/v2 v2.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
