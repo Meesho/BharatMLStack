@@ -154,7 +154,7 @@ func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) erro
 	shardIdx := h32 % uint32(len(wc.shards))
 
 	defer func() {
-		metrics.Timing("flashring.put.latency", time.Since(t), []string{})
+		metrics.Timing("flashring.put.latency", time.Since(t), []string{"shard_id", strconv.Itoa(int(shardIdx))})
 	}()
 
 	wc.shardLocks[shardIdx].Lock()
@@ -165,9 +165,9 @@ func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) erro
 		log.Error().Err(err).Msgf("Put failed for key: %s", key)
 		return fmt.Errorf("put failed for key: %s", key)
 	}
-	metrics.Count("flashring.put.count", 1, []string{})
+	metrics.Count("flashring.put.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
 	if h32%100 < 10 {
-		metrics.Gauge("flashring.active.entries.gauge", float64(wc.shards[shardIdx].GetRingBufferActiveEntries()), []string{})
+		metrics.Gauge("flashring.active.entries.gauge", float64(wc.shards[shardIdx].GetRingBufferActiveEntries()), []string{"shard_id", strconv.Itoa(int(shardIdx))})
 	}
 
 	return nil
@@ -179,21 +179,21 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	shardIdx := h32 % uint32(len(wc.shards))
 
 	defer func() {
-		metrics.Timing("flashring.get.latency", time.Since(t), []string{})
+		metrics.Timing("flashring.get.latency", time.Since(t), []string{"shard_id", strconv.Itoa(int(shardIdx))})
 	}()
 
 	wc.shardLocks[shardIdx].RLock()
 	keyFound, val, remainingTTL, expired, shouldReWrite := wc.shards[shardIdx].Get(key)
 
 	if keyFound && !expired {
-		metrics.Count("flashring.get.hit.count", 1, []string{})
+		metrics.Count("flashring.get.hit.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
 	}
 	if expired {
-		metrics.Count("flashring.get.expired.count", 1, []string{})
+		metrics.Count("flashring.get.expired.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
 	}
-	metrics.Count("flashring.get.total.count", 1, []string{})
+	metrics.Count("flashring.get.total.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
 	if shouldReWrite {
-		metrics.Count("flashring.get.rewrite.count", 1, []string{})
+		metrics.Count("flashring.get.rewrite.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
 		valToWrite := make([]byte, len(val))
 		copy(valToWrite, val)
 		wc.shardLocks[shardIdx].RUnlock()

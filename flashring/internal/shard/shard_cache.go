@@ -106,19 +106,19 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	indices.ByteOrder.PutUint32(buf[0:4], crc)
 	fc.keyIndex.Put(key, length, ttlMinutes, mtId, uint32(offset))
 	fc.dm.IncMemtableKeyCount(mtId)
-	metrics.Count("flashring.put.count", 1, []string{"memtable_id", strconv.Itoa(int(mtId))})
+	metrics.Count("flashring.shard.put.count", 1, []string{"memtable_id", strconv.Itoa(int(mtId))})
 	return nil
 }
 
 func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 	if status == indices.StatusNotFound {
-		metrics.Count("flashring.get.key_not_found.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
+		metrics.Count("flashring.shard.get.key_not_found.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
 		return false, nil, 0, false, false
 	}
 
 	if status == indices.StatusExpired {
-		metrics.Count("flashring.get.key_expired.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
+		metrics.Count("flashring.shard.get.key_expired.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
 		return false, nil, 0, true, false
 	}
 
@@ -137,7 +137,7 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
 		n := fc.readFromDisk(int64(fileOffset), length, buf)
 		if n != int(length) {
-			metrics.Count("flashring.get.bad_length.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
+			metrics.Count("flashring.shard.get.bad_length.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
 			return false, nil, 0, false, shouldReWrite
 		}
 	} else {
@@ -151,11 +151,11 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotCR32 != computedCR32 {
-		metrics.Count("flashring.get.bad_crc.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
+		metrics.Count("flashring.shard.get.bad_crc.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
 		return false, nil, 0, false, shouldReWrite
 	}
 	if gotKey != key {
-		metrics.Count("flashring.get.bad_key.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
+		metrics.Count("flashring.shard.get.bad_key.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
 		return false, nil, 0, false, shouldReWrite
 	}
 	valLen := int(length) - 4 - len(key)
@@ -167,13 +167,13 @@ func (fc *ShardCache) validateAndReturnBuffer(key string, buf []byte, length uin
 	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
 	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
 	if gotCR32 != computedCR32 {
-		metrics.Count("flashring.get.bad_crc.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
+		metrics.Count("flashring.shard.get.bad_crc.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
 		return false, nil, 0, false, shouldReWrite
 	}
 
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotKey != key {
-		metrics.Count("flashring.get.bad_key.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
+		metrics.Count("flashring.shard.get.bad_key.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
 		return false, nil, 0, false, shouldReWrite
 	}
 
