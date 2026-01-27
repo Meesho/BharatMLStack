@@ -182,57 +182,26 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 		metrics.Timing("flashring.get.latency", time.Since(t), []string{"shard_id", strconv.Itoa(int(shardIdx))})
 	}()
 
-	// Phase 1: Quick metadata lookup under lock
 	wc.shardLocks[shardIdx].RLock()
-	found, expired, inMemtable, val, remainingTTL, shouldReWrite, memId, offset, length := wc.shards[shardIdx].GetMetadata(key)
+	keyFound, val, remainingTTL, expired, shouldReWrite := wc.shards[shardIdx].Get(key)
 
-	if !found {
-		wc.shardLocks[shardIdx].RUnlock()
-		metrics.Count("flashring.get.total.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
-		return nil, false, false
-	}
-
-	if expired {
-		wc.shardLocks[shardIdx].RUnlock()
-		metrics.Count("flashring.get.expired.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
-		metrics.Count("flashring.get.total.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
-		return nil, false, true
-	}
-
-	if inMemtable {
-		// RAM read complete - val already populated
+	if keyFound && !expired {
 		metrics.Count("flashring.get.hit.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
-		metrics.Count("flashring.get.total.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
-		if shouldReWrite {
-			metrics.Count("flashring.get.rewrite.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
-			valCopy := make([]byte, len(val))
-			copy(valCopy, val)
-			wc.shardLocks[shardIdx].RUnlock()
-			wc.Put(key, valCopy, remainingTTL)
-			return valCopy, true, false
-		}
-		wc.shardLocks[shardIdx].RUnlock()
-		return val, true, false
 	}
-
-	// Phase 2: SSD read - release lock FIRST
-	wc.shardLocks[shardIdx].RUnlock()
-
-	// Lock-free SSD read
-	val, ok := wc.shards[shardIdx].ReadFromSSD(key, memId, offset, length)
+	if expired {
+		metrics.Count("flashring.get.expired.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
+	}
 	metrics.Count("flashring.get.total.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
-
-	if !ok {
-		// CRC validation failed - treat as miss
-		return nil, false, false
-	}
-
-	metrics.Count("flashring.get.hit.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
 	if shouldReWrite {
 		metrics.Count("flashring.get.rewrite.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
-		wc.Put(key, val, remainingTTL)
+		valToWrite := make([]byte, len(val))
+		copy(valToWrite, val)
+		wc.shardLocks[shardIdx].RUnlock()
+		go wc.Put(key, valToWrite, remainingTTL)
+		return valToWrite, keyFound, expired
 	}
-	return val, true, false
+	wc.shardLocks[shardIdx].RUnlock()
+	return val, keyFound, expired
 }
 
 func (wc *WrapCache) Hash(key string) uint32 {
