@@ -157,10 +157,16 @@ func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) erro
 		metrics.Timing("flashring.put.latency", time.Since(t), []string{"shard_id", strconv.Itoa(int(shardIdx))})
 	}()
 
+	// Measure lock acquisition time
+	lockStart := time.Now()
 	wc.shardLocks[shardIdx].Lock()
+	metrics.Timing("flashring.put.lock_acquire.latency", time.Since(lockStart), []string{"shard_id", strconv.Itoa(int(shardIdx))})
 	defer wc.shardLocks[shardIdx].Unlock()
 
+	// Measure work time inside lock
+	workStart := time.Now()
 	err := wc.shards[shardIdx].Put(key, value, exptimeInMinutes)
+	metrics.Timing("flashring.put.work.latency", time.Since(workStart), []string{"shard_id", strconv.Itoa(int(shardIdx))})
 	if err != nil {
 		log.Error().Err(err).Msgf("Put failed for key: %s", key)
 		return fmt.Errorf("put failed for key: %s", key)
@@ -182,8 +188,15 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 		metrics.Timing("flashring.get.latency", time.Since(t), []string{"shard_id", strconv.Itoa(int(shardIdx))})
 	}()
 
+	// Measure lock acquisition time
+	lockStart := time.Now()
 	wc.shardLocks[shardIdx].RLock()
+	metrics.Timing("flashring.get.lock_acquire.latency", time.Since(lockStart), []string{"shard_id", strconv.Itoa(int(shardIdx))})
+
+	// Measure work time inside lock
+	workStart := time.Now()
 	keyFound, val, remainingTTL, expired, shouldReWrite := wc.shards[shardIdx].Get(key)
+	metrics.Timing("flashring.get.work.latency", time.Since(workStart), []string{"shard_id", strconv.Itoa(int(shardIdx))})
 
 	if keyFound && !expired {
 		metrics.Count("flashring.get.hit.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
