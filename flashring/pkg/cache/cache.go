@@ -137,7 +137,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error)
 			BlockSize:           BLOCK_SIZE,
 			Directory:           mountPoint,
 			Predictor:           predictor,
-		}, &shardLocks[i])
+		}, &shardLocks[i], i)
 	}
 	wc := &WrapCache{
 		shards:     shards,
