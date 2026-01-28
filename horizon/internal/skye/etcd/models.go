@@ -10,8 +10,8 @@ type Skye struct {
 }
 
 type RateLimiter struct {
-	RateLimit  int
-	BurstLimit int
+	RateLimit  int `json:"rate_limit"`
+	BurstLimit int `json:"burst_limit"`
 }
 
 type Models struct {
