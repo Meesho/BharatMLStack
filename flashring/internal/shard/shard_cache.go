@@ -112,7 +112,11 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 }
 
 func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
+	// Measure index lookup time
+	indexStart := time.Now()
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
+	metrics.Timing("flashring.shard.get.index_lookup.latency", time.Since(indexStart), nil)
+
 	if status == indices.StatusNotFound {
 		metrics.Count("flashring.shard.get.key_not_found.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
 		return false, nil, 0, false, false
@@ -123,8 +127,11 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		return false, nil, 0, true, false
 	}
 
+	// Measure predictor time
+	predictorStart := time.Now()
 	_, currMemId, _ := fc.mm.GetMemtable()
 	shouldReWrite := fc.predictor.Predict(uint64(freq), uint64(lastAccess), memId, currMemId)
+	metrics.Timing("flashring.shard.get.predictor.latency", time.Since(predictorStart), nil)
 
 	var buf []byte
 	memtableExists := true
@@ -154,9 +161,13 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		}
 		metrics.Timing("flashring.shard.get.read.latency", time.Since(start), []string{"source", "ram"})
 	}
+	// Measure CRC validation time
+	crcStart := time.Now()
 	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
 	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
 	gotKey := string(buf[4 : 4+len(key)])
+	metrics.Timing("flashring.shard.get.crc_validation.latency", time.Since(crcStart), nil)
+
 	if gotCR32 != computedCR32 {
 		metrics.Count("flashring.shard.get.bad_crc.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
 		return false, nil, 0, false, shouldReWrite
