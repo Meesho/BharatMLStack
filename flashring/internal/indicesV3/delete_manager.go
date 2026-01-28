@@ -2,9 +2,10 @@ package indicesv2
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
-	"github.com/rs/zerolog/log"
+	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 )
 
 type DeleteManager struct {
@@ -40,10 +41,10 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 		}
 		if memtableId != dm.toBeDeletedMemId {
 			dm.memtableData[dm.toBeDeletedMemId] = dm.memtableData[dm.toBeDeletedMemId] - count
-			log.Debug().Msgf("memtableId: %d, toBeDeletedMemId: %d", memtableId, dm.toBeDeletedMemId)
 			if dm.memtableData[dm.toBeDeletedMemId] != 0 {
 				return fmt.Errorf("memtableData[dm.toBeDeletedMemId] != 0")
 			}
+			metrics.Count("flashring.delete.memtable_completed.count", 1, []string{"memtable_id", strconv.Itoa(int(dm.toBeDeletedMemId))})
 			delete(dm.memtableData, dm.toBeDeletedMemId)
 			dm.toBeDeletedMemId = memtableId
 			dm.deleteInProgress = false

@@ -109,17 +109,12 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	indices.ByteOrder.PutUint32(buf[0:4], crc)
 	fc.keyIndex.Put(key, length, ttlMinutes, mtId, uint32(offset))
 	fc.dm.IncMemtableKeyCount(mtId)
-	metrics.Count("flashring.shard.put.count", 1, []string{"memtable_id", strconv.Itoa(int(mtId))})
 	return nil
 }
 
 func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
-	shardTag := []string{"shard_id", strconv.Itoa(fc.shardId)}
-
 	// Measure index lookup time
-	indexStart := time.Now()
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
-	metrics.Timing("flashring.shard.get.index_lookup.latency", time.Since(indexStart), shardTag)
 
 	if status == indices.StatusNotFound {
 		metrics.Count("flashring.shard.get.key_not_found.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
@@ -132,10 +127,8 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	}
 
 	// Measure predictor time
-	predictorStart := time.Now()
 	_, currMemId, _ := fc.mm.GetMemtable()
 	shouldReWrite := fc.predictor.Predict(uint64(freq), uint64(lastAccess), memId, currMemId)
-	metrics.Timing("flashring.shard.get.predictor.latency", time.Since(predictorStart), shardTag)
 
 	var buf []byte
 	memtableExists := true
@@ -145,32 +138,24 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	}
 	if !memtableExists {
 		// Allocate buffer of exact size needed - no pool since readFromDisk already copies once
-		metrics.Count("flashring.shard.get.source", 1, []string{"source", "ssd", "shard_id", strconv.Itoa(fc.shardId)})
-		start := time.Now()
 		buf = make([]byte, length)
 		fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
 		n := fc.readFromDisk(int64(fileOffset), length, buf)
-		metrics.Timing("flashring.shard.get.read.latency", time.Since(start), []string{"source", "ssd", "shard_id", strconv.Itoa(fc.shardId)})
 		if n != int(length) {
 			metrics.Count("flashring.shard.get.bad_length.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
 			return false, nil, 0, false, shouldReWrite
 		}
 	} else {
-		metrics.Count("flashring.shard.get.source", 1, []string{"source", "ram", "shard_id", strconv.Itoa(fc.shardId)})
 		var exists bool
-		start := time.Now()
 		buf, exists = mt.GetBufForRead(int(offset), length)
 		if !exists {
 			panic("memtable exists but buf not found")
 		}
-		metrics.Timing("flashring.shard.get.read.latency", time.Since(start), []string{"source", "ram", "shard_id", strconv.Itoa(fc.shardId)})
 	}
 	// Measure CRC validation time
-	crcStart := time.Now()
 	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
 	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
 	gotKey := string(buf[4 : 4+len(key)])
-	metrics.Timing("flashring.shard.get.crc_validation.latency", time.Since(crcStart), shardTag)
 
 	if gotCR32 != computedCR32 {
 		metrics.Count("flashring.shard.get.bad_crc.count", 1, []string{"memtable_id", strconv.Itoa(int(memId))})
