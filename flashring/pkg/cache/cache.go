@@ -190,9 +190,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	wc.shardLocks[shardIdx].RLock()
 	metrics.Timing("flashring.get.lock_acquire.latency", time.Since(lockStart), shardTag)
 
-	metadataStart := time.Now()
 	found, isInMemtable, memtableBuf, length, memId, offset, remainingTTL, expired, shouldReWrite := wc.shards[shardIdx].GetMetadata(key)
-	metrics.Timing("flashring.get.metadata.latency", time.Since(metadataStart), shardTag)
 
 	// Handle not found / expired cases
 	if !found {
@@ -233,7 +231,6 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 		return val, true, false
 	}
 
-	// Phase 2: Release lock BEFORE slow SSD read
 	wc.shardLocks[shardIdx].RUnlock()
 	metrics.Count("flashring.get.source", 1, []string{"source", "ssd", "shard_id", strconv.Itoa(int(shardIdx))})
 

@@ -122,7 +122,7 @@ func (fc *ShardCache) GetMetadata(key string) (found bool, isInMemtable bool, me
 	}
 
 	if status == indices.StatusExpired {
-		return false, false, nil, 0, 0, 0, 0, true, false
+		return true, false, nil, 0, 0, 0, 0, true, false
 	}
 
 	_, currMemId, _ := fc.mm.GetMemtable()
@@ -181,7 +181,7 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	}
 
 	if status == indices.StatusExpired {
-		return false, nil, 0, true, false
+		return true, nil, 0, true, false
 	}
 
 	_, currMemId, _ := fc.mm.GetMemtable()
@@ -238,12 +238,23 @@ func (fc *ShardCache) validateAndReturnBuffer(key string, buf []byte, length uin
 }
 
 func (fc *ShardCache) readFromDisk(fileOffset int64, length uint16, buf []byte) int {
+	shardTag := []string{"shard_id", strconv.Itoa(fc.shardId)}
+
 	alignedStartOffset := (fileOffset / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
 	endndOffset := fileOffset + int64(length)
 	endAlignedOffset := ((endndOffset + fs.BLOCK_SIZE - 1) / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
 	alignedReadSize := endAlignedOffset - alignedStartOffset
+
+	// Measure allocator get time
+	allocGetStart := time.Now()
 	page := fc.readPageAllocator.Get(int(alignedReadSize))
+	metrics.Timing("flashring.disk.alloc_get.latency", time.Since(allocGetStart), shardTag)
+
+	// Measure pure Pread syscall time
+	preadStart := time.Now()
 	fc.file.Pread(alignedStartOffset, page.Buf)
+	metrics.Timing("flashring.disk.pread.latency", time.Since(preadStart), shardTag)
+
 	start := int(fileOffset - alignedStartOffset)
 	n := copy(buf, page.Buf[start:start+int(length)])
 	fc.readPageAllocator.Put(page)
