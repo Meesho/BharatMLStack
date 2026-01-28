@@ -179,38 +179,90 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	t := time.Now()
 	h32 := wc.Hash(key)
 	shardIdx := h32 % uint32(len(wc.shards))
+	shardTag := []string{"shard_id", strconv.Itoa(int(shardIdx))}
 
 	defer func() {
-		metrics.Timing("flashring.get.latency", time.Since(t), []string{"shard_id", strconv.Itoa(int(shardIdx))})
+		metrics.Timing("flashring.get.latency", time.Since(t), shardTag)
 	}()
 
-	// Measure lock acquisition time
+	// Phase 1: Acquire lock and get metadata
 	lockStart := time.Now()
 	wc.shardLocks[shardIdx].RLock()
-	metrics.Timing("flashring.get.lock_acquire.latency", time.Since(lockStart), []string{"shard_id", strconv.Itoa(int(shardIdx))})
+	metrics.Timing("flashring.get.lock_acquire.latency", time.Since(lockStart), shardTag)
 
-	// Measure work time inside lock
-	workStart := time.Now()
-	keyFound, val, remainingTTL, expired, shouldReWrite := wc.shards[shardIdx].Get(key)
-	metrics.Timing("flashring.get.work.latency", time.Since(workStart), []string{"shard_id", strconv.Itoa(int(shardIdx))})
+	metadataStart := time.Now()
+	found, isInMemtable, memtableBuf, length, memId, offset, remainingTTL, expired, shouldReWrite := wc.shards[shardIdx].GetMetadata(key)
+	metrics.Timing("flashring.get.metadata.latency", time.Since(metadataStart), shardTag)
 
-	if keyFound && !expired {
-		metrics.Count("flashring.get.hit.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
-	}
-	if expired {
-		metrics.Count("flashring.get.expired.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
-	}
-	metrics.Count("flashring.get.total.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
-	if shouldReWrite {
-		metrics.Count("flashring.get.rewrite.count", 1, []string{"shard_id", strconv.Itoa(int(shardIdx))})
-		valToWrite := make([]byte, len(val))
-		copy(valToWrite, val)
+	// Handle not found / expired cases
+	if !found {
 		wc.shardLocks[shardIdx].RUnlock()
-		go wc.Put(key, valToWrite, remainingTTL)
-		return valToWrite, keyFound, expired
+		metrics.Count("flashring.get.not_found.count", 1, shardTag)
+		metrics.Count("flashring.get.total.count", 1, shardTag)
+		return nil, false, expired
 	}
+
+	if expired {
+		wc.shardLocks[shardIdx].RUnlock()
+		metrics.Count("flashring.get.expired.count", 1, shardTag)
+		metrics.Count("flashring.get.total.count", 1, shardTag)
+		return nil, false, true
+	}
+
+	// If data is in memtable, validate and return (fast path, keep lock)
+	if isInMemtable {
+		valid, val := wc.shards[shardIdx].ValidateBuffer(key, memtableBuf, length)
+		wc.shardLocks[shardIdx].RUnlock()
+
+		metrics.Count("flashring.get.total.count", 1, shardTag)
+		metrics.Count("flashring.get.source", 1, []string{"source", "ram", "shard_id", strconv.Itoa(int(shardIdx))})
+
+		if !valid {
+			return nil, false, false
+		}
+
+		metrics.Count("flashring.get.hit.count", 1, shardTag)
+
+		if shouldReWrite {
+			metrics.Count("flashring.get.rewrite.count", 1, shardTag)
+			valCopy := make([]byte, len(val))
+			copy(valCopy, val)
+			go wc.Put(key, valCopy, remainingTTL)
+			return valCopy, true, false
+		}
+		return val, true, false
+	}
+
+	// Phase 2: Release lock BEFORE slow SSD read
 	wc.shardLocks[shardIdx].RUnlock()
-	return val, keyFound, expired
+	metrics.Count("flashring.get.source", 1, []string{"source", "ssd", "shard_id", strconv.Itoa(int(shardIdx))})
+
+	// SSD read without holding lock
+	ssdStart := time.Now()
+	buf := wc.shards[shardIdx].ReadFromSSD(memId, offset, length)
+	metrics.Timing("flashring.get.ssd_read.latency", time.Since(ssdStart), shardTag)
+
+	if buf == nil {
+		metrics.Count("flashring.get.total.count", 1, shardTag)
+		return nil, false, false
+	}
+
+	// Phase 3: Validate CRC (ensures data integrity after lock-free read)
+	valid, val := wc.shards[shardIdx].ValidateBuffer(key, buf, length)
+	metrics.Count("flashring.get.total.count", 1, shardTag)
+
+	if !valid {
+		metrics.Count("flashring.get.crc_fail.count", 1, shardTag)
+		return nil, false, false
+	}
+
+	metrics.Count("flashring.get.hit.count", 1, shardTag)
+
+	if shouldReWrite {
+		metrics.Count("flashring.get.rewrite.count", 1, shardTag)
+		go wc.Put(key, val, remainingTTL)
+	}
+	return val, true, false
 }
 
 func (wc *WrapCache) Hash(key string) uint32 {
