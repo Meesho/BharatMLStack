@@ -35,7 +35,24 @@ func NewLoggerManager(config Config) (*LoggerManager, error) {
 	}
 
 	// Extract base directory from LogFilePath
-	baseDir := filepath.Dir(config.LogFilePath)
+	// If LogFilePath is already a directory (no file extension), use it directly
+	// Otherwise, extract the directory from the file path
+	cleanedPath := filepath.Clean(config.LogFilePath)
+
+	// Check if the path has a file extension (like .log, .txt, etc.)
+	// If it does, it's a file path - extract the directory
+	// If it doesn't, treat it as a directory and use it directly
+	hasFileExtension := filepath.Ext(cleanedPath) != ""
+
+	var baseDir string
+	if hasFileExtension {
+		// Has file extension, extract directory from file path
+		baseDir = filepath.Dir(cleanedPath)
+	} else {
+		// No file extension - treat as directory and use it directly
+		baseDir = cleanedPath
+	}
+
 	if baseDir == "." || baseDir == "" {
 		baseDir = "."
 	}

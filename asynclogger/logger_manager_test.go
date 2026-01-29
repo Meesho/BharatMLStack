@@ -49,6 +49,38 @@ func TestNewLoggerManager(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, ".", lm.baseDir)
 	})
+
+	t.Run("uses directory directly when provided", func(t *testing.T) {
+		// Test with absolute directory path
+		tmpDir := t.TempDir()
+		config := DefaultConfig(tmpDir) // Directory path, not a file path
+
+		lm, err := NewLoggerManager(config)
+		require.NoError(t, err)
+		assert.Equal(t, tmpDir, lm.baseDir, "Should use directory directly when provided")
+	})
+
+	t.Run("uses directory directly with trailing slash", func(t *testing.T) {
+		// Test with directory path ending with slash
+		tmpDir := t.TempDir()
+		dirWithSlash := tmpDir + string(filepath.Separator)
+		config := DefaultConfig(dirWithSlash)
+
+		lm, err := NewLoggerManager(config)
+		require.NoError(t, err)
+		assert.Equal(t, tmpDir, lm.baseDir, "Should clean trailing slash and use directory")
+	})
+
+	t.Run("extracts directory from file path with extension", func(t *testing.T) {
+		// Test that file paths still extract directory correctly
+		logPath := filepath.Join(t.TempDir(), "subdir", "app.log")
+		config := DefaultConfig(logPath)
+
+		lm, err := NewLoggerManager(config)
+		require.NoError(t, err)
+		expectedDir := filepath.Dir(logPath)
+		assert.Equal(t, expectedDir, lm.baseDir, "Should extract directory from file path")
+	})
 }
 
 func TestSanitizeEventName(t *testing.T) {
@@ -148,10 +180,10 @@ func TestLoggerManager_LogBytesWithEvent(t *testing.T) {
 
 		// Empty string should not create a logger
 		assert.False(t, lm2.HasEventLogger(""))
-		
+
 		// "invalid/name" gets sanitized to "invalid_name" and creates a logger
 		assert.True(t, lm2.HasEventLogger("invalid_name"))
-		
+
 		// Stats should reflect the sanitized logger creation
 		assert.Greater(t, finalStats, initialStats, "stats should reflect sanitized logger")
 	})
@@ -649,4 +681,3 @@ func TestLoggerManager_LoadOrStoreRaceCondition(t *testing.T) {
 		assert.Equal(t, int64(numGoroutines), totalLogs)
 	})
 }
-
