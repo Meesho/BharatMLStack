@@ -199,33 +199,69 @@ func (p *OrderPersistHandler) persistEvents(bucketIdx int, userId string, finalE
 	}
 	tableName := getOrderTableName(bucketIdx)
 
+	// Track all PSDBs for cleanup after persist completes
+	psdbsToCleanup := make([]*blocks.PermanentStorageDataBlock, 0, len(columnsToUpdate)+len(columnsToInsert))
+
+	// Process updates: serialize and persist one at a time
 	for _, column := range columnsToUpdate {
 		events := finalEvents[column]
-		data, err := p.buildAndSerializePermanentStorageDataBlock(events)
+		psdb, err := p.buildPermanentStorageDataBlock(events)
 		if err != nil {
-			return nil, fmt.Errorf("serialize failed for column %s: %w", column, err)
+			cleanupPSDBs(psdbsToCleanup)
+			return nil, fmt.Errorf("psdb build failed for column %s: %w", column, err)
+		}
+		psdbsToCleanup = append(psdbsToCleanup, psdb)
+
+		data, err := psdb.Serialize()
+		if err != nil {
+			cleanupPSDBs(psdbsToCleanup)
+			return nil, fmt.Errorf("psdb serialize failed for column %s: %w", column, err)
 		}
 		if err := p.scyllaDb.UpdateInteractions(tableName, userId, column, data); err != nil {
-			return nil, fmt.Errorf("update failed for column %s: %w", column, err)
+			cleanupPSDBs(psdbsToCleanup)
+			return nil, fmt.Errorf("psdb update failed for column %s: %w", column, err)
 		}
 		metadata.toUpdate[column] = len(events)
 	}
 
+	// Process inserts: build all PSDBs first, then serialize and persist together
 	if len(columnsToInsert) > 0 {
 		insertData := make(map[string]interface{})
+		columnPSDBs := make(map[string]*blocks.PermanentStorageDataBlock, len(columnsToInsert))
+
+		// Build all PSDBs
 		for _, column := range columnsToInsert {
 			events := finalEvents[column]
-			data, err := p.buildAndSerializePermanentStorageDataBlock(events)
+			psdb, err := p.buildPermanentStorageDataBlock(events)
 			if err != nil {
-				return nil, fmt.Errorf("serialize failed for column %s: %w", column, err)
+				cleanupPSDBs(psdbsToCleanup)
+				return nil, fmt.Errorf("psdb build failed for column %s: %w", column, err)
 			}
-			insertData[column] = data
+			columnPSDBs[column] = psdb
+			psdbsToCleanup = append(psdbsToCleanup, psdb)
 			metadata.toInsert[column] = len(events)
 		}
+
+		// Serialize all PSDBs
+		for _, column := range columnsToInsert {
+			psdb := columnPSDBs[column]
+			data, err := psdb.Serialize()
+			if err != nil {
+				cleanupPSDBs(psdbsToCleanup)
+				return nil, fmt.Errorf("psdb serialize failed for column %s: %w", column, err)
+			}
+			insertData[column] = data
+		}
+
+		// Persist all at once
 		if err := p.scyllaDb.PersistInteractions(tableName, userId, insertData); err != nil {
-			return nil, fmt.Errorf("persist failed for columns %v: %w", columnsToInsert, err)
+			cleanupPSDBs(psdbsToCleanup)
+			return nil, fmt.Errorf("psdb persist failed for columns %v: %w", columnsToInsert, err)
 		}
 	}
+
+	// Cleanup PSDBs after all persist operations complete
+	cleanupPSDBs(psdbsToCleanup)
 
 	return metadata, nil
 }
@@ -262,14 +298,12 @@ func getOrderTableName(bucketIdx int) string {
 	return ""
 }
 
-func (p *OrderPersistHandler) buildAndSerializePermanentStorageDataBlock(data []model.FlattenedOrderEvent) ([]byte, error) {
+func (p *OrderPersistHandler) buildPermanentStorageDataBlock(data []model.FlattenedOrderEvent) (*blocks.PermanentStorageDataBlock, error) {
 	builder := blocks.NewPermanentStorageDataBlockBuilder()
 	builder.SetLayoutVersion(1)
 	builder.SetCompressionType(compression.TypeZSTD)
 	builder.SetData(data)
 	builder.SetDataLength(uint16(len(data)))
 	builder.SetInteractionType(enum.InteractionTypeOrder)
-	psdb := builder.Build()
-	defer blocks.GetPSDBPool().Put(psdb)
-	return psdb.Serialize()
+	return builder.Build(), nil
 }

@@ -23,7 +23,9 @@ func Init(config config.Configs) {
 		router = gin.New()
 
 		router.Use(gin.Recovery())
-		router.Use(gin.Logger())
+		if env != "prod" && env != "production" {
+			router.Use(gin.Logger())
+		}
 		router.Use(AuthMiddleware())
 
 		router.GET("/health/self", func(c *gin.Context) {

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	blocks "github.com/Meesho/BharatMLStack/interaction-store/internal/data/block"
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -310,8 +311,8 @@ func TestGetOrderMetadataTableName_ReturnsCorrectName(t *testing.T) {
 	assert.Equal(t, "order_interactions_metadata", result)
 }
 
-// Verifies that events are successfully serialized into permanent storage data block format.
-func TestOrderPersistHandler_buildAndSerializePermanentStorageDataBlock_Success(t *testing.T) {
+// Verifies that events are successfully built into permanent storage data block format.
+func TestOrderPersistHandler_buildPermanentStorageDataBlock_Success(t *testing.T) {
 	handler := &OrderPersistHandler{}
 
 	orderedAt := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC).UnixMilli()
@@ -319,23 +320,36 @@ func TestOrderPersistHandler_buildAndSerializePermanentStorageDataBlock_Success(
 		createTestFlattenedOrderEvent(orderedAt, 100, 200, "SUB001"),
 	}
 
-	data, err := handler.buildAndSerializePermanentStorageDataBlock(events)
+	psdb, err := handler.buildPermanentStorageDataBlock(events)
+	assert.NoError(t, err)
+	assert.NotNil(t, psdb)
 
+	// Verify serialization works
+	data, err := psdb.Serialize()
 	assert.NoError(t, err)
 	assert.NotEmpty(t, data)
+
+	// Cleanup
+	cleanupPSDBs([]*blocks.PermanentStorageDataBlock{psdb})
 }
 
 // Verifies that serialization of empty events returns an error.
-func TestOrderPersistHandler_buildAndSerializePermanentStorageDataBlock_EmptyEvents(t *testing.T) {
+func TestOrderPersistHandler_buildPermanentStorageDataBlock_EmptyEvents(t *testing.T) {
 	handler := &OrderPersistHandler{}
 
 	events := []model.FlattenedOrderEvent{}
 
-	data, err := handler.buildAndSerializePermanentStorageDataBlock(events)
+	psdb, err := handler.buildPermanentStorageDataBlock(events)
+	assert.NoError(t, err) // Build succeeds
+	assert.NotNil(t, psdb)
 
-	// Empty events should return an error as the serialization requires data
+	// Serialization of empty events should return an error
+	data, err := psdb.Serialize()
 	assert.Error(t, err)
 	assert.Nil(t, data)
+
+	// Cleanup
+	cleanupPSDBs([]*blocks.PermanentStorageDataBlock{psdb})
 }
 
 // Verifies persistence of events from different weeks within the same bucket.
