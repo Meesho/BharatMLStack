@@ -103,15 +103,15 @@ const ModelRegistry = () => {
     try {
       setLoading(true);
       setError('');
-      const [modelsResponse, entitiesResponse, jobFrequenciesResponse, mqIdTopicsResponse] = await Promise.all([
-        embeddingPlatformAPI.getModels(),
+      const [modelRequestsResponse, entitiesResponse, jobFrequenciesResponse, mqIdTopicsResponse] = await Promise.all([
+        embeddingPlatformAPI.getModelRequests(),
         embeddingPlatformAPI.getEntities(),
         embeddingPlatformAPI.getJobFrequencies(),
         embeddingPlatformAPI.getMQIdTopics()
       ]);
 
-      if (modelsResponse.models) {
-        setModels(modelsResponse.models);
+      if (modelRequestsResponse.model_requests) {
+        setModels(modelRequestsResponse.model_requests);
       } else {
         setModels([]);
       }
@@ -125,8 +125,11 @@ const ModelRegistry = () => {
         setEntities(availableEntities);
       }
 
-      if (jobFrequenciesResponse.job_frequencies) {
-        setJobFrequencies(jobFrequenciesResponse.job_frequencies);
+      if (jobFrequenciesResponse.frequencies) {
+        // Convert frequencies object to array
+        // Structure: { "FREQ_1D": "FREQ_1D", "FREQ_1M": "FREQ_1M", ... }
+        const frequenciesArray = Object.values(jobFrequenciesResponse.frequencies);
+        setJobFrequencies(frequenciesArray);
       } else {
         setJobFrequencies([]);
       }
@@ -481,10 +484,30 @@ const ModelRegistry = () => {
 
     try {
       setLoading(true);
+      
+      // Parse metadata if it's a string
+      let parsedMetadata = modelData.metadata;
+      if (typeof modelData.metadata === 'string' && modelData.metadata.trim()) {
+        try {
+          parsedMetadata = JSON.parse(modelData.metadata);
+        } catch (parseError) {
+          setValidationErrors({ metadata: 'Invalid JSON format. Please provide valid JSON.' });
+          setModalMessage('Metadata must be valid JSON format.');
+          showNotification("Validation failed", "error");
+          setLoading(false);
+          return;
+        }
+      } else if (!modelData.metadata || (typeof modelData.metadata === 'string' && !modelData.metadata.trim())) {
+        parsedMetadata = {};
+      }
+      
       const payload = {
         requestor: user?.email || 'user@example.com',
         reason: isEditMode ? 'Updating model configuration' : 'Registering new ML model',
-        payload: modelData
+        payload: {
+          ...modelData,
+          metadata: parsedMetadata
+        }
       };
       
       const response = isEditMode 
@@ -990,15 +1013,15 @@ const ModelRegistry = () => {
                 <TextField
                   fullWidth
                   multiline
-                  rows={2}
+                  rows={4}
                   size="small"
                   name="metadata"
                   label="Metadata (JSON)"
-                  value={modelData.metadata}
+                  value={typeof modelData.metadata === 'string' ? modelData.metadata : JSON.stringify(modelData.metadata || {}, null, 2)}
                   onChange={handleChange}
                   error={!!validationErrors.metadata}
-                  helperText={validationErrors.metadata}
-                  placeholder='{"key": "value"}'
+                  helperText={validationErrors.metadata || 'Expected format: {"entity": "string", "key-type": "string", "details": {"catalog_id": {"feature-group": "string", "feature": "string"}}}'}
+                  placeholder='{"entity": "catalog", "key-type": "catalog_id", "details": {"catalog_id": {"feature-group": "catalog_features", "feature": "catalog_id"}}}'
                 />
               </Grid>
             </Grid>

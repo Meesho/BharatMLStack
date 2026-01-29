@@ -96,7 +96,6 @@ const VariantRegistry = () => {
 
   useEffect(() => {
     fetchData();
-    fetchFilters();
     fetchVariantsList();
   }, []);
 
@@ -106,6 +105,7 @@ const VariantRegistry = () => {
       fetchFiltersForEntity(variantData.entity);
     } else {
       setModels([]);
+      setFilters([]);
       setVariantData(prev => ({ ...prev, model: '' }));
     }
   }, [variantData.entity]);
@@ -158,11 +158,31 @@ const VariantRegistry = () => {
   const fetchModelsForEntity = async (entityName) => {
     try {
       const response = await embeddingPlatformAPI.getModels({ entity: entityName });
-      if (response.models) {
-        const approvedModels = response.models.filter(model => 
-          (model.status || '') === 'active'
-        );
-        setModels(approvedModels);
+      if (response.models && typeof response.models === 'object') {
+        // Handle nested structure: { "catalog": { "Models": {...} }, "product": { "Models": {...} } }
+        const modelsArray = [];
+        Object.entries(response.models).forEach(([entity, entityData]) => {
+          // If entity parameter was provided, only process that entity
+          if (entityName && entity !== entityName) return;
+          
+          if (entityData.Models) {
+            Object.entries(entityData.Models).forEach(([modelName, modelData]) => {
+              modelsArray.push({
+                model: modelName,
+                name: modelName,
+                entity: entity,
+                model_type: modelData.ModelType || '',
+                ...modelData
+              });
+            });
+          }
+        });
+        setModels(modelsArray);
+      } else if (Array.isArray(response.models)) {
+        // Fallback for array format
+        setModels(response.models);
+      } else {
+        setModels([]);
       }
     } catch (error) {
       console.error('Error fetching models for entity:', error);
@@ -170,75 +190,32 @@ const VariantRegistry = () => {
     }
   };
 
-  const fetchFilters = async () => {
-    try {
-      const response = await embeddingPlatformAPI.getFilters();
-      
-      // Transform filter_groups response to flat array format
-      if (response.filter_groups && Array.isArray(response.filter_groups)) {
-        const transformedFilters = response.filter_groups.flatMap((group, groupIndex) => 
-          group.filters.map((filter, filterIndex) => ({
-            id: `${group.entity}_${filterIndex}`,
-            filter_id: `${group.entity}_${filterIndex}`,
-            entity: group.entity,
-            column_name: filter.column_name,
-            filter_value: filter.filter_value,
-            default_value: filter.default_value,
-            filter: {
-              column_name: filter.column_name,
-              filter_value: filter.filter_value,
-              default_value: filter.default_value
-            }
-          }))
-        );
-        setFilters(transformedFilters);
-      } else if (response.filters) {
-        // Fallback for old response format
-        setFilters(response.filters);
-      } else {
-        setFilters([]);
-      }
-    } catch (error) {
-      console.error('Error fetching filters:', error);
-      setFilters([]);
-    }
-  };
-
   const fetchFiltersForEntity = async (entityName) => {
     try {
       const response = await embeddingPlatformAPI.getFilters({ entity: entityName });
       
-      // Transform filter_groups response to flat array format
-      if (response.filter_groups && Array.isArray(response.filter_groups)) {
-        const transformedFilters = response.filter_groups.flatMap((group, groupIndex) => 
-          group.filters.map((filter, filterIndex) => ({
-            id: `${group.entity}_${filterIndex}`,
-            filter_id: `${group.entity}_${filterIndex}`,
-            entity: group.entity,
-            column_name: filter.column_name,
-            filter_value: filter.filter_value,
-            default_value: filter.default_value,
-            filter: {
-              column_name: filter.column_name,
-              filter_value: filter.filter_value,
-              default_value: filter.default_value
-            }
-          }))
-        );
-        // Store entity-specific filters separately or filter existing ones
-        setFilters(prevFilters => [
-          ...prevFilters.filter(f => f.entity !== entityName),
-          ...transformedFilters
-        ]);
-      } else if (response.filters) {
-        // Fallback for old response format
-        setFilters(prevFilters => [
-          ...prevFilters.filter(f => f.entity !== entityName),
-          ...response.filters
-        ]);
+      if (response.filters && typeof response.filters === 'object') {
+        const filtersArray = Object.entries(response.filters).map(([filterName, filterData], index) => ({
+          id: `${entityName}_${filterName}_${index}`,
+          filter_id: `${entityName}_${filterName}_${index}`,
+          entity: entityName,
+          column_name: filterData.column_name || filterName,
+          filter_value: filterData.filter_value || '',
+          default_value: filterData.default_value || '',
+          filter: {
+            column_name: filterData.column_name || filterName,
+            filter_value: filterData.filter_value || '',
+            default_value: filterData.default_value || ''
+          }
+        }));
+        
+        setFilters(filtersArray);
+      } else {
+        setFilters([]);
       }
     } catch (error) {
       console.error('Error fetching filters for entity:', error);
+      setFilters([]);
     }
   };
 
@@ -1078,7 +1055,8 @@ const VariantRegistry = () => {
                       
                       // Convert selected filters to criteria format
                       const criteria = selectedFilters.map(filterId => {
-                        const filter = filters.find(f => f.id === filterId || f.filter_id === filterId);
+                        const filtersArray = Array.isArray(filters) ? filters : [];
+                        const filter = filtersArray.find(f => f.id === filterId || f.filter_id === filterId);
                         return filter ? {
                           column_name: filter.filter?.column_name || filter.column_name,
                           operator: 'equals',
@@ -1100,7 +1078,8 @@ const VariantRegistry = () => {
                     renderValue={(selected) => (
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                         {selected.map((filterId) => {
-                          const filter = filters.find(f => f.id === filterId || f.filter_id === filterId);
+                          const filtersArray = Array.isArray(filters) ? filters : [];
+                          const filter = filtersArray.find(f => f.id === filterId || f.filter_id === filterId);
                           return (
                             <Chip 
                               key={filterId} 
@@ -1112,7 +1091,7 @@ const VariantRegistry = () => {
                   </Box>
                     )}
                   >
-                    {filters
+                    {(Array.isArray(filters) ? filters : [])
                       .filter(filter => !variantData.entity || filter.entity === variantData.entity)
                       .map((filter) => (
                         <MenuItem 

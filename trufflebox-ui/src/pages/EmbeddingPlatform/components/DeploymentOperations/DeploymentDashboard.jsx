@@ -78,24 +78,23 @@ const DeploymentDashboard = () => {
         setLoading(true);
       }
 
-      // Fetch available deployment data (currently only Qdrant clusters)
-      const [
-        qdrantClusters,
-      ] = await Promise.all([
-        embeddingPlatformAPI.getQdrantClusters().catch(() => ({ data: { clusters: [] } })),
-      ]);
+      // Fetch variant onboarding tasks as deployment data
+      const variantOnboardingTasks = await embeddingPlatformAPI.getVariantOnboardingTasks().catch(() => ({ variant_onboarding_tasks: [] }));
 
-      // Transform Qdrant clusters into deployment format
+      // Transform variant onboarding tasks into deployment format
       const combinedDeployments = [
-        ...(qdrantClusters.data?.clusters || []).map(cluster => ({
-          ...cluster,
-          type: 'Qdrant Cluster',
-          deployment_id: cluster.cluster_id,
-          status: cluster.status || DEPLOYMENT_STATUS.DEPLOYED,
-          created_by: cluster.created_by || 'System',
-          created_at: cluster.created_at || new Date().toISOString(),
-          updated_at: cluster.updated_at || new Date().toISOString(),
-          environment: cluster.environment || 'production'
+        ...(variantOnboardingTasks.variant_onboarding_tasks || []).map(task => ({
+          ...task,
+          type: 'Variant Onboarding',
+          deployment_id: task.task_id,
+          status: task.status || DEPLOYMENT_STATUS.PENDING,
+          created_by: task.created_by || 'System',
+          created_at: task.created_at || new Date().toISOString(),
+          updated_at: task.updated_at || new Date().toISOString(),
+          environment: 'production',
+          entity: task.entity,
+          model: task.model,
+          variant: task.variant
         })),
       ];
 

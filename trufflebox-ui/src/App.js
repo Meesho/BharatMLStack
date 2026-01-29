@@ -55,9 +55,7 @@ import EmbeddingFilterApproval from './pages/EmbeddingPlatform/components/Filter
 import EmbeddingJobFrequencyRegistry from './pages/EmbeddingPlatform/components/JobFrequencyManagement/JobFrequencyRegistry';
 import EmbeddingJobFrequencyApproval from './pages/EmbeddingPlatform/components/JobFrequencyManagement/JobFrequencyApproval';
 import { default as EmbeddingStoreDiscovery } from './pages/EmbeddingPlatform/components/StoreManagement/StoreDiscovery';
-import { default as EmbeddingEntityDiscovery } from './pages/EmbeddingPlatform/components/EntityManagement/EntityDiscovery';
-import { default as EmbeddingModelDiscovery } from './pages/EmbeddingPlatform/components/ModelManagement/ModelDiscovery';
-import { default as EmbeddingVariantDiscovery } from './pages/EmbeddingPlatform/components/VariantManagement/VariantDiscovery';
+import { default as EmbeddingHierarchicalDiscovery } from './pages/EmbeddingPlatform/components/HierarchicalDiscovery';
 import { default as EmbeddingFilterDiscovery } from './pages/EmbeddingPlatform/components/FilterManagement/FilterDiscovery';
 import { default as EmbeddingJobFrequencyDiscovery } from './pages/EmbeddingPlatform/components/JobFrequencyManagement/JobFrequencyDiscovery';
 
@@ -293,26 +291,10 @@ function App() {
           }
         />
         <Route
-          path="/embedding-platform/discovery/entities"
+          path="/embedding-platform/discovery/hierarchical"
           element={
-            <ProtectedRoute service="embedding_platform" screenType="entity-discovery">
-              <EmbeddingEntityDiscovery />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/embedding-platform/discovery/models"
-          element={
-            <ProtectedRoute service="embedding_platform" screenType="model-discovery">
-              <EmbeddingModelDiscovery />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/embedding-platform/discovery/variants"
-          element={
-            <ProtectedRoute service="embedding_platform" screenType="variant-discovery">
-              <EmbeddingVariantDiscovery />
+            <ProtectedRoute service="embedding_platform" screenType="hierarchical-discovery">
+              <EmbeddingHierarchicalDiscovery />
             </ProtectedRoute>
           }
         />

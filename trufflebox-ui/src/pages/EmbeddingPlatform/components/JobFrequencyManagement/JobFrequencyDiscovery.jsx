@@ -32,8 +32,13 @@ const JobFrequencyDiscovery = () => {
       setLoading(true);
       const response = await embeddingPlatformAPI.getJobFrequencies();
       
-      if (response.job_frequencies) {
-        setJobFrequencies(response.job_frequencies);
+      if (response.frequencies) {
+        // Convert frequencies object to array
+        // Structure: { "FREQ_1D": "FREQ_1D", "FREQ_1M": "FREQ_1M", ... }
+        const frequenciesArray = Object.values(response.frequencies);
+        setJobFrequencies(frequenciesArray);
+      } else {
+        setJobFrequencies([]);
       }
     } catch (error) {
       console.error('Error fetching job frequencies:', error);

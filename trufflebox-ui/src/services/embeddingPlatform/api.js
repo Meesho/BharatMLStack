@@ -1,4 +1,5 @@
 import { REACT_APP_HORIZON_BASE_URL } from '../../config';
+import { normalizeRequestList } from './utils';
 
 const BASE_URL = `${REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/skye`;
 
@@ -87,9 +88,11 @@ class EmbeddingPlatformAPI {
 
   /**
    * Get Store Requests
+   * API returns payload as JSON string; normalized to payload object per contract.
    */
   async getStoreRequests() {
-    return this.makeRequest('/data/store-requests');
+    const response = await this.makeRequest('/data/store-requests');
+    return normalizeRequestList(response, 'store_requests');
   }
 
   // =============================================================================
@@ -125,9 +128,11 @@ class EmbeddingPlatformAPI {
 
   /**
    * Get Entity Requests
+   * API returns payload as JSON string; normalized to payload object per contract.
    */
   async getEntityRequests() {
-    return this.makeRequest('/data/entity-requests');
+    const response = await this.makeRequest('/data/entity-requests');
+    return normalizeRequestList(response, 'entity_requests');
   }
 
   // =============================================================================
@@ -184,9 +189,11 @@ class EmbeddingPlatformAPI {
 
   /**
    * Get Model Requests
+   * API returns payload as JSON string; normalized to payload object and spread for table (entity, model, model_type).
    */
   async getModelRequests() {
-    return this.makeRequest('/data/model-requests');
+    const response = await this.makeRequest('/data/model-requests');
+    return normalizeRequestList(response, 'model_requests', true);
   }
 
   // =============================================================================
@@ -235,16 +242,21 @@ class EmbeddingPlatformAPI {
 
   /**
    * Get Variants
+   * @param {Object} params - Query parameters (entity, model)
    */
-  async getVariants() {
-    return this.makeRequest('/data/variants');
+  async getVariants(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    const endpoint = queryString ? `/data/variants?${queryString}` : '/data/variants';
+    return this.makeRequest(endpoint);
   }
 
   /**
    * Get Variant Requests
+   * API returns payload as JSON string; normalized to payload object per contract.
    */
   async getVariantRequests() {
-    return this.makeRequest('/data/variant-requests');
+    const response = await this.makeRequest('/data/variant-requests');
+    return normalizeRequestList(response, 'variant_requests');
   }
 
   // =============================================================================
@@ -283,9 +295,11 @@ class EmbeddingPlatformAPI {
 
   /**
    * Get Filter Requests
+   * API returns payload as JSON string; normalized to payload object per contract.
    */
   async getFilterRequests() {
-    return this.makeRequest('/data/filter-requests');
+    const response = await this.makeRequest('/data/filter-requests');
+    return normalizeRequestList(response, 'filter_requests');
   }
 
   // =============================================================================
@@ -321,48 +335,16 @@ class EmbeddingPlatformAPI {
 
   /**
    * Get Job Frequency Requests
+   * API returns payload as JSON string; normalized to payload object per contract.
    */
   async getJobFrequencyRequests() {
-    return this.makeRequest('/data/job-frequency-requests');
+    const response = await this.makeRequest('/data/job-frequency-requests');
+    return normalizeRequestList(response, 'job_frequency_requests');
   }
 
   // =============================================================================
-  // DEPLOYMENT OPERATIONS ENDPOINTS
+  // VARIANT PROMOTION & ONBOARDING OPERATIONS ENDPOINTS
   // =============================================================================
-
-  /**
-   * Create Qdrant Cluster
-   */
-  async createQdrantCluster(payload) {
-    return this.makeRequest('/requests/qdrant/create-cluster', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  }
-
-  /**
-   * Approve Qdrant Cluster
-   */
-  async approveQdrantCluster(payload) {
-    return this.makeRequest('/requests/qdrant/approve', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  }
-
-  /**
-   * Get Qdrant Clusters
-   */
-  async getQdrantClusters() {
-    return this.makeRequest('/data/qdrant/clusters');
-  }
-
-  /**
-   * Get Deployment Requests (All types: cluster, promotion, onboarding)
-   */
-  async getDeploymentRequests() {
-    return this.makeRequest('/data/deployment-requests');
-  }
 
   /**
    * Promote Variant
@@ -378,7 +360,7 @@ class EmbeddingPlatformAPI {
    * Approve Variant Promotion
    */
   async approveVariantPromotion(payload) {
-    return this.makeRequest('/requests/variant/promote/approve', {
+    return this.makeRequest(`/requests/variant/promote/approve?request_id=${payload.request_id}`, {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -398,7 +380,7 @@ class EmbeddingPlatformAPI {
    * Approve Variant Onboarding
    */
   async approveVariantOnboarding(payload) {
-    return this.makeRequest('/requests/variant/onboard/approve', {
+    return this.makeRequest(`/requests/variant/onboard/approve?request_id=${payload.request_id}`, {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -406,16 +388,18 @@ class EmbeddingPlatformAPI {
 
   /**
    * Get All Variant Onboarding Requests
+   * API returns payload as JSON string; normalized to payload object per contract.
    */
   async getAllVariantOnboardingRequests() {
-    return this.makeRequest('/data/variant-onboarding/requests');
+    const response = await this.makeRequest('/data/variant-onboarding/requests');
+    return normalizeRequestList(response, 'variant_onboarding_requests');
   }
 
   /**
-   * Get Onboarded Variants
+   * Get Variant Onboarding Tasks
    */
-  async getOnboardedVariants() {
-    return this.makeRequest('/data/variant-onboarding/variants');
+  async getVariantOnboardingTasks() {
+    return this.makeRequest('/data/variant-onboarding/tasks');
   }
 
   // =============================================================================
@@ -487,17 +471,13 @@ export const {
   getJobFrequencies,
   getJobFrequencyRequests,
   
-  // Deployment Operations
-  createQdrantCluster,
-  approveQdrantCluster,
-  getQdrantClusters,
-  getDeploymentRequests,
+  // Variant Promotion & Onboarding Operations
   promoteVariant,
   approveVariantPromotion,
   onboardVariant,
   approveVariantOnboarding,
   getAllVariantOnboardingRequests,
-  getOnboardedVariants,
+  getVariantOnboardingTasks,
   
   // MQ ID to Topics Mapping
   getMQIdTopics,

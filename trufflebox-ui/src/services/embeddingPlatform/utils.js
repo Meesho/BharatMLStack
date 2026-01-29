@@ -6,14 +6,7 @@ import {
   REQUEST_STATUS,
 } from './constants';
 
-/**
- * Utility functions for Embedding Platform (Skye)
- * Validation, formatting, and helper functions
- */
-
-// =============================================================================
-// BUSINESS RULE VALIDATIONS
-// =============================================================================
+// VALIDATION UTILITIES
 
 /**
  * Validate store registration payload
@@ -129,13 +122,6 @@ export const validateModelPayload = (payload) => {
     errors.training_data_path = 'Training data path is required';
   }
 
-  // Validate topic name
-  if (!payload.topic_name) {
-    errors.topic_name = ERROR_MESSAGES.REQUIRED_FIELD;
-  } else if (!VALIDATION_PATTERNS.TOPIC_NAME.test(payload.topic_name)) {
-    errors.topic_name = 'Topic name must contain only alphanumeric characters, underscores, and hyphens';
-  }
-
   // Validate model config
   if (!payload.model_config) {
     errors.model_config = 'Model configuration is required';
@@ -162,9 +148,7 @@ export const validateModelPayload = (payload) => {
 };
 
 
-// =============================================================================
 // FORMATTING UTILITIES
-// =============================================================================
 
 /**
  * Format date for display
@@ -178,9 +162,7 @@ export const formatDate = (dateString) => {
   }
 };
 
-// =============================================================================
 // DATA TRANSFORMATION UTILITIES
-// =============================================================================
 
 /**
  * Transform API response to table format
@@ -203,10 +185,7 @@ export const transformToTableData = (data, type = 'requests') => {
   }));
 };
 
-// =============================================================================
 // BUSINESS LOGIC UTILITIES
-// =============================================================================
-
 
 /**
  * Get default form values based on type
@@ -290,9 +269,35 @@ export const getDefaultFormValues = (type) => {
   return defaults[type] || {};
 };
 
-// =============================================================================
-// EXPORT ALL UTILITIES
-// =============================================================================
+// REQUEST LIST NORMALIZATION (API contract: payload is JSON string)
+
+/**
+ * Normalize a request list response by parsing each item's payload (JSON string) into an object
+ */
+export const normalizeRequestList = (response, arrayKey, spreadPayload = false) => {
+  const arr = response?.[arrayKey];
+  if (!Array.isArray(arr)) return response;
+
+  const normalized = arr.map((item) => {
+    let parsed = {};
+    try {
+      parsed =
+        typeof item.payload === 'string'
+          ? JSON.parse(item.payload || '{}')
+          : item.payload != null
+            ? item.payload
+            : {};
+    } catch (e) {
+      parsed = {};
+    }
+    if (spreadPayload) {
+      return { ...item, payload: parsed, ...parsed };
+    }
+    return { ...item, payload: parsed };
+  });
+
+  return { ...response, [arrayKey]: normalized };
+};
 
 export default {
   // Business Rules
@@ -305,6 +310,7 @@ export default {
 
   // Data Transformation
   transformToTableData,
+  normalizeRequestList,
 
   // Business Logic
   getDefaultFormValues,

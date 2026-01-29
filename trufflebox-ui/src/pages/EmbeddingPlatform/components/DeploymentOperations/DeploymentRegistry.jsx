@@ -101,18 +101,40 @@ const DeploymentRegistry = () => {
 
   const fetchDependencies = async () => {
     try {
-      // Fetch entities, models, variants, and clusters for form dropdowns
-      const [entitiesRes, modelsRes, variantsRes, clustersRes] = await Promise.all([
+      // Fetch entities, models for form dropdowns
+      const [entitiesRes, modelsRes] = await Promise.all([
         embeddingPlatformAPI.getEntities(),
         embeddingPlatformAPI.getModels(),
-        embeddingPlatformAPI.getVariants(),
-        embeddingPlatformAPI.getQdrantClusters()
       ]);
 
       if (entitiesRes.entities) setEntities(entitiesRes.entities);
-      if (modelsRes.models) setModels(modelsRes.models);
-      if (variantsRes.variants) setVariants(variantsRes.variants);
-      if (clustersRes.data?.clusters) setClusters(clustersRes.data.clusters);
+      
+      if (modelsRes.models && typeof modelsRes.models === 'object') {
+        // Flatten the nested structure: { "catalog": { "Models": {...} }, "product": { "Models": {...} } }
+        const modelsArray = [];
+        Object.entries(modelsRes.models).forEach(([entityName, entityData]) => {
+          if (entityData.Models) {
+            Object.entries(entityData.Models).forEach(([modelName, modelData]) => {
+              modelsArray.push({
+                model: modelName,
+                name: modelName,
+                entity: entityName,
+                model_type: modelData.ModelType || '',
+                vector_dimension: modelData.ModelConfig?.vector_dimension || 0,
+                job_frequency: modelData.JobFrequency || '',
+                ...modelData
+              });
+            });
+          }
+        });
+        setModels(modelsArray);
+      } else {
+        setModels([]);
+      }
+      
+      // Variants will be fetched when entity and model are selected
+      setVariants([]);
+      setClusters([]);
     } catch (error) {
       console.error('Error fetching dependencies:', error);
     }
@@ -233,7 +255,8 @@ const DeploymentRegistry = () => {
             project: clusterData.project
           }
         };
-        apiCall = () => embeddingPlatformAPI.createQdrantCluster(payload);
+        // Cluster creation endpoint removed - use variant promotion/onboarding instead
+        throw new Error('Cluster creation is no longer available. Please use variant promotion or onboarding.');
       }
     } else if (operationType === 'promotion') {
       errors = validatePromotionForm();

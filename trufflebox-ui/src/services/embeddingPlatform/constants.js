@@ -1,11 +1,4 @@
-/**
- * Constants for Embedding Platform (Skye)
- * Business rules, validation constants, and UI configurations
- */
-
-// =============================================================================
 // BUSINESS RULE CONSTANTS
-// =============================================================================
 
 export const BUSINESS_RULES = {
   // Store Management
@@ -29,9 +22,7 @@ export const BUSINESS_RULES = {
   },
 };
 
-// =============================================================================
 // STATUS CONSTANTS
-// =============================================================================
 
 export const REQUEST_STATUS = {
   PENDING: 'PENDING',
@@ -40,6 +31,7 @@ export const REQUEST_STATUS = {
   REJECTED: 'REJECTED',
   COMPLETED: 'COMPLETED',
   FAILED: 'FAILED',
+  SUCCESS: 'SUCCESS',
   CANCELLED: 'CANCELLED',
 };
 
@@ -49,9 +41,7 @@ export const APPROVAL_DECISIONS = {
   NEEDS_MODIFICATION: 'NEEDS_MODIFICATION',
 };
 
-// =============================================================================
 // JOB FREQUENCY OPTIONS
-// =============================================================================
 
 export const JOB_FREQUENCIES = [
   { id: 'FREQ_1H', label: 'Hourly', description: 'Runs every hour' },
@@ -66,9 +56,7 @@ export const JOB_FREQUENCIES = [
   { id: 'FREQ_1M', label: 'Monthly', description: 'Runs every month' },
 ];
 
-// =============================================================================
 // DISTANCE FUNCTIONS
-// =============================================================================
 
 export const DISTANCE_FUNCTIONS = [
   { id: 'EUCLIDEAN', label: 'Euclidean Distance' },
@@ -79,9 +67,7 @@ export const DISTANCE_FUNCTIONS = [
 
 
 
-// =============================================================================
 // STATUS COLOR MAPPINGS
-// =============================================================================
 
 export const STATUS_COLORS = {
   [REQUEST_STATUS.PENDING]: {
@@ -114,6 +100,11 @@ export const STATUS_COLORS = {
     text: '#D32F2F',
     label: 'Failed',
   },
+  [REQUEST_STATUS.SUCCESS]: {
+    background: '#E8F5E8',
+    text: '#2E7D32',
+    label: 'Success',
+  },
   [REQUEST_STATUS.CANCELLED]: {
     background: '#F5F5F5',
     text: '#757575',
@@ -121,9 +112,7 @@ export const STATUS_COLORS = {
   },
 };
 
-// =============================================================================
 // FORM VALIDATION PATTERNS
-// =============================================================================
 
 export const VALIDATION_PATTERNS = {
   EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
@@ -136,9 +125,7 @@ export const VALIDATION_PATTERNS = {
   DNS_SUBDOMAIN: /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/, // RFC 1123 subdomain
 };
 
-// =============================================================================
 // ERROR MESSAGES
-// =============================================================================
 
 export const ERROR_MESSAGES = {
   REQUIRED_FIELD: 'This field is required',

@@ -65,13 +65,15 @@ const DeploymentApproval = () => {
     try {
       setLoading(true);
       setError('');
-      const response = await embeddingPlatformAPI.getDeploymentRequests();
+      const onboardingResponse = await embeddingPlatformAPI.getAllVariantOnboardingRequests().catch(() => ({ variant_onboarding_requests: [] }));
       
-      if (response.deployment_requests) {
-        setDeploymentRequests(response.deployment_requests);
-      } else {
-        setDeploymentRequests([]);
-      }
+      // Transform requests to deployment format (payload already normalized by API)
+      const allRequests = (onboardingResponse.variant_onboarding_requests || []).map(req => ({
+        ...req,
+        request_type: 'variant_onboarding'
+      }));
+      
+      setDeploymentRequests(allRequests);
     } catch (error) {
       console.error('Error fetching deployment requests:', error);
       setError('Failed to load deployment requests. Please refresh the page.');
@@ -303,12 +305,10 @@ const DeploymentApproval = () => {
         approval_comments: approvalComments || (decision === 'APPROVED' ? 'Request approved' : 'Request rejected'),
       };
 
-      if (selectedRequest.request_type === 'cluster_creation') {
-        apiCall = () => embeddingPlatformAPI.approveQdrantCluster(payload);
-      } else if (selectedRequest.request_type === 'variant_promotion') {
-        apiCall = () => embeddingPlatformAPI.approveVariantPromotion(payload);
-      } else if (selectedRequest.request_type === 'variant_onboarding') {
+      if (selectedRequest.request_type === 'variant_onboarding') {
         apiCall = () => embeddingPlatformAPI.approveVariantOnboarding(payload);
+      } else {
+        throw new Error('Unsupported request type');
       }
 
       await apiCall();

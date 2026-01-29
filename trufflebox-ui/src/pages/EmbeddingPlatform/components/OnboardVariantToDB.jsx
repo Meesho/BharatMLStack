@@ -149,14 +149,21 @@ const OnboardVariantToDB = () => {
 
   const fetchVariantsForModel = async (entityName, modelName) => {
     try {
-      const response = await embeddingPlatformAPI.getVariants();
+      const response = await embeddingPlatformAPI.getVariants({ entity: entityName, model: modelName });
       if (response.variants) {
-        const modelVariants = response.variants.filter(variant => 
-          variant.entity === entityName && 
-          variant.model === modelName &&
+        // If variants is an object (map), convert to array
+        let variantsList = [];
+        if (typeof response.variants === 'object' && !Array.isArray(response.variants)) {
+          variantsList = Object.values(response.variants).flat();
+        } else {
+          variantsList = response.variants;
+        }
+        const modelVariants = variantsList.filter(variant => 
           (variant.status || '') === 'active'
         );
         setVariants(modelVariants);
+      } else {
+        setVariants([]);
       }
     } catch (error) {
       console.error('Error fetching variants for model:', error);
