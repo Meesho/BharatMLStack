@@ -50,11 +50,14 @@ const HierarchicalDiscovery = () => {
       // Check all entities for matching models
       entities.forEach(entity => {
         const entityData = allModelsData[entity.name];
-        if (entityData && entityData.Models) {
-          const hasMatchingModel = Object.entries(entityData.Models).some(([modelName, modelData]) => {
+        const modelsObj = entityData?.Models ?? entityData?.models;
+        if (entityData && modelsObj) {
+          const hasMatchingModel = Object.entries(modelsObj).some(([modelName, modelData]) => {
+            const mt = modelData.model_type ?? modelData.ModelType;
+            const jf = modelData.job_frequency ?? modelData.JobFrequency;
             return modelName.toLowerCase().includes(query) ||
-              modelData.ModelType?.toLowerCase().includes(query) ||
-              modelData.JobFrequency?.toLowerCase().includes(query);
+              mt?.toLowerCase().includes(query) ||
+              jf?.toLowerCase().includes(query);
           });
           if (hasMatchingModel) {
             entitiesToExpand.add(entity.name);
@@ -84,8 +87,7 @@ const HierarchicalDiscovery = () => {
       
       // Fetch all models
       const modelsResponse = await embeddingPlatformAPI.getModels();
-      if (modelsResponse.models && typeof modelsResponse.models === 'object') {
-        // Structure: { "catalog": { StoreId, Models: {...} }, "product": {...} }
+      if (modelsResponse.models && typeof modelsResponse.models === 'object' && !Array.isArray(modelsResponse.models)) {
         setAllModelsData(modelsResponse.models);
       }
     } catch (error) {
@@ -138,11 +140,14 @@ const HierarchicalDiscovery = () => {
       
       // Check if any model in this entity matches
       const entityData = allModelsData[entity.name];
-      if (entityData && entityData.Models) {
-        const hasMatchingModel = Object.entries(entityData.Models).some(([modelName, modelData]) => {
+      const modelsObj = entityData?.Models ?? entityData?.models;
+      if (entityData && modelsObj) {
+        const hasMatchingModel = Object.entries(modelsObj).some(([modelName, modelData]) => {
+          const mt = modelData.model_type ?? modelData.ModelType;
+          const jf = modelData.job_frequency ?? modelData.JobFrequency;
           return modelName.toLowerCase().includes(query) ||
-            modelData.ModelType?.toLowerCase().includes(query) ||
-            modelData.JobFrequency?.toLowerCase().includes(query);
+            mt?.toLowerCase().includes(query) ||
+            jf?.toLowerCase().includes(query);
         });
         if (hasMatchingModel) return true;
       }
@@ -176,11 +181,14 @@ const HierarchicalDiscovery = () => {
     
     entities.forEach(entity => {
       const entityData = allModelsData[entity.name];
-      if (entityData && entityData.Models) {
-        Object.entries(entityData.Models).forEach(([modelName, modelData]) => {
+      const modelsObj = entityData?.Models ?? entityData?.models;
+      if (entityData && modelsObj) {
+        Object.entries(modelsObj).forEach(([modelName, modelData]) => {
+          const mt = modelData.model_type ?? modelData.ModelType;
+          const jf = modelData.job_frequency ?? modelData.JobFrequency;
           const modelMatches = modelName.toLowerCase().includes(query) ||
-            modelData.ModelType?.toLowerCase().includes(query) ||
-            modelData.JobFrequency?.toLowerCase().includes(query);
+            mt?.toLowerCase().includes(query) ||
+            jf?.toLowerCase().includes(query);
           if (modelMatches) {
             matching.add(`${entity.name}_${modelName}`);
           }
@@ -193,13 +201,22 @@ const HierarchicalDiscovery = () => {
 
   const getModelsForEntity = (entityName) => {
     const entityData = allModelsData[entityName];
-    if (!entityData || !entityData.Models) return [];
+    const modelsObj = entityData?.Models ?? entityData?.models;
+    if (!entityData || !modelsObj) return [];
     
-    return Object.entries(entityData.Models).map(([modelName, modelData]) => ({
-      name: modelName,
-      ...modelData,
-      entity: entityName,
-    }));
+    return Object.entries(modelsObj).map(([modelName, modelData]) => {
+      const mt = modelData.model_type ?? modelData.ModelType;
+      const mc = modelData.model_config ?? modelData.ModelConfig;
+      const jf = modelData.job_frequency ?? modelData.JobFrequency;
+      return {
+        name: modelName,
+        ...modelData,
+        entity: entityName,
+        ModelType: mt,
+        ModelConfig: mc,
+        JobFrequency: jf,
+      };
+    });
   };
 
   const getFilteredModels = (entityName) => {
@@ -213,25 +230,31 @@ const HierarchicalDiscovery = () => {
     
     // Otherwise, filter models based on search query
     const query = searchQuery.toLowerCase();
-    return models.filter(model =>
-      model.name?.toLowerCase().includes(query) ||
-      model.ModelType?.toLowerCase().includes(query) ||
-      model.JobFrequency?.toLowerCase().includes(query)
-    );
+    return models.filter(model => {
+      const mt = model.model_type ?? model.ModelType;
+      const jf = model.job_frequency ?? model.JobFrequency;
+      return model.name?.toLowerCase().includes(query) ||
+        mt?.toLowerCase().includes(query) ||
+        jf?.toLowerCase().includes(query);
+    });
   };
 
   const getVariantsForModel = (entityName, modelName) => {
     const entityData = allModelsData[entityName];
-    if (!entityData || !entityData.Models || !entityData.Models[modelName]) return [];
+    const modelsObj = entityData?.Models ?? entityData?.models;
+    if (!entityData || !modelsObj || !modelsObj[modelName]) return [];
     
-    const model = entityData.Models[modelName];
-    if (!model.Variants) return [];
+    const model = modelsObj[modelName];
+    const variantsObj = model?.variants ?? model?.Variants;
+    if (!variantsObj) return [];
     
-    return Object.entries(model.Variants).map(([variantName, variantData]) => ({
+    return Object.entries(variantsObj).map(([variantName, variantData]) => ({
       name: variantName,
       ...variantData,
       entity: entityName,
       model: modelName,
+      Type: variantData.type ?? variantData.Type,
+      VariantState: variantData.variant_state ?? variantData.VariantState,
     }));
   };
 
@@ -247,11 +270,13 @@ const HierarchicalDiscovery = () => {
     
     // Otherwise, filter variants based on search query
     const query = searchQuery.toLowerCase();
-    return variants.filter(variant =>
-      variant.name?.toLowerCase().includes(query) ||
-      variant.Type?.toLowerCase().includes(query) ||
-      variant.VariantState?.toLowerCase().includes(query)
-    );
+    return variants.filter(variant => {
+      const typeVal = variant.type ?? variant.Type;
+      const stateVal = variant.variant_state ?? variant.VariantState;
+      return variant.name?.toLowerCase().includes(query) ||
+        typeVal?.toLowerCase().includes(query) ||
+        stateVal?.toLowerCase().includes(query);
+    });
   };
 
   const renderEntityItem = (entity) => {
@@ -751,7 +776,7 @@ const HierarchicalDiscovery = () => {
       <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
         <Typography variant="h6" sx={{ mb: 1 }}>Hierarchical Discovery</Typography>
         <TextField
-          label="Search Entities, Models, or Variants"
+          label="Search Entities or Models"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           InputProps={{

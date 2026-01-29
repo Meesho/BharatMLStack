@@ -18,7 +18,7 @@ export const BUSINESS_RULES = {
   VARIANT: {
     FORCED_VECTOR_DB_TYPE: 'QDRANT', // Always QDRANT
     FORCED_TYPE: 'EXPERIMENT', // Always EXPERIMENT
-    ADMIN_ONLY_FIELDS: ['vector_db_config', 'rate_limiter', 'rt_partition'],
+    ADMIN_ONLY_FIELDS: ['vector_db_config', 'rate_limiter'],
   },
 };
 

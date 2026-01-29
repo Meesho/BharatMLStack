@@ -34,6 +34,7 @@ import {
   Switch,
   FormControlLabel,
   Snackbar,
+  Collapse,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
@@ -41,6 +42,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ExperimentIcon from '@mui/icons-material/Science';
 import LockIcon from '@mui/icons-material/Lock';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useAuth } from '../../../Auth/AuthContext';
 import embeddingPlatformAPI from '../../../../services/embeddingPlatform/api';
 
@@ -52,6 +54,7 @@ const VariantRegistry = () => {
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [showRawJsonInViewModal, setShowRawJsonInViewModal] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [entities, setEntities] = useState([]);
   const [models, setModels] = useState([]);
@@ -60,7 +63,6 @@ const VariantRegistry = () => {
   const { user } = useAuth();
   const [notification, setNotification] = useState({ open: false, message: "", severity: "success" });
   
-  // Simplified variant data structure
   const [variantData, setVariantData] = useState({
     entity: '',
     model: '',
@@ -68,25 +70,13 @@ const VariantRegistry = () => {
     reason: '',
     vector_db_type: 'QDRANT',
     type: 'EXPERIMENT',
-    caching_configuration: {
-      in_memory_caching_enabled: true,
-      in_memory_cache_ttl_seconds: 300,
-      distributed_caching_enabled: false,
-      distributed_cache_ttl_seconds: 600,
-      embedding_retrieval_in_memory_config: { enabled: true, ttl: 60 },
-      embedding_retrieval_distributed_config: { enabled: false, ttl: 300 },
-      dot_product_in_memory_config: { enabled: true, ttl: 30 },
-      dot_product_distributed_config: { enabled: false, ttl: 120 },
-    },
     filter_configuration: {
-      criteria: [],
-      enabled: false,
-      selected_filters: []
+      criteria: [], // [{ column_name, condition: 'EQUALS' | 'NOT_EQUALS' }]
     },
     vector_db_config: {},
-    rate_limiter: { rate_limit: 0, burst_limit: 0 },
-    rt_partition: 0
   });
+  const [filterAddColumnName, setFilterAddColumnName] = useState('');
+  const [filterAddCondition, setFilterAddCondition] = useState('EQUALS');
 
   const statusOptions = [
     { value: 'PENDING', label: 'Pending', color: '#FFF8E1', textColor: '#F57C00' },
@@ -158,21 +148,21 @@ const VariantRegistry = () => {
   const fetchModelsForEntity = async (entityName) => {
     try {
       const response = await embeddingPlatformAPI.getModels({ entity: entityName });
-      if (response.models && typeof response.models === 'object') {
-        // Handle nested structure: { "catalog": { "Models": {...} }, "product": { "Models": {...} } }
+      if (response.models && typeof response.models === 'object' && !Array.isArray(response.models)) {
         const modelsArray = [];
         Object.entries(response.models).forEach(([entity, entityData]) => {
-          // If entity parameter was provided, only process that entity
           if (entityName && entity !== entityName) return;
-          
-          if (entityData.Models) {
-            Object.entries(entityData.Models).forEach(([modelName, modelData]) => {
+          const modelsObj = entityData?.Models ?? entityData?.models;
+          if (modelsObj) {
+            Object.entries(modelsObj).forEach(([modelName, modelData]) => {
+              const modelType = modelData.model_type ?? modelData.ModelType ?? '';
               modelsArray.push({
                 model: modelName,
                 name: modelName,
-                entity: entity,
-                model_type: modelData.ModelType || '',
-                ...modelData
+                entity,
+                model_type: modelType,
+                ModelType: modelType,
+                ...modelData,
               });
             });
           }
@@ -211,7 +201,7 @@ const VariantRegistry = () => {
         
         setFilters(filtersArray);
       } else {
-        setFilters([]);
+        setModels([]);
       }
     } catch (error) {
       console.error('Error fetching filters for entity:', error);
@@ -439,11 +429,14 @@ const VariantRegistry = () => {
 
   const handleCloseViewModal = () => {
     setShowViewModal(false);
+    setShowRawJsonInViewModal(false);
     setSelectedVariant(null);
   };
 
   const handleOpen = () => {
     setOpen(true);
+    setFilterAddColumnName('');
+    setFilterAddCondition('EQUALS');
     setVariantData({
       entity: '',
       model: '',
@@ -451,24 +444,8 @@ const VariantRegistry = () => {
       reason: '',
       vector_db_type: 'QDRANT',
       type: 'EXPERIMENT',
-      caching_configuration: {
-        in_memory_caching_enabled: true,
-        in_memory_cache_ttl_seconds: 300,
-        distributed_caching_enabled: false,
-        distributed_cache_ttl_seconds: 600,
-        embedding_retrieval_in_memory_config: { enabled: true, ttl: 60 },
-        embedding_retrieval_distributed_config: { enabled: false, ttl: 300 },
-        dot_product_in_memory_config: { enabled: true, ttl: 30 },
-        dot_product_distributed_config: { enabled: false, ttl: 120 },
-      },
-      filter_configuration: {
-        criteria: [],
-        enabled: false,
-        selected_filters: []
-      },
+      filter_configuration: { criteria: [] },
       vector_db_config: {},
-      rate_limiter: { rate_limit: 0, burst_limit: 0 },
-      rt_partition: 0
     });
   };
 
@@ -478,47 +455,46 @@ const VariantRegistry = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    
-    if (name.startsWith('caching_configuration.')) {
-      const configField = name.replace('caching_configuration.', '');
-      
-      // Handle nested config objects
-      if (configField.includes('.')) {
-        const [configType, field] = configField.split('.');
-    setVariantData(prev => ({
-      ...prev,
-          caching_configuration: {
-            ...prev.caching_configuration,
-            [configType]: {
-              ...prev.caching_configuration[configType],
-              [field]: type === 'checkbox' ? checked : (type === 'number' ? parseInt(value, 10) || 0 : value)
-            }
-      }
-    }));
-      } else {
-    setVariantData(prev => ({
-      ...prev,
-          caching_configuration: {
-            ...prev.caching_configuration,
-            [configField]: type === 'checkbox' ? checked : (type === 'number' ? parseInt(value, 10) || 0 : value)
-      }
-    }));
-      }
-    } else if (name.startsWith('filter_configuration.')) {
+    if (name.startsWith('filter_configuration.')) {
       const configField = name.replace('filter_configuration.', '');
+      setVariantData(prev => ({
+        ...prev,
+        filter_configuration: {
+          ...prev.filter_configuration,
+          [configField]: type === 'array' ? value : (type === 'number' ? parseInt(value, 10) || 0 : value),
+        },
+      }));
+    } else {
+      setVariantData(prev => ({
+        ...prev,
+        [name]: type === 'checkbox' ? checked : (type === 'number' ? parseInt(value, 10) || 0 : value),
+      }));
+    }
+  };
+
+  const handleAddFilterCriterion = () => {
+    if (!filterAddColumnName) return;
+    const columnName = filterAddColumnName;
+    const condition = filterAddCondition;
     setVariantData(prev => ({
       ...prev,
       filter_configuration: {
         ...prev.filter_configuration,
-          [configField]: type === 'checkbox' ? checked : (type === 'array' ? value : (type === 'number' ? parseInt(value, 10) || 0 : value))
-      }
+        criteria: [...(prev.filter_configuration.criteria || []), { column_name: columnName, condition }],
+      },
     }));
-    } else {
-      setVariantData(prev => ({
-        ...prev,
-        [name]: type === 'checkbox' ? checked : (type === 'number' ? parseInt(value, 10) || 0 : value)
-      }));
-    }
+    setFilterAddColumnName('');
+    setFilterAddCondition('EQUALS');
+  };
+
+  const handleRemoveFilterCriterion = (index) => {
+    setVariantData(prev => ({
+      ...prev,
+      filter_configuration: {
+        ...prev.filter_configuration,
+        criteria: prev.filter_configuration.criteria.filter((_, i) => i !== index),
+      },
+    }));
   };
 
   const handleSubmit = async () => {
@@ -539,13 +515,18 @@ const VariantRegistry = () => {
 
     try {
       setLoading(true);
-      // Extract reason from variantData for the top-level payload
-      const { reason, ...variantPayload } = variantData;
-      
+      const { reason, ...rest } = variantData;
+      const variantPayload = {
+        ...rest,
+        filter_configuration: { criteria: variantData.filter_configuration?.criteria ?? [] },
+        vector_db_config: variantData.vector_db_config ?? {},
+        rate_limiter: { rate_limit: 0, burst_limit: 0 },
+      };
+
       const payload = {
         requestor: user?.email || 'user@example.com',
-        reason: reason,
-        payload: variantPayload
+        reason,
+        payload: variantPayload,
       };
 
       const response = await embeddingPlatformAPI.registerVariant(payload);
@@ -848,280 +829,110 @@ const VariantRegistry = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12}>
-                <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, color: '#1976d2' }}>
-                  Caching Configuration
-                  </Typography>
-              </Grid>
-
-              <Grid item xs={6}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                      checked={variantData.caching_configuration.in_memory_caching_enabled}
-                        onChange={handleChange}
-                        name="caching_configuration.in_memory_caching_enabled"
-                    />
-                  }
-                  label="In-Memory Caching"
-                />
-              </Grid>
-              <Grid item xs={6}>
-                    <TextField
-                      fullWidth
-                  type="number"
-                      size="small"
-                  name="caching_configuration.in_memory_cache_ttl_seconds"
-                  label="In-Memory TTL (seconds)"
-                  value={variantData.caching_configuration.in_memory_cache_ttl_seconds}
-                  onChange={handleChange}
-                  disabled={!variantData.caching_configuration.in_memory_caching_enabled}
-                  />
-                </Grid>
-
-              <Grid item xs={6}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                      checked={variantData.caching_configuration.distributed_caching_enabled}
-                        onChange={handleChange}
-                        name="caching_configuration.distributed_caching_enabled"
-                      />
-                    }
-                  label="Distributed Caching"
-                  />
-                </Grid>
-              <Grid item xs={6}>
-                    <TextField
-                  fullWidth
-                      type="number"
-                  size="small"
-                  name="caching_configuration.distributed_cache_ttl_seconds"
-                  label="Distributed TTL (seconds)"
-                  value={variantData.caching_configuration.distributed_cache_ttl_seconds}
-                      onChange={handleChange}
-                  disabled={!variantData.caching_configuration.distributed_caching_enabled}
-                    />
-                  </Grid>
-
-              {/* Embedding Retrieval Caching */}
-              <Grid item xs={12}>
-                <Typography variant="body2" sx={{ mt: 1, mb: 1, color: '#1976d2', fontWeight: 500 }}>
-                  Embedding Retrieval Caching
-                </Typography>
-              </Grid>
-              
-              <Grid item xs={3}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={variantData.caching_configuration.embedding_retrieval_in_memory_config.enabled}
-                      onChange={handleChange}
-                      name="caching_configuration.embedding_retrieval_in_memory_config.enabled"
-                    />
-                  }
-                  label="In-Memory"
-                />
-              </Grid>
-              <Grid item xs={3}>
-                    <TextField
-                  fullWidth
-                      type="number"
-                  size="small"
-                  name="caching_configuration.embedding_retrieval_in_memory_config.ttl"
-                  label="TTL (seconds)"
-                  value={variantData.caching_configuration.embedding_retrieval_in_memory_config.ttl}
-                      onChange={handleChange}
-                  disabled={!variantData.caching_configuration.embedding_retrieval_in_memory_config.enabled}
-                />
-              </Grid>
-              <Grid item xs={3}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={variantData.caching_configuration.embedding_retrieval_distributed_config.enabled}
-                      onChange={handleChange}
-                      name="caching_configuration.embedding_retrieval_distributed_config.enabled"
-                    />
-                  }
-                  label="Distributed"
-                />
-              </Grid>
-              <Grid item xs={3}>
-                <TextField
-                      fullWidth
-                  type="number"
-                  size="small"
-                  name="caching_configuration.embedding_retrieval_distributed_config.ttl"
-                  label="TTL (seconds)"
-                  value={variantData.caching_configuration.embedding_retrieval_distributed_config.ttl}
-                  onChange={handleChange}
-                  disabled={!variantData.caching_configuration.embedding_retrieval_distributed_config.enabled}
-                    />
-                  </Grid>
-
-              {/* Dot Product Caching */}
-                <Grid item xs={12}>
-                <Typography variant="body2" sx={{ mt: 1, mb: 1, color: '#1976d2', fontWeight: 500 }}>
-                  Dot Product Caching
-                  </Typography>
-                </Grid>
-
-              <Grid item xs={3}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                      checked={variantData.caching_configuration.dot_product_in_memory_config.enabled}
-                      onChange={handleChange}
-                      name="caching_configuration.dot_product_in_memory_config.enabled"
-                    />
-                  }
-                  label="In-Memory"
-                />
-              </Grid>
-              <Grid item xs={3}>
-                    <TextField
-                      fullWidth
-                  type="number"
-                      size="small"
-                  name="caching_configuration.dot_product_in_memory_config.ttl"
-                  label="TTL (seconds)"
-                  value={variantData.caching_configuration.dot_product_in_memory_config.ttl}
-                  onChange={handleChange}
-                  disabled={!variantData.caching_configuration.dot_product_in_memory_config.enabled}
-                />
-                </Grid>
-              <Grid item xs={3}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                      checked={variantData.caching_configuration.dot_product_distributed_config.enabled}
-                      onChange={handleChange}
-                      name="caching_configuration.dot_product_distributed_config.enabled"
-                    />
-                  }
-                  label="Distributed"
-                />
-              </Grid>
-              <Grid item xs={3}>
-                    <TextField
-                      fullWidth
-                  type="number"
-                      size="small"
-                  name="caching_configuration.dot_product_distributed_config.ttl"
-                  label="TTL (seconds)"
-                  value={variantData.caching_configuration.dot_product_distributed_config.ttl}
-                  onChange={handleChange}
-                  disabled={!variantData.caching_configuration.dot_product_distributed_config.enabled}
-                />
-                </Grid>
-
-          {/* Filter Configuration */}
+                {/* Filter Configuration: select filter + EQUALS/NOT_EQUALS per criterion */}
               <Grid item xs={12}>
                 <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, color: '#1976d2' }}>
                   Filter Configuration
                 </Typography>
+                <FormHelperText sx={{ mb: 1 }}>
+                  Add filters; for each filter choose EQUALS or NOT_EQUALS. Caching and Vector DB config are set by admin during approval.
+                </FormHelperText>
               </Grid>
-              
-              <Grid item xs={6}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={variantData.filter_configuration.enabled}
-                      onChange={handleChange}
-                      name="filter_configuration.enabled"
-                    />
-                  }
-                  label="Enable Filtering"
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth size="small" disabled={!variantData.filter_configuration.enabled}>
-                  <InputLabel>Available Filters</InputLabel>
+              <Grid item xs={12} sm={5}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Filter (column)</InputLabel>
                   <Select
-                    multiple
-                    name="filter_configuration.selected_filters"
-                    value={variantData.filter_configuration.selected_filters}
-                    onChange={(e) => {
-                      const selectedFilters = e.target.value;
-                      // Update selected filters
-                      handleChange({
-                        target: {
-                          name: 'filter_configuration.selected_filters',
-                          value: selectedFilters,
-                          type: 'array'
-                        }
-                      });
-                      
-                      // Convert selected filters to criteria format
-                      const criteria = selectedFilters.map(filterId => {
-                        const filtersArray = Array.isArray(filters) ? filters : [];
-                        const filter = filtersArray.find(f => f.id === filterId || f.filter_id === filterId);
-                        return filter ? {
-                          column_name: filter.filter?.column_name || filter.column_name,
-                          operator: 'equals',
-                          filter_value: filter.filter?.filter_value || filter.filter_value,
-                          default_value: filter.filter?.default_value || filter.default_value
-                        } : null;
-                      }).filter(Boolean);
-                      
-                      // Update criteria as well
-                      handleChange({
-                        target: {
-                          name: 'filter_configuration.criteria',
-                          value: criteria,
-                          type: 'array'
-                        }
-                      });
-                    }}
-                    label="Available Filters"
-                    renderValue={(selected) => (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {selected.map((filterId) => {
-                          const filtersArray = Array.isArray(filters) ? filters : [];
-                          const filter = filtersArray.find(f => f.id === filterId || f.filter_id === filterId);
-                          return (
-                            <Chip 
-                              key={filterId} 
-                              label={filter ? `${filter.entity}: ${filter.filter?.column_name || filter.column_name}` : filterId}
-                      size="small"
-                            />
-                          );
-                        })}
-                  </Box>
-                    )}
+                    value={filterAddColumnName}
+                    onChange={(e) => setFilterAddColumnName(e.target.value)}
+                    label="Filter (column)"
                   >
+                    <MenuItem value="">
+                      <em>Select a filter</em>
+                    </MenuItem>
                     {(Array.isArray(filters) ? filters : [])
-                      .filter(filter => !variantData.entity || filter.entity === variantData.entity)
-                      .map((filter) => (
-                        <MenuItem 
-                          key={filter.id || filter.filter_id} 
-                          value={filter.id || filter.filter_id}
+                      .filter((f) => !variantData.entity || f.entity === variantData.entity)
+                      .map((filter) => {
+                        const col = filter.filter?.column_name || filter.column_name;
+                        return (
+                          <MenuItem key={filter.id || filter.filter_id} value={col}>
+                            {col}
+                            {filter.filter?.filter_value != null && (
+                              <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                                (value: {filter.filter.filter_value})
+                              </Typography>
+                            )}
+                          </MenuItem>
+                        );
+                      })}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Condition</InputLabel>
+                  <Select
+                    value={filterAddCondition}
+                    onChange={(e) => setFilterAddCondition(e.target.value)}
+                    label="Condition"
+                  >
+                    <MenuItem value="EQUALS">EQUALS</MenuItem>
+                    <MenuItem value="NOT_EQUALS">NOT_EQUALS</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={3}>
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={handleAddFilterCriterion}
+                  disabled={!filterAddColumnName}
+                  fullWidth
+                  sx={{ height: 40, borderColor: '#522b4a', color: '#522b4a', '&:hover': { borderColor: '#613a5c', backgroundColor: 'rgba(82, 43, 74, 0.04)' } }}
+                >
+                  Add filter
+                </Button>
+              </Grid>
+              {variantData.filter_configuration?.criteria?.length > 0 && (
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 1 }}>
+                    Added criteria
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    {variantData.filter_configuration.criteria.map((c, index) => (
+                      <Box
+                        key={`${c.column_name}-${index}`}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          py: 0.75,
+                          px: 1.5,
+                          backgroundColor: 'action.hover',
+                          borderRadius: 1,
+                        }}
+                      >
+                        <Typography variant="body2">
+                          <strong>{c.column_name}</strong> — {c.condition}
+                        </Typography>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleRemoveFilterCriterion(index)}
+                          aria-label="Remove filter"
+                          sx={{ color: 'error.main' }}
                         >
-                          <Box>
-                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                              {filter.entity}: {filter.filter?.column_name || filter.column_name}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              Value: {filter.filter?.filter_value || filter.filter_value} 
-                              (Default: {filter.filter?.default_value || filter.default_value})
-                            </Typography>
-                          </Box>
-                            </MenuItem>
-                          ))}
-                        </Select>
-                  <FormHelperText>
-                    Select filters to apply to this variant
-                    {variantData.entity && ` (showing filters for ${variantData.entity})`}
-                  </FormHelperText>
-                      </FormControl>
-                    </Grid>
+                          <DeleteOutlineIcon />
+                        </IconButton>
+                      </Box>
+                    ))}
+                  </Box>
+                </Grid>
+              )}
 
               <Grid item xs={12}>
                 <Alert severity="info" sx={{ mt: 2 }}>
-                  Rate limiting, RT partition, and Vector DB configuration will be set by admin during approval.
+                  Caching configuration, rate limiting, RT partition, and Vector DB configuration will be set by admin during approval.
                 </Alert>
-                    </Grid>
+              </Grid>
                   </Grid>
                 </Box>
         </DialogContent>
@@ -1152,29 +963,159 @@ const VariantRegistry = () => {
             Variant Request Details
           </Box>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ pt: 3 }}>
           {selectedVariant && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-              <TextField
-                multiline
-                rows={12}
-                value={selectedVariant.payload ? JSON.stringify(selectedVariant.payload, null, 2) : '{}'}
-                variant="outlined"
-                fullWidth
-                InputProps={{ 
-                  readOnly: true,
-                  style: { fontFamily: 'monospace', fontSize: '0.875rem' }
-                }}
-                sx={{ backgroundColor: '#fafafa' }}
-              />
-          </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {/* Request info */}
+              <Box sx={{ p: 2, backgroundColor: 'rgba(82, 43, 74, 0.02)', borderRadius: 1, border: '1px solid rgba(82, 43, 74, 0.1)' }}>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, mb: 1.5 }}>Request Information</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 600 }}>Request ID</Typography>
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace', color: '#522b4a' }}>{selectedVariant.request_id ?? 'N/A'}</Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 600 }}>Status</Typography>
+                    <Typography variant="body2">{selectedVariant.status ?? 'N/A'}</Typography>
+                  </Grid>
+                  {selectedVariant.created_by != null && (
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 600 }}>Created By</Typography>
+                      <Typography variant="body2">{selectedVariant.created_by}</Typography>
+                    </Grid>
+                  )}
+                  {selectedVariant.created_at != null && (
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 600 }}>Created At</Typography>
+                      <Typography variant="body2">{new Date(selectedVariant.created_at).toLocaleString()}</Typography>
+                    </Grid>
+                  )}
+                </Grid>
+              </Box>
+
+              {/* Variant configuration from payload */}
+              <Box sx={{ p: 2, backgroundColor: 'rgba(25, 118, 210, 0.02)', borderRadius: 1, border: '1px solid rgba(25, 118, 210, 0.1)' }}>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, mb: 1.5 }}>Variant Configuration</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={6} sm={4}>
+                    <Typography variant="caption" color="text.secondary" display="block">Entity</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{selectedVariant.payload?.entity ?? '—'}</Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={4}>
+                    <Typography variant="caption" color="text.secondary" display="block">Model</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{selectedVariant.payload?.model ?? '—'}</Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={4}>
+                    <Typography variant="caption" color="text.secondary" display="block">Variant</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{selectedVariant.payload?.variant ?? '—'}</Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={4}>
+                    <Typography variant="caption" color="text.secondary" display="block">Type</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{selectedVariant.payload?.type ?? '—'}</Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={4}>
+                    <Typography variant="caption" color="text.secondary" display="block">Vector DB type</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{selectedVariant.payload?.vector_db_type ?? '—'}</Typography>
+                  </Grid>
+                </Grid>
+                {selectedVariant.payload?.filter_configuration?.criteria?.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>Filter criteria</Typography>
+                    <TableContainer component={Paper} variant="outlined" sx={{ maxWidth: 400 }}>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 600 }}>Column</TableCell>
+                            <TableCell sx={{ fontWeight: 600 }}>Condition</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {selectedVariant.payload.filter_configuration.criteria.map((c, i) => (
+                            <TableRow key={i}>
+                              <TableCell>{c.column_name ?? '—'}</TableCell>
+                              <TableCell>{c.condition ?? '—'}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Box>
+                )}
+              </Box>
+
+              {/* Reason */}
+              {selectedVariant.payload?.reason != null && String(selectedVariant.payload.reason).trim() !== '' && (
+                <Box sx={{ p: 2, backgroundColor: 'rgba(82, 43, 74, 0.02)', borderRadius: 1, border: '1px solid rgba(82, 43, 74, 0.1)' }}>
+                  <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, mb: 1 }}>Reason</Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{selectedVariant.payload.reason}</Typography>
+                </Box>
+              )}
+
+              {/* Vector DB config (key-value if object with keys) */}
+              {selectedVariant.payload?.vector_db_config != null && typeof selectedVariant.payload.vector_db_config === 'object' && Object.keys(selectedVariant.payload.vector_db_config).length > 0 && (
+                <Box sx={{ p: 2, backgroundColor: 'rgba(25, 118, 210, 0.04)', borderRadius: 1, border: '1px solid rgba(25, 118, 210, 0.15)' }}>
+                  <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, mb: 1.5 }}>Vector DB configuration</Typography>
+                  <Grid container spacing={2}>
+                    {Object.entries(selectedVariant.payload.vector_db_config).map(([key, val]) => (
+                      <Grid item xs={12} sm={6} key={key}>
+                        <Typography variant="caption" color="text.secondary" display="block">{key.replace(/_/g, ' ')}</Typography>
+                        <Typography variant="body2" sx={{ fontFamily: typeof val === 'object' ? 'monospace' : 'inherit' }}>
+                          {typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                        </Typography>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Box>
+              )}
+
+              {/* Rate limiter */}
+              {selectedVariant.payload?.rate_limiter != null && typeof selectedVariant.payload.rate_limiter === 'object' && (
+                <Box sx={{ p: 2, backgroundColor: 'rgba(82, 43, 74, 0.02)', borderRadius: 1, border: '1px solid rgba(82, 43, 74, 0.1)' }}>
+                  <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, mb: 1.5 }}>Rate limiter</Typography>
+                  <Grid container spacing={2}>
+                    {selectedVariant.payload.rate_limiter.rate_limit != null && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="caption" color="text.secondary" display="block">Rate limit (req/sec)</Typography>
+                        <Typography variant="body2">{selectedVariant.payload.rate_limiter.rate_limit}</Typography>
+                      </Grid>
+                    )}
+                    {selectedVariant.payload.rate_limiter.burst_limit != null && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="caption" color="text.secondary" display="block">Burst limit</Typography>
+                        <Typography variant="body2">{selectedVariant.payload.rate_limiter.burst_limit}</Typography>
+                      </Grid>
+                    )}
+                  </Grid>
+                </Box>
+              )}
+
+              {/* Raw JSON (collapsible) */}
+              <Box>
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={() => setShowRawJsonInViewModal((p) => !p)}
+                  sx={{ textTransform: 'none', color: '#1976d2' }}
+                >
+                  {showRawJsonInViewModal ? 'Hide raw JSON' : 'Show raw JSON'}
+                </Button>
+                <Collapse in={showRawJsonInViewModal}>
+                  <TextField
+                    multiline
+                    rows={10}
+                    value={selectedVariant.payload ? JSON.stringify(selectedVariant.payload, null, 2) : '{}'}
+                    variant="outlined"
+                    fullWidth
+                    InputProps={{ readOnly: true, style: { fontFamily: 'monospace', fontSize: '0.875rem' } }}
+                    sx={{ mt: 1, backgroundColor: '#fafafa' }}
+                  />
+                </Collapse>
+              </Box>
+            </Box>
           )}
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2, backgroundColor: '#fafafa', borderTop: '1px solid #e0e0e0' }}>
-          <Button 
-            onClick={handleCloseViewModal}
-            sx={{ color: '#522b4a', '&:hover': { backgroundColor: 'rgba(82, 43, 74, 0.04)' } }}
-          >
+          <Button onClick={handleCloseViewModal} sx={{ color: '#522b4a', '&:hover': { backgroundColor: 'rgba(82, 43, 74, 0.04)' } }}>
             Close
           </Button>
         </DialogActions>

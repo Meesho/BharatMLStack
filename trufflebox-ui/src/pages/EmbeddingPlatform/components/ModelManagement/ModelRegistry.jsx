@@ -20,7 +20,6 @@ import {
   FormHelperText,
   Chip,
   IconButton,
-  Tooltip,
   Popover,
   List,
   ListItem,
@@ -53,16 +52,48 @@ import {
   validateModelPayload, 
   getDefaultFormValues,
 } from '../../../../services/embeddingPlatform/utils';
-import { 
-  BUSINESS_RULES, 
+import {
   DISTANCE_FUNCTIONS 
 } from '../../../../services/embeddingPlatform/constants';
+
+const formatTtlReadable = (seconds) => {
+  const n = Number(seconds);
+  if (!Number.isFinite(n) || n < 0) return '';
+  if (n === 0) return '0 sec';
+  const MIN = 60;
+  const HOUR = 3600;
+  const DAY = 86400;
+  const MONTH = 30 * DAY;
+  const YEAR = 365 * DAY;
+  if (n >= YEAR) {
+    const v = Math.round(n / YEAR);
+    return `${v} year${v !== 1 ? 's' : ''}`;
+  }
+  if (n >= MONTH) {
+    const v = Math.round(n / MONTH);
+    return `${v} month${v !== 1 ? 's' : ''}`;
+  }
+  if (n >= DAY) {
+    const v = Math.round(n / DAY);
+    return `${v} day${v !== 1 ? 's' : ''}`;
+  }
+  if (n >= HOUR) {
+    const v = Math.round(n / HOUR);
+    return `${v} hour${v !== 1 ? 's' : ''}`;
+  }
+  if (n >= MIN) {
+    const v = Math.round(n / MIN);
+    return `${v} min${v !== 1 ? 's' : ''}`;
+  }
+  const v = Math.round(n);
+  return `${v} sec${v !== 1 ? 's' : ''}`;
+};
 
 const ModelRegistry = () => {
   const [models, setModels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatuses, setSelectedStatuses] = useState(['active', 'inactive']);
+  const [selectedStatuses, setSelectedStatuses] = useState(['APPROVED', 'PENDING', 'REJECTED']);
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -502,7 +533,7 @@ const ModelRegistry = () => {
       }
       
       const payload = {
-        requestor: user?.email || 'user@example.com',
+        requestor: user?.email,
         reason: isEditMode ? 'Updating model configuration' : 'Registering new ML model',
         payload: {
           ...modelData,
@@ -948,20 +979,6 @@ const ModelRegistry = () => {
                 />
               </Grid>
 
-              <Grid item xs={6}>
-                <TextField
-                  fullWidth
-                  type="number"
-                  size="small"
-                  name="failure_producer_mq_id"
-                  label="Failure Producer MQ ID"
-                  value={modelData.failure_producer_mq_id}
-                  onChange={handleChange}
-                  error={!!validationErrors.failure_producer_mq_id}
-                  helperText={validationErrors.failure_producer_mq_id}
-                />
-              </Grid>
-
               {/* Row 6 - Embedding Store Toggle */}
               <Grid item xs={12}>
                 <FormControlLabel
@@ -988,7 +1005,12 @@ const ModelRegistry = () => {
                     value={modelData.embedding_store_ttl}
                     onChange={handleChange}
                     error={!!validationErrors.embedding_store_ttl}
-                    helperText={validationErrors.embedding_store_ttl}
+                    helperText={(() => {
+                      if (validationErrors.embedding_store_ttl) return validationErrors.embedding_store_ttl;
+                      const sec = Number(modelData.embedding_store_ttl);
+                      if (modelData.embedding_store_ttl != null && modelData.embedding_store_ttl !== '' && Number.isFinite(sec)) return '≈ ' + formatTtlReadable(sec);
+                      return undefined;
+                    })()}
                   />
                 </Grid>
               )}

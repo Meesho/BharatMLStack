@@ -241,7 +241,6 @@ export const getDefaultFormValues = (type) => {
       },
       vector_db_config: {},
       rate_limiter: {},
-      rt_partition: 0,
     },
     filter: {
       entity: '',

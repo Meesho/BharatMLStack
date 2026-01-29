@@ -294,6 +294,14 @@ class EmbeddingPlatformAPI {
   }
 
   /**
+   * Get All Filters
+   * Fetches all filters (e.g. for Filter Discovery).
+   */
+  async getAllFilters() {
+    return this.makeRequest('/data/all-filters');
+  }
+
+  /**
    * Get Filter Requests
    * API returns payload as JSON string; normalized to payload object per contract.
    */
@@ -348,11 +356,12 @@ class EmbeddingPlatformAPI {
 
   /**
    * Promote Variant
+   * Uses the same create/register variant endpoint with request_type set to PROMOTE.
    */
   async promoteVariant(payload) {
-    return this.makeRequest('/requests/variant/promote', {
+    return this.makeRequest('/requests/variant/register', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, request_type: 'PROMOTE' }),
     });
   }
 
@@ -424,6 +433,76 @@ class EmbeddingPlatformAPI {
     return this.makeRequest('/data/variants-list');
   }
 
+  /**
+   * Build Skye API base URL from Horizon base URL (e.g. REACT_APP_HORIZON_PROD_BASE_URL).
+   */
+  getSkyeBaseUrl(horizonBaseUrl) {
+    const base = (horizonBaseUrl || '').replace(/\/$/, '');
+    return base ? `${base}/api/v1/horizon/skye` : '';
+  }
+
+  /**
+   * Make a request to prod Horizon base URL with provided Bearer token.
+   */
+  async makeRequestWithAuth(horizonBaseUrl, token, endpoint, options = {}) {
+    const baseUrl = this.getSkyeBaseUrl(horizonBaseUrl);
+    if (!baseUrl) {
+      throw new Error('Horizon base URL is required');
+    }
+    const url = `${baseUrl}${endpoint}`;
+    const config = {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...options.headers,
+      },
+      ...options,
+    };
+    const response = await fetch(url, config);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || data.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+    return data;
+  }
+
+  /**
+   * Get models from prod Horizon.
+   */
+  async getModelsWithAuth(horizonBaseUrl, token) {
+    return this.makeRequestWithAuth(horizonBaseUrl, token, '/data/models', { method: 'GET' });
+  }
+
+  /**
+   * Get variants for entity+model from prod Horizon.
+   */
+  async getVariantsWithAuth(horizonBaseUrl, token, entity, model) {
+    const queryString = new URLSearchParams({ entity: String(entity), model: String(model) }).toString();
+    return this.makeRequestWithAuth(horizonBaseUrl, token, `/data/variants?${queryString}`, { method: 'GET' });
+  }
+
+  /**
+   * Register model at prod Horizon (e.g. promote model to prod).
+   * Payload: { requestor, reason, payload } where payload is model register payload.
+   */
+  async registerModelWithAuth(horizonBaseUrl, token, payload) {
+    return this.makeRequestWithAuth(horizonBaseUrl, token, '/requests/model/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /**
+   * Register variant at prod Horizon (e.g. promote variant to prod).
+   * Payload: { requestor, reason, payload, request_type? } where payload has entity, model, variant.
+   */
+  async registerVariantWithAuth(horizonBaseUrl, token, payload) {
+    return this.makeRequestWithAuth(horizonBaseUrl, token, '/requests/variant/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
 }
 
 // Create singleton instance
@@ -463,6 +542,7 @@ export const {
   registerFilter,
   approveFilter,
   getFilters,
+  getAllFilters,
   getFilterRequests,
   
   // Job Frequency Management
@@ -484,6 +564,14 @@ export const {
   
   // Variants List
   getVariantsList,
+
+  // Prod base URL API 
+  getSkyeBaseUrl,
+  makeRequestWithAuth,
+  getModelsWithAuth,
+  getVariantsWithAuth,
+  registerModelWithAuth,
+  registerVariantWithAuth,
 } = embeddingPlatformAPI;
 
 export default embeddingPlatformAPI;

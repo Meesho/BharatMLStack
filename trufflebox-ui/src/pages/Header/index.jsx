@@ -247,8 +247,6 @@ function Header({ onMenuItemClick }) {
           label: 'Operations',
           subItems: [
             { key: 'DeploymentOperations', label: 'Deployment', path: '/embedding-platform/deployment-operations', screenType: 'deployment-operations' },
-            { key: 'OnboardVariantToDB', label: 'Onboard to DB', path: '/embedding-platform/onboard-variant-to-db', screenType: 'onboard-variant-to-db' },
-            { key: 'OnboardVariantApproval', label: 'DB Approvals', path: '/embedding-platform/onboard-variant-approval', screenType: 'onboard-variant-approval', roles: ['admin'] },
           ],
           roles: null,
         },

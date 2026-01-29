@@ -53,17 +53,27 @@ const FilterDiscovery = () => {
     }
   }, [filterGroups, searchQuery]);
 
+  const normalizeFiltersResponse = (response) => {
+    if (response.filter_groups && Array.isArray(response.filter_groups)) {
+      return response.filter_groups;
+    }
+    const filtersByEntity = response.filters ?? response.Filters ?? {};
+    if (typeof filtersByEntity !== 'object') return [];
+    return Object.entries(filtersByEntity).map(([entity, filtersObj]) => ({
+      entity,
+      filters: typeof filtersObj === 'object' && filtersObj !== null
+        ? Object.values(filtersObj).filter(f => f && (f.column_name != null || f.filter_value != null))
+        : [],
+    }));
+  };
+
   const fetchFilters = async () => {
     try {
       setLoading(true);
       setError('');
-      const response = await embeddingPlatformAPI.getFilters();
-
-      if (response.filter_groups) {
-        setFilterGroups(response.filter_groups);
-      } else {
-        setFilterGroups([]);
-      }
+      const response = await embeddingPlatformAPI.getAllFilters();
+      const groups = normalizeFiltersResponse(response);
+      setFilterGroups(groups);
     } catch (error) {
       console.error('Error fetching filters:', error);
       setError('Failed to load filters. Please refresh the page.');

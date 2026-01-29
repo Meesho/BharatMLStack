@@ -40,8 +40,6 @@ import {
 
 // Embedding Platform Components
 import DeploymentOperations from './pages/EmbeddingPlatform/components/DeploymentOperations';
-import OnboardVariantToDB from './pages/EmbeddingPlatform/components/OnboardVariantToDB';
-import OnboardVariantApproval from './pages/EmbeddingPlatform/components/OnboardVariantApproval';
 import EmbeddingStoreRegistry from './pages/EmbeddingPlatform/components/StoreManagement/StoreRegistry';
 import EmbeddingStoreApproval from './pages/EmbeddingPlatform/components/StoreManagement/StoreApproval';
 import EmbeddingEntityRegistry from './pages/EmbeddingPlatform/components/EntityManagement/EntityRegistry';
@@ -419,22 +417,6 @@ function App() {
           element={
             <ProtectedRoute service="embedding_platform" screenType="deployment-operations">
               <DeploymentOperations />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/embedding-platform/onboard-variant-to-db"
-          element={
-            <ProtectedRoute service="embedding_platform" screenType="onboard-variant-to-db">
-              <OnboardVariantToDB />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/embedding-platform/onboard-variant-approval"
-          element={
-            <ProtectedRoute service="embedding_platform" screenType="onboard-variant-approval">
-              <OnboardVariantApproval />
             </ProtectedRoute>
           }
         />
