@@ -3,9 +3,9 @@ package asyncloguploader
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"cloud.google.com/go/storage"
+	logger "github.com/rs/zerolog/log"
 )
 
 // ChunkManager handles GCS compose operations with 32-chunk limit
@@ -125,7 +125,7 @@ func (cm *ChunkManager) cleanupObjects(ctx context.Context, client *storage.Clie
 	bkt := client.Bucket(bucket)
 	for _, obj := range objects {
 		if err := bkt.Object(obj).Delete(ctx); err != nil {
-			log.Printf("[WARNING] Failed to cleanup object %s: %v", obj, err)
+			logger.Warn().Err(err).Msgf("Failed to cleanup object %s", obj)
 		}
 	}
 }
