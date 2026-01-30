@@ -429,12 +429,18 @@ func (v *V1) handleMap(dataMap, metaMap *map[string]string, output interface{}, 
 					return err
 				}
 				val.SetMapIndex(reflect.ValueOf(mapKey), reflect.ValueOf(floatVal))
-			case reflect.Int, reflect.Int64:
+			case reflect.Int:
 				floatVal, err := strconv.ParseInt(data, 10, 64)
 				if err != nil {
 					return err
 				}
 				val.SetMapIndex(reflect.ValueOf(mapKey), reflect.ValueOf(floatVal))
+			case reflect.Int64:
+				intVal, err := strconv.ParseInt(data, 10, 64)
+				if err != nil {
+					return err
+				}
+				val.SetMapIndex(reflect.ValueOf(mapKey), reflect.ValueOf(intVal))
 			case reflect.Int8:
 				floatVal, err := strconv.ParseInt(data, 10, 8)
 				if err != nil {

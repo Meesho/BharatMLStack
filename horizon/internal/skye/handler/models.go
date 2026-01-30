@@ -3,14 +3,16 @@ package handler
 import (
 	"time"
 
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/entity_requests"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/filter_requests"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/job_frequency_requests"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/model_requests"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/store_requests"
-	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_onboarding_requests"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_onboarding_tasks"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_requests"
+	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_scaleup_requests"
+	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_scaleup_tasks"
 	skyeEtcd "github.com/Meesho/BharatMLStack/horizon/internal/skye/etcd"
 	"github.com/Meesho/BharatMLStack/horizon/internal/skye/etcd/enums"
 )
@@ -41,14 +43,14 @@ type ProcessingDetails struct {
 	EstimatedCompletion *time.Time `json:"estimated_completion,omitempty"`
 }
 
-// Common approval request structure
 type ApprovalRequest struct {
-	AdminID             string                  `json:"admin_id"`
-	ApprovalDecision    string                  `json:"approval_decision"` // APPROVED, REJECTED, NEEDS_MODIFICATION
-	ApprovalComments    string                  `json:"approval_comments"`
-	AdminVectorDBConfig skyeEtcd.VectorDbConfig `json:"admin_vector_db_config,omitempty"`
-	AdminRateLimiter    skyeEtcd.RateLimiter    `json:"admin_rate_limiter,omitempty"`
-	AdminRTPartition    int                     `json:"admin_rt_partition,omitempty"`
+	AdminID                   string                  `json:"admin_id"`
+	ApprovalDecision          string                  `json:"approval_decision"`
+	ApprovalComments          string                  `json:"approval_comments"`
+	AdminVectorDBConfig       skyeEtcd.VectorDbConfig `json:"admin_vector_db_config,omitempty"`
+	AdminRateLimiter          skyeEtcd.RateLimiter    `json:"admin_rate_limiter,omitempty"`
+	AdminCachingConfiguration CachingConfiguration    `json:"admin_caching_configuration,omitempty"`
+	ScaleUpHost               string                  `json:"scale_up_host"`
 }
 
 type ApprovalResponse struct {
@@ -129,10 +131,8 @@ type ModelRequestPayload struct {
 	MQID                  int                  `json:"mq_id"`
 	JobFrequency          string               `json:"job_frequency"`
 	TrainingDataPath      string               `json:"training_data_path"`
-	NumberOfPartitions    int                  `json:"number_of_partitions"`
 	TopicName             string               `json:"topic_name"`
 	Metadata              skyeEtcd.Metadata    `json:"metadata"`
-	FailureProducerMqId   int                  `json:"failure_producer_mq_id"`
 }
 
 type ModelRegisterRequest struct {
@@ -178,12 +178,16 @@ type CachingConfiguration struct {
 type FilterCriteria struct {
 	ColumnName   string `json:"column_name"`
 	FilterValue  string `json:"filter_value"`
-	Operator     string `json:"operator,omitempty"`
 	DefaultValue string `json:"default_value"`
 }
 
 type FilterConfiguration struct {
-	Criteria []skyeEtcd.Criteria `json:"criteria"`
+	Criteria []FilterCriteriaList `json:"criteria"`
+}
+
+type FilterCriteriaList struct {
+	ColumnName string                `json:"column_name"`
+	Condition  enums.FilterCondition `json:"condition"`
 }
 
 type EmbeddingRetrievalConfig struct {
@@ -202,42 +206,19 @@ type RateLimiter struct {
 }
 
 type VariantRequestPayload struct {
-	Entity               string               `json:"entity"`
-	Model                string               `json:"model"`
-	Variant              string               `json:"variant"`
-	VectorDBType         string               `json:"vector_db_type"`
-	Type                 enums.Type           `json:"type"`
-	CachingConfiguration CachingConfiguration `json:"caching_configuration"`
-	FilterConfiguration  FilterConfiguration  `json:"filter_configuration"`
-	VectorDBConfig       VectorDBConfig       `json:"vector_db_config"`
-	RateLimiter          RateLimiter          `json:"rate_limiter"`
-	RTPartition          int                  `json:"rt_partition"`
+	Entity              string              `json:"entity"`
+	Model               string              `json:"model"`
+	Variant             string              `json:"variant"`
+	VectorDBType        string              `json:"vector_db_type"`
+	Type                enums.Type          `json:"type"`
+	FilterConfiguration FilterConfiguration `json:"filter_configuration"`
+	VectorDBConfig      VectorDBConfig      `json:"vector_db_config"`
 }
 
 type VariantRegisterRequest struct {
 	Requestor string                `json:"requestor"`
 	Reason    string                `json:"reason"`
 	Payload   VariantRequestPayload `json:"payload"`
-}
-
-type VariantEditRequestPayload struct {
-	Entity                     string                  `json:"entity"`
-	Model                      string                  `json:"model"`
-	Variant                    string                  `json:"variant"`
-	InMemoryCachingEnabled     bool                    `json:"in_memory_caching_enabled"`
-	InMemoryCacheTTLSeconds    int                     `json:"in_memory_cache_ttl_seconds"`
-	DistributedCachingEnabled  bool                    `json:"distributed_caching_enabled"`
-	DistributedCacheTTLSeconds int                     `json:"distributed_cache_ttl_seconds"`
-	Filter                     []skyeEtcd.Criteria     `json:"filter"`
-	VectorDBConfig             skyeEtcd.VectorDbConfig `json:"vector_db_config"`
-	RateLimiter                skyeEtcd.RateLimiter    `json:"rate_limiter"`
-	RTPartition                int                     `json:"rt_partition"`
-}
-
-type VariantEditRequest struct {
-	Requestor string                    `json:"requestor"`
-	Reason    string                    `json:"reason"`
-	Payload   VariantEditRequestPayload `json:"payload"`
 }
 
 type VariantListResponse struct {
@@ -268,6 +249,10 @@ type FilterCriteriaResponse struct {
 
 type FilterListResponse struct {
 	Filters map[string]skyeEtcd.Criteria `json:"filters"`
+}
+
+type AllFiltersListResponse struct {
+	Filters map[string]map[string]skyeEtcd.Criteria `json:"filters"`
 }
 
 type JobFrequencyRequestPayload struct {
@@ -329,14 +314,58 @@ type VariantOnboardingRequest struct {
 	Payload   VariantOnboardingRequestPayload `json:"payload"`
 }
 
-type VariantOnboardingRequestListResponse struct {
-	VariantOnboardingRequests []variant_onboarding_requests.VariantOnboardingRequest `json:"variant_onboarding_requests"`
-	TotalCount                int                                                    `json:"total_count"`
+type VariantScaleUpRequest struct {
+	Requestor string                       `json:"requestor"`
+	Reason    string                       `json:"reason"`
+	Payload   VariantScaleUpRequestPayload `json:"payload"`
+}
+
+type VariantScaleUpRequestPayload struct {
+	Entity           string `json:"entity"`
+	Model            string `json:"model"`
+	Variant          string `json:"variant"`
+	VectorDBType     string `json:"vector_db_type"`
+	TrainingDataPath string `json:"training_data_path"`
+}
+type VariantScaleUpRequestListResponse struct {
+	VariantScaleUpRequests []variant_scaleup_requests.VariantScaleUpRequest `json:"variant_scale_up_requests"`
+	TotalCount             int                                              `json:"total_count"`
 }
 
 type VariantOnboardingTaskListResponse struct {
 	VariantOnboardingTasks []variant_onboarding_tasks.VariantOnboardingTask `json:"variant_onboarding_tasks"`
 	TotalCount             int                                              `json:"total_count"`
+}
+
+type VariantScaleUpTaskListResponse struct {
+	VariantScaleUpTasks []variant_scaleup_tasks.VariantScaleUpTask `json:"variant_scale_up_tasks"`
+	TotalCount          int                                        `json:"total_count"`
+}
+
+type VariantTestRequest struct {
+	Entity        string            `json:"entity"`
+	CandidateIds  []string          `json:"candidate_ids"`
+	Limit         int32             `json:"limit"`
+	ModelName     string            `json:"model_name"`
+	Variant       string            `json:"variant"`
+	Filters       []*grpc.Filters   `json:"filters"`
+	Attribute     []string          `json:"attribute"`
+	Embeddings    []*grpc.Embedding `json:"embeddings"`
+	GlobalFilters *grpc.Filters     `json:"global_filters"`
+}
+
+type TestRequestGenerationRequest struct {
+	Entity  string `json:"entity"`
+	Model   string `json:"model"`
+	Variant string `json:"variant"`
+}
+
+type TestRequestGenerationResponse struct {
+	Request VariantTestRequest `json:"request"`
+}
+
+type VariantTestResponse struct {
+	Response *grpc.SkyeResponse `json:"response"`
 }
 
 type MQIdTopicMapping struct {

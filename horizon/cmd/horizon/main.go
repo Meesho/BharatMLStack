@@ -79,5 +79,7 @@ func main() {
 	workflowRouter.Init()
 	skyeRouter.Init(appConfig.Configs)
 	scheduler.Init(appConfig.Configs)
+	scheduler.InitVariantScaleUpScheduler(appConfig.Configs)
+	scheduler.InitVariantOnboardingScheduler(appConfig.Configs)
 	httpframework.Instance().Run(":" + strconv.Itoa(appConfig.Configs.AppPort))
 }

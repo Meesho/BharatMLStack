@@ -15,6 +15,7 @@ import (
 type AirflowClient interface {
 	TriggerDAG(dagRunID string) (*AirflowResponse, error)
 	ListDAGRuns(dagID string) (*AirflowDAGRunsResponse, error)
+	GetDAGRun(dagID, dagRunID string) (*AirflowDAGRun, error)
 }
 
 type airflowClientImpl struct {
@@ -186,4 +187,48 @@ func (a *airflowClientImpl) ListDAGRuns(dagID string) (*AirflowDAGRunsResponse, 
 	}
 
 	return &response, nil
+}
+
+func (a *airflowClientImpl) GetDAGRun(dagID, dagRunID string) (*AirflowDAGRun, error) {
+	url := fmt.Sprintf("%s/api/v1/dags/%s/dagRuns/%s", a.BaseURL, dagID, dagRunID)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/json")
+	req.SetBasicAuth(a.Username, a.Password)
+
+	log.Debug().
+		Str("url", url).
+		Str("dag_id", dagID).
+		Str("dag_run_id", dagRunID).
+		Msg("Getting Airflow DAG run status")
+
+	resp, err := a.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Error().
+			Int("status_code", resp.StatusCode).
+			Str("response_body", string(body)).
+			Msg("Failed to get Airflow DAG run")
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var dagRun AirflowDAGRun
+	if err := json.Unmarshal(body, &dagRun); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return &dagRun, nil
 }

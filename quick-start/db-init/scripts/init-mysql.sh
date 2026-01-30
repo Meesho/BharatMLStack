@@ -834,7 +834,13 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   ('POST', '/api/v1/horizon/skye/requests/variant/onboard', 'SkyeVariantOnboardResolver'),
   ('POST', '/api/v1/horizon/skye/requests/variant/onboard/approve', 'SkyeVariantOnboardApproveResolver'),
   ('GET', '/api/v1/horizon/skye/data/variant-onboarding/requests', 'SkyeVariantOnboardRequestDiscoveryResolver'),
-  ('GET', '/api/v1/horizon/skye/data/variant-onboarding/variants', 'SkyeVariantOnboardDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/skye/data/variant-onboarding/tasks', 'SkyeVariantOnboardTaskDiscoveryResolver'),
+
+  -- Variant Scaleup APIs
+  ('POST', '/api/v1/horizon/skye/requests/variant/scale-up', 'SkyeVariantScaleupResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/variant/scale-up/approve', 'SkyeVariantScaleupApproveResolver'),
+  ('GET', '/api/v1/horizon/skye/data/variant-scaleup/requests', 'SkyeVariantScaleupRequestDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/skye/data/variant-scaleup/tasks', 'SkyeVariantScaleupTaskDiscoveryResolver'),
 
   -- MQ ID to Topics and Variants List APIs
   ('GET', '/api/v1/horizon/skye/data/mq-id-topics', 'SkyeMQIdTopicsDiscoveryResolver'),

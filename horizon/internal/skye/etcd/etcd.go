@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Meesho/BharatMLStack/horizon/internal/skye"
+	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/Meesho/BharatMLStack/horizon/internal/skye/etcd/enums"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/etcd"
 )
@@ -15,14 +15,12 @@ import (
 type SkyeManager struct {
 	instance etcd.Etcd
 	appName  string
-	env      string
 }
 
-func NewEtcdConfig() Manager {
+func NewEtcdConfig(appConfig configs.Configs) Manager {
 	return &SkyeManager{
-		instance: etcd.Instance()[skye.SkyeAppName],
-		appName:  skye.SkyeAppName,
-		env:      skye.AppEnv,
+		instance: etcd.Instance()[appConfig.SkyeAppName],
+		appName:  appConfig.SkyeAppName,
 	}
 }
 
@@ -271,7 +269,12 @@ func (s *SkyeManager) RegisterModel(entity string, model string, embeddingStoreE
 // Returns an error if the registration fails.
 func (s *SkyeManager) RegisterVariant(entity string, model string, variant string,
 	vectorDbConfig VectorDbConfig, vectorDbType string, filter []Criteria, variantType enums.Type,
-	distributedCacheEnabled bool, distributedCacheTtl int, inMemoryCacheEnabled bool, inMemoryCacheTtl int, rtPartition int, rateLimiters RateLimiter) error {
+	distributedCacheEnabled bool, distributedCacheTtl int, inMemoryCacheEnabled bool, inMemoryCacheTtl int,
+	embeddingRetrievalInMemoryConfigEnabled bool, embeddingRetrievalInMemoryConfigTtl int,
+	embeddingRetrievalDistributedConfigEnabled bool, embeddingRetrievalDistributedConfigTtl int,
+	dotProductInMemoryConfigEnabled bool, dotProductInMemoryConfigTtl int,
+	dotProductDistributedConfigEnabled bool, dotProductDistributedConfigTtl int,
+	rtPartition int, rateLimiters RateLimiter) error {
 	paths := make(map[string]interface{})
 
 	// Marshal config
@@ -308,9 +311,18 @@ func (s *SkyeManager) RegisterVariant(entity string, model string, variant strin
 	paths[fmt.Sprintf("%s/distributed-cache-TTL-seconds", variantPath)] = distributedCacheTtl
 	paths[fmt.Sprintf("%s/in-memory-caching-enabled", variantPath)] = inMemoryCacheEnabled
 	paths[fmt.Sprintf("%s/in-memory-cache-TTL-seconds", variantPath)] = inMemoryCacheTtl
+	paths[fmt.Sprintf("%s/default-response-percentage", variantPath)] = 0
+	paths[fmt.Sprintf("%s/embedding-retrieval-in-memory-config/enabled", variantPath)] = embeddingRetrievalInMemoryConfigEnabled
+	paths[fmt.Sprintf("%s/embedding-retrieval-in-memory-config/ttl", variantPath)] = embeddingRetrievalInMemoryConfigTtl
+	paths[fmt.Sprintf("%s/embedding-retrieval-distributed-config/enabled", variantPath)] = embeddingRetrievalDistributedConfigEnabled
+	paths[fmt.Sprintf("%s/embedding-retrieval-distributed-config/ttl", variantPath)] = embeddingRetrievalDistributedConfigTtl
+	paths[fmt.Sprintf("%s/dot-product-in-memory-config/enabled", variantPath)] = dotProductInMemoryConfigEnabled
+	paths[fmt.Sprintf("%s/dot-product-in-memory-config/ttl", variantPath)] = dotProductInMemoryConfigTtl
+	paths[fmt.Sprintf("%s/dot-product-distributed-config/enabled", variantPath)] = dotProductDistributedConfigEnabled
+	paths[fmt.Sprintf("%s/dot-product-distributed-config/ttl", variantPath)] = dotProductDistributedConfigTtl
 	paths[fmt.Sprintf("%s/rt-partition", variantPath)] = rtPartition
-	paths[fmt.Sprintf("%s/rate-limiters/burst-limit", variantPath)] = rateLimiters.BurstLimit
-	paths[fmt.Sprintf("%s/rate-limiters/rate-limit", variantPath)] = rateLimiters.RateLimit
+	paths[fmt.Sprintf("%s/rate-limiter/burst-limit", variantPath)] = rateLimiters.BurstLimit
+	paths[fmt.Sprintf("%s/rate-limiter/rate-limit", variantPath)] = rateLimiters.RateLimit
 	// Create variant properties nodes
 	if err := s.instance.CreateNodes(paths); err != nil {
 		return fmt.Errorf("failed to create variant properties: %w", err)

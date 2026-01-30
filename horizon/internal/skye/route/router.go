@@ -8,146 +8,65 @@ import (
 
 func Init(appConfig configs.Configs) {
 	api := httpframework.Instance().Group("/api")
-	controller := controller.NewConfigController(appConfig)
-	{
-		v1 := api.Group("/v1/horizon/skye")
-		{
-			storeRequests := v1.Group("/requests/store")
-			{
-				storeRequests.POST("/register", controller.RegisterStore)
-				storeRequests.POST("/approve", controller.ApproveStoreRequest)
-			}
-			storeData := v1.Group("/data/stores")
-			{
-				storeData.GET("", controller.GetStores)
-			}
-			storeRequestsData := v1.Group("/data/store-requests")
-			{
-				storeRequestsData.GET("", controller.GetAllStoreRequests)
-			}
-			entityRequests := v1.Group("/requests/entity")
-			{
-				entityRequests.POST("/register", controller.RegisterEntity)
-				entityRequests.POST("/approve", controller.ApproveEntityRequest)
-			}
+	ctrl := controller.NewConfigController(appConfig)
+	v1 := api.Group("/v1/horizon/skye")
 
-			entityData := v1.Group("/data/entities")
-			{
-				entityData.GET("", controller.GetEntities)
-			}
+	storeRequests := v1.Group("/requests/store")
+	storeRequests.POST("/register", ctrl.RegisterStore)
+	storeRequests.POST("/approve", ctrl.ApproveStoreRequest)
 
-			entityRequestsData := v1.Group("/data/entity-requests")
-			{
-				entityRequestsData.GET("", controller.GetAllEntityRequests)
-			}
+	v1.GET("/data/stores", ctrl.GetStores)
+	v1.GET("/data/store-requests", ctrl.GetAllStoreRequests)
 
-			// Model Registration and Management
-			modelRequests := v1.Group("/requests/model")
-			{
-				modelRequests.POST("/register", controller.RegisterModel)
-				modelRequests.POST("/edit", controller.EditModel)
-				modelRequests.POST("/approve", controller.ApproveModelRequest)
-				modelRequests.POST("/edit/approve", controller.ApproveModelEditRequest)
-			}
+	entityRequests := v1.Group("/requests/entity")
+	entityRequests.POST("/register", ctrl.RegisterEntity)
+	entityRequests.POST("/approve", ctrl.ApproveEntityRequest)
 
-			modelData := v1.Group("/data/models")
-			{
-				modelData.GET("", controller.GetModels)
-			}
+	v1.GET("/data/entities", ctrl.GetEntities)
+	v1.GET("/data/entity-requests", ctrl.GetAllEntityRequests)
 
-			modelRequestsData := v1.Group("/data/model-requests")
-			{
-				modelRequestsData.GET("", controller.GetAllModelRequests)
-			}
+	modelRequests := v1.Group("/requests/model")
+	modelRequests.POST("/register", ctrl.RegisterModel)
+	modelRequests.POST("/approve", ctrl.ApproveModelRequest)
 
-			// Variant Registration and Management
-			variantRequests := v1.Group("/requests/variant")
-			{
-				variantRequests.POST("/register", controller.RegisterVariant)
-				variantRequests.POST("/edit", controller.EditVariant)
-				variantRequests.POST("/approve", controller.ApproveVariantRequest)
-				variantRequests.POST("/edit/approve", controller.ApproveVariantEditRequest)
-			}
+	v1.GET("/data/models", ctrl.GetModels)
+	v1.GET("/data/model-requests", ctrl.GetAllModelRequests)
 
-			variantData := v1.Group("/data/variants")
-			{
-				variantData.GET("", controller.GetVariants)
-			}
+	variantRequests := v1.Group("/requests/variant")
+	variantRequests.POST("/register", ctrl.RegisterVariant)
+	variantRequests.POST("/approve", ctrl.ApproveVariantRequest)
+	variantRequests.POST("/scaleup", ctrl.ScaleUpVariant)
+	variantRequests.POST("/scaleup/approve", ctrl.ApproveVariantScaleUpRequest)
 
-			// Added new group for variant requests
-			variantRequestsData := v1.Group("/data/variant-requests")
-			{
-				variantRequestsData.GET("", controller.GetAllVariantRequests)
-			}
+	v1.GET("/data/variants", ctrl.GetVariants)
+	v1.GET("/data/variant-requests", ctrl.GetAllVariantRequests)
 
-			// Filter Registration and Management
-			filterRequests := v1.Group("/requests/filter")
-			{
-				filterRequests.POST("/register", controller.RegisterFilter)
-				filterRequests.POST("/approve", controller.ApproveFilterRequest)
-			}
+	filterRequests := v1.Group("/requests/filter")
+	filterRequests.POST("/register", ctrl.RegisterFilter)
+	filterRequests.POST("/approve", ctrl.ApproveFilterRequest)
 
-			filterData := v1.Group("/data/filters")
-			{
-				filterData.GET("", controller.GetFilters)
-			}
+	v1.GET("/data/filters", ctrl.GetFilters)
+	v1.GET("/data/all-filters", ctrl.GetAllFilters)
+	v1.GET("/data/filter-requests", ctrl.GetAllFilterRequests)
 
-			// Added new group for filter requests
-			filterRequestsData := v1.Group("/data/filter-requests")
-			{
-				filterRequestsData.GET("", controller.GetAllFilterRequests)
-			}
+	jobFrequencyRequests := v1.Group("/requests/job-frequency")
+	jobFrequencyRequests.POST("/register", ctrl.RegisterJobFrequency)
+	jobFrequencyRequests.POST("/approve", ctrl.ApproveJobFrequencyRequest)
 
-			// ==================== JOB FREQUENCY OPERATIONS ====================
+	v1.GET("/data/job-frequencies", ctrl.GetJobFrequencies)
+	v1.GET("/data/job-frequency-requests", ctrl.GetAllJobFrequencyRequests)
 
-			// Job Frequency Registration and Management
-			jobFrequencyRequests := v1.Group("/requests/job-frequency")
-			{
-				jobFrequencyRequests.POST("/register", controller.RegisterJobFrequency)
-				jobFrequencyRequests.POST("/approve", controller.ApproveJobFrequencyRequest)
-			}
+	v1.GET("/data/mq-id-topics", ctrl.GetMQIdTopics)
+	v1.GET("/data/variants-list", ctrl.GetVariantsList)
 
-			jobFrequencyData := v1.Group("/data/job-frequencies")
-			{
-				jobFrequencyData.GET("", controller.GetJobFrequencies)
-			}
+	variantOnboardingData := v1.Group("/data/variant-onboarding")
+	// variantOnboardingData.GET("/requests", ctrl.GetAllVariantOnboardingRequests)
+	variantOnboardingData.GET("/tasks", ctrl.GetVariantOnboardingTasks)
 
-			jobFrequencyRequestsData := v1.Group("/data/job-frequency-requests")
-			{
-				jobFrequencyRequestsData.GET("", controller.GetAllJobFrequencyRequests)
-			}
+	variantScaleUpData := v1.Group("/data/variant-scaleup")
+	variantScaleUpData.GET("/requests", ctrl.GetAllVariantScaleUpRequests)
+	variantScaleUpData.GET("/tasks", ctrl.GetVariantScaleUpTasks)
 
-			// ==================== MQ ID TO TOPICS OPERATIONS ====================
-
-			mqIdTopicsData := v1.Group("/data/mq-id-topics")
-			{
-				mqIdTopicsData.GET("", controller.GetMQIdTopics)
-			}
-
-			variantsListData := v1.Group("/data/variants-list")
-			{
-				variantsListData.GET("", controller.GetVariantsList)
-			}
-			// Variant Promotion Operations
-			variantPromotionRequests := v1.Group("/requests/variant")
-			{
-				variantPromotionRequests.POST("/promote", controller.PromoteVariant)
-				variantPromotionRequests.POST("/promote/approve", controller.ApproveVariantPromotionRequest)
-			}
-
-			// Variant Onboarding Operations
-			variantOnboardingRequests := v1.Group("/requests/variant")
-			{
-				variantOnboardingRequests.POST("/onboard", controller.OnboardVariant)
-				variantOnboardingRequests.POST("/onboard/approve", controller.ApproveVariantOnboardingRequest)
-			}
-
-			// Variant Onboarding Data Operations
-			variantOnboardingData := v1.Group("/data/variant-onboarding")
-			{
-				variantOnboardingData.GET("/requests", controller.GetAllVariantOnboardingRequests)
-				variantOnboardingData.GET("/tasks", controller.GetVariantOnboardingTasks)
-			}
-		}
-	}
+	v1.POST("/test/variant/execute-request", ctrl.TestVariant)
+	v1.POST("/test/variant/generate-request", ctrl.GenerateTestRequest)
 }

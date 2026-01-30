@@ -12,6 +12,7 @@ type VariantOnboardingTaskRepository interface {
 	Create(task *VariantOnboardingTask) error
 	GetByID(taskID int) (*VariantOnboardingTask, error)
 	GetByStatus(status string) ([]VariantOnboardingTask, error)
+	GetByEntityAndModelAndVariant(entity string, model string, variant string) (*VariantOnboardingTask, error)
 	GetFirstPending() (*VariantOnboardingTask, error)
 	GetFirstInProgress() (*VariantOnboardingTask, error)
 	UpdateStatus(taskID int, status string) error
@@ -53,6 +54,15 @@ func (r *variantOnboardingTaskRepo) Create(task *VariantOnboardingTask) error {
 func (r *variantOnboardingTaskRepo) GetByID(taskID int) (*VariantOnboardingTask, error) {
 	var task VariantOnboardingTask
 	err := r.db.Where("task_id = ?", taskID).First(&task).Error
+	if err != nil {
+		return nil, err
+	}
+	return &task, nil
+}
+
+func (r *variantOnboardingTaskRepo) GetByEntityAndModelAndVariant(entity string, model string, variant string) (*VariantOnboardingTask, error) {
+	var task VariantOnboardingTask
+	err := r.db.Where("entity = ? AND model = ? AND variant = ?", entity, model, variant).First(&task).Error
 	if err != nil {
 		return nil, err
 	}

@@ -1,4 +1,4 @@
-package variant_onboarding_requests
+package variant_scaleup_requests
 
 import (
 	"time"
@@ -7,9 +7,9 @@ import (
 	"gorm.io/gorm"
 )
 
-const VariantOnboardingRequestsTableName = "variant_onboarding_requests"
+const VariantScaleUpRequestsTableName = "variant_scaleup_requests"
 
-type VariantOnboardingRequest struct {
+type VariantScaleUpRequest struct {
 	RequestID   int       `gorm:"primaryKey;autoIncrement" json:"request_id"`
 	Reason      string    `gorm:"type:text;not null" json:"reason"`
 	Payload     string    `gorm:"type:text;not null" json:"payload"`
@@ -21,16 +21,16 @@ type VariantOnboardingRequest struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-func (VariantOnboardingRequest) TableName() string {
-	return VariantOnboardingRequestsTableName
+func (VariantScaleUpRequest) TableName() string {
+	return VariantScaleUpRequestsTableName
 }
 
-func (VariantOnboardingRequest) BeforeCreate(tx *gorm.DB) (err error) {
+func (VariantScaleUpRequest) BeforeCreate(tx *gorm.DB) (err error) {
 	tx.Statement.SetColumn(constant.CreatedAt, time.Now())
 	return
 }
 
-func (VariantOnboardingRequest) BeforeUpdate(tx *gorm.DB) (err error) {
+func (VariantScaleUpRequest) BeforeUpdate(tx *gorm.DB) (err error) {
 	tx.Statement.SetColumn(constant.UpdatedAt, time.Now())
 	return
 }

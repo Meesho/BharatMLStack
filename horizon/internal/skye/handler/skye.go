@@ -1,12 +1,15 @@
 package handler
 
 import (
-	"encoding/json"
 	"fmt"
+	"math/rand"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye"
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/scylla"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/entity_requests"
@@ -15,340 +18,173 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/model_requests"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/qdrant_cluster_requests"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/store_requests"
-	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_onboarding_requests"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_onboarding_tasks"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_promotion_requests"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_requests"
-	"github.com/Meesho/BharatMLStack/horizon/internal/skye"
+	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_scaleup_requests"
+	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_scaleup_tasks"
 	skyeEtcd "github.com/Meesho/BharatMLStack/horizon/internal/skye/etcd"
+	"github.com/Meesho/BharatMLStack/horizon/internal/skye/etcd/enums"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/rs/zerolog/log"
 )
 
-const (
-	StatusPending    = "PENDING"
-	StatusApproved   = "APPROVED"
-	StatusRejected   = "REJECTED"
-	StatusInProgress = "IN_PROGRESS"
-	StatusCompleted  = "COMPLETED"
-	StatusFailed     = "FAILED"
-	StatusSuccess    = "SUCCESS"
-)
-
 type skyeConfig struct {
-	StoreRequestRepo             store_requests.StoreRequestRepository
-	EntityRequestRepo            entity_requests.EntityRequestRepository
-	ModelRequestRepo             model_requests.ModelRequestRepository
-	VariantRequestRepo           variant_requests.VariantRequestRepository
-	FilterRequestRepo            filter_requests.FilterRequestRepository
-	JobFrequencyRequestRepo      job_frequency_requests.JobFrequencyRequestRepository
-	QdrantClusterRequestRepo     qdrant_cluster_requests.QdrantClusterRequestRepository
-	VariantPromotionRequestRepo  variant_promotion_requests.VariantPromotionRequestRepository
-	VariantOnboardingRequestRepo variant_onboarding_requests.VariantOnboardingRequestRepository
-	VariantOnboardingTaskRepo    variant_onboarding_tasks.VariantOnboardingTaskRepository
-	EtcdConfig                   skyeEtcd.Manager
-	ScyllaStores                 map[int]scylla.Store
-	ActiveScyllaConfigIDs        map[int]bool
-	MQIdTopicsMapping            map[int]string
-	VariantsList                 []string
-	AppConfig                    configs.Configs
+	StoreRequestRepo            store_requests.StoreRequestRepository
+	EntityRequestRepo           entity_requests.EntityRequestRepository
+	ModelRequestRepo            model_requests.ModelRequestRepository
+	VariantRequestRepo          variant_requests.VariantRequestRepository
+	FilterRequestRepo           filter_requests.FilterRequestRepository
+	JobFrequencyRequestRepo     job_frequency_requests.JobFrequencyRequestRepository
+	QdrantClusterRequestRepo    qdrant_cluster_requests.QdrantClusterRequestRepository
+	VariantPromotionRequestRepo variant_promotion_requests.VariantPromotionRequestRepository
+	VariantOnboardingTaskRepo   variant_onboarding_tasks.VariantOnboardingTaskRepository
+	VariantScaleUpRequestRepo   variant_scaleup_requests.VariantScaleUpRequestRepository
+	VariantScaleUpTaskRepo      variant_scaleup_tasks.VariantScaleUpTaskRepository
+	EtcdConfig                  skyeEtcd.Manager
+	ScyllaStores                map[int]scylla.SkyeStore
+	AppConfig                   configs.Configs
+	MQIdTopicsMapping           map[int]string
+	VariantsList                []string
+	SkyeClient                  skye.SkyeClient
 }
 
 func InitV1ConfigHandler(appConfig configs.Configs) Config {
-	if config == nil {
+	configOnce.Do(func() {
 		conn, err := infra.SQL.GetConnection()
 		if err != nil {
 			log.Fatal().Err(err).Msg("Failed to get SQL connection")
 		}
 		sqlConn := conn.(*infra.SQLConnection)
-
-		// Initialize all repositories
-		storeRequestRepo, err := store_requests.Repository(sqlConn)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to create store request repository")
-		}
-		variantOnboardingTaskRepo, err := variant_onboarding_tasks.Repository(sqlConn)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to create variant onboarding task repository")
-		}
-
-		entityRequestRepo, err := entity_requests.Repository(sqlConn)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to create entity request repository")
-		}
-
-		modelRequestRepo, err := model_requests.Repository(sqlConn)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to create model request repository")
-		}
-
-		variantRequestRepo, err := variant_requests.Repository(sqlConn)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to create variant request repository")
-		}
-
-		filterRequestRepo, err := filter_requests.Repository(sqlConn)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to create filter request repository")
-		}
-
-		jobFrequencyRequestRepo, err := job_frequency_requests.Repository(sqlConn)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to create job frequency request repository")
-		}
-
-		qdrantClusterRequestRepo, err := qdrant_cluster_requests.Repository(sqlConn)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to create qdrant cluster request repository")
-		}
-
-		variantPromotionRequestRepo, err := variant_promotion_requests.Repository(sqlConn)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to create variant promotion request repository")
-		}
-
-		variantOnboardingRequestRepo, err := variant_onboarding_requests.Repository(sqlConn)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to create variant onboarding request repository")
-		}
-
-		// Initialize Scylla stores
-		scyllaStores := make(map[int]scylla.Store)
-		activeScyllaConfigIDs := make(map[int]bool)
-
-		// Get active Scylla config IDs from environment
-		activeScyllaConfIds := skye.ScyllaActiveConfigIds
-		if activeScyllaConfIds != "" {
-			confIds := strings.Split(activeScyllaConfIds, ",")
-			for _, confIdStr := range confIds {
-				confIdStr = strings.TrimSpace(confIdStr)
-				confId, err := strconv.Atoi(confIdStr)
-				if err != nil {
-					log.Error().Err(err).Msgf("Error converting Scylla config ID %s to int", confIdStr)
-					continue
-				}
-
-				// Add to active config IDs set for validation
-				activeScyllaConfigIDs[confId] = true
-
-				if infra.Scylla != nil {
-					connFacade, err := infra.Scylla.GetConnection(confId)
-					if err != nil {
-						log.Error().Err(err).Msgf("Error getting Scylla connection for config ID %d", confId)
-						continue
-					}
-
-					conn := connFacade.(*infra.ScyllaClusterConnection)
-					scyllaStore, err := scylla.NewRepository(conn)
-					if err != nil {
-						log.Error().Err(err).Msgf("Error creating Scylla store for config ID %d", confId)
-						continue
-					}
-
-					scyllaStores[confId] = scyllaStore
-					log.Info().Msgf("Successfully initialized Scylla store for config ID %d", confId)
-				}
-			}
-		} else {
-			log.Warn().Msg("SCYLLA_ACTIVE_CONFIG_IDS not configured, running without Scylla stores")
-		}
-
-		mqIdTopicsMapping := make(map[int]string)
-		mqIdTopicsMappingStr := skye.MQIdTopicsMapping
-		if mqIdTopicsMappingStr != "" {
-			var mqIdTopicsList []struct {
-				MQID  int    `json:"mq_id"`
-				Topic string `json:"topic"`
-			}
-			if err := json.Unmarshal([]byte(mqIdTopicsMappingStr), &mqIdTopicsList); err != nil {
-				log.Error().Err(err).Msg("Error parsing MQ_ID_TOPICS_MAPPING JSON, running without MQ ID to topic mapping")
-			} else {
-				for _, mapping := range mqIdTopicsList {
-					mqIdTopicsMapping[mapping.MQID] = mapping.Topic
-					log.Info().Msgf("Loaded MQ ID %d with topic %s", mapping.MQID, mapping.Topic)
-				}
-			}
-		} else {
-			log.Warn().Msg("MQ_ID_TOPICS_MAPPING not configured, running without MQ ID to topic mapping")
-		}
-
-		// Initialize Variants List
-		variantsList := []string{}
-		variantsListStr := skye.VariantsList
-		if variantsListStr != "" {
-			if err := json.Unmarshal([]byte(variantsListStr), &variantsList); err != nil {
-				log.Error().Err(err).Msg("Error parsing VARIANTS_LIST JSON, running without variants list")
-			} else {
-				log.Info().Msgf("Loaded %d variants", len(variantsList))
-			}
-		} else {
-			log.Warn().Msg("VARIANTS_LIST not configured, running without variants list")
-		}
-
 		config = &skyeConfig{
-			StoreRequestRepo:             storeRequestRepo,
-			EntityRequestRepo:            entityRequestRepo,
-			ModelRequestRepo:             modelRequestRepo,
-			VariantRequestRepo:           variantRequestRepo,
-			FilterRequestRepo:            filterRequestRepo,
-			JobFrequencyRequestRepo:      jobFrequencyRequestRepo,
-			QdrantClusterRequestRepo:     qdrantClusterRequestRepo,
-			VariantPromotionRequestRepo:  variantPromotionRequestRepo,
-			VariantOnboardingRequestRepo: variantOnboardingRequestRepo,
-			VariantOnboardingTaskRepo:    variantOnboardingTaskRepo,
-			EtcdConfig:                   skyeEtcd.NewEtcdConfig(),
-			ScyllaStores:                 scyllaStores,
-			ActiveScyllaConfigIDs:        activeScyllaConfigIDs,
-			AppConfig:                    appConfig,
-			MQIdTopicsMapping:            mqIdTopicsMapping,
-			VariantsList:                 variantsList,
+			StoreRequestRepo:            initRepository("store request", store_requests.Repository, sqlConn),
+			EntityRequestRepo:           initRepository("entity request", entity_requests.Repository, sqlConn),
+			ModelRequestRepo:            initRepository("model request", model_requests.Repository, sqlConn),
+			VariantRequestRepo:          initRepository("variant request", variant_requests.Repository, sqlConn),
+			FilterRequestRepo:           initRepository("filter request", filter_requests.Repository, sqlConn),
+			JobFrequencyRequestRepo:     initRepository("job frequency request", job_frequency_requests.Repository, sqlConn),
+			QdrantClusterRequestRepo:    initRepository("qdrant cluster request", qdrant_cluster_requests.Repository, sqlConn),
+			VariantPromotionRequestRepo: initRepository("variant promotion request", variant_promotion_requests.Repository, sqlConn),
+			VariantOnboardingTaskRepo:   initRepository("variant onboarding task", variant_onboarding_tasks.Repository, sqlConn),
+			VariantScaleUpRequestRepo:   initRepository("variant scale up request", variant_scaleup_requests.Repository, sqlConn),
+			VariantScaleUpTaskRepo:      initRepository("variant scale up task", variant_scaleup_tasks.Repository, sqlConn),
+			EtcdConfig:                  skyeEtcd.NewEtcdConfig(appConfig),
+			ScyllaStores:                initScyllaStores(appConfig),
+			AppConfig:                   appConfig,
+			MQIdTopicsMapping:           parseMQIdTopicsMapping(appConfig.MQIdTopicsMapping),
+			VariantsList:                parseVariantsList(appConfig.VariantsList),
+			SkyeClient: skye.GetSkyeClientFromConfig(1, skye.ClientConfig{
+				Host:             appConfig.SkyeHost,
+				Port:             appConfig.SkyePort,
+				AuthToken:        appConfig.SkyeAuthToken,
+				PlainText:        true,
+				DeadlineExceedMS: appConfig.SkyeDeadlineExceedMS,
+			}, appConfig.AppName),
 		}
-		log.Info().Msg("Config initialization completed")
-	} else {
-		log.Info().Msg("Config already exists, reusing...")
-	}
+	})
 	return config
 }
 
+func initScyllaStores(appConfig configs.Configs) map[int]scylla.SkyeStore {
+	scyllaStores := make(map[int]scylla.SkyeStore)
+	activeScyllaConfIds := appConfig.SkyeScyllaActiveConfigIds
+	if activeScyllaConfIds == "" {
+		log.Fatal().Msg("skye_scylla_active_config_ids not configured, running without Scylla stores")
+		return scyllaStores
+	}
+
+	// Parse the horizon to skye conf id mapping
+	confIdMapping := parseHorizonToSkyeScyllaConfIdMap(appConfig.HorizonToSkyeScyllaConfIdMap)
+
+	for _, confIdStr := range strings.Split(activeScyllaConfIds, ",") {
+		confIdStr = strings.TrimSpace(confIdStr)
+		confId, err := strconv.Atoi(confIdStr)
+		if err != nil {
+			log.Error().Err(err).Msgf("Error converting Scylla config ID %s to int", confIdStr)
+			continue
+		}
+		if infra.Scylla == nil {
+			continue
+		}
+		connFacade, err := infra.Scylla.GetConnection(confId)
+		if err != nil {
+			log.Error().Err(err).Msgf("Error getting Scylla connection for config ID %d", confId)
+			continue
+		}
+		scyllaStore, err := scylla.NewSkyeRepository(connFacade.(*infra.ScyllaClusterConnection))
+		if err != nil {
+			log.Error().Err(err).Msgf("Error creating Scylla store for config ID %d", confId)
+			continue
+		}
+		// Use mapped key if mapping exists, otherwise use original confId
+		storeKey := confId
+		if mappedKey, exists := confIdMapping[confId]; exists {
+			storeKey = mappedKey
+			log.Info().
+				Int("original_conf_id", confId).
+				Int("mapped_store_key", storeKey).
+				Msg("Using mapped Scylla store key from horizon_to_skye_scylla_conf_id_map")
+		}
+		scyllaStores[storeKey] = scyllaStore
+	}
+	return scyllaStores
+}
+
 func (s *skyeConfig) RegisterStore(request StoreRegisterRequest) (RequestStatus, error) {
-	// Validate that the config_id is in the list of active Scylla config IDs
-	if !s.ActiveScyllaConfigIDs[request.Payload.ConfID] {
-		// Build list of allowed config IDs for error message
-		allowedConfigIDs := make([]string, 0, len(s.ActiveScyllaConfigIDs))
-		for confID := range s.ActiveScyllaConfigIDs {
-			allowedConfigIDs = append(allowedConfigIDs, fmt.Sprintf("%d", confID))
-		}
-
-		var allowedMsg string
-		if len(allowedConfigIDs) > 0 {
-			allowedMsg = fmt.Sprintf(" Allowed config_ids: %s", strings.Join(allowedConfigIDs, ", "))
-		} else {
-			allowedMsg = " No active Scylla config IDs are configured. Please set SCYLLA_ACTIVE_CONFIG_IDS environment variable."
-		}
-
-		return RequestStatus{}, fmt.Errorf("invalid config_id: %d.%s", request.Payload.ConfID, allowedMsg)
-	}
-
-	payloadJSON, err := json.Marshal(request.Payload)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	storeRequest := &store_requests.StoreRequest{
-		Reason:      request.Reason,
-		Payload:     string(payloadJSON),
-		RequestType: request.RequestType,
-		CreatedBy:   request.Requestor,
-		Status:      StatusPending,
-	}
-
-	err = s.StoreRequestRepo.Create(storeRequest)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to create store request: %w", err)
-	}
-
-	return RequestStatus{
-		RequestID: storeRequest.RequestID,
-		Status:    StatusPending,
-		Message:   "Store registration request submitted successfully. Awaiting admin approval.",
-		CreatedAt: storeRequest.CreatedAt,
-	}, nil
+	return createRequest(request.Payload, request.Reason, request.Requestor, request.RequestType, "Store registration",
+		func(payloadJSON string) (int, time.Time, error) {
+			req := &store_requests.StoreRequest{
+				Reason:      request.Reason,
+				Payload:     payloadJSON,
+				RequestType: request.RequestType,
+				CreatedBy:   request.Requestor,
+				Status:      StatusPending,
+			}
+			err := s.StoreRequestRepo.Create(req)
+			return req.RequestID, req.CreatedAt, err
+		},
+		func(payload interface{}) error {
+			storePayload, ok := payload.(StoreRequestPayload)
+			if !ok {
+				return fmt.Errorf("invalid payload type for store registration")
+			}
+			activeConfigIds := strings.Split(s.AppConfig.SkyeScyllaActiveConfigIds, ",")
+			if !slices.Contains(activeConfigIds, fmt.Sprintf("%d", storePayload.ConfID)) {
+				return fmt.Errorf("invalid config_id: %d. Allowed config_ids: %s", storePayload.ConfID, strings.Join(activeConfigIds, ", "))
+			}
+			return nil
+		})
 }
 
 func (s *skyeConfig) ApproveStoreRequest(requestID int, approval ApprovalRequest) (ApprovalResponse, error) {
-	req, err := s.StoreRequestRepo.GetByID(requestID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to get store request: %w", err)
-	}
-	if req.Status != StatusPending {
-		return ApprovalResponse{}, fmt.Errorf("request %d is not in pending status", requestID)
-	}
-	if approval.ApprovalDecision == StatusRejected {
-		err = s.StoreRequestRepo.UpdateStatus(requestID, approval.ApprovalDecision, approval.AdminID)
-		if err != nil {
-			return ApprovalResponse{}, fmt.Errorf("failed to update store request status: %w", err)
-		}
-		log.Info().Msgf("Successfully updated store request status in database: request_id=%d, status=%s", requestID, approval.ApprovalDecision)
-		return ApprovalResponse{
-			RequestID:        requestID,
-			Status:           approval.ApprovalDecision,
-			Message:          "Store request rejected.",
-			ApprovedBy:       approval.AdminID,
-			ApprovedAt:       time.Now(),
-			ProcessingStatus: StatusCompleted,
-		}, nil
-	}
-
-	if approval.ApprovalDecision == StatusApproved {
-		// Parse the payload
-		var payload StoreRequestPayload
-		if err := json.Unmarshal([]byte(req.Payload), &payload); err != nil {
-			return ApprovalResponse{}, fmt.Errorf("failed to parse store request payload: %w", err)
-		}
-
-		// Create ETCD configuration
-		err = s.EtcdConfig.RegisterStore(payload.ConfID, payload.DB, payload.EmbeddingsTable, payload.AggregatorTable)
-		if err != nil {
-			return ApprovalResponse{}, fmt.Errorf("failed to create ETCD store configuration: %w", err)
-		}
-		log.Info().Msgf("Successfully created ETCD store configuration for conf_id: %d", payload.ConfID)
-
-		// Create Scylla tables
-		if strings.ToLower(payload.DB) == "scylla" {
+	return approveRequest(requestID, approval, "Store",
+		func(id int) (RequestInfo, error) {
+			req, err := s.StoreRequestRepo.GetByID(id)
+			if err != nil {
+				return RequestInfo{}, err
+			}
+			return RequestInfo{RequestID: req.RequestID, Status: req.Status, Payload: req.Payload, CreatedAt: req.CreatedAt}, nil
+		},
+		s.StoreRequestRepo.UpdateStatus,
+		func(payloadJSON string) error {
+			payload, err := parsePayload[StoreRequestPayload](payloadJSON)
+			if err != nil {
+				return fmt.Errorf("failed to parse store request payload: %w", err)
+			}
+			if err := s.EtcdConfig.RegisterStore(payload.ConfID, payload.DB, payload.EmbeddingsTable, payload.AggregatorTable); err != nil {
+				return fmt.Errorf("failed to create ETCD store configuration: %w", err)
+			}
 			scyllaStore := s.ScyllaStores[payload.ConfID]
-			// Create embeddings table
-			if payload.EmbeddingsTable != "" {
-				// TODO: why are we using entity_id and embedding_id as primary keys? @atishay
-				primaryKeys := []string{"entity_id", "embedding_id"}
-				tableTTL := 0
-				log.Info().Msgf("Creating Scylla embeddings table: %s", payload.EmbeddingsTable)
-				err = scyllaStore.CreateTable(payload.EmbeddingsTable, primaryKeys, tableTTL)
-				if err != nil {
-					log.Error().Err(err).Msgf("Failed to create Scylla embeddings table: %s", payload.EmbeddingsTable)
-					// TODO: Rollback ETCD config
-					return ApprovalResponse{}, fmt.Errorf("failed to create Scylla embeddings table %s: %w", payload.EmbeddingsTable, err)
-				}
-				log.Info().Msgf("Successfully created Scylla embeddings table: %s", payload.EmbeddingsTable)
+			if err := scyllaStore.CreateEmbeddingTable(payload.EmbeddingsTable, 0, s.VariantsList); err != nil {
+				log.Error().Err(err).Msgf("Failed to create Scylla embeddings table: %s", payload.EmbeddingsTable)
+				return fmt.Errorf("failed to create Scylla embeddings table %s: %w", payload.EmbeddingsTable, err)
 			}
-
-			// Create aggregator table
-			if payload.AggregatorTable != "" {
-				// TODO: why are we using entity_id and embedding_id as primary keys? @atishay
-				primaryKeys := []string{"entity_id", "timestamp"}
-				tableTTL := 0
-
-				log.Info().Msgf("Creating Scylla aggregator table: %s", payload.AggregatorTable)
-				err = scyllaStore.CreateTable(payload.AggregatorTable, primaryKeys, tableTTL)
-				if err != nil {
-					log.Error().Err(err).Msgf("Failed to create Scylla aggregator table: %s", payload.AggregatorTable)
-					// TODO: Rollback ETCD config
-					return ApprovalResponse{}, fmt.Errorf("failed to create Scylla aggregator table %s: %w", payload.AggregatorTable, err)
-				}
-				log.Info().Msgf("Successfully created Scylla aggregator table: %s", payload.AggregatorTable)
+			if err := scyllaStore.CreateAggregatorTable(payload.AggregatorTable, 0); err != nil {
+				log.Error().Err(err).Msgf("Failed to create Scylla aggregator table: %s", payload.AggregatorTable)
+				return fmt.Errorf("failed to create Scylla aggregator table %s: %w", payload.AggregatorTable, err)
 			}
-			log.Info().Msgf("Successfully created all Scylla tables for conf_id: %d", payload.ConfID)
-		} else {
-			log.Info().Msgf("DB type is '%s', skipping Scylla table creation", payload.DB)
-		}
-	}
-
-	log.Info().Msgf("Updating store request status: request_id=%d, status=%s, admin_id=%s", requestID, approval.ApprovalDecision, approval.AdminID)
-	err = s.StoreRequestRepo.UpdateStatus(requestID, approval.ApprovalDecision, approval.AdminID)
-	if err != nil {
-		log.Error().Err(err).Msgf("Failed to update store request status in database: request_id=%d, status=%s", requestID, approval.ApprovalDecision)
-		return ApprovalResponse{}, fmt.Errorf("failed to update store request status: %w", err)
-	}
-
-	log.Info().Msgf("Successfully updated store request status in database: request_id=%d, status=%s", requestID, approval.ApprovalDecision)
-
-	return ApprovalResponse{
-		RequestID:        requestID,
-		Status:           approval.ApprovalDecision,
-		Message:          "Store request processed and ETCD configured successfully.",
-		ApprovedBy:       approval.AdminID,
-		ApprovedAt:       time.Now(),
-		ProcessingStatus: StatusApproved,
-	}, nil
+			return nil
+		})
 }
 
 func (s *skyeConfig) GetAllStoreRequests() (StoreRequestListResponse, error) {
@@ -356,10 +192,7 @@ func (s *skyeConfig) GetAllStoreRequests() (StoreRequestListResponse, error) {
 	if err != nil {
 		return StoreRequestListResponse{}, fmt.Errorf("failed to get store requests: %w", err)
 	}
-	return StoreRequestListResponse{
-		StoreRequests: requests,
-		TotalCount:    len(requests),
-	}, nil
+	return StoreRequestListResponse{StoreRequests: requests, TotalCount: len(requests)}, nil
 }
 
 func (s *skyeConfig) GetStores() (StoreListResponse, error) {
@@ -368,80 +201,79 @@ func (s *skyeConfig) GetStores() (StoreListResponse, error) {
 		log.Error().Err(err).Msg("Failed to get stores from ETCD")
 		return StoreListResponse{}, fmt.Errorf("failed to get stores from ETCD: %w", err)
 	}
+
 	var stores []StoreInfo
 	for storeId, storeConfig := range storeConfigs {
-		store := StoreInfo{
-			ID:              storeId, // Use the actual store ID from ETCD
+		stores = append(stores, StoreInfo{
+			ID:              storeId,
 			ConfID:          storeConfig.ConfId,
 			DB:              storeConfig.Db,
 			EmbeddingsTable: storeConfig.EmbeddingTable,
 			AggregatorTable: storeConfig.AggregatorTable,
-		}
-		stores = append(stores, store)
+		})
 	}
-	return StoreListResponse{
-		Stores: stores,
-	}, nil
+	return StoreListResponse{Stores: stores}, nil
 }
 
 func (s *skyeConfig) RegisterEntity(request EntityRegisterRequest) (RequestStatus, error) {
-	payloadJSON, err := json.Marshal(request.Payload)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to marshal payload: %w", err)
-	}
-	entityRequest := &entity_requests.EntityRequest{
-		Reason:      request.Reason,
-		Payload:     string(payloadJSON),
-		RequestType: request.RequestType,
-		CreatedBy:   request.Requestor,
-		Status:      StatusPending,
-	}
-	err = s.EntityRequestRepo.Create(entityRequest)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to create entity request: %w", err)
-	}
-	return RequestStatus{
-		RequestID: entityRequest.RequestID,
-		Status:    StatusPending,
-		Message:   "Entity registration request submitted successfully. Awaiting admin approval.",
-		CreatedAt: entityRequest.CreatedAt,
-	}, nil
+	return createRequest(request.Payload, request.Reason, request.Requestor, request.RequestType, "Entity registration",
+		func(payloadJSON string) (int, time.Time, error) {
+			req := &entity_requests.EntityRequest{
+				Reason:      request.Reason,
+				Payload:     payloadJSON,
+				RequestType: request.RequestType,
+				CreatedBy:   request.Requestor,
+				Status:      StatusPending,
+			}
+			err := s.EntityRequestRepo.Create(req)
+			return req.RequestID, req.CreatedAt, err
+		},
+		func(payload interface{}) error {
+			entityPayload, ok := payload.(EntityRequestPayload)
+			if !ok {
+				return fmt.Errorf("invalid payload type for entity registration")
+			}
+			// Validate that the store exists in etcd
+			stores, err := s.EtcdConfig.GetStores()
+			if err != nil {
+				return fmt.Errorf("failed to get stores from etcd: %w", err)
+			}
+			if _, exists := stores[entityPayload.StoreID]; !exists {
+				return fmt.Errorf("store with id '%s' is not registered in etcd", entityPayload.StoreID)
+			}
+			entities, err := s.EtcdConfig.GetEntities()
+			if err != nil {
+				return fmt.Errorf("failed to get entities from etcd: %w", err)
+			}
+			if _, exists := entities[entityPayload.Entity]; exists {
+				return fmt.Errorf("entity with name '%s' is already registered in etcd", entityPayload.Entity)
+			}
+			return nil
+		})
 }
 
 func (s *skyeConfig) ApproveEntityRequest(requestID int, approval ApprovalRequest) (ApprovalResponse, error) {
-	req, err := s.EntityRequestRepo.GetByID(requestID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to get entity request: %w", err)
-	}
-	if req.Status != StatusPending {
-		return ApprovalResponse{}, fmt.Errorf("request %d is not in pending status", requestID)
-	}
-	if approval.ApprovalDecision == StatusApproved {
-		var payload EntityRequestPayload
-		if err := json.Unmarshal([]byte(req.Payload), &payload); err != nil {
-			return ApprovalResponse{}, fmt.Errorf("failed to parse entity request payload: %w", err)
-		}
-		err = s.EtcdConfig.RegisterEntity(payload.Entity, payload.StoreID)
-		if err != nil {
-			log.Error().Err(err).Msgf("Failed to register entity in ETCD for entity: %s, store_id: %s", payload.Entity, payload.StoreID)
-			return ApprovalResponse{}, fmt.Errorf("failed to create ETCD entity configuration: %w", err)
-		}
-		log.Info().Msgf("Successfully registered entity in ETCD for entity: %s, store_id: %s", payload.Entity, payload.StoreID)
-	}
-
-	err = s.EntityRequestRepo.UpdateStatus(requestID, approval.ApprovalDecision, approval.AdminID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to update entity request status: %w", err)
-	}
-
-	return ApprovalResponse{
-		RequestID:        requestID,
-		Status:           approval.ApprovalDecision,
-		Message:          "Entity request processed and ETCD configured successfully.",
-		ApprovedBy:       approval.AdminID,
-		ApprovedAt:       time.Now(),
-		ProcessingStatus: StatusApproved,
-	}, nil
+	return approveRequest(requestID, approval, "Entity",
+		func(id int) (RequestInfo, error) {
+			req, err := s.EntityRequestRepo.GetByID(id)
+			if err != nil {
+				return RequestInfo{}, err
+			}
+			return RequestInfo{RequestID: req.RequestID, Status: req.Status, Payload: req.Payload, CreatedAt: req.CreatedAt}, nil
+		},
+		s.EntityRequestRepo.UpdateStatus,
+		func(payloadJSON string) error {
+			payload, err := parsePayload[EntityRequestPayload](payloadJSON)
+			if err != nil {
+				return fmt.Errorf("failed to parse entity request payload: %w", err)
+			}
+			if err := s.EtcdConfig.RegisterEntity(payload.Entity, payload.StoreID); err != nil {
+				log.Error().Err(err).Msgf("Failed to register entity in ETCD for entity: %s, store_id: %s", payload.Entity, payload.StoreID)
+				return fmt.Errorf("failed to create ETCD entity configuration: %w", err)
+			}
+			log.Info().Msgf("Successfully registered entity in ETCD for entity: %s, store_id: %s", payload.Entity, payload.StoreID)
+			return nil
+		})
 }
 
 func (s *skyeConfig) GetEntities() (EntityListResponse, error) {
@@ -452,35 +284,9 @@ func (s *skyeConfig) GetEntities() (EntityListResponse, error) {
 	}
 	var entities []EntityInfo
 	for entityId, entityConfig := range entityConfigs {
-		entities = append(entities, EntityInfo{
-			Name:    entityId,
-			StoreID: entityConfig.StoreId,
-		})
+		entities = append(entities, EntityInfo{Name: entityId, StoreID: entityConfig.StoreId})
 	}
-	return EntityListResponse{
-		Entities: entities,
-	}, nil
-}
-
-func (s *skyeConfig) GetMQIdTopics() (MQIdTopicsResponse, error) {
-	var mappings []MQIdTopicMapping
-	for mqID, topic := range s.MQIdTopicsMapping {
-		mappings = append(mappings, MQIdTopicMapping{
-			MQID:  mqID,
-			Topic: topic,
-		})
-	}
-	return MQIdTopicsResponse{
-		Mappings:   mappings,
-		TotalCount: len(mappings),
-	}, nil
-}
-
-func (s *skyeConfig) GetVariantsList() (VariantsListResponse, error) {
-	return VariantsListResponse{
-		Variants:   s.VariantsList,
-		TotalCount: len(s.VariantsList),
-	}, nil
+	return EntityListResponse{Entities: entities}, nil
 }
 
 func (s *skyeConfig) GetAllEntityRequests() (EntityRequestListResponse, error) {
@@ -488,155 +294,117 @@ func (s *skyeConfig) GetAllEntityRequests() (EntityRequestListResponse, error) {
 	if err != nil {
 		return EntityRequestListResponse{}, fmt.Errorf("failed to get entity requests: %w", err)
 	}
-	return EntityRequestListResponse{
-		EntityRequests: requests,
-		TotalCount:     len(requests),
-	}, nil
+	return EntityRequestListResponse{EntityRequests: requests, TotalCount: len(requests)}, nil
 }
 
 func (s *skyeConfig) RegisterModel(request ModelRegisterRequest) (RequestStatus, error) {
-	// Validation: model_type can only be RESET or DELTA
-	if request.Payload.ModelType != "RESET" && request.Payload.ModelType != "DELTA" {
-		return RequestStatus{}, fmt.Errorf("invalid model_type: %s. Only 'RESET' or 'DELTA' are allowed", request.Payload.ModelType)
-	}
-	// TODO keep this configurable from cac
-	request.Payload.NumberOfPartitions = 24
-	payloadJSON, err := json.Marshal(request.Payload)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to marshal payload: %w", err)
-	}
-	modelRequest := &model_requests.ModelRequest{
-		Reason:      request.Reason,
-		Payload:     string(payloadJSON),
-		RequestType: "CREATE",
-		CreatedBy:   request.Requestor,
-		Status:      StatusPending,
-	}
-	err = s.ModelRequestRepo.Create(modelRequest)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to create model request: %w", err)
-	}
-	return RequestStatus{
-		RequestID: modelRequest.RequestID,
-		Status:    StatusPending,
-		Message:   "Model registration request submitted successfully. Awaiting admin approval.",
-		CreatedAt: modelRequest.CreatedAt,
-	}, nil
-}
 
-func (s *skyeConfig) EditModel(request ModelEditRequest) (RequestStatus, error) {
-	if _, exists := request.Payload.Updates["mq_id"]; exists {
-		return RequestStatus{}, fmt.Errorf("mq_id is not editable and cannot be updated")
-	}
-	if _, exists := request.Payload.Updates["topic_name"]; exists {
-		return RequestStatus{}, fmt.Errorf("topic_name is not editable and cannot be updated")
-	}
-	if modelType, exists := request.Payload.Updates["model_type"]; exists {
-		if modelTypeStr, ok := modelType.(string); ok {
-			if modelTypeStr != "RESET" && modelTypeStr != "DELTA" {
-				return RequestStatus{}, fmt.Errorf("invalid model_type: %s. Only 'RESET' or 'DELTA' are allowed", modelTypeStr)
+	return createRequest(request.Payload, request.Reason, request.Requestor, RequestTypeCreate, "Model registration",
+		func(payloadJSON string) (int, time.Time, error) {
+			req := &model_requests.ModelRequest{
+				Reason:      request.Reason,
+				Payload:     payloadJSON,
+				RequestType: RequestTypeCreate,
+				CreatedBy:   request.Requestor,
+				Status:      StatusPending,
 			}
-		}
-	}
-	// TODO keep this configurable from cac
-	if _, exists := request.Payload.Updates["number_of_partitions"]; exists {
-		request.Payload.Updates["number_of_partitions"] = 24
-	}
-	payloadJSON, err := json.Marshal(request.Payload)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to marshal payload: %w", err)
-	}
-	modelRequest := &model_requests.ModelRequest{
-		Reason:      request.Reason,
-		Payload:     string(payloadJSON),
-		RequestType: "EDIT",
-		CreatedBy:   request.Requestor,
-		Status:      StatusPending,
-	}
-	err = s.ModelRequestRepo.Create(modelRequest)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to create model edit request: %w", err)
-	}
-	return RequestStatus{
-		RequestID: modelRequest.RequestID,
-		Status:    StatusPending,
-		Message:   "Model edit request submitted successfully. Awaiting admin approval.",
-		CreatedAt: modelRequest.CreatedAt,
-	}, nil
+			err := s.ModelRequestRepo.Create(req)
+			return req.RequestID, req.CreatedAt, err
+		},
+		func(payload interface{}) error {
+			modelPayload, ok := payload.(ModelRequestPayload)
+			if !ok {
+				return fmt.Errorf("invalid payload type for model registration")
+			}
+
+			// 1. Check entity is registered
+			entities, err := s.EtcdConfig.GetEntities()
+			if err != nil {
+				return fmt.Errorf("failed to get entities from etcd: %w", err)
+			}
+			if _, exists := entities[modelPayload.Entity]; !exists {
+				return fmt.Errorf("entity with name '%s' is not registered in etcd", modelPayload.Entity)
+			}
+
+			// 2. Check model is new and not present
+			_, err = s.EtcdConfig.GetModelConfig(modelPayload.Entity, modelPayload.Model)
+			if err == nil {
+				return fmt.Errorf("model '%s' for entity '%s' already exists in etcd", modelPayload.Model, modelPayload.Entity)
+			}
+
+			// 3. Check model_type is RESET or DELTA
+			if modelPayload.ModelType != "RESET" && modelPayload.ModelType != "DELTA" {
+				return fmt.Errorf("invalid model_type: %s. Only 'RESET' or 'DELTA' are allowed", modelPayload.ModelType)
+			}
+
+			// 4. Check frequency is registered and present
+			frequencies, err := s.EtcdConfig.GetFrequencies()
+			if err != nil {
+				return fmt.Errorf("failed to get frequencies from etcd: %w", err)
+			}
+			if _, exists := frequencies[modelPayload.JobFrequency]; !exists {
+				return fmt.Errorf("job frequency '%s' is not registered in etcd", modelPayload.JobFrequency)
+			}
+
+			// 5. Check mqId and topic_name match the mapping
+			expectedTopic, exists := s.MQIdTopicsMapping[modelPayload.MQID]
+			if !exists {
+				return fmt.Errorf("mq_id %d is not present in mq_id_topics_mapping", modelPayload.MQID)
+			}
+			if expectedTopic != modelPayload.TopicName {
+				return fmt.Errorf("topic_name '%s' does not match the mapping for mq_id %d (expected: '%s')", modelPayload.TopicName, modelPayload.MQID, expectedTopic)
+			}
+
+			if modelPayload.TrainingDataPath == "" {
+				return fmt.Errorf("training_data_path must be provided")
+			}
+
+			if modelPayload.ModelConfig.DistanceFunction == "" {
+				return fmt.Errorf("model_config must be provided and distance_function must be set")
+			}
+			allowedDistanceFunctions := map[string]bool{
+				"DOT":       true,
+				"EUCLIDEAN": true,
+				"COSINE":    true,
+				"MANHATTAN": true,
+			}
+			if !allowedDistanceFunctions[modelPayload.ModelConfig.DistanceFunction] {
+				return fmt.Errorf("model_config.distance_function '%s' is invalid. Allowed values: DOT, EUCLIDEAN, COSINE, MANHATTAN", modelPayload.ModelConfig.DistanceFunction)
+			}
+
+			return nil
+		})
 }
 
 func (s *skyeConfig) ApproveModelRequest(requestID int, approval ApprovalRequest) (ApprovalResponse, error) {
-	req, err := s.ModelRequestRepo.GetByID(requestID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to get model request: %w", err)
-	}
-	if req.Status != StatusPending {
-		return ApprovalResponse{}, fmt.Errorf("request %d is not in pending status", requestID)
-	}
-	if approval.ApprovalDecision == StatusApproved {
-		var payload ModelRequestPayload
-		if err := json.Unmarshal([]byte(req.Payload), &payload); err != nil {
-			return ApprovalResponse{}, fmt.Errorf("failed to parse model request payload: %w", err)
-		}
-		err = s.EtcdConfig.RegisterModel(payload.Entity, payload.Model, payload.EmbeddingStoreEnabled,
-			payload.EmbeddingStoreTTL, payload.ModelConfig, payload.ModelType, payload.MQID, payload.TrainingDataPath, payload.Metadata, payload.JobFrequency, payload.NumberOfPartitions, payload.FailureProducerMqId, payload.TopicName)
-		if err != nil {
-			log.Error().Err(err).Msgf("Failed to register model in ETCD for model: %s", payload.Model)
-			return ApprovalResponse{}, fmt.Errorf("failed to register model in ETCD: %w", err)
-		}
-		log.Info().Msgf("Successfully registered model in ETCD for model: %s", payload.Model)
-	}
-	err = s.ModelRequestRepo.UpdateStatus(requestID, approval.ApprovalDecision, approval.AdminID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to update model request status: %w", err)
-	}
-
-	return ApprovalResponse{
-		RequestID:        requestID,
-		Status:           approval.ApprovalDecision,
-		Message:          "Model request processed and ETCD configured successfully.",
-		ApprovedBy:       approval.AdminID,
-		ApprovedAt:       time.Now(),
-		ProcessingStatus: StatusApproved,
-	}, nil
-}
-
-func (s *skyeConfig) ApproveModelEditRequest(requestID int, approval ApprovalRequest) (ApprovalResponse, error) {
-	// Get and validate the request
-	req, err := s.ModelRequestRepo.GetByID(requestID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to get model request: %w", err)
-	}
-	if req.Status != StatusPending {
-		return ApprovalResponse{}, fmt.Errorf("request %d is not in pending status", requestID)
-	}
-	if approval.ApprovalDecision == StatusApproved {
-		// Parse the payload for edit request
-		var payload ModelRequestPayload
-		if err := json.Unmarshal([]byte(req.Payload), &payload); err != nil {
-			return ApprovalResponse{}, fmt.Errorf("failed to parse model edit request payload: %w", err)
-		}
-		// TODO for now calling Register Again, but we should call an EditModel and only Update the fields that are being updated
-		err = s.EtcdConfig.RegisterModel(payload.Entity, payload.Model, payload.EmbeddingStoreEnabled,
-			payload.EmbeddingStoreTTL, payload.ModelConfig, payload.ModelType, payload.MQID, payload.TrainingDataPath, payload.Metadata, payload.JobFrequency, payload.NumberOfPartitions, payload.FailureProducerMqId, payload.TopicName)
-		if err != nil {
-			log.Error().Err(err).Msgf("Failed to update model in ETCD for model: %s", payload.Model)
-			return ApprovalResponse{}, fmt.Errorf("failed to update model in ETCD: %w", err)
-		}
-		log.Info().Msgf("Successfully updated model in ETCD for model: %s", payload.Model)
-	}
-	err = s.ModelRequestRepo.UpdateStatus(requestID, approval.ApprovalDecision, approval.AdminID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to update model request status: %w", err)
-	}
-	return ApprovalResponse{
-		RequestID:        requestID,
-		Status:           approval.ApprovalDecision,
-		Message:          "Model edit request processed and ETCD updated successfully.",
-		ApprovedBy:       approval.AdminID,
-		ApprovedAt:       time.Now(),
-		ProcessingStatus: StatusApproved,
-	}, nil
+	return approveRequest(requestID, approval, "Model",
+		func(id int) (RequestInfo, error) {
+			req, err := s.ModelRequestRepo.GetByID(id)
+			if err != nil {
+				return RequestInfo{}, err
+			}
+			return RequestInfo{RequestID: req.RequestID, Status: req.Status, Payload: req.Payload, CreatedAt: req.CreatedAt}, nil
+		},
+		s.ModelRequestRepo.UpdateStatus,
+		func(payloadJSON string) error {
+			numberOfPartitions := s.AppConfig.SkyeNumberOfPartitions
+			if numberOfPartitions == 0 {
+				numberOfPartitions = 24
+			}
+			failureProducerMqId := s.AppConfig.SkyeFailureProducerMqId
+			payload, err := parsePayload[ModelRequestPayload](payloadJSON)
+			if err != nil {
+				return fmt.Errorf("failed to parse model request payload: %w", err)
+			}
+			if err := s.EtcdConfig.RegisterModel(payload.Entity, payload.Model, payload.EmbeddingStoreEnabled,
+				payload.EmbeddingStoreTTL, payload.ModelConfig, payload.ModelType, payload.MQID, payload.TrainingDataPath,
+				payload.Metadata, payload.JobFrequency, numberOfPartitions, failureProducerMqId, payload.TopicName); err != nil {
+				log.Error().Err(err).Msgf("Failed to register model in ETCD for model: %s", payload.Model)
+				return fmt.Errorf("failed to register model in ETCD: %w", err)
+			}
+			log.Info().Msgf("Successfully registered model in ETCD for model: %s", payload.Model)
+			return nil
+		})
 }
 
 func (s *skyeConfig) GetModels() (ModelListResponse, error) {
@@ -645,9 +413,7 @@ func (s *skyeConfig) GetModels() (ModelListResponse, error) {
 		log.Error().Err(err).Msg("Failed to get models from ETCD")
 		return ModelListResponse{}, fmt.Errorf("failed to get models from ETCD: %w", err)
 	}
-	return ModelListResponse{
-		Models: modelsMap,
-	}, nil
+	return ModelListResponse{Models: modelsMap}, nil
 }
 
 func (s *skyeConfig) GetAllModelRequests() (ModelRequestListResponse, error) {
@@ -655,153 +421,172 @@ func (s *skyeConfig) GetAllModelRequests() (ModelRequestListResponse, error) {
 	if err != nil {
 		return ModelRequestListResponse{}, fmt.Errorf("failed to get model requests: %w", err)
 	}
-	return ModelRequestListResponse{
-		ModelRequests: requests,
-		TotalCount:    len(requests),
-	}, nil
+	return ModelRequestListResponse{ModelRequests: requests, TotalCount: len(requests)}, nil
 }
 
 func (s *skyeConfig) RegisterVariant(request VariantRegisterRequest) (RequestStatus, error) {
-	if request.Payload.RateLimiter.RateLimit != 0 || request.Payload.RateLimiter.BurstLimit != 0 {
-		return RequestStatus{}, fmt.Errorf("rate_limiter should be empty during registration and will be configured by admin during approval")
-	}
-	if len(request.Payload.VectorDBConfig) > 0 {
-		return RequestStatus{}, fmt.Errorf("vector_db_config should be empty during registration and will be configured by admin during approval")
-	}
-	if request.Payload.RTPartition != 0 {
-		return RequestStatus{}, fmt.Errorf("rt_partition should be 0 during registration and will be configured by admin during approval")
-	}
-	payloadJSON, err := json.Marshal(request.Payload)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to marshal payload: %w", err)
-	}
-	variantRequest := &variant_requests.VariantRequest{
-		Reason:      request.Reason,
-		Payload:     string(payloadJSON),
-		RequestType: "CREATE",
-		CreatedBy:   request.Requestor,
-		Status:      StatusPending,
-	}
-	err = s.VariantRequestRepo.Create(variantRequest)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to create variant request: %w", err)
-	}
-	return RequestStatus{
-		RequestID: variantRequest.RequestID,
-		Status:    StatusPending,
-		Message:   "Variant registration request submitted successfully. Awaiting admin approval.",
-		CreatedAt: variantRequest.CreatedAt,
-	}, nil
-}
+	return createRequest(request.Payload, request.Reason, request.Requestor, RequestTypeCreate, "Variant registration",
+		func(payloadJSON string) (int, time.Time, error) {
+			req := &variant_requests.VariantRequest{
+				Reason:      request.Reason,
+				Payload:     payloadJSON,
+				RequestType: RequestTypeCreate,
+				CreatedBy:   request.Requestor,
+				Status:      StatusPending,
+			}
+			err := s.VariantRequestRepo.Create(req)
+			return req.RequestID, req.CreatedAt, err
+		},
+		func(payload interface{}) error {
 
-func (s *skyeConfig) EditVariant(request VariantEditRequest) (RequestStatus, error) {
-	payloadJSON, err := json.Marshal(request.Payload)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to marshal payload: %w", err)
-	}
-	variantRequest := &variant_requests.VariantRequest{
-		Reason:      request.Reason,
-		Payload:     string(payloadJSON),
-		RequestType: "EDIT",
-		CreatedBy:   request.Requestor,
-		Status:      StatusPending,
-	}
-	err = s.VariantRequestRepo.Create(variantRequest)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to create variant edit request: %w", err)
-	}
-	return RequestStatus{
-		RequestID: variantRequest.RequestID,
-		Status:    StatusPending,
-		Message:   "Variant edit request submitted successfully. Awaiting admin approval.",
-		CreatedAt: variantRequest.CreatedAt,
-	}, nil
+			variantPayload, ok := payload.(VariantRequestPayload)
+			if !ok {
+				return fmt.Errorf("invalid payload type for variant registration")
+			}
+
+			// Entity should be valid (exists)
+			entities, err := s.EtcdConfig.GetEntities()
+			if err != nil {
+				return fmt.Errorf("failed to get entities from etcd: %w", err)
+			}
+			models, ok := entities[variantPayload.Entity]
+			if !ok {
+				return fmt.Errorf("entity with name '%s' does not exist", variantPayload.Entity)
+			}
+
+			// Model name should be valid (exists under entity)
+			_, ok = models.Models[variantPayload.Model]
+			if !ok {
+				return fmt.Errorf("model with name '%s' does not exist for entity '%s'", variantPayload.Model, variantPayload.Entity)
+			}
+
+			// Variant should be present from variantList in config (i.e., must be pre-defined as allowed)
+			allowedVariants := s.VariantsList
+			if !slices.Contains(allowedVariants, variantPayload.Variant) {
+				return fmt.Errorf("variant '%s' is not in allowed variant list: %v", variantPayload.Variant, allowedVariants)
+			}
+
+			// Check that all filters specified in payload.FilterConfiguration.Criteria exist in etcd for the specified entity
+			filtersMap := models.Filters
+			for _, filters := range variantPayload.FilterConfiguration.Criteria {
+				if _, ok := filtersMap[filters.ColumnName]; !ok {
+					return fmt.Errorf("filter '%s' does not exist for entity '%s'", filters.ColumnName, variantPayload.Entity)
+				}
+			}
+
+			return nil
+		})
 }
 
 func (s *skyeConfig) ApproveVariantRequest(requestID int, approval ApprovalRequest) (ApprovalResponse, error) {
-	req, err := s.VariantRequestRepo.GetByID(requestID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to get variant request: %w", err)
-	}
-	if req.Status != StatusPending {
-		return ApprovalResponse{}, fmt.Errorf("request %d is not in pending status", requestID)
-	}
-	if approval.ApprovalDecision == StatusApproved {
-		var payload VariantRequestPayload
-		if err := json.Unmarshal([]byte(req.Payload), &payload); err != nil {
-			return ApprovalResponse{}, fmt.Errorf("failed to parse variant request payload: %w", err)
-		}
-		// Admin must provide VectorDBConfig, RateLimiter, and RTPartition during approval
-		if approval.AdminVectorDBConfig.ReadHost == "" || approval.AdminVectorDBConfig.WriteHost == "" || approval.AdminVectorDBConfig.Port == "" {
-			return ApprovalResponse{}, fmt.Errorf("admin must provide vector_db_config during variant approval")
-		}
-		if approval.AdminRateLimiter.RateLimit == 0 || approval.AdminRateLimiter.BurstLimit == 0 {
-			return ApprovalResponse{}, fmt.Errorf("admin must provide rate_limiter during variant approval")
-		}
-		if approval.AdminRTPartition == 0 {
-			return ApprovalResponse{}, fmt.Errorf("admin must provide rt_partition during variant approval")
-		}
-		err = s.EtcdConfig.RegisterVariant(payload.Entity, payload.Model, payload.Variant,
-			approval.AdminVectorDBConfig, payload.VectorDBType, payload.FilterConfiguration.Criteria,
-			payload.Type, payload.CachingConfiguration.DistributedCachingEnabled, payload.CachingConfiguration.DistributedCacheTTLSeconds,
-			payload.CachingConfiguration.InMemoryCachingEnabled, payload.CachingConfiguration.InMemoryCacheTTLSeconds,
-			approval.AdminRTPartition, approval.AdminRateLimiter)
-		if err != nil {
-			log.Error().Err(err).Msgf("Failed to register variant in ETCD for variant: %s", payload.Variant)
-			return ApprovalResponse{}, fmt.Errorf("failed to register variant in ETCD: %w", err)
-		}
-	}
-	err = s.VariantRequestRepo.UpdateStatus(requestID, approval.ApprovalDecision, approval.AdminID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to update variant request status: %w", err)
-	}
-	return ApprovalResponse{
-		RequestID:        requestID,
-		Status:           approval.ApprovalDecision,
-		Message:          "Variant request processed and ETCD configured successfully.",
-		ApprovedBy:       approval.AdminID,
-		ApprovedAt:       time.Now(),
-		ProcessingStatus: StatusApproved,
-	}, nil
-}
+	return approveRequest(requestID, approval, "Variant",
+		func(id int) (RequestInfo, error) {
+			req, err := s.VariantRequestRepo.GetByID(id)
+			if err != nil {
+				return RequestInfo{}, err
+			}
+			return RequestInfo{RequestID: req.RequestID, Status: req.Status, Payload: req.Payload, CreatedAt: req.CreatedAt}, nil
+		},
+		s.VariantRequestRepo.UpdateStatus,
+		func(payloadJSON string) error {
+			payload, err := parsePayload[VariantRequestPayload](payloadJSON)
+			if err != nil {
+				return fmt.Errorf("failed to parse variant request payload: %w", err)
+			}
 
-func (s *skyeConfig) ApproveVariantEditRequest(requestID int, approval ApprovalRequest) (ApprovalResponse, error) {
-	// Get and validate the request
-	req, err := s.VariantRequestRepo.GetByID(requestID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to get variant request: %w", err)
-	}
-	if req.Status != StatusPending {
-		return ApprovalResponse{}, fmt.Errorf("request %d is not in pending status", requestID)
-	}
-	if approval.ApprovalDecision == StatusApproved {
-		var payload VariantEditRequestPayload
-		if err := json.Unmarshal([]byte(req.Payload), &payload); err != nil {
-			return ApprovalResponse{}, fmt.Errorf("failed to parse variant edit request payload: %w", err)
-		}
-		// TODO Correct this, here also create a EditVariant function and use it here
-		// err = s.EtcdConfig.RegisterVariant(payload.Entity, payload.Model, payload.Variant,
-		// 	approval.AdminVectorDBConfig, payload.VectorDBType, payload.Filter,
-		// 	payload.Type, payload.CachingConfiguration.DistributedCachingEnabled, payload.CachingConfiguration.DistributedCacheTTLSeconds,
-		// 	payload.CachingConfiguration.InMemoryCachingEnabled, payload.CachingConfiguration.InMemoryCacheTTLSeconds,
-		// 	approval.AdminRTPartition, approval.AdminRateLimiter)
-		// if err != nil {
-		// 	log.Error().Err(err).Msgf("Failed to register variant in ETCD for variant: %s", payload.Variant)
-		// 	return ApprovalResponse{}, fmt.Errorf("failed to register variant in ETCD: %w", err)
-		// }
-	}
-	err = s.VariantRequestRepo.UpdateStatus(requestID, approval.ApprovalDecision, approval.AdminID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to update variant request status: %w", err)
-	}
-	return ApprovalResponse{
-		RequestID:        requestID,
-		Status:           approval.ApprovalDecision,
-		Message:          "Variant edit request processed and ETCD updated successfully.",
-		ApprovedBy:       approval.AdminID,
-		ApprovedAt:       time.Now(),
-		ProcessingStatus: StatusApproved,
-	}, nil
+			// Admin must provide VectorDBConfig, RateLimiter, and RTPartition during approval
+			if approval.AdminVectorDBConfig.ReadHost == "" || approval.AdminVectorDBConfig.WriteHost == "" || approval.AdminVectorDBConfig.Port == "" {
+				return fmt.Errorf("admin must provide vector_db_config during variant approval")
+			}
+			if approval.AdminRateLimiter.RateLimit == 0 || approval.AdminRateLimiter.BurstLimit == 0 {
+				return fmt.Errorf("admin must provide rate_limiter during variant approval")
+			}
+			if approval.AdminCachingConfiguration.DistributedCachingEnabled == false || approval.AdminCachingConfiguration.DistributedCacheTTLSeconds == 0 || approval.AdminCachingConfiguration.InMemoryCachingEnabled == false || approval.AdminCachingConfiguration.InMemoryCacheTTLSeconds == 0 {
+				return fmt.Errorf("admin must provide caching_configuration during variant approval")
+			}
+			// For RT Partition, collect all RT partitions for all models across all entities
+			rtPartitions := make(map[int]bool)
+			entities, err := s.EtcdConfig.GetEntities()
+			if err != nil {
+				return fmt.Errorf("failed to get entities from etcd: %w", err)
+			}
+			for _, models := range entities {
+				for _, modelConfig := range models.Models {
+					for _, variant := range modelConfig.Variants {
+						if variant.RTPartition > 0 {
+							rtPartitions[variant.RTPartition] = true
+						}
+					}
+				}
+			}
+			// Choose a random partition between 1 and 256 not present in the used list
+			availablePartitions := []int{}
+			for i := 1; i <= 256; i++ {
+				if _, exists := rtPartitions[i]; !exists {
+					availablePartitions = append(availablePartitions, i)
+				}
+			}
+			if len(availablePartitions) == 0 {
+				return fmt.Errorf("no RT partitions available (all 1-256 are used)")
+			}
+			// Seed RNG with nanoseconds
+			seed := time.Now().UnixNano()
+			rnd := int(seed % int64(len(availablePartitions)))
+			if rnd < 0 {
+				rnd = -rnd
+			}
+			// Fetch filters from etcd for the provided entity
+			filtersFromEtcd, err := s.EtcdConfig.GetFilters(payload.Entity)
+			if err != nil {
+				return fmt.Errorf("failed to fetch filters from etcd: %w", err)
+			}
+			criteria := []skyeEtcd.Criteria{}
+			for _, filter := range payload.FilterConfiguration.Criteria {
+				if _, ok := filtersFromEtcd[filter.ColumnName]; ok {
+					filterValue := filtersFromEtcd[filter.ColumnName].FilterValue
+					defaultValue := filtersFromEtcd[filter.ColumnName].DefaultValue
+					if filter.Condition == enums.FilterCondition(enums.NOT_EQUALS) {
+						filterValue = filtersFromEtcd[filter.ColumnName].DefaultValue
+						defaultValue = filtersFromEtcd[filter.ColumnName].FilterValue
+
+					}
+					criteria = append(criteria, skyeEtcd.Criteria{
+						ColumnName:   filter.ColumnName,
+						FilterValue:  filterValue,
+						DefaultValue: defaultValue,
+					})
+				}
+			}
+
+			if err := s.EtcdConfig.RegisterVariant(payload.Entity, payload.Model, payload.Variant,
+				approval.AdminVectorDBConfig, payload.VectorDBType, criteria,
+				payload.Type, approval.AdminCachingConfiguration.DistributedCachingEnabled, approval.AdminCachingConfiguration.DistributedCacheTTLSeconds,
+				approval.AdminCachingConfiguration.InMemoryCachingEnabled, approval.AdminCachingConfiguration.InMemoryCacheTTLSeconds,
+				approval.AdminCachingConfiguration.EmbeddingRetrievalInMemoryConfig.Enabled, approval.AdminCachingConfiguration.EmbeddingRetrievalInMemoryConfig.TTL,
+				approval.AdminCachingConfiguration.EmbeddingRetrievalDistributedConfig.Enabled, approval.AdminCachingConfiguration.EmbeddingRetrievalDistributedConfig.TTL,
+				approval.AdminCachingConfiguration.DotProductInMemoryConfig.Enabled, approval.AdminCachingConfiguration.DotProductInMemoryConfig.TTL,
+				approval.AdminCachingConfiguration.DotProductDistributedConfig.Enabled, approval.AdminCachingConfiguration.DotProductDistributedConfig.TTL,
+				availablePartitions[rnd], approval.AdminRateLimiter); err != nil {
+				log.Error().Err(err).Msgf("Failed to register variant in ETCD for variant: %s", payload.Variant)
+				return fmt.Errorf("failed to register variant in ETCD: %w", err)
+			}
+
+			task := &variant_onboarding_tasks.VariantOnboardingTask{
+				Entity:  payload.Entity,
+				Model:   payload.Model,
+				Variant: payload.Variant,
+				Payload: "{}",
+				Status:  StatusPending,
+			}
+			if err := s.VariantOnboardingTaskRepo.Create(task); err != nil {
+				log.Error().Err(err).Msgf("Failed to create variant onboarding task for request %d", requestID)
+				return fmt.Errorf("failed to create variant onboarding task: %w", err)
+			}
+			log.Info().Int("request_id", requestID).Int("task_id", task.TaskID).
+				Str("entity", payload.Entity).Str("model", payload.Model).Str("variant", payload.Variant).
+				Msg("Created variant onboarding task")
+			return nil
+		})
 }
 
 func (s *skyeConfig) GetVariants(entity string, model string) (VariantListResponse, error) {
@@ -810,9 +595,7 @@ func (s *skyeConfig) GetVariants(entity string, model string) (VariantListRespon
 		log.Error().Err(err).Msg("Failed to get variants from ETCD")
 		return VariantListResponse{}, fmt.Errorf("failed to get variants from ETCD: %w", err)
 	}
-	return VariantListResponse{
-		Variants: modelConfig.Variants,
-	}, nil
+	return VariantListResponse{Variants: modelConfig.Variants}, nil
 }
 
 func (s *skyeConfig) GetAllVariantRequests() (VariantRequestListResponse, error) {
@@ -820,92 +603,119 @@ func (s *skyeConfig) GetAllVariantRequests() (VariantRequestListResponse, error)
 	if err != nil {
 		return VariantRequestListResponse{}, fmt.Errorf("failed to get variant requests: %w", err)
 	}
-	return VariantRequestListResponse{
-		VariantRequests: requests,
-		TotalCount:      len(requests),
-	}, nil
+	return VariantRequestListResponse{VariantRequests: requests, TotalCount: len(requests)}, nil
 }
 
 func (s *skyeConfig) RegisterFilter(request FilterRegisterRequest) (RequestStatus, error) {
-	if request.Payload.Entity == "" {
-		return RequestStatus{}, fmt.Errorf("entity is required")
-	}
-	if request.Payload.Filter.ColumnName == "" {
-		return RequestStatus{}, fmt.Errorf("column_name is required")
-	}
-	if request.Payload.Filter.FilterValue == "" {
-		return RequestStatus{}, fmt.Errorf("filter_value is required")
-	}
-	if request.Payload.Filter.DefaultValue == "" {
-		return RequestStatus{}, fmt.Errorf("default_value is required")
-	}
-	payloadJSON, err := json.Marshal(request.Payload)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to marshal payload: %w", err)
-	}
-	filterRequest := &filter_requests.FilterRequest{
-		Reason:      request.Reason,
-		Payload:     string(payloadJSON),
-		RequestType: "CREATE",
-		CreatedBy:   request.Requestor,
-		Status:      StatusPending,
-	}
-	err = s.FilterRequestRepo.Create(filterRequest)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to create filter request: %w", err)
-	}
-	return RequestStatus{
-		RequestID: filterRequest.RequestID,
-		Status:    StatusPending,
-		Message:   "Filter registration request submitted successfully. Awaiting admin approval.",
-		CreatedAt: filterRequest.CreatedAt,
-	}, nil
+	return createRequest(request.Payload, request.Reason, request.Requestor, RequestTypeCreate, "Filter registration",
+		func(payloadJSON string) (int, time.Time, error) {
+			req := &filter_requests.FilterRequest{
+				Reason:      request.Reason,
+				Payload:     payloadJSON,
+				RequestType: RequestTypeCreate,
+				CreatedBy:   request.Requestor,
+				Status:      StatusPending,
+			}
+			err := s.FilterRequestRepo.Create(req)
+			return req.RequestID, req.CreatedAt, err
+		},
+		func(payload interface{}) error {
+			// Check if the entity is registered in ETCD
+			filterPayload, ok := payload.(FilterRequestPayload)
+			if !ok {
+				return fmt.Errorf("invalid payload type for filter registration")
+			}
+			_, err := s.EtcdConfig.GetEntityConfig(filterPayload.Entity)
+			if err != nil {
+				return fmt.Errorf("entity '%s' not found in ETCD, cannot register filter: %w", filterPayload.Entity, err)
+			}
+			// Check if the column name already exists for the given entity
+			filters, err := s.EtcdConfig.GetFilters(filterPayload.Entity)
+			if err != nil {
+				return fmt.Errorf("failed to fetch filters for entity %s: %w", filterPayload.Entity, err)
+			}
+			for _, f := range filters {
+				if f.ColumnName == filterPayload.Filter.ColumnName {
+					return fmt.Errorf("column_name '%s' is already registered for entity '%s'", filterPayload.Filter.ColumnName, filterPayload.Entity)
+				}
+			}
+
+			if filterPayload.Filter.FilterValue == "" {
+				return fmt.Errorf("filter_value is required")
+			}
+			if filterPayload.Filter.DefaultValue == "" {
+				return fmt.Errorf("default_value is required")
+			}
+			return nil
+		})
 }
 
 func (s *skyeConfig) ApproveFilterRequest(requestID int, approval ApprovalRequest) (ApprovalResponse, error) {
-	req, err := s.FilterRequestRepo.GetByID(requestID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to get filter request: %w", err)
-	}
-	if req.Status != StatusPending {
-		return ApprovalResponse{}, fmt.Errorf("request %d is not in pending status", requestID)
-	}
-	if approval.ApprovalDecision == StatusApproved {
-		var payload FilterRequestPayload
-		if err := json.Unmarshal([]byte(req.Payload), &payload); err != nil {
-			return ApprovalResponse{}, fmt.Errorf("failed to parse filter request payload: %w", err)
-		}
-		err = s.EtcdConfig.RegisterFilter(payload.Entity, payload.Filter.ColumnName, payload.Filter.FilterValue, payload.Filter.DefaultValue)
-		if err != nil {
-			log.Error().Err(err).Msgf("Failed to create filter config in ETCD for filter_id: %s", payload.Filter.ColumnName)
-			return ApprovalResponse{}, fmt.Errorf("failed to create ETCD filter configuration: %w", err)
-		}
-		log.Info().Msgf("Successfully created ETCD filter configuration for filter_id: %s", payload.Filter.ColumnName)
-	}
-
-	err = s.FilterRequestRepo.UpdateStatus(requestID, approval.ApprovalDecision, approval.AdminID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to update filter request status: %w", err)
-	}
-	return ApprovalResponse{
-		RequestID:        requestID,
-		Status:           approval.ApprovalDecision,
-		Message:          "Filter request processed and ETCD configured successfully.",
-		ApprovedBy:       approval.AdminID,
-		ApprovedAt:       time.Now(),
-		ProcessingStatus: StatusApproved,
-	}, nil
+	return approveRequest(requestID, approval, "Filter",
+		func(id int) (RequestInfo, error) {
+			req, err := s.FilterRequestRepo.GetByID(id)
+			if err != nil {
+				return RequestInfo{}, err
+			}
+			return RequestInfo{RequestID: req.RequestID, Status: req.Status, Payload: req.Payload, CreatedAt: req.CreatedAt}, nil
+		},
+		s.FilterRequestRepo.UpdateStatus,
+		func(payloadJSON string) error {
+			payload, err := parsePayload[FilterRequestPayload](payloadJSON)
+			if err != nil {
+				return fmt.Errorf("failed to parse filter request payload: %w", err)
+			}
+			if err := s.EtcdConfig.RegisterFilter(payload.Entity, payload.Filter.ColumnName, payload.Filter.FilterValue, payload.Filter.DefaultValue); err != nil {
+				log.Error().Err(err).Msgf("Failed to create filter config in ETCD for filter_id: %s", payload.Filter.ColumnName)
+				return fmt.Errorf("failed to create ETCD filter configuration: %w", err)
+			}
+			log.Info().Msgf("Successfully created ETCD filter configuration for filter_id: %s", payload.Filter.ColumnName)
+			entityConfig, err := s.EtcdConfig.GetEntityConfig(payload.Entity)
+			if err != nil {
+				log.Error().Err(err).Msgf("Failed to fetch entity ETCD config for '%s' while adding column to aggregator table", payload.Entity)
+				return fmt.Errorf("failed to fetch entity ETCD config: %w", err)
+			}
+			storeId := entityConfig.StoreId
+			storePayload, err := s.EtcdConfig.GetStores()
+			if err != nil {
+				log.Error().Err(err).Msgf("Failed to fetch store config for store '%s' while adding column to aggregator table", storeId)
+				return fmt.Errorf("failed to fetch store config: %w", err)
+			}
+			aggregatorTable := storePayload[storeId].AggregatorTable
+			scyllaStore := s.ScyllaStores[storePayload[storeId].ConfId]
+			if err := scyllaStore.AddAggregatorColumn(aggregatorTable, payload.Filter.ColumnName); err != nil {
+				log.Error().Err(err).Msgf("Failed to add column '%s' to aggregator table '%s' for store '%s'", payload.Filter.ColumnName, aggregatorTable, storeId)
+				return fmt.Errorf("failed to add column '%s' to aggregator table '%s': %w", payload.Filter.ColumnName, aggregatorTable, err)
+			}
+			return nil
+		})
 }
 
-func (s *skyeConfig) GetFilters(entity string) (FilterListResponse, error) { // Get all filters directly from ETCD configuration
+func (s *skyeConfig) GetFilters(entity string) (FilterListResponse, error) {
 	filters, err := s.EtcdConfig.GetFilters(entity)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get filters from ETCD")
 		return FilterListResponse{}, fmt.Errorf("failed to get filters from ETCD: %w", err)
 	}
-	return FilterListResponse{
-		Filters: filters,
-	}, nil
+	return FilterListResponse{Filters: filters}, nil
+}
+
+func (s *skyeConfig) GetAllFilters() (AllFiltersListResponse, error) {
+	entities, err := s.EtcdConfig.GetEntities()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get entities from ETCD")
+		return AllFiltersListResponse{}, fmt.Errorf("failed to get entities from ETCD: %w", err)
+	}
+	filters := make(map[string]map[string]skyeEtcd.Criteria)
+	for entityName, _ := range entities {
+		filtersForEntity, err := s.EtcdConfig.GetFilters(entityName)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to get filters from ETCD")
+			return AllFiltersListResponse{}, fmt.Errorf("failed to get filters from ETCD: %w", err)
+		}
+		filters[entityName] = filtersForEntity
+	}
+	return AllFiltersListResponse{Filters: filters}, nil
 }
 
 func (s *skyeConfig) GetAllFilterRequests() (FilterRequestListResponse, error) {
@@ -913,200 +723,55 @@ func (s *skyeConfig) GetAllFilterRequests() (FilterRequestListResponse, error) {
 	if err != nil {
 		return FilterRequestListResponse{}, fmt.Errorf("failed to get filter requests: %w", err)
 	}
-	return FilterRequestListResponse{
-		FilterRequests: requests,
-		TotalCount:     len(requests),
-	}, nil
-}
-
-func (s *skyeConfig) PromoteVariant(request VariantPromotionRequest) (RequestStatus, error) {
-	payloadJSON, err := json.Marshal(request.Payload)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to marshal payload: %w", err)
-	}
-	promotionRequest := &variant_promotion_requests.VariantPromotionRequest{
-		Reason:      request.Reason,
-		Payload:     string(payloadJSON),
-		RequestType: "PROMOTE",
-		CreatedBy:   request.Requestor,
-		Status:      StatusPending,
-	}
-	err = s.VariantPromotionRequestRepo.Create(promotionRequest)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to create variant promotion request: %w", err)
-	}
-
-	return RequestStatus{
-		RequestID: promotionRequest.RequestID,
-		Status:    StatusPending,
-		Message:   "Variant promotion request submitted successfully. Awaiting admin approval.",
-		CreatedAt: promotionRequest.CreatedAt,
-	}, nil
-}
-
-func (s *skyeConfig) ApproveVariantPromotionRequest(requestID int, approval ApprovalRequest) (ApprovalResponse, error) {
-	req, err := s.VariantPromotionRequestRepo.GetByID(requestID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to get variant promotion request: %w", err)
-	}
-	if req.Status != StatusPending {
-		return ApprovalResponse{}, fmt.Errorf("request %d is not in pending status", requestID)
-	}
-	err = s.VariantPromotionRequestRepo.UpdateStatus(requestID, approval.ApprovalDecision, approval.AdminID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to update variant promotion request status: %w", err)
-	}
-	return ApprovalResponse{
-		RequestID:        requestID,
-		Status:           approval.ApprovalDecision,
-		Message:          "Variant promotion request processed and ETCD configured successfully.",
-		ApprovedBy:       approval.AdminID,
-		ApprovedAt:       time.Now(),
-		ProcessingStatus: StatusApproved,
-	}, nil
-}
-
-func (s *skyeConfig) OnboardVariant(request VariantOnboardingRequest) (RequestStatus, error) {
-	payloadJSON, err := json.Marshal(request.Payload)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to marshal payload: %w", err)
-	}
-	onboardingRequest := &variant_onboarding_requests.VariantOnboardingRequest{
-		Reason:      request.Reason,
-		Payload:     string(payloadJSON),
-		RequestType: "ONBOARD",
-		CreatedBy:   request.Requestor,
-		Status:      StatusPending,
-	}
-	err = s.VariantOnboardingRequestRepo.Create(onboardingRequest)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to create variant onboarding request: %w", err)
-	}
-	return RequestStatus{
-		RequestID: onboardingRequest.RequestID,
-		Status:    StatusPending,
-		Message:   "Variant onboarding request submitted successfully. Awaiting admin approval.",
-		CreatedAt: onboardingRequest.CreatedAt,
-	}, nil
-}
-
-func (s *skyeConfig) ApproveVariantOnboardingRequest(requestID int, approval ApprovalRequest) (ApprovalResponse, error) {
-	req, err := s.VariantOnboardingRequestRepo.GetByID(requestID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to get variant onboarding request: %w", err)
-	}
-	if req.Status != StatusPending {
-		return ApprovalResponse{}, fmt.Errorf("request %d is not in pending status", requestID)
-	}
-	err = s.VariantOnboardingRequestRepo.UpdateStatus(requestID, approval.ApprovalDecision, approval.AdminID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to update variant onboarding request status: %w", err)
-	}
-	if approval.ApprovalDecision == StatusApproved {
-		// Parse the payload
-		var payload VariantOnboardingRequestPayload
-		if err := json.Unmarshal([]byte(req.Payload), &payload); err != nil {
-			return ApprovalResponse{}, fmt.Errorf("failed to parse variant onboarding request payload: %w", err)
-		}
-		// create task in the database which will be picked up by the variant onboarding job
-		task := &variant_onboarding_tasks.VariantOnboardingTask{
-			Entity:  payload.Entity,
-			Model:   payload.Model,
-			Variant: payload.Variant,
-			Payload: "{}",
-			Status:  "PENDING",
-		}
-		if err := s.VariantOnboardingTaskRepo.Create(task); err != nil {
-			log.Error().Err(err).Msgf("Failed to create variant onboarding task for request %d", requestID)
-			return ApprovalResponse{}, fmt.Errorf("failed to create variant onboarding task: %w", err)
-		}
-		log.Info().
-			Int("request_id", requestID).
-			Int("task_id", task.TaskID).
-			Str("entity", payload.Entity).
-			Str("model", payload.Model).
-			Str("variant", payload.Variant).
-			Msg("Created variant onboarding task")
-	}
-	return ApprovalResponse{
-		RequestID:        requestID,
-		Status:           approval.ApprovalDecision,
-		Message:          "Variant onboarding request processed and ETCD configured successfully.",
-		ApprovedBy:       approval.AdminID,
-		ApprovedAt:       time.Now(),
-		ProcessingStatus: StatusApproved,
-	}, nil
+	return FilterRequestListResponse{FilterRequests: requests, TotalCount: len(requests)}, nil
 }
 
 func (s *skyeConfig) RegisterJobFrequency(request JobFrequencyRegisterRequest) (RequestStatus, error) {
-	payloadJSON, err := json.Marshal(request.Payload)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to marshal payload: %w", err)
-	}
-	jobFrequencyRequest := &job_frequency_requests.JobFrequencyRequest{
-		Reason:      request.Reason,
-		Payload:     string(payloadJSON),
-		RequestType: "CREATE",
-		CreatedBy:   request.Requestor,
-		Status:      StatusPending,
-	}
-	err = s.JobFrequencyRequestRepo.Create(jobFrequencyRequest)
-	if err != nil {
-		return RequestStatus{}, fmt.Errorf("failed to create job frequency request: %w", err)
-	}
-	return RequestStatus{
-		RequestID: jobFrequencyRequest.RequestID,
-		Status:    StatusPending,
-		Message:   "Job frequency registration request submitted successfully. Awaiting admin approval.",
-		CreatedAt: jobFrequencyRequest.CreatedAt,
-	}, nil
+	return createRequest(request.Payload, request.Reason, request.Requestor, RequestTypeCreate, "Job frequency registration",
+		func(payloadJSON string) (int, time.Time, error) {
+			req := &job_frequency_requests.JobFrequencyRequest{
+				Reason:      request.Reason,
+				Payload:     payloadJSON,
+				RequestType: RequestTypeCreate,
+				CreatedBy:   request.Requestor,
+				Status:      StatusPending,
+			}
+			err := s.JobFrequencyRequestRepo.Create(req)
+			return req.RequestID, req.CreatedAt, err
+		},
+		nil)
 }
 
 func (s *skyeConfig) ApproveJobFrequencyRequest(requestID int, approval ApprovalRequest) (ApprovalResponse, error) {
-	req, err := s.JobFrequencyRequestRepo.GetByID(requestID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to get job frequency request: %w", err)
-	}
-	if req.Status != StatusPending {
-		return ApprovalResponse{}, fmt.Errorf("request %d is not in pending status", requestID)
-	}
-	if approval.ApprovalDecision == StatusApproved {
-		var payload JobFrequencyRequestPayload
-		if err := json.Unmarshal([]byte(req.Payload), &payload); err != nil {
-			return ApprovalResponse{}, fmt.Errorf("failed to parse job frequency request payload: %w", err)
-		}
-		err = s.EtcdConfig.RegisterFrequency(payload.JobFrequency)
-		if err != nil {
-			log.Error().Err(err).Msgf("Failed to create job frequency config in ETCD for frequency_id: %s", payload.JobFrequency)
-			return ApprovalResponse{}, fmt.Errorf("failed to create ETCD job frequency configuration: %w", err)
-		}
-		log.Info().Msgf("Successfully created ETCD job frequency configuration for frequency_id: %s", payload.JobFrequency)
-	}
-	err = s.JobFrequencyRequestRepo.UpdateStatus(requestID, approval.ApprovalDecision, approval.AdminID)
-	if err != nil {
-		return ApprovalResponse{}, fmt.Errorf("failed to update job frequency request status: %w", err)
-	}
-	return ApprovalResponse{
-		RequestID:        requestID,
-		Status:           approval.ApprovalDecision,
-		Message:          "Job frequency request processed, ETCD configured and file updated successfully.",
-		ApprovedBy:       approval.AdminID,
-		ApprovedAt:       time.Now(),
-		ProcessingStatus: StatusApproved,
-	}, nil
+	return approveRequest(requestID, approval, "Job frequency",
+		func(id int) (RequestInfo, error) {
+			req, err := s.JobFrequencyRequestRepo.GetByID(id)
+			if err != nil {
+				return RequestInfo{}, err
+			}
+			return RequestInfo{RequestID: req.RequestID, Status: req.Status, Payload: req.Payload, CreatedAt: req.CreatedAt}, nil
+		},
+		s.JobFrequencyRequestRepo.UpdateStatus,
+		func(payloadJSON string) error {
+			payload, err := parsePayload[JobFrequencyRequestPayload](payloadJSON)
+			if err != nil {
+				return fmt.Errorf("failed to parse job frequency request payload: %w", err)
+			}
+			if err := s.EtcdConfig.RegisterFrequency(payload.JobFrequency); err != nil {
+				log.Error().Err(err).Msgf("Failed to create job frequency config in ETCD for frequency_id: %s", payload.JobFrequency)
+				return fmt.Errorf("failed to create ETCD job frequency configuration: %w", err)
+			}
+			log.Info().Msgf("Successfully created ETCD job frequency configuration for frequency_id: %s", payload.JobFrequency)
+			return nil
+		})
 }
 
 func (s *skyeConfig) GetJobFrequencies() (JobFrequencyListResponse, error) {
-	// Fetch job frequencies from ETCD
 	frequencies, err := s.EtcdConfig.GetFrequencies()
 	if err != nil {
 		return JobFrequencyListResponse{}, fmt.Errorf("failed to get job frequencies from ETCD: %w", err)
 	}
-
-	return JobFrequencyListResponse{
-		Frequencies: frequencies,
-		TotalCount:  len(frequencies),
-	}, nil
+	return JobFrequencyListResponse{Frequencies: frequencies, TotalCount: len(frequencies)}, nil
 }
 
 func (s *skyeConfig) GetAllJobFrequencyRequests() (JobFrequencyRequestListResponse, error) {
@@ -1114,31 +779,185 @@ func (s *skyeConfig) GetAllJobFrequencyRequests() (JobFrequencyRequestListRespon
 	if err != nil {
 		return JobFrequencyRequestListResponse{}, fmt.Errorf("failed to get job frequency requests: %w", err)
 	}
-	return JobFrequencyRequestListResponse{
-		JobFrequencyRequests: requests,
-		TotalCount:           len(requests),
-	}, nil
+	return JobFrequencyRequestListResponse{JobFrequencyRequests: requests, TotalCount: len(requests)}, nil
 }
 
-func (s *skyeConfig) GetAllVariantOnboardingRequests() (VariantOnboardingRequestListResponse, error) {
-	requests, err := s.VariantOnboardingRequestRepo.GetAll()
-	if err != nil {
-		return VariantOnboardingRequestListResponse{}, fmt.Errorf("failed to get variant onboarding requests: %w", err)
-	}
-	return VariantOnboardingRequestListResponse{
-		VariantOnboardingRequests: requests,
-		TotalCount:                len(requests),
-	}, nil
-}
+// func (s *skyeConfig) OnboardVariant(request VariantOnboardingRequest) (RequestStatus, error) {
+// 	return createRequest(request.Payload, request.Reason, request.Requestor, "ONBOARD", "Variant onboarding",
+// 		func(payloadJSON string) (int, time.Time, error) {
+// 			req := &variant_onboarding_requests.VariantOnboardingRequest{
+// 				Reason:      request.Reason,
+// 				Payload:     payloadJSON,
+// 				RequestType: "ONBOARD",
+// 				CreatedBy:   request.Requestor,
+// 				Status:      StatusPending,
+// 			}
+// 			err := s.VariantOnboardingRequestRepo.Create(req)
+// 			return req.RequestID, req.CreatedAt, err
+// 		},
+// 		nil)
+// }
+
+// func (s *skyeConfig) ApproveVariantOnboardingRequest(requestID int, approval ApprovalRequest) (ApprovalResponse, error) {
+// 	return approveRequest(requestID, approval, "Variant onboarding",
+// 		func(id int) (RequestInfo, error) {
+// 			req, err := s.VariantOnboardingRequestRepo.GetByID(id)
+// 			if err != nil {
+// 				return RequestInfo{}, err
+// 			}
+// 			return RequestInfo{RequestID: req.RequestID, Status: req.Status, Payload: req.Payload, CreatedAt: req.CreatedAt}, nil
+// 		},
+// 		s.VariantOnboardingRequestRepo.UpdateStatus,
+// 		func(payloadJSON string) error {
+
+// 		})
+// }
+
+// func (s *skyeConfig) GetAllVariantOnboardingRequests() (VariantOnboardingRequestListResponse, error) {
+// 	requests, err := s.VariantOnboardingRequestRepo.GetAll()
+// 	if err != nil {
+// 		return VariantOnboardingRequestListResponse{}, fmt.Errorf("failed to get variant onboarding requests: %w", err)
+// 	}
+// 	return VariantOnboardingRequestListResponse{VariantOnboardingRequests: requests, TotalCount: len(requests)}, nil
+// }
 
 func (s *skyeConfig) GetVariantOnboardingTasks() (VariantOnboardingTaskListResponse, error) {
 	tasks, err := s.VariantOnboardingTaskRepo.GetAll()
 	if err != nil {
 		return VariantOnboardingTaskListResponse{}, fmt.Errorf("failed to get variant onboarding tasks: %w", err)
 	}
+	return VariantOnboardingTaskListResponse{VariantOnboardingTasks: tasks, TotalCount: len(tasks)}, nil
+}
 
-	return VariantOnboardingTaskListResponse{
-		VariantOnboardingTasks: tasks,
-		TotalCount:             len(tasks),
-	}, nil
+func (s *skyeConfig) ScaleUpVariant(request VariantScaleUpRequest) (RequestStatus, error) {
+	return createRequest(request.Payload, request.Reason, request.Requestor, "SCALE_UP", "Variant scale up",
+		func(payloadJSON string) (int, time.Time, error) {
+			req := &variant_scaleup_requests.VariantScaleUpRequest{
+				Reason:      request.Reason,
+				Payload:     payloadJSON,
+				RequestType: "SCALE_UP",
+				CreatedBy:   request.Requestor,
+				Status:      StatusPending,
+			}
+			err := s.VariantScaleUpRequestRepo.Create(req)
+			return req.RequestID, req.CreatedAt, err
+		},
+		nil)
+}
+
+func (s *skyeConfig) ApproveVariantScaleUpRequest(requestID int, approval ApprovalRequest) (ApprovalResponse, error) {
+	return approveRequest(requestID, approval, "Variant scale up",
+		func(id int) (RequestInfo, error) {
+			req, err := s.VariantScaleUpRequestRepo.GetByID(id)
+			if err != nil {
+				return RequestInfo{}, err
+			}
+			return RequestInfo{RequestID: req.RequestID, Status: req.Status, Payload: req.Payload, CreatedAt: req.CreatedAt}, nil
+		},
+		s.VariantScaleUpRequestRepo.UpdateStatus,
+		func(payloadJSON string) error {
+			payload, err := parsePayload[VariantScaleUpRequestPayload](payloadJSON)
+			if err != nil {
+				return fmt.Errorf("failed to parse variant scale up request payload: %w", err)
+			}
+
+			task := &variant_scaleup_tasks.VariantScaleUpTask{
+				Entity:           payload.Entity,
+				ScaleUpHost:      approval.ScaleUpHost,
+				Model:            payload.Model,
+				Variant:          payload.Variant,
+				VectorDBType:     payload.VectorDBType,
+				TrainingDataPath: payload.TrainingDataPath,
+				Payload:          "{}",
+				Status:           StatusPending,
+			}
+			if err := s.VariantScaleUpTaskRepo.Create(task); err != nil {
+				log.Error().Err(err).Msgf("Failed to create variant scale up task for request %d", requestID)
+				return fmt.Errorf("failed to create variant scale up task: %w", err)
+			}
+			log.Info().Int("request_id", requestID).
+				Str("entity", payload.Entity).Str("model", payload.Model).Str("variant", payload.Variant).
+				Msg("Created variant scale up task")
+			return nil
+		})
+}
+
+func (s *skyeConfig) GetAllVariantScaleUpRequests() (VariantScaleUpRequestListResponse, error) {
+	requests, err := s.VariantScaleUpRequestRepo.GetAll()
+	if err != nil {
+		return VariantScaleUpRequestListResponse{}, fmt.Errorf("failed to get variant scale up requests: %w", err)
+	}
+	return VariantScaleUpRequestListResponse{VariantScaleUpRequests: requests, TotalCount: len(requests)}, nil
+}
+
+func (s *skyeConfig) GetVariantScaleUpTasks() (VariantScaleUpTaskListResponse, error) {
+	tasks, err := s.VariantScaleUpTaskRepo.GetAll()
+	if err != nil {
+		return VariantScaleUpTaskListResponse{}, fmt.Errorf("failed to get variant scale up tasks: %w", err)
+	}
+	return VariantScaleUpTaskListResponse{VariantScaleUpTasks: tasks, TotalCount: len(tasks)}, nil
+}
+
+func (s *skyeConfig) GetMQIdTopics() (MQIdTopicsResponse, error) {
+	var mappings []MQIdTopicMapping
+	for mqID, topic := range s.MQIdTopicsMapping {
+		mappings = append(mappings, MQIdTopicMapping{MQID: mqID, Topic: topic})
+	}
+	return MQIdTopicsResponse{Mappings: mappings, TotalCount: len(mappings)}, nil
+}
+
+func (s *skyeConfig) GetVariantsList() (VariantsListResponse, error) {
+	return VariantsListResponse{Variants: s.VariantsList, TotalCount: len(s.VariantsList)}, nil
+}
+
+func (s *skyeConfig) TestVariant(request VariantTestRequest) (VariantTestResponse, error) {
+	grpcRequest := &grpc.SkyeRequest{
+		Entity:        request.Entity,
+		CandidateIds:  request.CandidateIds,
+		Limit:         request.Limit,
+		ModelName:     request.ModelName,
+		Variant:       request.Variant,
+		Filters:       request.Filters,
+		Attribute:     request.Attribute,
+		Embeddings:    request.Embeddings,
+		GlobalFilters: request.GlobalFilters,
+	}
+	taskStatus, err := s.VariantOnboardingTaskRepo.GetByEntityAndModelAndVariant(request.Entity, request.ModelName, request.Variant)
+	if err != nil {
+		return VariantTestResponse{}, fmt.Errorf("failed to get variant onboarding task: %w", err)
+	}
+	if taskStatus.Status == "IN_PROGRESS" || taskStatus.Status == "PENDING" {
+		return VariantTestResponse{}, fmt.Errorf("variant onboarding task is still in progress")
+	}
+	grpcResponse, err := s.SkyeClient.GetSimilarCandidates(grpcRequest)
+	if err != nil {
+		return VariantTestResponse{}, fmt.Errorf("failed to test variant: %w", err)
+	}
+	s.VariantOnboardingTaskRepo.UpdateStatus(taskStatus.TaskID, "TESTED_SUCCESSFULLY")
+	return VariantTestResponse{Response: grpcResponse}, nil
+}
+
+func (s *skyeConfig) GenerateTestRequest(request TestRequestGenerationRequest) (TestRequestGenerationResponse, error) {
+	variantTestRequest := VariantTestRequest{
+		Entity:        request.Entity,
+		ModelName:     request.Model,
+		Variant:       request.Variant,
+		Limit:         200,
+		Filters:       nil,
+		Attribute:     []string{},
+		GlobalFilters: nil,
+	}
+
+	modelConfig, err := s.EtcdConfig.GetModelConfig(request.Entity, request.Model)
+	if err != nil {
+		return TestRequestGenerationResponse{}, fmt.Errorf("failed to get model config for model %s: %w", request.Model, err)
+	}
+	vectorDim := modelConfig.ModelConfig.VectorDimension
+	embedding := make([]float64, vectorDim)
+	for i := range vectorDim {
+		embedding[i] = rand.Float64()
+	}
+	variantTestRequest.Embeddings = []*grpc.Embedding{{Embedding: embedding}}
+
+	return TestRequestGenerationResponse{Request: variantTestRequest}, nil
 }

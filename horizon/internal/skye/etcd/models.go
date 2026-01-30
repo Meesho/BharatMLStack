@@ -10,8 +10,8 @@ type Skye struct {
 }
 
 type RateLimiter struct {
-	RateLimit  int
-	BurstLimit int
+	RateLimit  int `json:"rate_limit"`
+	BurstLimit int `json:"burst_limit"`
 }
 
 type Models struct {
@@ -21,20 +21,20 @@ type Models struct {
 }
 
 type Model struct {
-	EmbeddingStoreEnabled bool
-	EmbeddingStoreTtl     int
-	EmbeddingStoreVersion int
-	MqId                  int
-	TopicName             string
-	Metadata              Metadata
-	ModelConfig           ModelConfig
-	TrainingDataPath      string
-	Variants              map[string]Variant
-	ModelType             enums.ModelType
-	PartitionStates       map[string]int
-	NumberOfPartitions    int
-	FailureProducerMqId   int
-	JobFrequency          string
+	EmbeddingStoreEnabled bool               `json:"embedding_store_enabled"`
+	EmbeddingStoreTtl     int                `json:"embedding_store_ttl"`
+	EmbeddingStoreVersion int                `json:"embedding_store_version"`
+	MqId                  int                `json:"mq_id"`
+	TopicName             string             `json:"topic_name"`
+	Metadata              Metadata           `json:"metadata"`
+	ModelConfig           ModelConfig        `json:"model_config"`
+	TrainingDataPath      string             `json:"training_data_path"`
+	Variants              map[string]Variant `json:"variants"`
+	ModelType             enums.ModelType    `json:"model_type"`
+	PartitionStates       map[string]int64   `json:"partition_states"`
+	NumberOfPartitions    int                `json:"number_of_partitions"`
+	FailureProducerMqId   int                `json:"failure_producer_mq_id"`
+	JobFrequency          string             `json:"job_frequency"`
 }
 
 type ModelConfig struct {
@@ -43,34 +43,34 @@ type ModelConfig struct {
 }
 
 type Variant struct {
-	ReqEmbLoggingPercentage             int
-	RTPartition                         int
-	RateLimiter                         RateLimiter
-	Filter                              map[string][]Criteria
-	Enabled                             bool
-	VariantState                        enums.VariantState
-	VectorDbType                        enums.VectorDbType
-	VectorDbConfig                      VectorDbConfig
-	RtDeltaProcessing                   bool
-	VectorDbReadVersion                 int
-	VectorDbWriteVersion                int
-	EmbeddingStoreReadVersion           int
-	EmbeddingStoreWriteVersion          int
-	Onboarded                           bool
-	PartialHitEnabled                   bool
-	BackupConfig                        BackupConfig
-	DefaultResponsePercentage           int
-	InMemoryCachingEnabled              bool
-	InMemoryCacheTTLSeconds             int
-	DistributedCachingEnabled           bool
-	DistributedCacheTTLSeconds          int
-	Type                                enums.Type
-	PartialHitDisabled                  bool
-	TestConfig                          TestConfig
-	EmbeddingRetrievalInMemoryConfig    Config
-	EmbeddingRetrievalDistributedConfig Config
-	DotProductInMemoryConfig            Config
-	DotProductDistributedConfig         Config
+	ReqEmbLoggingPercentage             int                   `json:"req_emb_logging_percentage"`
+	RTPartition                         int                   `json:"rt_partition"`
+	RateLimiter                         RateLimiter           `json:"rate_limiter"`
+	Filter                              map[string][]Criteria `json:"filter"`
+	Enabled                             bool                  `json:"enabled"`
+	VariantState                        enums.VariantState    `json:"variant_state"`
+	VectorDbType                        enums.VectorDbType    `json:"vector_db_type"`
+	VectorDbConfig                      VectorDbConfig        `json:"vector_db_config"`
+	RtDeltaProcessing                   bool                  `json:"rt_delta_processing"`
+	VectorDbReadVersion                 int                   `json:"vector_db_read_version"`
+	VectorDbWriteVersion                int                   `json:"vector_db_write_version"`
+	EmbeddingStoreReadVersion           int                   `json:"embedding_store_read_version"`
+	EmbeddingStoreWriteVersion          int                   `json:"embedding_store_write_version"`
+	Onboarded                           bool                  `json:"onboarded"`
+	PartialHitEnabled                   bool                  `json:"partial_hit_enabled"`
+	BackupConfig                        BackupConfig          `json:"backup_config"`
+	DefaultResponsePercentage           int                   `json:"default_response_percentage"`
+	InMemoryCachingEnabled              bool                  `json:"in_memory_caching_enabled"`
+	InMemoryCacheTTLSeconds             int                   `json:"in_memory_cache_ttl_seconds"`
+	DistributedCachingEnabled           bool                  `json:"distributed_caching_enabled"`
+	DistributedCacheTTLSeconds          int                   `json:"distributed_cache_ttl_seconds"`
+	Type                                enums.Type            `json:"type"`
+	PartialHitDisabled                  bool                  `json:"partial_hit_disabled"`
+	TestConfig                          TestConfig            `json:"test_config"`
+	EmbeddingRetrievalInMemoryConfig    Config                `json:"embedding_retrieval_in_memory_config"`
+	EmbeddingRetrievalDistributedConfig Config                `json:"embedding_retrieval_distributed_config"`
+	DotProductInMemoryConfig            Config                `json:"dot_product_in_memory_config"`
+	DotProductDistributedConfig         Config                `json:"dot_product_distributed_config"`
 }
 
 type Config struct {
@@ -151,13 +151,6 @@ type Data struct {
 }
 
 type Criteria struct {
-	ColumnName   string `json:"column_name"`
-	FilterValue  string `json:"filter_value"`
-	DefaultValue string `json:"default_value"`
-}
-
-type FilterConfig struct {
-	Entity       string `json:"entity"` // Entity-level filters
 	ColumnName   string `json:"column_name"`
 	FilterValue  string `json:"filter_value"`
 	DefaultValue string `json:"default_value"`

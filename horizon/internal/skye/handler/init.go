@@ -1,9 +1,14 @@
 package handler
 
-import "github.com/Meesho/BharatMLStack/horizon/internal/configs"
+import (
+	"sync"
+
+	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
+)
 
 var (
-	config Config
+	configOnce sync.Once
+	config     Config
 )
 
 func NewConfigHandler(version int, appConfig configs.Configs) Config {

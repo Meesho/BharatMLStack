@@ -157,7 +157,7 @@ func (m *MiddlewareHandler) AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		m.CheckScreenPermission(c, claims)
+		// m.CheckScreenPermission(c, claims)
 
 		// Set claims in the context for later use
 		c.Set("email", claims.Email)

@@ -17,7 +17,7 @@ type Manager interface {
 	RegisterFrequency(frequency string) error
 	RegisterEntity(entity string, storeId string) error
 	RegisterModel(string, string, bool, int, ModelConfig, string, int, string, Metadata, string, int, int, string) error
-	RegisterVariant(string, string, string, VectorDbConfig, string, []Criteria, enums.Type, bool, int, bool, int, int, RateLimiter) error
+	RegisterVariant(string, string, string, VectorDbConfig, string, []Criteria, enums.Type, bool, int, bool, int, bool, int, bool, int, bool, int, bool, int, int, RateLimiter) error
 	UpdateEmbeddingVersion(entity, model string, version int) error
 	UpdateVariantEmbeddingStoreReadVersion(entity string, model string, variant string, version int) error
 	UpdateVariantEmbeddingStoreWriteVersion(entity string, model string, variant string, version int) error

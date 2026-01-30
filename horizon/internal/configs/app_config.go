@@ -153,12 +153,31 @@ type Configs struct {
 	AirflowBaseUrl                  string `mapstructure:"airflow_base_url"`
 	AirflowUsername                 string `mapstructure:"airflow_username"`
 	AirflowPassword                 string `mapstructure:"airflow_password"`
-	PrismJobID                      int    `mapstructure:"prism_job_id"`
-	PrismStepID                     int    `mapstructure:"prism_step_id"`
-	AirflowDAGID                    string `mapstructure:"airflow_dag_id"`
+	InitialIngestionPrismJobID      int    `mapstructure:"initial_ingestion_prism_job_id"`
+	InitialIngestionPrismStepID     int    `mapstructure:"initial_ingestion_prism_step_id"`
+	InitialIngestionAirflowDAGID    string `mapstructure:"initial_ingestion_airflow_dag_id"`
+	VariantScaleUpPrismJobID        int    `mapstructure:"variant_scaleup_prism_job_id"`
+	VariantScaleUpPrismStepID       int    `mapstructure:"variant_scaleup_prism_step_id"`
+	VariantScaleUpAirflowDAGID      string `mapstructure:"variant_scaleup_airflow_dag_id"`
 	VariantOnboardingCronExpression string `mapstructure:"variant_onboarding_cron_expression"`
+	VariantScaleUpCronExpression    string `mapstructure:"variant_scaleup_cron_expression"`
 	MQIdTopicsMapping               string `mapstructure:"mq_id_topics_mapping"`
 	VariantsList                    string `mapstructure:"variants_list"`
+
+	SkyeScyllaActiveConfigIds    string `mapstructure:"skye_scylla_active_config_ids"`
+	Scylla2ContactPoints         string `mapstructure:"scylla_2_contact_points"`
+	Scylla2Port                  int    `mapstructure:"scylla_2_port"`
+	Scylla2Keyspace              string `mapstructure:"scylla_2_keyspace"`
+	Scylla2Username              string `mapstructure:"scylla_2_username"`
+	Scylla2Password              string `mapstructure:"scylla_2_password"`
+	SkyeNumberOfPartitions       int    `mapstructure:"skye_number_of_partitions"`
+	SkyeFailureProducerMqId      int    `mapstructure:"skye_failure_producer_mq_id"`
+	HorizonToSkyeScyllaConfIdMap string `mapstructure:"horizon_to_skye_scylla_conf_id_map"`
+
+	SkyeHost             string `mapstructure:"skye_host"`
+	SkyePort             string `mapstructure:"skye_port"`
+	SkyeAuthToken        string `mapstructure:"skye_auth_token"`
+	SkyeDeadlineExceedMS int    `mapstructure:"skye_deadline_exceed_ms"`
 }
 
 type DynamicConfigs struct{}

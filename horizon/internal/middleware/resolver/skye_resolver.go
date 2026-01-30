@@ -22,8 +22,9 @@ const (
 	screenTypeDeploymentOperations   = "deployment-operations"
 	screenTypeOnboardVariantToDB     = "onboard-variant-to-db"
 	screenTypeOnboardVariantApproval = "onboard-variant-approval"
-
-	serviceEmbeddingPlatform = "embedding_platform"
+	screenTypeScaleupVariantToDB     = "scaleup-variant-to-db"
+	screenTypeScaleupVariantApproval = "scaleup-variant-approval"
+	serviceEmbeddingPlatform         = "embedding_platform"
 
 	// Resolvers - Store
 	resolverSkyeStoreRegister         = "SkyeStoreRegisterResolver"
@@ -78,7 +79,13 @@ const (
 	resolverSkyeVariantOnboard                 = "SkyeVariantOnboardResolver"
 	resolverSkyeVariantOnboardApprove          = "SkyeVariantOnboardApproveResolver"
 	resolverSkyeVariantOnboardRequestDiscovery = "SkyeVariantOnboardRequestDiscoveryResolver"
-	resolverSkyeVariantOnboardDiscovery        = "SkyeVariantOnboardDiscoveryResolver"
+	resolverSkyeVariantOnboardTaskDiscovery    = "SkyeVariantOnboardTaskDiscoveryResolver"
+
+	// Resolvers - Variant Scaleup
+	resolverSkyeVariantScaleup                 = "SkyeVariantScaleupResolver"
+	resolverSkyeVariantScaleupApprove          = "SkyeVariantScaleupApproveResolver"
+	resolverSkyeVariantScaleupRequestDiscovery = "SkyeVariantScaleupRequestDiscoveryResolver"
+	resolverSkyeVariantScaleupTaskDiscovery    = "SkyeVariantScaleupTaskDiscoveryResolver"
 
 	// Resolvers - MQ ID to Topics and Variants List
 	resolverSkyeMQIdTopicsDiscovery   = "SkyeMQIdTopicsDiscoveryResolver"
@@ -147,7 +154,13 @@ func (r *SkyeResolver) GetResolvers() map[string]Func {
 		resolverSkyeVariantOnboard:                 StaticResolver(screenTypeOnboardVariantToDB, moduleOnboard, serviceEmbeddingPlatform),
 		resolverSkyeVariantOnboardApprove:          StaticResolver(screenTypeOnboardVariantApproval, moduleReview, serviceEmbeddingPlatform),
 		resolverSkyeVariantOnboardRequestDiscovery: StaticResolver(screenTypeOnboardVariantApproval, moduleView, serviceEmbeddingPlatform),
-		resolverSkyeVariantOnboardDiscovery:        StaticResolver(screenTypeOnboardVariantToDB, moduleView, serviceEmbeddingPlatform),
+		resolverSkyeVariantOnboardTaskDiscovery:    StaticResolver(screenTypeOnboardVariantToDB, moduleView, serviceEmbeddingPlatform),
+
+		// Variant Scaleup resolvers
+		resolverSkyeVariantScaleup:                 StaticResolver(screenTypeScaleupVariantToDB, moduleOnboard, serviceEmbeddingPlatform),
+		resolverSkyeVariantScaleupApprove:          StaticResolver(screenTypeScaleupVariantApproval, moduleReview, serviceEmbeddingPlatform),
+		resolverSkyeVariantScaleupRequestDiscovery: StaticResolver(screenTypeScaleupVariantApproval, moduleView, serviceEmbeddingPlatform),
+		resolverSkyeVariantScaleupTaskDiscovery:    StaticResolver(screenTypeScaleupVariantToDB, moduleView, serviceEmbeddingPlatform),
 
 		// MQ ID to Topics and Variants List resolvers
 		resolverSkyeMQIdTopicsDiscovery:   StaticResolver(screenTypeModelDiscovery, moduleView, serviceEmbeddingPlatform),
