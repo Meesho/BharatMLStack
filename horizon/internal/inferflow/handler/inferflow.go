@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	mainHandler "github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
@@ -21,6 +22,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/pkg/grpc"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/random"
+	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/metadata"
 	"gorm.io/gorm"
@@ -53,6 +55,12 @@ const (
 	activeFalse                       = false
 	inferFlowRetrieveModelScoreMethod = "/Inferflow/RetrieveModelScore"
 	setFunctionalTest                 = "FunctionalTest"
+	defaultLoggingTTL                 = 30
+	maxConfigVersion                  = 15
+	defaultModelSchemaPerc            = 0
+	deployableTagDelimiter            = "_"
+	scaleupTag                        = "scaleup"
+	defaultVersion                    = 1
 )
 
 func InitV1ConfigHandler() Config {
@@ -109,13 +117,12 @@ func (m *InferFlow) Onboard(request InferflowOnboardRequest, token string) (Resp
 		return Response{}, errors.New("failed to validate onboard request: " + err.Error())
 	}
 	if response.Error != emptyResponse {
-		return Response{}, errors.New("model proxy config is invalid: " + response.Error)
+		return Response{}, errors.New("inferflow config is invalid: " + response.Error)
 	}
 
-	exists := false
-	configs, err := m.InferFlowConfigRepo.GetByID(configId)
-	if err == nil {
-		exists = configs.Active
+	exists, err := m.InferFlowConfigRepo.DoesConfigIDExist(configId)
+	if err != nil {
+		return Response{}, errors.New("failed to check if config already exists: " + err.Error())
 	}
 	if exists {
 		return Response{}, errors.New("Config ID already exists")
@@ -123,12 +130,12 @@ func (m *InferFlow) Onboard(request InferflowOnboardRequest, token string) (Resp
 
 	inferFlowConfig, err := m.GetInferflowConfig(request, token)
 	if err != nil {
-		return Response{}, errors.New("failed to generate model proxy config: " + err.Error())
+		return Response{}, errors.New("failed to generate inferflow config: " + err.Error())
 	}
 
 	response, err = ValidateInferFlowConfig(inferFlowConfig, token)
 	if err != nil {
-		return Response{}, errors.New("failed to validate model proxy config: " + err.Error())
+		return Response{}, errors.New("failed to validate inferflow config: " + err.Error())
 	}
 	if response.Error != emptyResponse {
 		return Response{}, errors.New("infer flow config is invalid: " + response.Error)
@@ -178,6 +185,39 @@ func (m *InferFlow) Promote(request PromoteConfigRequest) (Response, error) {
 		modelName := request.Payload.ConfigValue.ComponentConfig.PredatorComponents[i].ModelName
 		request.Payload.ConfigValue.ComponentConfig.PredatorComponents[i].ModelEndPoint = modelNameToEndPointMap[modelName]
 	}
+	for i := range request.Payload.LatestRequest.Payload.RequestPayload.Rankers {
+		modelName := request.Payload.LatestRequest.Payload.RequestPayload.Rankers[i].ModelName
+		request.Payload.LatestRequest.Payload.RequestPayload.Rankers[i].EndPoint = modelNameToEndPointMap[modelName]
+	}
+	request.Payload.ConfigValue.ResponseConfig.LoggingTTL = defaultLoggingTTL
+	request.Payload.ConfigValue.ResponseConfig.ModelSchemaPerc = defaultModelSchemaPerc
+
+	destinationDeployableID := request.Payload.ConfigMapping.DeployableID
+	request.Payload.LatestRequest.Payload.ConfigMapping.DeployableID = destinationDeployableID
+	request.Payload.LatestRequest.Payload.RequestPayload.ConfigMapping.DeployableID = destinationDeployableID
+	request.Payload.LatestRequest.Payload.RequestPayload.Response.RankerSchemaFeaturesInResponsePerc = defaultModelSchemaPerc
+
+	newVersion := defaultVersion
+	configIDExists, err := m.InferFlowConfigRepo.DoesConfigIDExist(request.Payload.ConfigID)
+	if err != nil {
+		return Response{}, errors.New("failed to check if config id exists in config table " + err.Error())
+	}
+	if configIDExists {
+		log.Info().Msgf("config already exists, bumping version")
+		latestRequests, retrieveErr := m.InferFlowRequestRepo.GetApprovedRequestsByConfigID(request.Payload.ConfigID)
+		if retrieveErr != nil {
+			return Response{}, errors.New("failed to fetch config from DB")
+		}
+		if len(latestRequests) > 0 {
+			newVersion = latestRequests[0].Version + 1
+		}
+		if newVersion > maxConfigVersion {
+			return Response{}, errors.New("This inferflow config has reached its version limit. Please create a clone to make further updates.")
+		}
+		request.Payload.ConfigValue.ComponentConfig.CacheVersion = newVersion
+	} else {
+		request.Payload.ConfigValue.ComponentConfig.CacheVersion = newVersion
+	}
 
 	payload, err := AdaptPromoteRequestToDBPayload(request, request.Payload.LatestRequest)
 	if err != nil {
@@ -191,6 +231,7 @@ func (m *InferFlow) Promote(request PromoteConfigRequest) (Response, error) {
 		RequestType: promoteRequestType,
 		Status:      pendingApproval,
 		Active:      activeTrue,
+		Version:     newVersion,
 	}
 
 	err = m.InferFlowRequestRepo.Create(table)
@@ -210,7 +251,7 @@ func (m *InferFlow) Edit(request EditConfigOrCloneConfigRequest, token string) (
 
 	response, err := m.ValidateOnboardRequest(request.Payload)
 	if err != nil {
-		return Response{}, errors.New("failed to validate onboard request: " + err.Error())
+		return Response{}, errors.New("failed to validate edit request: " + err.Error())
 	}
 	if response.Error != emptyResponse {
 		return Response{}, errors.New("onboard request is invalid: " + response.Error)
@@ -238,9 +279,18 @@ func (m *InferFlow) Edit(request EditConfigOrCloneConfigRequest, token string) (
 		return Response{}, errors.New("failed to get existing configs: " + err.Error())
 	}
 
-	newVersion := 1
+	newVersion := defaultVersion
+	prevLoggingTTL := defaultLoggingTTL
 	if len(existingConfigs) > 0 {
 		newVersion = existingConfigs[0].Version + 1
+		prevLoggingTTL = existingConfigs[0].Payload.ConfigValue.ResponseConfig.LoggingTTL
+	}
+	if request.Payload.Response.LoggingTTL == 0 {
+		request.Payload.Response.LoggingTTL = prevLoggingTTL
+	}
+
+	if newVersion > maxConfigVersion {
+		return Response{}, errors.New("This inferflow config has reached its version limit. Please create a clone to make further updates.")
 	}
 
 	onboardRequest := InferflowOnboardRequest(request)
@@ -252,11 +302,13 @@ func (m *InferFlow) Edit(request EditConfigOrCloneConfigRequest, token string) (
 
 	response, err = ValidateInferFlowConfig(inferFlowConfig, token)
 	if err != nil {
-		return Response{}, errors.New("failed to validate model proxy config: " + err.Error())
+		return Response{}, errors.New("failed to validate inferflow config: " + err.Error())
 	}
 	if response.Error != emptyResponse {
 		return Response{}, errors.New("infer flow config is invalid: " + response.Error)
 	}
+
+	inferFlowConfig.ComponentConfig.CacheVersion = newVersion
 
 	payload, err := AdaptEditRequestToDBPayload(request, inferFlowConfig, request.Payload)
 	if err != nil {
@@ -310,6 +362,11 @@ func (m *InferFlow) Clone(request EditConfigOrCloneConfigRequest, token string) 
 		}
 	}
 
+	if request.Payload.Response.LoggingTTL == 0 {
+		request.Payload.Response.LoggingTTL = defaultLoggingTTL
+	}
+	request.Payload.Response.RankerSchemaFeaturesInResponsePerc = defaultModelSchemaPerc
+
 	onboardRequest := InferflowOnboardRequest(request)
 
 	inferFlowConfig, err := m.GetInferflowConfig(onboardRequest, token)
@@ -351,6 +408,12 @@ func (m *InferFlow) Clone(request EditConfigOrCloneConfigRequest, token string) 
 }
 
 func (m *InferFlow) ScaleUp(request ScaleUpConfigRequest) (Response, error) {
+	sourceConfigID := request.Payload.ConfigID
+	derivedConfigID, err := m.GetDerivedConfigID(request.Payload.ConfigID, request.GetConfigMapping().DeployableID)
+	if err != nil {
+		return Response{}, errors.New("failed to create derived config ID: " + err.Error())
+	}
+	request.Payload.ConfigID = derivedConfigID
 	exists, err := m.InferFlowRequestRepo.DoesConfigIdExistWithRequestType(request.Payload.ConfigID, scaleUpRequestType)
 	if err != nil {
 		return Response{}, errors.New("failed to check if config id exists in db: " + err.Error())
@@ -358,6 +421,13 @@ func (m *InferFlow) ScaleUp(request ScaleUpConfigRequest) (Response, error) {
 	if exists {
 		return Response{}, errors.New("Config ID already exists with scale up request")
 	}
+
+	var latestSourceRequest GetLatestRequestResponse
+	latestSourceRequest, err = m.GetLatestRequest(sourceConfigID)
+	if err != nil {
+		return Response{}, errors.New("failed to get latest request for the source configID: " + sourceConfigID + ": " + err.Error())
+	}
+	request.Payload.ConfigMapping.SourceConfigID = sourceConfigID
 
 	modelNameToEndPointMap := make(map[string]ModelNameToEndPointMap)
 	for _, proposedModelEndpoint := range request.Payload.ModelNameToEndPointMap {
@@ -370,12 +440,35 @@ func (m *InferFlow) ScaleUp(request ScaleUpConfigRequest) (Response, error) {
 		request.Payload.ConfigValue.ComponentConfig.PredatorComponents[i].ModelName = modelNameToEndPointMap[modelName].NewModelName
 	}
 
-	request.Payload.ConfigValue.ResponseConfig.LoggingPerc = request.Payload.LoggingPerc
+	for i := range latestSourceRequest.Data.Payload.RequestPayload.Rankers {
+		modelName := latestSourceRequest.Data.Payload.RequestPayload.Rankers[i].ModelName
+		latestSourceRequest.Data.Payload.RequestPayload.Rankers[i].EndPoint = modelNameToEndPointMap[modelName].EndPointID
+		latestSourceRequest.Data.Payload.RequestPayload.Rankers[i].ModelName = modelNameToEndPointMap[modelName].NewModelName
+	}
 
-	payload, err := AdaptScaleUpRequestToDBPayload(request)
+	// Set Request Payload name
+	parts := strings.Split(request.Payload.ConfigID, "-")
+	if len(parts) >= 3 {
+		latestSourceRequest.Data.Payload.RequestPayload.RealEstate = parts[0]
+		latestSourceRequest.Data.Payload.RequestPayload.Tenant = parts[1]
+		latestSourceRequest.Data.Payload.RequestPayload.ConfigIdentifier = strings.Join(parts[2:], "-")
+
+	}
+
+	latestSourceRequest.Data.ConfigID = request.Payload.ConfigID
+	latestSourceRequest.Data.Payload.RequestPayload.ConfigMapping.DeployableID = request.Payload.ConfigMapping.DeployableID
+	latestSourceRequest.Data.Payload.RequestPayload.Response.RankerSchemaFeaturesInResponsePerc = defaultModelSchemaPerc
+
+	request.Payload.ConfigValue.ResponseConfig.ModelSchemaPerc = defaultModelSchemaPerc
+	request.Payload.ConfigValue.ResponseConfig.LoggingPerc = request.Payload.LoggingPerc
+	request.Payload.ConfigValue.ResponseConfig.LoggingTTL = request.Payload.LoggingTTL
+	request.Payload.ConfigValue.ComponentConfig.CacheVersion = defaultVersion
+
+	payload, err := AdaptScaleUpRequestToDBPayload(request, latestSourceRequest.Data)
 	if err != nil {
 		return Response{}, errors.New("failed to adapt scale up request to db payload: " + err.Error())
 	}
+	payload.ConfigMapping.SourceConfigID = request.Payload.ConfigMapping.SourceConfigID
 
 	table := &inferflow_request.Table{
 		ConfigID:    request.Payload.ConfigID,
@@ -402,6 +495,9 @@ func (m *InferFlow) Delete(request DeleteConfigRequest) (Response, error) {
 	InferFlowConfigTable, err := m.InferFlowConfigRepo.GetByID(request.ConfigID)
 	if err != nil {
 		return Response{}, errors.New("failed to get infer flow config by id in db: " + err.Error())
+	}
+	if InferFlowConfigTable == nil {
+		return Response{}, errors.New("inferflow config: " + request.ConfigID + " does not exist in db")
 	}
 
 	Discoverytable, err := m.DiscoveryConfigRepo.GetById(int(InferFlowConfigTable.DiscoveryID))
@@ -467,71 +563,114 @@ func (m *InferFlow) Cancel(request CancelConfigRequest) (Response, error) {
 }
 
 func (m *InferFlow) Review(request ReviewRequest) (Response, error) {
+	request.Status = strings.ToUpper(request.Status)
 
-	err := m.InferFlowRequestRepo.Transaction(func(tx *gorm.DB) error {
+	if request.Status != approved && request.Status != rejected {
+		log.Error().Msgf("invalid status for request id: %d", request.RequestID)
+		return Response{}, errors.New("invalid status for request")
+	}
 
-		request.Status = strings.ToUpper(request.Status)
+	if request.Status == rejected && request.RejectReason == emptyResponse {
+		log.Error().Msgf("request reason not specified for request id: %d", request.RequestID)
+		return Response{}, errors.New("rejection reason is required")
+	}
 
-		if request.Status != approved && request.Status != rejected {
-			return errors.New("invalid status")
-		}
+	exists, err := m.InferFlowRequestRepo.DoesRequestIDExistWithStatus(request.RequestID, pendingApproval)
+	if err != nil {
+		log.Error().Msgf("failed to check if request id: %d exists with status in db: %s", request.RequestID, err)
+		return Response{}, errors.New("failed to check if request id exists with status in db: " + err.Error())
+	}
+	if !exists {
+		log.Error().Msgf("request id: %d does not exist or request is not pending approval", request.RequestID)
+		return Response{}, errors.New("request id does not exist or request is not pending approval")
+	}
 
-		if request.Status == rejected {
-			if request.RejectReason == emptyResponse {
-				return errors.New("rejecttion reason is needed")
-			}
-		}
+	if request.Status == rejected {
+		return m.handleRejectedRequest(request)
+	}
 
-		exists, err := m.InferFlowRequestRepo.DoesRequestIDExistWithStatus(request.RequestID, pendingApproval)
-		if err != nil {
-			return errors.New("failed to check if request id exists with status: " + err.Error())
-		}
-		if !exists {
-			return errors.New("request id does not exist or is not pending approval")
-		}
+	return m.handleApprovedRequest(request)
+}
 
-		fullTable := &inferflow_request.Table{}
-		if err := tx.First(fullTable, request.RequestID).Error; err != nil {
-			return errors.New("failed to get infer flow config request by id: " + err.Error())
-		}
+func (m *InferFlow) handleRejectedRequest(request ReviewRequest) (Response, error) {
+	requestEntry := &inferflow_request.Table{
+		RequestID:    request.RequestID,
+		Status:       request.Status,
+		RejectReason: request.RejectReason,
+		Reviewer:     request.Reviewer,
+		Active:       activeFalse,
+	}
 
-		table := &inferflow_request.Table{
+	if err := m.InferFlowRequestRepo.Update(requestEntry); err != nil {
+		return Response{}, errors.New("failed to update inferflow config request in db: " + err.Error())
+	}
+
+	return Response{
+		Error: emptyResponse,
+		Data:  Message{Message: fmt.Sprintf("inferflow config request rejected successfully for Request Id %d", request.RequestID)},
+	}, nil
+}
+
+func (m *InferFlow) handleApprovedRequest(request ReviewRequest) (Response, error) {
+	var requestEntry *inferflow_request.Table
+	var discoveryID int
+	var discoveryConfig *discovery_config.DiscoveryConfig
+
+	tempRequest := inferflow_request.Table{}
+	tempRequest, err := m.InferFlowRequestRepo.GetRequestByID(request.RequestID)
+	if err != nil {
+		return Response{}, fmt.Errorf("failed to fetch latest unapproved request for request id: %d: %w", request.RequestID, err)
+	}
+
+	var configExistedBeforeTx bool
+	if tempRequest.RequestType == promoteRequestType {
+		existingConfig, _ := m.InferFlowConfigRepo.GetByID(tempRequest.ConfigID)
+		configExistedBeforeTx = existingConfig != nil
+	}
+
+	err = m.InferFlowRequestRepo.Transaction(func(tx *gorm.DB) error {
+		requestEntry = &inferflow_request.Table{
 			RequestID:    request.RequestID,
 			Status:       request.Status,
 			RejectReason: request.RejectReason,
 			Reviewer:     request.Reviewer,
 		}
-		if request.Status == rejected {
-			table.Active = activeFalse
+		if err := tx.First(requestEntry, request.RequestID).Error; err != nil {
+			return fmt.Errorf("failed to get request: %w", err)
 		}
+		requestEntry.Reviewer = request.Reviewer
+		requestEntry.RejectReason = request.RejectReason
 
-		err = m.InferFlowRequestRepo.UpdateTx(tx, table)
+		var err error
+		discoveryID, discoveryConfig, err = m.createOrUpdateDiscoveryConfig(tx, requestEntry, configExistedBeforeTx)
 		if err != nil {
-			return errors.New("failed to update infer flow config request in db: " + err.Error())
+			return fmt.Errorf("failed to handle discovery config: %w", err)
 		}
 
-		if request.Status == approved {
-			discoveryID, discovery, err := m.createOrUpdateDiscoveryConfig(tx, fullTable)
-			if err != nil {
-				return err
-			}
-
-			err = m.createOrUpdateInferFlowConfig(tx, fullTable, discoveryID)
-			if err != nil {
-				return err
-			}
-
-			err = m.createOrUpdateEtcdConfig(fullTable, discovery)
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to sync config to etcd")
-				return errors.New("failed to sync config to etcd: " + err.Error())
-			}
+		if err := m.createOrUpdateInferFlowConfig(tx, requestEntry, discoveryID, configExistedBeforeTx); err != nil {
+			return fmt.Errorf("failed to handle inferflow config: %w", err)
 		}
+
+		requestEntry.Status = approved
+		err = m.InferFlowRequestRepo.UpdateTx(tx, requestEntry)
+		if err != nil {
+			return errors.New("failed to update inferflow config request in db: " + err.Error())
+		}
+
 		return nil
 	})
 
 	if err != nil {
-		return Response{}, errors.New("failed to review config: " + err.Error())
+		return Response{}, fmt.Errorf("failed to review config (DB rolled back): %w", err)
+	}
+
+	if err := m.createOrUpdateEtcdConfig(requestEntry, discoveryConfig, configExistedBeforeTx); err != nil {
+		if rollBackErr := m.rollbackApprovedRequest(request, requestEntry, discoveryID, configExistedBeforeTx); rollBackErr != nil {
+			log.Error().Err(rollBackErr).Msg("Failed to rollback DB changes after ETCD failure")
+			return Response{}, fmt.Errorf("ETCD sync failed and DB rollback also failed: etcd=%w, rollback=%v", err, rollBackErr)
+		}
+		log.Warn().Msgf("Successfully rolled back the request: %d", request.RequestID)
+		return Response{}, fmt.Errorf("ETCD sync failed: %w", err)
 	}
 
 	return Response{
@@ -540,34 +679,202 @@ func (m *InferFlow) Review(request ReviewRequest) (Response, error) {
 	}, nil
 }
 
-func (m *InferFlow) createOrUpdateDiscoveryConfig(tx *gorm.DB, table *inferflow_request.Table) (int, *discovery_config.DiscoveryConfig, error) {
+func (m *InferFlow) rollbackApprovedRequest(request ReviewRequest, fullTable *inferflow_request.Table, discoveryID int, configExistedBeforeTx bool) error {
+	return m.InferFlowRequestRepo.Transaction(func(tx *gorm.DB) error {
+		table := &inferflow_request.Table{
+			RequestID: request.RequestID,
+			Status:    pendingApproval,
+			Reviewer:  emptyResponse,
+		}
+		if err := m.InferFlowRequestRepo.UpdateTx(tx, table); err != nil {
+			return fmt.Errorf("failed to revert request status: %w", err)
+		}
+
+		switch fullTable.RequestType {
+		case onboardRequestType, cloneRequestType, scaleUpRequestType:
+			if err := m.rollbackCreatedConfigs(tx, fullTable.ConfigID, discoveryID); err != nil {
+				return err
+			}
+
+		case editRequestType:
+			if err := m.rollbackEditRequest(tx, fullTable, discoveryID); err != nil {
+				return err
+			}
+
+		case deleteRequestType:
+			updatedBy := fullTable.UpdatedBy
+			if updatedBy == "" {
+				updatedBy = fullTable.CreatedBy
+			}
+			if err := m.rollbackDeletedConfigs(tx, fullTable.ConfigID, discoveryID, updatedBy); err != nil {
+				return err
+			}
+
+		case promoteRequestType:
+			if err := m.rollbackPromoteRequest(tx, fullTable, discoveryID, configExistedBeforeTx); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
+func (m *InferFlow) rollbackPromoteRequest(tx *gorm.DB, currentRequest *inferflow_request.Table, discoveryID int, configExistedBeforeTx bool) error {
+	if !configExistedBeforeTx {
+		if err := m.rollbackCreatedConfigs(tx, currentRequest.ConfigID, discoveryID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *InferFlow) rollbackEditRequest(tx *gorm.DB, currentRequest *inferflow_request.Table, discoveryID int) error {
+	approvedRequests, err := m.InferFlowRequestRepo.GetApprovedRequestsByConfigID(currentRequest.ConfigID)
+	if err != nil {
+		return fmt.Errorf("Failed to retrieve approved requests: %w", err)
+	}
+
+	var previousRequest *inferflow_request.Table
+	if len(approvedRequests) > 0 {
+		if approvedRequests[0].RequestID == currentRequest.RequestID {
+			if len(approvedRequests) > 1 {
+				previousRequest = &approvedRequests[1]
+			} else {
+				return fmt.Errorf("no other request to revert back to: Requires manual intervention")
+			}
+		} else {
+			previousRequest = &approvedRequests[0]
+		}
+	} else {
+		return fmt.Errorf("no other request to revert back to: Requires manual intervention")
+	}
+
+	existingConfig, err := m.InferFlowConfigRepo.GetByID(currentRequest.ConfigID)
+	if err != nil {
+		return fmt.Errorf("failed to get inferflow config: %w", err)
+	}
+	if existingConfig == nil {
+		return errors.New("inferflow config not found")
+	}
+
+	restoredConfig := &inferflow_config.Table{
+		ConfigID:    currentRequest.ConfigID,
+		DiscoveryID: discoveryID,
+		ConfigValue: previousRequest.Payload.ConfigValue,
+		Active:      activeTrue,
+		UpdatedBy:   currentRequest.UpdatedBy,
+	}
+
+	if err := m.InferFlowConfigRepo.UpdateTx(tx, restoredConfig); err != nil {
+		return fmt.Errorf("failed to restore inferflow config: %w", err)
+	}
+
+	restoredDiscovery := &discovery_config.DiscoveryConfig{
+		ID:                  discoveryID,
+		ServiceDeployableID: previousRequest.Payload.ConfigMapping.DeployableID,
+		AppToken:            previousRequest.Payload.ConfigMapping.AppToken,
+		ServiceConnectionID: previousRequest.Payload.ConfigMapping.ConnectionConfigID,
+		Active:              activeTrue,
+		UpdatedBy:           currentRequest.UpdatedBy,
+	}
+	if err := m.DiscoveryConfigRepo.UpdateTx(tx, restoredDiscovery); err != nil {
+		return fmt.Errorf("failed to restore discovery config: %w", err)
+	}
+
+	return nil
+}
+
+func (m *InferFlow) rollbackCreatedConfigs(tx *gorm.DB, configID string, discoveryID int) error {
+	if err := m.InferFlowConfigRepo.DeleteByConfigIDTx(tx, configID); err != nil {
+		return fmt.Errorf("failed to rollback inferflow config: %w", err)
+	}
+
+	if err := m.DiscoveryConfigRepo.DeleteByIDTx(tx, discoveryID); err != nil {
+		return fmt.Errorf("failed to rollback discovery config: %w", err)
+	}
+
+	return nil
+}
+
+func (m *InferFlow) rollbackDeletedConfigs(tx *gorm.DB, configID string, discoveryID int, updatedby string) error {
+	latestConfig, err := m.InferFlowConfigRepo.GetLatestInactiveByConfigID(tx, configID)
+	if err != nil {
+		return fmt.Errorf("failed to find soft-deleted inferflow config: %w", err)
+	}
+	if latestConfig == nil {
+		return errors.New("no soft-deleted inferflow config found")
+	}
+
+	if err := m.InferFlowConfigRepo.ReactivateByIDTx(tx, int(latestConfig.ID), updatedby); err != nil {
+		return fmt.Errorf("failed to reactivate inferflow config: %w", err)
+	}
+
+	if err := m.DiscoveryConfigRepo.ReactivateByIDTx(tx, discoveryID); err != nil {
+		return fmt.Errorf("failed to reactivate discovery config: %w", err)
+	}
+
+	return nil
+}
+
+func (m *InferFlow) createOrUpdateDiscoveryConfig(tx *gorm.DB, requestEntry *inferflow_request.Table, configExistedBeforeTx bool) (int, *discovery_config.DiscoveryConfig, error) {
 	discovery := &discovery_config.DiscoveryConfig{
-		ServiceDeployableID: table.Payload.ConfigMapping.DeployableID,
-		AppToken:            table.Payload.ConfigMapping.AppToken,
-		ServiceConnectionID: table.Payload.ConfigMapping.ConnectionConfigID,
+		ServiceDeployableID: requestEntry.Payload.ConfigMapping.DeployableID,
+		AppToken:            requestEntry.Payload.ConfigMapping.AppToken,
+		ServiceConnectionID: requestEntry.Payload.ConfigMapping.ConnectionConfigID,
 		Active:              activeTrue,
 	}
 
-	switch table.RequestType {
-	case onboardRequestType, cloneRequestType, promoteRequestType, scaleUpRequestType:
-		if table.UpdatedBy != "" {
-			discovery.CreatedBy = table.UpdatedBy
+	switch requestEntry.RequestType {
+	case onboardRequestType, cloneRequestType, scaleUpRequestType:
+		if requestEntry.UpdatedBy != "" {
+			discovery.CreatedBy = requestEntry.UpdatedBy
 		} else {
-			discovery.CreatedBy = table.CreatedBy
+			discovery.CreatedBy = requestEntry.CreatedBy
 		}
 		err := m.DiscoveryConfigRepo.CreateTx(tx, discovery)
 		if err != nil {
 			return 0, nil, errors.New("failed to create discovery config: " + err.Error())
 		}
-	case editRequestType:
-		if table.UpdatedBy != "" {
-			discovery.UpdatedBy = table.UpdatedBy
+	case promoteRequestType:
+		if !configExistedBeforeTx {
+			if requestEntry.UpdatedBy != "" {
+				discovery.CreatedBy = requestEntry.UpdatedBy
+			} else {
+				discovery.CreatedBy = requestEntry.CreatedBy
+			}
+			err := m.DiscoveryConfigRepo.CreateTx(tx, discovery)
+			if err != nil {
+				return 0, nil, errors.New("failed to create discovery config: " + err.Error())
+			}
 		} else {
-			discovery.UpdatedBy = table.CreatedBy
+			existingConfig, err := m.InferFlowConfigRepo.GetByID(requestEntry.ConfigID)
+			if err != nil {
+				return 0, nil, errors.New("failed to query inferflow config repo: " + err.Error())
+			}
+			if requestEntry.UpdatedBy != "" {
+				discovery.UpdatedBy = requestEntry.UpdatedBy
+			} else {
+				discovery.UpdatedBy = requestEntry.CreatedBy
+			}
+			discovery.ID = int(existingConfig.DiscoveryID)
+			err = m.DiscoveryConfigRepo.UpdateTx(tx, discovery)
+			if err != nil {
+				return 0, nil, errors.New("failed to update discovery config: " + err.Error())
+			}
 		}
-		config, err := m.InferFlowConfigRepo.GetByID(table.ConfigID)
+	case editRequestType:
+		if requestEntry.UpdatedBy != "" {
+			discovery.UpdatedBy = requestEntry.UpdatedBy
+		} else {
+			discovery.UpdatedBy = requestEntry.CreatedBy
+		}
+		config, err := m.InferFlowConfigRepo.GetByID(requestEntry.ConfigID)
 		if err != nil {
-			return 0, nil, errors.New("failed to get model proxy config by id: " + err.Error())
+			return 0, nil, errors.New("failed to get inferflow config by id: " + err.Error())
+		}
+		if config == nil {
+			return 0, nil, errors.New("failed to get inferflow config by id")
 		}
 		discovery.ID = int(config.DiscoveryID)
 		err = m.DiscoveryConfigRepo.UpdateTx(tx, discovery)
@@ -575,14 +882,17 @@ func (m *InferFlow) createOrUpdateDiscoveryConfig(tx *gorm.DB, table *inferflow_
 			return 0, nil, errors.New("failed to update discovery config: " + err.Error())
 		}
 	case deleteRequestType:
-		config, err := m.InferFlowConfigRepo.GetByID(table.ConfigID)
+		config, err := m.InferFlowConfigRepo.GetByID(requestEntry.ConfigID)
 		if err != nil {
-			return 0, nil, errors.New("failed to get model proxy config by id: " + err.Error())
+			return 0, nil, errors.New("failed to get inferflow config by id: " + err.Error())
 		}
-		if table.UpdatedBy != "" {
-			discovery.UpdatedBy = table.UpdatedBy
+		if config == nil {
+			return 0, nil, errors.New("failed to get inferflow config by id")
+		}
+		if requestEntry.UpdatedBy != "" {
+			discovery.UpdatedBy = requestEntry.UpdatedBy
 		} else {
-			discovery.UpdatedBy = table.CreatedBy
+			discovery.UpdatedBy = requestEntry.CreatedBy
 		}
 		discovery.ID = int(config.DiscoveryID)
 		discovery.Active = activeFalse
@@ -597,53 +907,88 @@ func (m *InferFlow) createOrUpdateDiscoveryConfig(tx *gorm.DB, table *inferflow_
 	return discovery.ID, discovery, nil
 }
 
-func (m *InferFlow) createOrUpdateInferFlowConfig(tx *gorm.DB, table *inferflow_request.Table, discoveryID int) error {
-	newTable := &inferflow_config.Table{
+func (m *InferFlow) createOrUpdateInferFlowConfig(tx *gorm.DB, requestEntry *inferflow_request.Table, discoveryID int, configExistedBeforeTx bool) error {
+	newConfig := &inferflow_config.Table{
 		DiscoveryID: discoveryID,
-		ConfigID:    table.ConfigID,
+		ConfigID:    requestEntry.ConfigID,
 		Active:      activeTrue,
-		ConfigValue: table.Payload.ConfigValue,
+		ConfigValue: requestEntry.Payload.ConfigValue,
 	}
 
-	switch table.RequestType {
-	case onboardRequestType, cloneRequestType, promoteRequestType, scaleUpRequestType:
-		if table.UpdatedBy != "" {
-			newTable.CreatedBy = table.UpdatedBy
+	switch requestEntry.RequestType {
+	case onboardRequestType, cloneRequestType:
+		if requestEntry.UpdatedBy != "" {
+			newConfig.CreatedBy = requestEntry.UpdatedBy
 		} else {
-			newTable.CreatedBy = table.CreatedBy
+			newConfig.CreatedBy = requestEntry.CreatedBy
 		}
-		return m.InferFlowConfigRepo.CreateTx(tx, newTable)
+		return m.InferFlowConfigRepo.CreateTx(tx, newConfig)
+	case scaleUpRequestType:
+		if requestEntry.UpdatedBy != "" {
+			newConfig.CreatedBy = requestEntry.UpdatedBy
+		} else {
+			newConfig.CreatedBy = requestEntry.CreatedBy
+		}
+		newConfig.SourceConfigID = requestEntry.Payload.ConfigMapping.SourceConfigID
+		return m.InferFlowConfigRepo.CreateTx(tx, newConfig)
+	case promoteRequestType:
+		if !configExistedBeforeTx {
+			if requestEntry.UpdatedBy != "" {
+				newConfig.CreatedBy = requestEntry.UpdatedBy
+			} else {
+				newConfig.CreatedBy = requestEntry.CreatedBy
+			}
+			return m.InferFlowConfigRepo.CreateTx(tx, newConfig)
+		} else {
+			existingConfig, err := m.InferFlowConfigRepo.GetByID(requestEntry.ConfigID)
+			if err != nil {
+				return errors.New("failed to query inferflow config repo: " + err.Error())
+			}
+			newConfig.ID = existingConfig.ID
+			if requestEntry.UpdatedBy != "" {
+				newConfig.UpdatedBy = requestEntry.UpdatedBy
+			} else {
+				newConfig.UpdatedBy = requestEntry.CreatedBy
+			}
+			return m.InferFlowConfigRepo.UpdateTx(tx, newConfig)
+		}
 	case editRequestType:
-		existingConfig, err := m.InferFlowConfigRepo.GetByID(table.ConfigID)
+		existingConfig, err := m.InferFlowConfigRepo.GetByID(requestEntry.ConfigID)
 		if err != nil {
-			return errors.New("failed to get model proxy config by id: " + err.Error())
+			return errors.New("failed to get inferflow config by id: " + err.Error())
 		}
-		newTable.ID = existingConfig.ID
-		if table.UpdatedBy != "" {
-			newTable.UpdatedBy = table.UpdatedBy
+		if existingConfig == nil {
+			return errors.New("failed to get inferflow config by id")
+		}
+		newConfig.ID = existingConfig.ID
+		if requestEntry.UpdatedBy != "" {
+			newConfig.UpdatedBy = requestEntry.UpdatedBy
 		} else {
-			newTable.UpdatedBy = table.CreatedBy
+			newConfig.UpdatedBy = requestEntry.CreatedBy
 		}
-		return m.InferFlowConfigRepo.UpdateTx(tx, newTable)
+		return m.InferFlowConfigRepo.UpdateTx(tx, newConfig)
 	case deleteRequestType:
-		existingConfig, err := m.InferFlowConfigRepo.GetByID(table.ConfigID)
+		existingConfig, err := m.InferFlowConfigRepo.GetByID(requestEntry.ConfigID)
 		if err != nil {
-			return errors.New("failed to get model proxy config by id: " + err.Error())
+			return errors.New("failed to get inferflow config by id: " + err.Error())
 		}
-		newTable.ID = existingConfig.ID
-		if table.UpdatedBy != "" {
-			newTable.UpdatedBy = table.UpdatedBy
+		if existingConfig == nil {
+			return errors.New("failed to get inferflow config by id")
+		}
+		newConfig.ID = existingConfig.ID
+		if requestEntry.UpdatedBy != "" {
+			newConfig.UpdatedBy = requestEntry.UpdatedBy
 		} else {
-			newTable.UpdatedBy = table.CreatedBy
+			newConfig.UpdatedBy = requestEntry.CreatedBy
 		}
-		newTable.Active = activeFalse
-		return m.InferFlowConfigRepo.UpdateTx(tx, newTable)
+		newConfig.Active = activeFalse
+		return m.InferFlowConfigRepo.UpdateTx(tx, newConfig)
 	default:
 		return errors.New("invalid request type")
 	}
 }
 
-func (m *InferFlow) createOrUpdateEtcdConfig(table *inferflow_request.Table, discovery *discovery_config.DiscoveryConfig) error {
+func (m *InferFlow) createOrUpdateEtcdConfig(table *inferflow_request.Table, discovery *discovery_config.DiscoveryConfig, configExistedBeforeTx bool) error {
 	serviceDeployableTable, err := m.ServiceDeployableConfigRepo.GetById(int(discovery.ServiceDeployableID))
 	if err != nil {
 		return errors.New("failed to get service deployable config by id: " + err.Error())
@@ -653,8 +998,13 @@ func (m *InferFlow) createOrUpdateEtcdConfig(table *inferflow_request.Table, dis
 	inferFlowConfig := AdaptToEtcdInferFlowConfig(table.Payload.ConfigValue)
 
 	switch table.RequestType {
-	case onboardRequestType, cloneRequestType, promoteRequestType, scaleUpRequestType:
+	case onboardRequestType, cloneRequestType, scaleUpRequestType:
 		return m.EtcdConfig.CreateConfig(serviceName, configId, inferFlowConfig)
+	case promoteRequestType:
+		if !configExistedBeforeTx {
+			return m.EtcdConfig.CreateConfig(serviceName, configId, inferFlowConfig)
+		}
+		return m.EtcdConfig.UpdateConfig(serviceName, configId, inferFlowConfig)
 	case editRequestType:
 		return m.EtcdConfig.UpdateConfig(serviceName, configId, inferFlowConfig)
 	case deleteRequestType:
@@ -683,6 +1033,29 @@ func (m *InferFlow) GetAllRequests(request GetAllRequestConfigsRequest) (GetAllR
 		}
 	}
 
+	deployableIDsMap := make(map[int]bool)
+	for _, table := range tables {
+		payload := table.Payload
+		if payload.ConfigMapping.DeployableID > 0 {
+			deployableIDsMap[payload.ConfigMapping.DeployableID] = true
+		}
+	}
+
+	deployableIDs := make([]int, 0, len(deployableIDsMap))
+	for id := range deployableIDsMap {
+		deployableIDs = append(deployableIDs, id)
+	}
+
+	serviceDeployables, err := m.ServiceDeployableConfigRepo.GetByIds(deployableIDs)
+	if err != nil {
+		return GetAllRequestConfigsResponse{}, errors.New("failed to get service deployable configs: " + err.Error())
+	}
+
+	deployableMap := make(map[int]string)
+	for _, sd := range serviceDeployables {
+		deployableMap[sd.ID] = sd.Name
+	}
+
 	requestConfigs := make([]RequestConfig, len(tables))
 	for i, table := range tables {
 
@@ -691,13 +1064,11 @@ func (m *InferFlow) GetAllRequests(request GetAllRequestConfigsRequest) (GetAllR
 
 		ConfigValue := AdaptFromDbToInferFlowConfig(payload.ConfigValue)
 
-		serviceDeployableID := ConfigMapping.DeployableID
-		serviceDeployableTable, err := m.ServiceDeployableConfigRepo.GetById(int(serviceDeployableID))
-		if err != nil {
-			return GetAllRequestConfigsResponse{}, errors.New("failed to get service deployable config by id: " + err.Error())
+		if name, exists := deployableMap[ConfigMapping.DeployableID]; exists {
+			ConfigMapping.DeployableName = name
+		} else {
+			ConfigMapping.DeployableName = "Unknown"
 		}
-
-		ConfigMapping.DeployableName = serviceDeployableTable.Name
 
 		requestConfigs[i] = RequestConfig{
 			RequestID: table.RequestID,
@@ -728,37 +1099,45 @@ func (m *InferFlow) GetAll() (GetAllResponse, error) {
 
 	tables, err := m.InferFlowConfigRepo.GetAll()
 	if err != nil {
-		return GetAllResponse{}, errors.New("failed to get all infer flow configs: " + err.Error())
+		return GetAllResponse{}, errors.New("failed to get all inferflow configs: " + err.Error())
+	}
+
+	discoveryIDs := make([]int, 0, len(tables))
+	for _, table := range tables {
+		discoveryIDs = append(discoveryIDs, int(table.DiscoveryID))
+	}
+
+	discoveryMap, serviceDeployableMap, err := m.batchFetchDiscoveryConfigs(discoveryIDs)
+	if err != nil {
+		return GetAllResponse{}, errors.New(err.Error())
+	}
+
+	ringMasterConfigs, err := m.batchFetchRingMasterConfigs(serviceDeployableMap)
+	if err != nil {
+		return GetAllResponse{}, errors.New("failed to batch fetch ringmaster configs: " + err.Error())
 	}
 
 	responseConfigs := make([]ConfigTable, len(tables))
 	for i, table := range tables {
-		disocveryTable, err := m.DiscoveryConfigRepo.GetById(int(table.DiscoveryID))
-		if err != nil {
-			return GetAllResponse{}, errors.New("failed to get discovery config by id: " + err.Error())
+		disocveryTable, exists := discoveryMap[int(table.DiscoveryID)]
+		if !exists {
+			return GetAllResponse{}, errors.New("failed to find discovery config by id: " + strconv.Itoa(int(table.DiscoveryID)))
 		}
 
-		serviceDeployableID := disocveryTable.ServiceDeployableID
-		serviceDeployableTable, err := m.ServiceDeployableConfigRepo.GetById(int(serviceDeployableID))
-		if err != nil {
-			return GetAllResponse{}, errors.New("failed to get service deployable config by id: " + err.Error())
+		serviceDeployableTable, exists := serviceDeployableMap[disocveryTable.ServiceDeployableID]
+		if !exists {
+			return GetAllResponse{}, errors.New("failed to find service deployable config by id: " + strconv.Itoa(disocveryTable.ServiceDeployableID))
 		}
 
 		ConfigValue := AdaptFromDbToInferFlowConfig(table.ConfigValue)
 
-		infraConfig := m.infrastructureHandler.GetConfig(serviceDeployableTable.Name, m.workingEnv)
-		// Convert to mainHandler.Config for compatibility
-		DeployableConfig := mainHandler.Config{
-			MinReplica:    infraConfig.MinReplica,
-			MaxReplica:    infraConfig.MaxReplica,
-			RunningStatus: infraConfig.RunningStatus,
-		}
+		ringMasterConfig := ringMasterConfigs[serviceDeployableTable.ID]
 
 		responseConfigs[i] = ConfigTable{
 			ConfigID:                table.ConfigID,
 			ConfigValue:             ConfigValue,
 			Host:                    serviceDeployableTable.Host,
-			DeployableRunningStatus: DeployableConfig.RunningStatus == "true",
+			DeployableRunningStatus: ringMasterConfig.RunningStatus == "true",
 			MonitoringUrl:           serviceDeployableTable.MonitoringUrl,
 			CreatedBy:               table.CreatedBy,
 			UpdatedBy:               table.UpdatedBy,
@@ -768,6 +1147,7 @@ func (m *InferFlow) GetAll() (GetAllResponse, error) {
 				Tested:  table.TestResults.Tested,
 				Message: table.TestResults.Message,
 			},
+			SourceConfigID: table.SourceConfigID,
 		}
 
 	}
@@ -777,6 +1157,81 @@ func (m *InferFlow) GetAll() (GetAllResponse, error) {
 		Data:  responseConfigs,
 	}
 	return response, nil
+}
+
+func (m *InferFlow) batchFetchDiscoveryConfigs(discoveryIDs []int) (
+	map[int]*discovery_config.DiscoveryConfig,
+	map[int]*service_deployable_config.ServiceDeployableConfig,
+	error,
+) {
+	emptyDiscoveryMap := make(map[int]*discovery_config.DiscoveryConfig)
+	emptyServiceDeployableMap := make(map[int]*service_deployable_config.ServiceDeployableConfig)
+
+	if len(discoveryIDs) == 0 {
+		return emptyDiscoveryMap, emptyServiceDeployableMap, nil
+	}
+
+	discoveryConfigs, err := m.DiscoveryConfigRepo.GetByServiceDeployableIDs(discoveryIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get discovery configs: %w", err)
+	}
+
+	discoveryMap := make(map[int]*discovery_config.DiscoveryConfig)
+	for i := range discoveryConfigs {
+		discoveryMap[discoveryConfigs[i].ID] = &discoveryConfigs[i]
+	}
+
+	serviceDeployableIDsMap := make(map[int]bool)
+	for _, dc := range discoveryConfigs {
+		serviceDeployableIDsMap[dc.ServiceDeployableID] = true
+	}
+
+	serviceDeployableIDs := make([]int, 0, len(serviceDeployableIDsMap))
+	for id := range serviceDeployableIDsMap {
+		serviceDeployableIDs = append(serviceDeployableIDs, id)
+	}
+
+	if len(serviceDeployableIDs) == 0 {
+		return discoveryMap, emptyServiceDeployableMap, nil
+	}
+
+	serviceDeployables, err := m.ServiceDeployableConfigRepo.GetByIds(serviceDeployableIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get service deployable configs: %w", err)
+	}
+
+	serviceDeployableMap := make(map[int]*service_deployable_config.ServiceDeployableConfig)
+	for i := range serviceDeployables {
+		serviceDeployableMap[serviceDeployables[i].ID] = &serviceDeployables[i]
+	}
+
+	return discoveryMap, serviceDeployableMap, nil
+}
+
+func (m *InferFlow) batchFetchRingMasterConfigs(serviceDeployables map[int]*service_deployable_config.ServiceDeployableConfig) (map[int]infrastructurehandler.Config, error) {
+	ringMasterConfigs := make(map[int]infrastructurehandler.Config)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	semaphore := make(chan struct{}, 10)
+
+	for id, deployable := range serviceDeployables {
+		wg.Add(1)
+		go func(deployableID int, sd *service_deployable_config.ServiceDeployableConfig) {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			config := m.infrastructureHandler.GetConfig(sd.Name, inferflowPkg.AppEnv)
+
+			mu.Lock()
+			ringMasterConfigs[deployableID] = config
+			mu.Unlock()
+		}(id, deployable)
+	}
+
+	wg.Wait()
+	return ringMasterConfigs, nil
 }
 
 func (m *InferFlow) ValidateRequest(request ValidateRequest, token string) (Response, error) {
@@ -858,6 +1313,15 @@ func ValidateInferFlowConfig(config InferflowConfig, token string) (Response, er
 }
 
 func (m *InferFlow) ValidateOnboardRequest(request OnboardPayload) (Response, error) {
+	outputs := mapset.NewSet[string]()
+	deployableConfig, err := m.ServiceDeployableConfigRepo.GetById(request.ConfigMapping.DeployableID)
+	if err != nil {
+		return Response{
+			Error: "Failed to fetch deployable config for the request",
+			Data:  Message{Message: emptyResponse},
+		}, errors.New("Failed to fetch deployable config for the request")
+	}
+	permissibleEndpoints := m.EtcdConfig.GetConfiguredEndpoints(deployableConfig.Name)
 	for _, ranker := range request.Rankers {
 		if len(ranker.EntityID) == 0 {
 			return Response{
@@ -865,12 +1329,31 @@ func (m *InferFlow) ValidateOnboardRequest(request OnboardPayload) (Response, er
 				Data:  Message{Message: emptyResponse},
 			}, errors.New("Entity ID is not set for model: " + ranker.ModelName)
 		}
+		if !permissibleEndpoints.Contains(ranker.EndPoint) {
+			errorMsg := fmt.Sprintf(
+				"invalid endpoint: %s chosen for service deployable: %s for model: %s",
+				ranker.EndPoint, deployableConfig.Name, ranker.ModelName,
+			)
+			return Response{
+				Error: errorMsg,
+				Data:  Message{Message: emptyResponse},
+			}, errors.New(errorMsg)
+		}
 		for _, output := range ranker.Outputs {
 			if len(output.ModelScores) != len(output.ModelScoresDims) {
 				return Response{
 					Error: "model scores and model scores dims are not equal for model: " + ranker.ModelName,
 					Data:  Message{Message: emptyResponse},
 				}, errors.New("model scores and model scores dims are not equal for model: " + ranker.ModelName)
+			}
+			for _, modelScore := range output.ModelScores {
+				if outputs.Contains(modelScore) {
+					return Response{
+						Error: "duplicate model scores: " + modelScore + " for model: " + ranker.ModelName,
+						Data:  Message{Message: emptyResponse},
+					}, errors.New("duplicate model scores: " + modelScore + " for model: " + ranker.ModelName)
+				}
+				outputs.Add(modelScore)
 			}
 		}
 	}
@@ -895,6 +1378,56 @@ func (m *InferFlow) ValidateOnboardRequest(request OnboardPayload) (Response, er
 					Error: "invalid eq variable: " + value,
 					Data:  Message{Message: emptyResponse},
 				}, errors.New("invalid eq variable: " + value)
+			}
+		}
+		if outputs.Contains(reRanker.Score) {
+			return Response{
+				Error: "duplicate score: " + reRanker.Score + " for reRanker: " + reRanker.Score,
+				Data:  Message{Message: emptyResponse},
+			}, errors.New("duplicate score: " + reRanker.Score + " for reRanker: " + reRanker.Score)
+		}
+		outputs.Add(reRanker.Score)
+	}
+
+	// Validate MODEL_FEATURE list
+	for _, ranker := range request.Rankers {
+		for _, input := range ranker.Inputs {
+			for _, feature := range input.Features {
+				featureParts := strings.Split(feature, PIPE_DELIMITER)
+				if len(featureParts) != 2 {
+					return Response{
+						Error: "invalid feature: " + feature + " in input features of ranker: " + ranker.ModelName,
+						Data:  Message{Message: emptyResponse},
+					}, errors.New("invalid feature: " + feature + " in input features of ranker: " + ranker.ModelName)
+				}
+				if strings.Contains(featureParts[0], MODEL_FEATURE) {
+					if !outputs.Contains(featureParts[1]) {
+						return Response{
+							Error: "model score " + featureParts[1] + " is not found in other model scores of ranker: " + ranker.ModelName,
+							Data:  Message{Message: emptyResponse},
+						}, errors.New("model score " + featureParts[1] + " is not found in other model scores of ranker: " + ranker.ModelName)
+					}
+				}
+			}
+		}
+	}
+
+	for _, reRanker := range request.ReRankers {
+		for _, feature := range reRanker.EqVariables {
+			featureParts := strings.Split(feature, PIPE_DELIMITER)
+			if len(featureParts) != 2 {
+				return Response{
+					Error: "invalid feature: " + feature,
+					Data:  Message{Message: emptyResponse},
+				}, errors.New("invalid feature: " + feature)
+			}
+			if strings.Contains(featureParts[0], MODEL_FEATURE) {
+				if !outputs.Contains(featureParts[1]) {
+					return Response{
+						Error: "model score " + featureParts[1] + " is not found in other model scores of re ranker: " + strconv.Itoa(reRanker.EqID),
+						Data:  Message{Message: emptyResponse},
+					}, errors.New("model score " + featureParts[1] + " is not found in other model scores of re ranker: " + strconv.Itoa(reRanker.EqID))
+				}
 			}
 		}
 	}
@@ -956,26 +1489,18 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 			ep = strings.TrimPrefix(ep, "https://")
 		}
 		ep = strings.TrimSuffix(ep, "/")
-
-		// Check if port is already present
-		hasPort := false
 		if idx := strings.LastIndex(ep, ":"); idx != -1 {
-			// Ensure the colon is part of a port, not in a hostname
 			if idx < len(ep)-1 {
-				hasPort = true
+				ep = ep[:idx]
 			}
 		}
 
-		// Only add port if not already present
-		if !hasPort {
-			port := ":8080"
-			env := strings.ToLower(strings.TrimSpace(inferflowPkg.AppEnv))
-			if env == "stg" || env == "int" {
-				port = ":80"
-			}
-			ep = ep + port
+		port := ":8080"
+		env := strings.ToLower(strings.TrimSpace(inferflowPkg.AppEnv))
+		if env == "stg" || env == "int" {
+			port = ":80"
 		}
-
+		ep = ep + port
 		return ep
 	}(request.EndPoint)
 
@@ -1018,7 +1543,7 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 
 	protoResponse := &pb.InferflowResponseProto{}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
 	defer cancel()
 	err = grpc.SendGRPCRequest(ctx, conn, inferFlowRetrieveModelScoreMethod, protoRequest, protoResponse, md)
@@ -1053,7 +1578,9 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 	inferFlowConfig, err := m.InferFlowConfigRepo.GetByID(request.RequestBody.ModelConfigID)
 
 	if err != nil {
-		fmt.Println("Error getting model proxy config: ", err)
+		fmt.Println("Error getting inferflow config: ", err)
+	} else if inferFlowConfig == nil {
+		log.Error().Msgf("inferflow config '%s' does not exist in DB", request.RequestBody.ModelConfigID)
 	} else {
 		if response.Error != emptyResponse {
 			inferFlowConfig.TestResults = inferflow.TestResults{
@@ -1068,7 +1595,7 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 		}
 		err = m.InferFlowConfigRepo.Update(inferFlowConfig)
 		if err != nil {
-			fmt.Println("Error updating model proxy config: ", err)
+			fmt.Println("Error updating inferflow config: ", err)
 		}
 	}
 
@@ -1117,8 +1644,56 @@ func (m *InferFlow) GetLatestRequest(requestID string) (GetLatestRequestResponse
 	}, nil
 }
 
+func (m *InferFlow) GetDerivedConfigID(configID string, deployableID int) (string, error) {
+	serviceDeployableConfig, err := m.ServiceDeployableConfigRepo.GetById(deployableID)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch service service deployable config for name generation: %w", err)
+	}
+	deployableTag := serviceDeployableConfig.DeployableTag
+	if deployableTag == "" {
+		return configID, nil
+	}
+
+	derivedConfigID := configID + deployableTagDelimiter + deployableTag + deployableTagDelimiter + scaleupTag
+	return derivedConfigID, nil
+}
+
 func (m *InferFlow) GetLoggingTTL() (GetLoggingTTLResponse, error) {
 	return GetLoggingTTLResponse{
 		Data: []int{30, 60, 90},
+	}, nil
+}
+
+func (m *InferFlow) GetFeatureSchema(request FeatureSchemaRequest) (FeatureSchemaResponse, error) {
+	version, err := strconv.Atoi(request.Version)
+	if err != nil {
+		return FeatureSchemaResponse{
+			Data: []inferflow.SchemaComponents{},
+		}, err
+	}
+	inferflowRequests, err := m.InferFlowRequestRepo.GetByConfigIDandVersion(request.ModelConfigId, version)
+	if err != nil {
+		log.Error().Err(err).Str("model_config_id", request.ModelConfigId).Msg("Failed to get inferflow config")
+		return FeatureSchemaResponse{
+			Data: []inferflow.SchemaComponents{},
+		}, err
+	}
+	inferflowConfig := inferflowRequests[0].Payload
+	componentConfig := &inferflowConfig.ConfigValue.ComponentConfig
+	responseConfig := &inferflowConfig.ConfigValue.ResponseConfig
+
+	response := BuildFeatureSchemaFromInferflow(componentConfig, responseConfig)
+
+	if responseConfig.LogSelectiveFeatures {
+		responseSchemaComponents := ProcessResponseConfigFromInferflow(responseConfig, response)
+		log.Info().Str("model_config_id", request.ModelConfigId).Int("schema_components_count", len(responseSchemaComponents)).Msg("Successfully generated feature schema")
+		return FeatureSchemaResponse{
+			Data: responseSchemaComponents,
+		}, nil
+	}
+
+	log.Info().Str("model_config_id", request.ModelConfigId).Int("schema_components_count", len(response)).Msg("Successfully generated feature schema")
+	return FeatureSchemaResponse{
+		Data: response,
 	}, nil
 }

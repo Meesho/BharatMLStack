@@ -3,8 +3,10 @@ package etcd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/inferflow"
+	mapset "github.com/deckarep/golang-set/v2"
 
 	"github.com/Meesho/BharatMLStack/horizon/pkg/etcd"
 	"github.com/rs/zerolog/log"
@@ -16,6 +18,10 @@ type Etcd struct {
 	appName           string
 	env               string
 }
+
+const (
+	commaDelimiter = ","
+)
 
 func NewEtcdInstance() *Etcd {
 	return &Etcd{
@@ -37,7 +43,7 @@ func (e *Etcd) GetInferflowEtcdInstance() *ModelConfigRegistery {
 func (e *Etcd) GetHorizonEtcdInstance() *HorizonRegistry {
 	instance, ok := e.horizonInstance.GetConfigInstance().(*HorizonRegistry)
 	if !ok {
-		log.Panic().Msg("invalid etcd instanc	e")
+		log.Panic().Msg("invalid etcd instance")
 	}
 	return instance
 }
@@ -79,4 +85,33 @@ func (e *Etcd) UpdateConfig(serviceName string, ConfigId string, InferflowConfig
 
 func (e *Etcd) DeleteConfig(serviceName string, ConfigId string) error {
 	return e.inferflowInstance.DeleteNode(fmt.Sprintf("/config/%s/services/%s/model-config/config-map/%s", e.appName, serviceName, ConfigId))
+}
+
+func (e *Etcd) GetConfiguredEndpoints(serviceDeployableName string) mapset.Set[string] {
+	validEndpoints := mapset.NewSet[string]()
+	instance := e.GetInferflowEtcdInstance()
+	if instance == nil {
+		return validEndpoints
+	}
+
+	inferflowConfig, exists := instance.InferflowConfig[serviceDeployableName]
+	if !exists {
+		log.Warn().Msgf("service '%s' not found in etcd registry", serviceDeployableName)
+		return validEndpoints
+	}
+
+	predatorHosts := inferflowConfig.ModelConfig.ServiceConfig.PredatorHosts
+	if predatorHosts == "" {
+		return validEndpoints
+	}
+
+	endpoints := strings.Split(predatorHosts, commaDelimiter)
+	for i := range len(endpoints) {
+		cleanedEndpoint := strings.TrimSpace(endpoints[i])
+		if cleanedEndpoint == "" {
+			continue
+		}
+		validEndpoints.Add(cleanedEndpoint)
+	}
+	return validEndpoints
 }

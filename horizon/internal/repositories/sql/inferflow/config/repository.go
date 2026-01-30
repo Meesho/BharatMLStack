@@ -18,6 +18,9 @@ type Repository interface {
 	Update(table *Table) error
 	FindByDiscoveryIDsAndCreatedBefore(discoveryIDs []int, daysAgo int) ([]Table, error)
 	Deactivate(configID string) error
+	DeleteByConfigIDTx(tx *gorm.DB, configID string) error
+	GetLatestInactiveByConfigID(tx *gorm.DB, configID string) (*Table, error)
+	ReactivateByIDTx(tx *gorm.DB, id int, updatedBy string) error
 }
 
 type InferflowConfig struct {
@@ -84,8 +87,17 @@ func (g *InferflowConfig) GetAll() ([]Table, error) {
 }
 
 func (g *InferflowConfig) GetByID(configID string) (table *Table, err error) {
-	result := g.db.Where("config_id = ? and active = ?", configID, true).First(&table)
-	return table, result.Error
+	result := g.db.Where("config_id = ? and active = ?", configID, true).
+		Order("updated_at DESC").
+		First(table)
+
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return table, nil
 }
 
 func (g *InferflowConfig) DoesConfigIDExist(configID string) (bool, error) {
@@ -118,4 +130,45 @@ func (r *InferflowConfig) FindByDiscoveryIDsAndCreatedBefore(discoveryIDs []int,
 
 func (g *InferflowConfig) Deactivate(configID string) error {
 	return g.db.Model(&Table{}).Where("config_id = ?", configID).Update("active", false).Error
+}
+
+func (g *InferflowConfig) DeleteByConfigIDTx(tx *gorm.DB, configID string) error {
+	result := tx.Where("config_id = ?", configID).Delete(&Table{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("no config found with the given config_id")
+	}
+	return nil
+}
+
+func (g *InferflowConfig) GetLatestInactiveByConfigID(tx *gorm.DB, configID string) (*Table, error) {
+	var table Table
+	err := tx.Where("config_id = ? AND active = ?", configID, false).
+		Order("updated_at DESC").
+		First(&table).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &table, nil
+}
+
+func (g *InferflowConfig) ReactivateByIDTx(tx *gorm.DB, id int, updatedBy string) error {
+	result := tx.Model(&Table{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"active":     true,
+		"updated_by": updatedBy,
+		"updated_at": time.Now(),
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("no config found with the given id")
+	}
+	return nil
 }

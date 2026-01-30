@@ -24,6 +24,7 @@ const (
 	RTP_FEATURE                 = "RTP"
 	PCTR_CALIBRATION            = "PCTR_CALIBRATION"
 	PCVR_CALIBRATION            = "PCVR_CALIBRATION"
+	SEEN_SCORE                  = "SEEN_SCORE_FEATURE"
 	PIPE_DELIMITER              = "|"
 	UNDERSCORE_DELIMITER        = "_"
 	COLON_DELIMITER             = ":"
@@ -31,13 +32,55 @@ const (
 	featureClassOffline         = "offline"
 	featureClassOnline          = "online"
 	featureClassDefault         = "default"
+	featureClassModel           = "model"
 	featureClassRtp             = "rtp"
 	featureClassPCVRCalibration = "pcvr_calibration"
 	featureClassPCTRCalibration = "pctr_calibration"
+	featureClassSeenScore       = "seen_score"
 	featureClassInvalid         = "invalid"
 	COMPONENT_NAME_PREFIX       = "composite_key_gen_"
 	FEATURE_INITIALIZER         = "feature_initializer"
+	SeenScoreComponentName      = "product_seen_score"
+	SeenScoreDefaultDataType    = "DataTypeString"
 )
+
+type FeatureLists struct {
+	allFeatureList mapset.Set[string]
+
+	rtpFeatures, pcvrCalibrationFeatures, pctrCalibrationFeatures, seenScoreFeatures mapset.Set[string]
+
+	featureToDataType, predatorAndIrisOutputsToDataType, offlineToOnlineMapping map[string]string
+}
+
+type ClassifiedFeatures struct {
+	OfflineFeatures mapset.Set[string]
+
+	OnlineFeatures mapset.Set[string]
+
+	DefaultFeatures mapset.Set[string]
+
+	RTPFeatures mapset.Set[string]
+
+	PCTRCalibrationFeatures mapset.Set[string]
+
+	PCVRCalibrationFeatures mapset.Set[string]
+
+	SeenScoreFeatures mapset.Set[string]
+
+	FeatureToDataType map[string]string
+}
+
+type AllComponents struct {
+	FeatureComponents []FeatureComponent
+
+	RTPComponents []RTPComponent
+
+	IrisComponents []NumerixComponent
+
+	PredatorComponents []PredatorComponent
+
+	SeenScoreComponents []SeenScoreComponent
+}
 
 func (m *InferFlow) GetInferflowConfig(request InferflowOnboardRequest, token string) (InferflowConfig, error) {
 	// RTP client is initialized in externalcall.Init()
@@ -63,12 +106,12 @@ func (m *InferFlow) GetInferflowConfig(request InferflowOnboardRequest, token st
 		return InferflowConfig{}, err
 	}
 
-	rtpComponents, err := GetRTPComponents(request, rtpFeatures, featureToDataType, m.EtcdConfig, token)
+	rtpComponents, err := GetRTPComponents(request, rtpFeatures, m.EtcdConfig, token)
 	if err != nil {
 		return InferflowConfig{}, err
 	}
 
-	featureComponents, err := GetFeatureComponents(request, featureList, featureToDataType, pcvrCalibrationFeatures, pctrCalibrationFeatures, m.EtcdConfig, token, entityIDs)
+	featureComponents, err := GetFeatureComponents(request, featureList, pcvrCalibrationFeatures, pctrCalibrationFeatures, m.EtcdConfig, token, entityIDs)
 	if err != nil {
 		return InferflowConfig{}, err
 	}
@@ -98,7 +141,7 @@ func (m *InferFlow) GetInferflowConfig(request InferflowOnboardRequest, token st
 func GetFeatureList(request InferflowOnboardRequest, etcdConfig etcd.Manager, token string, entityIDs map[string]bool) (mapset.Set[string], map[string]string, mapset.Set[string], mapset.Set[string], mapset.Set[string], map[string]string, map[string]string, error) {
 	initialFeatures, featureToDataType, predatorAndIrisOutputsToDataType := extractFeatures(request, entityIDs)
 
-	offlineFeatures, onlineFeatures, _, rtpFeatures, pctrCalibrationFeatures, pcvrCalibrationFeatures, newFeatureToDataType, err := classifyFeatures(initialFeatures, featureToDataType)
+	offlineFeatures, onlineFeatures, defaultFeatures, rtpFeatures, pctrCalibrationFeatures, pcvrCalibrationFeatures, newFeatureToDataType, err := classifyFeatures(initialFeatures, featureToDataType)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, err
 	}
@@ -172,6 +215,15 @@ func GetFeatureList(request InferflowOnboardRequest, etcdConfig etcd.Manager, to
 	// 	features.Add(f)
 	// }
 
+	for _, f := range defaultFeatures.ToSlice() {
+		if _, exists := predatorAndIrisOutputsToDataType[f]; exists {
+			continue
+		}
+		if featureToDataType[f] == "" {
+			featureToDataType[f] = "String"
+		}
+	}
+
 	if err := fetchMissingDatatypes(featureToDataType, rtpFeatures, pctrCalibrationFeatures, pcvrCalibrationFeatures, onlineFeatures, token); err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, err
 	}
@@ -224,7 +276,7 @@ func extractFeatures(request InferflowOnboardRequest, entityIDs map[string]bool)
 	for _, ranker := range request.Payload.Rankers {
 		for _, input := range ranker.Inputs {
 			for _, feature := range input.Features {
-				addFeature(feature, input.DataType)
+				addFeature(feature, "")
 			}
 		}
 
@@ -386,6 +438,7 @@ func classifyFeatures(
 	featureDataTypes map[string]string,
 ) (mapset.Set[string], mapset.Set[string], mapset.Set[string], mapset.Set[string], mapset.Set[string], mapset.Set[string], map[string]string, error) {
 	defaultFeatures := mapset.NewSet[string]()
+	modelFeatures := mapset.NewSet[string]()
 	onlineFeatures := mapset.NewSet[string]()
 	offlineFeatures := mapset.NewSet[string]()
 	rtpFeatures := mapset.NewSet[string]()
@@ -394,7 +447,7 @@ func classifyFeatures(
 	newFeatureToDataType := make(map[string]string)
 
 	add := func(name, originalFeature string, featureType string) error {
-		if err := AddFeatureToSet(&defaultFeatures, &onlineFeatures, &offlineFeatures, &rtpFeatures, &pctrCalibrationFeatures, &pcvrCalibrationFeatures, name, featureType); err != nil {
+		if err := AddFeatureToSet(&defaultFeatures, &modelFeatures, &onlineFeatures, &offlineFeatures, &rtpFeatures, &pctrCalibrationFeatures, &pcvrCalibrationFeatures, name, featureType); err != nil {
 			return fmt.Errorf("error classifying feature: %w", err)
 		}
 		newFeatureToDataType[name] = featureDataTypes[originalFeature]
@@ -415,9 +468,10 @@ func classifyFeatures(
 	return offlineFeatures, onlineFeatures, defaultFeatures, rtpFeatures, pctrCalibrationFeatures, pcvrCalibrationFeatures, newFeatureToDataType, nil
 }
 
-func AddFeatureToSet(defaultFeatures, onlineFeatures, offlineFeatures, rtpFeatures, pctrCalibrationFeatures, pcvrCalibrationFeatures *mapset.Set[string], feature string, featureType string) error {
+func AddFeatureToSet(defaultFeatures, modelFeatures, onlineFeatures, offlineFeatures, rtpFeatures, pctrCalibrationFeatures, pcvrCalibrationFeatures *mapset.Set[string], feature string, featureType string) error {
 	allSets := map[string]*mapset.Set[string]{
 		featureClassDefault:         defaultFeatures,
+		featureClassModel:           modelFeatures,
 		featureClassOnline:          onlineFeatures,
 		featureClassOffline:         offlineFeatures,
 		featureClassRtp:             rtpFeatures,
@@ -474,6 +528,8 @@ func transformFeature(feature string) (string, string, error) {
 			switch featureTypes[1] {
 			case DEFAULT_FEATURE:
 				return newFeature, featureClassDefault, nil
+			case MODEL_FEATURE:
+				return newFeature, featureClassModel, nil
 			case ONLINE_FEATURE, CALIBRATION:
 				return newFeature, featureClassOnline, nil
 			case OFFLINE_FEATURE:
@@ -491,6 +547,8 @@ func transformFeature(feature string) (string, string, error) {
 	switch featureTypes[0] {
 	case DEFAULT_FEATURE:
 		return featureName, featureClassDefault, nil
+	case MODEL_FEATURE:
+		return featureName, featureClassModel, nil
 	case ONLINE_FEATURE, CALIBRATION:
 		return featureName, featureClassOnline, nil
 	case OFFLINE_FEATURE:
@@ -689,7 +747,7 @@ func GetOnlineFeatureMapping(offlineFeatureList mapset.Set[string], token string
 	return response.Data, nil
 }
 
-func GetFeatureComponents(request InferflowOnboardRequest, featureList mapset.Set[string], featureToDataType map[string]string, pcvrCalibrationFeatures mapset.Set[string], pctrCalibrationFeatures mapset.Set[string], etcdConfig etcd.Manager, token string, entityIDs map[string]bool) ([]FeatureComponent, error) {
+func GetFeatureComponents(request InferflowOnboardRequest, featureList mapset.Set[string], pcvrCalibrationFeatures mapset.Set[string], pctrCalibrationFeatures mapset.Set[string], etcdConfig etcd.Manager, token string, entityIDs map[string]bool) ([]FeatureComponent, error) {
 	featureComponents := make([]FeatureComponent, 0, featureList.Cardinality()+pcvrCalibrationFeatures.Cardinality()+pctrCalibrationFeatures.Cardinality())
 
 	featureComponentsMap := GetFeatureLabelToPrefixToFeatureGroupToFeatureMap(featureList.ToSlice())
@@ -937,7 +995,7 @@ func GetFeatureGroupDataTypeMap(label string, token string) (map[string]string, 
 	return featureGroupDataTypeMap, nil
 }
 
-func GetRTPComponents(request InferflowOnboardRequest, rtpFeatures mapset.Set[string], featureToDataTypeMap map[string]string, etcdConfig etcd.Manager, token string) ([]RTPComponent, error) {
+func GetRTPComponents(request InferflowOnboardRequest, rtpFeatures mapset.Set[string], etcdConfig etcd.Manager, token string) ([]RTPComponent, error) {
 	rtpComponents := make([]RTPComponent, 0)
 
 	if rtpFeatures.Cardinality() == 0 {
@@ -946,7 +1004,7 @@ func GetRTPComponents(request InferflowOnboardRequest, rtpFeatures mapset.Set[st
 
 	featureDataTypeMap, err := GetRTPFeatureGroupDataTypeMap()
 	if err != nil && inferflow.IsMeeshoEnabled {
-		return rtpComponents, nil
+		return rtpComponents, fmt.Errorf("RTP Components: failed to fetch RTP feature data-type map: %w", err)
 	}
 	rtpFeatureComponentsMap := GetRTPFeatureLabelToPrefixToFeatureGroupToFeatureMap(rtpFeatures.ToSlice())
 	for label, prefixToFeatureGroupToFeatureMap := range rtpFeatureComponentsMap {
@@ -1223,6 +1281,9 @@ func getNumerixScoreMapping(eqVariables map[string]string, offlineToOnlineMappin
 		if keyDataType == "" {
 			keyDataType = predatorAndNumerixOutputsToDataType[transformedFeature]
 		}
+		if keyDataType == "" {
+			return nil, fmt.Errorf("numerix Score Mapping: key data type for '%s' not found", transformedFeature)
+		}
 		if !strings.Contains(keyDataType, "DataType") {
 			key = key + "@DataType" + keyDataType
 		} else {
@@ -1253,6 +1314,7 @@ func GetResponseConfigs(request *InferflowOnboardRequest) (*FinalResponseConfig,
 		Features:             request.Payload.Response.ResponseFeatures,
 		LogSelectiveFeatures: request.Payload.Response.LogSelectiveFeatures,
 		LogBatchSize:         request.Payload.Response.LogBatchSize,
+		LoggingTTL:           request.Payload.Response.LoggingTTL,
 	}
 
 	return responseConfigs, nil

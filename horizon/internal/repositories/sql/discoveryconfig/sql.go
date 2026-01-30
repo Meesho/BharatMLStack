@@ -2,6 +2,7 @@ package discoveryconfig
 
 import (
 	"errors"
+	"time"
 
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"gorm.io/gorm"
@@ -16,8 +17,12 @@ type DiscoveryConfigRepository interface {
 	GetByToken(token string) ([]DiscoveryConfig, error)
 	GetById(configId int) (*DiscoveryConfig, error)
 	GetByServiceDeployableID(serviceDeployableID int) ([]DiscoveryConfig, error)
+	GetByServiceDeployableIDs(serviceDeployableIDs []int) ([]DiscoveryConfig, error)
 	DB() *gorm.DB
 	WithTx(tx *gorm.DB) DiscoveryConfigRepository
+	DeleteByIDTx(tx *gorm.DB, id int) error
+	ReactivateByIDTx(tx *gorm.DB, id int) error
+	DeactivateByID(id int, updatedBy string) error
 }
 
 type discoveryConfigRepo struct {
@@ -101,4 +106,31 @@ func (r *discoveryConfigRepo) WithTx(tx *gorm.DB) DiscoveryConfigRepository {
 	return &discoveryConfigRepo{
 		db: tx,
 	}
+}
+
+func (r *discoveryConfigRepo) GetByServiceDeployableIDs(serviceDeployableIDs []int) ([]DiscoveryConfig, error) {
+	if len(serviceDeployableIDs) == 0 {
+		return []DiscoveryConfig{}, nil
+	}
+	var configs []DiscoveryConfig
+	err := r.db.Where("id IN ?", serviceDeployableIDs).Find(&configs).Error
+	return configs, err
+}
+
+func (r *discoveryConfigRepo) DeleteByIDTx(tx *gorm.DB, id int) error {
+	return tx.Where("id = ?", id).Delete(&DiscoveryConfig{}).Error
+}
+
+func (r *discoveryConfigRepo) ReactivateByIDTx(tx *gorm.DB, id int) error {
+	return tx.Model(&DiscoveryConfig{}).Where("id = ?", id).Update("active", true).Error
+}
+
+func (r *discoveryConfigRepo) DeactivateByID(id int, updatedBy string) error {
+	return r.db.Model(&DiscoveryConfig{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"active":     false,
+			"updated_by": updatedBy,
+			"updated_at": time.Now(),
+		}).Error
 }
