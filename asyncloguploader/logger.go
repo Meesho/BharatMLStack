@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"time"
 	"unsafe"
+
+	logger "github.com/rs/zerolog/log"
 )
 
 // Statistics holds operational statistics for the logger
@@ -334,6 +336,12 @@ func (l *Logger) flushBuffers(buffers []*Buffer) {
 			for _, buf := range shardBuffers {
 				totalBytes += len(buf)
 			}
+			logger.Error().Err(err).Msgf(
+				"flush error: buffers=%d bytes=%d duration=%s",
+				len(shardBuffers),
+				totalBytes,
+				writeDuration,
+			)
 			fmt.Printf("[FLUSH_ERROR] Buffers=%d Bytes=%d Error=%v Duration=%v\n",
 				len(shardBuffers), totalBytes, err, writeDuration)
 			// Continue processing - reset buffers even on error to prevent deadlock
@@ -516,6 +524,7 @@ func (l *Logger) Close() error {
 	case <-timeout.C:
 		// Timeout: flush worker might be stuck, but we'll proceed anyway
 		// This prevents deadlock during shutdown
+		logger.Warn().Msg("timeout waiting for flush semaphore during Close(), proceeding anyway")
 		fmt.Printf("[WARNING] Timeout waiting for flush semaphore during Close(), proceeding anyway\n")
 	}
 

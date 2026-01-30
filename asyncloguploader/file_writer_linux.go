@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	logger "github.com/rs/zerolog/log"
 	"golang.org/x/sys/unix"
 )
 
@@ -95,6 +96,7 @@ func (fw *SizeFileWriter) WriteVectored(buffers [][]byte) (int, error) {
 
 	// Check and perform rotation if needed
 	if err := fw.rotateIfNeeded(); err != nil {
+		logger.Error().Err(err).Msgf("rotation failed before write (file=%s)", fw.filePath)
 		return 0, fmt.Errorf("rotation failed: %w", err)
 	}
 
@@ -110,6 +112,7 @@ func (fw *SizeFileWriter) WriteVectored(buffers [][]byte) (int, error) {
 	fw.lastPwritevDuration.Store(pwritevDuration.Nanoseconds())
 
 	if err != nil {
+		logger.Error().Err(err).Msgf("writev failed (file=%s offset=%d)", fw.filePath, offset)
 		return n, err
 	}
 
@@ -177,6 +180,7 @@ func (fw *SizeFileWriter) Close() error {
 				// Successfully sent to channel
 			default:
 				// Channel full - log warning but don't block close
+				logger.Warn().Msgf("upload channel full, skipping upload (file=%s)", completedFilePath)
 				fmt.Printf("[WARNING] Upload channel full, skipping upload for %s\n", completedFilePath)
 			}
 		}
@@ -258,6 +262,7 @@ func (fw *SizeFileWriter) createNextFile() error {
 			return fmt.Errorf("failed to open next file (with and without preallocation): %w", err)
 		}
 		// Log warning but continue (file will work, just without preallocation)
+		logger.Warn().Msgf("failed to preallocate %d bytes for %s, continuing without preallocation", fw.preallocateFileSize, nextPath)
 		fmt.Printf("[WARNING] Failed to preallocate %d bytes for %s, continuing without preallocation\n",
 			fw.preallocateFileSize, nextPath)
 	}
@@ -312,6 +317,7 @@ func (fw *SizeFileWriter) swapFiles() error {
 			// Successfully sent to channel
 		default:
 			// Channel full - log warning but don't block rotation
+			logger.Warn().Msgf("upload channel full, skipping upload (file=%s)", completedFilePath)
 			fmt.Printf("[WARNING] Upload channel full, skipping upload for %s\n", completedFilePath)
 		}
 	}

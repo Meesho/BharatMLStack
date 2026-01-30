@@ -10,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	logger "github.com/rs/zerolog/log"
 )
 
 // SizeFileWriter manages file handles, offset tracking, and size-based rotation for non-Linux systems
@@ -84,6 +86,7 @@ func (fw *SizeFileWriter) WriteVectored(buffers [][]byte) (int, error) {
 
 	// Check and perform rotation if needed
 	if err := fw.rotateIfNeeded(); err != nil {
+		logger.Error().Err(err).Msgf("rotation failed before write (file=%s)", fw.filePath)
 		return 0, fmt.Errorf("rotation failed: %w", err)
 	}
 
@@ -99,6 +102,7 @@ func (fw *SizeFileWriter) WriteVectored(buffers [][]byte) (int, error) {
 		}
 		n, err := fw.file.WriteAt(buf, offset+int64(totalWritten))
 		if err != nil {
+			logger.Error().Err(err).Msgf("write failed (file=%s offset=%d)", fw.filePath, offset+int64(totalWritten))
 			fw.lastPwritevDuration.Store(time.Since(writeStart).Nanoseconds())
 			return totalWritten, err
 		}
@@ -170,6 +174,7 @@ func (fw *SizeFileWriter) Close() error {
 				// Successfully sent to channel
 			default:
 				// Channel full - log warning but don't block close
+				logger.Warn().Msgf("upload channel full, skipping upload (file=%s)", completedFilePath)
 				fmt.Printf("[WARNING] Upload channel full, skipping upload for %s\n", completedFilePath)
 			}
 		}
@@ -281,6 +286,7 @@ func (fw *SizeFileWriter) swapFiles() error {
 		select {
 		case fw.completedFileChan <- completedFilePath:
 		default:
+			logger.Warn().Msgf("upload channel full, skipping upload (file=%s)", completedFilePath)
 			fmt.Printf("[WARNING] Upload channel full, skipping upload for %s\n", completedFilePath)
 		}
 	}

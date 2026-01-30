@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
+	logger "github.com/rs/zerolog/log"
 	"google.golang.org/api/option"
 )
 
@@ -125,17 +125,17 @@ func (u *Uploader) uploadWorker() {
 			continue
 		}
 
-		log.Printf("[DEBUG] Processing file for upload: %s", filePath)
+		logger.Debug().Msgf("Processing file for upload: %s", filePath)
 
 		// Upload file with retries (stats are updated inside uploadFileWithRetry)
 		if err := u.uploadFileWithRetry(filePath); err != nil {
-			log.Printf("[ERROR] Failed to upload %s after %d retries: %v", filePath, u.config.MaxRetries, err)
+			logger.Error().Err(err).Msgf("Failed to upload %s after %d retries", filePath, u.config.MaxRetries)
 			u.statsMu.Lock()
 			u.uploadStats.Failed++
 			u.uploadStats.TotalFiles++
 			u.statsMu.Unlock()
 		} else {
-			log.Printf("[DEBUG] Successfully uploaded: %s", filePath)
+			logger.Debug().Msgf("Successfully uploaded: %s", filePath)
 			u.statsMu.Lock()
 			u.uploadStats.Successful++
 			u.uploadStats.TotalFiles++
@@ -144,7 +144,7 @@ func (u *Uploader) uploadWorker() {
 		}
 	}
 
-	log.Printf("[DEBUG] Upload worker exiting (channel closed)")
+	logger.Debug().Msg("Upload worker exiting (channel closed)")
 }
 
 // uploadFileWithRetry uploads a file with retry logic
@@ -193,7 +193,12 @@ func (u *Uploader) uploadFileWithRetry(filePath string) error {
 
 		lastErr = err
 		if attempt < u.config.MaxRetries {
-			log.Printf("[WARNING] Upload attempt %d/%d failed for %s: %v, retrying...", attempt+1, u.config.MaxRetries+1, filePath, err)
+			logger.Warn().Err(err).Msgf(
+				"Upload attempt %d/%d failed for %s, retrying...",
+				attempt+1,
+				u.config.MaxRetries+1,
+				filePath,
+			)
 		}
 	}
 
@@ -236,7 +241,7 @@ func (u *Uploader) uploadFile(filePath string) error {
 
 	// Delete local file after successful upload
 	if err := os.Remove(filePath); err != nil {
-		log.Printf("[WARNING] Failed to delete local file %s after upload: %v", filePath, err)
+		logger.Warn().Err(err).Msgf("Failed to delete local file %s after upload", filePath)
 		// Non-fatal - upload succeeded
 	}
 
@@ -348,13 +353,13 @@ func (u *Uploader) uploadParallel(ctx context.Context, client *storage.Client, b
 	if err := u.chunkMgr.Compose(ctx, client, bucket, object, chunkObjects); err != nil {
 		// Cleanup on failure
 		u.cleanupTempChunks(ctx, client, bucket, tempPrefix, numChunks)
-		log.Printf("[ERROR] Compose failed for %s (%d chunks): %v. Chunks may remain in GCS.", object, numChunks, err)
+		logger.Error().Err(err).Msgf("Compose failed for %s (%d chunks). Chunks may remain in GCS.", object, numChunks)
 		return fmt.Errorf("compose error: %w", err)
 	}
 
 	// Log successful compose for debugging
 	if numChunks > 1 {
-		log.Printf("[DEBUG] Successfully composed %d chunks into %s", numChunks, object)
+		logger.Debug().Msgf("Successfully composed %d chunks into %s", numChunks, object)
 	}
 
 	// Verify final object size matches expected size
@@ -373,7 +378,7 @@ func (u *Uploader) uploadParallel(ctx context.Context, client *storage.Client, b
 
 	// Cleanup temporary chunk objects
 	if err := u.cleanupTempChunks(ctx, client, bucket, tempPrefix, numChunks); err != nil {
-		log.Printf("[WARNING] Failed to cleanup some temp chunks: %v", err)
+		logger.Warn().Err(err).Msg("Failed to cleanup some temp chunks")
 		// Non-fatal - main upload succeeded
 	}
 
