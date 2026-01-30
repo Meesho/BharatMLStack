@@ -7,6 +7,7 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/rs/zerolog/log"
 	"golang.org/x/sys/unix"
 )
 
@@ -37,6 +38,7 @@ func NewWrapAppendFile(config FileConfig) (*WrapAppendFile, error) {
 		return nil, err
 	}
 	readFd, readFile, rDirectIO, err := createReadFileDescriptor(filename)
+	log.Info().Msgf("readFd: %d, readFile: %v, rDirectIO: %v", readFd, readFile, rDirectIO)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +84,7 @@ func (r *WrapAppendFile) Pwrite(buf []byte) (currentPhysicalOffset int64, err er
 		r.PhysicalWriteOffset = r.PhysicalStartOffset
 	}
 	r.LogicalCurrentOffset += int64(n)
-	r.Stat.WriteCount++
+	// r.Stat.WriteCount++
 	return r.PhysicalWriteOffset, nil
 }
 
@@ -132,7 +134,7 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 	if err != nil {
 		return 0, err
 	}
-	r.Stat.ReadCount++
+	// r.Stat.ReadCount++
 	return int32(n), nil
 }
 
@@ -150,7 +152,7 @@ func (r *WrapAppendFile) TrimHead() (err error) {
 	if r.PhysicalStartOffset >= r.MaxFileSize {
 		r.PhysicalStartOffset = 0
 	}
-	r.Stat.PunchHoleCount++
+	// r.Stat.PunchHoleCount++
 	return nil
 }
 
