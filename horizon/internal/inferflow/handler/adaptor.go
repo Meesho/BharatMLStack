@@ -21,9 +21,9 @@ func AdaptOnboardRequestToDBPayload(req interface{}, inferflowConfig InferflowCo
 
 	dbNumerixComponents := AdaptToDBNumerixComponent(inferflowConfig)
 
-	dbRTPComponents := AdaptToDBRTPComponent(inferflowConfig)
-
-	dbSeenScoreComponents := AdaptToDBSeenScoreComponent(inferflowConfig)
+	// Use interface for internal component adaptation (RTP, SeenScore)
+	dbRTPComponents := InternalComponentBuilderInstance.AdaptToDBRTPComponent(inferflowConfig)
+	dbSeenScoreComponents := InternalComponentBuilderInstance.AdaptToDBSeenScoreComponent(inferflowConfig)
 
 	featureComponents := AdaptToDBFeatureComponent(inferflowConfig)
 
@@ -48,9 +48,9 @@ func AdaptEditRequestToDBPayload(req interface{}, inferflowConfig InferflowConfi
 
 	dbNumerixComponents := AdaptToDBNumerixComponent(inferflowConfig)
 
-	dbRTPComponents := AdaptToDBRTPComponent(inferflowConfig)
-
-	dbSeenScoreComponents := AdaptToDBSeenScoreComponent(inferflowConfig)
+	// Use interface for internal component adaptation (RTP, SeenScore)
+	dbRTPComponents := InternalComponentBuilderInstance.AdaptToDBRTPComponent(inferflowConfig)
+	dbSeenScoreComponents := InternalComponentBuilderInstance.AdaptToDBSeenScoreComponent(inferflowConfig)
 
 	featureComponents := AdaptToDBFeatureComponent(inferflowConfig)
 
@@ -76,9 +76,9 @@ func AdaptCloneConfigRequestToDBPayload(req interface{}, inferflowConfig Inferfl
 
 	dbNumerixComponents := AdaptToDBNumerixComponent(inferflowConfig)
 
-	dbRTPComponents := AdaptToDBRTPComponent(inferflowConfig)
-
-	dbSeenScoreComponents := AdaptToDBSeenScoreComponent(inferflowConfig)
+	// Use interface for internal component adaptation (RTP, SeenScore)
+	dbRTPComponents := InternalComponentBuilderInstance.AdaptToDBRTPComponent(inferflowConfig)
+	dbSeenScoreComponents := InternalComponentBuilderInstance.AdaptToDBSeenScoreComponent(inferflowConfig)
 
 	featureComponents := AdaptToDBFeatureComponent(inferflowConfig)
 
@@ -105,9 +105,9 @@ func AdaptPromoteRequestToDBPayload(req interface{}, requestPayload RequestConfi
 
 	dbNumerixComponents := AdaptToDBNumerixComponent(inferflowConfig)
 
-	dbRTPComponents := AdaptToDBRTPComponent(inferflowConfig)
-
-	dbSeenScoreComponents := AdaptToDBSeenScoreComponent(inferflowConfig)
+	// Use interface for internal component adaptation (RTP, SeenScore)
+	dbRTPComponents := InternalComponentBuilderInstance.AdaptToDBRTPComponent(inferflowConfig)
+	dbSeenScoreComponents := InternalComponentBuilderInstance.AdaptToDBSeenScoreComponent(inferflowConfig)
 
 	featureComponents := AdaptToDBFeatureComponent(inferflowConfig)
 
@@ -135,9 +135,9 @@ func AdaptScaleUpRequestToDBPayload(req interface{}, requestPayload RequestConfi
 
 	dbNumerixComponents := AdaptToDBNumerixComponent(inferflowConfig)
 
-	dbRTPComponents := AdaptToDBRTPComponent(inferflowConfig)
-
-	dbSeenScoreComponents := AdaptToDBSeenScoreComponent(inferflowConfig)
+	// Use interface for internal component adaptation (RTP, SeenScore)
+	dbRTPComponents := InternalComponentBuilderInstance.AdaptToDBRTPComponent(inferflowConfig)
+	dbSeenScoreComponents := InternalComponentBuilderInstance.AdaptToDBSeenScoreComponent(inferflowConfig)
 
 	featureComponents := AdaptToDBFeatureComponent(inferflowConfig)
 
@@ -247,79 +247,6 @@ func AdaptToDBNumerixComponent(inferflowConfig InferflowConfig) []dbModel.Numeri
 	return NumerixComponents
 }
 
-func AdaptToDBRTPComponent(inferflowConfig InferflowConfig) []dbModel.RTPComponent {
-	var rtpComponents []dbModel.RTPComponent
-	for _, rtpComponent := range inferflowConfig.ComponentConfig.RTPComponents {
-		fsKeys := make([]dbModel.FSKey, len(rtpComponent.FSKeys))
-		for i, key := range rtpComponent.FSKeys {
-			fsKeys[i] = dbModel.FSKey{
-				Schema: key.Schema,
-				Col:    key.Col,
-			}
-		}
-		fsFeatureGroups := make([]dbModel.FSFeatureGroup, len(rtpComponent.FeatureRequest.FeatureGroups))
-		for i, grp := range rtpComponent.FeatureRequest.FeatureGroups {
-			fsFeatureGroups[i] = dbModel.FSFeatureGroup{
-				Label:    grp.Label,
-				Features: grp.Features,
-				DataType: grp.DataType,
-			}
-		}
-		fsRequest := dbModel.FSRequest{
-			Label:         rtpComponent.FeatureRequest.Label,
-			FeatureGroups: fsFeatureGroups,
-		}
-		dbRTPComponent := dbModel.RTPComponent{
-			Component:         rtpComponent.Component,
-			ComponentID:       rtpComponent.ComponentID,
-			CompositeID:       rtpComponent.CompositeID,
-			FSKeys:            fsKeys,
-			FSRequest:         &fsRequest,
-			FSFlattenRespKeys: rtpComponent.FSFlattenRespKeys,
-			ColNamePrefix:     rtpComponent.ColNamePrefix,
-			CompCacheEnabled:  rtpComponent.CompCacheEnabled,
-		}
-		rtpComponents = append(rtpComponents, dbRTPComponent)
-	}
-	return rtpComponents
-}
-
-func AdaptToDBSeenScoreComponent(inferflowConfig InferflowConfig) []dbModel.SeenScoreComponent {
-	var seenScoreComponents []dbModel.SeenScoreComponent
-	for _, seenScoreComponent := range inferflowConfig.ComponentConfig.SeenScoreComponents {
-		fsKeys := make([]dbModel.FSKey, len(seenScoreComponent.FSKeys))
-		for i, key := range seenScoreComponent.FSKeys {
-			fsKeys[i] = dbModel.FSKey{
-				Schema: key.Schema,
-				Col:    key.Col,
-			}
-		}
-		var fsRequest *dbModel.FSRequest
-		if seenScoreComponent.FSRequest != nil {
-			fsFeatureGroups := make([]dbModel.FSFeatureGroup, len(seenScoreComponent.FSRequest.FeatureGroups))
-			for i, grp := range seenScoreComponent.FSRequest.FeatureGroups {
-				fsFeatureGroups[i] = dbModel.FSFeatureGroup{
-					Label:    grp.Label,
-					Features: grp.Features,
-					DataType: grp.DataType,
-				}
-			}
-			fsRequest = &dbModel.FSRequest{
-				Label:         seenScoreComponent.FSRequest.Label,
-				FeatureGroups: fsFeatureGroups,
-			}
-		}
-		dbSeenScoreComponent := dbModel.SeenScoreComponent{
-			Component:     seenScoreComponent.Component,
-			ComponentID:   seenScoreComponent.ComponentID,
-			ColNamePrefix: seenScoreComponent.ColNamePrefix,
-			FSKeys:        fsKeys,
-			FSRequest:     fsRequest,
-		}
-		seenScoreComponents = append(seenScoreComponents, dbSeenScoreComponent)
-	}
-	return seenScoreComponents
-}
 
 func AdaptToDBFeatureComponent(inferflowConfig InferflowConfig) []dbModel.FeatureComponent {
 	var featureComponents []dbModel.FeatureComponent
@@ -552,8 +479,8 @@ func AdaptFromDbToComponentConfig(dbComponentConfig dbModel.ComponentConfig) *Co
 		FeatureComponents:   AdaptFromDbToFeatureComponent(dbComponentConfig.FeatureComponents),
 		PredatorComponents:  AdaptFromDbToPredatorComponent(dbComponentConfig.PredatorComponents),
 		NumerixComponents:   AdaptFromDbToNumerixComponent(dbComponentConfig.NumerixComponents),
-		RTPComponents:       AdaptFromDbToRTPComponent(dbComponentConfig.RTPComponents),
-		SeenScoreComponents: AdaptFromDbToSeenScoreComponent(dbComponentConfig.SeenScoreComponents),
+		RTPComponents:       InternalComponentBuilderInstance.AdaptFromDbToRTPComponent(dbComponentConfig.RTPComponents),
+		SeenScoreComponents: InternalComponentBuilderInstance.AdaptFromDbToSeenScoreComponent(dbComponentConfig.SeenScoreComponents),
 	}
 }
 
@@ -642,78 +569,6 @@ func AdaptFromDbToNumerixComponent(dbNumerixComponents []dbModel.NumerixComponen
 	return NumerixComponents
 }
 
-func AdaptFromDbToRTPComponent(dbRTPComponents []dbModel.RTPComponent) []RTPComponent {
-
-	var rtpComponents []RTPComponent
-	for _, rtpComponent := range dbRTPComponents {
-		fsKeys := make([]FSKey, len(rtpComponent.FSKeys))
-		for i, key := range rtpComponent.FSKeys {
-			fsKeys[i] = FSKey{
-				Schema: key.Schema,
-				Col:    key.Col,
-			}
-		}
-		fsFeatureGroups := make([]FSFeatureGroup, len(rtpComponent.FSRequest.FeatureGroups))
-		for i, grp := range rtpComponent.FSRequest.FeatureGroups {
-			fsFeatureGroups[i] = FSFeatureGroup{
-				Label:    grp.Label,
-				Features: grp.Features,
-				DataType: grp.DataType,
-			}
-		}
-		fsRequest := FSRequest{
-			Label:         rtpComponent.FSRequest.Label,
-			FeatureGroups: fsFeatureGroups,
-		}
-		rtpComponents = append(rtpComponents, RTPComponent{
-			Component:         rtpComponent.Component,
-			ComponentID:       rtpComponent.ComponentID,
-			CompositeID:       rtpComponent.CompositeID,
-			FSKeys:            fsKeys,
-			FeatureRequest:    &fsRequest,
-			FSFlattenRespKeys: rtpComponent.FSFlattenRespKeys,
-			ColNamePrefix:     rtpComponent.ColNamePrefix,
-			CompCacheEnabled:  rtpComponent.CompCacheEnabled,
-		})
-	}
-	return rtpComponents
-}
-
-func AdaptFromDbToSeenScoreComponent(dbSeenScoreComponents []dbModel.SeenScoreComponent) []SeenScoreComponent {
-	var seenScoreComponents []SeenScoreComponent
-	for _, seenScoreComponent := range dbSeenScoreComponents {
-		fsKeys := make([]FSKey, len(seenScoreComponent.FSKeys))
-		for i, key := range seenScoreComponent.FSKeys {
-			fsKeys[i] = FSKey{
-				Schema: key.Schema,
-				Col:    key.Col,
-			}
-		}
-		var fsRequest *FSRequest
-		if seenScoreComponent.FSRequest != nil {
-			fsFeatureGroups := make([]FSFeatureGroup, len(seenScoreComponent.FSRequest.FeatureGroups))
-			for i, grp := range seenScoreComponent.FSRequest.FeatureGroups {
-				fsFeatureGroups[i] = FSFeatureGroup{
-					Label:    grp.Label,
-					Features: grp.Features,
-					DataType: grp.DataType,
-				}
-			}
-			fsRequest = &FSRequest{
-				Label:         seenScoreComponent.FSRequest.Label,
-				FeatureGroups: fsFeatureGroups,
-			}
-		}
-		seenScoreComponents = append(seenScoreComponents, SeenScoreComponent{
-			Component:     seenScoreComponent.Component,
-			ComponentID:   seenScoreComponent.ComponentID,
-			ColNamePrefix: seenScoreComponent.ColNamePrefix,
-			FSKeys:        fsKeys,
-			FSRequest:     fsRequest,
-		})
-	}
-	return seenScoreComponents
-}
 
 func AdaptFromDbToFeatureComponent(dbFeatureComponents []dbModel.FeatureComponent) []FeatureComponent {
 	var featureComponents []FeatureComponent
@@ -780,8 +635,8 @@ func AdaptToEtcdComponentConfig(dbComponentConfig dbModel.ComponentConfig) etcdM
 		FeatureComponents:   AdaptToEtcdFeatureComponent(dbComponentConfig.FeatureComponents),
 		PredatorComponents:  AdaptToEtcdPredatorComponent(dbComponentConfig.PredatorComponents),
 		NumerixComponents:   AdaptToEtcdNumerixComponent(dbComponentConfig.NumerixComponents),
-		RTPComponents:       AdaptToEtcdRTPComponent(dbComponentConfig.RTPComponents),
-		SeenScoreComponents: AdaptToEtcdSeenScoreComponent(dbComponentConfig.SeenScoreComponents),
+		RTPComponents:       InternalComponentBuilderInstance.AdaptToEtcdRTPComponent(dbComponentConfig.RTPComponents),
+		SeenScoreComponents: InternalComponentBuilderInstance.AdaptToEtcdSeenScoreComponent(dbComponentConfig.SeenScoreComponents),
 	}
 }
 
@@ -868,78 +723,6 @@ func AdaptToEtcdNumerixComponent(dbNumerixComponents []dbModel.NumerixComponent)
 	return NumerixComponents
 }
 
-func AdaptToEtcdRTPComponent(dbRTPComponents []dbModel.RTPComponent) []etcdModel.RTPComponent {
-
-	var rtpComponents []etcdModel.RTPComponent
-	for _, rtpComponent := range dbRTPComponents {
-		fsKeys := make([]etcdModel.FSKey, len(rtpComponent.FSKeys))
-		for i, key := range rtpComponent.FSKeys {
-			fsKeys[i] = etcdModel.FSKey{
-				Schema: key.Schema,
-				Col:    key.Col,
-			}
-		}
-		fsFeatureGroups := make([]etcdModel.FSFeatureGroup, len(rtpComponent.FSRequest.FeatureGroups))
-		for i, grp := range rtpComponent.FSRequest.FeatureGroups {
-			fsFeatureGroups[i] = etcdModel.FSFeatureGroup{
-				Label:    grp.Label,
-				Features: grp.Features,
-				DataType: grp.DataType,
-			}
-		}
-		fsRequest := etcdModel.FSRequest{
-			Label:         rtpComponent.FSRequest.Label,
-			FeatureGroups: fsFeatureGroups,
-		}
-		rtpComponents = append(rtpComponents, etcdModel.RTPComponent{
-			Component:         rtpComponent.Component,
-			ComponentID:       rtpComponent.ComponentID,
-			CompositeID:       rtpComponent.CompositeID,
-			FSKeys:            fsKeys,
-			FSRequest:         &fsRequest,
-			FSFlattenRespKeys: rtpComponent.FSFlattenRespKeys,
-			ColNamePrefix:     rtpComponent.ColNamePrefix,
-			CompCacheEnabled:  rtpComponent.CompCacheEnabled,
-		})
-	}
-	return rtpComponents
-}
-
-func AdaptToEtcdSeenScoreComponent(dbSeenScoreComponents []dbModel.SeenScoreComponent) []etcdModel.SeenScoreComponent {
-	var seenScoreComponents []etcdModel.SeenScoreComponent
-	for _, seenScoreComponent := range dbSeenScoreComponents {
-		fsKeys := make([]etcdModel.FSKey, len(seenScoreComponent.FSKeys))
-		for i, key := range seenScoreComponent.FSKeys {
-			fsKeys[i] = etcdModel.FSKey{
-				Schema: key.Schema,
-				Col:    key.Col,
-			}
-		}
-		var fsRequest *etcdModel.FSRequest
-		if seenScoreComponent.FSRequest != nil {
-			fsFeatureGroups := make([]etcdModel.FSFeatureGroup, len(seenScoreComponent.FSRequest.FeatureGroups))
-			for i, grp := range seenScoreComponent.FSRequest.FeatureGroups {
-				fsFeatureGroups[i] = etcdModel.FSFeatureGroup{
-					Label:    grp.Label,
-					Features: grp.Features,
-					DataType: grp.DataType,
-				}
-			}
-			fsRequest = &etcdModel.FSRequest{
-				Label:         seenScoreComponent.FSRequest.Label,
-				FeatureGroups: fsFeatureGroups,
-			}
-		}
-		seenScoreComponents = append(seenScoreComponents, etcdModel.SeenScoreComponent{
-			Component:     seenScoreComponent.Component,
-			ComponentID:   seenScoreComponent.ComponentID,
-			ColNamePrefix: seenScoreComponent.ColNamePrefix,
-			FSKeys:        fsKeys,
-			FSRequest:     fsRequest,
-		})
-	}
-	return seenScoreComponents
-}
 
 func AdaptToEtcdFeatureComponent(dbFeatureComponents []dbModel.FeatureComponent) []etcdModel.FeatureComponent {
 	var featureComponents []etcdModel.FeatureComponent

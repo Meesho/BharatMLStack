@@ -675,7 +675,7 @@ func (m *InferFlow) handleApprovedRequest(request ReviewRequest) (Response, erro
 
 	return Response{
 		Error: emptyResponse,
-		Data:  Message{Message: "Mp Config reviewed successfully."},
+		Data:  Message{Message: "Inferflow Config reviewed successfully."},
 	}, nil
 }
 
