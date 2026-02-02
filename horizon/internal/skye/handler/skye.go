@@ -501,7 +501,7 @@ func (s *skyeConfig) ApproveVariantRequest(requestID int, approval ApprovalReque
 			if approval.AdminRateLimiter.RateLimit == 0 || approval.AdminRateLimiter.BurstLimit == 0 {
 				return fmt.Errorf("admin must provide rate_limiter during variant approval")
 			}
-			if approval.AdminCachingConfiguration.DistributedCachingEnabled == false || approval.AdminCachingConfiguration.DistributedCacheTTLSeconds == 0 || approval.AdminCachingConfiguration.InMemoryCachingEnabled == false || approval.AdminCachingConfiguration.InMemoryCacheTTLSeconds == 0 {
+			if approval.AdminCachingConfiguration.DistributedCachingEnabled || approval.AdminCachingConfiguration.DistributedCacheTTLSeconds == 0 || approval.AdminCachingConfiguration.InMemoryCachingEnabled || approval.AdminCachingConfiguration.InMemoryCacheTTLSeconds == 0 {
 				return fmt.Errorf("admin must provide caching_configuration during variant approval")
 			}
 			// For RT Partition, collect all RT partitions for all models across all entities
@@ -707,7 +707,7 @@ func (s *skyeConfig) GetAllFilters() (AllFiltersListResponse, error) {
 		return AllFiltersListResponse{}, fmt.Errorf("failed to get entities from ETCD: %w", err)
 	}
 	filters := make(map[string]map[string]skyeEtcd.Criteria)
-	for entityName, _ := range entities {
+	for entityName := range entities {
 		filtersForEntity, err := s.EtcdConfig.GetFilters(entityName)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to get filters from ETCD")

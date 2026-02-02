@@ -290,7 +290,6 @@ func (s *SkyeManager) RegisterVariant(entity string, model string, variant strin
 
 	// Create variant node
 	variantPath := fmt.Sprintf("/config/%s/entity/%s/models/%s/variants/%s", s.appName, entity, model, variant)
-	s.instance.CreateNode(fmt.Sprintf("%s/enabled", variantPath), true)
 	s.instance.CreateNode(fmt.Sprintf("%s/vector-db-type", variantPath), vectorDbType)
 
 	// Set variant properties
@@ -327,6 +326,7 @@ func (s *SkyeManager) RegisterVariant(entity string, model string, variant strin
 	if err := s.instance.CreateNodes(paths); err != nil {
 		return fmt.Errorf("failed to create variant properties: %w", err)
 	}
+	s.instance.CreateNode(fmt.Sprintf("%s/enabled", variantPath), true)
 	return nil
 }
 
