@@ -36,36 +36,6 @@ const (
 	FEATURE_INITIALIZER         = "feature_initializer"
 )
 
-type FeatureLists struct {
-	allFeatureList mapset.Set[string]
-
-	pcvrCalibrationFeatures, pctrCalibrationFeatures mapset.Set[string]
-
-	featureToDataType, predatorAndIrisOutputsToDataType, offlineToOnlineMapping map[string]string
-}
-
-type ClassifiedFeatures struct {
-	OfflineFeatures mapset.Set[string]
-
-	OnlineFeatures mapset.Set[string]
-
-	DefaultFeatures mapset.Set[string]
-
-	PCTRCalibrationFeatures mapset.Set[string]
-
-	PCVRCalibrationFeatures mapset.Set[string]
-
-	FeatureToDataType map[string]string
-}
-
-type AllComponents struct {
-	FeatureComponents []FeatureComponent
-
-	IrisComponents []NumerixComponent
-
-	PredatorComponents []PredatorComponent
-}
-
 func (m *InferFlow) GetInferflowConfig(request InferflowOnboardRequest, token string) (InferflowConfig, error) {
 	entityIDs := extractEntityIDs(request)
 

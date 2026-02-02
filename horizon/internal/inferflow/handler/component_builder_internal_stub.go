@@ -4,7 +4,6 @@ package handler
 
 import (
 	etcd "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
-	etcdModel "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
 	dbModel "github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/inferflow"
 	mapset "github.com/deckarep/golang-set/v2"
 )
@@ -95,11 +94,11 @@ func (s *internalComponentBuilderStub) AdaptFromDbToSeenScoreComponent(dbSeenSco
 }
 
 // AdaptToEtcdRTPComponent returns empty slice - no RTP components in open-source builds
-func (s *internalComponentBuilderStub) AdaptToEtcdRTPComponent(dbRTPComponents []dbModel.RTPComponent) []etcdModel.RTPComponent {
-	return []etcdModel.RTPComponent{}
+func (s *internalComponentBuilderStub) AdaptToEtcdRTPComponent(dbRTPComponents []dbModel.RTPComponent) []etcd.RTPComponent {
+	return []etcd.RTPComponent{}
 }
 
 // AdaptToEtcdSeenScoreComponent returns empty slice - no SeenScore components in open-source builds
-func (s *internalComponentBuilderStub) AdaptToEtcdSeenScoreComponent(dbSeenScoreComponents []dbModel.SeenScoreComponent) []etcdModel.SeenScoreComponent {
-	return []etcdModel.SeenScoreComponent{}
+func (s *internalComponentBuilderStub) AdaptToEtcdSeenScoreComponent(dbSeenScoreComponents []dbModel.SeenScoreComponent) []etcd.SeenScoreComponent {
+	return []etcd.SeenScoreComponent{}
 }
