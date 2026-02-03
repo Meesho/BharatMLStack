@@ -49,13 +49,14 @@ func toClientComponentConfig(config *inferflow.ComponentConfig) *configschemacli
 	}
 
 	return &configschemaclient.ComponentConfig{
-		CacheEnabled:       config.CacheEnabled,
-		CacheTTL:           config.CacheTTL,
-		CacheVersion:       config.CacheVersion,
-		FeatureComponents:  toClientFeatureComponents(config.FeatureComponents),
-		RTPComponents:      toClientRTPComponents(config.RTPComponents),
-		PredatorComponents: toClientPredatorComponents(config.PredatorComponents),
-		NumerixComponents:  toClientNumerixComponents(config.NumerixComponents),
+		CacheEnabled:        config.CacheEnabled,
+		CacheTTL:            config.CacheTTL,
+		CacheVersion:        config.CacheVersion,
+		FeatureComponents:   toClientFeatureComponents(config.FeatureComponents),
+		RTPComponents:       toClientRTPComponents(config.RTPComponents),
+		SeenScoreComponents: toClientSeenScoreComponents(config.SeenScoreComponents),
+		PredatorComponents:  toClientPredatorComponents(config.PredatorComponents),
+		NumerixComponents:   toClientNumerixComponents(config.NumerixComponents),
 	}
 }
 
@@ -130,6 +131,24 @@ func toClientRTPComponents(components []inferflow.RTPComponent) []configschemacl
 			FSFlattenRespKeys: c.FSFlattenRespKeys,
 			ColNamePrefix:     c.ColNamePrefix,
 			CompCacheEnabled:  c.CompCacheEnabled,
+		}
+	}
+	return result
+}
+
+func toClientSeenScoreComponents(components []inferflow.SeenScoreComponent) []configschemaclient.SeenScoreComponent {
+	if len(components) == 0 {
+		return nil
+	}
+
+	result := make([]configschemaclient.SeenScoreComponent, len(components))
+	for i, c := range components {
+		result[i] = configschemaclient.SeenScoreComponent{
+			Component:     c.Component,
+			ComponentID:   c.ComponentID,
+			ColNamePrefix: c.ColNamePrefix,
+			FSKeys:        toClientFSKeys(c.FSKeys),
+			FSRequest:     toClientFSRequest(c.FSRequest),
 		}
 	}
 	return result

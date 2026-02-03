@@ -724,7 +724,11 @@ func (m *InferFlow) rollbackApprovedRequest(request ReviewRequest, fullTable *in
 }
 
 func (m *InferFlow) rollbackPromoteRequest(tx *gorm.DB, currentRequest *inferflow_request.Table, discoveryID int, configExistedBeforeTx bool) error {
-	if !configExistedBeforeTx {
+	if configExistedBeforeTx {
+		if err := m.rollbackEditRequest(tx, currentRequest, discoveryID); err != nil {
+			return err
+		}
+	} else {
 		if err := m.rollbackCreatedConfigs(tx, currentRequest.ConfigID, discoveryID); err != nil {
 			return err
 		}

@@ -92,7 +92,11 @@ func (p *PredatorService) ProcessBulkDelete(serviceDeployable servicedeployablec
 					continue
 				}
 
-				childConfig, _ := predatorBulkDeleteRepos.predatorConfigRepo.GetActiveModelByModelName(childName)
+				childConfig, err := predatorBulkDeleteRepos.predatorConfigRepo.GetActiveModelByModelName(childName)
+				if err != nil {
+					log.Warn().Err(err).Msgf("Failed to fetch child model config for %s", childName)
+					continue
+				}				
 				if childConfig != nil {
 					modelsToDelete = append(modelsToDelete, ModelInfo{
 						ModelName:         childName,
@@ -120,7 +124,14 @@ func (p *PredatorService) ProcessBulkDelete(serviceDeployable servicedeployablec
 
 	if len(deletedModels) > 0 {
 		// Restart deployable after deletion
-		err = p.infrastructureHandler.RestartDeployment(serviceDeployable.Name, p.workingEnv, false)
+		isCanary := false
+		var deployableConfigMap map[string]interface{}
+		if err := json.Unmarshal(serviceDeployable.Config, &deployableConfigMap); err == nil {
+			if strategy, ok := deployableConfigMap["deploymentStrategy"].(string); ok && strategy == "canary" {
+				isCanary = true
+			}
+		}
+		err = p.infrastructureHandler.RestartDeployment(serviceDeployable.Name, p.workingEnv, isCanary)
 		if err != nil {
 			log.Error().Err(err).Msg("Error restarting deployable")
 		}
