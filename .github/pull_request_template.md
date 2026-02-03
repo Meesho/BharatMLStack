@@ -14,8 +14,8 @@ Please describe how you tested the code. If manual tests were performed - please
 ## Monitoring:
 Explain how this change will be tracked after deployment. Indicate whether current dashboards, alerts, and logs are enough, or if additional instrumentation is required.
 
-## rollback plan 
-explain rollback plan in case of issues.
+## Rollback plan 
+Explain rollback plan in case of issues.
 
 ## Checklist before requesting a review
 - [ ] I have reviewed my own changes?
