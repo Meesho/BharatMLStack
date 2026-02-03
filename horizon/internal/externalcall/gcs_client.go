@@ -748,10 +748,10 @@ func (g *GCSClient) FindFileWithSuffix(bucket, folderPath, suffix string) (bool,
 	if err != nil {
 		return false, "", fmt.Errorf("failed to list objects: %w", err)
 	}
-	return foundFile != "", foundFile, nil
-
-	log.Info().Msgf("No file found with suffix '%s' in %s/%s", suffix, bucket, folderPath)
-	return false, "", nil
+	if foundFile == "" {
+		return false, "", fmt.Errorf("no file found with suffix '%s' in %s/%s", suffix, bucket, folderPath)
+	}
+	return true, foundFile, nil
 }
 
 // ObjectVisitor is called for each object. Return an error to stop iteration.

@@ -5,7 +5,7 @@ import (
 )
 
 // BuildFeatureSchema builds a feature schema from the component and response configs.
-// It processes components in order: FS → RTP → Numerix Output → Predator Output → Numerix Input → Predator Input
+// It processes components in order: FS → RTP → SeenScore → Numerix Output → Predator Output → Numerix Input → Predator Input
 func BuildFeatureSchema(componentConfig *ComponentConfig, responseConfig *ResponseConfig) []SchemaComponents {
 	if componentConfig == nil {
 		return nil
@@ -36,19 +36,22 @@ func BuildFeatureSchema(componentConfig *ComponentConfig, responseConfig *Respon
 	// 1. FS (Feature Store)
 	addUniqueComponents(processFS(componentConfig.FeatureComponents))
 
-	// 2. RTP (Real Time Pricing)
-	addUniqueComponents(processRTP(componentConfig.RTPComponents))
+	// 2. RTP (Real Time Pricing) - Internal component, uses interface
+	addUniqueComponents(InternalSchemaProcessorInstance.ProcessRTP(componentConfig.RTPComponents))
 
-	// 3. Numerix Output
+	// 3. SeenScore - Internal component, uses interface
+	addUniqueComponents(InternalSchemaProcessorInstance.ProcessSeenScore(componentConfig.SeenScoreComponents))
+
+	// 4. Numerix Output
 	addUniqueComponents(processNumerixOutput(componentConfig.NumerixComponents))
 
-	// 4. Predator Output
+	// 5. Predator Output
 	addUniqueComponents(processPredatorOutput(componentConfig.PredatorComponents))
 
-	// 5. Numerix Input (only add if not already present)
+	// 6. Numerix Input (only add if not already present)
 	addOrUpdateComponents(processNumerixInput(componentConfig.NumerixComponents))
 
-	// 6. Predator Input (only add if not already present)
+	// 7. Predator Input (only add if not already present)
 	addOrUpdateComponents(processPredatorInput(componentConfig.PredatorComponents))
 
 	return response
@@ -117,29 +120,6 @@ func processFS(featureComponents []FeatureComponent) []SchemaComponents {
 			for _, feature := range featureGroup.Features {
 				response = append(response, SchemaComponents{
 					FeatureName: getFeatureName(featureComponent.ColNamePrefix, featureComponent.FSRequest.Label, featureGroup.Label, feature),
-					FeatureType: featureGroup.DataType,
-					FeatureSize: 1,
-				})
-			}
-		}
-	}
-	return response
-}
-
-func processRTP(rtpComponents []RTPComponent) []SchemaComponents {
-	if len(rtpComponents) == 0 {
-		return nil
-	}
-
-	var response []SchemaComponents
-	for _, rtpComponent := range rtpComponents {
-		if rtpComponent.FSRequest == nil {
-			continue
-		}
-		for _, featureGroup := range rtpComponent.FSRequest.FeatureGroups {
-			for _, feature := range featureGroup.Features {
-				response = append(response, SchemaComponents{
-					FeatureName: getFeatureName(rtpComponent.ColNamePrefix, rtpComponent.FSRequest.Label, featureGroup.Label, feature),
 					FeatureType: featureGroup.DataType,
 					FeatureSize: 1,
 				})

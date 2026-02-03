@@ -86,10 +86,11 @@ func (g *InferflowConfig) GetAll() ([]Table, error) {
 	return configs, result.Error
 }
 
-func (g *InferflowConfig) GetByID(configID string) (table *Table, err error) {
+func (g *InferflowConfig) GetByID(configID string) (*Table, error) {
+	var table Table
 	result := g.db.Where("config_id = ? and active = ?", configID, true).
 		Order("updated_at DESC").
-		First(table)
+		First(&table)
 
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
@@ -97,7 +98,8 @@ func (g *InferflowConfig) GetByID(configID string) (table *Table, err error) {
 		}
 		return nil, result.Error
 	}
-	return table, nil
+
+	return &table, nil
 }
 
 func (g *InferflowConfig) DoesConfigIDExist(configID string) (bool, error) {

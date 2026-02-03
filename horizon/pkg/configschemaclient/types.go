@@ -9,13 +9,14 @@ type SchemaComponents struct {
 
 // ComponentConfig contains all component configurations
 type ComponentConfig struct {
-	CacheEnabled       bool                `json:"cache_enabled"`
-	CacheTTL           int                 `json:"cache_ttl"`
-	CacheVersion       int                 `json:"cache_version"`
-	FeatureComponents  []FeatureComponent  `json:"feature_components"`
-	RTPComponents      []RTPComponent      `json:"real_time_pricing_feature_components,omitempty"`
-	PredatorComponents []PredatorComponent `json:"predator_components"`
-	NumerixComponents  []NumerixComponent  `json:"numerix_components"`
+	CacheEnabled        bool                 `json:"cache_enabled"`
+	CacheTTL            int                  `json:"cache_ttl"`
+	CacheVersion        int                  `json:"cache_version"`
+	FeatureComponents   []FeatureComponent   `json:"feature_components"`
+	RTPComponents       []RTPComponent       `json:"real_time_pricing_feature_components,omitempty"`
+	SeenScoreComponents []SeenScoreComponent `json:"seen_score_components,omitempty"`
+	PredatorComponents  []PredatorComponent  `json:"predator_components"`
+	NumerixComponents   []NumerixComponent   `json:"numerix_components"`
 }
 
 // ResponseConfig contains response configuration
@@ -60,6 +61,15 @@ type RTPComponent struct {
 	FSFlattenRespKeys []string   `json:"fs_flatten_resp_keys"`
 	ColNamePrefix     string     `json:"col_name_prefix"`
 	CompCacheEnabled  bool       `json:"comp_cache_enabled"`
+}
+
+// SeenScoreComponent represents a seen score component
+type SeenScoreComponent struct {
+	Component     string     `json:"component"`
+	ComponentID   string     `json:"component_id"`
+	ColNamePrefix string     `json:"col_name_prefix,omitempty"`
+	FSKeys        []FSKey    `json:"fs_keys"`
+	FSRequest     *FSRequest `json:"fs_request"`
 }
 
 // PredatorComponent represents a Predator model component
