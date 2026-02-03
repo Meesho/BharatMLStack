@@ -66,7 +66,7 @@ func (i *NumerixService) fetchNonActiveNumerixConfigList(numerixConfigRepo numer
 
 	var allNumerixConfigList []string
 
-	numerixConfigList, err := numerixConfigRepo.FindByCreatedBefore(maxNumerixInactiveAge)
+	numerixConfigList, err := numerixConfigRepo.FindByCreatedBefore(bulkDeleteNumerixMaxInactiveDays)
 	if err != nil {
 		return nil, err
 	}

@@ -29,20 +29,39 @@ type StrategySelectorImpl struct {
 }
 
 var (
-	strategySelectorOnce    sync.Once
-	maxPredatorInactiveAge  int
-	defaultModelPath        string
-	maxInferflowInactiveAge int
-	maxNumerixInactiveAge   int
+	strategySelectorOnce                sync.Once
+	defaultModelPath                    string
+	bulkDeletePredatorEnabled           bool
+	bulkDeletePredatorMaxInactiveDays   int
+	bulkDeleteInferflowEnabled         bool
+	bulkDeleteInferflowMaxInactiveDays int
+	bulkDeleteNumerixEnabled            bool
+	bulkDeleteNumerixMaxInactiveDays    int
+	enablePredatorRequestSubmission     bool
+)
+
+const (
+	inferflowService 	= "inferflow"
+	predatorService   	= "predator"
+	numerixService      = "numerix"
 )
 
 func Init(config configs.Configs) StrategySelectorImpl {
 	var strategySelectorImpl StrategySelectorImpl
 	strategySelectorOnce.Do(func() {
-		maxPredatorInactiveAge = config.MaxPredatorInactiveAge
 		defaultModelPath = config.DefaultModelPath
-		maxInferflowInactiveAge = config.MaxInferflowInactiveAge
-		maxNumerixInactiveAge = config.MaxNumerixInactiveAge
+		
+		bulkDeletePredatorEnabled = config.BulkDeletePredatorEnabled
+		bulkDeletePredatorMaxInactiveDays = config.BulkDeletePredatorMaxInactiveDays
+
+		bulkDeleteInferflowEnabled = config.BulkDeleteInferflowEnabled
+		bulkDeleteInferflowMaxInactiveDays = config.BulkDeleteInferflowMaxInactiveDays
+
+		bulkDeleteNumerixEnabled = config.BulkDeleteNumerixEnabled
+		bulkDeleteNumerixMaxInactiveDays = config.BulkDeleteNumerixMaxInactiveDays
+
+		enablePredatorRequestSubmission = config.BulkDeletePredatorRequestSubmissionEnabled
+
 
 		connection, err := infra.SQL.GetConnection()
 		if err != nil {
@@ -62,7 +81,7 @@ func Init(config configs.Configs) StrategySelectorImpl {
 			sqlConn:               sqlConn,
 			prometheusClient:      externalcall.GetPrometheusClient(),
 			slackClient:           externalcall.GetSlackClient(),
-			gcsClient:             externalcall.CreateGCSClient(config.GcsEnabled),
+			gcsClient:             externalcall.CreateGCSClient(),
 			InferflowEtcdClient:   inferflowEtcdClient,
 			NumerixEtcdClient:     numerixEtcdClient,
 			infrastructureHandler: infrastructureHandler,
@@ -71,16 +90,27 @@ func Init(config configs.Configs) StrategySelectorImpl {
 	})
 	return strategySelectorImpl
 }
+
 func (ss *StrategySelectorImpl) GetBulkDeleteStrategy(service string) (BulkDeleteStrategy, error) {
 	switch service {
-	case "INFERFLOW":
+	case inferflowService:
+		if !bulkDeleteInferflowEnabled {
+			return nil, errors.New("inferflow bulk delete is disabled for this environment")
+		}
 		return &InferflowService{ss.sqlConn, ss.prometheusClient, ss.slackClient, ss.InferflowEtcdClient}, nil
-	case "PREDATOR":
+	case predatorService:
+		if !bulkDeletePredatorEnabled {
+			return nil, errors.New("predator bulk delete is disabled for this environment")
+		}
 		return &PredatorService{ss.sqlConn, ss.prometheusClient, ss.infrastructureHandler, ss.workingEnv, ss.slackClient, ss.gcsClient}, nil
-	case "NUMERIX":
+	case numerixService:
+		if !bulkDeleteNumerixEnabled {
+			return nil, errors.New("numerix bulk delete is disabled for this environment")
+		}
 		return &NumerixService{ss.sqlConn, ss.prometheusClient, ss.slackClient, ss.NumerixEtcdClient}, nil
 	default:
 		log.Warn().Msg("Unknown service type: " + service)
 		return nil, errors.New("unknown service type: " + service)
 	}
 }
+

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -14,6 +15,7 @@ type PrometheusClient interface {
 	GetModelNames(serviceName string) ([]string, error)
 	GetInferflowConfigNames(serviceName string) ([]string, error)
 	GetNumerixConfigNames() ([]string, error)
+	GetPredatorModelTraffic(serviceName string, daysAgo int) (map[string]PredatorModelTraffic, error)
 }
 
 type prometheusClientImpl struct {
@@ -91,6 +93,27 @@ type prometheusNumerixConfigResponse struct {
 	} `json:"data"`
 }
 
+type PredatorModelResponse struct {
+	Status    string `json:"status"`
+	IsPartial bool   `json:"isPartial"`
+	Data      struct {
+		ResultType string `json:"resultType"`
+		Result     []struct {
+			Metric struct {
+				Model string `json:"model"`
+			} `json:"metric"`
+			Values [][]interface{} `json:"values"` // [[timestamp, "value"], ...]
+		} `json:"result"`
+	} `json:"data"`
+}
+
+// PredatorModelTraffic holds model name and its traffic data
+type PredatorModelTraffic struct {
+	ModelName    string
+	TotalTraffic float64 // Sum of all values
+	DataPoints   int     // Number of data points
+}
+
 func (p *prometheusClientImpl) GetModelNames(serviceName string) ([]string, error) {
 	end := time.Now().Unix()
 	daysAgo := vmselectStartDaysAgo
@@ -139,6 +162,80 @@ func (p *prometheusClientImpl) GetModelNames(serviceName string) ([]string, erro
 	}
 
 	return modelNames, nil
+}
+
+// GetPredatorModelTraffic returns models with their traffic data for the past N days
+func (p *prometheusClientImpl) GetPredatorModelTraffic(serviceName string, daysAgo int) (map[string]PredatorModelTraffic, error) {
+	end := time.Now().Unix()
+	start := end - int64(daysAgo*24*60*60)
+	step := "1m"
+
+	query := fmt.Sprintf(
+		"sum by (model)(increase(nv_inference_count{service=\"%s\"}[1m]))",
+		serviceName,
+	)
+
+	url := fmt.Sprintf("%s/prometheus/api/v1/query_range?query=%s&start=%d&end=%d&step=%s",
+		p.BaseURL,
+		escapePrometheusQuery(query),
+		start,
+		end,
+		step,
+	)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("api-key", p.APIKey)
+
+	resp, err := p.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call Prometheus: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("Prometheus call failed, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var pr PredatorModelResponse
+	if err := json.NewDecoder(resp.Body).Decode(&pr); err != nil {
+		return nil, fmt.Errorf("failed to decode Prometheus response: %w", err)
+	}
+
+	// Parse results into map
+	result := make(map[string]PredatorModelTraffic)
+	for _, item := range pr.Data.Result {
+		modelName := item.Metric.Model
+		if modelName == "" {
+			continue
+		}
+
+		var totalTraffic float64
+		dataPoints := 0
+
+		for _, valueArr := range item.Values {
+			if len(valueArr) >= 2 {
+				if valueStr, ok := valueArr[1].(string); ok {
+					if val, err := strconv.ParseFloat(valueStr, 64); err == nil {
+						totalTraffic += val
+						dataPoints++
+					}
+				}
+			}
+		}
+
+		result[modelName] = PredatorModelTraffic{
+			ModelName:    modelName,
+			TotalTraffic: totalTraffic,
+			DataPoints:   dataPoints,
+		}
+	}
+
+	return result, nil
 }
 
 func (p *prometheusClientImpl) GetInferflowConfigNames(serviceName string) ([]string, error) {
