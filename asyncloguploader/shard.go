@@ -2,12 +2,12 @@ package asyncloguploader
 
 import (
 	"encoding/binary"
+	logger "github.com/rs/zerolog/log"
+	"golang.org/x/sys/unix"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/sys/unix"
 )
 
 // headerOffset is the number of bytes reserved at the start of each buffer for the shard header
@@ -316,10 +316,13 @@ func (s *Shard) trySwap() {
 
 	// Atomically swap active buffer
 	nextBufPtr := &nextBuf
-	if !s.activeBuffer.CompareAndSwap(&currentBuf, nextBufPtr) {
+	if !s.activeBuffer.CompareAndSwap(currentBufPtr, nextBufPtr) {
 		// Swap failed, another goroutine beat us
+		logger.Warn().Msgf("buffer swap failed")
 		return
 	}
+
+	logger.Info().Msgf("buffer swap succeeded")
 
 	// Push the now-inactive buffer to flush channel
 	// This buffer was just swapped out and needs to be flushed
