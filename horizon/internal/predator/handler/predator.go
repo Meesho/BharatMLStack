@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"regexp"
 	"sync"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/constant"
@@ -163,6 +164,9 @@ const (
 	failedToParseServiceConfig                 = "Failed to parse service config"
 	failedToCreateServiceDiscoveryAndConfig    = "Failed to create service discovery and config"
 	predatorInferMethod                        = "inference.GRPCInferenceService/ModelInfer"
+	deployableTagDelimiter = "_"
+	scaleupTag             = "scaleup"
+
 )
 
 func InitV1ConfigHandler() (Config, error) {
@@ -237,7 +241,7 @@ func InitV1ConfigHandler() (Config, error) {
 		workingEnv := viper.GetString("WORKING_ENV")
 
 		predator = &Predator{
-			GcsClient:               externalcall.CreateGCSClient(pred.IsGcsEnabled),
+			GcsClient:               externalcall.CreateGCSClient(),
 			ServiceDeployableRepo:   serviceDeployableRepo,
 			Repo:                    repo,
 			PredatorConfigRepo:      predatorConfigRepo,
@@ -272,7 +276,32 @@ func (p *Predator) HandleModelRequest(req ModelRequest, requestType string) (str
 		modelNameList = append(modelNameList, modelName)
 	}
 
-	exist, err := p.Repo.ActiveModelRequestExistForRequestType(modelNameList, requestType)
+	var payloadObjects []Payload
+	derivedModelNames := make([]string, len(modelNameList))
+
+	for i, payload := range req.Payload {
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf(errMsgProcessPayload)
+		}
+
+		var payloadObject Payload
+		if err := json.Unmarshal(payloadBytes, &payloadObject); err != nil {
+			return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf(errMsgProcessPayload)
+		}
+		derivedModelName, err := p.GetDerivedModelName(payloadObject, requestType)
+		if err != nil {
+			return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf("failed to fetch derived model name: %w", err)
+		}
+		if requestType == ScaleUpRequestType {
+			payloadObject.ConfigMapping.SourceModelName = payloadObject.ModelName
+		}
+		payloadObject.ModelName = derivedModelName
+		derivedModelNames[i] = derivedModelName
+		payloadObjects = append(payloadObjects, payloadObject)
+	}
+
+	exist, err := p.Repo.ActiveModelRequestExistForRequestType(derivedModelNames, requestType)
 	if err != nil {
 		return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf("failed to check existing models: %w", err)
 	}
@@ -280,7 +309,7 @@ func (p *Predator) HandleModelRequest(req ModelRequest, requestType string) (str
 		return constant.EmptyString, http.StatusConflict, fmt.Errorf("active model request already exists for one or more requested models")
 	}
 
-	predatorConfigList, err := p.PredatorConfigRepo.GetActiveModelByModelNameList(modelNameList)
+	predatorConfigList, err := p.PredatorConfigRepo.GetActiveModelByModelNameList(derivedModelNames)
 
 	if err != nil {
 		log.Error().Err(err).Msg(fmt.Sprintf("failed to fetch predator configs: %v", err))
@@ -296,12 +325,22 @@ func (p *Predator) HandleModelRequest(req ModelRequest, requestType string) (str
 		return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf("failed to get group id: %w", err)
 	}
 
-	for _, payload := range req.Payload {
-		payloadBytes, err := json.Marshal(payload)
+	for i := range len(req.Payload) {
+		payloadObject := payloadObjects[i]
+		payloadBytes, err := json.Marshal(payloadObject)
 		if err != nil {
-			return constant.EmptyString, http.StatusInternalServerError, errors.New(errMsgProcessPayload)
+			return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf("failed to marshal payload: %w", err)
 		}
-		modelName, _ := payload[fieldModelName].(string)
+
+		if payloadObject.ConfigMapping.ServiceDeployableID == 0 {
+			return constant.EmptyString, http.StatusBadRequest, fmt.Errorf("service deployable id is required")
+		}
+
+		if requestType == OnboardRequestType && payloadObject.MetaData.InstanceCount > 1 {
+			return constant.EmptyString, http.StatusBadRequest, fmt.Errorf("instance count should be 1 for onboard environment")
+		}
+
+		modelName := payloadObject.ModelName
 		newRequests = append(newRequests, predatorrequest.PredatorRequest{
 			ModelName:    modelName,
 			GroupId:      groupID,
@@ -514,18 +553,27 @@ func (p *Predator) FetchModelConfig(req FetchModelConfigRequest) (ModelParamsRes
 		return ModelParamsResponse{}, http.StatusBadRequest, err
 	}
 
-	bucket, objectPath := parseModelPath(req.ModelPath)
-	configPath := path.Join(objectPath, configFile)
-	metaDataPath := path.Join(objectPath, "metadata.json")
+	intBucket, intObjectPath := parseModelPath(req.ModelPath)
+	metaDataPath := path.Join(intObjectPath, "metadata.json")
+	_, modelName := parseModelPath(intObjectPath)
+	intConfigPath := path.Join(intObjectPath, configFile)
+
 
 	// Read config.pbtxt
-	configData, err := p.GcsClient.ReadFile(bucket, configPath)
+	var configData []byte
+	var err error
+	if p.isNonProductionEnvironment() {
+		configData, err = p.GcsClient.ReadFile(intBucket, intConfigPath)
+	} else {
+		prodConfigPath := path.Join(pred.GcsConfigBasePath, modelName, configFile)
+		configData, err = p.GcsClient.ReadFile(pred.GcsConfigBucket, prodConfigPath)
+	}
 	if err != nil {
 		return ModelParamsResponse{}, http.StatusInternalServerError, fmt.Errorf(errReadConfigFileFormat, err)
 	}
 
 	// Read feature_meta.json
-	metaData, err := p.GcsClient.ReadFile(bucket, metaDataPath)
+	metaData, err := p.GcsClient.ReadFile(intBucket, metaDataPath)
 	var featureMeta *FeatureMetadata
 	if err == nil && metaData != nil {
 		if err := json.Unmarshal(metaData, &featureMeta); err != nil {
@@ -561,7 +609,7 @@ func (p *Predator) FetchModelConfig(req FetchModelConfigRequest) (ModelParamsRes
 		outputs = []IO{}
 	}
 
-	return createModelParamsResponse(&modelConfig, objectPath, inputs, outputs), http.StatusOK, nil
+	return createModelParamsResponse(&modelConfig, intObjectPath, inputs, outputs), http.StatusOK, nil
 }
 
 func validateModelPath(modelPath string) error {
@@ -858,6 +906,8 @@ func (p *Predator) processEditGCSCopyStage(requestIdPayloadMap map[uint]*Payload
 		return transferredGcsModelData, nil
 	}
 
+	isNotProd := p.isNonProductionEnvironment()
+
 	for _, requestModel := range predatorRequestList {
 		payload := requestIdPayloadMap[requestModel.RequestID]
 		if payload == nil {
@@ -896,9 +946,22 @@ func (p *Predator) processEditGCSCopyStage(requestIdPayloadMap map[uint]*Payload
 		sourceModelName := pathSegments[len(pathSegments)-1]
 		sourceBasePath := strings.TrimSuffix(sourcePath, "/"+sourceModelName)
 
-		if err := p.GcsClient.TransferFolder(sourceBucket, sourceBasePath, sourceModelName, targetBucket, targetPath, modelName); err != nil {
-			log.Error().Err(err).Msgf("Failed to copy model %s for edit approval", modelName)
-			return transferredGcsModelData, fmt.Errorf("failed to copy model %s: %w", modelName, err)
+		if isNotProd {
+			if err := p.GcsClient.TransferFolder(
+				sourceBucket, sourceBasePath, sourceModelName,
+				targetBucket, targetPath, modelName,
+			); err != nil {
+				return transferredGcsModelData, err
+			}
+		} else {
+			configBucket := pred.GcsConfigBucket
+			configPath := pred.GcsConfigBasePath
+			if err := p.GcsClient.TransferFolderWithSplitSources(
+				sourceBucket, sourceBasePath, configBucket, configPath,
+				sourceModelName, targetBucket, targetPath, modelName,
+			); err != nil {
+				return transferredGcsModelData, err
+			}
 		}
 
 		// Track transferred data for potential rollback
@@ -1150,6 +1213,7 @@ func (p *Predator) processPayload(predatorRequest predatorrequest.PredatorReques
 func (p *Predator) processGCSCloneStage(requestIdPayloadMap map[uint]*Payload, predatorRequestList []predatorrequest.PredatorRequest, req ApproveRequest) ([]GcsModelData, error) {
 	var transferredGcsModelData []GcsModelData
 	if predatorRequestList[0].RequestStage == predatorStagePending || predatorRequestList[0].RequestStage == predatorStageCloneToBucket {
+		isNotProd := p.isNonProductionEnvironment()
 		for _, requestModel := range predatorRequestList {
 
 			serviceDeployable, err := p.ServiceDeployableRepo.GetById(int(requestIdPayloadMap[requestModel.RequestID].ConfigMapping.ServiceDeployableID))
@@ -1165,18 +1229,45 @@ func (p *Predator) processGCSCloneStage(requestIdPayloadMap map[uint]*Payload, p
 				return transferredGcsModelData, err
 			}
 
-			srcBucket, srcPath, srcModelName := extractGCSDetails(requestIdPayloadMap[requestModel.RequestID].ModelSource)
 			destBucket, destPath := extractGCSPath(strings.TrimSuffix(deployableConfig.GCSBucketPath, "/*"))
+			destModelName := requestIdPayloadMap[requestModel.RequestID].ModelName
 
-			if deployableConfig.GCSBucketPath != "NA" {
-				log.Info().Msgf("srcBucket: %s, srcPath: %s, srcModelName: %s, destBucket: %s, destPath: %s", srcBucket, srcPath, srcModelName, destBucket, destPath)
-				if srcBucket == constant.EmptyString || srcPath == constant.EmptyString || srcModelName == constant.EmptyString || destBucket == constant.EmptyString || destPath == constant.EmptyString || requestIdPayloadMap[requestModel.RequestID].ModelName == constant.EmptyString {
-					log.Error().Err(errors.New(errModelPathFormat)).Msg(errInvalidGcsBucketPath)
-					return transferredGcsModelData, errors.New(errModelPathFormat)
+			var srcBucket, srcPath, srcModelName string
+
+			srcBucket = pred.GcsModelBucket
+			srcPath = pred.GcsModelBasePath
+			if requestModel.RequestType == ScaleUpRequestType {
+				srcModelName = destModelName
+				log.Info().Msgf("Scale-up: Source from model-source gs://%s/%s/%s",
+					srcBucket, srcPath, srcModelName)
+			} else {
+				_, _, srcModelName = extractGCSDetails(requestIdPayloadMap[requestModel.RequestID].ModelSource)
+				log.Info().Msgf("Onboard/Promote: Source from payload gs://%s/%s/%s",
+					srcBucket, srcPath, srcModelName)
+			}
+
+			log.Info().Msgf("Copying to target deployable - src: %s/%s/%s, dest: %s/%s/%s",
+				srcBucket, srcPath, srcModelName, destBucket, destPath, destModelName)
+
+
+				if srcBucket == constant.EmptyString || srcPath == constant.EmptyString ||
+				srcModelName == constant.EmptyString || destBucket == constant.EmptyString ||
+				destPath == constant.EmptyString || destModelName == constant.EmptyString {
+				log.Error().Err(errors.New(errModelPathFormat)).Msg(errInvalidGcsBucketPath)
+				return transferredGcsModelData, errors.New(errModelPathFormat)
+			}
+
+			if isNotProd {
+				if err := p.GcsClient.TransferFolder(srcBucket, srcPath, srcModelName,
+					destBucket, destPath, destModelName); err != nil {
+					log.Error().Err(err).Msg(errGCSCopyFailed)
+					return transferredGcsModelData, err
 				}
-
-				if err := p.GcsClient.TransferFolder(srcBucket, srcPath, srcModelName, destBucket, destPath,
-					requestIdPayloadMap[requestModel.RequestID].ModelName); err != nil {
+			} else {
+				if err := p.GcsClient.TransferFolderWithSplitSources(
+					srcBucket, srcPath, pred.GcsConfigBucket, pred.GcsConfigBasePath,
+					srcModelName, destBucket, destPath, destModelName,
+				); err != nil {
 					log.Error().Err(err).Msg(errGCSCopyFailed)
 					return transferredGcsModelData, err
 				}
@@ -1187,6 +1278,8 @@ func (p *Predator) processGCSCloneStage(requestIdPayloadMap map[uint]*Payload, p
 				Path:   destPath,
 				Name:   requestIdPayloadMap[requestModel.RequestID].ModelName,
 			})
+
+			log.Info().Msgf("Successfully copied model to target deployable: %s", destModelName)
 		}
 		p.updateRequestStatusAndStage(req.ApprovedBy, predatorRequestList, statusInProgress, predatorStageDBPopulation)
 	}
@@ -1195,30 +1288,59 @@ func (p *Predator) processGCSCloneStage(requestIdPayloadMap map[uint]*Payload, p
 
 func (p *Predator) processGCSCloneStageIndefaultFolder(requestIdPayloadMap map[uint]*Payload, predatorRequestList []predatorrequest.PredatorRequest, req ApproveRequest) ([]GcsModelData, error) {
 	var transferredGcsModelData []GcsModelData
-	if predatorRequestList[0].RequestStage == predatorStagePending || predatorRequestList[0].RequestStage == predatorStageCloneToBucket {
-		for _, requestModel := range predatorRequestList {
-			srcBucket, srcPath, srcModelName := extractGCSDetails(requestIdPayloadMap[requestModel.RequestID].ModelSource)
-			destBucket := pred.GcsModelBucket
-			destPath := pred.GcsModelBasePath
-			log.Info().Msgf("srcBucket: %s, srcPath: %s, srcModelName: %s, destBucket: %s, destPath: %s", srcBucket, srcPath, srcModelName, destBucket, destPath)
-			if srcBucket == constant.EmptyString || srcPath == constant.EmptyString || srcModelName == constant.EmptyString || destBucket == constant.EmptyString || destPath == constant.EmptyString || requestIdPayloadMap[requestModel.RequestID].ModelName == constant.EmptyString {
-				log.Error().Err(errors.New(errModelPathFormat)).Msg(errInvalidGcsBucketPath)
-				return transferredGcsModelData, errors.New(errModelPathFormat)
-			}
+	if predatorRequestList[0].RequestStage != predatorStagePending &&
+		predatorRequestList[0].RequestStage != predatorStageCloneToBucket {
+		return transferredGcsModelData, nil
+	}
 
-			if err := p.GcsClient.TransferFolder(srcBucket, srcPath, srcModelName, pred.GcsModelBucket, pred.GcsModelBasePath,
-				requestIdPayloadMap[requestModel.RequestID].ModelName); err != nil {
-				log.Error().Err(err).Msg(errGCSCopyFailed)
+	isNotProd := p.isNonProductionEnvironment()
+
+	for _, requestModel := range predatorRequestList {
+		payload := requestIdPayloadMap[requestModel.RequestID]
+
+		destBucket := pred.GcsModelBucket
+		destPath := pred.GcsModelBasePath
+		destModelName := payload.ModelName
+
+		_, _, originalModelName := extractGCSDetails(payload.ModelSource)
+		srcBucket := pred.GcsModelBucket
+		srcPath := pred.GcsModelBasePath
+		srcModelName := originalModelName
+
+		log.Info().Msgf("Scale-up: Copying within model-source %s → %s", srcModelName, destModelName)
+		log.Info().Msgf("srcBucket: %s, srcPath: %s, srcModelName: %s, destBucket: %s, destPath: %s",
+			srcBucket, srcPath, srcModelName, destBucket, destPath)
+
+		if srcBucket == constant.EmptyString || srcPath == constant.EmptyString ||
+			srcModelName == constant.EmptyString || destBucket == constant.EmptyString ||
+			destPath == constant.EmptyString || destModelName == constant.EmptyString {
+			log.Error().Err(errors.New(errModelPathFormat)).Msg(errInvalidGcsBucketPath)
+			return transferredGcsModelData, errors.New(errModelPathFormat)
+		}
+
+		if err := p.GcsClient.TransferFolder(srcBucket, srcPath, srcModelName,
+			destBucket, destPath, destModelName); err != nil {
+			log.Error().Err(err).Msg(errGCSCopyFailed)
+			return transferredGcsModelData, err
+		}
+
+		log.Info().Msgf("Successfully copied model in model-source: %s → %s", srcModelName, destModelName)
+
+		if !isNotProd && srcModelName != destModelName {
+			if err := p.copyConfigToNewNameInConfigSource(srcModelName, destModelName); err != nil {
+				log.Error().Err(err).Msgf("Failed to copy config to config-source: %s → %s",
+					srcModelName, destModelName)
 				return transferredGcsModelData, err
 			}
-
-			transferredGcsModelData = append(transferredGcsModelData, GcsModelData{
-				Bucket: pred.GcsModelBucket,
-				Path:   pred.GcsModelBasePath,
-				Name:   requestIdPayloadMap[requestModel.RequestID].ModelName,
-			})
 		}
+
+		transferredGcsModelData = append(transferredGcsModelData, GcsModelData{
+			Bucket: destBucket,
+			Path:   destPath,
+			Name:   destModelName,
+		})
 	}
+
 	return transferredGcsModelData, nil
 }
 
@@ -1405,7 +1527,9 @@ func (p *Predator) updateRequestStatusAndStage(approvedBy string, predatorReques
 		if stage != constant.EmptyString {
 			predatorRequestList[i].RequestStage = stage
 		}
-		if predatorRequestList[i].Status == statusApproved {
+		if predatorRequestList[i].Status == statusApproved ||
+			predatorRequestList[i].Status == statusFailed ||
+			predatorRequestList[i].Status == statusRejected {
 			predatorRequestList[i].Active = false
 		}
 		predatorRequestList[i].UpdatedAt = time.Now()
@@ -1415,6 +1539,7 @@ func (p *Predator) updateRequestStatusAndStage(approvedBy string, predatorReques
 		log.Printf(errFailedToUpdateRequestStatusAndStage, err)
 	}
 }
+
 func (p *Predator) createDiscoveryAndPredatorConfigTx(tx *gorm.DB, requestModel predatorrequest.PredatorRequest, payload Payload, approvedBy string) error {
 	discoveryConfig, err := p.createDiscoveryConfigTx(tx, &requestModel, payload)
 	if err != nil {
@@ -1449,6 +1574,13 @@ func (p *Predator) createPredatorConfigTx(tx *gorm.DB, requestModel *predatorreq
 		return err
 	}
 
+	serviceDeployableID := int(payload.ConfigMapping.ServiceDeployableID)
+	serviceDeployable, err := p.ServiceDeployableRepo.GetById(serviceDeployableID)
+	if err != nil {
+		log.Error().Err(err).Msgf("Failed to get service deployable config for ID %d", serviceDeployableID)
+		return fmt.Errorf("failed to get service deployable config: %w", err)
+	}
+
 	config := predatorconfig.PredatorConfig{
 		DiscoveryConfigID: discoveryConfigID,
 		ModelName:         payload.ModelName,
@@ -1458,6 +1590,15 @@ func (p *Predator) createPredatorConfigTx(tx *gorm.DB, requestModel *predatorreq
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
 		Active:            true,
+		SourceModelName:   payload.ConfigMapping.SourceModelName,
+	}
+
+	if serviceDeployable.OverrideTesting {
+		log.Info().Msgf("OverrideTesting is enabled for deployable %s. Setting test_results for model %s",
+			serviceDeployable.Name, payload.ModelName)
+
+		config.TestResults = json.RawMessage(`{"is_functionally_tested": true}`)
+		config.HasNilData = false
 	}
 
 	if err := tx.Create(&config).Error; err != nil {
@@ -1687,6 +1828,7 @@ func (p *Predator) buildModelResponses(
 			DeployableRunningStatus: infraConfig.RunningStatus,
 			TestResults:             config.TestResults,
 			HasNilData:              config.HasNilData,
+			SourceModelName:         config.SourceModelName,
 		}
 
 		results = append(results, modelResponse)
@@ -2202,22 +2344,49 @@ func (p *Predator) copyRequestModelsToTemporary(requests []predatorrequest.Preda
 		return fmt.Errorf("failed to parse temporary deployable config: %w", err)
 	}
 
-	if tempDeployableConfig.GCSBucketPath != "NA" {
-		tempBucket, tempPath := extractGCSPath(strings.TrimSuffix(tempDeployableConfig.GCSBucketPath, "/*"))
+	tempBucket, tempPath := extractGCSPath(strings.TrimSuffix(tempDeployableConfig.GCSBucketPath, "/*"))
 
-		// Copy each requested model from default GCS location to temporary deployable
-		for _, request := range requests {
-			modelName := request.ModelName
-			sourceBucket := pred.GcsModelBucket
-			sourcePath := pred.GcsModelBasePath
+	isNotProd := p.isNonProductionEnvironment()
 
-			log.Info().Msgf("Copying requested model %s from gs://%s/%s to temporary deployable gs://%s/%s",
-				modelName, sourceBucket, sourcePath, tempBucket, tempPath)
+	// Copy each requested model from default GCS location to temporary deployable
+	for _, request := range requests {
+		modelName := request.ModelName
+		payload, err := p.processPayload(request)
+		if err != nil {
+			log.Error().Err(err).Msgf("Failed to parse payload for request %d", request.RequestID)
+			return fmt.Errorf("failed to parse payload for request %d: %w", request.RequestID, err)
+		}
 
-			if err := p.GcsClient.TransferFolder(sourceBucket, sourcePath, modelName, tempBucket, tempPath, modelName); err != nil {
+		var sourceBucket, sourcePath, sourceModelName string
+		if payload.ModelSource != "" {
+			sourceBucket, sourcePath, sourceModelName = extractGCSDetails(payload.ModelSource)
+			log.Info().Msgf("Using ModelSource from payload for validation: gs://%s/%s/%s",
+				sourceBucket, sourcePath, sourceModelName)
+		} else {
+			sourceBucket = pred.GcsModelBucket
+			sourcePath = pred.GcsModelBasePath
+			sourceModelName = modelName
+			log.Info().Msgf("Using default model source for validation: gs://%s/%s/%s",
+				sourceBucket, sourcePath, sourceModelName)
+		}
+		log.Info().Msgf("Copying model %s from gs://%s/%s/%s to temporary deployable gs://%s/%s",
+			modelName, sourceBucket, sourcePath, sourceModelName, tempBucket, tempPath)
+
+		if isNotProd {
+			if err := p.GcsClient.TransferFolder(sourceBucket, sourcePath, sourceModelName,
+				tempBucket, tempPath, modelName); err != nil {
+				return fmt.Errorf("failed to copy requested model %s to temporary deployable: %w", modelName, err)
+			}
+		} else {
+			if err := p.GcsClient.TransferFolderWithSplitSources(
+				sourceBucket, sourcePath, pred.GcsConfigBucket, pred.GcsConfigBasePath,
+				sourceModelName, tempBucket, tempPath, modelName,
+			); err != nil {
 				return fmt.Errorf("failed to copy requested model %s to temporary deployable: %w", modelName, err)
 			}
 		}
+
+		log.Info().Msgf("Successfully copied model %s to temporary deployable", modelName)
 	}
 
 	return nil
@@ -2849,10 +3018,54 @@ func (p *Predator) ExecuteFunctionalTestRequest(req ExecuteRequestFunctionalRequ
 					elementsPerBatch *= dim
 				}
 
+				normalizedOutputDT := strings.ToUpper(strings.TrimPrefix(outputMeta.DataType, "TYPE_"))
+				isStringType := normalizedOutputDT == "STRING" || normalizedOutputDT == "BYTES"
+
 				elementSize := getElementSize(outputMeta.DataType)
 				bytesPerBatch := int(elementsPerBatch * int64(elementSize))
 
-				if elementSize > 0 && len(outputBytes) >= bytesPerBatch {
+				if isStringType {
+					var allBatches [][]interface{}
+					offset := 0
+					for offset < len(outputBytes) {
+						var batchSlice []interface{}
+						for j := int64(0); j < elementsPerBatch && offset < len(outputBytes); j++ {
+							if offset+4 > len(outputBytes) {
+								modelConfig.HasNilData = true
+								p.PredatorConfigRepo.Update(modelConfig)
+								return ExecuteRequestFunctionalResponse{}, fmt.Errorf("functional test failed: insufficient bytes for string length at offset %d", offset)
+							}
+
+							length := binary.LittleEndian.Uint32(outputBytes[offset : offset+4])
+							offset += 4
+
+							if offset+int(length) > len(outputBytes) {
+								modelConfig.HasNilData = true
+								p.PredatorConfigRepo.Update(modelConfig)
+								return ExecuteRequestFunctionalResponse{}, fmt.Errorf("functional test failed: insufficient bytes for string content at offset %d, expected %d bytes", offset, length)
+							}
+
+							stringContent := outputBytes[offset : offset+int(length)]
+							offset += int(length)
+							batchSlice = append(batchSlice, string(stringContent))
+						}
+
+						if len(batchSlice) > 0 {
+							allBatches = append(allBatches, batchSlice)
+						}
+
+						if offset >= len(outputBytes) {
+							break
+						}
+					}
+
+					convertedOutputs = append(convertedOutputs, Output{
+						Name:     outputMeta.Name,
+						Dims:     dims,
+						DataType: outputMeta.DataType,
+						Data:     allBatches,
+					})
+				} else if elementSize > 0 && len(outputBytes) >= bytesPerBatch {
 					// Calculate number of batches from total bytes
 					numBatches := len(outputBytes) / bytesPerBatch
 
@@ -2961,13 +3174,14 @@ func (p *Predator) ExecuteFunctionalTestRequest(req ExecuteRequestFunctionalRequ
 				}
 			}
 		}
-		modelConfig.HasNilData = false
-		p.PredatorConfigRepo.Update(modelConfig)
 	} else {
 		modelConfig.HasNilData = true
 		p.PredatorConfigRepo.Update(modelConfig)
-		return ExecuteRequestFunctionalResponse{}, fmt.Errorf("no output contents received")
+		return ExecuteRequestFunctionalResponse{}, fmt.Errorf("no raw output contents received from helix")
 	}
+
+	modelConfig.HasNilData = false
+	p.PredatorConfigRepo.Update(modelConfig)
 
 	// Return converted response
 	return ExecuteRequestFunctionalResponse{
@@ -3186,6 +3400,16 @@ func (p *Predator) HandleEditModel(req ModelRequest, createdBy string) (string, 
 		if err != nil {
 			return constant.EmptyString, http.StatusInternalServerError, errors.New(errMsgProcessPayload)
 		}
+
+		var payloadObject Payload
+		if err := json.Unmarshal(payloadBytes, &payloadObject); err != nil {
+			return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf(errMsgProcessPayload)
+		}
+
+		if payloadObject.MetaData.InstanceCount > 1 && p.isNonProductionEnvironment() {
+			return constant.EmptyString, http.StatusBadRequest, fmt.Errorf("instance count should be 1 for non-production environment")
+		}
+
 		modelName, _ := payload[fieldModelName].(string)
 		newRequests = append(newRequests, predatorrequest.PredatorRequest{
 			ModelName:    modelName,
@@ -3306,6 +3530,11 @@ func (p *Predator) uploadSingleModel(modelItem ModelUploadItem, bucket, basePath
 		return p.createErrorResult(modelName, "Model file sync failed", err)
 	}
 
+	// Step 7: Copy config.pbtxt to prod config source (only in production)
+	if err := p.copyConfigToProdConfigSource(modelItem.GCSPath, modelName); err != nil {
+		return p.createErrorResult(modelName, "Failed to copy config to prod config source", err)
+	}
+
 	// Upload processed metadata.json (always done regardless of partial/full)
 	metadataPath, err := p.uploadModelMetadata(modelItem.Metadata, bucket, destPath)
 	if err != nil {
@@ -3320,6 +3549,42 @@ func (p *Predator) uploadSingleModel(modelItem ModelUploadItem, bucket, basePath
 		MetadataPath: metadataPath,
 		Status:       "success",
 	}
+}
+
+// copyConfigToProdConfigSource copies config.pbtxt to the prod config source path
+// This is done in both int and prd environments so config is available for prod deployments
+func (p *Predator) copyConfigToProdConfigSource(gcsPath, modelName string) error {
+	// Check if config source is configured
+	if pred.GcsConfigBucket == "" || pred.GcsConfigBasePath == "" {
+		log.Warn().Msg("Config source not configured, skipping config.pbtxt copy to config source")
+		return nil
+	}
+
+	// Parse source GCS path
+	srcBucket, srcPath := extractGCSPath(gcsPath)
+	if srcBucket == "" || srcPath == "" {
+		return fmt.Errorf("invalid GCS path format: %s", gcsPath)
+	}
+
+	// Read config.pbtxt from source
+	srcConfigPath := path.Join(srcPath, configFile)
+	configData, err := p.GcsClient.ReadFile(srcBucket, srcConfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config.pbtxt from source: %w", err)
+	}
+
+	// Update model name while preserving formatting
+	updatedConfigData := p.replaceModelNameInConfigPreservingFormat(configData, modelName)
+
+	// Upload to prod config source path with updated model name
+	destConfigPath := path.Join(pred.GcsConfigBasePath, modelName, configFile)
+	if err := p.GcsClient.UploadFile(pred.GcsConfigBucket, destConfigPath, updatedConfigData); err != nil {
+		return fmt.Errorf("failed to upload config.pbtxt to config source: %w", err)
+	}
+
+	log.Info().Msgf("Successfully copied config.pbtxt to config source with model name %s: gs://%s/%s",
+		modelName, pred.GcsConfigBucket, destConfigPath)
+	return nil
 }
 
 // Helper functions for simplified upload flow
@@ -3738,4 +4003,141 @@ func (p *Predator) cleanEnsembleScheduling(metadata MetaData) MetaData {
 		metadata.Ensembling = Ensembling{Step: nil}
 	}
 	return metadata
+}
+
+// Returns the derived model name with deployable tag
+func (p *Predator) GetDerivedModelName(payloadObject Payload, requestType string) (string, error) {
+	if requestType != ScaleUpRequestType {
+		return payloadObject.ModelName, nil
+	}
+	serviceDeployableID := payloadObject.ConfigMapping.ServiceDeployableID
+	serviceDeployable, err := p.ServiceDeployableRepo.GetById(int(serviceDeployableID))
+	if err != nil {
+		return constant.EmptyString, fmt.Errorf("%s: %w", errFetchDeployableConfig, err)
+	}
+
+	deployableTag := serviceDeployable.DeployableTag
+	if deployableTag == "" {
+		return payloadObject.ModelName, nil
+	}
+
+	derivedModelName := payloadObject.ModelName + deployableTagDelimiter + deployableTag
+	derivedModelName = derivedModelName + deployableTagDelimiter + scaleupTag
+	return derivedModelName, nil
+}
+
+// Returns the original model name if no tag is found (backward compatibility).
+func (p *Predator) GetOriginalModelName(derivedModelName string, serviceDeployableID int) (string, error) {
+	serviceDeployable, err := p.ServiceDeployableRepo.GetById(serviceDeployableID)
+	if err != nil {
+		return constant.EmptyString, fmt.Errorf("%s: %w", errFetchDeployableConfig, err)
+	}
+
+	deployableTag := serviceDeployable.DeployableTag
+	if deployableTag == "" {
+		return derivedModelName, nil
+	}
+
+	scaleupSuffix := deployableTagDelimiter + scaleupTag
+	derivedModelName = strings.TrimSuffix(derivedModelName, scaleupSuffix)
+
+	deployableTagSuffix := deployableTagDelimiter + deployableTag
+	if originalName, foundSuffix := strings.CutSuffix(derivedModelName, deployableTagSuffix); foundSuffix {
+		return originalName, nil
+	}
+
+	return derivedModelName, nil
+}
+
+func (p *Predator) isNonProductionEnvironment() bool {
+	env := strings.ToLower(strings.TrimSpace(pred.AppEnv))
+	if env == "prd" || env == "prod" {
+		return false
+	}
+	return true
+}
+
+func (p *Predator) copyConfigToNewNameInConfigSource(oldModelName, newModelName string) error {
+	if oldModelName == newModelName {
+		return nil
+	}
+
+	if pred.GcsConfigBucket == "" || pred.GcsConfigBasePath == "" {
+		log.Warn().Msg("Config source not configured, skipping config.pbtxt copy in config source")
+		return nil
+	}
+
+	destConfigPath := path.Join(pred.GcsConfigBasePath, newModelName, configFile)
+	exists, err := p.GcsClient.CheckFileExists(pred.GcsConfigBucket, destConfigPath)
+	if err != nil {
+		log.Warn().Err(err).Msgf("Failed to check if config exists for %s, will attempt copy anyway", newModelName)
+	} else if exists {
+		log.Info().Msgf("Config already exists for %s in config source, skipping copy", newModelName)
+		return nil
+	}
+
+	srcConfigPath := path.Join(pred.GcsConfigBasePath, oldModelName, configFile)
+
+	configData, err := p.GcsClient.ReadFile(pred.GcsConfigBucket, srcConfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config.pbtxt from %s: %w", srcConfigPath, err)
+	}
+
+	// Use formatting-preserving function instead of marshal/unmarshal
+	updatedConfigData := p.replaceModelNameInConfigPreservingFormat(configData, newModelName)
+
+	if err := p.GcsClient.UploadFile(pred.GcsConfigBucket, destConfigPath, updatedConfigData); err != nil {
+		return fmt.Errorf("failed to upload config.pbtxt to %s: %w", destConfigPath, err)
+	}
+
+	log.Info().Msgf("Successfully copied config.pbtxt from %s to %s in config source",
+		oldModelName, newModelName)
+	return nil
+}
+
+// replaceModelNameInConfigPreservingFormat updates only the top-level model name while preserving formatting
+// It replaces only the first occurrence to avoid modifying nested names in inputs/outputs/instance_groups
+func (p *Predator) replaceModelNameInConfigPreservingFormat(data []byte, destModelName string) []byte {
+	content := string(data)
+	lines := strings.Split(content, "\n")
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Match top-level "name:" field - should be at the start of line (or minimal indentation)
+		// Skip nested names which are typically indented with 2+ spaces
+		if strings.HasPrefix(trimmed, "name:") {
+			// Check indentation: top-level fields have minimal/no indentation
+			leadingWhitespace := len(line) - len(strings.TrimLeft(line, " \t"))
+			// Skip if heavily indented (nested field)
+			if leadingWhitespace >= 2 {
+				continue
+			}
+
+			// Match the first occurrence of name: "value" pattern
+			namePattern := regexp.MustCompile(`name\s*:\s*"([^"]+)"`)
+			matches := namePattern.FindStringSubmatch(line)
+			if len(matches) > 1 {
+				oldModelName := matches[1]
+				// Replace only the FIRST occurrence to avoid replacing nested names
+				loc := namePattern.FindStringIndex(line)
+				if loc != nil {
+					// Replace only the matched portion (first occurrence)
+					before := line[:loc[0]]
+					matched := line[loc[0]:loc[1]]
+					after := line[loc[1]:]
+					// Replace the value inside quotes while preserving the "name:" format
+					valuePattern := regexp.MustCompile(`"([^"]+)"`)
+					valueReplaced := valuePattern.ReplaceAllString(matched, fmt.Sprintf(`"%s"`, destModelName))
+					lines[i] = before + valueReplaced + after
+				} else {
+					// Fallback: replace all (shouldn't happen with valid input)
+					lines[i] = namePattern.ReplaceAllString(line, fmt.Sprintf(`name: "%s"`, destModelName))
+				}
+				log.Info().Msgf("Replacing top-level model name in config.pbtxt: '%s' -> '%s'", oldModelName, destModelName)
+				break
+			}
+		}
+	}
+
+	return []byte(strings.Join(lines, "\n"))
 }

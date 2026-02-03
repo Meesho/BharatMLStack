@@ -23,6 +23,7 @@ type PredatorConfigRepository interface {
 	GetByModelName(modelName string) (*PredatorConfig, error)
 	GetActiveModelByModelName(modelName string) (*PredatorConfig, error)
 	GetActiveModelByModelNameList(modelNames []string) ([]PredatorConfig, error)
+	FindByDiscoveryIDsAndAge(discoveryConfigIds []int, daysAgo int) ([]PredatorConfig, error)
 }
 
 type predatorConfigRepo struct {
@@ -76,6 +77,7 @@ func (r *predatorConfigRepo) Update(config *PredatorConfig) error {
 			"updated_at":   config.UpdatedAt,
 			"test_results": config.TestResults,
 			"has_nil_data": config.HasNilData,
+			"source_model_name": config.SourceModelName,
 		}).Error
 }
 
@@ -149,3 +151,19 @@ func (r *predatorConfigRepo) GetByModelName(modelName string) (*PredatorConfig, 
 	err := r.db.Where("model_name = ?", modelName).First(&config).Error
 	return &config, err
 }
+
+// FindByDiscoveryIDsAndAge returns active predator configs for given discovery IDs created before (now - daysAgo).
+func (r *predatorConfigRepo) FindByDiscoveryIDsAndAge(discoveryConfigIds []int, daysAgo int) ([]PredatorConfig, error) {
+	var configs []PredatorConfig
+	if daysAgo < 0 {
+		return nil, errors.New("daysAgo must be >= 0")
+	}
+	cutoffDate := time.Now().AddDate(0, 0, -daysAgo)
+
+	err := r.db.Where("discovery_config_id IN ? AND created_at < ? AND active = ?",
+		discoveryConfigIds, cutoffDate, true).
+		Find(&configs).Error
+
+	return configs, err
+}
+

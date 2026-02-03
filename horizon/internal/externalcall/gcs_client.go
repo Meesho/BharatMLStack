@@ -3,11 +3,13 @@ package externalcall
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +23,7 @@ type GCSClientInterface interface {
 	ReadFile(bucket, objectPath string) ([]byte, error)
 	TransferFolder(srcBucket, srcPath, srcModelName, destBucket, destPath, destModelName string) error
 	TransferAndDeleteFolder(srcBucket, srcPath, srcModelName, destBucket, destPath, destModelName string) error
+	TransferFolderWithSplitSources(modelBucket, modelPath, configBucket, configPath, srcModelName, destBuckt, destPath, destModelName string) error
 	DeleteFolder(bucket, modelPath, modelName string) error
 	ListFolders(bucket, prefix string) ([]string, error)
 	UploadFile(bucket, objectPath string, data []byte) error
@@ -52,14 +55,7 @@ type GCSClient struct {
 	ctx    context.Context
 }
 
-func CreateGCSClient(isGcsEnabled bool) GCSClientInterface {
-	if !isGcsEnabled {
-		log.Warn().Msg("GCS client is disabled")
-		return &GCSClient{
-			client: nil,
-			ctx:    nil,
-		}
-	}
+func CreateGCSClient() GCSClientInterface {
 	ctx := context.Background()
 
 	// Check for Application Default Credentials path
@@ -139,30 +135,17 @@ func (g *GCSClient) TransferFolder(srcBucket, srcPath, srcModelName, destBucket,
 	var regularFiles []storage.ObjectAttrs
 	var configFiles []storage.ObjectAttrs
 
-	it := g.client.Bucket(srcBucket).Objects(g.ctx, &storage.Query{Prefix: prefix})
-	for {
-		objAttrs, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("failed to list source bucket: %w", err)
-		}
+	isConfigFile := func(attrs *storage.ObjectAttrs) bool {
+		return strings.HasSuffix(attrs.Name, "config.pbtxt")
+	}
 
-		if strings.HasSuffix(objAttrs.Name, "/") {
-			continue
-		}
-
-		if strings.HasSuffix(objAttrs.Name, "config.pbtxt") {
-			configFiles = append(configFiles, *objAttrs)
-		} else {
-			regularFiles = append(regularFiles, *objAttrs)
-		}
+	configFiles, regularFiles, err := g.partitionObjects(srcBucket, prefix, isConfigFile)
+	if err != nil {
+		return fmt.Errorf("failed to list source bucket: %w", err)
 	}
 
 	if len(regularFiles) == 0 && len(configFiles) == 0 {
-		log.Info().Msg("No objects found to transfer")
-		return nil
+		return fmt.Errorf("no files found at source location: gs://%s/%s", srcBucket, prefix)
 	}
 
 	log.Info().Msgf("Starting two-phase transfer: %d regular files, %d config files", len(regularFiles), len(configFiles))
@@ -291,6 +274,115 @@ func (g *GCSClient) transferSingleConfigFile(objAttrs storage.ObjectAttrs, srcBu
 	return nil
 }
 
+func (g *GCSClient) TransferFolderWithSplitSources(modelBucket, modelPath, configBucket, configPath, srcModelName, destBucket, destPath, destModelName string) error {
+	modelPrefix := path.Join(modelPath, srcModelName)
+	if !strings.HasSuffix(modelPrefix, "/") {
+		modelPrefix += "/"
+	}
+
+	regularFiles, err := g.listObjects(modelBucket, modelPrefix, func(attrs *storage.ObjectAttrs) bool {
+		return !strings.HasSuffix(attrs.Name, "config.pbtxt")
+	})
+	if err != nil {
+		return fmt.Errorf("failed to read regular files from model source: %w", err)
+	}
+
+	log.Info().Msgf("TransferFolderWithSplitSources: Found %d regular files in model source gs://%s/%s",
+		len(regularFiles), modelBucket, modelPrefix)
+
+	configPrefix := path.Join(configPath, srcModelName)
+	if !strings.HasSuffix(configPrefix, "/") {
+		configPrefix += "/"
+	}
+
+	configFiles, err := g.listObjects(configBucket, configPrefix, func(attrs *storage.ObjectAttrs) bool {
+		return strings.HasSuffix(attrs.Name, "config.pbtxt")
+	})
+	if err != nil {
+		return fmt.Errorf("failed to read config files from config source: %w", err)
+	}
+
+	log.Info().Msgf("TransferFolderWithSplitSources: Found %d config files in config source gs://%s/%s",
+		len(configFiles), configBucket, configPrefix)
+
+	if len(regularFiles) == 0 && len(configFiles) == 0 {
+		log.Warn().Msg("TransferFolderWithSplitSources: No objects found to transfer")
+		return nil
+	}
+
+	regularFilesTransferred := false
+	if len(regularFiles) > 0 {
+		if err := g.transferRegularFilesFromSource(regularFiles, modelBucket, destBucket, destPath, destModelName, modelPrefix); err != nil {
+			return fmt.Errorf("failed to transfer regular files from model source: %w", err)
+		}
+		regularFilesTransferred = true
+	}
+
+	if len(configFiles) > 0 {
+		if err := g.transferConfigFilesFromSource(configFiles, configBucket, destBucket, destPath, destModelName, configPrefix); err != nil {
+			if regularFilesTransferred {
+				log.Warn().Err(err).Msgf("Config file transfer failed, reverting transfer by deleting destination folder gs://%s/%s/%s",
+					destBucket, destPath, destModelName)
+				if revertErr := g.DeleteFolder(destBucket, destPath, destModelName); revertErr != nil {
+					log.Error().Err(revertErr).Msgf("Failed to revert transfer by deleting destination folder gs://%s/%s/%s",
+						destBucket, destPath, destModelName)
+					return fmt.Errorf("failed to transfer config files from config source: %w; revert also failed: %w", err, revertErr)
+				}
+				log.Info().Msgf("Successfully reverted transfer by deleting destination folder")
+			}
+			return fmt.Errorf("failed to transfer config files from config source: %w", err)
+		}
+	}
+
+	log.Info().Msgf("TransferFolderWithSplitSources: Successfully completed split-source transfer for model %s -> %s",
+		srcModelName, destModelName)
+	return nil
+}
+
+func (g *GCSClient) transferRegularFilesFromSource(files []storage.ObjectAttrs, srcBucket, destBucket, destPath, destModelName, prefix string) error {
+	log.Info().Msgf("Transferring %d regular files from model source", len(files))
+
+	semaphore := make(chan struct{}, maxConcurrentFiles)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var transferErrors []error
+
+	for _, objAttrs := range files {
+		wg.Add(1)
+		go func(obj storage.ObjectAttrs) {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			if err := g.transferSingleRegularFile(obj, srcBucket, destBucket, destPath, destModelName, prefix); err != nil {
+				mu.Lock()
+				transferErrors = append(transferErrors, fmt.Errorf("failed to transfer %s: %w", obj.Name, err))
+				mu.Unlock()
+			}
+		}(objAttrs)
+	}
+
+	wg.Wait()
+
+	if len(transferErrors) > 0 {
+		return fmt.Errorf("regular file transfer completed with %d errors: %v", len(transferErrors), transferErrors[0])
+	}
+
+	return nil
+}
+
+func (g *GCSClient) transferConfigFilesFromSource(files []storage.ObjectAttrs, srcBucket, destBucket, destPath, destModelName, prefix string) error {
+	log.Info().Msgf("Transferring %d config files from config source", len(files))
+
+	for _, objAttrs := range files {
+		if err := g.transferSingleConfigFile(objAttrs, srcBucket, destBucket, destPath, destModelName, prefix); err != nil {
+			return fmt.Errorf("failed to transfer config file %s: %w", objAttrs.Name, err)
+		}
+	}
+
+	return nil
+}
+
 func (g *GCSClient) DeleteFolder(bucket, modelPath, modelName string) error {
 	// Ensure the prefix ends with "/" to avoid matching partial directory names
 	prefix := path.Join(modelPath, modelName)
@@ -353,19 +445,50 @@ func (g *GCSClient) TransferAndDeleteFolder(srcBucket, srcPath, srcModelName, de
 	return nil
 }
 
-// replaceModelNameInConfig modifies the `name:` field in config.pbtxt content
+// replaceModelNameInConfig modifies only the top-level `name:` field in config.pbtxt content
+// It replaces only the first occurrence to avoid modifying nested names in inputs/outputs/instance_groups
 func replaceModelNameInConfig(data []byte, destModelName string) []byte {
-	lines := strings.Split(string(data), "\n")
-	originalName := ""
+	content := string(data)
+	lines := strings.Split(content, "\n")
+
 	for i, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "name:") {
-			originalName = line
-			lines[i] = fmt.Sprintf(`name: "%s"`, destModelName)
-			log.Info().Msgf("Replacing model name in config.pbtxt: '%s' -> 'name: \"%s\"'", originalName, destModelName)
-			break
+		trimmed := strings.TrimSpace(line)
+		// Match top-level "name:" field - should be at the start of line (or minimal indentation)
+		// Skip nested names which are typically indented with 2+ spaces
+		if strings.HasPrefix(trimmed, "name:") {
+			// Check indentation: top-level fields have minimal/no indentation
+			leadingWhitespace := len(line) - len(strings.TrimLeft(line, " \t"))
+			// Skip if heavily indented (nested field)
+			if leadingWhitespace >= 2 {
+				continue
+			}
+
+			// Match the first occurrence of name: "value" pattern
+			namePattern := regexp.MustCompile(`name\s*:\s*"([^"]+)"`)
+			matches := namePattern.FindStringSubmatch(line)
+			if len(matches) > 1 {
+				oldModelName := matches[1]
+				// Replace only the FIRST occurrence to avoid replacing nested names
+				loc := namePattern.FindStringIndex(line)
+				if loc != nil {
+					// Replace only the matched portion (first occurrence)
+					before := line[:loc[0]]
+					matched := line[loc[0]:loc[1]]
+					after := line[loc[1]:]
+					// Replace the value inside quotes while preserving the "name:" format
+					valuePattern := regexp.MustCompile(`"([^"]+)"`)
+					valueReplaced := valuePattern.ReplaceAllString(matched, fmt.Sprintf(`"%s"`, destModelName))
+					lines[i] = before + valueReplaced + after
+				} else {
+					// Fallback: replace all (shouldn't happen with valid input)
+					lines[i] = namePattern.ReplaceAllString(line, fmt.Sprintf(`name: "%s"`, destModelName))
+				}
+				log.Info().Msgf("Replacing top-level model name in config.pbtxt: '%s' -> '%s'", oldModelName, destModelName)
+				break
+			}
 		}
 	}
+
 	return []byte(strings.Join(lines, "\n"))
 }
 
@@ -384,32 +507,23 @@ func (g *GCSClient) ListFolders(bucket, prefix string) ([]string, error) {
 
 	log.Info().Msgf("Listing folders in GCS bucket %s with prefix %s", bucket, prefix)
 
-	it := g.client.Bucket(bucket).Objects(g.ctx, &storage.Query{
-		Prefix: prefix,
-		// Do NOT set Delimiter here
-	})
-
-	for {
-		attrs, err := it.Next()
-		if err == iterator.Done {
-			break
+	err := g.forEachObject(bucket, prefix, func(attrs *storage.ObjectAttrs) error {
+		if attrs.Name == "" {
+			return nil
 		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to list objects: %w", err)
-		}
-
-		// Extract folder name after the prefix
-		if attrs.Name != "" {
-			trimmed := strings.TrimPrefix(attrs.Name, prefix)
-			parts := strings.SplitN(trimmed, "/", 2)
-			if len(parts) > 1 {
-				folderName := parts[0]
-				if !seenFolders[folderName] {
-					folders = append(folders, folderName)
-					seenFolders[folderName] = true
-				}
+		trimmed := strings.TrimPrefix(attrs.Name, prefix)
+		parts := strings.SplitN(trimmed, "/", 2)
+		if len(parts) > 1 {
+			folderName := parts[0]
+			if !seenFolders[folderName] {
+				folders = append(folders, folderName)
+				seenFolders[folderName] = true
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return folders, nil
@@ -458,20 +572,15 @@ func (g *GCSClient) CheckFolderExists(bucket, folderPrefix string) (bool, error)
 		folderPrefix += "/"
 	}
 
-	it := g.client.Bucket(bucket).Objects(g.ctx, &storage.Query{
-		Prefix: folderPrefix,
+	var exists bool
+	err := g.forEachObject(bucket, folderPrefix, func(attrs *storage.ObjectAttrs) error {
+		exists = true
+		return ErrStopIteration // Found one, stop iteration
 	})
-
-	// Check if at least one object exists with this prefix
-	_, err := it.Next()
-	if err == iterator.Done {
-		return false, nil // No objects found with this prefix
-	}
 	if err != nil {
 		return false, fmt.Errorf("failed to check folder existence: %w", err)
 	}
-
-	return true, nil
+	return exists, nil
 }
 
 func (g *GCSClient) UploadFolderFromLocal(srcFolderPath, bucket, destPath string) error {
@@ -526,38 +635,26 @@ func (g *GCSClient) GetFolderInfo(bucket, folderPrefix string) (*GCSFolderInfo, 
 		folderPrefix += "/"
 	}
 
-	it := g.client.Bucket(bucket).Objects(g.ctx, &storage.Query{
-		Prefix: folderPrefix,
-	})
-
 	var folderInfo GCSFolderInfo
 	folderInfo.Name = strings.TrimSuffix(path.Base(folderPrefix), "/")
 	folderInfo.Path = fmt.Sprintf("gs://%s/%s", bucket, strings.TrimSuffix(folderPrefix, "/"))
-	folderInfo.Created = time.Now()  // Will be updated with actual earliest file
-	folderInfo.Updated = time.Time{} // Will be updated with actual latest file
+	folderInfo.Created = time.Now()
+	folderInfo.Updated = time.Time{}
 
-	for {
-		attrs, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to list objects: %w", err)
-		}
-
-		// Update folder stats
+	err := g.forEachObject(bucket, folderPrefix, func(attrs *storage.ObjectAttrs) error {
 		folderInfo.FileCount++
 		folderInfo.Size += attrs.Size
 
-		// Track earliest creation time
 		if attrs.Created.Before(folderInfo.Created) {
 			folderInfo.Created = attrs.Created
 		}
-
-		// Track latest update time
 		if attrs.Updated.After(folderInfo.Updated) {
 			folderInfo.Updated = attrs.Updated
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	if folderInfo.FileCount == 0 {
@@ -581,54 +678,39 @@ func (g *GCSClient) ListFoldersWithTimestamp(bucket, prefix string) ([]GCSFolder
 	}
 
 	log.Info().Msgf("Listing folders with timestamps in GCS bucket %s with prefix %s", bucket, prefix)
-
-	it := g.client.Bucket(bucket).Objects(g.ctx, &storage.Query{
-		Prefix: prefix,
-	})
-
-	for {
-		attrs, err := it.Next()
-		if err == iterator.Done {
-			break
+	err := g.forEachObject(bucket, prefix, func(attrs *storage.ObjectAttrs) error {
+		if attrs.Name == "" {
+			return nil
 		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to list objects: %w", err)
-		}
+		trimmed := strings.TrimPrefix(attrs.Name, prefix)
+		parts := strings.SplitN(trimmed, "/", 2)
+		if len(parts) > 1 {
+			folderName := parts[0]
 
-		// Extract folder name after the prefix
-		if attrs.Name != "" {
-			trimmed := strings.TrimPrefix(attrs.Name, prefix)
-			parts := strings.SplitN(trimmed, "/", 2)
-			if len(parts) > 1 {
-				folderName := parts[0]
-
-				// Initialize or update folder info
-				if folderInfo, exists := seenFolders[folderName]; !exists {
-					seenFolders[folderName] = &GCSFolderInfo{
-						Name:      folderName,
-						Path:      fmt.Sprintf("gs://%s/%s%s", bucket, prefix, folderName),
-						Created:   attrs.Created,
-						Updated:   attrs.Updated,
-						Size:      attrs.Size,
-						FileCount: 1,
-					}
-				} else {
-					// Update existing folder info
-					folderInfo.FileCount++
-					folderInfo.Size += attrs.Size
-
-					// Track earliest creation time
-					if attrs.Created.Before(folderInfo.Created) {
-						folderInfo.Created = attrs.Created
-					}
-
-					// Track latest update time
-					if attrs.Updated.After(folderInfo.Updated) {
-						folderInfo.Updated = attrs.Updated
-					}
+			if folderInfo, exists := seenFolders[folderName]; !exists {
+				seenFolders[folderName] = &GCSFolderInfo{
+					Name:      folderName,
+					Path:      fmt.Sprintf("gs://%s/%s%s", bucket, prefix, folderName),
+					Created:   attrs.Created,
+					Updated:   attrs.Updated,
+					Size:      attrs.Size,
+					FileCount: 1,
+				}
+			} else {
+				folderInfo.FileCount++
+				folderInfo.Size += attrs.Size
+				if attrs.Created.Before(folderInfo.Created) {
+					folderInfo.Created = attrs.Created
+				}
+				if attrs.Updated.After(folderInfo.Updated) {
+					folderInfo.Updated = attrs.Updated
 				}
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// Convert map to slice
@@ -653,29 +735,95 @@ func (g *GCSClient) FindFileWithSuffix(bucket, folderPath, suffix string) (bool,
 
 	log.Info().Msgf("Searching for files with suffix '%s' in GCS bucket %s with prefix %s", suffix, bucket, folderPath)
 
-	it := g.client.Bucket(bucket).Objects(g.ctx, &storage.Query{
-		Prefix: folderPath,
+	var foundFile string
+	err := g.forEachObject(bucket, folderPath, func(attrs *storage.ObjectAttrs) error {
+		fileName := path.Base(attrs.Name)
+		if strings.HasSuffix(fileName, suffix) {
+			log.Info().Msgf("Found file with suffix '%s': %s", suffix, fileName)
+			foundFile = fileName
+			return ErrStopIteration
+		}
+		return nil
 	})
+	if err != nil {
+		return false, "", fmt.Errorf("failed to list objects: %w", err)
+	}
+	return foundFile != "", foundFile, nil
 
+	log.Info().Msgf("No file found with suffix '%s' in %s/%s", suffix, bucket, folderPath)
+	return false, "", nil
+}
+
+// ObjectVisitor is called for each object. Return an error to stop iteration.
+// Return a special sentinel error like ErrStopIteration to stop without error.
+type ObjectVisitor func(attrs *storage.ObjectAttrs) error
+
+var ErrStopIteration = errors.New("stop iteration")
+
+// forEachObject iterates over all objects with the given prefix and calls the visitor for each.
+func (g *GCSClient) forEachObject(bucket, prefix string, visitor ObjectVisitor) error {
+	it := g.client.Bucket(bucket).Objects(g.ctx, &storage.Query{Prefix: prefix})
 	for {
-		attrs, err := it.Next()
+		objAttrs, err := it.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			return false, "", fmt.Errorf("failed to list objects: %w", err)
+			return fmt.Errorf("failed to list objects: %w", err)
 		}
 
-		// Get the filename from the full object path
-		fileName := path.Base(attrs.Name)
-
-		// Check if the file ends with the specified suffix
-		if strings.HasSuffix(fileName, suffix) {
-			log.Info().Msgf("Found file with suffix '%s': %s", suffix, fileName)
-			return true, fileName, nil
+		if err := visitor(objAttrs); err != nil {
+			if errors.Is(err, ErrStopIteration) {
+				return nil
+			}
+			return err
 		}
 	}
+	return nil
+}
 
-	log.Info().Msgf("No file found with suffix '%s' in %s/%s", suffix, bucket, folderPath)
-	return false, "", nil
+// ObjectFilter returns true if the object should be included.
+type ObjectFilter func(attrs *storage.ObjectAttrs) bool
+
+// listObjects returns all objects matching the prefix, optionally filtered.
+// Pass nil for filter to include all objects (except directory markers).
+func (g *GCSClient) listObjects(bucket, prefix string, filter ObjectFilter) ([]storage.ObjectAttrs, error) {
+	var objects []storage.ObjectAttrs
+
+	err := g.forEachObject(bucket, prefix, func(attrs *storage.ObjectAttrs) error {
+		// Skip directory markers by default
+		if strings.HasSuffix(attrs.Name, "/") {
+			return nil
+		}
+
+		if filter == nil || filter(attrs) {
+			objects = append(objects, *attrs)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return objects, nil
+}
+
+// partitionObjects separates objects into two groups based on a predicate.
+// Objects matching the predicate go into the first slice, others into the second.
+func (g *GCSClient) partitionObjects(bucket, prefix string, predicate ObjectFilter) (matching, notMatching []storage.ObjectAttrs, err error) {
+	err = g.forEachObject(bucket, prefix, func(attrs *storage.ObjectAttrs) error {
+		// Skip directory markers
+		if strings.HasSuffix(attrs.Name, "/") {
+			return nil
+		}
+
+		if predicate(attrs) {
+			matching = append(matching, *attrs)
+		} else {
+			notMatching = append(notMatching, *attrs)
+		}
+		return nil
+	})
+
+	return matching, notMatching, err
 }

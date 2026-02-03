@@ -55,9 +55,10 @@ type Configs struct {
 	DefaultGpuThreshold string `mapstructure:"default_gpu_threshold"`
 	DefaultModelPath    string `mapstructure:"default_model_path"`
 
-	GcsModelBucket   string `mapstructure:"gcs_model_bucket"`
-	GcsModelBasePath string `mapstructure:"gcs_model_base_path"`
-	GcsEnabled       bool   `mapstructure:"gcs_enabled"`
+	GcsModelBucket    string `mapstructure:"gcs_model_bucket"`
+	GcsModelBasePath  string `mapstructure:"gcs_model_base_path"`
+	GcsConfigBasePath string `mapstructure:"gcs_config_base_path"`
+	GcsConfigBucket   string `mapstructure:"gcs_config_bucket"`
 
 	GrafanaBaseUrl string `mapstructure:"grafana_base_url"`
 
