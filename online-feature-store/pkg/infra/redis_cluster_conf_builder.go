@@ -119,7 +119,7 @@ func BuildRedisClusterOptionsFromEnv(envPrefix string) (*redis.ClusterOptions, e
 		clusterOptions.ConnMaxIdleTime = time.Duration(viper.GetInt(envPrefix+redisMaxConnIdleTimeoutEnvSuffix)) * time.Minute
 	}
 	if viper.IsSet(envPrefix + redisDisableIdentityEnvSuffix) {
-		clusterOptions.DisableIndentity = viper.GetBool(envPrefix + redisDisableIdentityEnvSuffix)
+		clusterOptions.DisableIdentity = viper.GetBool(envPrefix + redisDisableIdentityEnvSuffix)
 	}
 
 	log.Info().Msgf("redis cluster options built from env, env prefix - %s, options - %+v", envPrefix, clusterOptions)
