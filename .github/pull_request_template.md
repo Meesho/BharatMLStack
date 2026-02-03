@@ -1,4 +1,5 @@
 # 🔁 Pull Request Template – BharatMLStack
+> Please fill out the following sections to help us review your changes efficiently.
 
 ## Context:
 Give a brief overview of the motivation behind this change. Include any relevant discussion links (Slack, documents, tickets, etc.) that help reviewers understand the background and the issue being addressed.
@@ -44,3 +45,7 @@ explain rollback plan in case of issues.
 - [ ] Other: `___________`
 
 ---
+
+## 📊 Benchmark / Metrics (if applicable)
+
+<!-- Share perf impact (latency, throughput, mem usage, etc). Mention method of measurement -->
