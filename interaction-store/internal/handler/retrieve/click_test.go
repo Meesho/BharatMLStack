@@ -33,8 +33,8 @@ func (m *MockDatabase) PersistInteractions(tableName string, userId string, colu
 	return args.Error(0)
 }
 
-func (m *MockDatabase) UpdateInteractions(tableName string, userId string, column string, value interface{}) error {
-	args := m.Called(tableName, userId, column, value)
+func (m *MockDatabase) UpdateInteractions(tableName string, userId string, columns map[string]interface{}) error {
+	args := m.Called(tableName, userId, columns)
 	return args.Error(0)
 }
 
@@ -51,8 +51,8 @@ func (m *MockDatabase) PersistMetadata(metadataTableName string, userId string, 
 	return args.Error(0)
 }
 
-func (m *MockDatabase) UpdateMetadata(metadataTableName string, userId string, column string, value interface{}) error {
-	args := m.Called(metadataTableName, userId, column, value)
+func (m *MockDatabase) UpdateMetadata(metadataTableName string, userId string, columns map[string]interface{}) error {
+	args := m.Called(metadataTableName, userId, columns)
 	return args.Error(0)
 }
 

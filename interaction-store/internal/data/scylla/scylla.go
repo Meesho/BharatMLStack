@@ -58,24 +58,11 @@ func (s *Scylla) RetrieveInteractions(tableName string, userId string, columns [
 	return response, nil
 }
 
-func (s *Scylla) PersistInteractions(tableName string, userId string, columns map[string]interface{}) error {
-	t1 := time.Now()
-	metric.Incr("scylla_db_interactions_persist_count", []string{metric.TagAsString("table_name", tableName)})
-	preparedQuery, sortedColumns := createPersistInteractionsPreparedQuery(s.session, s.keyspace, tableName, userId, columns)
-	err := executePersistInteractions(preparedQuery, sortedColumns, userId, columns)
-	if err != nil {
-		log.Error().Msgf("error persisting data for user %v: %v", userId, err)
-		return err
-	}
-	metric.Timing("scylla_db_interactions_persist_latency", time.Since(t1), []string{metric.TagAsString("table_name", tableName)})
-	return nil
-}
-
-func (s *Scylla) UpdateInteractions(tableName string, userId string, column string, value interface{}) error {
+func (s *Scylla) UpdateInteractions(tableName string, userId string, columns map[string]interface{}) error {
 	t1 := time.Now()
 	metric.Incr("scylla_db_interactions_update_count", []string{metric.TagAsString("table_name", tableName)})
-	preparedQuery := createUpdateInteractionsPreparedQuery(s.session, s.keyspace, tableName, column)
-	err := executeUpdateInteractions(preparedQuery, value, userId)
+	preparedQuery, sortedColumns := createUpdateInteractionsPreparedQuery(s.session, s.keyspace, tableName, userId, columns)
+	err := executeUpdateInteractions(preparedQuery, sortedColumns, userId, columns)
 	if err != nil {
 		log.Error().Msgf("error updating data for user %v: %v", userId, err)
 		return err
@@ -93,24 +80,11 @@ func (s *Scylla) RetrieveMetadata(metadataTableName string, userId string, colum
 	return response, nil
 }
 
-func (s *Scylla) PersistMetadata(metadataTableName string, userId string, columns map[string]interface{}) error {
-	t1 := time.Now()
-	metric.Incr("scylla_db_persist_metadata_count", []string{metric.TagAsString("metadata_table_name", metadataTableName)})
-	preparedQuery, sortedColumns := createPersistMetadataPreparedQuery(s.session, s.keyspace, metadataTableName, columns)
-	err := executePersistMetadata(preparedQuery, sortedColumns, userId, columns)
-	if err != nil {
-		log.Error().Msgf("error persisting metadata for user %v: %v", userId, err)
-		return err
-	}
-	metric.Timing("scylla_db_persist_metadata_latency", time.Since(t1), []string{metric.TagAsString("metadata_table_name", metadataTableName)})
-	return nil
-}
-
-func (s *Scylla) UpdateMetadata(metadataTableName string, userId string, column string, value interface{}) error {
+func (s *Scylla) UpdateMetadata(metadataTableName string, userId string, columns map[string]interface{}) error {
 	t1 := time.Now()
 	metric.Incr("scylla_db_update_metadata_count", []string{metric.TagAsString("metadata_table_name", metadataTableName)})
-	preparedQuery := createUpdateMetadataPreparedQuery(s.session, s.keyspace, metadataTableName, column)
-	err := executeUpdateMetadata(preparedQuery, value, userId)
+	preparedQuery, sortedColumns := createUpdateMetadataPreparedQuery(s.session, s.keyspace, metadataTableName, columns)
+	err := executeUpdateMetadata(preparedQuery, sortedColumns, userId, columns)
 	if err != nil {
 		log.Error().Msgf("error updating metadata for user %v: %v", userId, err)
 		return err
@@ -132,24 +106,13 @@ func executeRetrieveInteractions(preparedQuery *gocql.Query, userId string) map[
 	return res[0]
 }
 
-func executePersistInteractions(preparedQuery *gocql.Query, sortedColumns []string, userId string, columns map[string]interface{}) error {
+func executeUpdateInteractions(preparedQuery *gocql.Query, sortedColumns []string, userId string, columns map[string]interface{}) error {
 	var boundValues []interface{}
 	for _, val := range sortedColumns {
 		boundValues = append(boundValues, columns[val])
 	}
 	boundValues = append(boundValues, userId)
-	preparedQuery.Bind(boundValues...)
-	preparedQuery.Consistency(gocql.Quorum)
-	err := preparedQuery.Exec()
-	if err != nil {
-		log.Error().Msgf("error executing cql query %v: %v\n", preparedQuery, err)
-		return err
-	}
-	return nil
-}
-
-func executeUpdateInteractions(preparedQuery *gocql.Query, value interface{}, userId string) error {
-	preparedQuery.Bind(value, userId).Consistency(gocql.Quorum)
+	preparedQuery.Bind(boundValues...).Consistency(gocql.Quorum)
 	err := preparedQuery.Exec()
 	if err != nil {
 		log.Error().Msgf("error executing cql query %v: %v\n", preparedQuery, err)
@@ -171,23 +134,13 @@ func executeRetrieveMetadata(preparedQuery *gocql.Query, userId string) map[stri
 	return res[0]
 }
 
-func executePersistMetadata(preparedQuery *gocql.Query, sortedColumns []string, userId string, columns map[string]interface{}) error {
+func executeUpdateMetadata(preparedQuery *gocql.Query, sortedColumns []string, userId string, columns map[string]interface{}) error {
 	var boundValues []interface{}
-	for _, col := range sortedColumns {
-		boundValues = append(boundValues, columns[col])
+	for _, val := range sortedColumns {
+		boundValues = append(boundValues, columns[val])
 	}
 	boundValues = append(boundValues, userId)
 	preparedQuery.Bind(boundValues...).Consistency(gocql.Quorum)
-	err := preparedQuery.Exec()
-	if err != nil {
-		log.Error().Msgf("error executing cql query %v: %v", preparedQuery, err)
-		return err
-	}
-	return nil
-}
-
-func executeUpdateMetadata(preparedQuery *gocql.Query, value interface{}, userId string) error {
-	preparedQuery.Bind(value, userId).Consistency(gocql.Quorum)
 	err := preparedQuery.Exec()
 	if err != nil {
 		log.Error().Msgf("error executing cql query %v: %v", preparedQuery, err)
@@ -224,10 +177,9 @@ func getRetrieveQueryCacheKey(keyspace, tableName string, columns []string) stri
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-// getPersistQueryCacheKey generates a hash-based cache key for persist queries
-func getPersistQueryCacheKey(keyspace, tableName string, columns []string) string {
+// getUpdateQueryCacheKey generates a cache key for update queries
+func getUpdateQueryCacheKey(keyspace, tableName string, columns []string) string {
 	h := xxhash.New()
-	// Fixed parts
 	_, _ = h.WriteString(keyspace)
 	_, _ = h.WriteString(tableName)
 
@@ -237,17 +189,6 @@ func getPersistQueryCacheKey(keyspace, tableName string, columns []string) strin
 	putUint64(buf, columnsHash)
 	_, _ = h.Write(buf)
 
-	_, _ = h.WriteString("persist")
-
-	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
-// getUpdateQueryCacheKey generates a cache key for update queries
-func getUpdateQueryCacheKey(keyspace, tableName, column string) string {
-	h := xxhash.New()
-	_, _ = h.WriteString(keyspace)
-	_, _ = h.WriteString(tableName)
-	_, _ = h.WriteString(column)
 	_, _ = h.WriteString("update")
 
 	return fmt.Sprintf("%x", h.Sum(nil))
@@ -281,46 +222,30 @@ func createRetrieveInteractionsPreparedQuery(session *gocql.Session, keyspace st
 	return session.Query(query)
 }
 
-func createPersistInteractionsPreparedQuery(session *gocql.Session, keyspace string, tableName string, userId string, columns map[string]interface{}) (*gocql.Query, []string) {
+func createUpdateInteractionsPreparedQuery(session *gocql.Session, keyspace string, tableName string, userId string, columns map[string]interface{}) (*gocql.Query, []string) {
 	columnNames := make([]string, 0, len(columns))
 	for col := range columns {
 		columnNames = append(columnNames, col)
 	}
 	sort.Strings(columnNames)
 
-	cacheKey := getPersistQueryCacheKey(keyspace, tableName, columnNames)
+	cacheKey := getUpdateQueryCacheKey(keyspace, tableName, columnNames)
 
 	cachedQuery, found := queryCache.Load(cacheKey)
 	if found {
 		return session.Query(cachedQuery.(string)), columnNames
 	}
 
-	placeholders := make([]string, len(columnNames))
-	for i := range placeholders {
-		placeholders[i] = "?"
+	assignments := make([]string, len(columnNames))
+	for i, col := range columnNames {
+		assignments[i] = col + " = ?"
 	}
 
-	columnsStr := strings.Join(columnNames, ", ") + ", user_id"
-	placeholdersStr := strings.Join(placeholders, ", ") + ", ?"
-	query := fmt.Sprintf(PersistQuery, keyspace, tableName, columnsStr, placeholdersStr)
+	assignmentsStr := strings.Join(assignments, ", ")
+	query := fmt.Sprintf(UpdateQuery, keyspace, tableName, assignmentsStr)
 	queryCache.Store(cacheKey, query)
-	metric.Count("persist_query_cache_miss", 1, []string{"table", tableName})
 
 	return session.Query(query), columnNames
-}
-
-func createUpdateInteractionsPreparedQuery(session *gocql.Session, keyspace string, tableName string, column string) *gocql.Query {
-	cacheKey := getUpdateQueryCacheKey(keyspace, tableName, column)
-
-	cachedQuery, found := queryCache.Load(cacheKey)
-	if found {
-		return session.Query(cachedQuery.(string))
-	}
-
-	query := fmt.Sprintf(UpdateQuery, keyspace, tableName, column)
-	queryCache.Store(cacheKey, query)
-
-	return session.Query(query)
 }
 
 func createRetrieveMetadataPreparedQuery(session *gocql.Session, keyspace string, metadataTableName string, columns []string) *gocql.Query {
@@ -339,44 +264,28 @@ func createRetrieveMetadataPreparedQuery(session *gocql.Session, keyspace string
 	return session.Query(query)
 }
 
-func createPersistMetadataPreparedQuery(session *gocql.Session, keyspace string, metadataTableName string, columns map[string]interface{}) (*gocql.Query, []string) {
+func createUpdateMetadataPreparedQuery(session *gocql.Session, keyspace string, metadataTableName string, columns map[string]interface{}) (*gocql.Query, []string) {
 	columnNames := make([]string, 0, len(columns))
 	for col := range columns {
 		columnNames = append(columnNames, col)
 	}
 	sort.Strings(columnNames)
 
-	cacheKey := getPersistQueryCacheKey(keyspace, metadataTableName, columnNames)
+	cacheKey := getUpdateQueryCacheKey(keyspace, metadataTableName, columnNames)
 
 	cachedQuery, found := queryCache.Load(cacheKey)
 	if found {
 		return session.Query(cachedQuery.(string)), columnNames
 	}
 
-	placeholders := make([]string, len(columnNames))
-	for i := range placeholders {
-		placeholders[i] = "?"
+	assignments := make([]string, len(columnNames))
+	for i, col := range columnNames {
+		assignments[i] = col + " = ?"
 	}
 
-	columnsStr := strings.Join(columnNames, ", ") + ", user_id"
-	placeholdersStr := strings.Join(placeholders, ", ") + ", ?"
-	query := fmt.Sprintf(PersistMetadataQuery, keyspace, metadataTableName, columnsStr, placeholdersStr)
+	assignmentsStr := strings.Join(assignments, ", ")
+	query := fmt.Sprintf(UpdateMetadataQuery, keyspace, metadataTableName, assignmentsStr)
 	queryCache.Store(cacheKey, query)
-	metric.Count("persist_metadata_query_cache_miss", 1, []string{"table", metadataTableName})
 
 	return session.Query(query), columnNames
-}
-
-func createUpdateMetadataPreparedQuery(session *gocql.Session, keyspace string, metadataTableName string, column string) *gocql.Query {
-	cacheKey := getUpdateQueryCacheKey(keyspace, metadataTableName, column)
-
-	cachedQuery, found := queryCache.Load(cacheKey)
-	if found {
-		return session.Query(cachedQuery.(string))
-	}
-
-	query := fmt.Sprintf(UpdateMetadataQuery, keyspace, metadataTableName, column)
-	queryCache.Store(cacheKey, query)
-
-	return session.Query(query)
 }

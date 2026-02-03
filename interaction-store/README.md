@@ -4,7 +4,7 @@ A high-performance ScyllaDB-based system for storing and querying user interacti
 
 ## Features
 
-- **Last Y Days**: Retrieve all interactions from last Y days (up to 24 weeks (~ 6 months) / 2,000 interactions)
+- **Last Y Days**: Retrieve all interactions from last Y days (up to 168 days (~ 24 weeks) / 2,000 interactions)
 - **Weekly Time-Bucketed Storage**: Data partitioned into weekly columns with ZSTD compression
 - **Vertical Sharding**: Tables split into 8-week chunks for query isolation and efficient compaction
 

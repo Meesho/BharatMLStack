@@ -14,7 +14,10 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
+var interactionHandler *handler.InteractionHandler
+
 func RegisterRoutes(router *gin.Engine) {
+	interactionHandler = handler.InitInteractionHandler()
 	api := router.Group("/api/v1")
 	{
 		api.POST("/timeseries/persist/click", handlePersistClickInteractions)
@@ -101,7 +104,6 @@ func handlePersistClickInteractions(c *gin.Context) {
 		return
 	}
 
-	interactionHandler := handler.InitInteractionHandler()
 	result, err := interactionHandler.PersistClickData(ctx, &request)
 	if err != nil {
 		handleError(c, err)
@@ -127,7 +129,6 @@ func handlePersistOrderInteractions(c *gin.Context) {
 		return
 	}
 
-	interactionHandler := handler.InitInteractionHandler()
 	result, err := interactionHandler.PersistOrderData(ctx, &request)
 	if err != nil {
 		handleError(c, err)
@@ -153,7 +154,6 @@ func handleRetrieveClickInteractions(c *gin.Context) {
 		return
 	}
 
-	interactionHandler := handler.InitInteractionHandler()
 	result, err := interactionHandler.RetrieveClickInteractions(ctx, &request)
 	if err != nil {
 		handleError(c, err)
@@ -180,7 +180,6 @@ func handleRetrieveOrderInteractions(c *gin.Context) {
 		return
 	}
 
-	interactionHandler := handler.InitInteractionHandler()
 	result, err := interactionHandler.RetrieveOrderInteractions(ctx, &request)
 	if err != nil {
 		handleError(c, err)
@@ -206,7 +205,6 @@ func handleRetrieveInteractions(c *gin.Context) {
 		return
 	}
 
-	interactionHandler := handler.InitInteractionHandler()
 	result, err := interactionHandler.RetrieveInteractions(ctx, &request)
 	if err != nil {
 		handleError(c, err)

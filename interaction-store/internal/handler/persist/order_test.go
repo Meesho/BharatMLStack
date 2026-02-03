@@ -39,11 +39,11 @@ func TestOrderPersistHandler_Persist_SuccessNewUser(t *testing.T) {
 	mockDb.On("RetrieveInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("[]string")).
 		Return(map[string]interface{}{}, nil)
 
-	mockDb.On("PersistInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}")).
+	mockDb.On("UpdateInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}")).
 		Return(nil)
 
-	// Mock metadata persist (called asynchronously, so we use Maybe())
-	mockDb.On("PersistMetadata", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}")).
+	// Mock metadata update (called asynchronously, so we use Maybe())
+	mockDb.On("UpdateMetadata", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}")).
 		Return(nil).Maybe()
 
 	err := handler.Persist("user1", events)
@@ -51,7 +51,7 @@ func TestOrderPersistHandler_Persist_SuccessNewUser(t *testing.T) {
 	assert.NoError(t, err)
 	// Only assert on synchronous expectations
 	mockDb.AssertCalled(t, "RetrieveInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("[]string"))
-	mockDb.AssertCalled(t, "PersistInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}"))
+	mockDb.AssertCalled(t, "UpdateInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}"))
 }
 
 // Verifies that empty event list is handled gracefully without database calls.
@@ -65,7 +65,7 @@ func TestOrderPersistHandler_Persist_EmptyEvents(t *testing.T) {
 
 	assert.NoError(t, err)
 	mockDb.AssertNotCalled(t, "RetrieveInteractions")
-	mockDb.AssertNotCalled(t, "PersistInteractions")
+	mockDb.AssertNotCalled(t, "UpdateInteractions")
 }
 
 // Verifies that database errors during retrieval are properly propagated.
@@ -88,8 +88,8 @@ func TestOrderPersistHandler_Persist_RetrieveInteractionsError(t *testing.T) {
 	mockDb.AssertExpectations(t)
 }
 
-// Verifies that database errors during persistence are properly propagated.
-func TestOrderPersistHandler_Persist_PersistInteractionsError(t *testing.T) {
+// Verifies that database errors during update are properly propagated.
+func TestOrderPersistHandler_Persist_UpdateInteractionsError(t *testing.T) {
 	mockDb := new(MockDatabase)
 	handler := newTestOrderPersistHandler(mockDb)
 
@@ -101,13 +101,13 @@ func TestOrderPersistHandler_Persist_PersistInteractionsError(t *testing.T) {
 	mockDb.On("RetrieveInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("[]string")).
 		Return(map[string]interface{}{}, nil)
 
-	mockDb.On("PersistInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}")).
-		Return(errors.New("persist failed"))
+	mockDb.On("UpdateInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}")).
+		Return(errors.New("update failed"))
 
 	err := handler.Persist("user1", events)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "persist failed")
+	assert.Contains(t, err.Error(), "update failed")
 	mockDb.AssertExpectations(t)
 }
 
@@ -369,11 +369,11 @@ func TestOrderPersistHandler_Persist_MultipleEventsInDifferentWeeks(t *testing.T
 	mockDb.On("RetrieveInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("[]string")).
 		Return(map[string]interface{}{}, nil)
 
-	mockDb.On("PersistInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}")).
+	mockDb.On("UpdateInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}")).
 		Return(nil)
 
-	// Mock metadata persist (called asynchronously, so we use Maybe())
-	mockDb.On("PersistMetadata", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}")).
+	// Mock metadata update (called asynchronously, so we use Maybe())
+	mockDb.On("UpdateMetadata", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}")).
 		Return(nil).Maybe()
 
 	err := handler.Persist("user1", events)
@@ -381,7 +381,7 @@ func TestOrderPersistHandler_Persist_MultipleEventsInDifferentWeeks(t *testing.T
 	assert.NoError(t, err)
 	// Only assert on synchronous expectations
 	mockDb.AssertCalled(t, "RetrieveInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("[]string"))
-	mockDb.AssertCalled(t, "PersistInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}"))
+	mockDb.AssertCalled(t, "UpdateInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}"))
 }
 
 // Verifies persistence of events from multiple weeks within the same bucket/table.
@@ -403,13 +403,13 @@ func TestOrderPersistHandler_Persist_MultipleWeeksInSameTable(t *testing.T) {
 	mockDb.On("RetrieveInteractions", "order_interactions_bucket1", "user1", mock.AnythingOfType("[]string")).
 		Return(map[string]interface{}{}, nil)
 
-	// PersistInteractions should be called with data for multiple weeks
-	mockDb.On("PersistInteractions", "order_interactions_bucket1", "user1", mock.MatchedBy(func(data map[string]interface{}) bool {
+	// UpdateInteractions should be called with data for multiple weeks
+	mockDb.On("UpdateInteractions", "order_interactions_bucket1", "user1", mock.MatchedBy(func(data map[string]interface{}) bool {
 		// Should have entries for two different weeks
 		return len(data) == 2
 	})).Return(nil)
 
-	mockDb.On("PersistMetadata", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}")).
+	mockDb.On("UpdateMetadata", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}")).
 		Return(nil).Maybe()
 
 	err := handler.Persist("user1", events)
@@ -436,16 +436,16 @@ func TestOrderPersistHandler_Persist_MultipleWeeksInDifferentTables(t *testing.T
 	// Bucket 0 (order_interactions_bucket1)
 	mockDb.On("RetrieveInteractions", "order_interactions_bucket1", "user1", mock.AnythingOfType("[]string")).
 		Return(map[string]interface{}{}, nil)
-	mockDb.On("PersistInteractions", "order_interactions_bucket1", "user1", mock.AnythingOfType("map[string]interface {}")).
+	mockDb.On("UpdateInteractions", "order_interactions_bucket1", "user1", mock.AnythingOfType("map[string]interface {}")).
 		Return(nil)
 
 	// Bucket 1 (order_interactions_bucket2)
 	mockDb.On("RetrieveInteractions", "order_interactions_bucket2", "user1", mock.AnythingOfType("[]string")).
 		Return(map[string]interface{}{}, nil)
-	mockDb.On("PersistInteractions", "order_interactions_bucket2", "user1", mock.AnythingOfType("map[string]interface {}")).
+	mockDb.On("UpdateInteractions", "order_interactions_bucket2", "user1", mock.AnythingOfType("map[string]interface {}")).
 		Return(nil)
 
-	mockDb.On("PersistMetadata", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}")).
+	mockDb.On("UpdateMetadata", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("map[string]interface {}")).
 		Return(nil).Maybe()
 
 	err := handler.Persist("user1", events)

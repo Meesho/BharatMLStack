@@ -20,9 +20,11 @@ func newPSDBPool() *PSDBPool {
 	return &PSDBPool{
 		pool: sync.Pool{
 			New: func() interface{} {
-				return &PermanentStorageDataBlock{
+				psdb := &PermanentStorageDataBlock{
 					Buf: make([]byte, PSDBLayout1HeaderLength),
 				}
+				psdb.Builder = &PermanentStorageDataBlockBuilder{psdb: psdb}
+				return psdb
 			},
 		},
 	}

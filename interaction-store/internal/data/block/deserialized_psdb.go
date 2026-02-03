@@ -21,9 +21,6 @@ type DeserializedPSDB struct {
 }
 
 func DeserializePSDB(data []byte, interactionType enum.InteractionType) (*DeserializedPSDB, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("data is missing")
-	}
 	layoutVersion, err := extractLayoutVersionFromHeader(data)
 	if err != nil {
 		return nil, err
@@ -94,12 +91,12 @@ func deserializePSDBForLayout1(data []byte) (*DeserializedPSDB, error) {
 	}, nil
 }
 
-func (dPsdb *DeserializedPSDB) RetrieveEventData() (any, error) {
+func (dPsdb *DeserializedPSDB) RetrieveEventData(userId string) (any, error) {
 	switch dPsdb.InteractionType {
 	case enum.InteractionTypeClick:
-		return dPsdb.retrieveClickEventData()
+		return dPsdb.retrieveClickEventData(userId)
 	case enum.InteractionTypeOrder:
-		return dPsdb.retrieveOrderEventData()
+		return dPsdb.retrieveOrderEventData(userId)
 	default:
 		return nil, fmt.Errorf("unsupported interaction type: %s", dPsdb.InteractionType)
 	}
@@ -107,7 +104,7 @@ func (dPsdb *DeserializedPSDB) RetrieveEventData() (any, error) {
 
 // extractCommonEventFields extracts catalog IDs, product IDs, and timestamps from the original data
 // Returns the extracted vectors, the current index position, and any error encountered
-func (dPsdb *DeserializedPSDB) extractCommonEventFields() (catalogIds, productIds []int32, timestamps []int64, idx int, err error) {
+func (dPsdb *DeserializedPSDB) extractCommonEventFields(userId string) (catalogIds, productIds []int32, timestamps []int64, idx int, err error) {
 	idx = 0
 	int32Size := enum.DataTypeInt32Vector.Size()
 	int64Size := enum.DataTypeInt64Vector.Size()
@@ -118,17 +115,9 @@ func (dPsdb *DeserializedPSDB) extractCommonEventFields() (catalogIds, productId
 	availableBytes := len(dPsdb.OriginalData)
 
 	if availableBytes < requiredBytes {
-		log.Error().
-			Uint16("dataLength", dPsdb.DataLength).
-			Int("requiredBytes", requiredBytes).
-			Int("availableBytes", availableBytes).
-			Uint8("compressionType", uint8(dPsdb.CompressionType)).
-			Str("interactionType", string(dPsdb.InteractionType)).
-			Msg("data corruption detected: original data too short for declared data length")
+		log.Error().Msgf("data corruption detected (psdb): original data too short for declared data length, dataLength=%d, requiredBytes=%d, availableBytes=%d, compressionType=%d, interactionType=%s, userId=%s", dPsdb.DataLength, requiredBytes, availableBytes, uint8(dPsdb.CompressionType), string(dPsdb.InteractionType), userId)
 
-		return nil, nil, nil, 0, fmt.Errorf(
-			"data corruption: header declares %d events requiring %d bytes, but only %d bytes available",
-			dPsdb.DataLength, requiredBytes, availableBytes)
+		return nil, nil, nil, 0, fmt.Errorf("insufficient data in psdb: original data too short for declared data length")
 	}
 
 	// Extract catalogIds
@@ -149,20 +138,10 @@ func (dPsdb *DeserializedPSDB) extractCommonEventFields() (catalogIds, productId
 	return catalogIds, productIds, timestamps, idx, nil
 }
 
-func (dPsdb *DeserializedPSDB) retrieveClickEventData() ([]model.ClickEvent, error) {
-	catalogIds, productIds, timestamps, idx, err := dPsdb.extractCommonEventFields()
+func (dPsdb *DeserializedPSDB) retrieveClickEventData(userId string) ([]model.ClickEvent, error) {
+	catalogIds, productIds, timestamps, idx, err := dPsdb.extractCommonEventFields(userId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract common event fields for click events: %w", err)
-	}
-
-	// Bounds check before slicing for metadata
-	if idx > len(dPsdb.OriginalData) {
-		log.Error().
-			Uint16("dataLength", dPsdb.DataLength).
-			Int("currentIndex", idx).
-			Int("availableBytes", len(dPsdb.OriginalData)).
-			Msg("data corruption: index out of bounds after extracting common fields for click events")
-		return nil, fmt.Errorf("data corruption: index %d exceeds available data %d bytes", idx, len(dPsdb.OriginalData))
 	}
 
 	metadata, err := deserializeStringVector(dPsdb.OriginalData[idx:], int(dPsdb.DataLength))
@@ -171,13 +150,6 @@ func (dPsdb *DeserializedPSDB) retrieveClickEventData() ([]model.ClickEvent, err
 	}
 
 	if dPsdb.DataLength != uint16(len(catalogIds)) || dPsdb.DataLength != uint16(len(productIds)) || dPsdb.DataLength != uint16(len(timestamps)) || dPsdb.DataLength != uint16(len(metadata)) {
-		log.Error().
-			Uint16("expectedLength", dPsdb.DataLength).
-			Int("catalogIdsLen", len(catalogIds)).
-			Int("productIdsLen", len(productIds)).
-			Int("timestampsLen", len(timestamps)).
-			Int("metadataLen", len(metadata)).
-			Msg("data length mismatch while deserializing click events")
 		return nil, fmt.Errorf("data length mismatch while deserializing click events")
 	}
 	events := make([]model.ClickEvent, dPsdb.DataLength)
@@ -196,20 +168,10 @@ func (dPsdb *DeserializedPSDB) retrieveClickEventData() ([]model.ClickEvent, err
 	return events, nil
 }
 
-func (dPsdb *DeserializedPSDB) retrieveOrderEventData() ([]model.FlattenedOrderEvent, error) {
-	catalogIds, productIds, timestamps, idx, err := dPsdb.extractCommonEventFields()
+func (dPsdb *DeserializedPSDB) retrieveOrderEventData(userId string) ([]model.FlattenedOrderEvent, error) {
+	catalogIds, productIds, timestamps, idx, err := dPsdb.extractCommonEventFields(userId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract common event fields for order events: %w", err)
-	}
-
-	// Bounds check before slicing for subOrderNums
-	if idx > len(dPsdb.OriginalData) {
-		log.Error().
-			Uint16("dataLength", dPsdb.DataLength).
-			Int("currentIndex", idx).
-			Int("availableBytes", len(dPsdb.OriginalData)).
-			Msg("data corruption: index out of bounds after extracting common fields for order events")
-		return nil, fmt.Errorf("data corruption: index %d exceeds available data %d bytes", idx, len(dPsdb.OriginalData))
 	}
 
 	subOrderNums, bytesConsumed, err := deserializeStringVectorWithOffset(dPsdb.OriginalData[idx:], int(dPsdb.DataLength))
@@ -218,30 +180,12 @@ func (dPsdb *DeserializedPSDB) retrieveOrderEventData() ([]model.FlattenedOrderE
 	}
 	idx += bytesConsumed
 
-	// Bounds check before slicing for metadata
-	if idx > len(dPsdb.OriginalData) {
-		log.Error().
-			Uint16("dataLength", dPsdb.DataLength).
-			Int("currentIndex", idx).
-			Int("availableBytes", len(dPsdb.OriginalData)).
-			Msg("data corruption: index out of bounds after extracting sub_order_num for order events")
-		return nil, fmt.Errorf("data corruption: index %d exceeds available data %d bytes", idx, len(dPsdb.OriginalData))
-	}
-
 	metadata, err := deserializeStringVector(dPsdb.OriginalData[idx:], int(dPsdb.DataLength))
 	if err != nil {
 		return nil, fmt.Errorf("failed to deserialize metadata: %w", err)
 	}
 
 	if dPsdb.DataLength != uint16(len(catalogIds)) || dPsdb.DataLength != uint16(len(productIds)) || dPsdb.DataLength != uint16(len(timestamps)) || dPsdb.DataLength != uint16(len(subOrderNums)) || dPsdb.DataLength != uint16(len(metadata)) {
-		log.Error().
-			Uint16("expectedLength", dPsdb.DataLength).
-			Int("catalogIdsLen", len(catalogIds)).
-			Int("productIdsLen", len(productIds)).
-			Int("timestampsLen", len(timestamps)).
-			Int("subOrderNumsLen", len(subOrderNums)).
-			Int("metadataLen", len(metadata)).
-			Msg("data length mismatch while deserializing order events")
 		return nil, fmt.Errorf("data length mismatch while deserializing order events")
 	}
 

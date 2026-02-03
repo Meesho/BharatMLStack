@@ -76,12 +76,12 @@ func (p *OrderPersistHandler) persistToBucket(bucketIdx int, userId string, even
 		return err
 	}
 
-	finalEvents, columnsToInsert, columnsToUpdate, err := p.mergeEvents(events, storageBlocks)
+	finalEvents, err := p.mergeEvents(events, storageBlocks, userId)
 	if err != nil {
 		return err
 	}
 
-	metadata, err := p.persistEvents(bucketIdx, userId, finalEvents, columnsToInsert, columnsToUpdate)
+	metadata, err := p.persistEvents(bucketIdx, userId, finalEvents)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func (p *OrderPersistHandler) persistToBucket(bucketIdx int, userId string, even
 				log.Error().Msgf("panic occurred while updating order metadata for user %s: %v", userId, r)
 			}
 		}()
-		p.updateMetadata(userId, metadata.toUpdate, metadata.toInsert)
+		p.updateMetadata(userId, metadata)
 	}()
 	return nil
 }
@@ -131,9 +131,8 @@ func (p *OrderPersistHandler) deserializeExistingData(data map[string]interface{
 	return result, nil
 }
 
-func (p *OrderPersistHandler) mergeEvents(newEvents []model.FlattenedOrderEvent, storageBlocks map[string]*blocks.DeserializedPSDB) (map[string][]model.FlattenedOrderEvent, []string, []string, error) {
+func (p *OrderPersistHandler) mergeEvents(newEvents []model.FlattenedOrderEvent, storageBlocks map[string]*blocks.DeserializedPSDB, userId string) (map[string][]model.FlattenedOrderEvent, error) {
 	finalEvents := make(map[string][]model.FlattenedOrderEvent)
-	var columnsToInsert, columnsToUpdate []string
 
 	for _, event := range newEvents {
 		week := utils.WeekFromTimestampMs(event.OrderedAt) % 24
@@ -143,14 +142,11 @@ func (p *OrderPersistHandler) mergeEvents(newEvents []model.FlattenedOrderEvent,
 		if !alreadyProcessed {
 			ddb, existsInStorage := storageBlocks[column]
 			if existsInStorage {
-				existing, err := p.getExistingOrderEvents(ddb, column)
+				existing, err := p.getExistingOrderEvents(ddb, column, userId)
 				if err != nil {
-					return nil, nil, nil, err
+					return nil, err
 				}
 				accumulated = existing
-				columnsToUpdate = append(columnsToUpdate, column)
-			} else {
-				columnsToInsert = append(columnsToInsert, column)
 			}
 		}
 
@@ -158,11 +154,11 @@ func (p *OrderPersistHandler) mergeEvents(newEvents []model.FlattenedOrderEvent,
 		finalEvents[column] = merged
 	}
 
-	return finalEvents, columnsToInsert, columnsToUpdate, nil
+	return finalEvents, nil
 }
 
-func (p *OrderPersistHandler) getExistingOrderEvents(ddb *blocks.DeserializedPSDB, column string) ([]model.FlattenedOrderEvent, error) {
-	data, err := ddb.RetrieveEventData()
+func (p *OrderPersistHandler) getExistingOrderEvents(ddb *blocks.DeserializedPSDB, column string, userId string) ([]model.FlattenedOrderEvent, error) {
+	data, err := ddb.RetrieveEventData(userId)
 	if err != nil {
 		return nil, fmt.Errorf("retrieve event data failed for column %s: %w", column, err)
 	}
@@ -192,46 +188,19 @@ func (p *OrderPersistHandler) mergeAndTrimEvents(existing []model.FlattenedOrder
 	return existing
 }
 
-func (p *OrderPersistHandler) persistEvents(bucketIdx int, userId string, finalEvents map[string][]model.FlattenedOrderEvent, columnsToInsert, columnsToUpdate []string) (*metadataMaps, error) {
-	metadata := &metadataMaps{
-		toUpdate: make(map[string]interface{}),
-		toInsert: make(map[string]interface{}),
-	}
+func (p *OrderPersistHandler) persistEvents(bucketIdx int, userId string, finalEvents map[string][]model.FlattenedOrderEvent) (map[string]interface{}, error) {
+	metadata := make(map[string]interface{})
 	tableName := getOrderTableName(bucketIdx)
 
 	// Track all PSDBs for cleanup after persist completes
-	psdbsToCleanup := make([]*blocks.PermanentStorageDataBlock, 0, len(columnsToUpdate)+len(columnsToInsert))
+	psdbsToCleanup := make([]*blocks.PermanentStorageDataBlock, 0, len(finalEvents))
 
-	// Process updates: serialize and persist one at a time
-	for _, column := range columnsToUpdate {
-		events := finalEvents[column]
-		psdb, err := p.buildPermanentStorageDataBlock(events)
-		if err != nil {
-			cleanupPSDBs(psdbsToCleanup)
-			return nil, fmt.Errorf("psdb build failed for column %s: %w", column, err)
-		}
-		psdbsToCleanup = append(psdbsToCleanup, psdb)
-
-		data, err := psdb.Serialize()
-		if err != nil {
-			cleanupPSDBs(psdbsToCleanup)
-			return nil, fmt.Errorf("psdb serialize failed for column %s: %w", column, err)
-		}
-		if err := p.scyllaDb.UpdateInteractions(tableName, userId, column, data); err != nil {
-			cleanupPSDBs(psdbsToCleanup)
-			return nil, fmt.Errorf("psdb update failed for column %s: %w", column, err)
-		}
-		metadata.toUpdate[column] = len(events)
-	}
-
-	// Process inserts: build all PSDBs first, then serialize and persist together
-	if len(columnsToInsert) > 0 {
-		insertData := make(map[string]interface{})
-		columnPSDBs := make(map[string]*blocks.PermanentStorageDataBlock, len(columnsToInsert))
+	if len(finalEvents) > 0 {
+		updateData := make(map[string]interface{})
+		columnPSDBs := make(map[string]*blocks.PermanentStorageDataBlock, len(finalEvents))
 
 		// Build all PSDBs
-		for _, column := range columnsToInsert {
-			events := finalEvents[column]
+		for column, events := range finalEvents {
 			psdb, err := p.buildPermanentStorageDataBlock(events)
 			if err != nil {
 				cleanupPSDBs(psdbsToCleanup)
@@ -239,24 +208,24 @@ func (p *OrderPersistHandler) persistEvents(bucketIdx int, userId string, finalE
 			}
 			columnPSDBs[column] = psdb
 			psdbsToCleanup = append(psdbsToCleanup, psdb)
-			metadata.toInsert[column] = len(events)
+			metadata[column] = len(events)
 		}
 
 		// Serialize all PSDBs
-		for _, column := range columnsToInsert {
+		for column := range finalEvents {
 			psdb := columnPSDBs[column]
 			data, err := psdb.Serialize()
 			if err != nil {
 				cleanupPSDBs(psdbsToCleanup)
 				return nil, fmt.Errorf("psdb serialize failed for column %s: %w", column, err)
 			}
-			insertData[column] = data
+			updateData[column] = data
 		}
 
-		// Persist all at once
-		if err := p.scyllaDb.PersistInteractions(tableName, userId, insertData); err != nil {
+		// Update all at once
+		if err := p.scyllaDb.UpdateInteractions(tableName, userId, updateData); err != nil {
 			cleanupPSDBs(psdbsToCleanup)
-			return nil, fmt.Errorf("psdb persist failed for columns %v: %w", columnsToInsert, err)
+			return nil, fmt.Errorf("psdb update failed: %w", err)
 		}
 	}
 
@@ -266,18 +235,12 @@ func (p *OrderPersistHandler) persistEvents(bucketIdx int, userId string, finalE
 	return metadata, nil
 }
 
-func (p *OrderPersistHandler) updateMetadata(userId string, metadataToUpdate, metadataToInsert map[string]interface{}) {
+func (p *OrderPersistHandler) updateMetadata(userId string, metadataToUpdate map[string]interface{}) {
 	tableName := getOrderMetadataTableName()
 
-	for column, count := range metadataToUpdate {
-		if err := p.scyllaDb.UpdateMetadata(tableName, userId, column, count); err != nil {
-			log.Error().Msg(fmt.Sprintf("failed to update order metadata for userId=%s, table=%s, column=%s: %v", userId, tableName, column, err))
-		}
-	}
-
-	if len(metadataToInsert) > 0 {
-		if err := p.scyllaDb.PersistMetadata(tableName, userId, metadataToInsert); err != nil {
-			log.Error().Msg(fmt.Sprintf("failed to persist order metadata for userId=%s, table=%s, columns=%v: %v", userId, tableName, metadataToInsert, err))
+	if len(metadataToUpdate) > 0 {
+		if err := p.scyllaDb.UpdateMetadata(tableName, userId, metadataToUpdate); err != nil {
+			log.Error().Msg(fmt.Sprintf("failed to update order metadata for userId=%s, table=%s, columns=%v: %v", userId, tableName, metadataToUpdate, err))
 		}
 	}
 }
