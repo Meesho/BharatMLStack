@@ -220,7 +220,7 @@ func (p *PredatorService) fetchModelNames(
 			continue
 		}
 
-		if (&metaData.Ensembling) != nil && metaData.Ensembling.Step != nil {
+		if len(metaData.Ensembling.Step) > 0 {
 			for _, step := range metaData.Ensembling.Step {
 				if step.ModelName != "" {
 					parentToChildMapping[pc.ModelName] = append(parentToChildMapping[pc.ModelName], step.ModelName)
