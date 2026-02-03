@@ -282,12 +282,12 @@ func (p *Predator) HandleModelRequest(req ModelRequest, requestType string) (str
 	for i, payload := range req.Payload {
 		payloadBytes, err := json.Marshal(payload)
 		if err != nil {
-			return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf(errMsgProcessPayload)
+			return constant.EmptyString, http.StatusInternalServerError, errors.New(errMsgProcessPayload)
 		}
 
 		var payloadObject Payload
 		if err := json.Unmarshal(payloadBytes, &payloadObject); err != nil {
-			return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf(errMsgProcessPayload)
+			return constant.EmptyString, http.StatusInternalServerError, errors.New(errMsgProcessPayload)
 		}
 		derivedModelName, err := p.GetDerivedModelName(payloadObject, requestType)
 		if err != nil {
@@ -3403,7 +3403,7 @@ func (p *Predator) HandleEditModel(req ModelRequest, createdBy string) (string, 
 
 		var payloadObject Payload
 		if err := json.Unmarshal(payloadBytes, &payloadObject); err != nil {
-			return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf(errMsgProcessPayload)
+			return constant.EmptyString, http.StatusInternalServerError, errors.New(errMsgProcessPayload)
 		}
 
 		if payloadObject.MetaData.InstanceCount > 1 && p.isNonProductionEnvironment() {

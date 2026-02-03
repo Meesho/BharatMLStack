@@ -198,7 +198,7 @@ func (p *prometheusClientImpl) GetPredatorModelTraffic(serviceName string, daysA
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Prometheus call failed, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("prometheus call failed, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var pr PredatorModelResponse

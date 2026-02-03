@@ -30,7 +30,6 @@ type StrategySelectorImpl struct {
 
 var (
 	strategySelectorOnce                sync.Once
-	defaultModelPath                    string
 	bulkDeletePredatorEnabled           bool
 	bulkDeletePredatorMaxInactiveDays   int
 	bulkDeleteInferflowEnabled         bool
@@ -49,8 +48,6 @@ const (
 func Init(config configs.Configs) StrategySelectorImpl {
 	var strategySelectorImpl StrategySelectorImpl
 	strategySelectorOnce.Do(func() {
-		defaultModelPath = config.DefaultModelPath
-		
 		bulkDeletePredatorEnabled = config.BulkDeletePredatorEnabled
 		bulkDeletePredatorMaxInactiveDays = config.BulkDeletePredatorMaxInactiveDays
 

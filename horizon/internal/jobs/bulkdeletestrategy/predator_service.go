@@ -216,7 +216,7 @@ func (p *PredatorService) fetchModelNames(
 
 		var metaData handler.MetaData
 		if err := json.Unmarshal(pc.MetaData, &metaData); err != nil {
-			log.Err(err).Msg("Could not unmarshall model metadata for: " + pc.ModelName + " for scheduled deletion")
+			log.Err(err).Msg("could not unmarshall model metadata for: " + pc.ModelName + " for scheduled deletion")
 			continue
 		}
 
@@ -423,46 +423,6 @@ func (p *PredatorService) deserializeDeployableConfig(serviceDeployable serviced
 		return deployableConfig, err
 	}
 	return deployableConfig, nil
-}
-
-func (p *PredatorService) processGCSAndDeleteModels(basePath string, inactiveModelNameList []string) []string {
-	srcBucket, srcPath := extractGCSPath(basePath)
-	destBucket, destPath := extractGCSPath(defaultModelPath)
-
-	var deleteModelNameList []string
-	for _, inactiveModelName := range inactiveModelNameList {
-		err := p.gcsClient.TransferAndDeleteFolder(srcBucket, srcPath, inactiveModelName, destBucket, destPath, inactiveModelName)
-		if err != nil {
-			log.Error().Err(err).Msg("Error transferring and deleting folder in GCS")
-			continue
-		}
-		deleteModelNameList = append(deleteModelNameList, inactiveModelName)
-	}
-
-	return deleteModelNameList
-}
-
-func (p *PredatorService) deactivateModelsAndRestartDeployable(deleteModelNameList []string, serviceDeployable servicedeployableconfig.ServiceDeployableConfig, predatorConfig predatorconfig.PredatorConfigRepository, discoveryConfigId []int) error {
-	err := predatorConfig.BulkDeactivateByModelNames(deleteModelNameList, serviceDeployable.UpdatedBy, discoveryConfigId)
-	if err != nil {
-		log.Error().Err(err).Msg("Error deactivating models in predator config")
-		return err
-	}
-
-	// Extract isCanary from deployable config
-	var deployableConfig map[string]interface{}
-	isCanary := false
-	if err := json.Unmarshal(serviceDeployable.Config, &deployableConfig); err == nil {
-		if strategy, ok := deployableConfig["deploymentStrategy"].(string); ok && strategy == "canary" {
-			isCanary = true
-		}
-	}
-	if err := p.infrastructureHandler.RestartDeployment(serviceDeployable.Name, p.workingEnv, isCanary); err != nil {
-		log.Error().Err(err).Msg("Error restarting deployable")
-		return fmt.Errorf("failed to restart deployable: %w", err)
-	}
-
-	return nil
 }
 
 func (p *PredatorService) sendSlackNotification(serviceDeployableName string, deleteModelNameList []string) error {
