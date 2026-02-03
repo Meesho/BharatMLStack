@@ -11,49 +11,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Global read semaphore to limit concurrent Pread operations
-// This prevents kernel scheduling/interrupt wakeup tail latency from burst concurrency
-var (
-	readSemaphore chan struct{}
-	semaphoreSize int
-)
-
-// InitReadSemaphore initializes the global read concurrency limiter
-// Recommended values: 16-32 for optimal P99 latency
-// Call this once at startup before any reads
-func InitReadSemaphore(maxConcurrentReads int) {
-	if maxConcurrentReads <= 0 {
-		maxConcurrentReads = 16 // default
-	}
-	semaphoreSize = maxConcurrentReads
-	readSemaphore = make(chan struct{}, maxConcurrentReads)
-	log.Info().Int("max_concurrent_reads", maxConcurrentReads).Msg("Initialized read semaphore")
-}
-
-// acquireReadSlot blocks until a read slot is available
-func acquireReadSlot() {
-	if readSemaphore == nil {
-		return // semaphore not initialized, no limit
-	}
-	readSemaphore <- struct{}{}
-}
-
-// releaseReadSlot releases a read slot
-func releaseReadSlot() {
-	if readSemaphore == nil {
-		return
-	}
-	<-readSemaphore
-}
-
-// GetReadSemaphoreStats returns current usage (for monitoring)
-func GetReadSemaphoreStats() (inUse, capacity int) {
-	if readSemaphore == nil {
-		return 0, 0
-	}
-	return len(readSemaphore), semaphoreSize
-}
-
 type WrapAppendFile struct {
 	WriteDirectIO        bool
 	ReadDirectIO         bool
@@ -171,11 +128,7 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 		return 0, ErrFileOffsetOutOfRange
 	}
 
-	// Acquire semaphore slot to limit concurrent reads
-	// This prevents burst concurrency from causing kernel scheduling tail latency
-	acquireReadSlot()
 	n, err := syscall.Pread(r.ReadFd, buf, fileOffset)
-	releaseReadSlot()
 
 	if err != nil {
 		return 0, err
