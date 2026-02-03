@@ -2,7 +2,6 @@ package handler
 
 import (
 	etcd "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
-	etcdModel "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
 	dbModel "github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/inferflow"
 	mapset "github.com/deckarep/golang-set/v2"
 )
@@ -81,10 +80,10 @@ type InternalComponentBuilder interface {
 	AdaptFromDbToSeenScoreComponent(dbSeenScoreComponents []dbModel.SeenScoreComponent) []SeenScoreComponent
 
 	// AdaptToEtcdRTPComponent adapts DB model RTP components to etcd model format
-	AdaptToEtcdRTPComponent(dbRTPComponents []dbModel.RTPComponent) []etcdModel.RTPComponent
+	AdaptToEtcdRTPComponent(dbRTPComponents []dbModel.RTPComponent) []etcd.RTPComponent
 
 	// AdaptToEtcdSeenScoreComponent adapts DB model SeenScore components to etcd model format
-	AdaptToEtcdSeenScoreComponent(dbSeenScoreComponents []dbModel.SeenScoreComponent) []etcdModel.SeenScoreComponent
+	AdaptToEtcdSeenScoreComponent(dbSeenScoreComponents []dbModel.SeenScoreComponent) []etcd.SeenScoreComponent
 }
 
 // InternalComponentBuilderInstance is the global instance of the internal component builder.

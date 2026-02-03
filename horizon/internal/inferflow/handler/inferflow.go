@@ -212,7 +212,7 @@ func (m *InferFlow) Promote(request PromoteConfigRequest) (Response, error) {
 			newVersion = latestRequests[0].Version + 1
 		}
 		if newVersion > maxConfigVersion {
-			return Response{}, errors.New("This inferflow config has reached its version limit. Please create a clone to make further updates.")
+			return Response{}, errors.New("this inferflow config has reached its version limit. Please create a clone to make further updates")
 		}
 		request.Payload.ConfigValue.ComponentConfig.CacheVersion = newVersion
 	} else {
@@ -290,7 +290,7 @@ func (m *InferFlow) Edit(request EditConfigOrCloneConfigRequest, token string) (
 	}
 
 	if newVersion > maxConfigVersion {
-		return Response{}, errors.New("This inferflow config has reached its version limit. Please create a clone to make further updates.")
+		return Response{}, errors.New("this inferflow config has reached its version limit. Please create a clone to make further updates")
 	}
 
 	onboardRequest := InferflowOnboardRequest(request)
@@ -732,7 +732,7 @@ func (m *InferFlow) rollbackPromoteRequest(tx *gorm.DB, currentRequest *inferflo
 func (m *InferFlow) rollbackEditRequest(tx *gorm.DB, currentRequest *inferflow_request.Table, discoveryID int) error {
 	approvedRequests, err := m.InferFlowRequestRepo.GetApprovedRequestsByConfigID(currentRequest.ConfigID)
 	if err != nil {
-		return fmt.Errorf("Failed to retrieve approved requests: %w", err)
+		return fmt.Errorf("failed to retrieve approved requests: %w", err)
 	}
 
 	var previousRequest *inferflow_request.Table
@@ -1319,7 +1319,7 @@ func (m *InferFlow) ValidateOnboardRequest(request OnboardPayload) (Response, er
 		return Response{
 			Error: "Failed to fetch deployable config for the request",
 			Data:  Message{Message: emptyResponse},
-		}, errors.New("Failed to fetch deployable config for the request")
+		}, errors.New("failed to fetch deployable config for the request")
 	}
 	permissibleEndpoints := m.EtcdConfig.GetConfiguredEndpoints(deployableConfig.Name)
 	for _, ranker := range request.Rankers {
