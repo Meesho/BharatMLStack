@@ -17,7 +17,7 @@ type DiscoveryConfigRepository interface {
 	GetByToken(token string) ([]DiscoveryConfig, error)
 	GetById(configId int) (*DiscoveryConfig, error)
 	GetByServiceDeployableID(serviceDeployableID int) ([]DiscoveryConfig, error)
-	GetByServiceDeployableIDs(serviceDeployableIDs []int) ([]DiscoveryConfig, error)
+	GetByDiscoveryIDs(discoveryIDs []int) ([]DiscoveryConfig, error)
 	DB() *gorm.DB
 	WithTx(tx *gorm.DB) DiscoveryConfigRepository
 	DeleteByIDTx(tx *gorm.DB, id int) error
@@ -108,12 +108,12 @@ func (r *discoveryConfigRepo) WithTx(tx *gorm.DB) DiscoveryConfigRepository {
 	}
 }
 
-func (r *discoveryConfigRepo) GetByServiceDeployableIDs(serviceDeployableIDs []int) ([]DiscoveryConfig, error) {
-	if len(serviceDeployableIDs) == 0 {
+func (r *discoveryConfigRepo) GetByDiscoveryIDs(discoveryIDs []int) ([]DiscoveryConfig, error) {
+	if len(discoveryIDs) == 0 {
 		return []DiscoveryConfig{}, nil
 	}
 	var configs []DiscoveryConfig
-	err := r.db.Where("id IN ?", serviceDeployableIDs).Find(&configs).Error
+	err := r.db.Where("id IN ?", discoveryIDs).Find(&configs).Error
 	return configs, err
 }
 

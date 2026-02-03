@@ -424,7 +424,7 @@ func (m *InferFlow) ScaleUp(request ScaleUpConfigRequest) (Response, error) {
 
 	var latestSourceRequest GetLatestRequestResponse
 	latestSourceRequest, err = m.GetLatestRequest(sourceConfigID)
-	if err != nil {
+	if err != nil || latestSourceRequest.Error != emptyResponse {
 		return Response{}, errors.New("failed to get latest request for the source configID: " + sourceConfigID + ": " + err.Error())
 	}
 	request.Payload.ConfigMapping.SourceConfigID = sourceConfigID
@@ -624,7 +624,10 @@ func (m *InferFlow) handleApprovedRequest(request ReviewRequest) (Response, erro
 
 	var configExistedBeforeTx bool
 	if tempRequest.RequestType == promoteRequestType {
-		existingConfig, _ := m.InferFlowConfigRepo.GetByID(tempRequest.ConfigID)
+		existingConfig, err := m.InferFlowConfigRepo.GetByID(tempRequest.ConfigID)
+		if err != nil {
+			return Response{}, fmt.Errorf("failed to check existing config for promote: %w", err)
+		}
 		configExistedBeforeTx = existingConfig != nil
 	}
 
@@ -1171,7 +1174,7 @@ func (m *InferFlow) batchFetchDiscoveryConfigs(discoveryIDs []int) (
 		return emptyDiscoveryMap, emptyServiceDeployableMap, nil
 	}
 
-	discoveryConfigs, err := m.DiscoveryConfigRepo.GetByServiceDeployableIDs(discoveryIDs)
+	discoveryConfigs, err := m.DiscoveryConfigRepo.GetByDiscoveryIDs(discoveryIDs)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get discovery configs: %w", err)
 	}
@@ -1677,6 +1680,11 @@ func (m *InferFlow) GetFeatureSchema(request FeatureSchemaRequest) (FeatureSchem
 		return FeatureSchemaResponse{
 			Data: []inferflow.SchemaComponents{},
 		}, err
+	}
+	if len(inferflowRequests) == 0 {
+		return FeatureSchemaResponse{
+			Data: []inferflow.SchemaComponents{},
+		}, errors.New("no inferflow config found for model_config_id=" + request.ModelConfigId + " version=" + strconv.Itoa(version))
 	}
 	inferflowConfig := inferflowRequests[0].Payload
 	componentConfig := &inferflowConfig.ConfigValue.ComponentConfig
