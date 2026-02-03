@@ -238,7 +238,7 @@ func (fc *ShardCache) validateAndReturnBuffer(key string, buf []byte, length uin
 }
 
 func (fc *ShardCache) readFromDisk(fileOffset int64, length uint16, buf []byte) int {
-	shardTag := []string{"shard_id", strconv.Itoa(fc.shardId)}
+	// shardTag := []string{"shard_id", strconv.Itoa(fc.shardId)}
 
 	alignedStartOffset := (fileOffset / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
 	endndOffset := fileOffset + int64(length)
@@ -246,14 +246,14 @@ func (fc *ShardCache) readFromDisk(fileOffset int64, length uint16, buf []byte) 
 	alignedReadSize := endAlignedOffset - alignedStartOffset
 
 	// Measure allocator get time
-	allocGetStart := time.Now()
+	// allocGetStart := time.Now()
 	page := fc.readPageAllocator.Get(int(alignedReadSize))
-	metrics.Timing("flashring.disk.alloc_get.latency", time.Since(allocGetStart), shardTag)
+	// metrics.Timing("flashring.disk.alloc_get.latency", time.Since(allocGetStart), shardTag)
 
 	// Measure pure Pread syscall time
-	preadStart := time.Now()
+	// preadStart := time.Now()
 	fc.file.Pread(alignedStartOffset, page.Buf)
-	metrics.Timing("flashring.disk.pread.latency", time.Since(preadStart), shardTag)
+	// metrics.Timing("flashring.disk.pread.latency", time.Since(preadStart), shardTag)
 
 	start := int(fileOffset - alignedStartOffset)
 	n := copy(buf, page.Buf[start:start+int(length)])

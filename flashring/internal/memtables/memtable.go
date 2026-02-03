@@ -2,10 +2,8 @@ package memtables
 
 import (
 	"errors"
-	"strconv"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
-	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 	"github.com/rs/zerolog/log"
 )
 
@@ -101,7 +99,7 @@ func (m *Memtable) Flush() (n int, fileOffset int64, err error) {
 		return 0, 0, ErrMemtableNotReadyForFlush
 	}
 	fileOffset, err = m.file.Pwrite(m.page.Buf)
-	metrics.Count("flashring.memtable.flush.count", 1, []string{"memtable_id", strconv.Itoa(int(m.Id))})
+	// metrics.Count("flashring.memtable.flush.count", 1, []string{"memtable_id", strconv.Itoa(int(m.Id))})
 	if err != nil {
 		return 0, 0, err
 	} else {
