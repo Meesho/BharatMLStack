@@ -306,8 +306,7 @@ func (g *GCSClient) TransferFolderWithSplitSources(modelBucket, modelPath, confi
 		len(configFiles), configBucket, configPrefix)
 
 	if len(regularFiles) == 0 && len(configFiles) == 0 {
-		log.Warn().Msg("TransferFolderWithSplitSources: No objects found to transfer")
-		return nil
+		return fmt.Errorf("TransferFolderWithSplitSources: No objects found to transfer")
 	}
 
 	regularFilesTransferred := false
