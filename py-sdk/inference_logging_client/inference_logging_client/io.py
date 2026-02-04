@@ -49,7 +49,7 @@ def _fetch_schema_with_retry(url: str, max_retries: int = _MAX_RETRIES) -> dict:
                 url,
                 headers={
                     "Content-Type": "application/json",
-                    "User-Agent": "inference-logging-client/0.1.0",
+                    "User-Agent": "inference-logging-client/0.2.0",
                 },
             )
             with urllib.request.urlopen(req, timeout=30) as response:
