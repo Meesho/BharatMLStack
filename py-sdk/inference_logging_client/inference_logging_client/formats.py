@@ -16,6 +16,127 @@ from .utils import is_sized_type, get_scalar_size
 from .exceptions import FormatError
 
 
+def decode_arrow_features(encoded_bytes: bytes, schema: list[FeatureInfo]) -> dict[str, Any]:
+    """
+    Decode Arrow IPC-encoded features for a single entity.
+
+    Arrow encoding for single entity:
+    - Arrow IPC stream with a single row
+    - Columns named by feature index ("0", "1", ...)
+    - Each column contains raw feature value bytes
+    """
+    if len(encoded_bytes) == 0:
+        return {f.name: None for f in schema}
+
+    try:
+        reader = pa.ipc.open_stream(io.BytesIO(encoded_bytes))
+        table = reader.read_all()
+    except Exception as e:
+        raise FormatError(f"Failed to read Arrow IPC data: {e}")
+
+    if table.num_rows == 0:
+        return {f.name: None for f in schema}
+
+    result = {}
+    for feature in schema:
+        col_name = str(feature.index)
+
+        if col_name not in table.column_names:
+            result[feature.name] = None
+            continue
+
+        column = table.column(col_name)
+
+        if column.is_null()[0].as_py():
+            result[feature.name] = None
+            continue
+
+        value_bytes = column[0].as_py()
+        if value_bytes is None or len(value_bytes) == 0:
+            result[feature.name] = None
+        else:
+            result[feature.name] = decode_feature_value(value_bytes, feature.feature_type)
+
+    return result
+
+
+def decode_parquet_features(encoded_bytes: bytes, schema: list[FeatureInfo]) -> dict[str, Any]:
+    """
+    Decode Parquet-encoded features for a single entity.
+
+    Parquet encoding for single entity:
+    - Parquet file with a single row
+    - Features column (map[int][]byte) or columnar format
+    """
+    if len(encoded_bytes) == 0:
+        return {f.name: None for f in schema}
+
+    try:
+        table = pq.read_table(io.BytesIO(encoded_bytes))
+    except Exception as e:
+        raise FormatError(f"Failed to read Parquet data: {e}")
+
+    if table.num_rows == 0:
+        return {f.name: None for f in schema}
+
+    result = {}
+
+    # Check for Features column (map format)
+    if "Features" in table.column_names:
+        features_col = table.column("Features")
+        feature_data = features_col[0].as_py()
+
+        if feature_data is None:
+            return {f.name: None for f in schema}
+
+        if isinstance(feature_data, dict):
+            for feature in schema:
+                value_bytes = feature_data.get(feature.index)
+                if value_bytes is None or len(value_bytes) == 0:
+                    result[feature.name] = None
+                else:
+                    result[feature.name] = decode_feature_value(value_bytes, feature.feature_type)
+        elif isinstance(feature_data, list):
+            if len(feature_data) > 0 and isinstance(feature_data[0], tuple):
+                feature_map = {k: v for k, v in feature_data}
+                for feature in schema:
+                    value_bytes = feature_map.get(feature.index)
+                    if value_bytes is None or len(value_bytes) == 0:
+                        result[feature.name] = None
+                    else:
+                        result[feature.name] = decode_feature_value(value_bytes, feature.feature_type)
+            else:
+                for feature in schema:
+                    if feature.index < len(feature_data):
+                        value_bytes = feature_data[feature.index]
+                        if value_bytes is None or (isinstance(value_bytes, (bytes, bytearray)) and len(value_bytes) == 0):
+                            result[feature.name] = None
+                        else:
+                            result[feature.name] = decode_feature_value(value_bytes, feature.feature_type)
+                    else:
+                        result[feature.name] = None
+        else:
+            return {f.name: None for f in schema}
+    else:
+        # Columnar format
+        for feature in schema:
+            col_name = str(feature.index)
+            if col_name in table.column_names:
+                column = table.column(col_name)
+                if column.is_null()[0].as_py():
+                    result[feature.name] = None
+                else:
+                    value_bytes = column[0].as_py()
+                    if value_bytes is None or len(value_bytes) == 0:
+                        result[feature.name] = None
+                    else:
+                        result[feature.name] = decode_feature_value(value_bytes, feature.feature_type)
+            else:
+                result[feature.name] = None
+
+    return result
+
+
 def decode_proto_features(encoded_bytes: bytes, schema: list[FeatureInfo]) -> dict[str, Any]:
     """
     Decode proto-encoded features for a single entity.

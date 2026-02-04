@@ -36,7 +36,14 @@ from .exceptions import (
     SchemaFetchError,
     SchemaNotFoundError,
 )
-from .formats import decode_arrow_format, decode_parquet_format, decode_proto_format
+from .formats import (
+    decode_arrow_format,
+    decode_arrow_features,
+    decode_parquet_format,
+    decode_parquet_features,
+    decode_proto_format,
+    decode_proto_features,
+)
 from .io import clear_schema_cache, get_feature_schema, get_mplog_metadata, parse_mplog_protobuf
 from .types import FORMAT_TYPE_MAP, DecodedMPLog, FeatureInfo, Format
 from .utils import format_dataframe_floats, get_format_name, unpack_metadata_byte
@@ -277,23 +284,45 @@ def decode_mplog_dataframe(
     # Key: (mp_config_id, version) only - host/path intentionally excluded as schemas are canonical
     schema_cache: dict[tuple[str, int], list[FeatureInfo]] = {}
 
+    def _extract_metadata_byte(metadata_data) -> int:
+        """Extract metadata byte from JSON array with base64-encoded string.
+
+        Expected format: JSON array with single base64-encoded string, e.g., '["BQ=="]'
+        """
+        if metadata_data is None:
+            return 0
+
+        # Handle JSON string format
+        if isinstance(metadata_data, str):
+            try:
+                parsed = json.loads(metadata_data)
+                if isinstance(parsed, list) and len(parsed) > 0:
+                    decoded = base64.b64decode(parsed[0])
+                    if len(decoded) > 0:
+                        return decoded[0]
+            except (json.JSONDecodeError, ValueError, TypeError):
+                pass
+            return 0
+
+        # Handle already-parsed list format
+        if isinstance(metadata_data, list) and len(metadata_data) > 0:
+            first_item = metadata_data[0]
+            if isinstance(first_item, str):
+                try:
+                    decoded = base64.b64decode(first_item)
+                    if len(decoded) > 0:
+                        return decoded[0]
+                except (ValueError, TypeError):
+                    pass
+            return 0
+
+        return 0
+
     # First pass: collect unique (mp_config_id, version) pairs
     for row in rows:
         # Extract metadata byte to get version
         metadata_data = row[metadata_column]
-        metadata_byte = 0
-        if metadata_data is not None:
-            if isinstance(metadata_data, (int, float)):
-                metadata_byte = int(metadata_data)
-            elif isinstance(metadata_data, bytes) and len(metadata_data) > 0:
-                metadata_byte = metadata_data[0]
-            elif isinstance(metadata_data, (bytearray, memoryview)) and len(metadata_data) > 0:
-                metadata_byte = metadata_data[0]
-            elif isinstance(metadata_data, str):
-                try:
-                    metadata_byte = int(metadata_data)
-                except ValueError:
-                    pass
+        metadata_byte = _extract_metadata_byte(metadata_data)
 
         _, version, _ = unpack_metadata_byte(metadata_byte)
 
@@ -318,50 +347,30 @@ def decode_mplog_dataframe(
 
     all_decoded_rows = []
 
+    # Metadata columns to preserve
+    row_metadata_columns = [
+        "prism_ingested_at",
+        "prism_extracted_at",
+        "created_at",
+        "mp_config_id",
+        "parent_entity",
+        "tracking_id",
+        "user_id",
+        "year",
+        "month",
+        "day",
+        "hour",
+    ]
+
     for idx, row in enumerate(rows):
-        # Extract features bytes
+        # Extract features data
         features_data = row[features_column]
         if features_data is None:
             continue
 
-        # Convert features to bytes (handle base64, hex, or raw bytes)
-        features_bytes = None
-        if isinstance(features_data, bytes):
-            features_bytes = features_data
-        elif isinstance(features_data, str):
-            # Try base64 first
-            try:
-                features_bytes = base64.b64decode(features_data)
-            except Exception:
-                # Try hex
-                try:
-                    features_bytes = bytes.fromhex(features_data)
-                except Exception:
-                    # Try UTF-8 encoding
-                    features_bytes = features_data.encode("utf-8")
-        elif isinstance(features_data, (bytearray, memoryview)):
-            features_bytes = bytes(features_data)
-        else:
-            continue
-
-        if features_bytes is None or len(features_bytes) == 0:
-            continue
-
         # Extract metadata byte
         metadata_data = row[metadata_column]
-        metadata_byte = 0
-        if metadata_data is not None:
-            if isinstance(metadata_data, (int, float)):
-                metadata_byte = int(metadata_data)
-            elif isinstance(metadata_data, bytes) and len(metadata_data) > 0:
-                metadata_byte = metadata_data[0]
-            elif isinstance(metadata_data, (bytearray, memoryview)) and len(metadata_data) > 0:
-                metadata_byte = metadata_data[0]
-            elif isinstance(metadata_data, str):
-                try:
-                    metadata_byte = int(metadata_data)
-                except ValueError:
-                    pass
+        metadata_byte = _extract_metadata_byte(metadata_data)
 
         # Extract version from metadata byte
         _, version, _ = unpack_metadata_byte(metadata_byte)
@@ -385,105 +394,113 @@ def decode_mplog_dataframe(
         cache_key = (mp_config_id, version)
         cached_schema = schema_cache.get(cache_key)
 
-        # Decode this row's features
         try:
-            # Attempt decompression if enabled
-            working_data = features_bytes
-            if decompress:
-                working_data = _decompress_zstd(features_bytes)
-
-            # Parse protobuf to get format from metadata
-            parsed = parse_mplog_protobuf(working_data)
-            if parsed.format_type in FORMAT_TYPE_MAP:
-                detected_format = FORMAT_TYPE_MAP[parsed.format_type]
+            # Parse features JSON (expected format: JSON array of dicts with encoded_features)
+            if isinstance(features_data, str):
+                features_list = json.loads(features_data)
             else:
-                detected_format = Format.PROTO
+                features_list = features_data
+
+            if not isinstance(features_list, list):
+                warnings.warn(f"Row {idx}: features is not a list, skipping", UserWarning)
+                continue
+
+            # Get entities from row
+            entities_val = None
+            if "entities" in df_columns:
+                entities_raw = row["entities"]
+                if entities_raw is not None:
+                    if isinstance(entities_raw, str):
+                        try:
+                            entities_val = json.loads(entities_raw)
+                        except (json.JSONDecodeError, ValueError):
+                            entities_val = [entities_raw]
+                    elif isinstance(entities_raw, list):
+                        entities_val = entities_raw
+                    else:
+                        entities_val = [entities_raw]
 
             # Use cached schema or fetch
             feature_schema = cached_schema
             if feature_schema is None:
                 feature_schema = get_feature_schema(mp_config_id, version, inference_host)
 
-            # Decode based on format
-            if detected_format == Format.PROTO:
-                entity_ids, decoded_feature_rows = decode_proto_format(working_data, feature_schema)
-            elif detected_format == Format.ARROW:
-                entity_ids, decoded_feature_rows = decode_arrow_format(working_data, feature_schema)
-            elif detected_format == Format.PARQUET:
-                entity_ids, decoded_feature_rows = decode_parquet_format(working_data, feature_schema)
+            # Determine format type from metadata byte
+            # unpack_metadata_byte returns (compression_enabled, version, format_type)
+            _, _, format_type_num = unpack_metadata_byte(metadata_byte)
+            if format_type_num in FORMAT_TYPE_MAP:
+                detected_format = FORMAT_TYPE_MAP[format_type_num]
             else:
-                raise FormatError(f"Unsupported format: {detected_format}")
+                detected_format = Format.PROTO  # Default to proto
 
-            # Add original row metadata to each decoded entity row
-            if decoded_feature_rows:
-                # Metadata columns to preserve
-                metadata_columns = [
-                    "prism_ingested_at",
-                    "prism_extracted_at",
-                    "created_at",
-                    "mp_config_id",
-                    "parent_entity",
-                    "tracking_id",
-                    "user_id",
-                    "year",
-                    "month",
-                    "day",
-                    "hour",
-                ]
-
-                # Get entities from row if available
-                entities_val = None
-                if "entities" in df_columns:
-                    entities_val = row["entities"]
-                    if entities_val is not None:
-                        if isinstance(entities_val, str):
-                            try:
-                                entities_val = json.loads(entities_val)
-                            except (json.JSONDecodeError, ValueError):
-                                entities_val = [entities_val]
-                        elif not isinstance(entities_val, list):
-                            entities_val = [entities_val]
-
-                # Process parent_entity
-                parent_entity_val = None
-                if "parent_entity" in df_columns and row["parent_entity"] is not None:
-                    parent_val = row["parent_entity"]
-                    if isinstance(parent_val, str):
-                        try:
-                            parent_val = json.loads(parent_val)
-                        except (json.JSONDecodeError, ValueError):
-                            parent_val = [parent_val]
-                    if isinstance(parent_val, list):
-                        if len(parent_val) == 1:
-                            parent_entity_val = parent_val[0]
-                        elif len(parent_val) > 1:
-                            parent_entity_val = str(parent_val)
-                        else:
-                            parent_entity_val = None
+            # Process parent_entity
+            parent_entity_val = None
+            if "parent_entity" in df_columns and row["parent_entity"] is not None:
+                parent_val = row["parent_entity"]
+                if isinstance(parent_val, str):
+                    try:
+                        parent_val = json.loads(parent_val)
+                    except (json.JSONDecodeError, ValueError):
+                        parent_val = [parent_val]
+                if isinstance(parent_val, list):
+                    if len(parent_val) == 1:
+                        parent_entity_val = parent_val[0]
+                    elif len(parent_val) > 1:
+                        parent_entity_val = str(parent_val)
                     else:
-                        parent_entity_val = parent_val
+                        parent_entity_val = None
+                else:
+                    parent_entity_val = parent_val
 
-                for i, (entity_id, feature_row) in enumerate(zip(entity_ids, decoded_feature_rows)):
-                    result_row = {"entity_id": entity_id}
-                    result_row.update(feature_row)
+            # Process each entity's features
+            for i, feature_item in enumerate(features_list):
+                # Get entity_id from entities array or generate synthetic
+                entity_id = f"entity_{i}"
+                if entities_val and i < len(entities_val):
+                    entity_id = str(entities_val[i])
 
-                    # Add metadata columns
-                    for col in metadata_columns:
-                        if col in df_columns:
-                            result_row[col] = row[col]
+                # Get and decode base64 encoded_features
+                encoded_features_b64 = feature_item.get("encoded_features", "")
+                if not encoded_features_b64:
+                    continue
 
-                    # Override entity_id from entities column if available and matches count
-                    if entities_val and len(entities_val) == len(entity_ids):
-                        result_row["entity_id"] = entities_val[i]
+                try:
+                    encoded_bytes = base64.b64decode(encoded_features_b64)
+                except (ValueError, TypeError):
+                    continue
 
-                    # Set parent_entity
-                    if parent_entity_val is not None:
-                        result_row["parent_entity"] = parent_entity_val
+                if len(encoded_bytes) == 0:
+                    continue
 
-                    all_decoded_rows.append(result_row)
+                # Attempt decompression if enabled
+                working_data = encoded_bytes
+                if decompress:
+                    working_data = _decompress_zstd(encoded_bytes)
+
+                # Decode features based on format type
+                if detected_format == Format.ARROW:
+                    decoded_features = decode_arrow_features(working_data, feature_schema)
+                elif detected_format == Format.PARQUET:
+                    decoded_features = decode_parquet_features(working_data, feature_schema)
+                else:
+                    # Default to proto format
+                    decoded_features = decode_proto_features(working_data, feature_schema)
+
+                result_row = {"entity_id": entity_id}
+                result_row.update(decoded_features)
+
+                # Add metadata columns
+                for col in row_metadata_columns:
+                    if col in df_columns:
+                        result_row[col] = row[col]
+
+                # Set parent_entity
+                if parent_entity_val is not None:
+                    result_row["parent_entity"] = parent_entity_val
+
+                all_decoded_rows.append(result_row)
 
         except Exception as e:
-            # Track error but continue processing other rows
             decode_errors.append((idx, str(e)))
             warnings.warn(f"Failed to decode row {idx}: {e}", UserWarning)
             continue
