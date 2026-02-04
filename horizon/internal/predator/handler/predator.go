@@ -164,9 +164,8 @@ const (
 	failedToParseServiceConfig                 = "Failed to parse service config"
 	failedToCreateServiceDiscoveryAndConfig    = "Failed to create service discovery and config"
 	predatorInferMethod                        = "inference.GRPCInferenceService/ModelInfer"
-	deployableTagDelimiter = "_"
-	scaleupTag             = "scaleup"
-
+	deployableTagDelimiter                     = "_"
+	scaleupTag                                 = "scaleup"
 )
 
 func InitV1ConfigHandler() (Config, error) {
@@ -555,9 +554,8 @@ func (p *Predator) FetchModelConfig(req FetchModelConfigRequest) (ModelParamsRes
 
 	intBucket, intObjectPath := parseModelPath(req.ModelPath)
 	metaDataPath := path.Join(intObjectPath, "metadata.json")
-	_, modelName := parseModelPath(intObjectPath)
+	modelName := path.Base(intObjectPath)
 	intConfigPath := path.Join(intObjectPath, configFile)
-
 
 	// Read config.pbtxt
 	var configData []byte
@@ -1249,8 +1247,7 @@ func (p *Predator) processGCSCloneStage(requestIdPayloadMap map[uint]*Payload, p
 			log.Info().Msgf("Copying to target deployable - src: %s/%s/%s, dest: %s/%s/%s",
 				srcBucket, srcPath, srcModelName, destBucket, destPath, destModelName)
 
-
-				if srcBucket == constant.EmptyString || srcPath == constant.EmptyString ||
+			if srcBucket == constant.EmptyString || srcPath == constant.EmptyString ||
 				srcModelName == constant.EmptyString || destBucket == constant.EmptyString ||
 				destPath == constant.EmptyString || destModelName == constant.EmptyString {
 				log.Error().Err(errors.New(errModelPathFormat)).Msg(errInvalidGcsBucketPath)
