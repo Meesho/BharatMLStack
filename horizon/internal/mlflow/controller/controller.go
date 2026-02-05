@@ -85,7 +85,7 @@ func (v *V1) ProxyToMLFlow(ctx *gin.Context) {
 	// Copy response headers from MLFlow backend
 	for key, values := range resp.Header {
 		for _, value := range values {
-			ctx.Header(key, value)
+			ctx.Writer.Header().Add(key, value)
 		}
 	}
 
