@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
 	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
 	filecache "github.com/Meesho/BharatMLStack/flashring/internal/shard"
 	"github.com/cespare/xxhash/v2"
@@ -68,6 +69,7 @@ type WrapCacheConfig struct {
 	GridSearchEpsilon     float64
 	SampleDuration        time.Duration
 	MountPoint            string
+	MaxConcurrentReads    int // Semaphore size to limit concurrent SSD reads (0 = no limit)
 }
 
 func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error) {
@@ -94,6 +96,11 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error)
 	}
 	if config.FileSize%BLOCK_SIZE != 0 {
 		return nil, ErrFileSizeNotMultipleOf4KB
+	}
+
+	// Initialize read semaphore to limit concurrent SSD reads
+	if config.MaxConcurrentReads > 0 {
+		fs.InitReadSemaphore(config.MaxConcurrentReads)
 	}
 
 	//clear existing data

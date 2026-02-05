@@ -5,11 +5,54 @@ package fs
 
 import (
 	"os"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sys/unix"
 )
+
+// Global read semaphore to limit concurrent SSD reads
+var (
+	readSemaphore    chan struct{}
+	semaphoreSize    int
+	semaphoreWaiting atomic.Int64 // tracks goroutines waiting for semaphore
+)
+
+// InitReadSemaphore initializes the global read semaphore.
+// Call this once during cache initialization.
+func InitReadSemaphore(maxConcurrentReads int) {
+	if maxConcurrentReads <= 0 {
+		maxConcurrentReads = 64 // sensible default
+	}
+	semaphoreSize = maxConcurrentReads
+	readSemaphore = make(chan struct{}, maxConcurrentReads)
+	log.Info().Int("max_concurrent_reads", maxConcurrentReads).Msg("Initialized read semaphore")
+}
+
+func acquireReadSlot() {
+	if readSemaphore == nil {
+		return // semaphore not initialized, no limiting
+	}
+	semaphoreWaiting.Add(1)
+	readSemaphore <- struct{}{}
+	semaphoreWaiting.Add(-1)
+}
+
+func releaseReadSlot() {
+	if readSemaphore == nil {
+		return
+	}
+	<-readSemaphore
+}
+
+// GetReadSemaphoreStats returns current semaphore statistics
+func GetReadSemaphoreStats() (inUse int, waiting int64, capacity int) {
+	if readSemaphore == nil {
+		return 0, 0, 0
+	}
+	return len(readSemaphore), semaphoreWaiting.Load(), semaphoreSize
+}
 
 type WrapAppendFile struct {
 	WriteDirectIO        bool
@@ -128,7 +171,10 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 		return 0, ErrFileOffsetOutOfRange
 	}
 
+	// Acquire semaphore slot to limit concurrent reads
+	acquireReadSlot()
 	n, err := syscall.Pread(r.ReadFd, buf, fileOffset)
+	releaseReadSlot()
 
 	if err != nil {
 		return 0, err
