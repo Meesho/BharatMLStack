@@ -552,16 +552,16 @@ func (p *Predator) FetchModelConfig(req FetchModelConfigRequest) (ModelParamsRes
 		return ModelParamsResponse{}, http.StatusBadRequest, err
 	}
 
-	intBucket, intObjectPath := parseModelPath(req.ModelPath)
-	metaDataPath := path.Join(intObjectPath, "metadata.json")
-	modelName := path.Base(intObjectPath)
-	intConfigPath := path.Join(intObjectPath, configFile)
+	preProdBucket, preProdObjectPath := parseModelPath(req.ModelPath)
+	metaDataPath := path.Join(preProdObjectPath, "metadata.json")
+	modelName := path.Base(preProdObjectPath)
+	preProdConfigPath := path.Join(preProdObjectPath, configFile)
 
 	// Read config.pbtxt
 	var configData []byte
 	var err error
 	if p.isNonProductionEnvironment() {
-		configData, err = p.GcsClient.ReadFile(intBucket, intConfigPath)
+		configData, err = p.GcsClient.ReadFile(preProdBucket, preProdConfigPath)
 	} else {
 		prodConfigPath := path.Join(pred.GcsConfigBasePath, modelName, configFile)
 		configData, err = p.GcsClient.ReadFile(pred.GcsConfigBucket, prodConfigPath)
@@ -571,7 +571,7 @@ func (p *Predator) FetchModelConfig(req FetchModelConfigRequest) (ModelParamsRes
 	}
 
 	// Read feature_meta.json
-	metaData, err := p.GcsClient.ReadFile(intBucket, metaDataPath)
+	metaData, err := p.GcsClient.ReadFile(preProdBucket, metaDataPath)
 	var featureMeta *FeatureMetadata
 	if err == nil && metaData != nil {
 		if err := json.Unmarshal(metaData, &featureMeta); err != nil {
@@ -607,7 +607,7 @@ func (p *Predator) FetchModelConfig(req FetchModelConfigRequest) (ModelParamsRes
 		outputs = []IO{}
 	}
 
-	return createModelParamsResponse(&modelConfig, intObjectPath, inputs, outputs), http.StatusOK, nil
+	return createModelParamsResponse(&modelConfig, preProdObjectPath, inputs, outputs), http.StatusOK, nil
 }
 
 func validateModelPath(modelPath string) error {
