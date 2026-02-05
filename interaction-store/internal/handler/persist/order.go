@@ -12,7 +12,6 @@ import (
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/model"
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/scylla"
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/utils"
-	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -86,14 +85,9 @@ func (p *OrderPersistHandler) persistToBucket(bucketIdx int, userId string, even
 		return err
 	}
 
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Error().Msgf("panic occurred while updating order metadata for user %s: %v", userId, r)
-			}
-		}()
-		p.updateMetadata(userId, metadata)
-	}()
+	if err := p.updateMetadata(userId, metadata); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -235,14 +229,16 @@ func (p *OrderPersistHandler) persistEvents(bucketIdx int, userId string, finalE
 	return metadata, nil
 }
 
-func (p *OrderPersistHandler) updateMetadata(userId string, metadataToUpdate map[string]interface{}) {
-	tableName := getOrderMetadataTableName()
-
-	if len(metadataToUpdate) > 0 {
-		if err := p.scyllaDb.UpdateMetadata(tableName, userId, metadataToUpdate); err != nil {
-			log.Error().Msg(fmt.Sprintf("failed to update order metadata for userId=%s, table=%s, columns=%v: %v", userId, tableName, metadataToUpdate, err))
-		}
+func (p *OrderPersistHandler) updateMetadata(userId string, metadataToUpdate map[string]interface{}) error {
+	if len(metadataToUpdate) == 0 {
+		return nil
 	}
+
+	tableName := getOrderMetadataTableName()
+	if err := p.scyllaDb.UpdateMetadata(tableName, userId, metadataToUpdate); err != nil {
+		return fmt.Errorf("failed to update order metadata for userId=%s, table=%s: %w", userId, tableName, err)
+	}
+	return nil
 }
 
 func getOrderMetadataTableName() string {
