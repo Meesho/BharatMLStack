@@ -4,6 +4,11 @@ import (
 	"strings"
 )
 
+const (
+	DataTypeString     = "String"
+	DefaultFeatureSize = 1
+)
+
 // BuildFeatureSchema builds a feature schema from the component and response configs.
 // It processes components in order: FS → RTP → SeenScore → Numerix Output → Predator Output → Numerix Input → Predator Input
 func BuildFeatureSchema(componentConfig *ComponentConfig, responseConfig *ResponseConfig) []SchemaComponents {
@@ -26,7 +31,7 @@ func BuildFeatureSchema(componentConfig *ComponentConfig, responseConfig *Respon
 	addOrUpdateComponents := func(components []SchemaComponents) {
 		for _, component := range components {
 			if !existingFeatures[component.FeatureName] {
-				component.FeatureType = "String"
+				component.FeatureType = DataTypeString
 				response = append(response, component)
 				existingFeatures[component.FeatureName] = true
 			}
@@ -175,15 +180,15 @@ func processPredatorInput(predatorComponents []PredatorComponent) []SchemaCompon
 	return response
 }
 
-func getPredatorFeatureTypeAndSize(dataType string, shape []int) (int, string) {
-	if len(shape) == 1 && shape[0] == 1 {
+func getPredatorFeatureTypeAndSize(dataType string, dims []int) (int, string) {
+	if len(dims) == 1 && dims[0] == 1 {
 		return 1, dataType
 	}
-	if len(shape) == 2 && shape[0] == -1 {
-		return shape[1], dataType + "Vector"
+	if len(dims) == 2 && dims[0] == -1 {
+		return dims[1], dataType + "Vector"
 	}
-	if len(shape) > 0 {
-		return shape[0], dataType + "Vector"
+	if len(dims) > 0 {
+		return dims[0], dataType + "Vector"
 	}
 	return 1, dataType
 }
@@ -212,8 +217,8 @@ func ProcessResponseConfig(responseConfig *ResponseConfig, schemaComponents []Sc
 		} else {
 			response = append(response, SchemaComponents{
 				FeatureName: feature,
-				FeatureType: "String",
-				FeatureSize: 1,
+				FeatureType: DataTypeString,
+				FeatureSize: DefaultFeatureSize,
 			})
 		}
 	}
