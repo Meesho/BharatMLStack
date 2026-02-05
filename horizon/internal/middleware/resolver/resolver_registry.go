@@ -17,6 +17,7 @@ func NewHandler() (*Handler, error) {
 		NewInferflowServiceResolver,
 		NewNumerixServiceResolver,
 		NewApplicationServiceResolver,
+		NewMLFlowServiceResolver,
 	}
 
 	for _, rFn := range resolverList {

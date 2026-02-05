@@ -138,6 +138,9 @@ type Configs struct {
 	// DNS API configuration (for Meesho builds only)
 	DNSAPIBaseURL string `mapstructure:"dns_api_base_url"`
 	DNSAPIKey     string `mapstructure:"dns_api_key"`
+
+	// MLFLow Config
+	MLFlowHostURL string `mapstructure:"mlflow_host_url"`
 }
 
 type DynamicConfigs struct{}
