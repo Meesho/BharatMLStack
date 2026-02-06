@@ -99,7 +99,10 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	}
 	buf, offset, length, readyForFlush := mt.GetBufForAppend(uint16(size))
 	if readyForFlush {
+		start := time.Now()
 		fc.mm.Flush()
+		metrics.Timing("flashring.shard.put.memtable_flush.latency", time.Since(start), []string{"memtable_id", strconv.Itoa(int(mtId))})
+		metrics.Count("flashring.shard.put.memtable_flush.count", 1, []string{"memtable_id", strconv.Itoa(int(mtId))})
 		mt, mtId, _ = fc.mm.GetMemtable()
 		buf, offset, length, _ = mt.GetBufForAppend(uint16(size))
 	}
