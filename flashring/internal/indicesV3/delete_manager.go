@@ -3,9 +3,11 @@ package indicesv2
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
 	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
+	"github.com/rs/zerolog/log"
 )
 
 type DeleteManager struct {
@@ -41,10 +43,10 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 		}
 		if memtableId != dm.toBeDeletedMemId {
 			dm.memtableData[dm.toBeDeletedMemId] = dm.memtableData[dm.toBeDeletedMemId] - count
+			log.Debug().Msgf("memtableId: %d, toBeDeletedMemId: %d", memtableId, dm.toBeDeletedMemId)
 			if dm.memtableData[dm.toBeDeletedMemId] != 0 {
 				return fmt.Errorf("memtableData[dm.toBeDeletedMemId] != 0")
 			}
-			metrics.Count("flashring.delete.memtable_completed.count", 1, []string{"memtable_id", strconv.Itoa(int(dm.toBeDeletedMemId))})
 			delete(dm.memtableData, dm.toBeDeletedMemId)
 			dm.toBeDeletedMemId = memtableId
 			dm.deleteInProgress = false
@@ -63,9 +65,6 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 	if trimNeeded || nextAddNeedsDelete {
 		dm.deleteInProgress = true
 		dm.deleteCount = int(dm.memtableData[dm.toBeDeletedMemId] / dm.deleteAmortizedStep)
-		if dm.deleteCount == 0 {
-			dm.deleteCount = int(dm.memtableData[dm.toBeDeletedMemId] % dm.deleteAmortizedStep)
-		}
 		memIdAtHead, err := dm.keyIndex.PeekMemIdAtHead()
 		if err != nil {
 			return err
@@ -73,10 +72,10 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 		if memIdAtHead != dm.toBeDeletedMemId {
 			return fmt.Errorf("memIdAtHead: %d, toBeDeletedMemId: %d", memIdAtHead, dm.toBeDeletedMemId)
 		}
-
-		if trimNeeded {
-			dm.wrapFile.TrimHead()
-		}
+		start := time.Now()
+		dm.wrapFile.TrimHead()
+		metrics.Timing("flashring.delete.ssd_trimmed.latency", time.Since(start), []string{"memtable_id", strconv.Itoa(int(dm.toBeDeletedMemId))})
+		metrics.Count("flashring.delete.ssd_trimmed.count", 1, []string{"memtable_id", strconv.Itoa(int(dm.toBeDeletedMemId))})
 		return nil
 	}
 	return nil
