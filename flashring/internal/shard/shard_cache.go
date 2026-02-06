@@ -99,10 +99,7 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	}
 	buf, offset, length, readyForFlush := mt.GetBufForAppend(uint16(size))
 	if readyForFlush {
-		start := time.Now()
 		fc.mm.Flush()
-		metrics.Timing("flashring.shard.put.memtable_flush.latency", time.Since(start), []string{"memtable_id", strconv.Itoa(int(mtId))})
-		metrics.Count("flashring.shard.put.memtable_flush.count", 1, []string{"memtable_id", strconv.Itoa(int(mtId))})
 		mt, mtId, _ = fc.mm.GetMemtable()
 		buf, offset, length, _ = mt.GetBufForAppend(uint16(size))
 	}
@@ -162,11 +159,11 @@ func (fc *ShardCache) ValidateBuffer(key string, buf []byte, length uint16) (boo
 	if buf == nil || len(buf) < 4+len(key) {
 		return false, nil
 	}
-	gotCRC := indices.ByteOrder.Uint32(buf[0:4])
-	computedCRC := crc32.ChecksumIEEE(buf[4:length])
-	if gotCRC != computedCRC {
-		return false, nil
-	}
+	// gotCRC := indices.ByteOrder.Uint32(buf[0:4])
+	// computedCRC := crc32.ChecksumIEEE(buf[4:length])
+	// if gotCRC != computedCRC {
+	// 	return false, nil
+	// }
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotKey != key {
 		return false, nil
