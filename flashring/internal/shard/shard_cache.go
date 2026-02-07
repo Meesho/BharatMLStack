@@ -159,11 +159,11 @@ func (fc *ShardCache) ValidateBuffer(key string, buf []byte, length uint16) (boo
 	if buf == nil || len(buf) < 4+len(key) {
 		return false, nil
 	}
-	// gotCRC := indices.ByteOrder.Uint32(buf[0:4])
-	// computedCRC := crc32.ChecksumIEEE(buf[4:length])
-	// if gotCRC != computedCRC {
-	// 	return false, nil
-	// }
+	gotCRC := indices.ByteOrder.Uint32(buf[0:4])
+	computedCRC := crc32.ChecksumIEEE(buf[4:length])
+	if gotCRC != computedCRC {
+		return false, nil
+	}
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotKey != key {
 		return false, nil
@@ -238,22 +238,15 @@ func (fc *ShardCache) validateAndReturnBuffer(key string, buf []byte, length uin
 }
 
 func (fc *ShardCache) readFromDisk(fileOffset int64, length uint16, buf []byte) int {
-	// shardTag := []string{"shard_id", strconv.Itoa(fc.shardId)}
 
 	alignedStartOffset := (fileOffset / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
 	endndOffset := fileOffset + int64(length)
 	endAlignedOffset := ((endndOffset + fs.BLOCK_SIZE - 1) / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
 	alignedReadSize := endAlignedOffset - alignedStartOffset
 
-	// Measure allocator get time
-	// allocGetStart := time.Now()
 	page := fc.readPageAllocator.Get(int(alignedReadSize))
-	// metrics.Timing("flashring.disk.alloc_get.latency", time.Since(allocGetStart), shardTag)
 
-	// Measure pure Pread syscall time
-	// preadStart := time.Now()
 	fc.file.Pread(alignedStartOffset, page.Buf)
-	// metrics.Timing("flashring.disk.pread.latency", time.Since(preadStart), shardTag)
 
 	start := int(fileOffset - alignedStartOffset)
 	n := copy(buf, page.Buf[start:start+int(length)])

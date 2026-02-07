@@ -68,24 +68,33 @@ func (m *Memtable) Get(offset int, length uint16) ([]byte, error) {
 
 func (m *Memtable) Put(buf []byte) (offset int, length uint16, readyForFlush bool) {
 	offset = m.currentOffset
-	if offset+len(buf) > m.capacity {
+	alignedSize := alignSizeToBlock(len(buf))
+	if offset+alignedSize > m.capacity {
 		m.readyForFlush = true
 		return -1, 0, true
 	}
 	copy(m.page.Buf[offset:], buf)
-	m.currentOffset += len(buf)
+	m.currentOffset += alignedSize
 	return offset, uint16(len(buf)), false
+}
+
+// alignSizeToBlock rounds size up to the next multiple of fs.BLOCK_SIZE (4KB).
+// This ensures each record is stored in whole blocks so reads need at most
+// ceil(size/4096) blocks, reducing read amplification (e.g. 3718 bytes → 1 block instead of 2).
+func alignSizeToBlock(size int) int {
+	return ((size + fs.BLOCK_SIZE - 1) / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
 }
 
 // Efforts to make zero copy
 func (m *Memtable) GetBufForAppend(size uint16) (bbuf []byte, offset int, length uint16, readyForFlush bool) {
 	offset = m.currentOffset
-	if offset+int(size) > m.capacity {
+	alignedSize := alignSizeToBlock(int(size))
+	if offset+alignedSize > m.capacity {
 		m.readyForFlush = true
 		return nil, -1, 0, true
 	}
 	bbuf = m.page.Buf[offset : offset+int(size)]
-	m.currentOffset += int(size)
+	m.currentOffset += alignedSize
 	return bbuf, offset, size, false
 }
 
