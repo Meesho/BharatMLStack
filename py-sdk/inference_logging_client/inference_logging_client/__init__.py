@@ -461,7 +461,16 @@ def decode_mplog_dataframe(
                     except Exception:
                         continue
                     result_row = {"entity_id": entity_id}
-                    result_row.update(decoded_features)
+                    # Convert all feature values to strings for schema compatibility
+                    for k, v in decoded_features.items():
+                        if v is None:
+                            result_row[k] = None
+                        elif isinstance(v, (list, tuple)):
+                            result_row[k] = str(v)
+                        elif isinstance(v, bytes):
+                            result_row[k] = v.hex()
+                        else:
+                            result_row[k] = str(v)
                     for col in row_metadata_columns:
                         if col in df_columns:
                             result_row[col] = _safe_get(row, col)
