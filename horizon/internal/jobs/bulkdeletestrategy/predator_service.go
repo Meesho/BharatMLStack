@@ -29,9 +29,9 @@ type PredatorService struct {
 }
 
 const (
-	slashConstant = "/"
-	gcsPrefix     = "gs://"
-	bulkDeleteCreatedBy = "horizon-bulk-delete" 
+	slashConstant       = "/"
+	gcsPrefix           = "gs://"
+	bulkDeleteCreatedBy = "horizon-bulk-delete"
 )
 
 type ModelInfo struct {
@@ -45,7 +45,6 @@ type PredatorBulkDeleteRepos struct {
 	predatorRequestRepo predatorrequest.PredatorRequestRepository
 	groupCounterRepo    counter.GroupIdCounterRepository
 }
-
 
 func (p *PredatorService) ProcessBulkDelete(serviceDeployable servicedeployableconfig.ServiceDeployableConfig) error {
 	predatorBulkDeleteRepos, err := p.initializeRepositories()
@@ -96,7 +95,7 @@ func (p *PredatorService) ProcessBulkDelete(serviceDeployable servicedeployablec
 				if err != nil {
 					log.Warn().Err(err).Msgf("Failed to fetch child model config for %s", childName)
 					continue
-				}				
+				}
 				if childConfig != nil {
 					modelsToDelete = append(modelsToDelete, ModelInfo{
 						ModelName:         childName,
@@ -201,7 +200,7 @@ func (p *PredatorService) fetchModelNames(
 		}
 	}
 
-	predatorConfigList, err := predatorBulkDeleteRepos.predatorConfigRepo.FindByDiscoveryIDsAndAge(discoveryConfigIds, zeroTrafficDays)
+	predatorConfigList, err := predatorBulkDeleteRepos.predatorConfigRepo.FindByDiscoveryConfigIdsAndAge(discoveryConfigIds, zeroTrafficDays)
 	if err != nil {
 		log.Err(err).Msg("Error fetching predator configs from DB")
 		return nil, nil, nil, nil, err

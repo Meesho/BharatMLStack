@@ -94,7 +94,7 @@ func (e *Etcd) GetConfiguredEndpoints(serviceDeployableName string) mapset.Set[s
 		return validEndpoints
 	}
 
-	inferflowConfig, exists := instance.InferflowConfig[serviceDeployableName]
+	inferflowConfig, exists := instance.Services[serviceDeployableName]
 	if !exists {
 		log.Warn().Msgf("service '%s' not found in etcd registry", serviceDeployableName)
 		return validEndpoints
@@ -105,13 +105,10 @@ func (e *Etcd) GetConfiguredEndpoints(serviceDeployableName string) mapset.Set[s
 		return validEndpoints
 	}
 
-	endpoints := strings.Split(predatorHosts, commaDelimiter)
-	for i := range len(endpoints) {
-		cleanedEndpoint := strings.TrimSpace(endpoints[i])
-		if cleanedEndpoint == "" {
-			continue
+	for _, endpoint := range strings.Split(predatorHosts, commaDelimiter) {
+		if cleanedEndpoint := strings.TrimSpace(endpoint); cleanedEndpoint != "" {
+			validEndpoints.Add(cleanedEndpoint)
 		}
-		validEndpoints.Add(cleanedEndpoint)
 	}
 	return validEndpoints
 }

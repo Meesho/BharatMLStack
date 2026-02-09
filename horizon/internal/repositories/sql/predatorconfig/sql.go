@@ -23,7 +23,7 @@ type PredatorConfigRepository interface {
 	GetByModelName(modelName string) (*PredatorConfig, error)
 	GetActiveModelByModelName(modelName string) (*PredatorConfig, error)
 	GetActiveModelByModelNameList(modelNames []string) ([]PredatorConfig, error)
-	FindByDiscoveryIDsAndAge(discoveryConfigIds []int, daysAgo int) ([]PredatorConfig, error)
+	FindByDiscoveryConfigIdsAndAge(discoveryConfigIds []int, daysAgo int) ([]PredatorConfig, error)
 }
 
 type predatorConfigRepo struct {
@@ -71,12 +71,12 @@ func (r *predatorConfigRepo) Update(config *PredatorConfig) error {
 	return r.db.Model(config).
 		Where("id = ?", config.ID).
 		UpdateColumns(map[string]interface{}{
-			"active":       config.Active,
-			"meta_data":    config.MetaData,
-			"updated_by":   config.UpdatedBy,
-			"updated_at":   config.UpdatedAt,
-			"test_results": config.TestResults,
-			"has_nil_data": config.HasNilData,
+			"active":            config.Active,
+			"meta_data":         config.MetaData,
+			"updated_by":        config.UpdatedBy,
+			"updated_at":        config.UpdatedAt,
+			"test_results":      config.TestResults,
+			"has_nil_data":      config.HasNilData,
 			"source_model_name": config.SourceModelName,
 		}).Error
 }
@@ -152,8 +152,8 @@ func (r *predatorConfigRepo) GetByModelName(modelName string) (*PredatorConfig, 
 	return &config, err
 }
 
-// FindByDiscoveryIDsAndAge returns active predator configs for given discovery IDs created before (now - daysAgo).
-func (r *predatorConfigRepo) FindByDiscoveryIDsAndAge(discoveryConfigIds []int, daysAgo int) ([]PredatorConfig, error) {
+// FindByDiscoveryConfigIdsAndAge returns active predator configs for given discovery IDs created before (now - daysAgo).
+func (r *predatorConfigRepo) FindByDiscoveryConfigIdsAndAge(discoveryConfigIds []int, daysAgo int) ([]PredatorConfig, error) {
 	var configs []PredatorConfig
 	if daysAgo < 0 {
 		return nil, errors.New("daysAgo must be >= 0")
@@ -166,4 +166,3 @@ func (r *predatorConfigRepo) FindByDiscoveryIDsAndAge(discoveryConfigIds []int, 
 
 	return configs, err
 }
-
