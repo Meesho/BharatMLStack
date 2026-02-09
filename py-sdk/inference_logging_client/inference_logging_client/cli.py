@@ -2,8 +2,11 @@
 
 import argparse
 import base64
+import glob
 import os
+import shutil
 import sys
+import tempfile
 
 from . import decode_mplog, format_dataframe_floats, get_format_name, get_mplog_metadata
 from .types import Format
@@ -126,12 +129,27 @@ Examples:
             print(f"Output written to {args.output}")
         else:
             if args.json:
-                # Collect and print as JSON
-                import json
-                rows = [row.asDict() for row in df.collect()]
-                print(json.dumps(rows, indent=2, default=str))
+                # Avoid collect() for large DataFrames: write to temp dir then stream to stdout
+                tmpdir = tempfile.mkdtemp(prefix="inference_logging_client_json_")
+                try:
+                    df.coalesce(1).write.mode("overwrite").json(tmpdir)
+                    part_files = sorted(glob.glob(os.path.join(tmpdir, "part-*")))
+                    print("[")
+                    first = True
+                    for path in part_files:
+                        with open(path) as f:
+                            for line in f:
+                                line = line.strip()
+                                if line:
+                                    if not first:
+                                        print(",")
+                                    print("  " + line, end="")
+                                    first = False
+                    print("\n]" if not first else "]")
+                finally:
+                    shutil.rmtree(tmpdir, ignore_errors=True)
             else:
-                # Show table
+                # Show table (only fetches 20 rows, no full collect)
                 df.show(truncate=False)
 
         # Get metadata for summary
@@ -150,7 +168,12 @@ Examples:
         print(
             f"Compression: {'enabled' if metadata.compression_enabled else 'disabled'}", file=sys.stderr
         )
-        print(f"Rows: {df.count()}", file=sys.stderr)
+        # Avoid full count() for huge DataFrames: use limit(1).count() for empty check only
+        try:
+            row_count = df.count()
+            print(f"Rows: {row_count}", file=sys.stderr)
+        except Exception:
+            print("Rows: (count skipped - use --output to write without summary)", file=sys.stderr)
         print(f"Columns: {len(df.columns)}", file=sys.stderr)
         col_preview = df.columns[1:5] if len(df.columns) > 1 else []
         print(
