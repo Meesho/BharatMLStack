@@ -1304,9 +1304,8 @@ func (p *Predator) processGCSCloneStageIndefaultFolder(requestIdPayloadMap map[u
 		srcPath := pred.GcsModelBasePath
 		srcModelName := originalModelName
 
-		log.Info().Msgf("Scale-up: Copying within model-source %s → %s", srcModelName, destModelName)
-		log.Info().Msgf("srcBucket: %s, srcPath: %s, srcModelName: %s, destBucket: %s, destPath: %s",
-			srcBucket, srcPath, srcModelName, destBucket, destPath)
+		log.Info().Msgf("Scale-up: Copying within model-source %s → %s:\nsrcBucket: %s, srcPath: %s, srcModelName: %s, destBucket: %s, destPath: %s",
+			srcModelName, destModelName, srcBucket, srcPath, srcModelName, destBucket, destPath)
 
 		if srcBucket == constant.EmptyString || srcPath == constant.EmptyString ||
 			srcModelName == constant.EmptyString || destBucket == constant.EmptyString ||

@@ -111,6 +111,15 @@ func CreateGCSClient() GCSClientInterface {
 	}
 }
 
+// ObjectVisitor is called for each object. Return an error to stop iteration.
+// Return a special sentinel error like ErrStopIteration to stop without error.
+type ObjectVisitor func(attrs *storage.ObjectAttrs) error
+
+var ErrStopIteration = errors.New("stop iteration")
+
+// ObjectFilter returns true if the object should be included.
+type ObjectFilter func(attrs *storage.ObjectAttrs) bool
+
 func (g *GCSClient) ReadFile(bucket, objectPath string) ([]byte, error) {
 	rc, err := g.client.Bucket(bucket).Object(objectPath).NewReader(g.ctx)
 	if err != nil {
@@ -343,8 +352,7 @@ func (g *GCSClient) transferRegularFilesFromSource(files []storage.ObjectAttrs, 
 
 	semaphore := make(chan struct{}, maxConcurrentFiles)
 	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var transferErrors []error
+	errChan := make(chan error, len(files))
 
 	for _, objAttrs := range files {
 		wg.Add(1)
@@ -354,17 +362,27 @@ func (g *GCSClient) transferRegularFilesFromSource(files []storage.ObjectAttrs, 
 			defer func() { <-semaphore }()
 
 			if err := g.transferSingleRegularFile(obj, srcBucket, destBucket, destPath, destModelName, prefix); err != nil {
-				mu.Lock()
-				transferErrors = append(transferErrors, fmt.Errorf("failed to transfer %s: %w", obj.Name, err))
-				mu.Unlock()
+				errChan <- fmt.Errorf("failed to transfer %s: %w", obj.Name, err)
 			}
 		}(objAttrs)
 	}
 
 	wg.Wait()
 
-	if len(transferErrors) > 0 {
-		return fmt.Errorf("regular file transfer completed with %d errors: %v", len(transferErrors), transferErrors[0])
+	if errCount := len(errChan); errCount > 0 {
+		errs := make([]error, 0, errCount)
+		for i := 0; i < errCount; i++ {
+			errs = append(errs, <-errChan)
+		}
+		var b strings.Builder
+		b.WriteString(fmt.Sprintf("regular file transfer completed with %d errors:\n", len(errs)))
+		for i, e := range errs {
+			if i > 0 {
+				b.WriteString("\n")
+			}
+			b.WriteString(e.Error())
+		}
+		return fmt.Errorf("%s", b.String())
 	}
 
 	return nil
@@ -753,12 +771,6 @@ func (g *GCSClient) FindFileWithSuffix(bucket, folderPath, suffix string) (bool,
 	return true, foundFile, nil
 }
 
-// ObjectVisitor is called for each object. Return an error to stop iteration.
-// Return a special sentinel error like ErrStopIteration to stop without error.
-type ObjectVisitor func(attrs *storage.ObjectAttrs) error
-
-var ErrStopIteration = errors.New("stop iteration")
-
 // forEachObject iterates over all objects with the given prefix and calls the visitor for each.
 func (g *GCSClient) forEachObject(bucket, prefix string, visitor ObjectVisitor) error {
 	it := g.client.Bucket(bucket).Objects(g.ctx, &storage.Query{Prefix: prefix})
@@ -780,9 +792,6 @@ func (g *GCSClient) forEachObject(bucket, prefix string, visitor ObjectVisitor) 
 	}
 	return nil
 }
-
-// ObjectFilter returns true if the object should be included.
-type ObjectFilter func(attrs *storage.ObjectAttrs) bool
 
 // listObjects returns all objects matching the prefix, optionally filtered.
 // Pass nil for filter to include all objects (except directory markers).
