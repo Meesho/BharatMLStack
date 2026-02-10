@@ -42,7 +42,7 @@ func (v *V1) ProxyToMLFlow(ctx *gin.Context) {
 
 	// Construct the full MLFlow backend URL with path rewrite (v1 -> 2.0)
 	mlflowURL := v.handler.ConstructMLFlowURL(mlflowPath)
-	
+
 	// Append query parameters if present
 	if ctx.Request.URL.RawQuery != "" {
 		mlflowURL += "?" + ctx.Request.URL.RawQuery
@@ -59,7 +59,7 @@ func (v *V1) ProxyToMLFlow(ctx *gin.Context) {
 			})
 			return
 		}
-		
+
 		// Create a new reader from the bytes for forwarding
 		if len(bodyBytes) > 0 {
 			bodyReader = bytes.NewReader(bodyBytes)

@@ -26,14 +26,11 @@ func NewMLFlowHandler() *MLFlowHandler {
 
 // ConstructMLFlowURL rewrites the path from /api/v1/mlflow/* to /api/2.0/mlflow/*
 func (h *MLFlowHandler) ConstructMLFlowURL(mlflowPath string) string {
-	// mlflowPath comes in as something like "/runs/log-metric"
-	// We need to construct: http://localhost:5001/api/2.0/mlflow/runs/log-metric
-	return h.baseURL + "/api/2.0/mlflow" + mlflowPath
+	return h.baseURL + mlflowPath
 }
 
 // ForwardRequest forwards the HTTP request to the MLFlow backend
 func (h *MLFlowHandler) ForwardRequest(method, url string, body io.Reader, headers http.Header) (*http.Response, error) {
-	// Read body if present to ensure it can be sent with the request
 	var bodyReader io.Reader
 	if body != nil {
 		bodyBytes, err := io.ReadAll(body)
@@ -50,13 +47,11 @@ func (h *MLFlowHandler) ForwardRequest(method, url string, body io.Reader, heade
 		return nil, err
 	}
 
-	// Copy headers from the original request, but skip problematic ones
-	// that might cause CORS issues with MLFlow backend
 	skipHeaders := map[string]bool{
-		"Origin":     true, // Skip Origin to avoid CORS issues
-		"Referer":    true, // Skip Referer as it points to the frontend
-		"Host":       true, // Host will be set automatically by http.Client
-		"Connection": true, // Connection is managed by http.Client
+		"Origin":     true,
+		"Referer":    true,
+		"Host":       true,
+		"Connection": true,
 	}
 
 	for key, values := range headers {
