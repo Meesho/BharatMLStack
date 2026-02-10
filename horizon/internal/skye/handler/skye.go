@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"slices"
@@ -438,7 +439,6 @@ func (s *skyeConfig) RegisterVariant(request VariantRegisterRequest) (RequestSta
 			return req.RequestID, req.CreatedAt, err
 		},
 		func(payload interface{}) error {
-
 			variantPayload, ok := payload.(VariantRequestPayload)
 			if !ok {
 				return fmt.Errorf("invalid payload type for variant registration")
@@ -458,6 +458,10 @@ func (s *skyeConfig) RegisterVariant(request VariantRegisterRequest) (RequestSta
 			_, ok = models.Models[variantPayload.Model]
 			if !ok {
 				return fmt.Errorf("model with name '%s' does not exist for entity '%s'", variantPayload.Model, variantPayload.Entity)
+			}
+
+			if models.Models[variantPayload.Model].ModelType != enums.ModelType(enums.DELTA) && variantPayload.OTDTrainingDataPath == "" {
+				return fmt.Errorf("otd_training_data_path is required for DELTA model type")
 			}
 
 			// Variant should be present from variantList in config (i.e., must be pre-defined as allowed)
@@ -501,9 +505,9 @@ func (s *skyeConfig) ApproveVariantRequest(requestID int, approval ApprovalReque
 			if approval.AdminRateLimiter.RateLimit == 0 || approval.AdminRateLimiter.BurstLimit == 0 {
 				return fmt.Errorf("admin must provide rate_limiter during variant approval")
 			}
-			if approval.AdminCachingConfiguration.DistributedCachingEnabled || approval.AdminCachingConfiguration.DistributedCacheTTLSeconds == 0 || approval.AdminCachingConfiguration.InMemoryCachingEnabled || approval.AdminCachingConfiguration.InMemoryCacheTTLSeconds == 0 {
-				return fmt.Errorf("admin must provide caching_configuration during variant approval")
-			}
+			// if approval.AdminCachingConfiguration.DistributedCachingEnabled || approval.AdminCachingConfiguration.DistributedCacheTTLSeconds == 0 || approval.AdminCachingConfiguration.InMemoryCachingEnabled || approval.AdminCachingConfiguration.InMemoryCacheTTLSeconds == 0 {
+			// 	return fmt.Errorf("admin must provide caching_configuration during variant approval")
+			// }
 			// For RT Partition, collect all RT partitions for all models across all entities
 			rtPartitions := make(map[int]bool)
 			entities, err := s.EtcdConfig.GetEntities()
@@ -570,12 +574,20 @@ func (s *skyeConfig) ApproveVariantRequest(requestID int, approval ApprovalReque
 				log.Error().Err(err).Msgf("Failed to register variant in ETCD for variant: %s", payload.Variant)
 				return fmt.Errorf("failed to register variant in ETCD: %w", err)
 			}
-
+			otdPayload := map[string]interface{}{
+				"otd_path": payload.OTDTrainingDataPath,
+			}
+			otdPayloadBytes, err := json.Marshal(otdPayload)
+			if err != nil {
+				log.Error().Err(err).Msgf("Failed to marshal otd payload for onboarding task: %s", payload.Variant)
+				return fmt.Errorf("failed to marshal otd payload: %w", err)
+			}
+			otdPayloadJsonStr := string(otdPayloadBytes)
 			task := &variant_onboarding_tasks.VariantOnboardingTask{
 				Entity:  payload.Entity,
 				Model:   payload.Model,
 				Variant: payload.Variant,
-				Payload: "{}",
+				Payload: otdPayloadJsonStr,
 				Status:  StatusPending,
 			}
 			if err := s.VariantOnboardingTaskRepo.Create(task); err != nil {

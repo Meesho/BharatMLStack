@@ -213,6 +213,7 @@ type VariantRequestPayload struct {
 	Type                enums.Type          `json:"type"`
 	FilterConfiguration FilterConfiguration `json:"filter_configuration"`
 	VectorDBConfig      VectorDBConfig      `json:"vector_db_config"`
+	OTDTrainingDataPath string              `json:"otd_training_data_path"`
 }
 
 type VariantRegisterRequest struct {

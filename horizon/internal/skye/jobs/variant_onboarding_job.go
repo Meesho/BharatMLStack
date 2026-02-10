@@ -13,6 +13,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_onboarding_tasks"
 	skyeEtcd "github.com/Meesho/BharatMLStack/horizon/internal/skye/etcd"
+	"github.com/Meesho/BharatMLStack/horizon/internal/skye/etcd/enums"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/rs/zerolog/log"
 )
@@ -377,6 +378,15 @@ func (j *VariantOnboardingJob) triggerPrismAndAirflow(task *variant_onboarding_t
 		return fmt.Errorf("failed to get variants from etcd: %w", err)
 	}
 
+	var payload map[string]interface{}
+	if err := json.Unmarshal([]byte(task.Payload), &payload); err != nil {
+		return fmt.Errorf("failed to unmarshal payload: %w", err)
+	}
+	trainingDataPath := model.TrainingDataPath
+	if model.ModelType == enums.DELTA {
+		trainingDataPath = payload["otd_path"].(string)
+	}
+
 	// Prepare Prism parameters
 	prismClient := externalcall.GetPrismV2Client()
 	parameters := make(map[string]interface{})
@@ -386,7 +396,7 @@ func (j *VariantOnboardingJob) triggerPrismAndAirflow(task *variant_onboarding_t
 	parameters["vector_db_type"] = variant.VectorDbType
 	parameters["model_name"] = task.Model
 	parameters["variant_name"] = task.Variant
-	parameters["training_data_path"] = model.TrainingDataPath
+	parameters["training_data_path"] = trainingDataPath
 
 	// Update Prism step parameters
 	if err := prismClient.UpdateStepParameters(j.appConfig.InitialIngestionPrismJobID, j.appConfig.InitialIngestionPrismStepID, parameters); err != nil {
@@ -401,10 +411,7 @@ func (j *VariantOnboardingJob) triggerPrismAndAirflow(task *variant_onboarding_t
 	}
 
 	// Add or update the "airflow_response" key
-	var payload map[string]interface{}
-	if err := json.Unmarshal([]byte(task.Payload), &payload); err != nil {
-		return fmt.Errorf("failed to unmarshal payload: %w", err)
-	}
+
 	payload["airflow_response"] = airflowResponse
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
