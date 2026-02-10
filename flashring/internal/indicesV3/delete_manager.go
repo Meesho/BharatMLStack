@@ -73,9 +73,7 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 			return fmt.Errorf("memIdAtHead: %d, toBeDeletedMemId: %d", memIdAtHead, dm.toBeDeletedMemId)
 		}
 
-		if trimNeeded {
-			dm.wrapFile.TrimHead()
-		}
+		dm.wrapFile.TrimHead()
 		return nil
 	}
 	return nil

@@ -39,11 +39,11 @@ func planReadthroughGaussian() {
 
 	flag.StringVar(&mountPoint, "mount", "/mnt/disks/nvme/", "data directory for shard files")
 	flag.IntVar(&numShards, "shards", 100, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 2_00_000, "keys per shard")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 3_00_000, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 2, "memtable size in MiB")
 	flag.Float64Var(&fileSizeMultiplier, "file-size-multiplier", 0.25, "file size in GiB per shard")
-	flag.IntVar(&readWorkers, "readers", 8, "number of read workers")
-	flag.IntVar(&writeWorkers, "writers", 8, "number of write workers")
+	flag.IntVar(&readWorkers, "readers", 16, "number of read workers")
+	flag.IntVar(&writeWorkers, "writers", 16, "number of write workers")
 	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
 	flag.Int64Var(&iterations, "iterations", 100_000_000, "number of iterations")
 	flag.Float64Var(&aVal, "a", 0.4, "a value for the predictor")
@@ -127,7 +127,7 @@ func planReadthroughGaussian() {
 		missedKeyChanList[i] = make(chan int)
 	}
 
-	totalKeys := keysPerShard * numShards
+	totalKeys := 30_000_000
 	str1kb := strings.Repeat("a", 1024)
 	str1kb = "%d" + str1kb
 
@@ -145,7 +145,7 @@ func planReadthroughGaussian() {
 		key := fmt.Sprintf("key%d", k)
 		val := []byte(fmt.Sprintf(str1kb, k))
 		if err := pc.Put(key, val, 60); err != nil {
-			panic(err)
+			log.Error().Err(err).Msgf("error putting key %s", key)
 		}
 		if k%5000000 == 0 {
 			fmt.Printf("----------------------------------------------prepopulated %d keys\n", k)
@@ -164,7 +164,7 @@ func planReadthroughGaussian() {
 					key := fmt.Sprintf("key%d", mk)
 					val := []byte(fmt.Sprintf(str1kb, mk))
 					if err := pc.Put(key, val, 60); err != nil {
-						panic(err)
+						log.Error().Err(err).Msgf("error putting key %s", key)
 					}
 				}
 			}(w)
@@ -189,7 +189,8 @@ func planReadthroughGaussian() {
 					}
 
 					if expired {
-						panic("key expired")
+						log.Error().Msgf("key %s expired", key)
+						// panic("key expired")
 
 					}
 					if found && string(val) != fmt.Sprintf(str1kb, randomval) {

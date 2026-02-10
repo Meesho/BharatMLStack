@@ -93,6 +93,8 @@ func RunConsoleLogger(metricsCollector *MetricsCollector) {
 			badCR32Total := int64(0)
 			badKeyTotal := int64(0)
 			deletedKeyTotal := int64(0)
+			writeTotal := int64(0)
+			punchHoleTotal := int64(0)
 
 			for _, shard := range currentMetrics.ShardIndexMetrics {
 				keyNotFoundTotal += shard.KeyNotFoundCount
@@ -102,6 +104,8 @@ func RunConsoleLogger(metricsCollector *MetricsCollector) {
 				badCR32Total += shard.BadCR32Count
 				badKeyTotal += shard.BadKeyCount
 				deletedKeyTotal += shard.DeletedKeyCount
+				writeTotal += shard.WriteCount
+				punchHoleTotal += shard.PunchHoleCount
 			}
 
 			log.Info().Msgf("KeyNotFoundTotal: %v", keyNotFoundTotal)
@@ -111,6 +115,8 @@ func RunConsoleLogger(metricsCollector *MetricsCollector) {
 			log.Info().Msgf("BadCR32Total: %v", badCR32Total)
 			log.Info().Msgf("BadKeyTotal: %v", badKeyTotal)
 			log.Info().Msgf("DeletedKeyTotal: %v", deletedKeyTotal)
+			log.Info().Msgf("WriteTotal: %v", writeTotal)
+			log.Info().Msgf("PunchHoleTotal: %v", punchHoleTotal)
 
 			// Debug: Log cumulative totals to understand the issue
 			log.Info().Msgf("DEBUG - GetsTotal: %v, HitsTotal: %v, PutsTotal: %v, ActiveEntriesTotal: %v", getsTotal, hitsTotal, putsTotal, activeEntriesTotal)
