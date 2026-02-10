@@ -344,6 +344,7 @@ func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) erro
 	start := time.Now()
 	defer func() {
 		wc.stats[shardIdx].LatencyTracker.RecordPut(time.Since(start))
+		metrics.Timing(metrics.KEY_WRITE_LATENCY, time.Since(start), metrics.BuildTag(metrics.NewTag(metrics.TAG_SHARD_IDX, strconv.Itoa(int(shardIdx)))))
 	}()
 
 	wc.shardLocks[shardIdx].Lock()
@@ -369,6 +370,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	start := time.Now()
 	defer func() {
 		wc.stats[shardIdx].LatencyTracker.RecordGet(time.Since(start))
+		metrics.Timing(metrics.KEY_READ_LATENCY_STATSD, time.Since(start), metrics.BuildTag(metrics.NewTag(metrics.TAG_SHARD_IDX, strconv.Itoa(int(shardIdx)))))
 	}()
 
 	var keyFound bool
