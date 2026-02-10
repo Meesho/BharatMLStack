@@ -773,6 +773,10 @@ func (g *GCSClient) FindFileWithSuffix(bucket, folderPath, suffix string) (bool,
 
 // forEachObject iterates over all objects with the given prefix and calls the visitor for each.
 func (g *GCSClient) forEachObject(bucket, prefix string, visitor ObjectVisitor) error {
+	if g.client == nil {
+		return fmt.Errorf("GCS client not initialized properly")
+	}
+
 	it := g.client.Bucket(bucket).Objects(g.ctx, &storage.Query{Prefix: prefix})
 	for {
 		objAttrs, err := it.Next()
@@ -796,6 +800,10 @@ func (g *GCSClient) forEachObject(bucket, prefix string, visitor ObjectVisitor) 
 // listObjects returns all objects matching the prefix, optionally filtered.
 // Pass nil for filter to include all objects (except directory markers).
 func (g *GCSClient) listObjects(bucket, prefix string, filter ObjectFilter) ([]storage.ObjectAttrs, error) {
+	if g.client == nil {
+		return nil, fmt.Errorf("GCS client not initialized properly")
+	}
+
 	var objects []storage.ObjectAttrs
 
 	err := g.forEachObject(bucket, prefix, func(attrs *storage.ObjectAttrs) error {
@@ -819,6 +827,10 @@ func (g *GCSClient) listObjects(bucket, prefix string, filter ObjectFilter) ([]s
 // partitionObjects separates objects into two groups based on a predicate.
 // Objects matching the predicate go into the first slice, others into the second.
 func (g *GCSClient) partitionObjects(bucket, prefix string, predicate ObjectFilter) (matching, notMatching []storage.ObjectAttrs, err error) {
+	if g.client == nil {
+		return nil, nil, fmt.Errorf("GCS client not initialized properly")
+	}
+
 	err = g.forEachObject(bucket, prefix, func(attrs *storage.ObjectAttrs) error {
 		// Skip directory markers
 		if strings.HasSuffix(attrs.Name, "/") {
