@@ -38,11 +38,11 @@ func planLockless() {
 
 	flag.StringVar(&mountPoint, "mount", "/mnt/disks/nvme", "data directory for shard files")
 	flag.IntVar(&numShards, "shards", 100, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 50_00_00, "keys per shard")
-	flag.IntVar(&memtableMB, "memtable-mb", 16, "memtable size in MiB")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 3_00_000, "keys per shard")
+	flag.IntVar(&memtableMB, "memtable-mb", 2, "memtable size in MiB")
 	flag.IntVar(&fileSizeMultiplier, "file-size-multiplier", 2, "file size in GiB per shard")
-	flag.IntVar(&readWorkers, "readers", 8, "number of read workers")
-	flag.IntVar(&writeWorkers, "writers", 8, "number of write workers")
+	flag.IntVar(&readWorkers, "readers", 16, "number of read workers")
+	flag.IntVar(&writeWorkers, "writers", 16, "number of write workers")
 	flag.IntVar(&sampleSecs, "sample-secs", 30, "predictor sampling window in seconds")
 	flag.Int64Var(&iterations, "iterations", 100_000_000, "number of iterations")
 	flag.Float64Var(&aVal, "a", 0.4, "a value for the predictor")
@@ -127,7 +127,7 @@ func planLockless() {
 		missedKeyChanList[i] = make(chan int)
 	}
 
-	totalKeys := keysPerShard * numShards
+	totalKeys := 30_000_000
 	str1kb := strings.Repeat("a", 1024)
 	str1kb = "%d" + str1kb
 

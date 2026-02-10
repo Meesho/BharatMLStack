@@ -289,6 +289,7 @@ func (wc *WrapCache) PutLL(key string, value []byte, exptimeInMinutes uint16) er
 	filecache.ErrorPool.Put(result)
 	wc.stats[shardIdx].TotalPuts.Add(1)
 	wc.stats[shardIdx].LatencyTracker.RecordPut(time.Since(start))
+	metrics.Timing(metrics.KEY_WRITE_LATENCY_STATSD, time.Since(start), metrics.BuildTag(metrics.NewTag(metrics.TAG_SHARD_IDX, strconv.Itoa(int(shardIdx)))))
 	return op
 }
 
@@ -298,19 +299,19 @@ func (wc *WrapCache) GetLL(key string) ([]byte, bool, bool) {
 
 	start := time.Now()
 
-	found, value, _, expired, needsSlowPath := wc.shards[shardIdx].GetFastPath(key)
+	// found, value, _, expired, needsSlowPath := wc.shards[shardIdx].GetFastPath(key)
 
-	if !needsSlowPath {
-		if found && !expired {
-			wc.stats[shardIdx].Hits.Add(1)
-		} else if expired {
-			wc.stats[shardIdx].Expired.Add(1)
-		}
+	// if !needsSlowPath {
+	// 	if found && !expired {
+	// 		wc.stats[shardIdx].Hits.Add(1)
+	// 	} else if expired {
+	// 		wc.stats[shardIdx].Expired.Add(1)
+	// 	}
 
-		wc.stats[shardIdx].TotalGets.Add(1)
-		wc.stats[shardIdx].LatencyTracker.RecordGet(time.Since(start))
-		return value, found, expired
-	}
+	// 	wc.stats[shardIdx].TotalGets.Add(1)
+	// 	wc.stats[shardIdx].LatencyTracker.RecordGet(time.Since(start))
+	// 	return value, found, expired
+	// }
 
 	result := filecache.ReadResultPool.Get().(chan filecache.ReadResultV2)
 
@@ -331,6 +332,7 @@ func (wc *WrapCache) GetLL(key string) ([]byte, bool, bool) {
 		wc.stats[shardIdx].Expired.Add(1)
 	}
 	wc.stats[shardIdx].LatencyTracker.RecordGet(time.Since(start))
+	metrics.Timing(metrics.KEY_READ_LATENCY_STATSD, time.Since(start), metrics.BuildTag(metrics.NewTag(metrics.TAG_SHARD_IDX, strconv.Itoa(int(shardIdx)))))
 	wc.stats[shardIdx].TotalGets.Add(1)
 
 	return op.Data, op.Found, op.Expired
