@@ -3,6 +3,8 @@ package handler
 import (
 	"fmt"
 	"path"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/constant"
@@ -105,4 +107,43 @@ func (p *Predator) isNonProductionEnvironment() bool {
 		return false
 	}
 	return true
+}
+
+func replaceInstanceCountInConfigPreservingFormat(data []byte, newCount int) ([]byte, error) {
+	lines := strings.Split(string(data), "\n")
+	inInstanceGroup := false
+	bracket := 0
+	brace := 0
+
+	countRegex := regexp.MustCompile(`^(\s*count\s*:\s*)\d+(\s*)$`)
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "instance_group") {
+			inInstanceGroup = true
+		}
+
+		if inInstanceGroup {
+			bracket += strings.Count(line, "[")
+			bracket -= strings.Count(line, "]")
+
+
+			brace += strings.Count(line, "{")
+			brace -= strings.Count(line, "}")
+
+			if brace > 0 && countRegex.MatchString(line) {
+				lines[i] = countRegex.ReplaceAllString(
+					line,
+					"${1}"+strconv.Itoa(newCount)+"${2}",
+				)
+				return []byte(strings.Join(lines, "\n")), nil
+			}
+
+			if bracket == 0 {
+				inInstanceGroup = false
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("%s", errNoInstanceGroup)
 }

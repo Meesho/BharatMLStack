@@ -149,6 +149,66 @@ func TestPredator_GetOriginalModelName_RepoError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to fetch")
 }
 
+func TestReplaceInstanceCountInConfigPreservingFormat(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      []byte
+		newCount  int
+		wantData  string
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name: "preserves formatting around count",
+			data: []byte(`instance_group [
+  {
+    count : 2
+  }
+]
+`),
+			newCount: 10,
+			wantData: "count : 10",
+			wantErr:  false,
+		},
+		{
+			name:      "error when no instance_group",
+			data:      []byte("name: \"model\"\nplatform: \"tensorflow\"\n"),
+			newCount:  1,
+			wantErr:   true,
+			errSubstr: errNoInstanceGroup,
+		},
+		{
+			name: "error when instance_group has no count field",
+			data: []byte(`instance_group [
+  { kind: KIND_CPU }
+]
+`),
+			newCount:  1,
+			wantErr:   true,
+			errSubstr: errNoInstanceGroup,
+		},
+		{
+			name:      "error on empty input",
+			data:      []byte(""),
+			newCount:  1,
+			wantErr:   true,
+			errSubstr: errNoInstanceGroup,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := replaceInstanceCountInConfigPreservingFormat(tt.data, tt.newCount)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errSubstr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Contains(t, string(got), tt.wantData)
+		})
+	}
+}
+
 // predatorMockServiceDeployableRepo implements servicedeployableconfig.ServiceDeployableRepository for tests.
 type predatorMockServiceDeployableRepo struct {
 	getById func(id int) (*servicedeployableconfig.ServiceDeployableConfig, error)
