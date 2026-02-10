@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"bytes"
 	"io"
 	"net/http"
 	"time"
@@ -31,17 +30,7 @@ func (h *MLFlowHandler) ConstructMLFlowURL(mlflowPath string) string {
 
 // ForwardRequest forwards the HTTP request to the MLFlow backend
 func (h *MLFlowHandler) ForwardRequest(method, url string, body io.Reader, headers http.Header) (*http.Response, error) {
-	var bodyReader io.Reader
-	if body != nil {
-		bodyBytes, err := io.ReadAll(body)
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to read body in handler")
-			return nil, err
-		}
-		bodyReader = bytes.NewReader(bodyBytes)
-	}
-
-	req, err := http.NewRequest(method, url, bodyReader)
+	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		log.Error().Err(err).Str("url", url).Msg("Failed to create MLFlow request")
 		return nil, err
