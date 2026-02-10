@@ -1,6 +1,7 @@
 package indicesv2
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
@@ -74,7 +75,7 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 		}
 
 		dm.wrapFile.TrimHead()
-		return nil
+		return errors.New("trim needed retry this write")
 	}
 	return nil
 }
