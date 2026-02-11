@@ -3,9 +3,9 @@ package handler
 import (
 	"fmt"
 	"path"
-	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/constant"
 	pred "github.com/Meesho/BharatMLStack/horizon/internal/predator"
@@ -110,40 +110,65 @@ func (p *Predator) isNonProductionEnvironment() bool {
 }
 
 func replaceInstanceCountInConfigPreservingFormat(data []byte, newCount int) ([]byte, error) {
-	lines := strings.Split(string(data), "\n")
+	input := string(data)
+	var output strings.Builder
+
 	inInstanceGroup := false
 	bracket := 0
 	brace := 0
 
-	countRegex := regexp.MustCompile(`^(\s*count\s*:\s*)\d+(\s*)$`)
+	i := 0
+	for i < len(input) {
 
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "instance_group") {
+		if !inInstanceGroup && strings.HasPrefix(input[i:], "instance_group") {
 			inInstanceGroup = true
+			output.WriteString("instance_group")
+			i += len("instance_group")
+			continue
 		}
+
+		ch := input[i]
 
 		if inInstanceGroup {
-			bracket += strings.Count(line, "[")
-			bracket -= strings.Count(line, "]")
-
-
-			brace += strings.Count(line, "{")
-			brace -= strings.Count(line, "}")
-
-			if brace > 0 && countRegex.MatchString(line) {
-				lines[i] = countRegex.ReplaceAllString(
-					line,
-					"${1}"+strconv.Itoa(newCount)+"${2}",
-				)
-				return []byte(strings.Join(lines, "\n")), nil
+			if ch == '[' {
+				bracket++
+			}
+			if ch == ']' {
+				bracket--
+				if bracket == 0 {
+					inInstanceGroup = false
+				}
 			}
 
-			if bracket == 0 {
-				inInstanceGroup = false
+			if ch == '{' {
+				brace++
+			}
+			if ch == '}' {
+				brace--
+			}
+			if brace > 0 && strings.HasPrefix(input[i:], "count") {
+				j := i + len("count")
+				for j < len(input) && unicode.IsSpace(rune(input[j])) {
+					j++
+				}
+				if j < len(input) && input[j] == ':' {
+					j++
+					for j < len(input) && unicode.IsSpace(rune(input[j])) {
+						j++
+					}
+					k := j
+					for k < len(input) && unicode.IsDigit(rune(input[k])) {
+						k++
+					}
+					output.WriteString(input[i:j])
+					output.WriteString(strconv.Itoa(newCount))
+					i = k
+					continue
+				}
 			}
 		}
+		output.WriteByte(ch)
+		i++
 	}
-
-	return nil, fmt.Errorf("%s", errNoInstanceGroup)
+	return []byte(output.String()), nil
 }
