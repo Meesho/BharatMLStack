@@ -92,3 +92,8 @@ func (rb *RingBuffer) TailIndex() int {
 func (rb *RingBuffer) ActiveEntries() int {
 	return (rb.nextIndex - rb.head + rb.capacity) % rb.capacity
 }
+
+// Capacity returns the fixed capacity of the ring buffer.
+func (rb *RingBuffer) Capacity() int {
+	return rb.capacity
+}

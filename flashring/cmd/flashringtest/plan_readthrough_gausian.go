@@ -38,8 +38,8 @@ func planReadthroughGaussian() {
 	)
 
 	flag.StringVar(&mountPoint, "mount", "/mnt/disks/nvme/", "data directory for shard files")
-	flag.IntVar(&numShards, "shards", 100, "number of shards")
-	flag.IntVar(&keysPerShard, "keys-per-shard", 3_00_000, "keys per shard")
+	flag.IntVar(&numShards, "shards", 50, "number of shards")
+	flag.IntVar(&keysPerShard, "keys-per-shard", 6_00_000, "keys per shard")
 	flag.IntVar(&memtableMB, "memtable-mb", 2, "memtable size in MiB")
 	flag.Float64Var(&fileSizeMultiplier, "file-size-multiplier", 0.25, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 16, "number of read workers")

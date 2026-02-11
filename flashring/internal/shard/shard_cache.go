@@ -31,6 +31,11 @@ type ShardCache struct {
 	//Lockless read and write
 	ReadCh  chan *ReadRequestV2
 	WriteCh chan *WriteRequestV2
+
+	// Background delete worker
+	shardLock           *sync.RWMutex
+	deleteBatchSize     int
+	deleteWorkerEnabled bool
 }
 
 type Stats struct {
@@ -89,6 +94,9 @@ type ShardCacheConfig struct {
 
 	//lockless
 	EnableLockless bool
+
+	// Background delete worker: max deletes per lock acquisition (default: 20)
+	DeleteBatchSize int
 }
 
 func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
@@ -121,6 +129,12 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 		log.Panic().Err(err).Msg("Failed to create read page allocator")
 	}
 	dm := indices.NewDeleteManager(ki, file, config.DeleteAmortizedStep)
+
+	deleteBatchSize := config.DeleteBatchSize
+	if deleteBatchSize == 0 {
+		deleteBatchSize = 20
+	}
+
 	sc := &ShardCache{
 		keyIndex:          ki,
 		mm:                memtableManager,
@@ -129,6 +143,8 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 		dm:                dm,
 		predictor:         config.Predictor,
 		startAt:           time.Now().Unix(),
+		shardLock:         sl,
+		deleteBatchSize:   deleteBatchSize,
 		Stats: &Stats{
 			// sync.Map fields have zero values that are ready to use
 			BatchTracker: NewBatchTracker(),
@@ -151,6 +167,14 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 		go sc.startReadWriteRoutines()
 	}
 
+	// Start background delete worker for locked mode.
+	// In lockless mode, delete is still handled inline by the single
+	// read/write goroutine via ExecuteDeleteIfNeeded.
+	if !config.EnableLockless {
+		sc.deleteWorkerEnabled = true
+		go sc.startDeleteWorker()
+	}
+
 	return sc
 }
 
@@ -170,13 +194,85 @@ func (fc *ShardCache) startReadWriteRoutines() {
 	}()
 }
 
+// startDeleteWorker runs a background goroutine that proactively handles
+// ring-buffer eviction and file-hole punching, removing this work from the
+// Put hot path. The worker acquires the shard lock for short, bounded batches
+// and then releases it so that concurrent Put/Get calls can proceed.
+func (fc *ShardCache) startDeleteWorker() {
+	const (
+		idleSleep   = 100 * time.Microsecond // poll interval when no work
+		activeSleep = 10 * time.Microsecond  // yield between batches during active delete
+	)
+
+	for {
+		// Quick approximate check without the lock.
+		// A false-negative just delays work by one poll cycle.
+		if !fc.dm.NeedsWork() {
+			time.Sleep(idleSleep)
+			continue
+		}
+
+		// Acquire exclusive shard lock to safely mutate the index/file.
+		fc.shardLock.Lock()
+
+		// Initialise a delete round if one is not already in progress.
+		// This includes the (potentially slow) TrimHead / fallocate call,
+		// but it only runs once per round, not on every Put.
+		started, err := fc.dm.InitDeleteRound()
+		if err != nil {
+			fc.shardLock.Unlock()
+			log.Error().Err(err).Msg("delete worker: failed to init delete round")
+			time.Sleep(idleSleep)
+			continue
+		}
+		if !started {
+			// Condition changed between our racy check and the locked check.
+			fc.shardLock.Unlock()
+			time.Sleep(idleSleep)
+			continue
+		}
+
+		// Perform a bounded batch of deletes.
+		done, err := fc.dm.ExecuteDeleteBatch(fc.deleteBatchSize)
+		fc.shardLock.Unlock()
+
+		if err != nil {
+			log.Error().Err(err).Msg("delete worker: delete batch failed")
+			time.Sleep(idleSleep)
+			continue
+		}
+
+		if done {
+			// Round complete — go back to idle polling.
+			time.Sleep(idleSleep)
+		} else {
+			// More batches remain — yield briefly then continue.
+			time.Sleep(activeSleep)
+		}
+	}
+}
+
 func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	size := 4 + len(key) + len(value)
 	mt, mtId, _ := fc.mm.GetMemtable()
-	err := fc.dm.ExecuteDeleteIfNeeded()
-	if err != nil {
-		return err
+
+	if fc.deleteWorkerEnabled {
+		// Background worker handles delete/trim. Only do a small inline
+		// batch as a safety fallback when the ring buffer or file is
+		// critically full and the worker hasn't caught up yet.
+		if fc.keyIndex.GetRB().NextAddNeedsDelete() || fc.file.TrimHeadIfNeeded() {
+			if err := fc.inlineDeleteFallback(); err != nil {
+				return err
+			}
+		}
+	} else {
+		// No background worker (e.g. lockless mode) — use the original
+		// inline delete path.
+		if err := fc.dm.ExecuteDeleteIfNeeded(); err != nil {
+			return err
+		}
 	}
+
 	buf, offset, length, readyForFlush := mt.GetBufForAppend(uint16(size))
 	if readyForFlush {
 		fc.mm.Flush()
@@ -190,6 +286,19 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	fc.keyIndex.Put(key, length, ttlMinutes, mtId, uint32(offset))
 	fc.dm.IncMemtableKeyCount(mtId)
 	fc.Stats.IncMemIdCount(mtId)
+	return nil
+}
+
+// inlineDeleteFallback performs a small bounded delete as a safety mechanism
+// when the background worker hasn't caught up. This should be rare; the worker
+// normally handles all delete/trim work proactively.
+func (fc *ShardCache) inlineDeleteFallback() error {
+	if _, err := fc.dm.InitDeleteRound(); err != nil {
+		return err
+	}
+	if _, err := fc.dm.ExecuteDeleteBatch(fc.deleteBatchSize); err != nil {
+		return err
+	}
 	return nil
 }
 
