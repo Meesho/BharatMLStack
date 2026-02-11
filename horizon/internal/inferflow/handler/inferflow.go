@@ -393,7 +393,7 @@ func (m *InferFlow) ScaleUp(request ScaleUpConfigRequest) (Response, error) {
 		return Response{}, errors.New("failed to get latest request for the source configID: " + sourceConfigID + ": " + err.Error())
 	}
 	if latestSourceRequest.Error != emptyResponse {
-		return Response{}, errors.New("failed to get latest request for the source configID: " + sourceConfigID + ": " + latestSourceRequest.Error.(string))
+		return Response{}, errors.New("failed to get latest request for the source configID: " + sourceConfigID + ": " + fmt.Sprint(latestSourceRequest.Error))
 	}
 	request.Payload.ConfigMapping.SourceConfigID = sourceConfigID
 
