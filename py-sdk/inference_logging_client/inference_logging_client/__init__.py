@@ -357,9 +357,13 @@ def decode_mplog_dataframe(
             all_feature_names.add(f.name)
     metadata_cols_in_schema = [c for c in row_metadata_columns if c in df_columns]
     from pyspark.sql.types import StringType, StructField, StructType
+    # Map input column names to their Spark types so we can preserve them in the output
+    input_field_map = {field.name: field.dataType for field in df.schema.fields}
     schema_fields = [StructField("entity_id", StringType(), True)]
     for c in metadata_cols_in_schema:
-        schema_fields.append(StructField(c, StringType(), True))
+        # Preserve the original type (LongType, TimestampType, etc.)
+        original_type = input_field_map.get(c, StringType())
+        schema_fields.append(StructField(c, original_type, True))
     for c in sorted(all_feature_names):
         schema_fields.append(StructField(c, StringType(), True))
     full_schema = StructType(schema_fields)
@@ -473,6 +477,8 @@ def decode_mplog_dataframe(
                             result_row[k] = str(v)
                     for col in row_metadata_columns:
                         if col in df_columns:
+                            # Pass through as-is to preserve original types
+                            # (LongType, TimestampType, etc.)
                             result_row[col] = _safe_get(row, col)
                     if parent_entity_val is not None:
                         result_row["parent_entity"] = parent_entity_val
