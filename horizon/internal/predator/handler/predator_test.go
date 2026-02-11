@@ -171,18 +171,50 @@ func TestReplaceInstanceCountInConfigPreservingFormat(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name:      "error when no instance_group",
-			data:      []byte("name: \"model\"\nplatform: \"tensorflow\"\n"),
+			name: "works with no spaces",
+			data: []byte(`instance_group[{count:2}]`),
+			newCount: 5,
+			wantData: "count:5",
+			wantErr:  false,
+		},
+		{
+			name: "works with excessive spacing",
+			data: []byte(`instance_group   [   {   count    :      3    } ]`),
+			newCount: 8,
+			wantData: "count    :      8",
+			wantErr:  false,
+		},
+		{
+			name: "count outside instance_group should not change",
+			data: []byte(`count: 99
+instance_group [
+  { count: 1 }
+]`),
+			newCount: 4,
+			wantData: "count: 4",
+			wantErr:  false,
+		},
+		{
+			name: "instance_group but no count",
+			data: []byte(`instance_group [
+  { kind: KIND_CPU }
+]`),
 			newCount:  1,
 			wantErr:   true,
 			errSubstr: errNoInstanceGroup,
 		},
 		{
-			name: "error when instance_group has no count field",
-			data: []byte(`instance_group [
-  { kind: KIND_CPU }
-]
-`),
+			name: "nested formatting with line breaks",
+			data: []byte(`instance_group[
+{kind:KIND_CPU
+count:1}]`),
+			newCount: 6,
+			wantData: "count:6",
+			wantErr:  false,
+		},
+		{
+			name:      "error when no instance_group",
+			data:      []byte("name: \"model\"\nplatform: \"tensorflow\"\n"),
 			newCount:  1,
 			wantErr:   true,
 			errSubstr: errNoInstanceGroup,
@@ -195,19 +227,23 @@ func TestReplaceInstanceCountInConfigPreservingFormat(t *testing.T) {
 			errSubstr: errNoInstanceGroup,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := replaceInstanceCountInConfigPreservingFormat(tt.data, tt.newCount)
+
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errSubstr)
 				return
 			}
+
 			require.NoError(t, err)
 			assert.Contains(t, string(got), tt.wantData)
 		})
 	}
 }
+
 
 // predatorMockServiceDeployableRepo implements servicedeployableconfig.ServiceDeployableRepository for tests.
 type predatorMockServiceDeployableRepo struct {

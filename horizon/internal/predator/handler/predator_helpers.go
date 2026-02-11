@@ -162,13 +162,13 @@ func replaceInstanceCountInConfigPreservingFormat(data []byte, newCount int) ([]
 					}
 					output.WriteString(input[i:j])
 					output.WriteString(strconv.Itoa(newCount))
-					i = k
-					continue
+					output.WriteString(input[k:])
+					return []byte(output.String()), nil
 				}
 			}
 		}
 		output.WriteByte(ch)
 		i++
 	}
-	return []byte(output.String()), nil
+	return nil, fmt.Errorf("%s", errNoInstanceGroup)
 }
