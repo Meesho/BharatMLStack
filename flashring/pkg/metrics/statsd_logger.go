@@ -42,6 +42,9 @@ const (
 	KEY_PWRITE_LATENCY    = "flashring_pwrite_latency"
 
 	KEY_MEMTABLE_FLUSH_COUNT = "flashring_memtable_flush_count"
+
+	LATENCY_RLOCK = "flashring_rlock_latency"
+	LATENCY_WLOCK = "flashring_wlock_latency"
 )
 
 func RunStatsdLogger(metricsCollector *MetricsCollector) {

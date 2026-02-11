@@ -349,7 +349,9 @@ func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) erro
 		metrics.Timing(metrics.KEY_WRITE_LATENCY_STATSD, time.Since(start), metrics.BuildTag(metrics.NewTag(metrics.TAG_SHARD_IDX, strconv.Itoa(int(shardIdx)))))
 	}()
 
+	start = time.Now()
 	wc.shardLocks[shardIdx].Lock()
+	metrics.Timing(metrics.LATENCY_WLOCK, time.Since(start), metrics.BuildTag(metrics.NewTag(metrics.TAG_SHARD_IDX, strconv.Itoa(int(shardIdx)))))
 	defer wc.shardLocks[shardIdx].Unlock()
 
 	err := wc.shards[shardIdx].Put(key, value, exptimeInMinutes)
@@ -396,7 +398,9 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	} else {
 
 		func(key string, shardIdx uint32) {
+			start := time.Now()
 			wc.shardLocks[shardIdx].RLock()
+			metrics.Timing(metrics.LATENCY_RLOCK, time.Since(start), metrics.BuildTag(metrics.NewTag(metrics.TAG_SHARD_IDX, strconv.Itoa(int(shardIdx)))))
 			defer wc.shardLocks[shardIdx].RUnlock()
 			keyFound, val, remainingTTL, expired, shouldReWrite = wc.shards[shardIdx].Get(key)
 
