@@ -36,6 +36,10 @@ const (
 
 	KEY_WRITE_COUNT      = "flashring_write_count"
 	KEY_PUNCH_HOLE_COUNT = "flashring_punch_hole_count"
+
+	KEY_TRIM_HEAD_LATENCY = "flashring_wrap_file_trim_head_latency"
+	KEY_PREAD_LATENCY     = "flashring_pread_latency"
+	KEY_PWRITE_LATENCY    = "flashring_pwrite_latency"
 )
 
 func RunStatsdLogger(metricsCollector *MetricsCollector) {

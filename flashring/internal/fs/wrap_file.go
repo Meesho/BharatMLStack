@@ -6,7 +6,9 @@ package fs
 import (
 	"os"
 	"syscall"
+	"time"
 
+	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 	"golang.org/x/sys/unix"
 )
 
@@ -72,10 +74,13 @@ func (r *WrapAppendFile) Pwrite(buf []byte) (currentPhysicalOffset int64, err er
 			return 0, ErrBufNoAlign
 		}
 	}
+	startTime := time.Now()
 	n, err := syscall.Pwrite(r.WriteFd, buf, r.PhysicalWriteOffset)
+	metrics.Timing(metrics.KEY_PWRITE_LATENCY, time.Since(startTime), []string{})
 	if err != nil {
 		return 0, err
 	}
+
 	r.PhysicalWriteOffset += int64(n)
 	if r.PhysicalWriteOffset >= r.MaxFileSize {
 		r.wrapped = true
@@ -126,7 +131,9 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 		return 0, ErrFileOffsetOutOfRange
 	}
 
+	startTime := time.Now()
 	n, err := syscall.Pread(r.ReadFd, buf, fileOffset)
+	metrics.Timing(metrics.KEY_PREAD_LATENCY, time.Since(startTime), []string{})
 	// flags := unix.RWF_HIPRI // optionally: | unix.RWF_NOWAIT
 	// n, err := preadv2(r.ReadFd, buf, fileOffset, flags)
 	if err != nil {
@@ -137,6 +144,8 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 }
 
 func (r *WrapAppendFile) TrimHead() (err error) {
+
+	startTime := time.Now()
 	if r.WriteDirectIO {
 		if !isAlignedOffset(r.PhysicalStartOffset, r.blockSize) {
 			return ErrOffsetNotAligned
@@ -151,6 +160,7 @@ func (r *WrapAppendFile) TrimHead() (err error) {
 		r.PhysicalStartOffset = 0
 	}
 	r.Stat.PunchHoleCount++
+	metrics.Timing(metrics.KEY_TRIM_HEAD_LATENCY, time.Since(startTime), []string{})
 	return nil
 }
 
