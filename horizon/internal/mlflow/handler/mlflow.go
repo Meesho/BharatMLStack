@@ -3,6 +3,7 @@ package handler
 import (
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	mlflowpkg "github.com/Meesho/BharatMLStack/horizon/internal/mlflow"
@@ -23,7 +24,7 @@ func NewMLFlowHandler() *MLFlowHandler {
 	}
 }
 
-// ConstructMLFlowURL rewrites the path from /api/v1/mlflow/* to /api/2.0/mlflow/*
+// ConstructMLFlowURL builds the full MLflow URL from the base URL and path.
 func (h *MLFlowHandler) ConstructMLFlowURL(mlflowPath string) string {
 	return h.baseURL + mlflowPath
 }
@@ -36,15 +37,33 @@ func (h *MLFlowHandler) ForwardRequest(method, url string, body io.Reader, heade
 		return nil, err
 	}
 
+	// RFC 2616 §13.5.1 hop-by-hop headers and proxy-specific headers; never forwarded
 	skipHeaders := map[string]bool{
-		"Origin":     true,
-		"Referer":    true,
-		"Host":       true,
-		"Connection": true,
+		http.CanonicalHeaderKey("Connection"):          true,
+		http.CanonicalHeaderKey("Keep-Alive"):          true,
+		http.CanonicalHeaderKey("Proxy-Authenticate"):  true,
+		http.CanonicalHeaderKey("Proxy-Authorization"): true,
+		http.CanonicalHeaderKey("TE"):                  true,
+		http.CanonicalHeaderKey("Trailer"):            true,
+		http.CanonicalHeaderKey("Transfer-Encoding"): true,
+		http.CanonicalHeaderKey("Upgrade"):            true,
+		http.CanonicalHeaderKey("Origin"):             true,
+		http.CanonicalHeaderKey("Referer"):            true,
+		http.CanonicalHeaderKey("Host"):               true,
+	}
+
+	// Connection header lists additional hop-by-hop header names to not forward
+	if conn := headers.Get("Connection"); conn != "" {
+		for _, token := range strings.Split(conn, ",") {
+			name := strings.TrimSpace(token)
+			if name != "" {
+				skipHeaders[http.CanonicalHeaderKey(name)] = true
+			}
+		}
 	}
 
 	for key, values := range headers {
-		if skipHeaders[key] {
+		if skipHeaders[http.CanonicalHeaderKey(key)] {
 			continue
 		}
 		for _, value := range values {
