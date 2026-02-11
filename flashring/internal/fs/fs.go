@@ -83,7 +83,7 @@ func createAppendOnlyWriteFileDescriptor(filename string) (int, *os.File, bool, 
 
 func createPreAllocatedWriteFileDescriptor(filename string, maxFileSize int64) (int, *os.File, bool, error) {
 	// flags := O_DIRECT | O_WRONLY | O_CREAT | O_DSYNC
-	flags := O_DIRECT | O_WRONLY | O_CREAT
+	flags := O_WRONLY | O_CREAT
 	fd, err := syscall.Open(filename, flags, FILE_MODE)
 	if err != nil {
 		log.Warn().Msgf("DIRECT_IO not supported, falling back to regular flags: %v", err)
