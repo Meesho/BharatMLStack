@@ -14,6 +14,7 @@ import (
 	inferflowRouter "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/route"
 	infrastructureRouter "github.com/Meesho/BharatMLStack/horizon/internal/infrastructure/router"
 	"github.com/Meesho/BharatMLStack/horizon/internal/middleware"
+	mlflowRouter "github.com/Meesho/BharatMLStack/horizon/internal/mlflow/route"
 	numerixConfig "github.com/Meesho/BharatMLStack/horizon/internal/numerix/etcd"
 	numerixRouter "github.com/Meesho/BharatMLStack/horizon/internal/numerix/route"
 	ofsConfig "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/config"
@@ -71,6 +72,7 @@ func main() {
 	ofsRouter.Init()
 	infrastructureRouter.Init()
 	dnsRouter.Init()
+	mlflowRouter.Init()
 	workflowRouter.Init()
 	scheduler.Init(appConfig.Configs)
 	httpframework.Instance().Run(":" + strconv.Itoa(appConfig.Configs.AppPort))
