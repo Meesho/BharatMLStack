@@ -32,6 +32,7 @@ var (
 	ErrFileSizeExceeded     = errors.New("file size exceeded. Please punch hole")
 	ErrFileOffsetOutOfRange = errors.New("file offset is out of range")
 	ErrOffsetNotAligned     = errors.New("offset is not aligned to block size")
+	ErrReadTimeout          = errors.New("read timeout")
 )
 
 type Stat struct {
@@ -82,13 +83,11 @@ func createAppendOnlyWriteFileDescriptor(filename string) (int, *os.File, bool, 
 }
 
 func createPreAllocatedWriteFileDescriptor(filename string, maxFileSize int64) (int, *os.File, bool, error) {
-	// flags := O_DIRECT | O_WRONLY | O_CREAT | O_DSYNC
-	flags := O_WRONLY | O_CREAT
+	flags := O_DIRECT | O_WRONLY | O_CREAT | O_DSYNC
 	fd, err := syscall.Open(filename, flags, FILE_MODE)
 	if err != nil {
 		log.Warn().Msgf("DIRECT_IO not supported, falling back to regular flags: %v", err)
-		// flags = O_WRONLY | O_CREAT | O_DSYNC
-		flags = O_WRONLY | O_CREAT
+		flags = O_WRONLY | O_CREAT | O_DSYNC
 		fd, err = syscall.Open(filename, flags, FILE_MODE)
 		if err != nil {
 			return 0, nil, false, err

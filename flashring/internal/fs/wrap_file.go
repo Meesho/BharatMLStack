@@ -108,6 +108,15 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 		}
 	}
 
+	//return if the pread command doesnt complete in 1ms
+	timeoutTicker := time.NewTicker(1 * time.Millisecond)
+	defer timeoutTicker.Stop()
+	timeoutChan := timeoutTicker.C
+	select {
+	case <-timeoutChan:
+		return 0, ErrReadTimeout
+	default:
+	}
 	// Validate read window depending on wrap state
 	readEnd := fileOffset + int64(len(buf))
 	valid := false
