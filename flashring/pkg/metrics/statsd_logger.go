@@ -40,6 +40,8 @@ const (
 	KEY_TRIM_HEAD_LATENCY = "flashring_wrap_file_trim_head_latency"
 	KEY_PREAD_LATENCY     = "flashring_pread_latency"
 	KEY_PWRITE_LATENCY    = "flashring_pwrite_latency"
+
+	KEY_MEMTABLE_FLUSH_COUNT = "flashring_memtable_flush_count"
 )
 
 func RunStatsdLogger(metricsCollector *MetricsCollector) {
