@@ -104,7 +104,7 @@ type Configs struct {
 
 	GitHubAppID          int64  `mapstructure:"github_app_id"`
 	GitHubInstallationID int64  `mapstructure:"github_installation_id"`
-	GitHubPrivateKeyPath string `mapstructure:"github_private_key_path"`
+	GitHubPrivateKey     string `mapstructure:"github_private_key"`
 	GitHubOwner          string `mapstructure:"github_owner"`
 	LocalModelPath       string `mapstructure:"local_model_path"`
 

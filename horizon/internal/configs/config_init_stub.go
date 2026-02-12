@@ -125,7 +125,7 @@ func bindEnvVars() {
 
 	viper.BindEnv("github_app_id", "GITHUB_APP_ID")
 	viper.BindEnv("github_installation_id", "GITHUB_INSTALLATION_ID")
-	viper.BindEnv("github_private_key_path", "GITHUB_PRIVATE_KEY_PATH")
+	viper.BindEnv("github_private_key", "GITHUB_PRIVATE_KEY")
 	viper.BindEnv("github_owner", "GITHUB_OWNER")
 	viper.BindEnv("github_commit_author", "GITHUB_COMMIT_AUTHOR")
 	viper.BindEnv("github_commit_email", "GITHUB_COMMIT_EMAIL")

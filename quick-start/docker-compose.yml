@@ -384,7 +384,7 @@ services:
       - BRANCH_NAME=main
       - GITHUB_APP_ID=2546855
       - GITHUB_INSTALLATION_ID=101432634
-      - GITHUB_PRIVATE_KEY_PATH=/app/configs/github.pem
+      - GITHUB_PRIVATE_KEY=/app/configs/github.pem
       - GITHUB_OWNER=Adit2607
       - GITHUB_COMMIT_AUTHOR=horizon-bot
       - GITHUB_COMMIT_EMAIL=aditya.garg@meesho.com
@@ -526,6 +526,108 @@ services:
     command: sh -c "apk add --no-cache curl && sleep infinity"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://inferflow:8085/health/self"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: "no"
+
+  skye-admin:
+    image: ghcr.io/meesho/skye-admin:${SKYE_VERSION:-latest}
+    container_name: skye-admin
+    ports:
+      - "8092:8092"
+    environment:
+      - CONFIG_LOCATION=/config
+      - ENVIRONMENT=staging
+      - DEPLOYABLE_NAME=skye-admin
+    volumes:
+      - ./skye-config:/config:ro
+    networks:
+      - onfs-network
+    depends_on:
+      - etcd
+      - kafka
+    restart: unless-stopped
+
+  skye-admin-healthcheck:
+    image: alpine:latest
+    container_name: skye-admin-healthcheck
+    networks:
+      - onfs-network
+    depends_on:
+      - skye-admin
+    command: sh -c "apk add --no-cache curl && sleep infinity"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://skye-admin:8092/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: "no"
+
+  skye-consumers:
+    image: ghcr.io/meesho/skye-consumers:${SKYE_VERSION:-latest}
+    container_name: skye-consumers
+    ports:
+      - "8093:8093"
+    environment:
+      - CONFIG_LOCATION=/config
+      - ENVIRONMENT=staging
+      - DEPLOYABLE_NAME=skye-consumers
+    volumes:
+      - ./skye-config:/config:ro
+    networks:
+      - onfs-network
+    depends_on:
+      - etcd
+      - kafka
+    restart: unless-stopped
+
+  skye-consumers-healthcheck:
+    image: alpine:latest
+    container_name: skye-consumers-healthcheck
+    networks:
+      - onfs-network
+    depends_on:
+      - skye-consumers
+    command: sh -c "apk add --no-cache curl && sleep infinity"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://skye-consumers:8093/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: "no"
+
+  skye-serving:
+    image: ghcr.io/meesho/skye-serving:${SKYE_VERSION:-latest}
+    container_name: skye-serving
+    ports:
+      - "8094:8094"
+    environment:
+      - CONFIG_LOCATION=/config
+      - ENVIRONMENT=staging
+      - DEPLOYABLE_NAME=skye-serving
+      - APP_PORT=8094
+    volumes:
+      - ./skye-config:/config:ro
+    networks:
+      - onfs-network
+    depends_on:
+      - etcd
+    restart: unless-stopped
+
+  skye-serving-healthcheck:
+    image: alpine:latest
+    container_name: skye-serving-healthcheck
+    networks:
+      - onfs-network
+    depends_on:
+      - skye-serving
+    command: sh -c "apk add --no-cache curl && sleep infinity"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://skye-serving:8094/health/self"]
       interval: 30s
       timeout: 10s
       retries: 5

@@ -16,7 +16,7 @@ func Init(config configs.Configs) {
 	InitGitHubClient(
 		config.GitHubAppID,
 		config.GitHubInstallationID,
-		config.GitHubPrivateKeyPath,
+		[]byte(config.GitHubPrivateKey),
 		config.GitHubOwner,
 		config.GitHubCommitAuthor,
 		config.GitHubCommitEmail,
