@@ -100,7 +100,7 @@ func (m *Memtable) Flush() (n int, fileOffset int64, err error) {
 		return 0, 0, ErrMemtableNotReadyForFlush
 	}
 
-	chunkSize := 8 * fs.BLOCK_SIZE
+	chunkSize := 16 * fs.BLOCK_SIZE
 	totalWritten := 0
 
 	for totalWritten < len(m.page.Buf) {
