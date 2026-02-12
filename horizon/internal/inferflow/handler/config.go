@@ -16,4 +16,5 @@ type Config interface {
 	ExecuteFuncitonalTestRequest(request ExecuteRequestFunctionalTestingRequest) (ExecuteRequestFunctionalTestingResponse, error)
 	GetLatestRequest(requestID string) (GetLatestRequestResponse, error)
 	GetLoggingTTL() (GetLoggingTTLResponse, error)
+	GetFeatureSchema(FeatureSchemaRequest) (FeatureSchemaResponse, error)
 }

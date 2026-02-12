@@ -40,4 +40,7 @@ func Init(config configs.Configs) {
 	InitFeatureValidationClient()
 	// Initialize pricing client - provides both raw data types and RTP format
 	PricingClient.InitPricingClient()
+	InitAirflowClient(config.AirflowBaseUrl, config.AirflowUsername, config.AirflowPassword)
+	InitPrismV2Client(config.PrismBaseUrl, config.PrismAppUserID)
+
 }

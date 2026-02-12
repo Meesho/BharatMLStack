@@ -12,7 +12,8 @@ const (
 	moduleValidate     = "validate"
 
 	// Resolvers
-	resolverModelApproval            = "ModelApprovalResolver"
+	resolverModelRequestApprove      = "ModelRequestApproveResolver"
+	resolverModelRequestReject       = "ModelRequestRejectResolver"
 	resolverModelDiscovery           = "ModelDiscoveryResolver"
 	resolverModelDelete              = "ModelDeleteResolver"
 	resolverModelScaleUp             = "ModelScaleUpResolver"
@@ -36,7 +37,8 @@ func NewPredatorServiceResolver() (ServiceResolver, error) {
 
 func (p *PredatorResolver) GetResolvers() map[string]Func {
 	return map[string]Func{
-		resolverModelApproval:            StaticResolver(screenTypeApproval, moduleReview, servicePredator),
+		resolverModelRequestApprove:      StaticResolver(screenTypeApproval, moduleApprove, servicePredator),
+		resolverModelRequestReject:       StaticResolver(screenTypeApproval, moduleReject, servicePredator),
 		resolverModelDiscovery:           StaticResolver(screenTypeModel, moduleView, servicePredator),
 		resolverModelDelete:              StaticResolver(screenTypeModel, moduleDelete, servicePredator),
 		resolverModelScaleUp:             StaticResolver(screenTypeModel, moduleScaleUp, servicePredator),

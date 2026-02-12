@@ -1,8 +1,8 @@
 
 const env = window.env || {};
 
-export const REACT_APP_HORIZON_BASE_URL = process.env.REACT_APP_HORIZON_BASE_URL || env.REACT_APP_HORIZON_BASE_URL || "http://localhost:8082";
-export const REACT_APP_HORIZON_PROD_BASE_URL = process.env.REACT_APP_HORIZON_PROD_BASE_URL || env.REACT_APP_HORIZON_PROD_BASE_URL || "http://localhost:8085";
+export const REACT_APP_HORIZON_BASE_URL = process.env.REACT_APP_HORIZON_BASE_URL || env.REACT_APP_HORIZON_BASE_URL || "http://horizon-v2.int.meesho.int";
+export const REACT_APP_HORIZON_PROD_BASE_URL = process.env.REACT_APP_HORIZON_PROD_BASE_URL || env.REACT_APP_HORIZON_PROD_BASE_URL || "http://horizon-v2.prd.meesho.int";
 export const REACT_APP_SKYE_BASE_URL = process.env.REACT_APP_SKYE_BASE_URL || env.REACT_APP_SKYE_BASE_URL || "http://localhost:8083";
 export const REACT_APP_MODEL_INFERENCE_BASE_URL = process.env.REACT_APP_MODEL_INFERENCE_BASE_URL || env.REACT_APP_MODEL_INFERENCE_BASE_URL || "http://localhost:8084";
 export const REACT_APP_ENVIRONMENT = process.env.REACT_APP_ENVIRONMENT || env.REACT_APP_ENVIRONMENT || "production";
@@ -29,4 +29,3 @@ export const isOnlineFeatureStoreEnabled = () => REACT_APP_ONLINE_FEATURE_STORE_
 export const isInferFlowEnabled = () => REACT_APP_INFERFLOW_ENABLED;
 export const isNumerixEnabled = () => REACT_APP_NUMERIX_ENABLED;
 export const isPredatorEnabled = () => REACT_APP_PREDATOR_ENABLED;
-export const isEmbeddingPlatformEnabled = () => REACT_APP_EMBEDDING_PLATFORM_ENABLED;
