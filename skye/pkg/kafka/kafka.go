@@ -70,19 +70,28 @@ func NewKafkaListener(cfg *kafkaConf.KafkaConfig, batchHandler BatchHandler) *Ka
 func (k *KafkaListener) Init() {
 	for i := 0; i < k.kafkaConfig.Concurrency; i++ {
 		indexString := strconv.Itoa(i)
-		consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
+		configMap := &kafka.ConfigMap{
 			bootstrapServers:     k.kafkaConfig.BootstrapURLs,
 			groupID:              k.kafkaConfig.GroupID,
 			autoOffsetReset:      k.kafkaConfig.AutoOffsetReset,
 			reBalanceEnable:      k.kafkaConfig.ReBalanceEnable,
 			enableAutoCommit:     k.kafkaConfig.AutoCommitEnable,
 			autoCommitIntervalMs: k.kafkaConfig.AutoCommitIntervalInMs,
-			saslUsername:         k.kafkaConfig.SaslUsername,
-			saslPassword:         k.kafkaConfig.SaslPassword,
-			securityProtocol:     k.kafkaConfig.SecurityProtocol,
-			saslMechanism:        k.kafkaConfig.SaslMechanism,
 			clientId:             k.kafkaConfig.ClientID + "-" + indexString,
-		})
+		}
+		if k.kafkaConfig.SecurityProtocol != "" {
+			(*configMap)[securityProtocol] = k.kafkaConfig.SecurityProtocol
+		}
+		if k.kafkaConfig.SaslMechanism != "" {
+			(*configMap)[saslMechanism] = k.kafkaConfig.SaslMechanism
+		}
+		if k.kafkaConfig.SaslUsername != "" {
+			(*configMap)[saslUsername] = k.kafkaConfig.SaslUsername
+		}
+		if k.kafkaConfig.SaslPassword != "" {
+			(*configMap)[saslPassword] = k.kafkaConfig.SaslPassword
+		}
+		consumer, err := kafka.NewConsumer(configMap)
 		if err != nil {
 			log.Panic().Err(err).Msg("Failed to create Kafka consumer.")
 		}

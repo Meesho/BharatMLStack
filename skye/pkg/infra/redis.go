@@ -18,8 +18,8 @@ func InitRedis() {
 	redisOnce.Do(func() {
 		cfg := structs.GetAppConfig().Configs
 		addr := cfg.RedisAddr
-		if addr == "" || cfg.RedisDB == 0 || cfg.RedisPassword == "" {
-			panic("redis addr, db, or password is not set")
+		if addr == "" {
+			panic("redis addr is not set")
 		}
 		redisClient = redis.NewClient(&redis.Options{
 			Addr:     addr,
