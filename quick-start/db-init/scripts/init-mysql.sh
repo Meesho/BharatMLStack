@@ -228,6 +228,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     test_results json,
+    source_config_id varchar(255) NULL,
     PRIMARY KEY (id),
     UNIQUE KEY config_id (config_id)
   );
@@ -308,6 +309,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     test_results json,
     has_nil_data boolean DEFAULT false,
+    source_model_name varchar(255) NULL,
     PRIMARY KEY (id)
   );
   
@@ -387,6 +389,8 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     deployment_run_id varchar(255),
     deployable_health enum('DEPLOYMENT_REASON_ARGO_APP_HEALTH_DEGRADED', 'DEPLOYMENT_REASON_ARGO_APP_HEALTHY'),
     work_flow_status enum('WORKFLOW_COMPLETED','WORKFLOW_NOT_FOUND','WORKFLOW_RUNNING','WORKFLOW_FAILED','WORKFLOW_NOT_STARTED'),
+    override_testing TINYINT(1) DEFAULT 0,
+    deployable_tag varchar(255) NULL,
     PRIMARY KEY (id),
     UNIQUE KEY host (host)
   );
@@ -594,7 +598,8 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   ('GET', '/api/v1/horizon/predator-config-discovery/models', 'ModelDiscoveryResolver'),
   ('GET', '/api/v1/horizon/predator-config-discovery/source-models', 'ModelSourceDiscoveryResolver'),
   ('GET', '/api/v1/horizon/predator-config-discovery/feature-types', 'ModelSourceDiscoveryResolver'),
-  ('PUT', '/api/v1/horizon/predator-config-approval/process-request', 'ModelApprovalResolver'),
+  ('PUT', '/api/v1/horizon/predator-config-approval/process-request/approve', 'ModelRequestApproveResolver'),
+  ('PUT', '/api/v1/horizon/predator-config-approval/process-request/reject', 'ModelRequestRejectResolver'),
   ('GET', '/api/v1/horizon/predator-config-approval/requests/:group_id', 'ModelValidatorResolver'),
   ('GET', '/api/v1/horizon/predator-config-approval/requests', 'ModelRequestDiscoveryResolver'),
   ('POST', '/api/v1/horizon/predator-config-testing/generate-request', 'ModelTestGenerateRequestResolver'),
@@ -663,8 +668,8 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   ('admin', 'predator', 'model-approval', 'approve'),
   ('admin', 'predator', 'model-approval', 'view'),
   ('admin', 'predator', 'model-approval', 'reject'),
+  ('user', 'predator', 'model-approval', 'reject'),
   ('admin', 'predator', 'model-approval', 'cancel'),
-  ('admin', 'predator', 'model-approval', 'review'),
   ('admin', 'predator', 'model-approval', 'validate'),
   ('admin', 'predator', 'model', 'delete'),
   ('admin', 'predator', 'model', 'onboard'),

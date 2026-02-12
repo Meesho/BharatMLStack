@@ -55,9 +55,10 @@ type Configs struct {
 	DefaultGpuThreshold string `mapstructure:"default_gpu_threshold"`
 	DefaultModelPath    string `mapstructure:"default_model_path"`
 
-	GcsModelBucket   string `mapstructure:"gcs_model_bucket"`
-	GcsModelBasePath string `mapstructure:"gcs_model_base_path"`
-	GcsEnabled       bool   `mapstructure:"gcs_enabled"`
+	GcsModelBucket    string `mapstructure:"gcs_model_bucket"`
+	GcsModelBasePath  string `mapstructure:"gcs_model_base_path"`
+	GcsConfigBasePath string `mapstructure:"gcs_config_base_path"`
+	GcsConfigBucket   string `mapstructure:"gcs_config_bucket"`
 
 	GrafanaBaseUrl string `mapstructure:"grafana_base_url"`
 
@@ -66,9 +67,13 @@ type Configs struct {
 	NumerixAppName       string `mapstructure:"numerix_app_name"`
 	NumerixMonitoringUrl string `mapstructure:"numerix_monitoring_url"`
 
-	MaxNumerixInactiveAge   int `mapstructure:"max_numerix_inactive_age"`
-	MaxInferflowInactiveAge int `mapstructure:"max_inferflow_inactive_age"`
-	MaxPredatorInactiveAge  int `mapstructure:"max_predator_inactive_age"`
+	BulkDeletePredatorEnabled                  bool `mapstructure:"bulk_delete_predator_enabled"`
+	BulkDeleteInferflowEnabled                 bool `mapstructure:"bulk_delete_inferflow_enabled"`
+	BulkDeleteNumerixEnabled                   bool `mapstructure:"bulk_delete_numerix_enabled"`
+	BulkDeletePredatorMaxInactiveDays          int  `mapstructure:"bulk_delete_predator_max_inactive_days"`
+	BulkDeleteInferflowMaxInactiveDays        int  `mapstructure:"bulk_delete_inferflow_max_inactive_days"`
+	BulkDeleteNumerixMaxInactiveDays           int  `mapstructure:"bulk_delete_numerix_max_inactive_days"`
+	BulkDeletePredatorRequestSubmissionEnabled bool `mapstructure:"bulk_delete_predator_request_submission_enabled"`
 
 	InferflowAppName string `mapstructure:"inferflow_app_name"`
 

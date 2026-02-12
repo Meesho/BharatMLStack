@@ -18,6 +18,7 @@ type ServiceDeployableRepository interface {
 	GetByWorkflowStatus(status string) ([]ServiceDeployableConfig, error)
 	GetByDeployableHealth(health string) ([]ServiceDeployableConfig, error)
 	GetByNameAndService(name, service string) (*ServiceDeployableConfig, error)
+	GetByIds(ids []int) ([]ServiceDeployableConfig, error)
 }
 
 type serviceDeployableRepo struct {
@@ -97,4 +98,13 @@ func (r *serviceDeployableRepo) GetByNameAndService(name, service string) (*Serv
 		return nil, err
 	}
 	return &deployable, nil
+}
+
+func (r *serviceDeployableRepo) GetByIds(ids []int) ([]ServiceDeployableConfig, error) {
+	if len(ids) == 0 {
+		return []ServiceDeployableConfig{}, nil
+	}
+	var deployables []ServiceDeployableConfig
+	err := r.db.Where("id IN ?", ids).Find(&deployables).Error
+	return deployables, err
 }

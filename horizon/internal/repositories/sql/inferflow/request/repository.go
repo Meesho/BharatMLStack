@@ -21,8 +21,10 @@ type Repository interface {
 	DoesConfigIdExistWithRequestType(configID string, requestType string) (bool, error)
 	CurrentRequestStatus(requestID uint) (string, error)
 	Deactivate(configID string) error
-	GetLatestPendingRequestByConfigID(configID string) ([]Table, error)
+	GetByConfigIDandVersion(configID string, version int) ([]Table, error)
 	GetApprovedRequestsByConfigID(configID string) ([]Table, error)
+	GetLatestPendingRequestByConfigID(configID string) ([]Table, error)
+	GetRequestByID(requestID uint) (Table, error)
 }
 
 type InferflowRequest struct {
@@ -91,6 +93,18 @@ func (g *InferflowRequest) GetByUser(email string) ([]Table, error) {
 	return tables, result.Error
 }
 
+func (g *InferflowRequest) GetByConfigIDandVersion(configID string, version int) ([]Table, error) {
+	var tables []Table
+	result := g.db.Where("config_id = ? AND version = ? AND status = 'APPROVED'", configID, version).Find(&tables)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if len(tables) == 0 {
+		return nil, errors.New("no request found with the given config_id and version")
+	}
+	return tables, result.Error
+}
+
 func (g *InferflowRequest) DoesRecordExist(query string, args ...interface{}) (bool, error) {
 	var table Table
 	result := g.db.Where(query, args...).First(&table)
@@ -112,7 +126,7 @@ func (g *InferflowRequest) DoesRequestIDExist(requestID uint) (bool, error) {
 }
 
 func (g *InferflowRequest) DoesConfigIdExistWithRequestType(configID string, requestType string) (bool, error) {
-	return g.DoesRecordExist("config_id = ? AND request_type = ? AND STATUS != 'REJECTED'", configID, requestType)
+	return g.DoesRecordExist("config_id = ? AND request_type = ? AND STATUS = 'PENDING APPROVAL'", configID, requestType)
 }
 
 func (g *InferflowRequest) CurrentRequestStatus(requestID uint) (string, error) {
@@ -143,4 +157,16 @@ func (g *InferflowRequest) GetLatestPendingRequestByConfigID(configID string) ([
 		Order("created_at DESC").
 		Find(&tables)
 	return tables, result.Error
+}
+
+func (g *InferflowRequest) GetRequestByID(requestID uint) (Table, error) {
+	var table Table
+	result := g.db.Where("request_id = ?", requestID).First(&table)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return Table{}, nil
+		}
+		return Table{}, result.Error
+	}
+	return table, nil
 }

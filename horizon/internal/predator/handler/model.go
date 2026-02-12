@@ -11,6 +11,8 @@ type Payload struct {
 	MetaData          MetaData      `json:"meta_data"`
 	ConfigMapping     ConfigMapping `json:"config_mapping"`
 	DiscoveryConfigID uint          `json:"discovery_config_id"`
+	IsLoadTested      bool          `json:"is_load_tested,omitempty"`
+	GrafanaLink       string        `json:"grafana_link,omitempty"`
 }
 
 type MetaData struct {
@@ -44,7 +46,8 @@ type IOField struct {
 }
 
 type ConfigMapping struct {
-	ServiceDeployableID uint `json:"service_deployable_id"`
+	ServiceDeployableID uint   `json:"service_deployable_id"`
+	SourceModelName     string `json:"source_model_name,omitempty"`
 }
 
 type FetchModelConfigRequest struct {
@@ -99,6 +102,7 @@ type ModelResponse struct {
 	DeployableRunningStatus string          `json:"deployable_running_status"`
 	TestResults             json.RawMessage `json:"test_results"`
 	HasNilData              bool            `json:"has_nil_data"`
+	SourceModelName         string          `json:"source_model_name,omitempty"`
 }
 
 type PredatorRequestResponse struct {
