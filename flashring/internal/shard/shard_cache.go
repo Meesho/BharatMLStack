@@ -18,6 +18,7 @@ import (
 type ShardCache struct {
 	keyIndex          *indices.Index
 	file              *fs.WrapAppendFile
+	ioFile            *fs.IOUringFile
 	mm                *memtables.MemtableManager
 	readPageAllocator *allocators.SlabAlignedPageAllocator
 	dm                *indices.DeleteManager
@@ -121,10 +122,18 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 		log.Panic().Err(err).Msg("Failed to create read page allocator")
 	}
 	dm := indices.NewDeleteManager(ki, file, config.DeleteAmortizedStep)
+
+	// Attach io_uring to the existing file -- do NOT create a second WrapAppendFile,
+	// otherwise the ioFile would have stale offset tracking (PhysicalWriteOffset etc.).
+	ioFile, err := fs.NewIOUringFile(file, 256, 0)
+	if err != nil {
+		log.Panic().Err(err).Msg("Failed to create io_uring file")
+	}
 	sc := &ShardCache{
 		keyIndex:          ki,
 		mm:                memtableManager,
 		file:              file,
+		ioFile:            ioFile,
 		readPageAllocator: readPageAllocator,
 		dm:                dm,
 		predictor:         config.Predictor,
@@ -219,7 +228,7 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		// Allocate buffer of exact size needed - no pool since readFromDisk already copies once
 		buf = make([]byte, length)
 		fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
-		n := fc.readFromDisk(int64(fileOffset), length, buf)
+		n := fc.readFromDiskAsync(int64(fileOffset), length, buf)
 		if n != int(length) {
 			fc.Stats.BadLengthCount.Add(1)
 			return false, nil, 0, false, shouldReWrite
@@ -360,16 +369,51 @@ func (fc *ShardCache) validateAndReturnBuffer(key string, buf []byte, length uin
 }
 
 func (fc *ShardCache) readFromDisk(fileOffset int64, length uint16, buf []byte) int {
+
 	alignedStartOffset := (fileOffset / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
 	endndOffset := fileOffset + int64(length)
 	endAlignedOffset := ((endndOffset + fs.BLOCK_SIZE - 1) / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
 	alignedReadSize := endAlignedOffset - alignedStartOffset
+
 	page := fc.readPageAllocator.Get(int(alignedReadSize))
+
 	fc.file.Pread(alignedStartOffset, page.Buf)
+
 	start := int(fileOffset - alignedStartOffset)
 	n := copy(buf, page.Buf[start:start+int(length)])
 	fc.readPageAllocator.Put(page)
 	return n
+}
+
+func (fc *ShardCache) readFromDiskAsync(fileOffset int64, length uint16, buf []byte) int {
+	alignedStartOffset := (fileOffset / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
+	endndOffset := fileOffset + int64(length)
+	endAlignedOffset := ((endndOffset + fs.BLOCK_SIZE - 1) / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
+	alignedReadSize := int(endAlignedOffset - alignedStartOffset)
+	page := fc.readPageAllocator.Get(alignedReadSize)
+
+	// Use exactly alignedReadSize bytes, not the full page.Buf which may be
+	// larger due to slab allocator rounding to the next size class.
+	readBuf := page.Buf[:alignedReadSize]
+	n, err := fc.ioFile.PreadAsync(alignedStartOffset, readBuf)
+	if err != nil || n != alignedReadSize {
+		// ErrFileOffsetOutOfRange is expected for stale index entries -- don't log.
+		// Only log genuine io_uring / I/O errors.
+		if err != nil && err != fs.ErrFileOffsetOutOfRange {
+			log.Warn().Err(err).
+				Int64("offset", alignedStartOffset).
+				Int("alignedReadSize", alignedReadSize).
+				Int("n", n).
+				Msg("io_uring pread failed")
+		}
+		fc.readPageAllocator.Put(page)
+		return 0
+	}
+
+	start := int(fileOffset - alignedStartOffset)
+	copied := copy(buf, page.Buf[start:start+int(length)])
+	fc.readPageAllocator.Put(page)
+	return copied
 }
 
 func (fc *ShardCache) GetRingBufferActiveEntries() int {

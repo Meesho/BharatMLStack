@@ -143,6 +143,53 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 	return int32(n), nil
 }
 
+// PreadAsync submits a pread via io_uring and waits for completion.
+// Thread-safe: multiple goroutines can call this concurrently on the same IOUringFile.
+// Applies the same read-window validation and offset wrapping as Pread so that
+// stale index entries (pointing past MaxFileSize) are rejected cheaply without
+// hitting the kernel.
+func (f *IOUringFile) PreadAsync(fileOffset int64, buf []byte) (int, error) {
+	if f.ReadDirectIO {
+		if !isAlignedOffset(fileOffset, f.blockSize) {
+			return 0, ErrOffsetNotAligned
+		}
+		if !isAlignedBuffer(buf, f.blockSize) {
+			return 0, ErrBufNoAlign
+		}
+	}
+
+	// Validate read window and wrap offset (mirrors Pread logic exactly)
+	readEnd := fileOffset + int64(len(buf))
+	valid := false
+
+	if !f.wrapped {
+		// Single valid region: [PhysicalStartOffset, PhysicalWriteOffset)
+		valid = fileOffset >= f.PhysicalStartOffset && readEnd <= f.PhysicalWriteOffset
+	} else {
+		// Ring buffer has wrapped -- map the logical offset back into [0, MaxFileSize)
+		fileOffset = fileOffset % f.MaxFileSize
+		readEnd = readEnd % f.MaxFileSize
+		if fileOffset >= f.PhysicalStartOffset {
+			valid = readEnd <= f.MaxFileSize
+		} else {
+			valid = readEnd <= f.PhysicalWriteOffset
+		}
+	}
+	if !valid {
+		return 0, ErrFileOffsetOutOfRange
+	}
+
+	startTime := time.Now()
+	n, err := f.ring.SubmitRead(f.ReadFd, buf, uint64(fileOffset))
+	metrics.Timing(metrics.KEY_PREAD_LATENCY, time.Since(startTime), []string{})
+	if err != nil {
+		return 0, err
+	}
+
+	f.Stat.ReadCount++
+	return n, nil
+}
+
 func (r *WrapAppendFile) TrimHead() (err error) {
 
 	startTime := time.Now()
