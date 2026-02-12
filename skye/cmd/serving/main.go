@@ -16,7 +16,6 @@ import (
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
 	"github.com/Meesho/BharatMLStack/skye/pkg/profiling"
 	pb "github.com/Meesho/helix-clients/pkg/deployableclients/skye/client/grpc"
-	memcoil "github.com/Meesho/memcoil/v2/pkg/memcoil"
 	"github.com/Meesho/memcoil/v2/pkg/serviceclient/mcachecontrolplane"
 )
 
@@ -30,7 +29,6 @@ func main() {
 	logger.Init()
 	metric.Init()
 	mcachecontrolplane.Init()
-	memcoil.Init()
 	profiling.Init()
 	etcd.InitFromAppName(&config.Skye{}, appConfig.Configs.AppName, appConfig.Configs)
 	grpc.Init(middlewares.ServerInterceptor)

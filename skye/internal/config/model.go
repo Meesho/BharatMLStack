@@ -20,18 +20,20 @@ type Models struct {
 }
 
 type Model struct {
-	EmbeddingStoreEnabled bool
-	EmbeddingStoreTtl     int
-	EmbeddingStoreVersion int
-	TopicName             string
-	Metadata              Metadata
-	ModelConfig           ModelConfig
-	TrainingDataPath      string
-	Variants              map[string]Variant
-	ModelType             enums.ModelType
-	PartitionStates       map[string]int
-	NumberOfPartitions    int
-	JobFrequency          string
+	EmbeddingStoreEnabled  bool
+	EmbeddingStoreTtl      int
+	EmbeddingStoreVersion  int
+	KafkaId                int
+	TopicName              string
+	Metadata               Metadata
+	ModelConfig            ModelConfig
+	TrainingDataPath       string
+	Variants               map[string]Variant
+	ModelType              enums.ModelType
+	PartitionStates        map[string]int
+	NumberOfPartitions     int
+	FailureProducerKafkaId int
+	JobFrequency           string
 }
 
 type ModelConfig struct {

@@ -42,6 +42,7 @@ type ProcessModelsWithFrequencyResponse struct {
 
 type ProcessModelResponse struct {
 	Variants              map[string]int  `json:"variants"`
+	KafkaId               int             `json:"kafka_id"`
 	TrainingDataPath      string          `json:"training_data_path"`
 	EmbeddingStoreVersion int             `json:"embedding_store_version"`
 	Model                 string          `json:"model"`

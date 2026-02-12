@@ -5,8 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	httpHelper "github.com/Meesho/go-core/v2/api/http"
 	"net/http"
+
+	httpHelper "github.com/Meesho/BharatMLStack/skye/pkg/api/http"
 )
 
 type RequestBuilder struct {

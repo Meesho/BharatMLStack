@@ -22,17 +22,19 @@ type RegisterEntityRequest struct {
 }
 
 type RegisterModelRequest struct {
-	Entity                string                 `json:"entity"`
-	Model                 string                 `json:"model"`
-	EmbeddingStoreEnabled bool                   `json:"embedding_store_enabled"`
-	EmbeddingStoreTtl     int                    `json:"embedding_store_ttl"`
-	ModelConfig           map[string]interface{} `json:"model_config"`
-	ModelType             string                 `json:"model_type"`
-	TrainingDataPath      string                 `json:"training_data_path"`
-	Metadata              config.Metadata        `json:"metadata"`
-	JobFrequency          string                 `json:"job_frequency"`
-	NumberOfPartitions    int                    `json:"number_of_partitions"`
-	TopicName             string                 `json:"topic_name"`
+	Entity                 string                 `json:"entity"`
+	Model                  string                 `json:"model"`
+	EmbeddingStoreEnabled  bool                   `json:"embedding_store_enabled"`
+	EmbeddingStoreTtl      int                    `json:"embedding_store_ttl"`
+	ModelConfig            map[string]interface{} `json:"model_config"`
+	ModelType              string                 `json:"model_type"`
+	KafkaId                int                    `json:"kafka_id"`
+	TrainingDataPath       string                 `json:"training_data_path"`
+	Metadata               config.Metadata        `json:"metadata"`
+	JobFrequency           string                 `json:"job_frequency"`
+	NumberOfPartitions     int                    `json:"number_of_partitions"`
+	FailureProducerKafkaId int                    `json:"failure_producer_kafka_id"`
+	TopicName              string                 `json:"topic_name"`
 }
 
 type RegisterVariantRequest struct {

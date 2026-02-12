@@ -56,7 +56,7 @@ func (r *RegistryManager) RegisterEntity(request *RegisterEntityRequest) error {
 }
 
 func (r *RegistryManager) RegisterModel(request *RegisterModelRequest) error {
-	err := r.config.RegisterModel(request.Entity, request.Model, request.EmbeddingStoreEnabled, request.EmbeddingStoreTtl, request.ModelConfig, request.ModelType, request.TrainingDataPath, request.Metadata, request.JobFrequency, request.NumberOfPartitions, request.TopicName)
+	err := r.config.RegisterModel(request.Entity, request.Model, request.EmbeddingStoreEnabled, request.EmbeddingStoreTtl, request.ModelConfig, request.ModelType, request.KafkaId, request.TrainingDataPath, request.Metadata, request.JobFrequency, request.NumberOfPartitions, request.FailureProducerKafkaId, request.TopicName)
 	if err != nil {
 		log.Error().Msgf("Error Registering Model for %s , %s, %v", request.Entity, request.Model, err)
 		return err

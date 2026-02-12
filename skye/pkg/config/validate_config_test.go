@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	http2 "github.com/Meesho/go-core/v2/api/http"
+	http2 "github.com/Meesho/BharatMLStack/skye/pkg/api/http"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"

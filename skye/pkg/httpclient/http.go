@@ -7,9 +7,9 @@ import (
 	"regexp"
 	"time"
 
-	httpHelper "github.com/Meesho/go-core/v2/api/http"
-	"github.com/Meesho/go-core/v2/circuitbreaker"
-	"github.com/Meesho/go-core/v2/metric"
+	httpHelper "github.com/Meesho/BharatMLStack/skye/pkg/api/http"
+	"github.com/Meesho/BharatMLStack/skye/pkg/circuitbreaker"
+	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"

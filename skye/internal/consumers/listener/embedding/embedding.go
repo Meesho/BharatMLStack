@@ -18,7 +18,10 @@ import (
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories/embedding"
 	"github.com/Meesho/BharatMLStack/skye/pkg/httpclient"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
+	"github.com/Meesho/BharatMLStack/skye/pkg/mq/producer"
 	"github.com/rs/zerolog/log"
+
+	mqConfig "github.com/Meesho/BharatMLStack/skye/pkg/mq/config"
 )
 
 var (
@@ -55,6 +58,41 @@ func newEmbeddingConsumer() Consumer {
 	return embeddingConsumer
 }
 
+func (e *EmbeddingConsumer) produceFailureEvents(failedEvents []Event) {
+	payload := make([]mqConfig.RequestPayload, 0, len(failedEvents))
+	for _, failedEvent := range failedEvents {
+		metric.Incr("embedding_consumer_event_error", []string{"entity_name", failedEvent.Entity, "model_name", failedEvent.Model})
+		modelConf, err := e.configManager.GetModelConfig(failedEvent.Entity, failedEvent.Model)
+		if err != nil {
+			log.Error().Err(err).Msg("Error getting model config")
+			continue
+		}
+		failureProducerKafkaId := modelConf.FailureProducerKafkaId
+		jsonBytes, err := json.Marshal(failedEvent)
+		if err != nil {
+			log.Error().Msgf("Error marshalling failed event: %v", err)
+			return
+		}
+		keyStr := ""
+		payload = append(payload, mqConfig.RequestPayload{
+			Key:         &keyStr,
+			Value:       jsonBytes,
+			PayloadType: mqConfig.BYTE_ARRAY,
+			Headers:     make(map[string][]byte),
+			Partition:   nil,
+		})
+		sendErr := producer.SendAndForget(failureProducerKafkaId, payload)
+		if sendErr != nil {
+			log.Error().Err(sendErr).Int("failed_count", len(payload)).Int("producer_kafka_id", failureProducerKafkaId).Msg("Error producing failed embedding events batch to failure topic")
+			metric.Incr("embedding_failure_producer_event_error", []string{"entity_name", failedEvent.Entity, "model_name", failedEvent.Model})
+		} else {
+			log.Info().Int("produced_count", len(payload)).Int("producer_kafka_id", failureProducerKafkaId).Msg("Successfully produced failed embedding events batch to failure topic")
+			metric.Incr("embedding_failure_producer_event_success", []string{"entity_name", failedEvent.Entity, "model_name", failedEvent.Model})
+		}
+	}
+
+}
+
 func (e *EmbeddingConsumer) Process(event []Event) error {
 	go func(event []Event) {
 		var err error
@@ -68,6 +106,9 @@ func (e *EmbeddingConsumer) Process(event []Event) error {
 				} else {
 					err = errors.Join(err, panicErr)
 				}
+			}
+			if err != nil {
+				e.produceFailureEvents(event)
 			}
 		}()
 
@@ -103,6 +144,9 @@ func (e *EmbeddingConsumer) ProcessInSequence(events []Event) (err error) {
 			} else {
 				err = errors.Join(err, panicErr)
 			}
+		}
+		if err != nil {
+			e.produceFailureEvents(events)
 		}
 	}()
 

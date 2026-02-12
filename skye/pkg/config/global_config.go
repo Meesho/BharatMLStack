@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Meesho/go-core/v2/config/configutils"
-	"github.com/Meesho/go-core/v2/zookeeper"
+	"github.com/Meesho/BharatMLStack/skye/pkg/config/configutils"
+	"github.com/Meesho/BharatMLStack/skye/pkg/zookeeper"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"

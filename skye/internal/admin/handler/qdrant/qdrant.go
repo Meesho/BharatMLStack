@@ -476,6 +476,7 @@ func (q *Qdrant) updateVariantAndJobState(entity, model, variant string) error {
 
 func (q *Qdrant) buildProcessModelResponse(entity, model string, embeddingStoreVersion int, variantsToProcessFreqMap map[string]int) (*ProcessModelResponse, error) {
 	modelConfig, _ := q.configManager.GetModelConfig(entity, model)
+	kafkaId := modelConfig.KafkaId
 	topicName := modelConfig.TopicName
 	trainingDataPath := modelConfig.TrainingDataPath
 	numberOfPartitions := modelConfig.NumberOfPartitions
@@ -485,6 +486,7 @@ func (q *Qdrant) buildProcessModelResponse(entity, model string, embeddingStoreV
 	}
 	return &ProcessModelResponse{
 		Variants:              variantsToProcessFreqMap,
+		KafkaId:               kafkaId,
 		TrainingDataPath:      trainingDataPath,
 		EmbeddingStoreVersion: embeddingStoreVersion,
 		Model:                 model,
@@ -520,7 +522,7 @@ func (q *Qdrant) startTicker(ticker *time.Ticker) error {
 		}
 		for entity, modelMap := range entities {
 			for model, models := range modelMap.Models {
-				metric.Count("model_config", 1, []string{"entity_name", entity, "model_name", model, "model_type", string(models.ModelType)})
+				metric.Count("model_config", 1, []string{"entity_name", entity, "model_name", model, "kafka_id", strconv.Itoa(models.KafkaId), "model_type", string(models.ModelType)})
 				for Variant, variant := range models.Variants {
 					variantConfig, _ := q.configManager.GetVariantConfig(entity, model, Variant)
 					variantType := variantConfig.Type

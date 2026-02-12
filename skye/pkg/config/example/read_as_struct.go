@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/Meesho/go-core/v2/config"
+	"github.com/Meesho/BharatMLStack/skye/pkg/config"
 )
 
 type YourConfigStruct struct {

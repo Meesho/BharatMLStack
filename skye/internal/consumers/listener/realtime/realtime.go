@@ -1,6 +1,7 @@
 package realtime
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"sync"
@@ -10,6 +11,8 @@ import (
 	"github.com/Meesho/BharatMLStack/skye/internal/consumers/handler/indexer"
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories/embedding"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
+	mqConfig "github.com/Meesho/BharatMLStack/skye/pkg/mq/config"
+	"github.com/Meesho/BharatMLStack/skye/pkg/mq/producer"
 	"github.com/rs/zerolog/log"
 )
 
@@ -79,8 +82,8 @@ func (r *RealtimeConsumer) Process(events []Event) error {
 }
 
 func (r *RealtimeConsumer) ProduceDeltaEvent(eventType indexer.EventType, event []indexer.Data) error {
-	// keyStr := ""
-	// payloadToProduce := make([]kafka.Message, 0, len(event))
+	keyStr := ""
+	payloadToProduce := make([]mqConfig.RequestPayload, 0, len(event))
 	for _, eventData := range event {
 		metric.Count("realtime_delta_producer_event", 1, []string{"type", string(eventType), "entity", eventData.Entity, "model", eventData.Model, "variant", eventData.Variant, "version", strconv.Itoa(eventData.Version)})
 		if eventType == indexer.Upsert && len(eventData.Vectors) == 0 {
@@ -97,11 +100,11 @@ func (r *RealtimeConsumer) ProduceDeltaEvent(eventType indexer.EventType, event 
 			Vectors:   eventData.Vectors,
 			EventType: string(eventType),
 		}
-		// jsonDeltaEvent, err := json.Marshal(deltaEvent)
-		// if err != nil {
-		// 	log.Error().Msgf("Error in Marshalling %s", err)
-		// 	return err
-		// }
+		jsonDeltaEvent, err := json.Marshal(deltaEvent)
+		if err != nil {
+			log.Error().Msgf("Error in Marshalling %s", err)
+			return err
+		}
 		variantConfig, err := r.configManager.GetVariantConfig(deltaEvent.Entity, deltaEvent.Model, deltaEvent.Variant)
 		if err != nil {
 			log.Error().Msgf("Error getting variant config for entity %s, model %s, variant %s: %v", deltaEvent.Entity, deltaEvent.Model, deltaEvent.Variant, err)
@@ -112,45 +115,43 @@ func (r *RealtimeConsumer) ProduceDeltaEvent(eventType indexer.EventType, event 
 			log.Error().Msgf("RTPartition is 0 for entity %s, model %s, variant %s", deltaEvent.Entity, deltaEvent.Model, deltaEvent.Variant)
 			return err
 		}
-		// payloadToProduce = append(payloadToProduce, kafka.Message{
-		// 	TopicPartition: kafka.TopicPartition{
-		// 		Topic:     &deltaEvent.TopicName,
-		// 		Partition: variantConfig.RTPartition,
-		// 		Offset:    kafka.OffsetInvalid,
-		// 	},
-		// 	Key:   &keyStr,
-		// 	Value: jsonDeltaEvent,
-		// })
+		payloadToProduce = append(payloadToProduce, mqConfig.RequestPayload{
+			Partition:   &variantConfig.RTPartition,
+			Key:         &keyStr,
+			Value:       string(jsonDeltaEvent),
+			PayloadType: mqConfig.STRING,
+			Headers:     make(map[string][]byte),
+		})
 	}
-	// err := c.Produce(&payloadToProduce, nil)
-	// if err != nil {
-	// 	log.Error().Msgf("Error in producing message %s", err)
-	// 	return err
-	// }
+	err := producer.SendAndForget(appConfig.RealTimeDeltaProducerKafkaId, payloadToProduce)
+	if err != nil {
+		log.Error().Msgf("Error in producing message %s", err)
+		return err
+	}
 	return nil
 }
 
 func (r *RealtimeConsumer) ProduceMessage(event Event) {
 	metric.Count("realtime_producer_event", int64(len(event.Data)), []string{"type", event.Type})
-	// jsonPayload, err := json.Marshal(event)
-	// if err != nil {
-	// 	log.Error().Msgf("Error in Marshalling %s", err)
-	// }
-	// keyStr := ""
-	// payloadToProduce := []kafka.Message{
-	// 	{
-	// 		Key:         &keyStr,
-	// 		Value:       string(jsonPayload),
-	// 		PayloadType: mqConfig.STRING,
-	// 		Headers:     make(map[string][]byte),
-	// 		Partition:   nil,
-	// 	},
-	// }
-	// err = producer.SendAndForget(appConfig.RealtimeProducerMqId, payloadToProduce)
-	// if err != nil {
-	// 	log.Error().Msgf("Error in producing message %s", err)
-	// 	return
-	// }
+	jsonPayload, err := json.Marshal(event)
+	if err != nil {
+		log.Error().Msgf("Error in Marshalling %s", err)
+	}
+	keyStr := ""
+	payloadToProduce := []mqConfig.RequestPayload{
+		{
+			Key:         &keyStr,
+			Value:       string(jsonPayload),
+			PayloadType: mqConfig.STRING,
+			Headers:     make(map[string][]byte),
+			Partition:   nil,
+		},
+	}
+	err = producer.SendAndForget(appConfig.RealtimeProducerKafkaId, payloadToProduce)
+	if err != nil {
+		log.Error().Msgf("Error in producing message %s", err)
+		return
+	}
 }
 
 func (r *RealtimeConsumer) ProcessRealtimeEvent(event Event, indexerEvent indexer.Event) error {

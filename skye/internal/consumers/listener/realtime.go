@@ -5,11 +5,13 @@ import (
 
 	"github.com/Meesho/BharatMLStack/skye/internal/consumers/listener/realtime"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
+	mqConfig "github.com/Meesho/BharatMLStack/skye/pkg/mq/config"
+	"github.com/Meesho/BharatMLStack/skye/pkg/mq/consumer"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/rs/zerolog/log"
 )
 
-func ConsumeRealtimeEvents(records []kafka.Message, c *kafka.Consumer) error {
+func ConsumeRealtimeEvents(records []mqConfig.ConsumerRecord[string, string], c *kafka.Consumer) error {
 	rtConsumer := realtime.NewConsumer(realtime.DefaultVersion)
 	events := make([]realtime.Event, 0)
 	for _, r := range records {
@@ -29,7 +31,7 @@ func ConsumeRealtimeEvents(records []kafka.Message, c *kafka.Consumer) error {
 		return err
 	}
 
-	err = c.Commit(c)
+	err = consumer.Commit(c)
 	if err != nil {
 		return err
 	}

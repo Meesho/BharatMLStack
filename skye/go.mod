@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/Meesho/helix-clients v0.0.1
-	github.com/Meesho/memcoil/v2 v2.0.1
+	github.com/redis/go-redis/v9 v9.6.0
 	github.com/confluentinc/confluent-kafka-go/v2 v2.11.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-zookeeper/zk v1.0.4 // indirect
@@ -23,7 +23,6 @@ require (
 
 require (
 	github.com/DataDog/datadog-go/v5 v5.5.0
-	github.com/Meesho/go-core/v2 v2.1.0
 	github.com/coocood/freecache v1.2.4
 	github.com/soheilhy/cmux v0.1.5
 	go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.65.0
@@ -39,7 +38,6 @@ require (
 )
 
 require (
-	github.com/Meesho/go-core v1.30.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/bits-and-blooms/bitset v1.22.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect

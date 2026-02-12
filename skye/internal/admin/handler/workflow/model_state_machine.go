@@ -1,13 +1,15 @@
 package workflow
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/skye/internal/config"
 	"github.com/Meesho/BharatMLStack/skye/internal/config/enums"
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories/vector"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
-
+	mqConfig "github.com/Meesho/BharatMLStack/skye/pkg/mq/config"
+	"github.com/Meesho/BharatMLStack/skye/pkg/mq/producer"
 	"github.com/rs/zerolog/log"
 )
 
@@ -51,25 +53,25 @@ func (msm *ModelStateMachine) process(currentState enums.VariantState, payload *
 	}
 	payload.VariantState = newState
 	payload.Counter = counter
-	// jsonPayload, err := json.Marshal(payload)
-	// if err != nil {
-	// 	log.Error().Msgf("Error in Marshalling %s", err)
-	// 	return err
-	// }
-	// payloadToProduce := []kafka.Message{
-	// 	{
-	// 		TopicPartition: kafka.TopicPartition{
-	// 			Topic:     &payload.TopicName,
-	// 			Partition: kafka.PartitionAny,
-	// 			Offset:    kafka.OffsetInvalid,
-	// 		},
-	// 		Value: jsonPayload,
-	// 	},
-	// }
-	// err = producer.SendAndForget(appConfig.ModelStateProducer, payloadToProduce)
-	// if err != nil {
-	// 	return err
-	// }
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		log.Error().Msgf("Error in Marshalling %s", err)
+		return err
+	}
+	keyStr := ""
+	payloadToProduce := []mqConfig.RequestPayload{
+		{
+			Key:         &keyStr,
+			Value:       string(jsonPayload),
+			PayloadType: mqConfig.STRING,
+			Headers:     make(map[string][]byte),
+			Partition:   nil,
+		},
+	}
+	err = producer.SendAndForget(appConfig.ModelStateProducer, payloadToProduce)
+	if err != nil {
+		return err
+	}
 	log.Error().Msgf("%s State Processed for %s %s %s", currentState, payload.Entity, payload.Model, payload.Variant)
 	return nil
 }
@@ -174,7 +176,7 @@ func (msm *ModelStateMachine) handleIndexingInProgress(payload *ModelStateExecut
 		response, _ := vector.GetRepository(vectorDbType).GetCollectionInfo(payload.Entity, payload.Model, payload.Variant, payload.Version)
 		isPayloadIndexedScaleUp := false
 		for _, payloadPointsCount := range response.PayloadPointsCount {
-			if response != nil && payloadPointsCount/response.PointsCount > 0.90 {
+			if response != nil && payloadPointsCount/response.PointsCount > 0.95 {
 				isPayloadIndexedScaleUp = true
 			}
 		}
@@ -236,7 +238,7 @@ func (msm *ModelStateMachine) handleModelVersionUpdated(payload *ModelStateExecu
 	}
 	variantConfig, _ := msm.configManager.GetVariantConfig(payload.Entity, payload.Model, payload.Variant)
 	if variantConfig.VectorDbConfig.Params["after_collection_index_payload"] != "" && variantConfig.VectorDbConfig.Params["after_collection_index_payload"] == "true" {
-		err := msm.configManager.UpdateRateLimiter(payload.Entity, payload.Model, payload.Variant, 100, 100)
+		err := msm.configManager.UpdateRateLimiter(payload.Entity, payload.Model, payload.Variant, 0, 0)
 		if err != nil {
 			return "", 0, err
 		}

@@ -124,6 +124,7 @@ func TestPrepareEmbeddingStoreVersion_ResetUpdateError(t *testing.T) {
 func TestBuildProcessModelResponse_WithVariants(t *testing.T) {
 	q, cm, _ := newTestQdrant()
 	cm.On("GetModelConfig", "e1", "m1").Return(&config.Model{
+		KafkaId:            10,
 		TopicName:          "topic1",
 		TrainingDataPath:   "/data/path",
 		NumberOfPartitions: 4,
@@ -134,6 +135,7 @@ func TestBuildProcessModelResponse_WithVariants(t *testing.T) {
 	resp, err := q.buildProcessModelResponse("e1", "m1", 5, variantsMap)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
+	assert.Equal(t, 10, resp.KafkaId)
 	assert.Equal(t, "topic1", resp.TopicName)
 	assert.Equal(t, "/data/path", resp.TrainingDataPath)
 	assert.Equal(t, 4, resp.NumberOfPartitions)

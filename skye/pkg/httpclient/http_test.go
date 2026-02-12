@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
-	"github.com/Meesho/go-core/v2/tracing"
+	"github.com/Meesho/BharatMLStack/skye/pkg/tracing"
 )
 
 // TestPathNormalization tests the path normalization logic

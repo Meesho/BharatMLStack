@@ -203,11 +203,12 @@ func (s *SkyeManager) RegisterEntity(entity string, storeId string) error {
 // - embeddingStoreTtl: The time-to-live for the embedding store.
 // - modelConfig: A map containing configuration settings for the model.
 // - modelType: The type of the model being registered.
+// - kafkaId: The Kafka identifier associated with the model.
 // - trainingDataPath: The path to the training data for the model.
 //
 // Returns an error if the registration fails.
 func (s *SkyeManager) RegisterModel(entity string, model string, embeddingStoreEnabled bool, embeddingStoreTtl int,
-	modelConfig map[string]interface{}, modelType string, trainingDataPath string, metadata Metadata, jobFrequency string, numberOfPartitions int, topicName string) error {
+	modelConfig map[string]interface{}, modelType string, kafkaId int, trainingDataPath string, metadata Metadata, jobFrequency string, numberOfPartitions int, failureProducerKafkaId int, topicName string) error {
 	paths := make(map[string]interface{})
 
 	skye, err := s.GetSkyeConfig()
@@ -246,6 +247,7 @@ func (s *SkyeManager) RegisterModel(entity string, model string, embeddingStoreE
 	paths[fmt.Sprintf("%s/embedding-store-ttl", modelPath)] = embeddingStoreTtl
 	paths[fmt.Sprintf("%s/model-config", modelPath)] = string(modelConfigJson)
 	paths[fmt.Sprintf("%s/model-type", modelPath)] = modelType
+	paths[fmt.Sprintf("%s/kafka-id", modelPath)] = kafkaId
 	paths[fmt.Sprintf("%s/topic-name", modelPath)] = topicName
 	paths[fmt.Sprintf("%s/training-data-path", modelPath)] = trainingDataPath
 	paths[fmt.Sprintf("%s/metadata", modelPath)] = string(metadataJson)
@@ -253,6 +255,7 @@ func (s *SkyeManager) RegisterModel(entity string, model string, embeddingStoreE
 		paths[fmt.Sprintf("%s/partition-states/%s", modelPath, strconv.Itoa(i))] = 0
 	}
 	paths[fmt.Sprintf("%s/number-of-partitions", modelPath)] = numberOfPartitions
+	paths[fmt.Sprintf("%s/failure-producer-kafka-id", modelPath)] = failureProducerKafkaId
 
 	// Create nodes with properties
 	if err := s.etcd.CreateNodes(paths); err != nil {

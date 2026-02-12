@@ -95,8 +95,8 @@ func (m *MockConfigManager) RegisterEntity(entity, storeId string) error {
 	return args.Error(0)
 }
 
-func (m *MockConfigManager) RegisterModel(entity, model string, embeddingStoreEnabled bool, embeddingStoreTtl int, modelConfig map[string]interface{}, modelType string, trainingDataPath string, metadata Metadata, jobFrequency string, numberOfPartitions int, topicName string) error {
-	args := m.Called(entity, model, embeddingStoreEnabled, embeddingStoreTtl, modelConfig, modelType, trainingDataPath, metadata, jobFrequency, numberOfPartitions, topicName)
+func (m *MockConfigManager) RegisterModel(entity, model string, embeddingStoreEnabled bool, embeddingStoreTtl int, modelConfig map[string]interface{}, modelType string, kafkaId int, trainingDataPath string, metadata Metadata, jobFrequency string, numberOfPartitions int, failureProducerKafkaId int, topicName string) error {
+	args := m.Called(entity, model, embeddingStoreEnabled, embeddingStoreTtl, modelConfig, modelType, kafkaId, trainingDataPath, metadata, jobFrequency, numberOfPartitions, failureProducerKafkaId, topicName)
 	return args.Error(0)
 }
 
