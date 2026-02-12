@@ -3,7 +3,6 @@ package memtables
 import (
 	"errors"
 	"runtime"
-	"strconv"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
 	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
@@ -105,7 +104,7 @@ func (m *Memtable) Flush() (n int, fileOffset int64, err error) {
 	totalWritten := 0
 
 	for totalWritten < len(m.page.Buf) {
-		metrics.Count(metrics.KEY_MEMTABLE_FLUSH_COUNT, 1, []string{"memtable_id", strconv.Itoa(int(m.Id))})
+		metrics.Count(metrics.KEY_MEMTABLE_FLUSH_COUNT, 1, []string{})
 		chunk := m.page.Buf[totalWritten : totalWritten+chunkSize]
 
 		if err != nil {
