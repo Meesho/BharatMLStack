@@ -109,7 +109,7 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 	if err != nil {
 		log.Panic().Err(err).Msg("Failed to create memtable manager")
 	}
-	ki := indices.NewIndex(0, config.RbInitial, config.RbMax, config.DeleteAmortizedStep)
+	ki := indices.NewIndex(0, config.RbInitial, config.RbMax, config.DeleteAmortizedStep, sl)
 	sizeClasses := make([]allocators.SizeClass, 0)
 	i := fs.BLOCK_SIZE
 	iMax := (1 << 16)

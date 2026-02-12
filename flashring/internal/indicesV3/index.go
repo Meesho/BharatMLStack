@@ -22,7 +22,7 @@ const (
 )
 
 type Index struct {
-	mu       sync.RWMutex
+	mu       *sync.RWMutex
 	rm       map[uint64]int
 	rb       *RingBuffer
 	mc       *maths.MorrisLogCounter
@@ -30,12 +30,13 @@ type Index struct {
 	hashBits int
 }
 
-func NewIndex(hashBits int, rbInitial, rbMax, deleteAmortizedStep int) *Index {
+func NewIndex(hashBits int, rbInitial, rbMax, deleteAmortizedStep int, mu *sync.RWMutex) *Index {
 	if ByteOrder == nil {
 		loadByteOrder()
 	}
 	// rm := make(map[uint64]int)
 	return &Index{
+		mu:       mu,
 		rm:       make(map[uint64]int),
 		rb:       NewRingBuffer(rbInitial, rbMax),
 		mc:       maths.New(12),
