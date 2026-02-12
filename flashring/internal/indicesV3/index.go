@@ -77,8 +77,8 @@ func (i *Index) Get(key string) (length, lastAccess, remainingTTL uint16, freq u
 	metrics.Timing(metrics.LATENCY_RLOCK, time.Since(start), []string{})
 
 	if ok {
-		entry, hashNextPrev, _ := i.rb.Get(int(idx))
 		for {
+			entry, hashNextPrev, _ := i.rb.Get(int(idx))
 			if isHashMatch(hhi, hlo, hashNextPrev) {
 				length, deltaExptime, lastAccess, freq, memId, offset := decode(entry)
 				exptime := int(deltaExptime) + int(i.startAt/60)
