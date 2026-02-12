@@ -4,6 +4,6 @@ repos:
       - id: trufflehog
         name: TruffleHog
         description: Detect secrets in your data.
-        entry: "trufflehog/trufflehog-hook.sh"
+        entry: "pre-commit-scripts/runner.sh"
         language: script
         stages: ["pre-commit", "pre-push"]
