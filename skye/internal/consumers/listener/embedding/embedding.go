@@ -17,11 +17,9 @@ import (
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories/aggregator"
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories/embedding"
 	"github.com/Meesho/BharatMLStack/skye/pkg/httpclient"
+	skafka "github.com/Meesho/BharatMLStack/skye/pkg/kafka"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
-	"github.com/Meesho/BharatMLStack/skye/pkg/mq/producer"
 	"github.com/rs/zerolog/log"
-
-	mqConfig "github.com/Meesho/BharatMLStack/skye/pkg/mq/config"
 )
 
 var (
@@ -59,7 +57,6 @@ func newEmbeddingConsumer() Consumer {
 }
 
 func (e *EmbeddingConsumer) produceFailureEvents(failedEvents []Event) {
-	payload := make([]mqConfig.RequestPayload, 0, len(failedEvents))
 	for _, failedEvent := range failedEvents {
 		metric.Incr("embedding_consumer_event_error", []string{"entity_name", failedEvent.Entity, "model_name", failedEvent.Model})
 		modelConf, err := e.configManager.GetModelConfig(failedEvent.Entity, failedEvent.Model)
@@ -68,29 +65,29 @@ func (e *EmbeddingConsumer) produceFailureEvents(failedEvents []Event) {
 			continue
 		}
 		failureProducerKafkaId := modelConf.FailureProducerKafkaId
+		skafka.InitProducer(failureProducerKafkaId) // idempotent — ensures producer exists for this dynamic ID
 		jsonBytes, err := json.Marshal(failedEvent)
 		if err != nil {
 			log.Error().Msgf("Error marshalling failed event: %v", err)
 			return
 		}
 		keyStr := ""
-		payload = append(payload, mqConfig.RequestPayload{
-			Key:         &keyStr,
-			Value:       jsonBytes,
-			PayloadType: mqConfig.BYTE_ARRAY,
-			Headers:     make(map[string][]byte),
-			Partition:   nil,
-		})
-		sendErr := producer.SendAndForget(failureProducerKafkaId, payload)
+		msgs := []skafka.ProducerMessage{
+			{
+				Key:     &keyStr,
+				Value:   jsonBytes,
+				Headers: make(map[string][]byte),
+			},
+		}
+		sendErr := skafka.SendAndForget(failureProducerKafkaId, msgs)
 		if sendErr != nil {
-			log.Error().Err(sendErr).Int("failed_count", len(payload)).Int("producer_kafka_id", failureProducerKafkaId).Msg("Error producing failed embedding events batch to failure topic")
+			log.Error().Err(sendErr).Int("failed_count", len(msgs)).Int("producer_kafka_id", failureProducerKafkaId).Msg("Error producing failed embedding events batch to failure topic")
 			metric.Incr("embedding_failure_producer_event_error", []string{"entity_name", failedEvent.Entity, "model_name", failedEvent.Model})
 		} else {
-			log.Info().Int("produced_count", len(payload)).Int("producer_kafka_id", failureProducerKafkaId).Msg("Successfully produced failed embedding events batch to failure topic")
+			log.Info().Int("produced_count", len(msgs)).Int("producer_kafka_id", failureProducerKafkaId).Msg("Successfully produced failed embedding events batch to failure topic")
 			metric.Incr("embedding_failure_producer_event_success", []string{"entity_name", failedEvent.Entity, "model_name", failedEvent.Model})
 		}
 	}
-
 }
 
 func (e *EmbeddingConsumer) Process(event []Event) error {

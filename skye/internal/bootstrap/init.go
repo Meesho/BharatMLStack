@@ -10,11 +10,10 @@ import (
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories/distributedcache"
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories/embedding"
 	"github.com/Meesho/BharatMLStack/skye/internal/server/middlewares"
-	conf "github.com/Meesho/BharatMLStack/skye/pkg/config"
 )
 
 func Init() {
-	conf.InitGlobalConfig(structs.GetAppConfig())
+	config.InitConfig(structs.GetAppConfig())
 	config.Init()
 	embedding.Init()
 	aggregator.Init()

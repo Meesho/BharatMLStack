@@ -5,13 +5,13 @@ import (
 
 	"github.com/Meesho/BharatMLStack/skye/internal/consumers/listener/delta_realtime"
 	"github.com/Meesho/BharatMLStack/skye/internal/consumers/listener/realtime"
+	skafka "github.com/Meesho/BharatMLStack/skye/pkg/kafka"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
-	mqConfig "github.com/Meesho/BharatMLStack/skye/pkg/mq/config"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/rs/zerolog/log"
 )
 
-func ConsumeRealTimeDeltaEvents(records []mqConfig.ConsumerRecord[string, string], c *kafka.Consumer) error {
+func ConsumeRealTimeDeltaEvents(records []skafka.ConsumerRecord[string, string], c *kafka.Consumer) error {
 	deltaRtConsumer := delta_realtime.NewConsumer(delta_realtime.DefaultVersion)
 	events := make([]realtime.DeltaEvent, 0)
 	for _, r := range records {

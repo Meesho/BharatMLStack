@@ -4,16 +4,13 @@ import (
 	"context"
 	"encoding/binary"
 	"math"
-
-	// "crypto/sha1" // removed, using md5 for all hashes
-
 	"math/rand"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories"
+	"github.com/Meesho/BharatMLStack/skye/pkg/infra"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
-	"github.com/Meesho/memcoil/v2/pkg/memcoil"
-	memcoilProvider "github.com/Meesho/memcoil/v2/pkg/provider"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 	protosd "google.golang.org/protobuf/proto"
 )
@@ -22,30 +19,25 @@ var (
 	cacheDB Database
 )
 
-type Mcache struct {
-	client memcoil.Client
+type RedisCache struct {
+	client *redis.Client
 }
 
-func initMCache(mcacheId int) Database {
+func initRedisCache() Database {
 	if cacheDB == nil {
 		once.Do(func() {
-			clientProvider := memcoilProvider.GetInstance()
-			converter := memcoil.NewBytesConverter()
-			c := clientProvider.GetMemCoilClient(mcacheId, converter)
-			pingResponse := c.Ping(context.Background())
-			if err := pingResponse.Err(); err != nil {
-				metric.Incr("distributed_cache_v2_mcache_failure", []string{})
-				log.Panic().Msgf("MCache ping failed %v", err)
+			client := infra.GetRedisClient()
+			if client == nil {
+				metric.Incr("distributed_cache_v2_redis_cache_failure", []string{})
+				log.Panic().Msg("Redis client not initialized; call infra.InitRedis() first")
 			}
-			cacheDB = &Mcache{
-				client: c,
-			}
+			cacheDB = &RedisCache{client: client}
 		})
 	}
 	return cacheDB
 }
 
-func (m *Mcache) MGet(keys map[string]repositories.CacheStruct, tags []string) (map[string][]byte, error) {
+func (m *RedisCache) MGet(keys map[string]repositories.CacheStruct, tags []string) (map[string][]byte, error) {
 	startTime := time.Now()
 	cacheKeyAndGenericResponse := make(map[string][]byte)
 	keysSlice := make([]string, 0, len(keys))
@@ -53,8 +45,7 @@ func (m *Mcache) MGet(keys map[string]repositories.CacheStruct, tags []string) (
 		keysSlice = append(keysSlice, k)
 	}
 	metric.Count("distributed_cache_v2_mget", int64(len(keysSlice)), tags)
-	cmd := m.client.MGet(context.Background(), keysSlice...)
-	vals, err := cmd.Result()
+	vals, err := m.client.MGet(context.Background(), keysSlice...).Result()
 	if err != nil {
 		metric.Incr("distributed_cache_v2_mget_failure", tags)
 		log.Error().Msgf("Error fetching data from distributed cache for keys: %v, error: %v", keys, err)
@@ -62,14 +53,16 @@ func (m *Mcache) MGet(keys map[string]repositories.CacheStruct, tags []string) (
 	}
 	for i, val := range vals {
 		if val != nil {
-			cacheKeyAndGenericResponse[keysSlice[i]] = []byte(val.(string))
+			if s, ok := val.(string); ok {
+				cacheKeyAndGenericResponse[keysSlice[i]] = []byte(s)
+			}
 		}
 	}
 	metric.Timing("distributed_cache_v2_mget_latency", time.Since(startTime), tags)
 	return cacheKeyAndGenericResponse, nil
 }
 
-func (m *Mcache) MSet(responseData map[string]repositories.CandidateResponseStruct, missingCacheKeys map[string]repositories.CacheStruct, ttl int, byteResponseMap map[string][]byte, tags []string) {
+func (m *RedisCache) MSet(responseData map[string]repositories.CandidateResponseStruct, missingCacheKeys map[string]repositories.CacheStruct, ttl int, byteResponseMap map[string][]byte, tags []string) {
 	startTime := time.Now()
 	finalTTL := getFinalTTLWithJitter(ttl)
 	pipe := m.client.Pipeline()
@@ -100,13 +93,13 @@ func (m *Mcache) MSet(responseData map[string]repositories.CandidateResponseStru
 	_, err := pipe.Exec(context.Background())
 	if err != nil {
 		metric.Count("distributed_cache_v2_mset_failure", int64(count), tags)
-		log.Error().Msgf("Error while Persisting Data to dragonfly: %v", err)
+		log.Error().Msgf("Error while persisting data to redis: %v", err)
 		return
 	}
 	metric.Timing("distributed_cache_v2_mset_latency", time.Since(startTime), tags)
 }
 
-func (m *Mcache) MSetDotProduct(cacheKeys map[string]repositories.CacheStruct, foundcacheKeys map[string]repositories.CacheStruct, missingCacheKeys map[string]repositories.CacheStruct, ttl int, tags []string) {
+func (m *RedisCache) MSetDotProduct(cacheKeys map[string]repositories.CacheStruct, foundcacheKeys map[string]repositories.CacheStruct, missingCacheKeys map[string]repositories.CacheStruct, ttl int, tags []string) {
 	startTime := time.Now()
 	finalTTL := getFinalTTLWithJitter(ttl)
 	pipe := m.client.Pipeline()
@@ -147,7 +140,7 @@ func (m *Mcache) MSetDotProduct(cacheKeys map[string]repositories.CacheStruct, f
 	_, err := pipe.Exec(context.Background())
 	if err != nil {
 		metric.Count("distributed_cache_v2_mset_failure", int64(count), tags)
-		log.Error().Msgf("Error while Persisting Data to dragonfly: %v", err)
+		log.Error().Msgf("Error while persisting data to redis: %v", err)
 		return
 	}
 	metric.Timing("distributed_cache_v2_mset_latency", time.Since(startTime), tags)

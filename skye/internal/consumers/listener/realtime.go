@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 
 	"github.com/Meesho/BharatMLStack/skye/internal/consumers/listener/realtime"
+	skafka "github.com/Meesho/BharatMLStack/skye/pkg/kafka"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
-	mqConfig "github.com/Meesho/BharatMLStack/skye/pkg/mq/config"
-	"github.com/Meesho/BharatMLStack/skye/pkg/mq/consumer"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/rs/zerolog/log"
 )
 
-func ConsumeRealtimeEvents(records []mqConfig.ConsumerRecord[string, string], c *kafka.Consumer) error {
+func ConsumeRealtimeEvents(records []skafka.ConsumerRecord[string, string], c *kafka.Consumer) error {
 	rtConsumer := realtime.NewConsumer(realtime.DefaultVersion)
 	events := make([]realtime.Event, 0)
 	for _, r := range records {
@@ -31,9 +30,6 @@ func ConsumeRealtimeEvents(records []mqConfig.ConsumerRecord[string, string], c 
 		return err
 	}
 
-	err = consumer.Commit(c)
-	if err != nil {
-		return err
-	}
+	// Commit is handled by KafkaListener.processBatch after this handler returns nil.
 	return nil
 }
