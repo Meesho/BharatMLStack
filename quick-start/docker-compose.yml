@@ -112,6 +112,7 @@ services:
       
       # Create the topic
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:29092 --create --if-not-exists --topic online-feature-store.feature_ingestion --partitions 1 --replication-factor 1
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:29092 --create --if-not-exists --topic inferflow_inference_logs --partitions 1 --replication-factor 1
       
       echo 'Topic created successfully!'
       "
@@ -509,6 +510,8 @@ services:
       - EXTERNAL_SERVICE_PREDATOR_CALLER_TOKEN=inferflow
       - EXTERNAL_SERVICE_PREDATOR_DEADLINE=200
       - METRIC_SAMPLING_RATE=1
+      - KAFKA_BOOTSTRAP_SERVERS=broker:29092
+      - KAFKA_V2_LOG_TOPIC=inferflow_inference_logs
     networks:
       - onfs-network
     depends_on:
