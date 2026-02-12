@@ -6,7 +6,7 @@ option go_package = "../grpc";
 message InferflowLog {
     string user_id = 1;
     string tracking_id = 2;
-    string mp_config_id = 3;
+    string model_config_id = 3;
     repeated string entities = 4;
     repeated PerEntityFeatures features = 5;
     bytes metadata = 6;

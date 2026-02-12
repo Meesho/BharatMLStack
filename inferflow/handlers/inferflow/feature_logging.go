@@ -78,10 +78,10 @@ func buildMPLogBase(ctx context.Context, userId, trackingId string, conf *config
 	parent := extractParentEntityFromHeaders(ctx)
 
 	mpLog := &pb.InferflowLog{
-		UserId:     userId,
-		TrackingId: trackingId,
-		MpConfigId: compRequest.ModelId,
-		Metadata:   []byte{meta},
+		UserId:        userId,
+		TrackingId:    trackingId,
+		ModelConfigId: compRequest.ModelId,
+		Metadata:      []byte{meta},
 	}
 	if parent != "" {
 		mpLog.ParentEntity = []string{parent}
@@ -141,13 +141,13 @@ func logInferenceInsights(mpLog *pb.InferflowLog, conf *config.Config, compReque
 			end = total
 		}
 		batch := &pb.InferflowLog{
-			UserId:       mpLog.UserId,
-			TrackingId:   mpLog.TrackingId,
-			MpConfigId:   mpLog.MpConfigId,
-			Metadata:     mpLog.Metadata,
-			ParentEntity: mpLog.ParentEntity,
-			Entities:     mpLog.Entities[i:end],
-			Features:     mpLog.Features[i:end],
+			UserId:        mpLog.UserId,
+			TrackingId:    mpLog.TrackingId,
+			ModelConfigId: mpLog.ModelConfigId,
+			Metadata:      mpLog.Metadata,
+			ParentEntity:  mpLog.ParentEntity,
+			Entities:      mpLog.Entities[i:end],
+			Features:      mpLog.Features[i:end],
 		}
 		logInferenceBatchInsights(batch, trackingId, compRequest.ModelId)
 	}

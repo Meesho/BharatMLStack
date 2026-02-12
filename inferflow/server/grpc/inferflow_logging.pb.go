@@ -26,7 +26,7 @@ type InferflowLog struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	TrackingId    string                 `protobuf:"bytes,2,opt,name=tracking_id,json=trackingId,proto3" json:"tracking_id,omitempty"`
-	MpConfigId    string                 `protobuf:"bytes,3,opt,name=mp_config_id,json=mpConfigId,proto3" json:"mp_config_id,omitempty"`
+	ModelConfigId string                 `protobuf:"bytes,3,opt,name=model_config_id,json=modelConfigId,proto3" json:"model_config_id,omitempty"`
 	Entities      []string               `protobuf:"bytes,4,rep,name=entities,proto3" json:"entities,omitempty"`
 	Features      []*PerEntityFeatures   `protobuf:"bytes,5,rep,name=features,proto3" json:"features,omitempty"`
 	Metadata      []byte                 `protobuf:"bytes,6,opt,name=metadata,proto3" json:"metadata,omitempty"`
@@ -79,9 +79,9 @@ func (x *InferflowLog) GetTrackingId() string {
 	return ""
 }
 
-func (x *InferflowLog) GetMpConfigId() string {
+func (x *InferflowLog) GetModelConfigId() string {
 	if x != nil {
-		return x.MpConfigId
+		return x.ModelConfigId
 	}
 	return ""
 }
@@ -162,13 +162,12 @@ var File_inferflow_logging_proto protoreflect.FileDescriptor
 
 const file_inferflow_logging_proto_rawDesc = "" +
 	"\n" +
-	"\x17inferflow_logging.proto\"\xf7\x01\n" +
+	"\x17inferflow_logging.proto\"\xfd\x01\n" +
 	"\fInferflowLog\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1f\n" +
 	"\vtracking_id\x18\x02 \x01(\tR\n" +
-	"trackingId\x12 \n" +
-	"\fmp_config_id\x18\x03 \x01(\tR\n" +
-	"mpConfigId\x12\x1a\n" +
+	"trackingId\x12&\n" +
+	"\x0fmodel_config_id\x18\x03 \x01(\tR\rmodelConfigId\x12\x1a\n" +
 	"\bentities\x18\x04 \x03(\tR\bentities\x12.\n" +
 	"\bfeatures\x18\x05 \x03(\v2\x12.PerEntityFeaturesR\bfeatures\x12\x1a\n" +
 	"\bmetadata\x18\x06 \x01(\fR\bmetadata\x12#\n" +
