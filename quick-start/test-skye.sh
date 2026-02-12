@@ -143,7 +143,7 @@ admin_post "Register variant" "/api/v1/model/register-variant" '{
 # ---------------------------------------------------------------------------
 # Step 6: Create Qdrant collection directly (bypassing skye-admin for simplicity)
 # ---------------------------------------------------------------------------
-COLLECTION_NAME="test-products_product-embeddings_v1_1"
+COLLECTION_NAME="v1_product-embeddings_1"
 info "Creating Qdrant collection: ${COLLECTION_NAME}..."
 HTTP_CODE=$(curl -s -o /tmp/skye_resp.txt -w "%{http_code}" -X PUT "${QDRANT_URL}/collections/${COLLECTION_NAME}" \
   -H "Content-Type: application/json" \

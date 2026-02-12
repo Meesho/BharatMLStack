@@ -737,6 +737,7 @@ services:
       # Storage (no external ScyllaDB in quick-start)
       - STORAGE_AGGREGATOR_DB_COUNT=0
       - STORAGE_EMBEDDING_STORE_COUNT=0
+      - AUTH_TOKENS=test
     networks:
       - onfs-network
     depends_on:
