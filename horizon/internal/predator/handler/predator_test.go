@@ -226,6 +226,118 @@ count:1}]`),
 			wantErr:   true,
 			errSubstr: errNoInstanceGroup,
 		},
+		{
+			name: "real config with no instance_group",
+			data: []byte(`name: "ensemble_clp_p13n_explore_v1"
+platform: "ensemble"
+max_batch_size: 200
+input [
+    {
+        name: "input__0"
+        data_type: TYPE_STRING
+        dims: [ 50 ]
+    } 
+]
+output [
+  {
+    name: "output__0"
+    data_type: TYPE_FP32
+    dims: [ 1 ]
+  }
+]
+ensemble_scheduling {
+  step [
+    {
+      model_name: "preprocessing_clp_p13n_explore_v1"
+      model_version: 1
+      input_map {
+        key: "INPUT__0"
+        value: "input__0"
+      }
+      output_map {
+        key: "OUTPUT__0"
+        value: "OUTPUT__0"
+      }
+    },
+    {
+      model_name: "clp_p13n_explore_v1"
+      model_version: 1
+      input_map {
+        key: "input__0"
+        value: "OUTPUT__0"
+      }
+      output_map {
+        key: "output__0"
+        value: "output__0"
+      }
+    }
+  ]
+}
+`),
+			newCount:  2,
+			wantErr:   true,
+			errSubstr: errNoInstanceGroup,
+		},
+		{
+			name: "real config, updates instance_group count",
+			data: []byte(`name: "clp_ad_pcvr_v1_2"
+backend: "fil"
+max_batch_size: 200
+
+dynamic_batching {
+  max_queue_delay_microseconds: 100
+}
+
+input [
+ {
+    name: "input__0"
+    data_type: TYPE_FP32
+    dims: [ 91 ]
+  }
+]
+output [
+ {
+    name: "output__0"
+    data_type: TYPE_FP32
+    dims: [ 1 ]
+  }
+]
+response_cache {
+  enable: false
+}
+instance_group [
+  {
+    count: 1
+    kind : KIND_CPU
+  }
+]
+parameters [
+  {
+    key: "model_type"
+    value: { string_value: "treelite_checkpoint" }
+  },
+  {
+    key: "predict_proba"
+    value: { string_value: "false" }
+  },
+  {
+    key: "output_class"
+    value: { string_value: "false" }
+  },
+  {
+    key: "storage_type"
+    value: { string_value: "AUTO" }
+  },
+  {
+    key: "use_experimental_optimizations"
+    value: { string_value: "true" }
+  }
+]
+`),
+			newCount: 4,
+			wantData: "count: 4",
+			wantErr:  false,
+		},
 	}
 
 	for _, tt := range tests {
