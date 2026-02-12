@@ -172,6 +172,13 @@ func (p *Predator) HandleModelRequest(req ModelRequest, requestType string) (str
 		if err := json.Unmarshal(payloadBytes, &payloadObject); err != nil {
 			return constant.EmptyString, http.StatusInternalServerError, errors.New(errMsgProcessPayload)
 		}
+		// Validate load test fields for promote requests
+		if requestType == PromoteRequestType && payloadObject.IsLoadTested {
+			if err := validateGrafanaLink(payloadObject.GrafanaLink); err != nil {
+				return constant.EmptyString, http.StatusBadRequest, err
+			}
+		}
+
 		derivedModelName, err := p.GetDerivedModelName(payloadObject, requestType)
 		if err != nil {
 			return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf("failed to fetch derived model name: %w", err)
@@ -780,7 +787,6 @@ func (p *Predator) GetValidationJobStatus(groupId string) (*validationjob.Table,
 
 	return job, nil
 }
-
 
 func (p *Predator) GenerateFunctionalTestRequest(req RequestGenerationRequest) (RequestGenerationResponse, error) {
 
