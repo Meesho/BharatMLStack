@@ -561,7 +561,7 @@ services:
       - "8092:8092"
     environment:
       # Application
-      - APP_NAME=skye-admin
+      - APP_NAME=skye
       - APP_ENV=local
       - APP_LOG_LEVEL=INFO
       - APP_METRIC_SAMPLING_RATE=100
@@ -618,7 +618,7 @@ services:
       - "8093:8093"
     environment:
       # Application
-      - APP_NAME=skye-consumers
+      - APP_NAME=skye
       - APP_ENV=local
       - APP_LOG_LEVEL=INFO
       - APP_METRIC_SAMPLING_RATE=100
@@ -719,7 +719,7 @@ services:
       - "8094:8094"
     environment:
       # Application
-      - APP_NAME=skye-serving
+      - APP_NAME=skye
       - APP_ENV=local
       - APP_LOG_LEVEL=INFO
       - APP_PORT=8094
