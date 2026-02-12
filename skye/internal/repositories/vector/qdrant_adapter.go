@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
+	pb "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
 	"github.com/Meesho/BharatMLStack/skye/internal/config"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
-	pb "github.com/Meesho/helix-clients/pkg/deployableclients/skye/client/grpc"
 	"github.com/qdrant/go-client/qdrant"
 	"github.com/rs/zerolog/log"
 )

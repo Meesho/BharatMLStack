@@ -1,11 +1,11 @@
 package similar_candidate
 
 import (
+	pb "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
 	"github.com/Meesho/BharatMLStack/skye/internal/config"
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories"
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories/vector"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
-	pb "github.com/Meesho/helix-clients/pkg/deployableclients/skye/client/grpc"
 	"github.com/rs/zerolog/log"
 	protosd "google.golang.org/protobuf/proto"
 )

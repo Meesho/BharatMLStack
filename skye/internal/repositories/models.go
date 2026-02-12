@@ -1,7 +1,7 @@
 package repositories
 
 import (
-	pb "github.com/Meesho/helix-clients/pkg/deployableclients/skye/client/grpc"
+	pb "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
 )
 
 type CacheStruct struct {

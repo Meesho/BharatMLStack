@@ -1,6 +1,6 @@
 package embedding
 
-import "github.com/Meesho/helix-clients/pkg/deployableclients/skye/client/grpc"
+import "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
 
 func GetHandler(version int) grpc.SkyeEmbeddingServiceServer {
 	switch version {

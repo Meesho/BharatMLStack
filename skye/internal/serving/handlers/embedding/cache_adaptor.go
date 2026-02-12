@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"strings"
 
+	pb "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories"
-	pb "github.com/Meesho/helix-clients/pkg/deployableclients/skye/client/grpc"
 )
 
 const (

@@ -1,6 +1,7 @@
 package main
 
 import (
+	pb "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
 	"github.com/Meesho/BharatMLStack/skye/internal/bootstrap"
 	"github.com/Meesho/BharatMLStack/skye/internal/config"
 	"github.com/Meesho/BharatMLStack/skye/internal/config/enums"
@@ -16,7 +17,6 @@ import (
 	"github.com/Meesho/BharatMLStack/skye/pkg/logger"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
 	"github.com/Meesho/BharatMLStack/skye/pkg/profiling"
-	pb "github.com/Meesho/helix-clients/pkg/deployableclients/skye/client/grpc"
 )
 
 const (

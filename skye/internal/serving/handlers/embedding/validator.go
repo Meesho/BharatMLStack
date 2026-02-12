@@ -1,6 +1,6 @@
 package embedding
 
-import "github.com/Meesho/helix-clients/pkg/deployableclients/skye/client/grpc"
+import "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
 
 func isValidateEmbeddingsRequest(req *grpc.SkyeBulkEmbeddingRequest) (bool, string) {
 	if req.Entity == "" {

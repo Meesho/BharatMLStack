@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"time"
 
+	pb "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
 	"github.com/Meesho/BharatMLStack/skye/internal/config"
 	"github.com/Meesho/BharatMLStack/skye/internal/config/structs"
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories"
@@ -13,7 +14,6 @@ import (
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories/inmemorycache"
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories/vector"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
-	pb "github.com/Meesho/helix-clients/pkg/deployableclients/skye/client/grpc"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

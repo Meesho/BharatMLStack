@@ -1,7 +1,7 @@
 package similar_candidate
 
 import (
-	"github.com/Meesho/helix-clients/pkg/deployableclients/skye/client/grpc"
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
 )
 
 func validateSkyeRequest(request *grpc.SkyeRequest) (bool, string) {

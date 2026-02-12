@@ -3,11 +3,11 @@ package similar_candidate
 import (
 	"sync"
 
+	"github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
 	"github.com/Meesho/BharatMLStack/skye/internal/config"
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories/distributedcache"
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories/embedding"
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories/inmemorycache"
-	"github.com/Meesho/helix-clients/pkg/deployableclients/skye/client/grpc"
 )
 
 var (

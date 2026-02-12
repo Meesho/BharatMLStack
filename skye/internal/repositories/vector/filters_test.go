@@ -3,8 +3,8 @@ package vector
 import (
 	"testing"
 
+	pb "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
 	"github.com/Meesho/BharatMLStack/skye/internal/config"
-	pb "github.com/Meesho/helix-clients/pkg/deployableclients/skye/client/grpc"
 	"github.com/qdrant/go-client/qdrant"
 	"github.com/stretchr/testify/assert"
 )

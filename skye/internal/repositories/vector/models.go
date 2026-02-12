@@ -1,7 +1,7 @@
 package vector
 
 import (
-	pb "github.com/Meesho/helix-clients/pkg/deployableclients/skye/client/grpc"
+	pb "github.com/Meesho/BharatMLStack/helix-client/pkg/clients/skye/client/grpc"
 	"github.com/qdrant/go-client/qdrant"
 )
 
