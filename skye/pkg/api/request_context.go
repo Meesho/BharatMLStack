@@ -74,7 +74,7 @@ func GetRequestContextForGRPC(ctx context.Context) (*RequestContext, error) {
 	}
 
 	// get app version code (optional)
-	rawAppVersionCode, err := getMetadataValue(mdContext, http.HeaderAppVersionCode)
+	rawAppVersionCode, _ := getMetadataValue(mdContext, http.HeaderAppVersionCode)
 	if len(rawAppVersionCode) != 0 {
 		if appVersionCode, err := strconv.Atoi(rawAppVersionCode); err != nil {
 			return nil, errors.New("app_version_code should be an integer")

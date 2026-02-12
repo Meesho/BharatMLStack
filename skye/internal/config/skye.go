@@ -221,7 +221,7 @@ func (s *SkyeManager) RegisterModel(entity string, model string, embeddingStoreE
 	}
 
 	for _, models := range skye.Entity {
-		for etcdModel, _ := range models.Models {
+		for etcdModel := range models.Models {
 			if etcdModel == model {
 				return fmt.Errorf("model already registered")
 			}

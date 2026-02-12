@@ -220,16 +220,16 @@ func (e *EmbeddingConsumer) processEmbeddingEvent(events []Event, indexerEvent i
 				Vectors: event.IndexSpace.Embedding,
 			}
 			switch event.IndexSpace.Operation {
-			case "DELETE":
+			case delete:
 				indexerEvent.Data[indexer.Delete] = append(indexerEvent.Data[indexer.Delete], data)
-			case "ADD":
+			case add:
 				if shouldBeIndexed := event.IndexSpace.VariantsIndexMap[variant]; shouldBeIndexed {
 					if err = e.processAddOperation(event, data, indexerEvent, aggregatorData); err != nil {
 						log.Error().Msgf("Error processing add operation: %v", err)
 						return err
 					}
 				}
-			case "UPSERT_PAYLOAD":
+			case upsertPayload:
 				if shouldBeIndexed := event.IndexSpace.VariantsIndexMap[variant]; shouldBeIndexed {
 					if err = e.processUpsertPayloadOperation(event, data, indexerEvent, aggregatorData); err != nil {
 						log.Error().Msgf("Error processing upsert payload operation: %v", err)

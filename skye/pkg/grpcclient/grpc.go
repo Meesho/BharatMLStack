@@ -1,6 +1,7 @@
 package grpcclient
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"time"
@@ -9,7 +10,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"

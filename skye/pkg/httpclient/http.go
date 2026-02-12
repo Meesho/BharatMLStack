@@ -71,7 +71,7 @@ func NewConn(envPrefix string) *HTTPClient {
 	coreClient := getHTTPClient(config)
 	cbConfig := circuitbreaker.BuildConfig(envPrefix)
 	var cb circuitbreaker.CircuitBreaker[*http.Request, *http.Response] = nil
-	if cbConfig != nil && cbConfig.Enabled == true {
+	if cbConfig != nil && cbConfig.Enabled {
 		cb = circuitbreaker.GetCircuitBreaker[*http.Request, *http.Response](cbConfig)
 	}
 	return &HTTPClient{
@@ -85,7 +85,7 @@ func NewConn(envPrefix string) *HTTPClient {
 func NewConnFromConfig(config *Config, envPrefix string) *HTTPClient {
 	coreClient := getHTTPClient(config)
 	var cb circuitbreaker.CircuitBreaker[*http.Request, *http.Response] = nil
-	if config.CBConfig != nil && config.CBConfig.Enabled == true {
+	if config.CBConfig != nil && config.CBConfig.Enabled {
 		cb = circuitbreaker.GetCircuitBreaker[*http.Request, *http.Response](config.CBConfig)
 	}
 	return &HTTPClient{

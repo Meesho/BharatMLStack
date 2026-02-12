@@ -55,7 +55,7 @@ func loadStaticConfig(filePath string, config interface{}, deployableName string
 	if err != nil {
 		return err
 	}
-	if configBytes == nil || len(configBytes) == 0 {
+	if len(configBytes) == 0 {
 		return nil
 	}
 
@@ -84,7 +84,7 @@ func loadDynamicConfig(filePath string, targetConfig interface{}, deployableName
 	if err != nil {
 		return err
 	}
-	if configData == nil || len(configData) == 0 {
+	if len(configData) == 0 {
 		configData = []byte{}
 	}
 
@@ -193,7 +193,7 @@ func readConfig(filePath, deployableName string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sections from file: %w", err)
 	}
-	if sections == nil || len(sections) == 0 {
+	if len(sections) == 0 {
 		return nil, nil
 	}
 

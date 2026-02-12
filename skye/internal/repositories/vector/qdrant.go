@@ -16,6 +16,7 @@ import (
 	"github.com/qdrant/go-client/qdrant"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/resolver"
 )
 
@@ -148,7 +149,7 @@ func createQdrantClient(vectorConfig config.VectorDbConfig, host string) (*qdran
 		Host: host,
 		Port: port,
 		GrpcOptions: []grpc.DialOption{
-			grpc.WithInsecure(),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
 		},
 	})
@@ -854,7 +855,7 @@ func (q *Qdrant) mapCollectionInfoResponse(response *qdrant.GetCollectionInfoRes
 	}
 	var payloadPointsCount []float64
 	if response.Result.PayloadSchema != nil {
-		for key, _ := range payloadSchema {
+		for key := range payloadSchema {
 			if response.Result.PayloadSchema[key] != nil {
 				payloadPointsCount = append(payloadPointsCount, float64(*response.Result.PayloadSchema[key].Points))
 			}

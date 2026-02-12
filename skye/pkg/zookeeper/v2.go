@@ -218,8 +218,7 @@ func (v *V2) watchNodeWithData(path string) error {
 		}()
 
 		for {
-			select {
-			case event := <-dataWatcher:
+			for event := range dataWatcher {
 				if event.Type == zk.EventNodeDataChanged {
 					st := time.Now()
 					metric.Incr(metric.TagZkRealtimeTotalUpdateEvent, []string{"path:" + event.Path, "event:" + event.Type.String()})
@@ -247,6 +246,7 @@ func (v *V2) watchNodeWithData(path string) error {
 						}
 					}
 					metric.Timing(metric.TagZkRealtimeEventUpdateLatency, time.Since(st), []string{"path:" + event.Path, "event:" + event.Type.String()})
+					break
 				} else if event.Type == zk.EventNodeDeleted {
 					st := time.Now()
 					metric.Incr(metric.TagZkRealtimeTotalUpdateEvent, []string{"path:" + event.Path, "event:" + event.Type.String()})
@@ -299,8 +299,7 @@ func (v *V2) watchNodeWithChildren(path string) error {
 		}()
 
 		for {
-			select {
-			case event := <-childWatcher:
+			for event := range childWatcher {
 				if event.Type == zk.EventNodeChildrenChanged {
 					st := time.Now()
 					metric.Incr(metric.TagZkRealtimeTotalUpdateEvent, []string{"path:" + event.Path, "event:" + event.Type.String()})
@@ -339,6 +338,7 @@ func (v *V2) watchNodeWithChildren(path string) error {
 						metric.Incr(metric.TagZkRealtimeSuccessEvent, []string{"path:" + event.Path, "event:" + event.Type.String()})
 					}
 					metric.Timing(metric.TagZkRealtimeEventUpdateLatency, time.Since(st), []string{"path:" + event.Path, "event:" + event.Type.String()})
+					break
 				}
 			}
 		}
@@ -586,6 +586,7 @@ func (v *V2) handleMap(dataMap, metaMap *map[string]string, output interface{}, 
 				newValue := reflect.MakeMap(valueType)
 				mapVal = newValue
 			}
+			//lint:ignore SA9005 mapVal is a reflect.Value used for dynamic map population
 			err := json.Unmarshal([]byte(data), &mapVal)
 			if err != nil {
 				metric.Incr(metric.TagZkRealtimeFailureEvent, []string{"deployable_name:" + v.appName, "error_type:json_unmarshal_map_failure", "key:" + key})
@@ -742,7 +743,7 @@ func (v *V2) getOriginalPrefix(originalPath, prefix string) string {
 	var commonSegments []string
 	for i, segment := range originalSegments {
 		modifiedOriginalSeg := strings.ReplaceAll(segment, "-", "")
-		if i < len(prefixSegments) && strings.ToLower(modifiedOriginalSeg) == strings.ToLower(prefixSegments[i]) {
+		if i < len(prefixSegments) && strings.EqualFold(modifiedOriginalSeg, prefixSegments[i]) {
 			commonSegments = append(commonSegments, segment)
 		} else {
 			break

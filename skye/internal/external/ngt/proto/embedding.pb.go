@@ -7,10 +7,11 @@
 package proto
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -260,6 +261,7 @@ func file_proto_embedding_proto_init() {
 		return
 	}
 	if !protoimpl.UnsafeEnabled {
+		//lint:ignore SA1019 Exporter is set by generated protobuf code
 		file_proto_embedding_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SearchRequest); i {
 			case 0:
@@ -272,6 +274,7 @@ func file_proto_embedding_proto_init() {
 				return nil
 			}
 		}
+		//lint:ignore SA1019 Exporter is set by generated protobuf code
 		file_proto_embedding_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SearchResponse); i {
 			case 0:
@@ -284,6 +287,7 @@ func file_proto_embedding_proto_init() {
 				return nil
 			}
 		}
+		//lint:ignore SA1019 Exporter is set by generated protobuf code
 		file_proto_embedding_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SearchResult); i {
 			case 0:

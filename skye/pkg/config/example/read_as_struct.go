@@ -20,8 +20,10 @@ type YourConfigStruct struct {
 }
 
 //go:embed test.yaml
+//lint:ignore U1000 used by start() when run via go run
 var content embed.FS
 
+//lint:ignore U1000 example entrypoint for reading config
 func start() {
 	os.Setenv("APP_NAME", "test-app")
 	os.Setenv("APP_VERSION", "1.0.0")

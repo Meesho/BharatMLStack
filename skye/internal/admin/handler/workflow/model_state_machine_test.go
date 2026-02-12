@@ -241,6 +241,7 @@ func TestHandleIndexingStarted_Counter2_WithPayloadIndex_Success(t *testing.T) {
 		PointsCount:         100,
 		IndexedVectorsCount: 98,
 	}, nil)
+	mockVectorDb.On("UpdateIndexingThreshold", "e1", "m1", "v1", 3, "0").Return(nil)
 	mockVectorDb.On("CreateFieldIndexes", "e1", "m1", "v1", 3).Return(nil)
 	cm.On("UpdateVariantState", "e1", "m1", "v1", enums.INDEXING_IN_PROGRESS).Return(nil)
 
@@ -270,6 +271,7 @@ func TestHandleIndexingStarted_Counter2_CreateFieldIndexesError(t *testing.T) {
 	mockVectorDb.On("GetCollectionInfo", "e1", "m1", "v1", 3).Return(&vector.CollectionInfoResponse{
 		PointsCount: 100, IndexedVectorsCount: 98,
 	}, nil)
+	mockVectorDb.On("UpdateIndexingThreshold", "e1", "m1", "v1", 3, "0").Return(nil)
 	mockVectorDb.On("CreateFieldIndexes", "e1", "m1", "v1", 3).Return(fmt.Errorf("field index err"))
 
 	state, _, err := msm.ProcessState(&ModelStateExecutorPayload{
@@ -483,7 +485,7 @@ func TestHandleIndexingInProgress_WithPayloadIndex_Ready_Counter5(t *testing.T) 
 	mockVectorDb.On("UpdateIndexingThreshold", "e1", "m1", "v1", 3, "30000").Return(nil)
 	mockVectorDb.On("GetCollectionInfo", "e1", "m1", "v1", 3).Return(&vector.CollectionInfoResponse{
 		PointsCount:        100,
-		PayloadPointsCount: []float64{95}, // 95/100 > 0.90, counter 4→5
+		PayloadPointsCount: []float64{96}, // 96/100 > 0.95, counter 4→5
 	}, nil)
 	cm.On("GetModelConfig", "e1", "m1").Return(&config.Model{ModelType: enums.DELTA}, nil)
 	cm.On("UpdateVariantState", "e1", "m1", "v1", enums.INDEXING_COMPLETED).Return(nil)
@@ -644,7 +646,7 @@ func TestHandleModelVersionUpdated_WithRateLimiterUpdate(t *testing.T) {
 	}, nil)
 	cm.On("UpdateVariantState", "e1", "m1", "v1", enums.INDEXING_COMPLETED).Return(nil)
 	mockVectorDb.On("DeleteCollection", "e1", "m1", "v1", 4).Return(nil)
-	cm.On("UpdateRateLimiter", "e1", "m1", "v1", 100, 100).Return(nil)
+	cm.On("UpdateRateLimiter", "e1", "m1", "v1", 0, 0).Return(nil)
 
 	state, counter, err := msm.ProcessState(&ModelStateExecutorPayload{
 		Entity: "e1", Model: "m1", Variant: "v1",
@@ -671,7 +673,7 @@ func TestHandleModelVersionUpdated_RateLimiterError(t *testing.T) {
 	}, nil)
 	cm.On("UpdateVariantState", "e1", "m1", "v1", enums.INDEXING_COMPLETED).Return(nil)
 	mockVectorDb.On("DeleteCollection", "e1", "m1", "v1", 4).Return(nil)
-	cm.On("UpdateRateLimiter", "e1", "m1", "v1", 100, 100).Return(fmt.Errorf("limiter err"))
+	cm.On("UpdateRateLimiter", "e1", "m1", "v1", 0, 0).Return(fmt.Errorf("limiter err"))
 
 	state, _, err := msm.ProcessState(&ModelStateExecutorPayload{
 		Entity: "e1", Model: "m1", Variant: "v1",

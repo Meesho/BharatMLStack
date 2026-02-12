@@ -38,14 +38,11 @@ func HTTPLogger() gin.HandlerFunc {
 		metricTags := metric.BuildTag(
 			metric.NewTag(metric.TagPath, route),
 			metric.NewTag(metric.TagMethod, method),
-			metric.NewTag(metric.TagStatusCode, strconv.Itoa(statusCode)),
-			metric.NewTag(metric.TagHttpStatusCode, strconv.Itoa(statusCode)), // TODO: Remove this support in future
+			metric.NewTag(metric.TagHttpStatusCode, strconv.Itoa(statusCode)),
 			metric.NewTag(metric.TagUserContext, userContext),
 		)
-		metric.Incr(metric.HttpRequestCount, metricTags) // TODO: Remove this support in future
 		metric.Incr(metric.ApiRequestCount, metricTags)
-		metric.Timing(metric.HttpRequestLatency, latency, metricTags)
-		metric.Timing(metric.ApiRequestLatency, latency, metricTags) // TODO: Remove this support in future
+		metric.Timing(metric.ApiRequestLatency, latency, metricTags)
 		log.Info().Msgf("[access] [%s] %s %s %d %v", clientIP, method, route, statusCode, latency)
 	}
 }

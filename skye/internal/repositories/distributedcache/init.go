@@ -8,13 +8,12 @@ import (
 
 var (
 	DefaultVersion = 1
-	appConfig      structs.Configs
 	initOnce       sync.Once
 )
 
 func Init() {
 	initOnce.Do(func() {
-		appConfig = structs.GetAppConfig().Configs
+		_ = structs.GetAppConfig().Configs
 	})
 }
 

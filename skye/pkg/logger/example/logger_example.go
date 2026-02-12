@@ -5,6 +5,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+//lint:ignore U1000 example entrypoint: go run .
 func main() {
 
 	logger.InitLogger("test-app", "DEBUG")

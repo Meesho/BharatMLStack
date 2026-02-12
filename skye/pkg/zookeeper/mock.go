@@ -1,8 +1,9 @@
 package zookeeper
 
 import (
-	"github.com/stretchr/testify/mock"
 	"time"
+
+	"github.com/stretchr/testify/mock"
 )
 
 type MockZK struct {
@@ -11,7 +12,7 @@ type MockZK struct {
 
 func (m *MockZK) GetConfigInstance() interface{} {
 	ret := m.Called()
-	return ret.Get(0).(interface{})
+	return ret.Get(0)
 }
 
 func (m *MockZK) enablePeriodicConfigUpdate(duration time.Duration) {

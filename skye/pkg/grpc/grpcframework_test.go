@@ -2,8 +2,10 @@ package grpc
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -13,7 +15,6 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
-	stdgrpc "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -22,6 +23,18 @@ func resetGlobalState() {
 	server = nil
 	once = sync.Once{}
 	httpframework.ResetForTesting()
+}
+
+// getFreePort returns a port that is likely free for use in tests.
+func getFreePort(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	_ = listener.Close()
+	return strconv.Itoa(port)
 }
 
 // Helper function to wait for server to be ready
@@ -82,7 +95,7 @@ func TestInitAndRun(t *testing.T) {
 	defer resp.Body.Close()
 
 	//make grpc call to the server
-	conn, err := grpc.Dial("localhost:8080", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient("localhost:8080", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	assert.NoError(t, err)
 	defer conn.Close()
 
@@ -96,7 +109,7 @@ func TestInitWithServerOptions(t *testing.T) {
 	os.Setenv("APP_PORT", "8081")
 	viper.AutomaticEnv()
 
-	serverOpts := []stdgrpc.ServerOption{
+	serverOpts := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(1024 * 1024 * 4), // 4MB max message size
 	}
 
@@ -122,7 +135,7 @@ func TestInitWithServerOptions(t *testing.T) {
 	defer resp.Body.Close()
 
 	//make grpc call to the server
-	conn, err := grpc.Dial("localhost:8081", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient("localhost:8081", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	assert.NoError(t, err)
 	defer conn.Close()
 
@@ -158,7 +171,7 @@ func TestInitWithoutServerOptions(t *testing.T) {
 	defer resp.Body.Close()
 
 	//make grpc call to the server
-	conn, err := grpc.Dial("localhost:8082", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient("localhost:8082", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	assert.NoError(t, err)
 	defer conn.Close()
 
@@ -186,7 +199,7 @@ func TestInitWithServerOptionsCustomInterceptors(t *testing.T) {
 		return handler(ctx, req)
 	}
 
-	serverOpts := []stdgrpc.ServerOption{
+	serverOpts := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(1024 * 1024 * 2), // 2MB max message size
 	}
 
@@ -216,11 +229,13 @@ func TestInitWithServerOptionsCustomInterceptors(t *testing.T) {
 func TestInitWithServerOptionsEmptyServerOptions(t *testing.T) {
 	resetGlobalState()
 
-	os.Setenv("APP_PORT", "8084")
+	port := getFreePort(t)
+	os.Setenv("APP_PORT", port)
+	viper.Set("APP_NAME", "test-grpc-app")
 	viper.AutomaticEnv()
 
 	// Test with empty server options slice
-	serverOpts := []stdgrpc.ServerOption{}
+	serverOpts := []grpc.ServerOption{}
 
 	InitWithServerOptions(serverOpts)
 	instance := Instance()
@@ -233,10 +248,10 @@ func TestInitWithServerOptionsEmptyServerOptions(t *testing.T) {
 	go instance.Run()
 
 	// Wait for the server to start
-	assert.True(t, waitForServer("8084"), "Server did not start within timeout")
+	assert.True(t, waitForServer(port), "Server did not start within timeout")
 
 	// Send a GET request to the /health/self endpoint
-	resp, err := http.Get("http://localhost:8084/health/self")
+	resp, err := http.Get("http://localhost:" + port + "/health/self")
 	assert.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -250,7 +265,7 @@ func TestInitWithServerOptionsMultipleOptions(t *testing.T) {
 	os.Setenv("APP_PORT", "8085")
 	viper.AutomaticEnv()
 
-	serverOpts := []stdgrpc.ServerOption{
+	serverOpts := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(1024 * 1024 * 8), // 8MB max message size
 		grpc.MaxSendMsgSize(1024 * 1024 * 8), // 8MB max send message size
 		grpc.MaxConcurrentStreams(1000),
@@ -284,11 +299,11 @@ func TestInitWithServerOptionsOnlyCalledOnce(t *testing.T) {
 	os.Setenv("APP_PORT", "8086")
 	viper.AutomaticEnv()
 
-	serverOpts1 := []stdgrpc.ServerOption{
+	serverOpts1 := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(1024 * 1024 * 4), // 4MB max message size
 	}
 
-	serverOpts2 := []stdgrpc.ServerOption{
+	serverOpts2 := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(1024 * 1024 * 8), // 8MB max message size
 	}
 
@@ -356,7 +371,7 @@ func TestInitWithServerOptionsInterceptorOrdering(t *testing.T) {
 		return handler(ctx, req)
 	}
 
-	serverOpts := []stdgrpc.ServerOption{
+	serverOpts := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(1024 * 1024 * 4), // 4MB max message size
 	}
 

@@ -35,6 +35,7 @@ func (c *MyConfig) GetDynamicConfig() interface{} {
 	return &c.DynamicConfig
 }
 
+//lint:ignore U1000 example entrypoint: go run .
 func main() {
 	os.Setenv("POD_NAMESPACE", "dev-myapp")
 	os.Setenv("CONFIG_LOCATION", "/absolute/path/to/config/directory")

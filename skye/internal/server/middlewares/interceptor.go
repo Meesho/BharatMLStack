@@ -73,10 +73,7 @@ func isAuthorized(authHeaders []string) bool {
 	permittedTokens := authTokens
 	tokens := strings.Split(permittedTokens, ",")
 	token := authHeaders[0]
-	if slices.Contains(tokens, token) {
-		return true
-	}
-	return false
+	return slices.Contains(tokens, token)
 }
 
 func trackGenericMetrics(startTime time.Time, info *grpc.UnaryServerInfo, callerID string, statusCode codes.Code) {

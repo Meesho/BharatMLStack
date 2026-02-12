@@ -111,6 +111,4 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 )
 
-replace github.com/redis/go-redis/v9 v9.6.0 => github.com/Meesho/go-redis/v9 v9.6.4
-
 replace github.com/gocql/gocql => github.com/scylladb/gocql v1.15.3

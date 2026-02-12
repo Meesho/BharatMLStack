@@ -60,7 +60,7 @@ func getGRPCConnections(config Config) (*GRPCClient, error) {
 		)
 	} else {
 		creds := credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})
-		gConn, err = grpc.Dial(config.Host+":"+config.Port,
+		gConn, err = grpc.NewClient(config.Host+":"+config.Port,
 			grpc.WithTransportCredentials(creds),
 			grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"`+config.LoadBalancingPolicy+`"}`),
 			grpc.WithKeepaliveParams(keepalive.ClientParameters{
