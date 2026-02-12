@@ -43,6 +43,7 @@ func TestInitGlobalConfig(t *testing.T) {
 		expectedStaticConfig  *StaticConfig
 		expectedDynamicConfig *DynamicConfig
 		shouldPanic           bool
+		skipFileCreation      bool // when true, config files are not written (to test missing-file scenarios)
 	}{
 		{
 			name:         "Static and Dynamic with deployable section",
@@ -172,6 +173,7 @@ key5: value5
 			expectedStaticConfig:  nil,
 			expectedDynamicConfig: nil,
 			shouldPanic:           true,
+			skipFileCreation:      true,
 		},
 		{
 			name:         "Setting no section",
@@ -487,8 +489,10 @@ key5: value5
 				directoryPath = viper.GetString(envConfigLocation)
 			}
 			os.MkdirAll(directoryPath, os.ModePerm)
-			os.WriteFile(directoryPath+"/application-dev.yml", []byte(test.staticConfigContent), os.ModePerm)
-			os.WriteFile(directoryPath+"/application-dyn-dev.yml", []byte(test.dynamicConfigContent), os.ModePerm)
+			if !test.skipFileCreation {
+				os.WriteFile(directoryPath+"/application-dev.yml", []byte(test.staticConfigContent), os.ModePerm)
+				os.WriteFile(directoryPath+"/application-dyn-dev.yml", []byte(test.dynamicConfigContent), os.ModePerm)
+			}
 
 			defer func() {
 				if r := recover(); r != nil {
