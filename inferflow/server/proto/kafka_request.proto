@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+import "google/protobuf/any.proto";
+
+option go_package = "../grpc";
+
+message KafkaRequest {
+  KafkaEventValue value = 1;
+  google.protobuf.Any headers = 2;
+}
+
+message KafkaEventValue {
+  string event_name = 1;
+  string event_id = 2;
+  int64 created_at = 3;
+  google.protobuf.Any properties = 4;
+  int32 pipeline_id = 5;
+  int64 ingested_at = 6;
+  int64 received_event_time = 7;
+  string user_id = 8;
+  string x_forwarded_for_received = 9;
+  string normalized_client_ip = 10;
+  string app_client_id = 11;
+}

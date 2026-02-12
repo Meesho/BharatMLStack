@@ -48,6 +48,11 @@ type Configs struct {
 	NumerixClientV1_GrpcPlainText bool   `mapstructure:"numerixClientV1_plainText"`
 	NumerixClientV1_AuthToken     string `mapstructure:"numerixClientV1_authToken"`
 	NumerixClientV1_BatchSize     int    `mapstructure:"numerixClientV1_batchSize"`
+
+	// Kafka config for inference logging
+	KafkaBootstrapServers string `mapstructure:"kafka_bootstrapServers"`
+	KafkaV1LogTopic       string `mapstructure:"kafka_v1LogTopic"`
+	KafkaV2LogTopic       string `mapstructure:"kafka_v2LogTopic"`
 }
 
 type DynamicConfigs struct {
