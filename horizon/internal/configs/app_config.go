@@ -77,6 +77,8 @@ type Configs struct {
 
 	InferflowAppName string `mapstructure:"inferflow_app_name"`
 
+	SkyeAppName string `mapstructure:"skye_app_name"`
+
 	PhoenixServerBaseUrl string `mapstructure:"phoenix_server_base_url"`
 
 	PredatorMonitoringUrl   string `mapstructure:"predator_monitoring_url"`
@@ -143,6 +145,44 @@ type Configs struct {
 	// DNS API configuration (for Meesho builds only)
 	DNSAPIBaseURL string `mapstructure:"dns_api_base_url"`
 	DNSAPIKey     string `mapstructure:"dns_api_key"`
+
+	ScyllaActiveConfigIds string `mapstructure:"scylla_active_config_ids"`
+	Scylla1ContactPoints  string `mapstructure:"scylla_1_contact_points"`
+	Scylla1Port           int    `mapstructure:"scylla_1_port"`
+	Scylla1Keyspace       string `mapstructure:"scylla_1_keyspace"`
+	Scylla1Username       string `mapstructure:"scylla_1_username"`
+	Scylla1Password       string `mapstructure:"scylla_1_password"`
+
+	PrismBaseUrl                    string `mapstructure:"prism_base_url"`
+	PrismAppUserID                  string `mapstructure:"prism_app_user_id"`
+	AirflowBaseUrl                  string `mapstructure:"airflow_base_url"`
+	AirflowUsername                 string `mapstructure:"airflow_username"`
+	AirflowPassword                 string `mapstructure:"airflow_password"`
+	InitialIngestionPrismJobID      int    `mapstructure:"initial_ingestion_prism_job_id"`
+	InitialIngestionPrismStepID     int    `mapstructure:"initial_ingestion_prism_step_id"`
+	InitialIngestionAirflowDAGID    string `mapstructure:"initial_ingestion_airflow_dag_id"`
+	VariantScaleUpPrismJobID        int    `mapstructure:"variant_scaleup_prism_job_id"`
+	VariantScaleUpPrismStepID       int    `mapstructure:"variant_scaleup_prism_step_id"`
+	VariantScaleUpAirflowDAGID      string `mapstructure:"variant_scaleup_airflow_dag_id"`
+	VariantOnboardingCronExpression string `mapstructure:"variant_onboarding_cron_expression"`
+	VariantScaleUpCronExpression    string `mapstructure:"variant_scaleup_cron_expression"`
+	MQIdTopicsMapping               string `mapstructure:"mq_id_topics_mapping"`
+	VariantsList                    string `mapstructure:"variants_list"`
+
+	SkyeScyllaActiveConfigIds    string `mapstructure:"skye_scylla_active_config_ids"`
+	Scylla2ContactPoints         string `mapstructure:"scylla_2_contact_points"`
+	Scylla2Port                  int    `mapstructure:"scylla_2_port"`
+	Scylla2Keyspace              string `mapstructure:"scylla_2_keyspace"`
+	Scylla2Username              string `mapstructure:"scylla_2_username"`
+	Scylla2Password              string `mapstructure:"scylla_2_password"`
+	SkyeNumberOfPartitions       int    `mapstructure:"skye_number_of_partitions"`
+	SkyeFailureProducerMqId      int    `mapstructure:"skye_failure_producer_mq_id"`
+	HorizonToSkyeScyllaConfIdMap string `mapstructure:"horizon_to_skye_scylla_conf_id_map"`
+
+	SkyeHost             string `mapstructure:"skye_host"`
+	SkyePort             string `mapstructure:"skye_port"`
+	SkyeAuthToken        string `mapstructure:"skye_auth_token"`
+	SkyeDeadlineExceedMS int    `mapstructure:"skye_deadline_exceed_ms"`
 }
 
 type DynamicConfigs struct{}
