@@ -143,26 +143,14 @@ func (s *Inferflow) RetrieveModelScore(ctx context.Context, req *pb.InferflowReq
 		utils.IsEnableForUserForToday(userId, conf.ResponseConfig.LoggingPerc) &&
 		InferflowReq.TrackingId != "" {
 		modelConfigMap := config.GetModelConfigMap()
-		v2LoggingEnabled := false
-		if modelConfigMap.ServiceConfig.V2LoggingPercentage > 0 &&
-			utils.IsV2LoggingEnableForUserForToday(userId, modelConfigMap.ServiceConfig.V2LoggingPercentage) {
-			v2LoggingEnabled = true
-			// V2 logging: route based on configured format type
-			switch modelConfigMap.ServiceConfig.V2LoggingType {
-			case "proto":
-				go logInferflowResponseV2(ctx, userId, InferflowReq.TrackingId, conf, &componentReq)
-			case "arrow":
-				go logInferflowResponseArrow(ctx, userId, InferflowReq.TrackingId, conf, &componentReq)
-			case "parquet":
-				go logInferflowResponseParquet(ctx, userId, InferflowReq.TrackingId, conf, &componentReq)
-			}
-		} else {
-			// V1 logging: JSON format
-			go logInferflowResponse(ctx, userId, InferflowReq.TrackingId, conf, &componentReq)
-		}
-		// Dual logging: if enabled and V2 is active, also send V1
-		if modelConfigMap.ServiceConfig.DualLoggingEnabled && v2LoggingEnabled {
-			go logInferflowResponse(ctx, userId, InferflowReq.TrackingId, conf, &componentReq)
+		// V2 logging: route based on configured format type
+		switch modelConfigMap.ServiceConfig.V2LoggingType {
+		case "proto":
+			go logInferflowResponseBytes(ctx, userId, InferflowReq.TrackingId, conf, &componentReq)
+		case "arrow":
+			go logInferflowResponseArrow(ctx, userId, InferflowReq.TrackingId, conf, &componentReq)
+		case "parquet":
+			go logInferflowResponseParquet(ctx, userId, InferflowReq.TrackingId, conf, &componentReq)
 		}
 	}
 

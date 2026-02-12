@@ -81,14 +81,6 @@ func IsEnableForUserForToday(userId string, percentageUsers int) bool {
 	return (int(math.Abs(float64(hashValue))))%100 < percentageUsers
 }
 
-// IsV2LoggingEnableForUserForToday uses reversed hash input (date + userId)
-// to provide independent sampling from IsEnableForUserForToday.
-func IsV2LoggingEnableForUserForToday(userId string, percentageUsers int) bool {
-	currentDate := time.Now().Format("02-01-2006")
-	hashValue := GetMurMurHash(strings.ReplaceAll(currentDate, "-", "") + userId)
-	return (int(math.Abs(float64(hashValue))))%100 < percentageUsers
-}
-
 func GetMurMurHash(key string) int32 {
 	h := murmur3.New32()
 	h.Write([]byte(key))

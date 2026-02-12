@@ -2,8 +2,8 @@ syntax = "proto3";
 
 option go_package = "../grpc";
 
-// MPLog is the message structure for inference logging
-message MPLog {
+// InferflowLog is the message structure for inference logging
+message InferflowLog {
     string user_id = 1;
     string tracking_id = 2;
     string mp_config_id = 3;

@@ -14,11 +14,9 @@ type ModelConfig struct {
 }
 
 type ServiceConfig struct {
-	V2LoggingPercentage int          `json:"v2-logging-percentage"`
-	V2LoggingType       string       `json:"v2-logging-type"`
-	DualLoggingEnabled  bool         `json:"dual-logging-enabled"`
-	CompressionEnabled  bool         `json:"compression-enabled"`
-	AsyncLoggerConfig   LoggerConfig `json:"async-logger-config"`
+	V2LoggingType      string       `json:"v2-logging-type"`
+	CompressionEnabled bool         `json:"compression-enabled"`
+	AsyncLoggerConfig  LoggerConfig `json:"async-logger-config"`
 }
 
 type LoggerConfig struct {

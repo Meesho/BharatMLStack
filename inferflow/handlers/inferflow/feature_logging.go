@@ -71,13 +71,13 @@ func extractParentEntityFromHeaders(ctx context.Context) string {
 	return ""
 }
 
-// buildMPLogBase creates the base MPLog structure with common fields.
-func buildMPLogBase(ctx context.Context, userId, trackingId string, conf *config.Config, compRequest *components.ComponentRequest, formatType int) *pb.MPLog {
+// buildMPLogBase creates the base InferflowLog structure with common fields.
+func buildMPLogBase(ctx context.Context, userId, trackingId string, conf *config.Config, compRequest *components.ComponentRequest, formatType int) *pb.InferflowLog {
 	svcConfig := config.GetModelConfigMap().ServiceConfig
 	meta := packMetadataByte(svcConfig.CompressionEnabled, compRequest.ComponentConfig.CacheVersion, formatType)
 	parent := extractParentEntityFromHeaders(ctx)
 
-	mpLog := &pb.MPLog{
+	mpLog := &pb.InferflowLog{
 		UserId:     userId,
 		TrackingId: trackingId,
 		MpConfigId: compRequest.ModelId,
@@ -99,11 +99,11 @@ func getBatchSize(conf *config.Config) int {
 
 // --- V2 Kafka transport ---
 
-// sendMPLogToKafka wraps MPLog in KafkaRequest and sends to Kafka via V2 writer.
-func sendMPLogToKafka(mpLog *pb.MPLog, trackingId, modelId string) {
+// logInferenceBatchInsights wraps InferflowLog in KafkaRequest and sends to Kafka via V2 writer.
+func logInferenceBatchInsights(mpLog *pb.InferflowLog, trackingId, modelId string) {
 	mpLogAny, err := anypb.New(mpLog)
 	if err != nil {
-		logger.Error("Error wrapping MPLog in Any", err)
+		logger.Error("Error wrapping InferflowLog in Any", err)
 		metrics.Count("inferflow.logging.error", 1, []string{"model-id", modelId, "error", "wrapping_mp_log"})
 		return
 	}
@@ -115,17 +115,15 @@ func sendMPLogToKafka(mpLog *pb.MPLog, trackingId, modelId string) {
 			EventId:    trackingId,
 			CreatedAt:  now.Unix(),
 			Properties: mpLogAny,
-			PipelineId: 0,
 			UserId:     mpLog.UserId,
-			IngestedAt: now.UnixMilli(),
 		},
 	}
 
-	kafkaLogger.SendV2Log(kafkaReq, modelId)
+	kafkaLogger.PublishInferenceInsightsLog(kafkaReq, modelId)
 }
 
-// sendBatchedV2Log splits MPLog entities into batches and sends each batch.
-func sendBatchedV2Log(mpLog *pb.MPLog, conf *config.Config, compRequest *components.ComponentRequest, trackingId string) {
+// logInferenceInsights splits InferflowLog entities into batches and sends each batch.
+func logInferenceInsights(mpLog *pb.InferflowLog, conf *config.Config, compRequest *components.ComponentRequest, trackingId string) {
 	batchSize := getBatchSize(conf)
 	total := len(mpLog.Entities)
 
@@ -133,7 +131,7 @@ func sendBatchedV2Log(mpLog *pb.MPLog, conf *config.Config, compRequest *compone
 		return
 	}
 	if total <= batchSize {
-		sendMPLogToKafka(mpLog, trackingId, compRequest.ModelId)
+		logInferenceBatchInsights(mpLog, trackingId, compRequest.ModelId)
 		return
 	}
 
@@ -142,7 +140,7 @@ func sendBatchedV2Log(mpLog *pb.MPLog, conf *config.Config, compRequest *compone
 		if end > total {
 			end = total
 		}
-		batch := &pb.MPLog{
+		batch := &pb.InferflowLog{
 			UserId:       mpLog.UserId,
 			TrackingId:   mpLog.TrackingId,
 			MpConfigId:   mpLog.MpConfigId,
@@ -151,17 +149,17 @@ func sendBatchedV2Log(mpLog *pb.MPLog, conf *config.Config, compRequest *compone
 			Entities:     mpLog.Entities[i:end],
 			Features:     mpLog.Features[i:end],
 		}
-		sendMPLogToKafka(batch, trackingId, compRequest.ModelId)
+		logInferenceBatchInsights(batch, trackingId, compRequest.ModelId)
 	}
 }
 
 // --- Proto V2 logging ---
 
-// logInferflowResponseV2 encodes features using proto format and sends to Kafka.
-func logInferflowResponseV2(ctx context.Context, userId, trackingId string, conf *config.Config, compRequest *components.ComponentRequest) {
+// logInferflowResponseBytes encodes features using proto format and sends to Kafka.
+func logInferflowResponseBytes(ctx context.Context, userId, trackingId string, conf *config.Config, compRequest *components.ComponentRequest) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error().Msgf("Recovered from panic in logInferflowResponseV2: %v", r)
+			log.Error().Msgf("Recovered from panic in logInferflowResponseBytes: %v", r)
 		}
 	}()
 
@@ -258,7 +256,7 @@ func logInferflowResponseV2(ctx context.Context, userId, trackingId string, conf
 	if encodingErrors > 0 {
 		metrics.Count("inferflow.logging.error", 1, []string{"model-id", compRequest.ModelId, "error", "encoding_error"})
 	} else {
-		sendBatchedV2Log(mpLog, conf, compRequest, trackingId)
+		logInferenceInsights(mpLog, conf, compRequest, trackingId)
 	}
 }
 
@@ -317,7 +315,7 @@ func logInferflowResponseArrow(ctx context.Context, userId, trackingId string, c
 
 		batchMPLog.Entities = entityIDs[i:end]
 		batchMPLog.Features = []*pb.PerEntityFeatures{{EncodedFeatures: buf.Bytes()}}
-		sendMPLogToKafka(batchMPLog, trackingId, compRequest.ModelId)
+		logInferenceBatchInsights(batchMPLog, trackingId, compRequest.ModelId)
 	}
 }
 
@@ -456,7 +454,7 @@ func logInferflowResponseParquet(ctx context.Context, userId, trackingId string,
 
 		batchMPLog.Entities = entityIDs[i:end]
 		batchMPLog.Features = []*pb.PerEntityFeatures{{EncodedFeatures: buf.Bytes()}}
-		sendMPLogToKafka(batchMPLog, trackingId, compRequest.ModelId)
+		logInferenceBatchInsights(batchMPLog, trackingId, compRequest.ModelId)
 	}
 }
 
