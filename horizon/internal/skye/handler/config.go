@@ -14,6 +14,7 @@ type Config interface {
 	GetModels() (ModelListResponse, error)
 	GetAllModelRequests() (ModelRequestListResponse, error)
 	RegisterVariant(VariantRegisterRequest) (RequestStatus, error)
+	GetVariantApprovalData() (ApprovalData, error)
 	ApproveVariantRequest(int, ApprovalRequest) (ApprovalResponse, error)
 	GetVariants(string, string) (VariantListResponse, error)
 	GetAllVariantRequests() (VariantRequestListResponse, error)

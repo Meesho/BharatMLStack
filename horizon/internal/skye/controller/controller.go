@@ -22,6 +22,7 @@ type Config interface {
 	GetModels(ctx *gin.Context)
 	GetAllModelRequests(ctx *gin.Context)
 	RegisterVariant(ctx *gin.Context)
+	GetVariantApprovalData(ctx *gin.Context)
 	ApproveVariantRequest(ctx *gin.Context)
 	GetVariants(ctx *gin.Context)
 	GetAllVariantRequests(ctx *gin.Context)
@@ -120,6 +121,10 @@ func (c *V1) GetAllModelRequests(ctx *gin.Context) {
 // Variant Operations
 func (c *V1) RegisterVariant(ctx *gin.Context) {
 	handleRegister(ctx, c.Config.RegisterVariant)
+}
+
+func (c *V1) GetVariantApprovalData(ctx *gin.Context) {
+	handleSimpleGet(ctx, c.Config.GetVariantApprovalData)
 }
 
 func (c *V1) ApproveVariantRequest(ctx *gin.Context) {

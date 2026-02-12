@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
+	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/job_locks"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_scaleup_tasks"
 	skyeEtcd "github.com/Meesho/BharatMLStack/horizon/internal/skye/etcd"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
@@ -26,6 +28,7 @@ type VariantScaleUpJob struct {
 	taskRepo   variant_scaleup_tasks.VariantScaleUpTaskRepository
 	etcdConfig skyeEtcd.Manager
 	appConfig  configs.Configs
+	lockRepo   job_locks.JobLocksRepository
 }
 
 type ScaleUpCollectionStatusPayload struct {
@@ -48,11 +51,17 @@ func InitVariantScaleUpJob(config configs.Configs) *VariantScaleUpJob {
 			log.Fatal().Err(err).Msg("Failed to create variant scale-up task repository")
 		}
 
+		lockRepo, err := job_locks.Repository(sqlConn)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Failed to create job locks repository")
+		}
+
 		etcdConfig := skyeEtcd.NewEtcdConfig(config)
 		variantScaleUpJob = &VariantScaleUpJob{
 			taskRepo:   taskRepo,
 			etcdConfig: etcdConfig,
 			appConfig:  config,
+			lockRepo:   lockRepo,
 		}
 	})
 	return variantScaleUpJob
@@ -65,6 +74,15 @@ func (j *VariantScaleUpJob) Run() {
 		}
 	}()
 	log.Info().Msg("Starting variant scale-up job")
+	if err := j.lockRepo.AcquireLockNowait(context.Background(), "variant_scaleup_job"); err != nil {
+		log.Error().Err(err).Msg("Failed to acquire job lock")
+		return
+	}
+	defer func() {
+		if err := j.lockRepo.ReleaseLock(context.Background(), "variant_scaleup_job"); err != nil {
+			log.Error().Err(err).Msg("Failed to release job lock")
+		}
+	}()
 
 	// Process all IN_PROGRESS tasks
 	inProgressTasks, err := j.taskRepo.GetByStatus("IN_PROGRESS")

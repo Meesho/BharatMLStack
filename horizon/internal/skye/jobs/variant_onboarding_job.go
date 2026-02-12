@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
+	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/job_locks"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_onboarding_tasks"
 	skyeEtcd "github.com/Meesho/BharatMLStack/horizon/internal/skye/etcd"
 	"github.com/Meesho/BharatMLStack/horizon/internal/skye/etcd/enums"
@@ -27,6 +29,7 @@ type VariantOnboardingJob struct {
 	taskRepo   variant_onboarding_tasks.VariantOnboardingTaskRepository
 	etcdConfig skyeEtcd.Manager
 	appConfig  configs.Configs
+	lockRepo   job_locks.JobLocksRepository
 }
 
 type CollectionStatusPayload struct {
@@ -49,11 +52,17 @@ func InitVariantOnboardingJob(config configs.Configs) *VariantOnboardingJob {
 			log.Fatal().Err(err).Msg("Failed to create variant onboarding task repository")
 		}
 
+		lockRepo, err := job_locks.Repository(sqlConn)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Failed to create job locks repository")
+		}
+
 		etcdConfig := skyeEtcd.NewEtcdConfig(config)
 		variantOnboardingJob = &VariantOnboardingJob{
 			taskRepo:   taskRepo,
 			etcdConfig: etcdConfig,
 			appConfig:  config,
+			lockRepo:   lockRepo,
 		}
 	})
 	return variantOnboardingJob
@@ -66,6 +75,15 @@ func (j *VariantOnboardingJob) Run() {
 		}
 	}()
 	log.Info().Msg("Starting variant onboarding job")
+	if err := j.lockRepo.AcquireLockNowait(context.Background(), "variant_onboarding_job"); err != nil {
+		log.Error().Err(err).Msg("Failed to acquire job lock")
+		return
+	}
+	defer func() {
+		if err := j.lockRepo.ReleaseLock(context.Background(), "variant_onboarding_job"); err != nil {
+			log.Error().Err(err).Msg("Failed to release job lock")
+		}
+	}()
 
 	// Process all IN_PROGRESS tasks
 	inProgressTasks, err := j.taskRepo.GetByStatus("IN_PROGRESS")

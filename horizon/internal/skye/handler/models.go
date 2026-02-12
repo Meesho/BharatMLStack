@@ -50,7 +50,15 @@ type ApprovalRequest struct {
 	AdminVectorDBConfig       skyeEtcd.VectorDbConfig `json:"admin_vector_db_config,omitempty"`
 	AdminRateLimiter          skyeEtcd.RateLimiter    `json:"admin_rate_limiter,omitempty"`
 	AdminCachingConfiguration CachingConfiguration    `json:"admin_caching_configuration,omitempty"`
-	ScaleUpHost               string                  `json:"scale_up_host"`
+	ScaleUpHost               string                  `json:"admin_scale_up_host"`
+	MQID                      int                     `json:"admin_mq_id"`
+	TopicName                 string                  `json:"admin_topic_name"`
+}
+
+type ApprovalData struct {
+	AdminVectorDBConfig       skyeEtcd.VectorDbConfig `json:"admin_vector_db_config,omitempty"`
+	AdminRateLimiter          skyeEtcd.RateLimiter    `json:"admin_rate_limiter,omitempty"`
+	AdminCachingConfiguration CachingConfiguration    `json:"admin_caching_configuration,omitempty"`
 }
 
 type ApprovalResponse struct {
@@ -128,10 +136,8 @@ type ModelRequestPayload struct {
 	EmbeddingStoreTTL     int                  `json:"embedding_store_ttl"`
 	ModelConfig           skyeEtcd.ModelConfig `json:"model_config"`
 	ModelType             string               `json:"model_type"` // RESET, DELTA
-	MQID                  int                  `json:"mq_id"`
 	JobFrequency          string               `json:"job_frequency"`
 	TrainingDataPath      string               `json:"training_data_path"`
-	TopicName             string               `json:"topic_name"`
 	Metadata              skyeEtcd.Metadata    `json:"metadata"`
 }
 
