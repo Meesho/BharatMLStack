@@ -25,6 +25,7 @@ func Init() {
 					register.GET("/logging-ttl", controller.NewConfigController().GetLoggingTTL)
 					register.PATCH("/delete", controller.NewConfigController().Delete)
 					register.GET("/latestRequest/:config_id", controller.NewConfigController().GetLatestRequest)
+					register.GET("/get_feature_schema", controller.NewConfigController().GetFeatureSchema)
 				}
 
 				discovery := v1.Group("/inferflow-config-discovery")

@@ -21,11 +21,13 @@ func AdaptOnboardRequestToDBPayload(req interface{}, inferflowConfig InferflowCo
 
 	dbNumerixComponents := AdaptToDBNumerixComponent(inferflowConfig)
 
-	dbRTPComponents := AdaptToDBRTPComponent(inferflowConfig)
+	// Use interface for internal component adaptation (RTP, SeenScore)
+	dbRTPComponents := InternalComponentBuilderInstance.AdaptToDBRTPComponent(inferflowConfig)
+	dbSeenScoreComponents := InternalComponentBuilderInstance.AdaptToDBSeenScoreComponent(inferflowConfig)
 
 	featureComponents := AdaptToDBFeatureComponent(inferflowConfig)
 
-	dbComponentConfig := AdaptToDBComponentConfig(inferflowConfig, featureComponents, dbNumerixComponents, dbPredatorComponents, dbRTPComponents)
+	dbComponentConfig := AdaptToDBComponentConfig(inferflowConfig, featureComponents, dbNumerixComponents, dbPredatorComponents, dbRTPComponents, dbSeenScoreComponents)
 
 	dbDagExecutionConfig := AdaptToDBDagExecutionConfig(inferflowConfig)
 
@@ -46,17 +48,18 @@ func AdaptEditRequestToDBPayload(req interface{}, inferflowConfig InferflowConfi
 
 	dbNumerixComponents := AdaptToDBNumerixComponent(inferflowConfig)
 
-	dbRTPComponents := AdaptToDBRTPComponent(inferflowConfig)
+	// Use interface for internal component adaptation (RTP, SeenScore)
+	dbRTPComponents := InternalComponentBuilderInstance.AdaptToDBRTPComponent(inferflowConfig)
+	dbSeenScoreComponents := InternalComponentBuilderInstance.AdaptToDBSeenScoreComponent(inferflowConfig)
 
 	featureComponents := AdaptToDBFeatureComponent(inferflowConfig)
 
-	dbComponentConfig := AdaptToDBComponentConfig(inferflowConfig, featureComponents, dbNumerixComponents, dbPredatorComponents, dbRTPComponents)
+	dbComponentConfig := AdaptToDBComponentConfig(inferflowConfig, featureComponents, dbNumerixComponents, dbPredatorComponents, dbRTPComponents, dbSeenScoreComponents)
 
 	dbDagExecutionConfig := AdaptToDBDagExecutionConfig(inferflowConfig)
 
 	payload.ConfigValue = AdaptToDBConfigValue(dbDagExecutionConfig, dbComponentConfig, dbResponseConfig)
 
-	payload.ConfigValue.ComponentConfig.CacheVersion = payload.ConfigValue.ComponentConfig.CacheVersion + 1
 	payload.RequestPayload = AdaptToDBOnboardPayload(onboardPayload)
 
 	return payload, nil
@@ -73,11 +76,13 @@ func AdaptCloneConfigRequestToDBPayload(req interface{}, inferflowConfig Inferfl
 
 	dbNumerixComponents := AdaptToDBNumerixComponent(inferflowConfig)
 
-	dbRTPComponents := AdaptToDBRTPComponent(inferflowConfig)
+	// Use interface for internal component adaptation (RTP, SeenScore)
+	dbRTPComponents := InternalComponentBuilderInstance.AdaptToDBRTPComponent(inferflowConfig)
+	dbSeenScoreComponents := InternalComponentBuilderInstance.AdaptToDBSeenScoreComponent(inferflowConfig)
 
 	featureComponents := AdaptToDBFeatureComponent(inferflowConfig)
 
-	dbComponentConfig := AdaptToDBComponentConfig(inferflowConfig, featureComponents, dbNumerixComponents, dbPredatorComponents, dbRTPComponents)
+	dbComponentConfig := AdaptToDBComponentConfig(inferflowConfig, featureComponents, dbNumerixComponents, dbPredatorComponents, dbRTPComponents, dbSeenScoreComponents)
 
 	dbDagExecutionConfig := AdaptToDBDagExecutionConfig(inferflowConfig)
 
@@ -100,11 +105,13 @@ func AdaptPromoteRequestToDBPayload(req interface{}, requestPayload RequestConfi
 
 	dbNumerixComponents := AdaptToDBNumerixComponent(inferflowConfig)
 
-	dbRTPComponents := AdaptToDBRTPComponent(inferflowConfig)
+	// Use interface for internal component adaptation (RTP, SeenScore)
+	dbRTPComponents := InternalComponentBuilderInstance.AdaptToDBRTPComponent(inferflowConfig)
+	dbSeenScoreComponents := InternalComponentBuilderInstance.AdaptToDBSeenScoreComponent(inferflowConfig)
 
 	featureComponents := AdaptToDBFeatureComponent(inferflowConfig)
 
-	dbComponentConfig := AdaptToDBComponentConfig(inferflowConfig, featureComponents, dbNumerixComponents, dbPredatorComponents, dbRTPComponents)
+	dbComponentConfig := AdaptToDBComponentConfig(inferflowConfig, featureComponents, dbNumerixComponents, dbPredatorComponents, dbRTPComponents, dbSeenScoreComponents)
 
 	dbDagExecutionConfig := AdaptToDBDagExecutionConfig(inferflowConfig)
 
@@ -115,7 +122,7 @@ func AdaptPromoteRequestToDBPayload(req interface{}, requestPayload RequestConfi
 	return payload, nil
 }
 
-func AdaptScaleUpRequestToDBPayload(req interface{}) (dbModel.Payload, error) {
+func AdaptScaleUpRequestToDBPayload(req interface{}, requestPayload RequestConfig) (dbModel.Payload, error) {
 	var payload dbModel.Payload
 
 	payload.ConfigMapping = AdaptToDBConfig(req)
@@ -128,15 +135,18 @@ func AdaptScaleUpRequestToDBPayload(req interface{}) (dbModel.Payload, error) {
 
 	dbNumerixComponents := AdaptToDBNumerixComponent(inferflowConfig)
 
-	dbRTPComponents := AdaptToDBRTPComponent(inferflowConfig)
+	// Use interface for internal component adaptation (RTP, SeenScore)
+	dbRTPComponents := InternalComponentBuilderInstance.AdaptToDBRTPComponent(inferflowConfig)
+	dbSeenScoreComponents := InternalComponentBuilderInstance.AdaptToDBSeenScoreComponent(inferflowConfig)
 
 	featureComponents := AdaptToDBFeatureComponent(inferflowConfig)
 
-	dbComponentConfig := AdaptToDBComponentConfig(inferflowConfig, featureComponents, dbNumerixComponents, dbPredatorComponents, dbRTPComponents)
+	dbComponentConfig := AdaptToDBComponentConfig(inferflowConfig, featureComponents, dbNumerixComponents, dbPredatorComponents, dbRTPComponents, dbSeenScoreComponents)
 
 	dbDagExecutionConfig := AdaptToDBDagExecutionConfig(inferflowConfig)
 
 	payload.ConfigValue = AdaptToDBConfigValue(dbDagExecutionConfig, dbComponentConfig, dbResponseConfig)
+	payload.RequestPayload = AdaptToDBOnboardPayload(requestPayload.Payload.RequestPayload)
 
 	return payload, nil
 }
@@ -158,6 +168,7 @@ func AdaptToDBResponseConfig(inferflowConfig InferflowConfig) dbModel.ResponseCo
 		Features:             inferflowConfig.ResponseConfig.Features,
 		LogSelectiveFeatures: inferflowConfig.ResponseConfig.LogSelectiveFeatures,
 		LogBatchSize:         inferflowConfig.ResponseConfig.LogBatchSize,
+		LoggingTTL:           inferflowConfig.ResponseConfig.LoggingTTL,
 	}
 }
 
@@ -236,42 +247,6 @@ func AdaptToDBNumerixComponent(inferflowConfig InferflowConfig) []dbModel.Numeri
 	return NumerixComponents
 }
 
-func AdaptToDBRTPComponent(inferflowConfig InferflowConfig) []dbModel.RTPComponent {
-	var rtpComponents []dbModel.RTPComponent
-	for _, rtpComponent := range inferflowConfig.ComponentConfig.RTPComponents {
-		fsKeys := make([]dbModel.FSKey, len(rtpComponent.FSKeys))
-		for i, key := range rtpComponent.FSKeys {
-			fsKeys[i] = dbModel.FSKey{
-				Schema: key.Schema,
-				Col:    key.Col,
-			}
-		}
-		fsFeatureGroups := make([]dbModel.FSFeatureGroup, len(rtpComponent.FeatureRequest.FeatureGroups))
-		for i, grp := range rtpComponent.FeatureRequest.FeatureGroups {
-			fsFeatureGroups[i] = dbModel.FSFeatureGroup{
-				Label:    grp.Label,
-				Features: grp.Features,
-				DataType: grp.DataType,
-			}
-		}
-		fsRequest := dbModel.FSRequest{
-			Label:         rtpComponent.FeatureRequest.Label,
-			FeatureGroups: fsFeatureGroups,
-		}
-		dbRTPComponent := dbModel.RTPComponent{
-			Component:         rtpComponent.Component,
-			ComponentID:       rtpComponent.ComponentID,
-			CompositeID:       rtpComponent.CompositeID,
-			FSKeys:            fsKeys,
-			FSRequest:         &fsRequest,
-			FSFlattenRespKeys: rtpComponent.FSFlattenRespKeys,
-			ColNamePrefix:     rtpComponent.ColNamePrefix,
-			CompCacheEnabled:  rtpComponent.CompCacheEnabled,
-		}
-		rtpComponents = append(rtpComponents, dbRTPComponent)
-	}
-	return rtpComponents
-}
 
 func AdaptToDBFeatureComponent(inferflowConfig InferflowConfig) []dbModel.FeatureComponent {
 	var featureComponents []dbModel.FeatureComponent
@@ -315,15 +290,16 @@ func AdaptToDBFeatureComponent(inferflowConfig InferflowConfig) []dbModel.Featur
 	return featureComponents
 }
 
-func AdaptToDBComponentConfig(inferflowConfig InferflowConfig, featureComponents []dbModel.FeatureComponent, NumerixComponents []dbModel.NumerixComponent, predatorComponents []dbModel.PredatorComponent, rtpComponents []dbModel.RTPComponent) dbModel.ComponentConfig {
+func AdaptToDBComponentConfig(inferflowConfig InferflowConfig, featureComponents []dbModel.FeatureComponent, NumerixComponents []dbModel.NumerixComponent, predatorComponents []dbModel.PredatorComponent, rtpComponents []dbModel.RTPComponent, seenScoreComponents []dbModel.SeenScoreComponent) dbModel.ComponentConfig {
 	return dbModel.ComponentConfig{
-		CacheEnabled:       inferflowConfig.ComponentConfig.CacheEnabled,
-		CacheTTL:           inferflowConfig.ComponentConfig.CacheTTL,
-		CacheVersion:       inferflowConfig.ComponentConfig.CacheVersion,
-		FeatureComponents:  featureComponents,
-		PredatorComponents: predatorComponents,
-		NumerixComponents:  NumerixComponents,
-		RTPComponents:      rtpComponents,
+		CacheEnabled:        inferflowConfig.ComponentConfig.CacheEnabled,
+		CacheTTL:            inferflowConfig.ComponentConfig.CacheTTL,
+		CacheVersion:        inferflowConfig.ComponentConfig.CacheVersion,
+		FeatureComponents:   featureComponents,
+		PredatorComponents:  predatorComponents,
+		NumerixComponents:   NumerixComponents,
+		RTPComponents:       rtpComponents,
+		SeenScoreComponents: seenScoreComponents,
 	}
 }
 
@@ -354,6 +330,7 @@ func AdaptToDBOnboardPayload(onboardPayload OnboardPayload) dbModel.OnboardPaylo
 			Features:             onboardPayload.Response.ResponseFeatures,
 			LogSelectiveFeatures: onboardPayload.Response.LogSelectiveFeatures,
 			LogBatchSize:         onboardPayload.Response.LogBatchSize,
+			LoggingTTL:           onboardPayload.Response.LoggingTTL,
 		},
 		ConfigMapping: dbModel.ConfigMapping{
 			AppToken:              onboardPayload.ConfigMapping.AppToken,
@@ -433,6 +410,7 @@ func AdaptFromDbToOnboardPayload(dbOnboardPayload dbModel.OnboardPayload) Onboar
 			ResponseFeatures:                   dbOnboardPayload.Response.Features,
 			LogSelectiveFeatures:               dbOnboardPayload.Response.LogSelectiveFeatures,
 			LogBatchSize:                       dbOnboardPayload.Response.LogBatchSize,
+			LoggingTTL:                         dbOnboardPayload.Response.LoggingTTL,
 		},
 		ConfigMapping: ConfigMapping{
 			AppToken:              dbOnboardPayload.ConfigMapping.AppToken,
@@ -495,13 +473,14 @@ func AdaptFromDbToOnboardPayload(dbOnboardPayload dbModel.OnboardPayload) Onboar
 
 func AdaptFromDbToComponentConfig(dbComponentConfig dbModel.ComponentConfig) *ComponentConfig {
 	return &ComponentConfig{
-		CacheEnabled:       dbComponentConfig.CacheEnabled,
-		CacheTTL:           dbComponentConfig.CacheTTL,
-		CacheVersion:       dbComponentConfig.CacheVersion,
-		FeatureComponents:  AdaptFromDbToFeatureComponent(dbComponentConfig.FeatureComponents),
-		PredatorComponents: AdaptFromDbToPredatorComponent(dbComponentConfig.PredatorComponents),
-		NumerixComponents:  AdaptFromDbToNumerixComponent(dbComponentConfig.NumerixComponents),
-		RTPComponents:      AdaptFromDbToRTPComponent(dbComponentConfig.RTPComponents),
+		CacheEnabled:        dbComponentConfig.CacheEnabled,
+		CacheTTL:            dbComponentConfig.CacheTTL,
+		CacheVersion:        dbComponentConfig.CacheVersion,
+		FeatureComponents:   AdaptFromDbToFeatureComponent(dbComponentConfig.FeatureComponents),
+		PredatorComponents:  AdaptFromDbToPredatorComponent(dbComponentConfig.PredatorComponents),
+		NumerixComponents:   AdaptFromDbToNumerixComponent(dbComponentConfig.NumerixComponents),
+		RTPComponents:       InternalComponentBuilderInstance.AdaptFromDbToRTPComponent(dbComponentConfig.RTPComponents),
+		SeenScoreComponents: InternalComponentBuilderInstance.AdaptFromDbToSeenScoreComponent(dbComponentConfig.SeenScoreComponents),
 	}
 }
 
@@ -512,6 +491,7 @@ func AdaptFromDbToResponseConfig(dbResponseConfig dbModel.ResponseConfig) *Final
 		Features:             dbResponseConfig.Features,
 		LogSelectiveFeatures: dbResponseConfig.LogSelectiveFeatures,
 		LogBatchSize:         dbResponseConfig.LogBatchSize,
+		LoggingTTL:           dbResponseConfig.LoggingTTL,
 	}
 }
 
@@ -589,42 +569,6 @@ func AdaptFromDbToNumerixComponent(dbNumerixComponents []dbModel.NumerixComponen
 	return NumerixComponents
 }
 
-func AdaptFromDbToRTPComponent(dbRTPComponents []dbModel.RTPComponent) []RTPComponent {
-
-	var rtpComponents []RTPComponent
-	for _, rtpComponent := range dbRTPComponents {
-		fsKeys := make([]FSKey, len(rtpComponent.FSKeys))
-		for i, key := range rtpComponent.FSKeys {
-			fsKeys[i] = FSKey{
-				Schema: key.Schema,
-				Col:    key.Col,
-			}
-		}
-		fsFeatureGroups := make([]FSFeatureGroup, len(rtpComponent.FSRequest.FeatureGroups))
-		for i, grp := range rtpComponent.FSRequest.FeatureGroups {
-			fsFeatureGroups[i] = FSFeatureGroup{
-				Label:    grp.Label,
-				Features: grp.Features,
-				DataType: grp.DataType,
-			}
-		}
-		fsRequest := FSRequest{
-			Label:         rtpComponent.FSRequest.Label,
-			FeatureGroups: fsFeatureGroups,
-		}
-		rtpComponents = append(rtpComponents, RTPComponent{
-			Component:         rtpComponent.Component,
-			ComponentID:       rtpComponent.ComponentID,
-			CompositeID:       rtpComponent.CompositeID,
-			FSKeys:            fsKeys,
-			FeatureRequest:    &fsRequest,
-			FSFlattenRespKeys: rtpComponent.FSFlattenRespKeys,
-			ColNamePrefix:     rtpComponent.ColNamePrefix,
-			CompCacheEnabled:  rtpComponent.CompCacheEnabled,
-		})
-	}
-	return rtpComponents
-}
 
 func AdaptFromDbToFeatureComponent(dbFeatureComponents []dbModel.FeatureComponent) []FeatureComponent {
 	var featureComponents []FeatureComponent
@@ -685,13 +629,14 @@ func AdaptToEtcdInferFlowConfig(dpConfig dbModel.InferflowConfig) etcdModel.Infe
 
 func AdaptToEtcdComponentConfig(dbComponentConfig dbModel.ComponentConfig) etcdModel.ComponentConfig {
 	return etcdModel.ComponentConfig{
-		CacheEnabled:       dbComponentConfig.CacheEnabled,
-		CacheTTL:           dbComponentConfig.CacheTTL,
-		CacheVersion:       dbComponentConfig.CacheVersion,
-		FeatureComponents:  AdaptToEtcdFeatureComponent(dbComponentConfig.FeatureComponents),
-		PredatorComponents: AdaptToEtcdPredatorComponent(dbComponentConfig.PredatorComponents),
-		NumerixComponents:  AdaptToEtcdNumerixComponent(dbComponentConfig.NumerixComponents),
-		RTPComponents:      AdaptToEtcdRTPComponent(dbComponentConfig.RTPComponents),
+		CacheEnabled:        dbComponentConfig.CacheEnabled,
+		CacheTTL:            dbComponentConfig.CacheTTL,
+		CacheVersion:        dbComponentConfig.CacheVersion,
+		FeatureComponents:   AdaptToEtcdFeatureComponent(dbComponentConfig.FeatureComponents),
+		PredatorComponents:  AdaptToEtcdPredatorComponent(dbComponentConfig.PredatorComponents),
+		NumerixComponents:   AdaptToEtcdNumerixComponent(dbComponentConfig.NumerixComponents),
+		RTPComponents:       InternalComponentBuilderInstance.AdaptToEtcdRTPComponent(dbComponentConfig.RTPComponents),
+		SeenScoreComponents: InternalComponentBuilderInstance.AdaptToEtcdSeenScoreComponent(dbComponentConfig.SeenScoreComponents),
 	}
 }
 
@@ -778,42 +723,6 @@ func AdaptToEtcdNumerixComponent(dbNumerixComponents []dbModel.NumerixComponent)
 	return NumerixComponents
 }
 
-func AdaptToEtcdRTPComponent(dbRTPComponents []dbModel.RTPComponent) []etcdModel.RTPComponent {
-
-	var rtpComponents []etcdModel.RTPComponent
-	for _, rtpComponent := range dbRTPComponents {
-		fsKeys := make([]etcdModel.FSKey, len(rtpComponent.FSKeys))
-		for i, key := range rtpComponent.FSKeys {
-			fsKeys[i] = etcdModel.FSKey{
-				Schema: key.Schema,
-				Col:    key.Col,
-			}
-		}
-		fsFeatureGroups := make([]etcdModel.FSFeatureGroup, len(rtpComponent.FSRequest.FeatureGroups))
-		for i, grp := range rtpComponent.FSRequest.FeatureGroups {
-			fsFeatureGroups[i] = etcdModel.FSFeatureGroup{
-				Label:    grp.Label,
-				Features: grp.Features,
-				DataType: grp.DataType,
-			}
-		}
-		fsRequest := etcdModel.FSRequest{
-			Label:         rtpComponent.FSRequest.Label,
-			FeatureGroups: fsFeatureGroups,
-		}
-		rtpComponents = append(rtpComponents, etcdModel.RTPComponent{
-			Component:         rtpComponent.Component,
-			ComponentID:       rtpComponent.ComponentID,
-			CompositeID:       rtpComponent.CompositeID,
-			FSKeys:            fsKeys,
-			FSRequest:         &fsRequest,
-			FSFlattenRespKeys: rtpComponent.FSFlattenRespKeys,
-			ColNamePrefix:     rtpComponent.ColNamePrefix,
-			CompCacheEnabled:  rtpComponent.CompCacheEnabled,
-		})
-	}
-	return rtpComponents
-}
 
 func AdaptToEtcdFeatureComponent(dbFeatureComponents []dbModel.FeatureComponent) []etcdModel.FeatureComponent {
 	var featureComponents []etcdModel.FeatureComponent

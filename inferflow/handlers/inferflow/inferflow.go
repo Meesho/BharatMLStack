@@ -66,7 +66,7 @@ func InitInferflowHandler(configs *configs.AppConfigs) {
 			},
 		},
 	}
-	logger.Info("Model Proxy handler initialized")
+	logger.Info("Inferflow handler initialized")
 }
 
 func ReloadModelConfigMapAndRegisterComponents() error {

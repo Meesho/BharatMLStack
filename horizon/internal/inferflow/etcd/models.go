@@ -1,7 +1,7 @@
 package etcd
 
 type ModelConfigRegistery struct {
-	InferflowConfig map[string]InferflowConfigs `json:"services"`
+	Services map[string]InferflowConfigs `json:"services"`
 }
 
 type HorizonRegistry struct {
@@ -17,7 +17,12 @@ type InferflowConfigs struct {
 }
 
 type ModelConfigData struct {
-	ConfigMap map[string]InferflowConfig `json:"config-map"`
+	ConfigMap     map[string]InferflowConfig `json:"config-map"`
+	ServiceConfig ServiceConfigData          `json:"service-config"`
+}
+
+type ServiceConfigData struct {
+	PredatorHosts string `json:"predator-hosts"`
 }
 
 type NumerixComponent struct {
@@ -73,6 +78,14 @@ type RTPComponent struct {
 	CompCacheEnabled  bool       `json:"comp_cache_enabled"`
 }
 
+type SeenScoreComponent struct {
+	Component     string     `json:"component"`
+	ComponentID   string     `json:"component_id,omitempty"`
+	ColNamePrefix string     `json:"col_name_prefix,omitempty"`
+	FSKeys        []FSKey    `json:"fs_keys"`
+	FSRequest     *FSRequest `json:"fs_request"`
+}
+
 type FinalResponseConfig struct {
 	LoggingPerc          int      `json:"logging_perc"`
 	ModelSchemaPerc      int      `json:"model_schema_features_perc"`
@@ -110,13 +123,14 @@ type FeatureComponent struct {
 }
 
 type ComponentConfig struct {
-	CacheEnabled       bool                `json:"cache_enabled"`
-	CacheTTL           int                 `json:"cache_ttl"`
-	CacheVersion       int                 `json:"cache_version"`
-	FeatureComponents  []FeatureComponent  `json:"feature_components"`
-	RTPComponents      []RTPComponent      `json:"real_time_pricing_feature_components,omitempty"`
-	PredatorComponents []PredatorComponent `json:"predator_components"`
-	NumerixComponents  []NumerixComponent  `json:"numerix_components"`
+	CacheEnabled        bool                 `json:"cache_enabled"`
+	CacheTTL            int                  `json:"cache_ttl"`
+	CacheVersion        int                  `json:"cache_version"`
+	FeatureComponents   []FeatureComponent   `json:"feature_components"`
+	RTPComponents       []RTPComponent       `json:"real_time_pricing_feature_components,omitempty"`
+	PredatorComponents  []PredatorComponent  `json:"predator_components"`
+	NumerixComponents   []NumerixComponent   `json:"numerix_components"`
+	SeenScoreComponents []SeenScoreComponent `json:"seen_score_components"`
 }
 
 type DagExecutionConfig struct {

@@ -15,7 +15,9 @@ var (
 	TestGpuDeployableID  int
 	initOnce             sync.Once
 	IsMeeshoEnabled      bool
-	IsGcsEnabled         bool
+	AppEnv           string
+	GcsConfigBucket   string
+	GcsConfigBasePath string
 )
 
 func Init(config configs.Configs) {
@@ -27,7 +29,9 @@ func Init(config configs.Configs) {
 		TestDeployableID = config.TestDeployableID
 		TestGpuDeployableID = config.TestGpuDeployableID
 		IsMeeshoEnabled = config.IsMeeshoEnabled
-		IsGcsEnabled = config.GcsEnabled
+		AppEnv = config.AppEnv
+		GcsConfigBasePath = config.GcsConfigBasePath
+		GcsConfigBucket = config.GcsConfigBucket
 	})
 
 }
