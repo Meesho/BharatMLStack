@@ -2,6 +2,7 @@ package components
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -63,6 +64,13 @@ func (pComponent *PredatorComponent) Run(request interface{}) {
 			logger.Error(fmt.Sprintf("Invalid component request for model-id %s and component %s ", modelID, pComponent.GetComponentName()), nil)
 			return
 		}
+
+		if pConfig.SlateComponent && componentRequest.SlateData != nil {
+			pComponent.runSlate(componentRequest, pConfig, &matrixUtil, errLoggingPercent, metricTags)
+			metrics.Timing("modelproxy.component.execution.latency", time.Since(t), metricTags)
+			return
+		}
+
 		// get payload for model
 		predatorComponentBuilder := &models.PredatorComponentBuilder{}
 		initializePredatorComponentBuilder(predatorComponentBuilder, &pConfig, &matrixUtil)
@@ -80,6 +88,115 @@ func (pComponent *PredatorComponent) Run(request interface{}) {
 			}
 		}
 		metrics.Timing("inferflow.component.execution.latency", time.Since(t), metricTags)
+	}
+}
+
+// runSlate handles the slate-aware predator path.
+// For each slate it makes a **separate inference request**:
+//  1. Read slate_target_indices from SlateData (comma-separated row indices into the target matrix).
+//  2. Build a per-slate matrix view containing only that slate's target rows.
+//  3. Run the standard predator flow (init builder → gather features → score → collect output).
+//  4. Write the per-slate scores into the corresponding SlateData row.
+func (pComponent *PredatorComponent) runSlate(
+	req ComponentRequest,
+	pConfig config.PredatorComponentConfig,
+	targetMatrix *matrix.ComponentMatrix,
+	errLoggingPercent int,
+	metricTags []string,
+) {
+	slateMatrix := req.SlateData
+	slateRows := slateMatrix.Rows
+	numSlates := len(slateRows)
+	if numSlates == 0 {
+		return
+	}
+
+	indicesCol, ok := slateMatrix.StringColumnIndexMap[SlateTargetIndicesColumn]
+	if !ok {
+		logger.Error("slate_target_indices column not found in SlateData", nil)
+		metrics.Count("modelproxy.component.execution.error", 1, append(metricTags, errorType, compConfigErr))
+		return
+	}
+
+	// Pre-allocate score accumulators: one [][]byte per output score, length = numSlates
+	totalScoreCount := 0
+	for _, out := range pConfig.Outputs {
+		totalScoreCount += len(out.ModelScores)
+	}
+	slateScoresByOutput := make([][][]byte, totalScoreCount)
+	for i := range slateScoresByOutput {
+		slateScoresByOutput[i] = make([][]byte, numSlates)
+	}
+
+	// Process each slate independently in parallel.
+	var wg sync.WaitGroup
+	for s, slateRow := range slateRows {
+		wg.Add(1)
+		go func(s int, slateRow matrix.Row) {
+			defer wg.Done()
+			defer func() {
+				if rec := recover(); rec != nil {
+					logger.Error(fmt.Sprintf("panic recovered in slate predator goroutine for model-id %s slate %d: %v", req.ModelId, s, rec), nil)
+					metrics.Count("modelproxy.component.execution.error", 1, append(metricTags, errorType, "slate-predator-goroutine-panic"))
+				}
+			}()
+
+			// Parse target indices for this slate
+			idxStr := slateRow.StringData[indicesCol.Index]
+			parts := strings.Split(idxStr, ",")
+			targetRows := make([]matrix.Row, 0, len(parts))
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if p == "" {
+					continue
+				}
+				idx, err := strconv.Atoi(p)
+				if err != nil || idx < 0 || idx >= len(targetMatrix.Rows) {
+					continue
+				}
+				targetRows = append(targetRows, targetMatrix.Rows[idx])
+			}
+			if len(targetRows) == 0 {
+				return
+			}
+
+			// Per-slate matrix view (reuses target column maps, only this slate's target rows)
+			perSlateMatrix := &matrix.ComponentMatrix{
+				StringColumnIndexMap: targetMatrix.StringColumnIndexMap,
+				ByteColumnIndexMap:   targetMatrix.ByteColumnIndexMap,
+				Rows:                 targetRows,
+			}
+
+			// Standard predator flow on the per-slate matrix
+			builder := &models.PredatorComponentBuilder{}
+			initializePredatorComponentBuilder(builder, &pConfig, perSlateMatrix)
+
+			t1 := time.Now()
+			GetMatrixOfColumnSliceWithDataType(&pConfig, perSlateMatrix, builder, metricTags)
+			metrics.Timing("modelproxy.datatype.conversion.execution.latency", time.Since(t1), metricTags)
+
+			t2 := time.Now()
+			pComponent.populateScores(req.ModelId, pConfig, builder, errLoggingPercent)
+			metrics.Timing("modelproxy.component.predator.execution.latency", time.Since(t2), metricTags)
+
+			// Collect per-slate scores (model returns one score set for this slate)
+			for i := range slateScoresByOutput {
+				if i < len(builder.Scores) && builder.Scores[i] != nil && len(builder.Scores[i]) > 0 {
+					// Take the first output row as the slate-level score
+					slateScoresByOutput[i][s] = builder.Scores[i][0]
+				}
+			}
+		}(s, slateRow)
+	}
+	wg.Wait()
+
+	// Write accumulated slate scores to SlateData
+	counter := 0
+	for _, out := range pConfig.Outputs {
+		for _, scoreName := range out.ModelScores {
+			slateMatrix.PopulateByteAndStringData(scoreName, slateScoresByOutput[counter])
+			counter++
+		}
 	}
 }
 

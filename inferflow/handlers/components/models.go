@@ -7,10 +7,12 @@ import (
 
 type ComponentRequest struct {
 	ComponentData   *matrix.ComponentMatrix
+	SlateData       *matrix.ComponentMatrix // Slate-level matrix (one row per slate); nil when no slate components
 	Entities        *[]string
 	EntityIds       *[][]string
 	ComponentConfig *config.ComponentConfig
 	Features        *map[string][]string
 	ModelId         string
+	ModelIdHash     string // Pre-computed CRC32 hash of ModelId for cache key construction
 	Headers         map[string]string
 }

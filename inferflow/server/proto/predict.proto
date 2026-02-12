@@ -1,0 +1,150 @@
+syntax = "proto3";
+
+option go_package = "../grpc/predict";
+
+enum DataType {
+    DataTypeFP8E5M2 = 0;
+    DataTypeFP8E4M3 = 1;
+    DataTypeFP16 = 2;
+    DataTypeFP32 = 3;
+    DataTypeFP64 = 4;
+    DataTypeInt8 = 5;
+    DataTypeInt16 = 6;
+    DataTypeInt32 = 7;
+    DataTypeInt64 = 8;
+    DataTypeUint8 = 9;
+    DataTypeUint16 = 10;
+    DataTypeUint32 = 11;
+    DataTypeUint64 = 12;
+    DataTypeString = 13;
+    DataTypeBool = 14;
+    DataTypeFP8E5M2Vector = 15;
+    DataTypeFP8E4M3Vector = 16;
+    DataTypeFP16Vector = 17;
+    DataTypeFP32Vector = 18;
+    DataTypeFP64Vector = 19;
+    DataTypeInt8Vector = 20;
+    DataTypeInt16Vector = 21;
+    DataTypeInt32Vector = 22;
+    DataTypeInt64Vector = 23;
+    DataTypeUint8Vector = 24;
+    DataTypeUint16Vector = 25;
+    DataTypeUint32Vector = 26;
+    DataTypeUint64Vector = 27;
+    DataTypeStringVector = 28;
+    DataTypeBoolVector = 29;
+}
+
+// Schema definition for a feature column
+message FeatureSchema {
+    string name = 1;
+    DataType data_type = 2;
+    int32 vector_dim = 3; // 0 = scalar, >0 = fixed vector length
+}
+
+// A request-level context feature (user, session, device, etc.)
+message ContextFeature {
+    string name = 1;
+    bytes value = 2;
+    DataType data_type = 3;
+    int32 vector_dim = 4; // 0 = scalar, >0 = fixed vector length
+}
+
+// A single entity to be scored/ranked
+message Target {
+    string id = 1;
+    repeated bytes feature_values = 2; // aligned with target_input_schema
+}
+
+// --- PointWise ---
+
+message TargetScore {
+    string error = 1;
+    repeated bytes output_values = 2; // aligned with target_output_schema
+}
+
+message PointWiseRequest {
+    string model_config_id = 1;
+    string tracking_id = 2;
+    repeated ContextFeature context_features = 3;
+    repeated FeatureSchema target_input_schema = 4;
+    repeated Target targets = 5;
+    string tenant_id = 6;
+}
+
+message PointWiseResponse {
+    repeated FeatureSchema target_output_schema = 1;
+    repeated TargetScore target_scores = 2;
+    string request_error = 3;
+}
+
+// --- PairWise ---
+
+message TargetPair {
+    int32 first_target_index = 1;
+    int32 second_target_index = 2;
+    repeated bytes feature_values = 3; // aligned with pair_input_schema
+}
+
+message PairWiseRequest {
+    string model_config_id = 1;
+    string tracking_id = 2;
+    repeated ContextFeature context_features = 3;
+    repeated FeatureSchema target_input_schema = 4;
+    repeated FeatureSchema pair_input_schema = 5;
+    repeated TargetPair pairs = 6;
+    repeated Target targets = 7;
+    string tenant_id = 8;
+}
+
+message PairScore {
+    string error = 1;
+    repeated bytes output_values = 2; // aligned with pair_output_schema
+}
+
+message PairWiseResponse {
+    repeated PairScore pair_scores = 1;
+    repeated TargetScore target_scores = 2;
+    repeated FeatureSchema target_output_schema = 3;
+    repeated FeatureSchema pair_output_schema = 4;
+    string request_error = 5;
+}
+
+// --- SlateWise ---
+
+message TargetSlate {
+    repeated int32 target_indices = 1;
+    repeated bytes feature_values = 2; // aligned with slate_input_schema
+}
+
+message SlateScore {
+    string error = 1;
+    repeated bytes output_values = 2; // aligned with slate_output_schema
+}
+
+message SlateWiseRequest {
+    string model_config_id = 1;
+    string tracking_id = 2;
+    repeated ContextFeature context_features = 3;
+    repeated FeatureSchema target_input_schema = 4;
+    repeated FeatureSchema slate_input_schema = 5;
+    repeated TargetSlate slates = 6;
+    repeated Target targets = 7;
+    string tenant_id = 8;
+}
+
+message SlateWiseResponse {
+    repeated SlateScore slate_scores = 1;
+    repeated TargetScore target_scores = 2;
+    repeated FeatureSchema target_output_schema = 3;
+    repeated FeatureSchema slate_output_schema = 4;
+    string request_error = 5;
+}
+
+// --- Service ---
+
+service Predict {
+    rpc InferPointWise(PointWiseRequest) returns (PointWiseResponse) {};
+    rpc InferPairWise(PairWiseRequest) returns (PairWiseResponse) {};
+    rpc InferSlateWise(SlateWiseRequest) returns (SlateWiseResponse) {};
+}

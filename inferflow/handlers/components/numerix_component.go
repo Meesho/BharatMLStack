@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"time"
 
+	"strconv"
+	"strings"
+
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/models"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/matrix"
 
@@ -54,6 +57,12 @@ func (iComponent *NumerixComponent) Run(request interface{}) {
 			return
 		}
 
+		if iConfig.SlateComponent && componentRequest.SlateData != nil {
+			iComponent.runSlate(componentRequest, iConfig, &matrixUtil, errLoggingPercent, metricTags)
+			metrics.Timing("inferflow.component.execution.latency", time.Duration(time.Since(t)), metricTags)
+			return
+		}
+
 		numerixComponentBuilder := &models.NumerixComponentBuilder{}
 		initializeNumerixComponentBuilder(numerixComponentBuilder, &iConfig, &matrixUtil)
 
@@ -70,6 +79,88 @@ func (iComponent *NumerixComponent) Run(request interface{}) {
 		matrixUtil.PopulateByteData(iConfig.ScoreColumn, numerixComponentBuilder.Scores)
 		metrics.Timing("inferflow.component.execution.latency", time.Duration(time.Since(t)), metricTags)
 	}
+}
+
+// runSlate handles the slate-aware iris path.
+// For each slate it makes a **separate inference request**:
+//  1. Read slate_target_indices from SlateData (comma-separated row indices into the target matrix).
+//  2. Build a per-slate matrix view containing only that slate's target rows.
+//  3. Run the standard iris flow (init builder → populate matrix → score).
+//  4. Write the per-slate score into the corresponding SlateData row.
+func (iComponent *NumerixComponent) runSlate(
+	req ComponentRequest,
+	iConfig config.NumerixComponentConfig,
+	targetMatrix *matrix.ComponentMatrix,
+	errLoggingPercent int,
+	metricTags []string,
+) {
+	slateMatrix := req.SlateData
+	slateRows := slateMatrix.Rows
+	numSlates := len(slateRows)
+	if numSlates == 0 {
+		return
+	}
+
+	indicesCol, ok := slateMatrix.StringColumnIndexMap[SlateTargetIndicesColumn]
+	if !ok {
+		logger.Error("slate_target_indices column not found in SlateData", nil)
+		metrics.Count("inferflow.component.execution.error", 1, append(metricTags, errorType, compConfigErr))
+		return
+	}
+
+	// Accumulate one score per slate
+	slateScores := make([][]byte, numSlates)
+
+	// Process each slate independently
+	for s, slateRow := range slateRows {
+		// Parse target indices for this slate
+		idxStr := slateRow.StringData[indicesCol.Index]
+		parts := strings.Split(idxStr, ",")
+		targetRows := make([]matrix.Row, 0, len(parts))
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			idx, err := strconv.Atoi(p)
+			if err != nil || idx < 0 || idx >= len(targetMatrix.Rows) {
+				continue
+			}
+			targetRows = append(targetRows, targetMatrix.Rows[idx])
+		}
+		if len(targetRows) == 0 {
+			continue
+		}
+
+		// Per-slate matrix view (reuses target column maps, only this slate's target rows)
+		perSlateMatrix := &matrix.ComponentMatrix{
+			StringColumnIndexMap: targetMatrix.StringColumnIndexMap,
+			ByteColumnIndexMap:   targetMatrix.ByteColumnIndexMap,
+			Rows:                 targetRows,
+		}
+
+		// Standard iris flow on the per-slate matrix
+		builder := &models.NumerixComponentBuilder{}
+		initializeNumerixComponentBuilder(builder, &iConfig, perSlateMatrix)
+
+		builder.MatrixColumns = append(builder.MatrixColumns, iConfig.ComponentId)
+		builder.Schema = append(builder.Schema, iConfig.ComponentId)
+		for key, value := range iConfig.ScoreMapping {
+			builder.Schema = append(builder.Schema, key)
+			builder.MatrixColumns = append(builder.MatrixColumns, value)
+		}
+
+		perSlateMatrix.PopulateMatrixOfColumnSlice(builder)
+		iComponent.populateScoreMap(req.ModelId, iConfig, builder.Schema, builder, errLoggingPercent)
+
+		// Take the first output row as the slate-level score
+		if builder.Scores != nil && len(builder.Scores) > 0 {
+			slateScores[s] = builder.Scores[0]
+		}
+	}
+
+	// Write accumulated slate scores to SlateData
+	slateMatrix.PopulateByteData(iConfig.ScoreColumn, slateScores)
 }
 
 func initializeNumerixComponentBuilder(numerixComponentBuilder *models.NumerixComponentBuilder, iConfig *config.NumerixComponentConfig, matrixUtil *matrix.ComponentMatrix) {
