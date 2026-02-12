@@ -143,6 +143,38 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 	return int32(n), nil
 }
 
+// ValidateReadOffset checks the read window and wraps the offset for ring-buffer
+// files. Returns the physical file offset to use, or an error.
+// Mirrors the validation logic in PreadAsync / Pread so callers that bypass
+// PreadAsync (e.g. the batched io_uring path) get identical safety checks.
+func (r *WrapAppendFile) ValidateReadOffset(fileOffset int64, bufLen int) (int64, error) {
+	if r.ReadDirectIO {
+		if !isAlignedOffset(fileOffset, r.blockSize) {
+			return 0, ErrOffsetNotAligned
+		}
+	}
+
+	readEnd := fileOffset + int64(bufLen)
+	valid := false
+
+	if !r.wrapped {
+		valid = fileOffset >= r.PhysicalStartOffset && readEnd <= r.PhysicalWriteOffset
+	} else {
+		fileOffset = fileOffset % r.MaxFileSize
+		readEnd = readEnd % r.MaxFileSize
+		if fileOffset >= r.PhysicalStartOffset {
+			valid = readEnd <= r.MaxFileSize
+		} else {
+			valid = readEnd <= r.PhysicalWriteOffset
+		}
+	}
+	if !valid {
+		return 0, ErrFileOffsetOutOfRange
+	}
+
+	return fileOffset, nil
+}
+
 // PreadAsync submits a pread via io_uring and waits for completion.
 // Thread-safe: multiple goroutines can call this concurrently on the same IOUringFile.
 // Applies the same read-window validation and offset wrapping as Pread so that

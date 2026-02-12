@@ -19,6 +19,7 @@ type ShardCache struct {
 	keyIndex          *indices.Index
 	file              *fs.WrapAppendFile
 	ioFile            *fs.IOUringFile
+	batchReader       *fs.BatchIoUringReader // global batched io_uring reader (shared across shards)
 	mm                *memtables.MemtableManager
 	readPageAllocator *allocators.SlabAlignedPageAllocator
 	dm                *indices.DeleteManager
@@ -90,6 +91,10 @@ type ShardCacheConfig struct {
 
 	//lockless
 	EnableLockless bool
+
+	// Global batched io_uring reader (shared across all shards).
+	// When set, disk reads go through this instead of the per-shard IOUringFile.
+	BatchIoUringReader *fs.BatchIoUringReader
 }
 
 func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
@@ -123,17 +128,10 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 	}
 	dm := indices.NewDeleteManager(ki, file, config.DeleteAmortizedStep)
 
-	// Attach io_uring to the existing file -- do NOT create a second WrapAppendFile,
-	// otherwise the ioFile would have stale offset tracking (PhysicalWriteOffset etc.).
-	ioFile, err := fs.NewIOUringFile(file, 256, 0)
-	if err != nil {
-		log.Panic().Err(err).Msg("Failed to create io_uring file")
-	}
 	sc := &ShardCache{
 		keyIndex:          ki,
 		mm:                memtableManager,
 		file:              file,
-		ioFile:            ioFile,
 		readPageAllocator: readPageAllocator,
 		dm:                dm,
 		predictor:         config.Predictor,
@@ -142,6 +140,18 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 			// sync.Map fields have zero values that are ready to use
 			BatchTracker: NewBatchTracker(),
 		},
+	}
+
+	if config.BatchIoUringReader != nil {
+		// Use the global batched io_uring reader (shared across all shards).
+		sc.batchReader = config.BatchIoUringReader
+	} else {
+		// Fallback: per-shard io_uring ring for backward compatibility.
+		ioFile, err := fs.NewIOUringFile(file, 256, 0)
+		if err != nil {
+			log.Panic().Err(err).Msg("Failed to create io_uring file")
+		}
+		sc.ioFile = ioFile
 	}
 
 	// Initialize batch reader if enabled
@@ -395,10 +405,25 @@ func (fc *ShardCache) readFromDiskAsync(fileOffset int64, length uint16, buf []b
 	// Use exactly alignedReadSize bytes, not the full page.Buf which may be
 	// larger due to slab allocator rounding to the next size class.
 	readBuf := page.Buf[:alignedReadSize]
-	n, err := fc.ioFile.PreadAsync(alignedStartOffset, readBuf)
+
+	var n int
+	var err error
+
+	if fc.batchReader != nil {
+		// Batched path: validate offset locally, then submit to the global
+		// io_uring batch reader which accumulates requests across all shards.
+		var validOffset int64
+		validOffset, err = fc.file.ValidateReadOffset(alignedStartOffset, alignedReadSize)
+		if err == nil {
+			n, err = fc.batchReader.Submit(fc.file.ReadFd, readBuf, uint64(validOffset))
+		}
+	} else {
+		// Per-shard io_uring fallback
+		n, err = fc.ioFile.PreadAsync(alignedStartOffset, readBuf)
+	}
+
 	if err != nil || n != alignedReadSize {
 		// ErrFileOffsetOutOfRange is expected for stale index entries -- don't log.
-		// Only log genuine io_uring / I/O errors.
 		if err != nil && err != fs.ErrFileOffsetOutOfRange {
 			log.Warn().Err(err).
 				Int64("offset", alignedStartOffset).

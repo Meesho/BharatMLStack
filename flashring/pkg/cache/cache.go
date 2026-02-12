@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
 	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
 	filecache "github.com/Meesho/BharatMLStack/flashring/internal/shard"
 	"github.com/cespare/xxhash/v2"
@@ -46,6 +47,7 @@ type WrapCache struct {
 	predictor        *maths.Predictor
 	stats            []*CacheStats
 	metricsCollector *metrics.MetricsCollector
+	batchReader      *fs.BatchIoUringReader // global batched io_uring reader
 }
 
 type CacheStats struct {
@@ -170,6 +172,20 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 		GridSearchEpsilon:     config.GridSearchEpsilon,
 	})
 
+	// Create a single global batched io_uring reader shared across all shards.
+	// All disk reads funnel into one channel; the background goroutine collects
+	// them for up to 1ms and submits them in a single io_uring_enter call.
+	batchReader, err := fs.NewBatchIoUringReader(fs.BatchIoUringConfig{
+		RingDepth: 256,
+		MaxBatch:  256,
+		Window:    time.Millisecond,
+		QueueSize: 1024,
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create batched io_uring reader, falling back to per-shard rings")
+		batchReader = nil
+	}
+
 	batchWindow := time.Duration(0)
 	if config.EnableBatching && config.BatchWindowMicros > 0 {
 		batchWindow = time.Duration(config.BatchWindowMicros) * time.Microsecond
@@ -195,6 +211,8 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 
 			//lockless mode for PutLL/GetLL
 			EnableLockless: config.EnableLockless,
+
+			BatchIoUringReader: batchReader,
 		}, &shardLocks[i])
 	}
 
@@ -208,6 +226,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 		predictor:        predictor,
 		stats:            stats,
 		metricsCollector: metricsCollector,
+		batchReader:      batchReader,
 	}
 
 	if metricsCollector.Config.StatsEnabled {
