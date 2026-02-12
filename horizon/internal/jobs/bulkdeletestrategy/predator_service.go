@@ -16,6 +16,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/predatorrequest"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/servicedeployableconfig"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
+	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/rs/zerolog/log"
 )
 
@@ -59,7 +60,7 @@ func (p *PredatorService) ProcessBulkDelete(serviceDeployable servicedeployablec
 		return err
 	}
 
-	_, zeroTrafficModelList, parentToChildMapping, trafficData, err := p.fetchModelNames(
+	_, zeroTrafficModelList, parentToChildMapping, _, err := p.fetchModelNames(
 		serviceDeployable,
 		discoveryConfigList,
 		&predatorBulkDeleteRepos,
@@ -75,6 +76,12 @@ func (p *PredatorService) ProcessBulkDelete(serviceDeployable servicedeployablec
 		return err
 	}
 
+	basePath := strings.TrimSuffix(deployableConfig.GCSBucketPath, "/*")
+	zeroTrafficModelList = p.filterModelsByGCSAge(basePath, zeroTrafficModelList, bulkDeletePredatorMaxInactiveDays)
+
+	// Get child models for every parent (ensemble) being deleted — delete all children with the parent.
+	addedModels := make(map[string]struct{})
+
 	// Get child models for zero traffic parents
 	var modelsToDelete []ModelInfo
 	for _, parentModel := range zeroTrafficModelList {
@@ -82,12 +89,8 @@ func (p *PredatorService) ProcessBulkDelete(serviceDeployable servicedeployablec
 
 		// Add child models if any
 		if children, found := parentToChildMapping[parentModel.ModelName]; found {
-			for _, childName := range children {
-				// Find child's discovery config ID from predator config
-				childTraffic, existsInPrometheus := trafficData[childName]
-				if existsInPrometheus && childTraffic.TotalTraffic > 0 {
-					log.Info().Msgf("[SKIP CHILD] Model: %s (child of %s) has traffic (%.2f), skipping deletion",
-						childName, parentModel.ModelName, childTraffic.TotalTraffic)
+			for _, childName := range children {	
+				if _, alreadyAdded := addedModels[childName]; alreadyAdded {
 					continue
 				}
 
@@ -101,6 +104,7 @@ func (p *PredatorService) ProcessBulkDelete(serviceDeployable servicedeployablec
 						ModelName:         childName,
 						DiscoveryConfigID: childConfig.DiscoveryConfigID,
 					})
+					addedModels[childName] = struct{}{}
 					log.Info().Msgf("[DELETE CHILD] Model: %s (child of %s) has zero traffic, adding to delete list",
 						childName, parentModel.ModelName)
 				}
@@ -119,6 +123,7 @@ func (p *PredatorService) ProcessBulkDelete(serviceDeployable servicedeployablec
 		modelsToDelete,
 		serviceDeployable,
 		&predatorBulkDeleteRepos,
+		parentToChildMapping,
 	)
 
 	if len(deletedModels) > 0 {
@@ -277,12 +282,31 @@ func (p *PredatorService) processDeleteModels(
 	modelInfoList []ModelInfo,
 	serviceDeployableConfig servicedeployableconfig.ServiceDeployableConfig,
 	predatorBulkDeleteRepos *PredatorBulkDeleteRepos,
+	parentToChildMapping map[string][]string,
 ) []string {
+	childToParentMapping := make(map[string]string)
+	for parent, children := range parentToChildMapping {
+		for _, child := range children {
+			childToParentMapping[child] = parent
+		}
+	}
 	srcBucket, srcPath := extractGCSPath(basePath)
 
-	var deletedModels []string
+	deletedModels := mapset.NewSet[string]()
+
+	groupID, err := predatorBulkDeleteRepos.groupCounterRepo.GetAndIncrementCounter(1)
+	if err != nil {
+		log.Error().Err(err).Msgf("Failed to get new groupID for model deletion: %s", err)
+		return nil
+	}
+
+	// 1. First pass delete parents
 	for _, modelInfo := range modelInfoList {
 		modelName := modelInfo.ModelName
+		if _, isChild := childToParentMapping[modelName]; isChild {
+			// child model will be deleted in second pass
+			continue
+		}
 		discoveryConfigID := modelInfo.DiscoveryConfigID
 		modelGCSPath := srcPath + "/" + modelName
 		existsInGCS, err := p.gcsClient.CheckFolderExists(srcBucket, modelGCSPath)
@@ -293,7 +317,7 @@ func (p *PredatorService) processDeleteModels(
 
 		err = p.processModelDeletion(
 			srcBucket, srcPath, modelName, discoveryConfigID, serviceDeployableConfig.ID,
-			predatorBulkDeleteRepos, existsInGCS,
+			predatorBulkDeleteRepos, existsInGCS, groupID,
 		)
 
 		if err != nil {
@@ -301,10 +325,42 @@ func (p *PredatorService) processDeleteModels(
 			continue
 		}
 
-		deletedModels = append(deletedModels, modelInfo.ModelName)
+		deletedModels.Add(modelInfo.ModelName)
 	}
 
-	return deletedModels
+	// 2. Second pass delete children
+	for _, modelInfo := range modelInfoList {
+		modelName := modelInfo.ModelName
+		parent, isChild := childToParentMapping[modelName]
+		if !isChild {
+			// parent ones already deleted
+			continue
+		} else if !deletedModels.Contains(parent) {
+			log.Info().Msgf("[SKIP]: Skipping child model: %s as parent model: %s not deleted", modelName, parent)
+			continue
+		}
+		discoveryConfigID := modelInfo.DiscoveryConfigID
+		modelGCSPath := srcPath + "/" + modelName
+		existsInGCS, err := p.gcsClient.CheckFolderExists(srcBucket, modelGCSPath)
+		if err != nil {
+			log.Warn().Err(err).Msgf("Failed to check GCS existence for model %s, assuming it exists", modelName)
+			existsInGCS = true
+		}
+
+		err = p.processModelDeletion(
+			srcBucket, srcPath, modelName, discoveryConfigID, serviceDeployableConfig.ID,
+			predatorBulkDeleteRepos, existsInGCS, groupID,
+		)
+
+		if err != nil {
+			log.Error().Err(err).Msgf("Failed to process scheduled deletion for model: %s, skipping", modelName)
+			continue
+		}
+
+		deletedModels.Add(modelInfo.ModelName)
+	}
+
+	return deletedModels.ToSlice()
 }
 
 func (p *PredatorService) processModelDeletion(
@@ -312,6 +368,7 @@ func (p *PredatorService) processModelDeletion(
 	discoveryConfigID int, serviceDeployableID int,
 	predatorBulkDeleteRepos *PredatorBulkDeleteRepos,
 	existsInGCS bool,
+	groupID uint,
 ) (err error) {
 	db := predatorBulkDeleteRepos.predatorConfigRepo.DB()
 
@@ -373,12 +430,6 @@ func (p *PredatorService) processModelDeletion(
 		if err != nil {
 			tx.Rollback()
 			return fmt.Errorf("failed to marshall payload for model %s: %w", modelName, err)
-		}
-
-		groupID, err := predatorBulkDeleteRepos.groupCounterRepo.GetAndIncrementCounter(1)
-		if err != nil {
-			tx.Rollback()
-			return fmt.Errorf("failed to get new groupID for model deletion: %w", err)
 		}
 
 		deleteRequest := predatorrequest.PredatorRequest{
@@ -484,3 +535,34 @@ func parseGCSURL(gcsURL string) (bucket, objectPath string, ok bool) {
 	}
 	return bucket, objectPath, true
 }
+
+// filterModelsByGCSAge keeps only models whose GCS folder was last modified before (now - olderThanDays).
+// FindByDiscoveryIDsAndAge filters by DB created_at; this re-validates using the folder modification date in GCS.
+func (p *PredatorService) filterModelsByGCSAge(basePath string, models []ModelInfo, olderThanDays int) []ModelInfo {
+	if len(models) == 0 || olderThanDays < 0 {
+		return models
+	}
+	srcBucket, srcPath := extractGCSPath(basePath)
+	if srcBucket == "" || srcPath == "" {
+		log.Warn().Msg("Invalid GCS base path for age filter, skipping GCS age filter")
+		return models
+	}
+	cutoff := time.Now().AddDate(0, 0, -olderThanDays)
+	var filtered []ModelInfo
+	for _, m := range models {
+		folderPrefix := srcPath + "/" + m.ModelName
+		info, err := p.gcsClient.GetFolderInfo(srcBucket, folderPrefix)
+		if err != nil {
+			log.Warn().Err(err).Msgf("[SKIP GCS AGE] Model: %s - could not get GCS folder info, excluding from delete list", m.ModelName)
+			continue
+		}
+		if info.Updated.Before(cutoff) {
+			filtered = append(filtered, m)
+			log.Info().Msgf("[GCS AGE OK] Model: %s | GCS folder last modified: %s (older than %d days)", m.ModelName, info.Updated.Format(time.RFC3339), olderThanDays)
+		} else {
+			log.Info().Msgf("[SKIP GCS AGE] Model: %s | GCS folder modified recently at %s, excluding from delete list", m.ModelName, info.Updated.Format(time.RFC3339))
+		}
+	}
+	return filtered
+}
+
