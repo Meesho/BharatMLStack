@@ -67,7 +67,7 @@ func (pComponent *PredatorComponent) Run(request interface{}) {
 
 		if pConfig.SlateComponent && componentRequest.SlateData != nil {
 			pComponent.runSlate(componentRequest, pConfig, &matrixUtil, errLoggingPercent, metricTags)
-			metrics.Timing("modelproxy.component.execution.latency", time.Since(t), metricTags)
+			metrics.Timing("inferflow.component.execution.latency", time.Since(t), metricTags)
 			return
 		}
 
@@ -92,11 +92,13 @@ func (pComponent *PredatorComponent) Run(request interface{}) {
 }
 
 // runSlate handles the slate-aware predator path.
-// For each slate it makes a **separate inference request**:
-//  1. Read slate_target_indices from SlateData (comma-separated row indices into the target matrix).
-//  2. Build a per-slate matrix view containing only that slate's target rows.
-//  3. Run the standard predator flow (init builder → gather features → score → collect output).
-//  4. Write the per-slate scores into the corresponding SlateData row.
+//
+// For each slate:
+//  1. Parse slate_target_indices → pick target rows from the filled target matrix.
+//  2. Build a per-slate matrix view with those rows.
+//  3. Same predator flow: init builder → gather features → call predator.
+//  4. Model returns 1 score for N inputs → write that score directly
+//     into SlateData row [s], score column.
 func (pComponent *PredatorComponent) runSlate(
 	req ComponentRequest,
 	pConfig config.PredatorComponentConfig,
@@ -105,99 +107,87 @@ func (pComponent *PredatorComponent) runSlate(
 	metricTags []string,
 ) {
 	slateMatrix := req.SlateData
-	slateRows := slateMatrix.Rows
-	numSlates := len(slateRows)
+	numSlates := len(slateMatrix.Rows)
 	if numSlates == 0 {
 		return
 	}
 
 	indicesCol, ok := slateMatrix.StringColumnIndexMap[SlateTargetIndicesColumn]
 	if !ok {
-		logger.Error("slate_target_indices column not found in SlateData", nil)
-		metrics.Count("modelproxy.component.execution.error", 1, append(metricTags, errorType, compConfigErr))
+		logger.Error(fmt.Sprintf("slate_target_indices column not found in SlateData for component %s", pComponent.GetComponentName()), nil)
+		metrics.Count("inferflow.component.execution.error", 1, append(metricTags, errorType, compConfigErr))
 		return
 	}
 
-	// Pre-allocate score accumulators: one [][]byte per output score, length = numSlates
-	totalScoreCount := 0
-	for _, out := range pConfig.Outputs {
-		totalScoreCount += len(out.ModelScores)
-	}
-	slateScoresByOutput := make([][][]byte, totalScoreCount)
-	for i := range slateScoresByOutput {
-		slateScoresByOutput[i] = make([][]byte, numSlates)
-	}
-
-	// Process each slate independently in parallel.
+	// --- Process each slate (parallel) ---
 	var wg sync.WaitGroup
-	for s, slateRow := range slateRows {
+	for s := 0; s < numSlates; s++ {
 		wg.Add(1)
-		go func(s int, slateRow matrix.Row) {
+		go func(s int) {
 			defer wg.Done()
 			defer func() {
 				if rec := recover(); rec != nil {
-					logger.Error(fmt.Sprintf("panic recovered in slate predator goroutine for model-id %s slate %d: %v", req.ModelId, s, rec), nil)
-					metrics.Count("modelproxy.component.execution.error", 1, append(metricTags, errorType, "slate-predator-goroutine-panic"))
+					logger.Error(fmt.Sprintf("panic in slate %d for model-id %s component %s: %v",
+						s, req.ModelId, pComponent.GetComponentName(), rec), nil)
 				}
 			}()
 
-			// Parse target indices for this slate
-			idxStr := slateRow.StringData[indicesCol.Index]
-			parts := strings.Split(idxStr, ",")
-			targetRows := make([]matrix.Row, 0, len(parts))
-			for _, p := range parts {
-				p = strings.TrimSpace(p)
-				if p == "" {
-					continue
-				}
-				idx, err := strconv.Atoi(p)
-				if err != nil || idx < 0 || idx >= len(targetMatrix.Rows) {
-					continue
-				}
-				targetRows = append(targetRows, targetMatrix.Rows[idx])
-			}
+			// 1. Parse target indices for this slate
+			targetRows := parseSlateTargetRows(slateMatrix.Rows[s], indicesCol.Index, targetMatrix)
 			if len(targetRows) == 0 {
 				return
 			}
 
-			// Per-slate matrix view (reuses target column maps, only this slate's target rows)
+			// 2. Build per-slate matrix view (same columns, subset of rows)
 			perSlateMatrix := &matrix.ComponentMatrix{
 				StringColumnIndexMap: targetMatrix.StringColumnIndexMap,
 				ByteColumnIndexMap:   targetMatrix.ByteColumnIndexMap,
 				Rows:                 targetRows,
 			}
 
-			// Standard predator flow on the per-slate matrix
+			// 3. Same predator flow: init → gather features → call predator
 			builder := &models.PredatorComponentBuilder{}
 			initializePredatorComponentBuilder(builder, &pConfig, perSlateMatrix)
-
-			t1 := time.Now()
 			GetMatrixOfColumnSliceWithDataType(&pConfig, perSlateMatrix, builder, metricTags)
-			metrics.Timing("modelproxy.datatype.conversion.execution.latency", time.Since(t1), metricTags)
-
-			t2 := time.Now()
 			pComponent.populateScores(req.ModelId, pConfig, builder, errLoggingPercent)
-			metrics.Timing("modelproxy.component.predator.execution.latency", time.Since(t2), metricTags)
 
-			// Collect per-slate scores (model returns one score set for this slate)
-			for i := range slateScoresByOutput {
-				if i < len(builder.Scores) && builder.Scores[i] != nil && len(builder.Scores[i]) > 0 {
-					// Take the first output row as the slate-level score
-					slateScoresByOutput[i][s] = builder.Scores[i][0]
+			// 4. Write the score directly into SlateData row [s], for each score column.
+			//    Model returns 1 score (builder.Scores[i][0]) for this slate.
+			counter := 0
+
+			for _, out := range pConfig.Outputs {
+				for _, scoreName := range out.ModelScores {
+					if counter < len(builder.Scores) && len(builder.Scores[counter]) > 0 {
+						if col, ok := slateMatrix.ByteColumnIndexMap[scoreName]; ok {
+							slateMatrix.Rows[s].ByteData[col.Index] = builder.Scores[0][0]
+						}
+					}
+					counter++
 				}
 			}
-		}(s, slateRow)
+		}(s)
 	}
 	wg.Wait()
+}
 
-	// Write accumulated slate scores to SlateData
-	counter := 0
-	for _, out := range pConfig.Outputs {
-		for _, scoreName := range out.ModelScores {
-			slateMatrix.PopulateByteAndStringData(scoreName, slateScoresByOutput[counter])
-			counter++
+// parseSlateTargetRows reads the comma-separated target indices from a slate row
+// and returns the corresponding rows from the target matrix.
+func parseSlateTargetRows(slateRow matrix.Row, indicesColIdx int, targetMatrix *matrix.ComponentMatrix) []matrix.Row {
+	idxStr := slateRow.StringData[indicesColIdx]
+	parts := strings.Split(idxStr, ",")
+	rows := make([]matrix.Row, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
 		}
+		idx, err := strconv.Atoi(p)
+		if err != nil || idx < 0 || idx >= len(targetMatrix.Rows) {
+			continue
+		}
+		rows = append(rows, targetMatrix.Rows[idx])
 	}
+	return rows
 }
 
 func GetMatrixOfColumnSliceWithDataType(
