@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/Meesho/BharatMLStack/skye/internal/admin/handler/qdrant"
-	"github.com/Meesho/BharatMLStack/skye/internal/consumers/api"
+	"github.com/Meesho/BharatMLStack/skye/pkg/api"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )

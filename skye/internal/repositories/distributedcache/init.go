@@ -21,7 +21,7 @@ func Init() {
 func NewRepository(version int) Database {
 	switch version {
 	case DefaultVersion:
-		return initMCache(appConfig.McacheId)
+		return initRedisCache()
 	default:
 		return nil
 	}

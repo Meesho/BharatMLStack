@@ -12,11 +12,11 @@ import (
 	"github.com/Meesho/BharatMLStack/skye/internal/serving/handlers/similar_candidate"
 	"github.com/Meesho/BharatMLStack/skye/pkg/etcd"
 	"github.com/Meesho/BharatMLStack/skye/pkg/grpc"
+	"github.com/Meesho/BharatMLStack/skye/pkg/infra"
 	"github.com/Meesho/BharatMLStack/skye/pkg/logger"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
 	"github.com/Meesho/BharatMLStack/skye/pkg/profiling"
 	pb "github.com/Meesho/helix-clients/pkg/deployableclients/skye/client/grpc"
-	"github.com/Meesho/memcoil/v2/pkg/serviceclient/mcachecontrolplane"
 )
 
 const (
@@ -28,7 +28,7 @@ func main() {
 	appConfig := structs.GetAppConfig()
 	logger.Init()
 	metric.Init()
-	mcachecontrolplane.Init()
+	infra.InitRedis()
 	profiling.Init()
 	etcd.InitFromAppName(&config.Skye{}, appConfig.Configs.AppName, appConfig.Configs)
 	grpc.Init(middlewares.ServerInterceptor)

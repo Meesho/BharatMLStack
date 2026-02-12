@@ -26,6 +26,9 @@ type Configs struct {
 	AuthTokens                        string `mapstructure:"auth_tokens"`
 	CollectionMetricEnabled           bool   `mapstructure:"collection_metric_enabled"`
 	CollectionMetricPublish           int    `mapstructure:"collection_metric_publish"`
+	KafkaBroker                       string `mapstructure:"kafka_broker"`
+	KafkaGroupID                      string `mapstructure:"kafka_group_id"`
+	KafkaTopic                        string `mapstructure:"kafka_topic"`
 	EmbeddingConsumerKafkaIds         string `mapstructure:"embedding_consumer_kafka_ids"`
 	EmbeddingConsumerSequenceKafkaIds string `mapstructure:"embedding_consumer_sequence_kafka_ids"`
 	RealtimeConsumerKafkaIds          string `mapstructure:"realtime_consumer_kafka_ids"`
@@ -36,7 +39,9 @@ type Configs struct {
 	EtcdPassword                      string `mapstructure:"etcd_password"`
 	EtcdServer                        string `mapstructure:"etcd_server"`
 	EtcdWatcherEnabled                bool   `mapstructure:"etcd_watcher_enabled"`
-	McacheId                          int    `mapstructure:"mcache_id"`
+	RedisAddr                         string `mapstructure:"redis_addr"`
+	RedisPassword                     string `mapstructure:"redis_password"`
+	RedisDB                           int    `mapstructure:"redis_db"`
 	ModelStateConsumer                int    `mapstructure:"model_state_consumer"`
 	ModelStateProducer                int    `mapstructure:"model_state_producer"`
 	Port                              int    `mapstructure:"port"`

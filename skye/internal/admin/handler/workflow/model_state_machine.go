@@ -7,9 +7,8 @@ import (
 	"github.com/Meesho/BharatMLStack/skye/internal/config"
 	"github.com/Meesho/BharatMLStack/skye/internal/config/enums"
 	"github.com/Meesho/BharatMLStack/skye/internal/repositories/vector"
+	skafka "github.com/Meesho/BharatMLStack/skye/pkg/kafka"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
-	mqConfig "github.com/Meesho/BharatMLStack/skye/pkg/mq/config"
-	"github.com/Meesho/BharatMLStack/skye/pkg/mq/producer"
 	"github.com/rs/zerolog/log"
 )
 
@@ -59,16 +58,14 @@ func (msm *ModelStateMachine) process(currentState enums.VariantState, payload *
 		return err
 	}
 	keyStr := ""
-	payloadToProduce := []mqConfig.RequestPayload{
+	payloadToProduce := []skafka.ProducerMessage{
 		{
-			Key:         &keyStr,
-			Value:       string(jsonPayload),
-			PayloadType: mqConfig.STRING,
-			Headers:     make(map[string][]byte),
-			Partition:   nil,
+			Key:     &keyStr,
+			Value:   jsonPayload,
+			Headers: make(map[string][]byte),
 		},
 	}
-	err = producer.SendAndForget(appConfig.ModelStateProducer, payloadToProduce)
+	err = skafka.SendAndForget(appConfig.ModelStateProducer, payloadToProduce)
 	if err != nil {
 		return err
 	}

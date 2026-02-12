@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 
 	"github.com/Meesho/BharatMLStack/skye/internal/consumers/listener/embedding"
+	skafka "github.com/Meesho/BharatMLStack/skye/pkg/kafka"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
-	mqConfig "github.com/Meesho/BharatMLStack/skye/pkg/mq/config"
-	"github.com/Meesho/BharatMLStack/skye/pkg/mq/consumer"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/rs/zerolog/log"
 )
 
-func ProcessEmbeddingEvents(record []mqConfig.ConsumerRecord[string, []byte], c *kafka.Consumer) error {
+func ProcessEmbeddingEvents(record []skafka.ConsumerRecord[string, []byte], c *kafka.Consumer) error {
 	embeddingConsumer := embedding.NewConsumer(embedding.DefaultVersion)
 	var events []embedding.Event
 
@@ -36,14 +35,11 @@ func ProcessEmbeddingEvents(record []mqConfig.ConsumerRecord[string, []byte], c 
 		return err
 	}
 
-	err = consumer.Commit(c)
-	if err != nil {
-		return err
-	}
+	// Commit is handled by KafkaListener.processBatch after this handler returns nil.
 	return nil
 }
 
-func ProcessEmbeddingEventsInSequence(record []mqConfig.ConsumerRecord[string, []byte], c *kafka.Consumer) error {
+func ProcessEmbeddingEventsInSequence(record []skafka.ConsumerRecord[string, []byte], c *kafka.Consumer) error {
 	embeddingConsumer := embedding.NewConsumer(embedding.DefaultVersion)
 	var events []embedding.Event
 
@@ -61,9 +57,7 @@ func ProcessEmbeddingEventsInSequence(record []mqConfig.ConsumerRecord[string, [
 		log.Error().Msgf("Error in processing Embedding Event %v", err)
 		return err
 	}
-	err = consumer.Commit(c)
-	if err != nil {
-		return err
-	}
+
+	// Commit is handled by KafkaListener.processBatch after this handler returns nil.
 	return nil
 }
