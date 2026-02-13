@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/allocators"
@@ -17,6 +18,8 @@ import (
 type ShardCache struct {
 	keyIndex          *indices.Index
 	file              *fs.WrapAppendFile
+	ioFile            *fs.IOUringFile
+	batchReader       *fs.BatchIoUringReader // global batched io_uring reader (shared across shards)
 	mm                *memtables.MemtableManager
 	readPageAllocator *allocators.SlabAlignedPageAllocator
 	dm                *indices.DeleteManager
@@ -33,18 +36,39 @@ type ShardCache struct {
 }
 
 type Stats struct {
-	KeyNotFoundCount int
-	KeyExpiredCount  int
-	BadDataCount     int
-	BadLengthCount   int
-	BadCR32Count     int
-	BadKeyCount      int
-	MemIdCount       map[uint32]int
-	LastDeletedMemId uint32
-	DeletedKeyCount  int
-	BadCRCMemIds     map[uint32]int
-	BadKeyMemIds     map[uint32]int
+	KeyNotFoundCount atomic.Int64
+	KeyExpiredCount  atomic.Int64
+	BadDataCount     atomic.Int64
+	BadLengthCount   atomic.Int64
+	BadCR32Count     atomic.Int64
+	BadKeyCount      atomic.Int64
+	MemIdCount       sync.Map // key: uint32, value: *atomic.Int64
+	LastDeletedMemId atomic.Uint32
+	DeletedKeyCount  atomic.Int64
+	BadCRCMemIds     sync.Map // key: uint32, value: *atomic.Int64
+	BadKeyMemIds     sync.Map // key: uint32, value: *atomic.Int64
 	BatchTracker     *BatchTracker
+}
+
+// Helper method to increment a counter in a sync.Map
+func (s *Stats) incMapCounter(m *sync.Map, key uint32) {
+	val, _ := m.LoadOrStore(key, &atomic.Int64{})
+	val.(*atomic.Int64).Add(1)
+}
+
+// IncMemIdCount atomically increments the counter for the given memId
+func (s *Stats) IncMemIdCount(memId uint32) {
+	s.incMapCounter(&s.MemIdCount, memId)
+}
+
+// IncBadCRCMemIds atomically increments the bad CRC counter for the given memId
+func (s *Stats) IncBadCRCMemIds(memId uint32) {
+	s.incMapCounter(&s.BadCRCMemIds, memId)
+}
+
+// IncBadKeyMemIds atomically increments the bad key counter for the given memId
+func (s *Stats) IncBadKeyMemIds(memId uint32) {
+	s.incMapCounter(&s.BadKeyMemIds, memId)
 }
 
 type ShardCacheConfig struct {
@@ -64,6 +88,16 @@ type ShardCacheConfig struct {
 	EnableBatching bool
 	BatchWindow    time.Duration
 	MaxBatchSize   int
+
+	//lockless
+	EnableLockless bool
+
+	// Global batched io_uring reader (shared across all shards).
+	// When set, disk reads go through this instead of the per-shard IOUringFile.
+	BatchIoUringReader *fs.BatchIoUringReader
+
+	// Dedicated io_uring ring for batched writes (shared across all shards).
+	WriteRing *fs.IoUring
 }
 
 func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
@@ -83,7 +117,7 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 	if err != nil {
 		log.Panic().Err(err).Msg("Failed to create memtable manager")
 	}
-	ki := indices.NewIndex(0, config.RbInitial, config.RbMax, config.DeleteAmortizedStep)
+	ki := indices.NewIndex(0, config.RbInitial, config.RbMax, config.DeleteAmortizedStep, sl)
 	sizeClasses := make([]allocators.SizeClass, 0)
 	i := fs.BLOCK_SIZE
 	iMax := (1 << 16)
@@ -96,6 +130,12 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 		log.Panic().Err(err).Msg("Failed to create read page allocator")
 	}
 	dm := indices.NewDeleteManager(ki, file, config.DeleteAmortizedStep)
+
+	// Attach the dedicated write ring so memtable flushes use batched io_uring.
+	if config.WriteRing != nil {
+		file.WriteRing = config.WriteRing
+	}
+
 	sc := &ShardCache{
 		keyIndex:          ki,
 		mm:                memtableManager,
@@ -105,11 +145,21 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 		predictor:         config.Predictor,
 		startAt:           time.Now().Unix(),
 		Stats: &Stats{
-			MemIdCount:   make(map[uint32]int),
-			BadCRCMemIds: make(map[uint32]int),
-			BadKeyMemIds: make(map[uint32]int),
+			// sync.Map fields have zero values that are ready to use
 			BatchTracker: NewBatchTracker(),
 		},
+	}
+
+	if config.BatchIoUringReader != nil {
+		// Use the global batched io_uring reader (shared across all shards).
+		sc.batchReader = config.BatchIoUringReader
+	} else {
+		// Fallback: per-shard io_uring ring for backward compatibility.
+		ioFile, err := fs.NewIOUringFile(file, 256, 0)
+		if err != nil {
+			log.Panic().Err(err).Msg("Failed to create io_uring file")
+		}
+		sc.ioFile = ioFile
 	}
 
 	// Initialize batch reader if enabled
@@ -120,10 +170,13 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 		}, sc, sl)
 	}
 
-	sc.ReadCh = make(chan *ReadRequestV2, 500)
-	sc.WriteCh = make(chan *WriteRequestV2, 500)
+	if config.EnableLockless {
 
-	go sc.startReadWriteRoutines()
+		sc.ReadCh = make(chan *ReadRequestV2, 500)
+		sc.WriteCh = make(chan *WriteRequestV2, 500)
+
+		go sc.startReadWriteRoutines()
+	}
 
 	return sc
 }
@@ -163,19 +216,19 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	indices.ByteOrder.PutUint32(buf[0:4], crc)
 	fc.keyIndex.Put(key, length, ttlMinutes, mtId, uint32(offset))
 	fc.dm.IncMemtableKeyCount(mtId)
-	fc.Stats.MemIdCount[mtId]++
+	fc.Stats.IncMemIdCount(mtId)
 	return nil
 }
 
 func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 	if status == indices.StatusNotFound {
-		fc.Stats.KeyNotFoundCount++
+		fc.Stats.KeyNotFoundCount.Add(1)
 		return false, nil, 0, false, false
 	}
 
 	if status == indices.StatusExpired {
-		fc.Stats.KeyExpiredCount++
+		fc.Stats.KeyExpiredCount.Add(1)
 		return false, nil, 0, true, false
 	}
 
@@ -190,13 +243,12 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		memtableExists = false
 	}
 	if !memtableExists {
-		bufPtr := BufPool.Get().(*[]byte)
-		buf = *bufPtr
-		defer BufPool.Put(bufPtr)
+		// Allocate buffer of exact size needed - no pool since readFromDisk already copies once
+		buf = make([]byte, length)
 		fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
-		n := fc.readFromDisk(int64(fileOffset), length, buf)
+		n := fc.readFromDiskAsync(int64(fileOffset), length, buf)
 		if n != int(length) {
-			fc.Stats.BadLengthCount++
+			fc.Stats.BadLengthCount.Add(1)
 			return false, nil, 0, false, shouldReWrite
 		}
 	} else {
@@ -206,16 +258,16 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		}
 	}
 	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
-	computedCR32 := crc32.ChecksumIEEE(buf[4:])
+	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotCR32 != computedCR32 {
-		fc.Stats.BadCR32Count++
-		fc.Stats.BadCRCMemIds[memId]++
+		fc.Stats.BadCR32Count.Add(1)
+		fc.Stats.IncBadCRCMemIds(memId)
 		return false, nil, 0, false, shouldReWrite
 	}
 	if gotKey != key {
-		fc.Stats.BadKeyCount++
-		fc.Stats.BadKeyMemIds[memId]++
+		fc.Stats.BadKeyCount.Add(1)
+		fc.Stats.IncBadKeyMemIds(memId)
 		return false, nil, 0, false, shouldReWrite
 	}
 	valLen := int(length) - 4 - len(key)
@@ -228,12 +280,12 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 func (fc *ShardCache) GetFastPath(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 	if status == indices.StatusNotFound {
-		fc.Stats.KeyNotFoundCount++
+		fc.Stats.KeyNotFoundCount.Add(1)
 		return false, nil, 0, false, false // needsSlowPath = false (not found)
 	}
 
 	if status == indices.StatusExpired {
-		fc.Stats.KeyExpiredCount++
+		fc.Stats.KeyExpiredCount.Add(1)
 		return false, nil, 0, true, false // needsSlowPath = false (expired)
 	}
 
@@ -254,8 +306,8 @@ func (fc *ShardCache) GetFastPath(key string) (bool, []byte, uint16, bool, bool)
 	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
 	computedCR32 := crc32.ChecksumIEEE(buf[4:])
 	if gotCR32 != computedCR32 {
-		fc.Stats.BadCR32Count++
-		fc.Stats.BadCRCMemIds[memId]++
+		fc.Stats.BadCR32Count.Add(1)
+		fc.Stats.IncBadCRCMemIds(memId)
 		_, currMemId, _ := fc.mm.GetMemtable()
 		shouldReWrite := fc.predictor.Predict(uint64(freq), uint64(lastAccess), memId, currMemId)
 		_ = shouldReWrite // Not returning shouldReWrite in fast path for simplicity
@@ -264,8 +316,8 @@ func (fc *ShardCache) GetFastPath(key string) (bool, []byte, uint16, bool, bool)
 
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotKey != key {
-		fc.Stats.BadKeyCount++
-		fc.Stats.BadKeyMemIds[memId]++
+		fc.Stats.BadKeyCount.Add(1)
+		fc.Stats.IncBadKeyMemIds(memId)
 		return false, nil, 0, false, false
 	}
 
@@ -278,12 +330,12 @@ func (fc *ShardCache) GetFastPath(key string) (bool, []byte, uint16, bool, bool)
 func (fc *ShardCache) GetSlowPath(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 	if status == indices.StatusNotFound {
-		fc.Stats.KeyNotFoundCount++
+		fc.Stats.KeyNotFoundCount.Add(1)
 		return false, nil, 0, false, false
 	}
 
 	if status == indices.StatusExpired {
-		fc.Stats.KeyExpiredCount++
+		fc.Stats.KeyExpiredCount.Add(1)
 		return false, nil, 0, true, false
 	}
 
@@ -301,14 +353,12 @@ func (fc *ShardCache) GetSlowPath(key string) (bool, []byte, uint16, bool, bool)
 		return fc.validateAndReturnBuffer(key, buf, length, memId, remainingTTL, shouldReWrite)
 	}
 
-	// Read from disk
-	bufPtr := BufPool.Get().(*[]byte)
-	buf := *bufPtr
-	defer BufPool.Put(bufPtr)
+	// Read from disk - allocate buffer of exact size needed (no pool since readFromDisk already copies once)
+	buf := make([]byte, length)
 	fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
 	n := fc.readFromDisk(int64(fileOffset), length, buf)
 	if n != int(length) {
-		fc.Stats.BadLengthCount++
+		fc.Stats.BadLengthCount.Add(1)
 		return false, nil, 0, false, shouldReWrite
 	}
 
@@ -318,17 +368,17 @@ func (fc *ShardCache) GetSlowPath(key string) (bool, []byte, uint16, bool, bool)
 // validateAndReturnBuffer validates CRC and key, then returns the value
 func (fc *ShardCache) validateAndReturnBuffer(key string, buf []byte, length uint16, memId uint32, remainingTTL uint16, shouldReWrite bool) (bool, []byte, uint16, bool, bool) {
 	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
-	computedCR32 := crc32.ChecksumIEEE(buf[4:])
+	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
 	if gotCR32 != computedCR32 {
-		fc.Stats.BadCR32Count++
-		fc.Stats.BadCRCMemIds[memId]++
+		fc.Stats.BadCR32Count.Add(1)
+		fc.Stats.IncBadCRCMemIds(memId)
 		return false, nil, 0, false, shouldReWrite
 	}
 
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotKey != key {
-		fc.Stats.BadKeyCount++
-		fc.Stats.BadKeyMemIds[memId]++
+		fc.Stats.BadKeyCount.Add(1)
+		fc.Stats.IncBadKeyMemIds(memId)
 		return false, nil, 0, false, shouldReWrite
 	}
 
@@ -337,16 +387,66 @@ func (fc *ShardCache) validateAndReturnBuffer(key string, buf []byte, length uin
 }
 
 func (fc *ShardCache) readFromDisk(fileOffset int64, length uint16, buf []byte) int {
+
 	alignedStartOffset := (fileOffset / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
 	endndOffset := fileOffset + int64(length)
 	endAlignedOffset := ((endndOffset + fs.BLOCK_SIZE - 1) / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
 	alignedReadSize := endAlignedOffset - alignedStartOffset
+
 	page := fc.readPageAllocator.Get(int(alignedReadSize))
+
 	fc.file.Pread(alignedStartOffset, page.Buf)
+
 	start := int(fileOffset - alignedStartOffset)
 	n := copy(buf, page.Buf[start:start+int(length)])
 	fc.readPageAllocator.Put(page)
 	return n
+}
+
+func (fc *ShardCache) readFromDiskAsync(fileOffset int64, length uint16, buf []byte) int {
+	alignedStartOffset := (fileOffset / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
+	endndOffset := fileOffset + int64(length)
+	endAlignedOffset := ((endndOffset + fs.BLOCK_SIZE - 1) / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
+	alignedReadSize := int(endAlignedOffset - alignedStartOffset)
+	page := fc.readPageAllocator.Get(alignedReadSize)
+
+	// Use exactly alignedReadSize bytes, not the full page.Buf which may be
+	// larger due to slab allocator rounding to the next size class.
+	readBuf := page.Buf[:alignedReadSize]
+
+	var n int
+	var err error
+
+	if fc.batchReader != nil {
+		// Batched path: validate offset locally, then submit to the global
+		// io_uring batch reader which accumulates requests across all shards.
+		var validOffset int64
+		validOffset, err = fc.file.ValidateReadOffset(alignedStartOffset, alignedReadSize)
+		if err == nil {
+			n, err = fc.batchReader.Submit(fc.file.ReadFd, readBuf, uint64(validOffset))
+		}
+	} else {
+		// Per-shard io_uring fallback
+		n, err = fc.ioFile.PreadAsync(alignedStartOffset, readBuf)
+	}
+
+	if err != nil || n != alignedReadSize {
+		// ErrFileOffsetOutOfRange is expected for stale index entries -- don't log.
+		if err != nil && err != fs.ErrFileOffsetOutOfRange {
+			log.Warn().Err(err).
+				Int64("offset", alignedStartOffset).
+				Int("alignedReadSize", alignedReadSize).
+				Int("n", n).
+				Msg("io_uring pread failed")
+		}
+		fc.readPageAllocator.Put(page)
+		return 0
+	}
+
+	start := int(fileOffset - alignedStartOffset)
+	copied := copy(buf, page.Buf[start:start+int(length)])
+	fc.readPageAllocator.Put(page)
+	return copied
 }
 
 func (fc *ShardCache) GetRingBufferActiveEntries() int {
@@ -360,11 +460,11 @@ func (fc *ShardCache) processBuffer(key string, buf []byte, length uint16) ReadR
 	gotKey := string(buf[4 : 4+len(key)])
 
 	if gotCR32 != computedCR32 {
-		fc.Stats.BadCR32Count++
+		fc.Stats.BadCR32Count.Add(1)
 		return ReadResult{Found: false, Error: fmt.Errorf("crc mismatch")}
 	}
 	if gotKey != key {
-		fc.Stats.BadKeyCount++
+		fc.Stats.BadKeyCount.Add(1)
 		return ReadResult{Found: false, Error: fmt.Errorf("key mismatch")}
 	}
 
@@ -376,4 +476,8 @@ func (fc *ShardCache) processBuffer(key string, buf []byte, length uint16) ReadR
 		Found: true,
 		Data:  value,
 	}
+}
+
+func (fc *ShardCache) GetFileStat() *fs.Stat {
+	return fc.file.Stat
 }
