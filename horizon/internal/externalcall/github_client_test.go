@@ -11,7 +11,7 @@ func TestInitGitHubClient(t *testing.T) {
 		name                   string
 		appID                  int64
 		installationID         int64
-		privateKeyPath         string
+		privateKey             []byte
 		owner                  string
 		commitAuthor           string
 		commitEmail            string
@@ -22,7 +22,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:                   "Test 1: Initialize with complete configuration",
 			appID:                  12345,
 			installationID:         67890,
-			privateKeyPath:         "/path/to/key.pem",
+			privateKey:             []byte("/path/to/key.pem"),
 			owner:                  "test-org",
 			commitAuthor:           "test-bot",
 			commitEmail:            "test@example.com",
@@ -33,7 +33,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:                   "Test 2: Initialize without client credentials",
 			appID:                  0,
 			installationID:         0,
-			privateKeyPath:         "",
+			privateKey:             []byte(""),
 			owner:                  "test-org",
 			commitAuthor:           "test-bot",
 			commitEmail:            "test@example.com",
@@ -44,7 +44,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:                   "Test 3: Initialize with empty strings (use defaults)",
 			appID:                  0,
 			installationID:         0,
-			privateKeyPath:         "",
+			privateKey:             []byte(""),
 			owner:                  "",
 			commitAuthor:           "",
 			commitEmail:            "",
@@ -55,7 +55,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:                   "Test 4: Initialize with partial configuration",
 			appID:                  0,
 			installationID:         0,
-			privateKeyPath:         "",
+			privateKey:             []byte(""),
 			owner:                  "custom-org",
 			commitAuthor:           "",
 			commitEmail:            "custom@example.com",
@@ -66,7 +66,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:                   "Test 5: Initialize with only VictoriaMetrics address",
 			appID:                  0,
 			installationID:         0,
-			privateKeyPath:         "",
+			privateKey:             []byte(""),
 			owner:                  "",
 			commitAuthor:           "",
 			commitEmail:            "",
@@ -77,7 +77,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:                   "Test 6: Initialize with zero AppID (should skip client init)",
 			appID:                  0,
 			installationID:         67890,
-			privateKeyPath:         "/path/to/key.pem",
+			privateKey:             []byte("/path/to/key.pem"),
 			owner:                  "test-org",
 			commitAuthor:           "",
 			commitEmail:            "",
@@ -88,7 +88,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:                   "Test 7: Initialize with only owner and email",
 			appID:                  0,
 			installationID:         0,
-			privateKeyPath:         "",
+			privateKey:             []byte(""),
 			owner:                  "my-org",
 			commitAuthor:           "",
 			commitEmail:            "devops@myorg.com",
@@ -99,7 +99,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:                   "Test 8: Initialize with invalid credentials path",
 			appID:                  12345,
 			installationID:         67890,
-			privateKeyPath:         "/nonexistent/path.pem",
+			privateKey:             []byte("/nonexistent/path.pem"),
 			owner:                  "test-org",
 			commitAuthor:           "",
 			commitEmail:            "",
@@ -110,7 +110,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:                   "Test 9: Initialize multiple times (should only initialize once)",
 			appID:                  0,
 			installationID:         0,
-			privateKeyPath:         "",
+			privateKey:             []byte(""),
 			owner:                  "test-org",
 			commitAuthor:           "test-bot",
 			commitEmail:            "test@example.com",
@@ -127,7 +127,7 @@ func TestInitGitHubClient(t *testing.T) {
 			InitGitHubClient(
 				tt.appID,
 				tt.installationID,
-				tt.privateKeyPath,
+				tt.privateKey,
 				tt.owner,
 				tt.commitAuthor,
 				tt.commitEmail,
@@ -143,8 +143,10 @@ func TestInitGitHubClient(t *testing.T) {
 
 func TestInitGitHubClient_Idempotent(t *testing.T) {
 	// Test that multiple calls to InitGitHubClient are idempotent
-	InitGitHubClient(0, 0, "", "org1", "author1", "email1", "", nil)
-	InitGitHubClient(0, 0, "", "org2", "author2", "email2", "", nil)
+	InitGitHubClient(0, 0, []byte(""), "org1", "author1", "email1", "", nil)
+	InitGitHubClient(0, 0, []byte(""), "org2", "author2", "email2", "", nil)
+	InitGitHubClient(0, 0, []byte(""), "org1", "author1", "email1", "", nil)
+	InitGitHubClient(0, 0, []byte(""), "org2", "author2", "email2", "", nil)
 	// Second call should not change the configuration due to sync.Once
 	// This is expected behavior - initialization should happen only once
 	assert.True(t, true, "Multiple initialization calls should be idempotent")

@@ -18,6 +18,8 @@ ARGOCD_NAMESPACE="argocd"
 ARGOCD_PORT="8087"
 CONTOUR_NAMESPACE="projectcontour"
 KEDA_VERSION="v2.12.0"
+# Node name/selector used by deployable_metadata; kind names node <cluster>-control-plane, minikube we set explicitly
+TARGET_NODE_NAME="bharatml-stack-control-plane"
 
 # Functions
 log_info() {
@@ -141,9 +143,11 @@ create_cluster_minikube() {
         fi
     fi
     
-    # Start minikube
-    log_info "Starting minikube cluster (this may take a few minutes)..."
-    if ! minikube start; then
+    # Start minikube with node name matching deployable_metadata (nodeSelector)
+    log_info "Starting minikube cluster with node name ${TARGET_NODE_NAME} (this may take a few minutes)..."
+    if ! minikube start \
+        --extra-config=kubeadm.node-name="${TARGET_NODE_NAME}" \
+        --extra-config=kubelet.hostname-override="${TARGET_NODE_NAME}"; then
         log_error "Failed to start minikube cluster"
         exit 1
     fi
@@ -158,6 +162,7 @@ create_cluster_minikube() {
 
 create_cluster_docker_desktop() {
     log_info "Setting up Docker Desktop Kubernetes..."
+    log_info "Note: Docker Desktop node name stays 'docker-desktop'; script will label it ${TARGET_NODE_NAME} so pods can schedule."
     
     log_warning "Docker Desktop Kubernetes must be enabled manually."
     echo ""
@@ -271,14 +276,14 @@ label_node() {
         exit 1
     fi
     
-    log_info "Node name: $NODE_NAME"
+    log_info "Node name: $NODE_NAME (label: dedicated=$TARGET_NODE_NAME)"
     
-    # Label the node with dedicated label matching the node name
-    kubectl label node "$NODE_NAME" dedicated="$NODE_NAME" --overwrite
+    # Label so pods with nodeSelector from deployable_metadata can schedule (see PREDATOR_SETUP.md troubleshooting)
+    kubectl label node "$NODE_NAME" dedicated="$TARGET_NODE_NAME" --overwrite
     
     # Verify the label
-    if kubectl get nodes --show-labels | grep -q "dedicated=$NODE_NAME"; then
-        log_success "Node labeled successfully: dedicated=$NODE_NAME"
+    if kubectl get nodes --show-labels | grep -q "dedicated=$TARGET_NODE_NAME"; then
+        log_success "Node labeled: dedicated=$TARGET_NODE_NAME"
     else
         log_warning "Node label verification failed, but continuing..."
     fi
@@ -293,14 +298,23 @@ install_contour_crds() {
         return
     fi
     
-    # Install only Contour CRDs (needed before ArgoCD Application can sync)
-    kubectl apply -f https://raw.githubusercontent.com/projectcontour/contour/main/examples/contour/01-crds.yaml
+    # Option 1: Install only Contour CRDs (needed before ArgoCD Application can sync)
+    # Option 2 (fallback): Install full Contour deployment (includes CRDs + Contour + Envoy)
+    # See PREDATOR_SETUP.md troubleshooting for manual commands.
+    if ! kubectl apply -f https://raw.githubusercontent.com/projectcontour/contour/main/examples/contour/01-crds.yaml 2>/dev/null; then
+        log_warning "Contour CRDs-only install failed. Trying full Contour deployment (includes CRDs)..."
+        kubectl apply -f https://projectcontour.io/quickstart/contour.yaml
+    fi
     
     # Verify HTTPProxy CRD
     if kubectl get crd httpproxies.projectcontour.io &> /dev/null; then
         log_success "Contour CRDs installed successfully"
     else
-        log_error "Contour CRDs installation failed. HTTPProxy CRD not found."
+        log_error "Contour CRDs installation failed. HTTPProxy CRD not found. You can try manually:"
+        echo "  # CRDs only:"
+        echo "  kubectl apply -f https://raw.githubusercontent.com/projectcontour/contour/main/examples/contour/01-crds.yaml"
+        echo "  # Or full deployment:"
+        echo "  kubectl apply -f https://projectcontour.io/quickstart/contour.yaml"
         exit 1
     fi
 }
@@ -781,7 +795,9 @@ install_keda() {
     # Install KEDA (ScaledJob CRD error is expected and can be ignored)
     # We capture output and filter out the ScaledJob error, then verify installation succeeded
     local install_output
-    install_output=$(kubectl apply -f https://github.com/kedacore/keda/releases/download/${KEDA_VERSION}/keda-${KEDA_VERSION}.yaml 2>&1) || {
+    # Asset filename is keda-2.12.0.yaml (no 'v' in filename), tag is v2.12.0
+    local keda_yaml="keda-${KEDA_VERSION#v}.yaml"
+    install_output=$(kubectl apply -f "https://github.com/kedacore/keda/releases/download/${KEDA_VERSION}/${keda_yaml}" 2>&1) || {
         # Installation may have failed, but check if it's just the ScaledJob CRD error
         if echo "$install_output" | grep -q "scaledjobs.keda.sh.*Too long"; then
             log_warning "ScaledJob CRD installation failed (expected - not needed for Predator)"
@@ -957,9 +973,25 @@ install_argocd() {
         kubectl create namespace "$ARGOCD_NAMESPACE"
     fi
     
-    # Install ArgoCD
-    kubectl apply -n "$ARGOCD_NAMESPACE" -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-    
+    # Install ArgoCD (ApplicationSet CRD may fail with "metadata.annotations: Too long" - optional for core Argo CD)
+    local argocd_output
+    argocd_output=$(kubectl apply -n "$ARGOCD_NAMESPACE" -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml 2>&1) || {
+        if echo "$argocd_output" | grep -qE "applicationsets\.argoproj\.io.*(invalid|Too long)|metadata\.annotations: Too long"; then
+            log_warning "ApplicationSet CRD installation failed (expected - annotations exceed limit; not required for core Argo CD)"
+        else
+            log_error "ArgoCD installation failed:"
+            echo "$argocd_output"
+            exit 1
+        fi
+    }
+    echo "$argocd_output" | grep -vE "applicationsets\.argoproj\.io.*(invalid|Too long)|metadata\.annotations: Too long" || true
+
+    # Verify core Argo CD resources were created
+    if ! kubectl get deployment argocd-server -n "$ARGOCD_NAMESPACE" &> /dev/null; then
+        log_error "ArgoCD server deployment not found after installation"
+        exit 1
+    fi
+
     # Wait for ArgoCD to be ready
     log_info "Waiting for ArgoCD server to be ready (this may take a few minutes)..."
     kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n "$ARGOCD_NAMESPACE" || {
@@ -1472,8 +1504,11 @@ add_github_repo_to_argocd() {
         --github-app-private-key-path "$github_private_key_path" \
         --insecure; then
         log_success "Repository added successfully with GitHub App authentication"
-        # Store repo URL for later use
+        # Store repo URL and GitHub App credentials for Step 6 (copy Predator chart to repo)
         export ARGOCD_REPO_URL="$repo_url"
+        export GITHUB_APP_ID="$github_app_id"
+        export GITHUB_INSTALLATION_ID="$github_installation_id"
+        export GITHUB_APP_PRIVATE_KEY_PATH="$github_private_key_path"
     else
         log_error "Failed to add repository"
         log_info "Troubleshooting:"
@@ -1508,6 +1543,141 @@ add_github_repo_to_argocd() {
         echo "  # Then re-run this script or add manually with GitHub App"
         return 0
     fi
+}
+
+# get_github_installation_token generates a GitHub App installation access token (for git clone/push).
+# Requires: jq, openssl, curl. Outputs the token to stdout; returns 0 on success.
+get_github_installation_token() {
+    local app_id="$1"
+    local installation_id="$2"
+    local private_key_path="$3"
+    local now
+    now=$(date +%s)
+    local exp=$((now + 600))
+    local header='{"alg":"RS256","typ":"JWT"}'
+    local payload
+    payload=$(jq -n --arg iat "$now" --arg exp "$exp" --arg iss "$app_id" '{iat: ($iat|tonumber), exp: ($exp|tonumber), iss: $iss}')
+    local header_b64 payload_b64
+    header_b64=$(echo -n "$header" | base64 2>/dev/null | tr -d '\n' | tr '+/' '-_' | tr -d '=')
+    payload_b64=$(echo -n "$payload" | base64 2>/dev/null | tr -d '\n' | tr '+/' '-_' | tr -d '=')
+    local signed_content="${header_b64}.${payload_b64}"
+    local sig_b64
+    sig_b64=$(echo -n "$signed_content" | openssl dgst -sha256 -sign "$private_key_path" 2>/dev/null | base64 2>/dev/null | tr -d '\n' | tr '+/' '-_' | tr -d '=')
+    local jwt="${signed_content}.${sig_b64}"
+    local token
+    token=$(curl -s -X POST \
+        -H "Authorization: Bearer ${jwt}" \
+        -H "Accept: application/vnd.github+json" \
+        "https://api.github.com/app/installations/${installation_id}/access_tokens" | jq -r '.token')
+    if [ -z "$token" ] || [ "$token" = "null" ]; then
+        return 1
+    fi
+    echo -n "$token"
+}
+
+# copy_predator_chart_to_repo implements PREDATOR_SETUP.md Step 6: copy Predator Helm chart to repository.
+# Uses GitHub App installation token to clone, add 1.0.0, commit and push.
+copy_predator_chart_to_repo() {
+    local repo_url="${ARGOCD_REPO_URL:-}"
+    local branch="${REPO_BRANCH:-}"
+    if [ -z "$branch" ]; then
+        read -p "Enter your repository branch (default: main): " branch
+        branch=${branch:-main}
+    fi
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local chart_source="${script_dir}/../predator/1.0.0"
+    local configs_services_source="${script_dir}/../horizon/configs/services"
+    if [ -z "$repo_url" ]; then
+        log_error "No repository URL set. Add the repository to ArgoCD first."
+        return 1
+    fi
+    if [ ! -d "$chart_source" ]; then
+        log_error "Predator Helm chart not found at: $chart_source"
+        log_info "Run this script from the BharatMLStack repo (quick-start/)."
+        return 1
+    fi
+    if [ -z "${GITHUB_APP_ID:-}" ] || [ -z "${GITHUB_INSTALLATION_ID:-}" ] || [ -z "${GITHUB_APP_PRIVATE_KEY_PATH:-}" ]; then
+        log_error "GitHub App credentials not set. Add the repository with GitHub App first."
+        return 1
+    fi
+    if ! command -v jq &> /dev/null; then
+        log_error "jq is required for Step 6 (GitHub App token). Install with: brew install jq (macOS) or apt install jq (Linux)"
+        return 1
+    fi
+    log_info "Step 6: Copying Predator Helm chart to repository..."
+    local token
+    token=$(get_github_installation_token "$GITHUB_APP_ID" "$GITHUB_INSTALLATION_ID" "$GITHUB_APP_PRIVATE_KEY_PATH") || {
+        log_error "Failed to get GitHub App installation token. Check App ID, Installation ID, and private key."
+        return 1
+    }
+    # Build HTTPS URL with token for clone/push (github.com only)
+    local repo_url_authed
+    if [[ "$repo_url" =~ ^https://github\.com/(.+)$ ]]; then
+        repo_url_authed="https://x-access-token:${token}@github.com/${BASH_REMATCH[1]}"
+    elif [[ "$repo_url" =~ ^https://(.+)$ ]]; then
+        log_warning "Repository is not github.com; using URL as-is (push may require existing credentials)"
+        repo_url_authed="$repo_url"
+    else
+        log_error "Unsupported repository URL for automated push: $repo_url"
+        return 1
+    fi
+    local tmpdir
+    tmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t predator-step6)
+    trap "rm -rf '$tmpdir'" RETURN
+    log_info "Cloning repository (branch: $branch)..."
+    if ! git clone --branch "$branch" --depth 1 "$repo_url_authed" "$tmpdir/repo" 2>/dev/null; then
+        log_warning "Clone failed (branch may not exist). Trying default branch..."
+        git clone --depth 1 "$repo_url_authed" "$tmpdir/repo" 2>/dev/null || {
+            log_error "Failed to clone repository."
+            return 1
+        }
+        cd "$tmpdir/repo"
+        branch=$(git rev-parse --abbrev-ref HEAD)
+        cd - >/dev/null
+    fi
+    local repo_dir="$tmpdir/repo"
+    if [ -d "$repo_dir/1.0.0" ]; then
+        log_info "1.0.0/ already exists in repository; updating contents..."
+        rm -rf "$repo_dir/1.0.0"
+    fi
+    cp -r "$chart_source" "$repo_dir/1.0.0"
+
+    # Create prd/applications/ (blank folder tracked with .gitkeep)
+    mkdir -p "$repo_dir/prd/applications"
+    if [ ! -f "$repo_dir/prd/applications/.gitkeep" ]; then
+        touch "$repo_dir/prd/applications/.gitkeep"
+    fi
+
+    # Copy horizon/configs/services as configs/services/ in repo
+    if [ -d "$configs_services_source" ]; then
+        log_info "Copying configs/services (from horizon/configs/services)..."
+        mkdir -p "$repo_dir/configs"
+        if [ -d "$repo_dir/configs/services" ]; then
+            rm -rf "$repo_dir/configs/services"
+        fi
+        cp -r "$configs_services_source" "$repo_dir/configs/services"
+    else
+        log_warning "horizon/configs/services not found at $configs_services_source; skipping configs/services copy"
+    fi
+
+    cd "$repo_dir"
+    git config user.email "horizon-bot@predator-setup.local"
+    git config user.name "Predator Setup"
+    git add 1.0.0 prd/applications
+    [ -d configs/services ] && git add configs/services
+    if git diff --cached --quiet; then
+        log_info "No changes to commit (repo already up to date)."
+        return 0
+    fi
+    git commit -m "Add Predator Helm chart 1.0.0, prd/applications, configs/services (via setup-predator-k8s.sh Step 6)"
+    if ! git push origin "$branch" 2>/dev/null; then
+        log_warning "Push failed. You can push manually from your repo:"
+        echo "  cd <your-repo> && git push origin $branch"
+        return 1
+    fi
+    cd - >/dev/null
+    log_success "Step 6 complete: 1.0.0/, prd/applications/, configs/services/ copied to repository and pushed to $branch"
 }
 
 setup_prd_applications() {
@@ -1659,7 +1829,7 @@ main() {
     
     check_prerequisites
     label_node
-    
+
     # Contour setup (commented out - use direct port-forward for local dev)
     # For production, uncomment these lines:
     # install_contour_crds
@@ -1685,6 +1855,18 @@ main() {
     if [[ "$ADD_REPO" =~ ^[Yy]$ ]]; then
         if add_github_repo_to_argocd; then
             log_success "GitHub repository authentication configured"
+            # Step 6: Copy Predator Helm chart to repository (PREDATOR_SETUP.md)
+            echo ""
+            read -p "Do you want to copy the Predator Helm chart to your repository (Step 6)? (y/n): " COPY_CHART
+            if [[ "$COPY_CHART" =~ ^[Yy]$ ]]; then
+                if copy_predator_chart_to_repo; then
+                    log_success "Step 6 complete: Predator Helm chart is in your repo at 1.0.0/"
+                else
+                    log_warning "Step 6 failed or was skipped. You can do it manually (see PREDATOR_SETUP.md Step 6)"
+                fi
+            else
+                log_info "Skipping Step 6. You can copy the chart manually (see PREDATOR_SETUP.md Step 6)"
+            fi
         else
             log_warning "Repository authentication setup failed or was skipped"
         fi

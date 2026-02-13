@@ -30,8 +30,8 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0.53.0/go.mod h1:jUZ5LYlw40WMd07qxcQJD5M40aUxrfwqQX1g7zxYnrQ=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.53.0 h1:Ron4zCA/yk6U7WOBXhTJcDpsUBG9npumK6xw2auFltQ=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.53.0/go.mod h1:cSgYe11MCNYunTnRXrKiR/tHc0eoKjICUuWpNZoVCOo=
-github.com/Meesho/BharatMLStack/helix-client v1.0.0-alpha-649f13 h1:Ns+/JiGMmZA4o7wdPi+cYlrrJMNhm9A+4frtJOBpl1s=
-github.com/Meesho/BharatMLStack/helix-client v1.0.0-alpha-649f13/go.mod h1:Pw9RyIH12tZRFFkX3lodoMrywH3RLjlKzPnVyZwzyyU=
+github.com/Meesho/BharatMLStack/helix-client v1.0.0-alpha-7f5f39 h1:kWQqArO0PP/o3lQmtScI044fs4nZSS4AZJHw3JBlDlc=
+github.com/Meesho/BharatMLStack/helix-client v1.0.0-alpha-7f5f39/go.mod h1:Pw9RyIH12tZRFFkX3lodoMrywH3RLjlKzPnVyZwzyyU=
 github.com/Microsoft/go-winio v0.5.0/go.mod h1:JPGBdM1cNvN/6ISo+n8V5iA4v8pBzdOpzfwIujj1a84=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=

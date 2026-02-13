@@ -9,6 +9,7 @@ const (
 
 	moduleReview     = "review"
 	moduleReject     = "reject"
+	moduleApprove    = "approve"
 	moduleDeactivate = "deactivate"
 	moduleClone      = "clone"
 	moduleTest       = "test"
