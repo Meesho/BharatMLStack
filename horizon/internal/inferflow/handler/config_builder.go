@@ -8,7 +8,7 @@ import (
 
 	ofsHandler "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/handler"
 
-	etcd "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
+	"github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
 	mapset "github.com/deckarep/golang-set/v2"
 )
 
@@ -496,6 +496,41 @@ func mapOfflineFeatures(offlineFeatureList mapset.Set[string], token string) (ma
 	return GetOnlineFeatureMapping(offlineFeatureList, token)
 }
 
+func getComponentDataOrDefault(etcdConfig etcd.Manager, componentName string) *etcd.ComponentData {
+	componentData := etcdConfig.GetComponentData(componentName)
+	if componentData == nil {
+		defaultComponentID := componentName + "_id"
+		return &etcd.ComponentData{
+			ComponentID:         defaultComponentID,
+			CompositeID:         false,
+			ExecutionDependency: FEATURE_INITIALIZER,
+			FSFlattenResKeys: map[string]string{
+				"0": defaultComponentID,
+			},
+			FSIdSchemaToValueColumns: map[string]etcd.FSIdSchemaToValueColumnPair{
+				"0": {
+					Schema:   defaultComponentID,
+					ValueCol: defaultComponentID,
+					DataType: "FP32", //Not being used currently TODO: figure out better handling
+				},
+			},
+			Overridecomponent: make(map[string]etcd.OverrideComponent),
+		}
+	}
+
+	if componentData.FSFlattenResKeys == nil {
+		componentData.FSFlattenResKeys = make(map[string]string)
+	}
+	if componentData.FSIdSchemaToValueColumns == nil {
+		componentData.FSIdSchemaToValueColumns = make(map[string]etcd.FSIdSchemaToValueColumnPair)
+	}
+	if componentData.Overridecomponent == nil {
+		componentData.Overridecomponent = make(map[string]etcd.OverrideComponent)
+	}
+
+	return componentData
+}
+
 // fetchComponentFeatures fetches the component features from the etcd config
 // and returns the features set and a map of feature to data type
 func fetchComponentFeatures(features mapset.Set[string], pctrCalibrationFeatures mapset.Set[string], pcvrCalibrationFeatures mapset.Set[string], etcdConfig etcd.Manager, realEstate string, token string) (mapset.Set[string], map[string]string, error) {
@@ -504,10 +539,7 @@ func fetchComponentFeatures(features mapset.Set[string], pctrCalibrationFeatures
 	featureToDataType := make(map[string]string)
 
 	for _, component := range componentList.ToSlice() {
-		componentData := etcdConfig.GetComponentData(component)
-		if componentData == nil {
-			return nil, nil, fmt.Errorf("component data: ComponentData for '%s' not found in registry. Please contact MLP team to onboard the component", component)
-		}
+		componentData := getComponentDataOrDefault(etcdConfig, component)
 
 		for _, pair := range componentData.FSIdSchemaToValueColumns {
 			if strings.Contains(pair.ValueCol, COLON_DELIMITER) {
@@ -721,10 +753,7 @@ func FillFeatureComponentFromComponentMap(request InferflowOnboardRequest, featu
 				featureGroups = append(featureGroups, featureGroupData)
 			}
 
-			componentData := etcdConfig.GetComponentData(componentName)
-			if componentData == nil {
-				return fmt.Errorf("feature components: componentData for '%s' not found in registry", componentName)
-			}
+			componentData := getComponentDataOrDefault(etcdConfig, componentName)
 
 			componentID := componentData.ComponentID
 			overrideComponentID := ""
@@ -837,12 +866,12 @@ func GetFeatureGroupDataTypeMap(label string, token string) (map[string]string, 
 	featureGroupDataTypeMap := make(map[string]string)
 
 	// Use internal handler instead of HTTP request
-	ofsHandler := ofsHandler.NewConfigHandler(1)
-	if ofsHandler == nil {
+	ofsConfigHandler := ofsHandler.NewConfigHandler(1)
+	if ofsConfigHandler == nil {
 		return nil, fmt.Errorf("failed to initialize online feature store handler")
 	}
 
-	featureGroups, err := ofsHandler.RetrieveFeatureGroups(label)
+	featureGroups, err := ofsConfigHandler.RetrieveFeatureGroups(label)
 	if err != nil {
 		return nil, err
 	}
