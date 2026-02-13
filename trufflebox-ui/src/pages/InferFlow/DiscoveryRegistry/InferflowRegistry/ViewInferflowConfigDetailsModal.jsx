@@ -112,7 +112,7 @@ const ViewInferflowConfigDetailsModal = ({ open, onClose, configData }) => {
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="h6">
-          InferFlow Config Details - {configData?.config_id || 'N/A'}
+          Inferpipe Details - {configData?.config_id || 'N/A'}
           </Typography>
         </Box>
         <IconButton
@@ -141,7 +141,7 @@ const ViewInferflowConfigDetailsModal = ({ open, onClose, configData }) => {
               <Grid item xs={12} md={6}>
                 <Box sx={{ display: 'flex', py: 1, borderBottom: '1px solid #f0f0f0' }}>
                   <Typography variant="body1" sx={{ fontWeight: 'bold', width: '40%' }}>
-                    Config ID:
+                    Inferpipe ID:
                   </Typography>
                   <Typography variant="body1" sx={{ width: '60%' }}>
                     {configData.config_id || 'N/A'}
@@ -247,18 +247,15 @@ const ViewInferflowConfigDetailsModal = ({ open, onClose, configData }) => {
 
             {/* Configuration Details Section */}
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', borderBottom: '2px solid #450839', pb: 1 }}>
-              Configuration Details
+              Inferpipe Definition
             </Typography>
 
             {/* Config Value */}
             {configData.config_value && (
               <Paper elevation={1} sx={{ p: 2, mb: 3, bgcolor: '#f8f9fa', borderRadius: 1 }}>
-                <Typography variant="subtitle2" sx={{ color: '#666', mb: 2, fontWeight: 'bold' }}>
-                  CONFIG VALUE
-                </Typography>
                 <JsonViewer
                   data={configData.config_value}
-                  title="Configuration Value"
+                  title=""
                   defaultExpanded={true}
                   maxHeight={300}
                   enableCopy={true}

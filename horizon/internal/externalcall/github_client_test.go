@@ -145,6 +145,8 @@ func TestInitGitHubClient_Idempotent(t *testing.T) {
 	// Test that multiple calls to InitGitHubClient are idempotent
 	InitGitHubClient(0, 0, []byte(""), "org1", "author1", "email1", "", nil)
 	InitGitHubClient(0, 0, []byte(""), "org2", "author2", "email2", "", nil)
+	InitGitHubClient(0, 0, []byte(""), "org1", "author1", "email1", "", nil)
+	InitGitHubClient(0, 0, []byte(""), "org2", "author2", "email2", "", nil)
 	// Second call should not change the configuration due to sync.Once
 	// This is expected behavior - initialization should happen only once
 	assert.True(t, true, "Multiple initialization calls should be idempotent")

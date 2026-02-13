@@ -223,10 +223,10 @@ const ScaleUpInferflowConfigModal = ({ open, onClose, onSuccess, configData }) =
 
     // Validate required basic fields
     if (!formData.config_id.trim()) {
-      errors.push('Config ID is required');
+      errors.push('Inferpipe ID is required');
     }
     if (!formData.config_value.trim()) {
-      errors.push('Config Value is required');
+      errors.push('Inferpipe Value is required');
     }
 
     // Validate config mapping
@@ -265,7 +265,7 @@ const ScaleUpInferflowConfigModal = ({ open, onClose, onSuccess, configData }) =
 
     // Validate config ID cannot be the same as the original config ID
     if (formData.config_id.trim() === configData.config_id.trim()) {
-      errors.push('Config ID cannot be the same as the original config ID');
+      errors.push('Inferpipe ID cannot be the same as the original inferpipe ID');
     }
     
     return errors;
@@ -324,16 +324,16 @@ const ScaleUpInferflowConfigModal = ({ open, onClose, onSuccess, configData }) =
       
       const successMessage = typeof response.data.data === 'string' 
         ? response.data.data 
-        : response.data.data?.message || 'Configuration scaled up successfully';
+        : response.data.data?.message || 'Inferpipe scaled up successfully';
       
       onSuccess(successMessage);
       onClose();
     } catch (err) {
-      setError(err.message || 'An error occurred while scaling up the configuration');
+      setError(err.message || 'An error occurred while scaling up the inferpipe');
       setResponseModal({
         open: true,
         type: 'error',
-        message: err.message || 'An error occurred while scaling up the configuration'
+        message: err.message || 'An error occurred while scaling up the inferpipe'
       });
     } finally {
       setLoading(false);
@@ -354,7 +354,7 @@ const ScaleUpInferflowConfigModal = ({ open, onClose, onSuccess, configData }) =
           }}
         >
           <Box display="flex" alignItems="center" gap={1}>
-            <Typography variant="h6">Scale Up InferFlow Config</Typography>
+            <Typography variant="h6">Scale Up Inferpipe</Typography>
           </Box>
           <IconButton onClick={onClose} size="small" sx={{ color: 'white' }}>
             <CloseIcon />
@@ -365,7 +365,7 @@ const ScaleUpInferflowConfigModal = ({ open, onClose, onSuccess, configData }) =
             <Box sx={{ mb: 3, borderRadius: 1 }}>
               <TextField
                 fullWidth
-                label="InferFlow Config ID"
+                label="Inferpipe ID"
                 value={formData.config_id}
                 onChange={handleConfigIdChange}
                 sx={{ mb: 2 }}
@@ -373,7 +373,7 @@ const ScaleUpInferflowConfigModal = ({ open, onClose, onSuccess, configData }) =
 
               <TextField
                 fullWidth
-                label="InferFlow Config Value"
+                label="Inferpipe Value"
                 value={formData.config_value}
                 disabled
                 multiline
