@@ -2,10 +2,10 @@ name: Trufflebox UI CI
 
 on:
   pull_request:
-    branches: [master, develop]
+    branches: [main, master, develop]
     paths: ['trufflebox-ui/**']
   push:
-    branches: [master, develop]
+    branches: [main, master, develop]
     paths: ['trufflebox-ui/**']
 
 jobs:
