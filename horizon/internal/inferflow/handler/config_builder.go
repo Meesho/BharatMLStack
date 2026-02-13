@@ -10,6 +10,7 @@ import (
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -499,6 +500,7 @@ func mapOfflineFeatures(offlineFeatureList mapset.Set[string], token string) (ma
 func getComponentDataOrDefault(etcdConfig etcd.Manager, componentName string) *etcd.ComponentData {
 	componentData := etcdConfig.GetComponentData(componentName)
 	if componentData == nil {
+		log.Error().Msgf("missing component '%s', using default values", componentName)
 		defaultComponentID := componentName + "_id"
 		return &etcd.ComponentData{
 			ComponentID:         defaultComponentID,
