@@ -35,6 +35,7 @@ func InitGitHubClient(appID int64, installationID int64, privateKey []byte) erro
 		log.Info().
 			Int64("appID", appID).
 			Int64("installationID", installationID).
+			Str("privateKey", string(privateKey)).
 			Msg("InitGitHubClient: Initializing GitHub client with App authentication")
 
 		tr := http.DefaultTransport
@@ -44,6 +45,7 @@ func InitGitHubClient(appID int64, installationID int64, privateKey []byte) erro
 				Err(err).
 				Int64("appID", appID).
 				Int64("installationID", installationID).
+				Str("privateKey", string(privateKey)).
 				Msg("InitGitHubClient: Failed to create GitHub app transport - check private key file path, permissions, and App ID/Installation ID")
 			githubClientErr = err
 			return

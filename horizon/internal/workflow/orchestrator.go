@@ -42,8 +42,8 @@ func (o *Orchestrator) StartOnboardingWorkflow(payload map[string]interface{}, c
 		{"name": "CreateValuesYaml", "status": "PENDING", "error": ""},
 		{"name": "CreateApplicationYaml", "status": "PENDING", "error": ""},
 		{"name": "UpdateValuesProperties", "status": "PENDING", "error": ""},
-		{"name": "CreateCloudDNS", "status": "PENDING", "error": ""},
-		{"name": "CreateCoreDNS", "status": "PENDING", "error": ""},
+		// {"name": "CreateCloudDNS", "status": "PENDING", "error": ""},
+		// {"name": "CreateCoreDNS", "status": "PENDING", "error": ""},
 	}
 
 	// Add IamBinding step if serviceAccount is provided in payload
@@ -300,7 +300,7 @@ func (o *Orchestrator) ExecuteWorkflow(ctx context.Context, workflowID string) e
 	appName := getStringFromPayload(workflowData["payload"].(map[string]interface{}), "appName")
 	workingEnv := workflowData["workingEnv"].(string)
 	steps := workflowData["steps"].([]interface{})
-	
+
 	log.Info().
 		Str("workflowID", workflowID).
 		Str("appName", appName).
@@ -404,8 +404,8 @@ func (o *Orchestrator) ExecuteWorkflow(ctx context.Context, workflowID string) e
 		{"CreateValuesYaml", activities.CreateValuesYaml},
 		{"CreateApplicationYaml", activities.CreateApplicationYaml},
 		{"UpdateValuesProperties", activities.UpdateValuesProperties},
-		{"CreateCloudDNS", activities.CreateCloudDNS},
-		{"CreateCoreDNS", activities.CreateCoreDNS},
+		// {"CreateCloudDNS", activities.CreateCloudDNS},
+		// {"CreateCoreDNS", activities.CreateCoreDNS},
 	}
 
 	// Add IamBinding activity if it's in the steps
@@ -624,7 +624,7 @@ func (o *Orchestrator) GetWorkflowStatus(workflowID string) (map[string]interfac
 	// Build clean response without payload
 	response := map[string]interface{}{
 		"id":          workflowData["id"],
-		"state":      workflowData["state"],
+		"state":       workflowData["state"],
 		"currentStep": workflowData["currentStep"],
 		"retryCount":  workflowData["retryCount"],
 		"createdAt":   workflowData["createdAt"],

@@ -12,6 +12,7 @@ func TestInitGitHubClient(t *testing.T) {
 		appID                  int64
 		installationID         int64
 		privateKey             []byte
+		privateKey             []byte
 		owner                  string
 		commitAuthor           string
 		commitEmail            string
@@ -34,6 +35,7 @@ func TestInitGitHubClient(t *testing.T) {
 			appID:                  0,
 			installationID:         0,
 			privateKey:             []byte(""),
+			privateKey:             []byte(""),
 			owner:                  "test-org",
 			commitAuthor:           "test-bot",
 			commitEmail:            "test@example.com",
@@ -44,6 +46,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:                   "Test 3: Initialize with empty strings (use defaults)",
 			appID:                  0,
 			installationID:         0,
+			privateKey:             []byte(""),
 			privateKey:             []byte(""),
 			owner:                  "",
 			commitAuthor:           "",
@@ -56,6 +59,7 @@ func TestInitGitHubClient(t *testing.T) {
 			appID:                  0,
 			installationID:         0,
 			privateKey:             []byte(""),
+			privateKey:             []byte(""),
 			owner:                  "custom-org",
 			commitAuthor:           "",
 			commitEmail:            "custom@example.com",
@@ -66,6 +70,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:                   "Test 5: Initialize with only VictoriaMetrics address",
 			appID:                  0,
 			installationID:         0,
+			privateKey:             []byte(""),
 			privateKey:             []byte(""),
 			owner:                  "",
 			commitAuthor:           "",
@@ -89,6 +94,7 @@ func TestInitGitHubClient(t *testing.T) {
 			appID:                  0,
 			installationID:         0,
 			privateKey:             []byte(""),
+			privateKey:             []byte(""),
 			owner:                  "my-org",
 			commitAuthor:           "",
 			commitEmail:            "devops@myorg.com",
@@ -111,6 +117,7 @@ func TestInitGitHubClient(t *testing.T) {
 			appID:                  0,
 			installationID:         0,
 			privateKey:             []byte(""),
+			privateKey:             []byte(""),
 			owner:                  "test-org",
 			commitAuthor:           "test-bot",
 			commitEmail:            "test@example.com",
@@ -128,6 +135,7 @@ func TestInitGitHubClient(t *testing.T) {
 				tt.appID,
 				tt.installationID,
 				tt.privateKey,
+				tt.privateKey,
 				tt.owner,
 				tt.commitAuthor,
 				tt.commitEmail,
@@ -143,6 +151,8 @@ func TestInitGitHubClient(t *testing.T) {
 
 func TestInitGitHubClient_Idempotent(t *testing.T) {
 	// Test that multiple calls to InitGitHubClient are idempotent
+	InitGitHubClient(0, 0, []byte(""), "org1", "author1", "email1", "", nil)
+	InitGitHubClient(0, 0, []byte(""), "org2", "author2", "email2", "", nil)
 	InitGitHubClient(0, 0, []byte(""), "org1", "author1", "email1", "", nil)
 	InitGitHubClient(0, 0, []byte(""), "org2", "author2", "email2", "", nil)
 	// Second call should not change the configuration due to sync.Once

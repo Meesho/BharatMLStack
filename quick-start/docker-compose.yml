@@ -435,25 +435,21 @@ services:
       - CLOUDSDK_CONFIG=/home/nonroot/.config/gcloud
       - TEST_DEPLOYABLE_ID=3020
       - TEST_GPU_DEPLOYABLE_ID=3020
-      # Skye configuration
       - SKYE_APP_NAME=skye
       - SKYE_SCYLLA_ACTIVE_CONFIG_IDS=2
-      - SKYE_HOST=skye-serving
-      - SKYE_PORT=8094
-      - SKYE_AUTH_TOKEN=c2t5ZS1zZXJ2aWNl
-      - SKYE_DEADLINE_EXCEED_MS=200
-      # Airflow configuration
-      - AIRFLOW_BASE_URL=http://ds-airflow.prd.meesho.int
-      - AIRFLOW_USERNAME=aditya.garg@meesho.com
-      - AIRFLOW_PASSWORD=${AIRFLOW_PASSWORD:-}
+      - SKYE_HOST=scylla
+      - SKYE_PORT=9042
+      - SKYE_AUTH_TOKEN=
+      - SKYE_DEADLINE_EXCEED_MS=2000
+      - AIRFLOW_BASE_URL=http://airflow:8080
+      - AIRFLOW_USERNAME=airflow
+      - AIRFLOW_PASSWORD=airflow
       # Prism configuration
-      - PRISM_BASE_URL=http://di-jobs-service.prd.meesho.int
-      - PRISM_APP_USER_ID=aditya.garg@meesho.com
-      # Initial ingestion configuration
+      - PRISM_BASE_URL=http://prism:8080
+      - PRISM_APP_USER_ID=airflow
       - INITIAL_INGESTION_PRISM_JOB_ID=679
       - INITIAL_INGESTION_PRISM_STEP_ID=1706
       - INITIAL_INGESTION_AIRFLOW_DAG_ID=JOB_V2_skye_initial_ingestion
-      # Variant configuration
       - VARIANT_SCALEUP_CRON_EXPRESSION=0 */1 * * * *
       - VARIANT_SCALEUP_PRISM_JOB_ID=680
       - VARIANT_SCALEUP_PRISM_STEP_ID=2420
