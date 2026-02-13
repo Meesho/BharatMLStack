@@ -22,7 +22,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:                   "Test 1: Initialize with complete configuration",
 			appID:                  12345,
 			installationID:         67890,
-			privateKey:             []byte("test-key"),
+			privateKey:             []byte("/path/to/key.pem"),
 			owner:                  "test-org",
 			commitAuthor:           "test-bot",
 			commitEmail:            "test@example.com",
@@ -77,7 +77,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:                   "Test 6: Initialize with zero AppID (should skip client init)",
 			appID:                  0,
 			installationID:         67890,
-			privateKey:             []byte("test-key"),
+			privateKey:             []byte("/path/to/key.pem"),
 			owner:                  "test-org",
 			commitAuthor:           "",
 			commitEmail:            "",
@@ -99,7 +99,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:                   "Test 8: Initialize with invalid credentials path",
 			appID:                  12345,
 			installationID:         67890,
-			privateKey:             []byte("test-key"),
+			privateKey:             []byte("/nonexistent/path.pem"),
 			owner:                  "test-org",
 			commitAuthor:           "",
 			commitEmail:            "",
@@ -143,6 +143,8 @@ func TestInitGitHubClient(t *testing.T) {
 
 func TestInitGitHubClient_Idempotent(t *testing.T) {
 	// Test that multiple calls to InitGitHubClient are idempotent
+	InitGitHubClient(0, 0, []byte(""), "org1", "author1", "email1", "", nil)
+	InitGitHubClient(0, 0, []byte(""), "org2", "author2", "email2", "", nil)
 	InitGitHubClient(0, 0, []byte(""), "org1", "author1", "email1", "", nil)
 	InitGitHubClient(0, 0, []byte(""), "org2", "author2", "email2", "", nil)
 	// Second call should not change the configuration due to sync.Once

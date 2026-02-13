@@ -198,4 +198,8 @@ func bindEnvVars() {
 	viper.BindEnv("skye_port", "SKYE_PORT")
 	viper.BindEnv("skye_auth_token", "SKYE_AUTH_TOKEN")
 	viper.BindEnv("skye_deadline_exceed_ms", "SKYE_DEADLINE_EXCEED_MS")
+
+	// OSS: use skye-trigger instead of Airflow for initial ingestion / variant processor
+	viper.BindEnv("use_skye_trigger_instead_of_airflow", "USE_SKYE_TRIGGER_INSTEAD_OF_AIRFLOW")
+	viper.BindEnv("skye_trigger_url", "SKYE_TRIGGER_URL")
 }

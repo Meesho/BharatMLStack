@@ -11,7 +11,6 @@ CREATE KEYSPACE IF NOT EXISTS onfs
     WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
 EOF
 
-# Create keyspace
 echo "  📋 Creating 'skye' keyspace..."
 cqlsh scylla 9042 <<'EOF'
 CREATE KEYSPACE IF NOT EXISTS skye 

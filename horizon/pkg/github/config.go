@@ -47,7 +47,7 @@ func InitGitHub(config GitHubConfig) error {
 	}
 
 	// Initialize GitHub client if credentials are provided
-	if config.AppID > 0 && config.InstallationID > 0 && string(config.PrivateKey) != "" {
+	if config.AppID > 0 && config.InstallationID > 0 && config.PrivateKey != nil {
 		if err := InitGitHubClient(config.AppID, config.InstallationID, config.PrivateKey); err != nil {
 			log.Warn().Err(err).Msg("Failed to initialize GitHub client - threshold updates will not work")
 			return err
