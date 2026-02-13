@@ -25,7 +25,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_BASE: ghcr.io/${{ github.repository_owner }}/skye
 
 jobs:
   release:
@@ -40,6 +39,9 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.branch }}
 
+      - name: Set image base (lowercase for ghcr.io)
+        run: echo "IMAGE_BASE=ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')/skye" >> $GITHUB_ENV
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -50,18 +52,32 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set tags (skip latest for beta/alpha)
-        id: tags
-        run: |
-          if [ "${{ inputs.is_beta }}" = "true" ] || [ "${{ inputs.is_alpha }}" = "true" ]; then
-            echo "admin=${{ env.IMAGE_BASE }}-admin:${{ inputs.version }}" >> $GITHUB_OUTPUT
-            echo "consumers=${{ env.IMAGE_BASE }}-consumers:${{ inputs.version }}" >> $GITHUB_OUTPUT
-            echo "serving=${{ env.IMAGE_BASE }}-serving:${{ inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "admin=${{ env.IMAGE_BASE }}-admin:${{ inputs.version }},${{ env.IMAGE_BASE }}-admin:latest" >> $GITHUB_OUTPUT
-            echo "consumers=${{ env.IMAGE_BASE }}-consumers:${{ inputs.version }},${{ env.IMAGE_BASE }}-consumers:latest" >> $GITHUB_OUTPUT
-            echo "serving=${{ env.IMAGE_BASE }}-serving:${{ inputs.version }},${{ env.IMAGE_BASE }}-serving:latest" >> $GITHUB_OUTPUT
-          fi
+      - name: Extract metadata (skye-admin)
+        id: meta-admin
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_BASE }}-admin
+          tags: |
+            type=raw,value=${{ inputs.version }}
+            type=raw,value=latest,enable=${{ !inputs.is_beta && !inputs.is_alpha }}
+
+      - name: Extract metadata (skye-consumers)
+        id: meta-consumers
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_BASE }}-consumers
+          tags: |
+            type=raw,value=${{ inputs.version }}
+            type=raw,value=latest,enable=${{ !inputs.is_beta && !inputs.is_alpha }}
+
+      - name: Extract metadata (skye-serving)
+        id: meta-serving
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_BASE }}-serving
+          tags: |
+            type=raw,value=${{ inputs.version }}
+            type=raw,value=latest,enable=${{ !inputs.is_beta && !inputs.is_alpha }}
 
       - name: Build and push skye-admin
         uses: docker/build-push-action@v5
@@ -70,7 +86,8 @@ jobs:
           file: ./skye/cmd/admin/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.tags.outputs.admin }}
+          tags: ${{ steps.meta-admin.outputs.tags }}
+          labels: ${{ steps.meta-admin.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -81,7 +98,8 @@ jobs:
           file: ./skye/cmd/consumers/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.tags.outputs.consumers }}
+          tags: ${{ steps.meta-consumers.outputs.tags }}
+          labels: ${{ steps.meta-consumers.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -92,7 +110,8 @@ jobs:
           file: ./skye/cmd/serving/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.tags.outputs.serving }}
+          tags: ${{ steps.meta-serving.outputs.tags }}
+          labels: ${{ steps.meta-serving.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
