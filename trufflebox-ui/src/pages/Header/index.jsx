@@ -10,9 +10,13 @@ import BugReportIcon from '@mui/icons-material/BugReport';
 import PersonIcon from '@mui/icons-material/Person';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import CategoryIcon from '@mui/icons-material/Category';
 import ModelTrainingIcon from '@mui/icons-material/ModelTraining';
 import ScienceIcon from '@mui/icons-material/Science';
+import FilterAltIcon from '@mui/icons-material/FilterAlt';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -24,7 +28,8 @@ import {
   isOnlineFeatureStoreEnabled, 
   isInferFlowEnabled, 
   isNumerixEnabled, 
-  isPredatorEnabled 
+  isPredatorEnabled, 
+  isEmbeddingPlatformEnabled 
 } from '../../config';
 
 function Header({ onMenuItemClick }) {
@@ -45,6 +50,7 @@ function Header({ onMenuItemClick }) {
       'Numerix': <FolderIcon />,
       'Predator': <BugReportIcon />,
       'UserManagement': <PersonIcon />,
+      'EmbeddingPlatform': <RocketLaunchIcon />,
       'Discovery': <FolderIcon />,
       'FeatureRegistry': <StorageIcon />,
       'FeatureApproval': <ApprovalIcon />,
@@ -56,9 +62,27 @@ function Header({ onMenuItemClick }) {
       'NumerixTesting': <BugReportIcon />,
       'PredatorApproval': <ApprovalIcon />,
       'Testing': <BugReportIcon />,
+      'EmbeddingDiscovery': <FolderIcon />,
+      'EmbeddingRegistry': <StorageIcon />,
+      'EmbeddingApproval': <ApprovalIcon />,
+      'EmbeddingOperations': <SettingsIcon />,
       'StoreDiscovery': <StorageIcon />,
+      'HierarchicalDiscovery': <CategoryIcon />,
+      'FilterDiscovery': <FilterAltIcon />,
+      'JobFrequencyDiscovery': <ScheduleIcon />,
+      'StoreRegistry': <StorageIcon />,
       'EntityRegistry': <CategoryIcon />,
       'ModelRegistry': <ModelTrainingIcon />,
+      'VariantRegistry': <ScienceIcon />,
+      'FilterRegistry': <FilterAltIcon />,
+      'JobFrequencyRegistry': <ScheduleIcon />,
+      'EmbeddingStoreApproval': <StorageIcon />,
+      'EmbeddingEntityApproval': <CategoryIcon />,
+      'EmbeddingModelApproval': <ModelTrainingIcon />,
+      'EmbeddingVariantApproval': <ScienceIcon />,
+      'EmbeddingFilterApproval': <FilterAltIcon />,
+      'EmbeddingJobFrequencyApproval': <ScheduleIcon />,
+      'DeploymentOperations': <CloudUploadIcon />,
     };
     return iconMap[key] || <StorageIcon />;
   };
@@ -176,6 +200,59 @@ function Header({ onMenuItemClick }) {
       ]
     },
     {
+      key: 'EmbeddingPlatform',
+      label: 'Embedding Platform',
+      subItems: null,
+      roles: null,
+      children: [
+        {
+          key: 'EmbeddingDiscovery',
+          label: 'Discovery',
+          subItems: [
+            { key: 'StoreDiscovery', label: 'Store', path: '/embedding-platform/discovery/stores', screenType: 'store-discovery' },
+            { key: 'HierarchicalDiscovery', label: 'Entity/Model/Variant', path: '/embedding-platform/discovery/hierarchical', screenType: 'hierarchical-discovery' },
+            { key: 'FilterDiscovery', label: 'Filter', path: '/embedding-platform/discovery/filters', screenType: 'filter-discovery' },
+            { key: 'JobFrequencyDiscovery', label: 'Job Frequency', path: '/embedding-platform/discovery/job-frequencies', screenType: 'job-frequency-discovery' },
+          ],
+          roles: null,
+        },
+        {
+          key: 'EmbeddingRegistry',
+          label: 'Registry',
+          subItems: [
+            { key: 'StoreRegistry', label: 'Store', path: '/embedding-platform/registry/store', screenType: 'store-registry' },
+            { key: 'EntityRegistry', label: 'Entity', path: '/embedding-platform/registry/entity', screenType: 'entity-registry' },
+            { key: 'ModelRegistry', label: 'Model', path: '/embedding-platform/registry/model', screenType: 'model-registry' },
+            { key: 'VariantRegistry', label: 'Variant', path: '/embedding-platform/registry/variant', screenType: 'variant-registry' },
+            { key: 'FilterRegistry', label: 'Filter', path: '/embedding-platform/registry/filter', screenType: 'filter-registry' },
+            { key: 'JobFrequencyRegistry', label: 'Job Frequency', path: '/embedding-platform/registry/job-frequency', screenType: 'job-frequency-registry' },
+          ],
+          roles: null,
+        },
+        {
+          key: 'EmbeddingApproval',
+          label: 'Approval',
+          subItems: [
+            { key: 'EmbeddingStoreApproval', label: 'Store', path: '/embedding-platform/approval/store', screenType: 'store-approval' },
+            { key: 'EmbeddingEntityApproval', label: 'Entity', path: '/embedding-platform/approval/entity', screenType: 'entity-approval' },
+            { key: 'EmbeddingModelApproval', label: 'Model', path: '/embedding-platform/approval/model', screenType: 'model-approval' },
+            { key: 'EmbeddingVariantApproval', label: 'Variant', path: '/embedding-platform/approval/variant', screenType: 'variant-approval' },
+            { key: 'EmbeddingFilterApproval', label: 'Filter', path: '/embedding-platform/approval/filter', screenType: 'filter-approval' },
+            { key: 'EmbeddingJobFrequencyApproval', label: 'Job Frequency', path: '/embedding-platform/approval/job-frequency', screenType: 'job-frequency-approval' },
+          ],
+          roles: ['admin'],
+        },
+        {
+          key: 'EmbeddingOperations',
+          label: 'Operations',
+          subItems: [
+            { key: 'DeploymentOperations', label: 'Deployment', path: '/embedding-platform/deployment-operations', screenType: 'deployment-operations' },
+          ],
+          roles: null,
+        },
+      ]
+    },
+    {
       key: 'UserManagement',
       label: 'User Management',
       path: '/user-management',
@@ -196,6 +273,9 @@ function Header({ onMenuItemClick }) {
       return false;
     }
     if (item.key === 'Predator' && !isPredatorEnabled()) {
+      return false;
+    }
+    if (item.key === 'EmbeddingPlatform' && !isEmbeddingPlatformEnabled()) {
       return false;
     }
     return true;
