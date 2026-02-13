@@ -532,7 +532,7 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
       errors.push('Tenant is required');
     }
     if (!formData.config_identifier.trim()) {
-      errors.push('Config Identifier is required');
+      errors.push('Inferpipe Identifier is required');
     }
 
     // Validate rankers (all fields required except calibration)
@@ -755,11 +755,11 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
         return;
       }
 
-      const successMessage = response.data.data?.message || 'InferFlow Config onboarded successfully';
+      const successMessage = response.data.data?.message || 'Inferpipe onboarded successfully';
       onSuccess(successMessage);
       onClose();
     } catch (error) {
-      setError(error.response?.data?.error || error.message || 'Failed to onboard InferFlow config');
+      setError(error.response?.data?.error || error.message || 'Failed to onboard Inferpipe');
     } finally {
       setLoading(false);
     }
@@ -782,7 +782,7 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
         justifyContent: 'space-between',
         alignItems: 'center'
       }}>
-        <Typography variant="h6">Onboard InferFlow Config</Typography>
+        <Typography variant="h6">Onboard Inferpipe</Typography>
         <IconButton
           edge="end"
           color="inherit"

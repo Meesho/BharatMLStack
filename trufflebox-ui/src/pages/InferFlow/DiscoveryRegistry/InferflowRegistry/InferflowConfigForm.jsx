@@ -214,7 +214,7 @@ const InferflowConfigForm = ({
         </Grid>
         <TextField
           fullWidth
-          label="Config Identifier"
+          label="Inferpipe Identifier"
           size="small"
           value={formData.config_identifier}
           onChange={handleBasicInfoChange('config_identifier')}
@@ -243,12 +243,12 @@ const InferflowConfigForm = ({
         >
           {isEditMode ? (
             <Typography variant="caption">
-              InferFlow Config ID: <strong>{configId}</strong> (cannot be changed)
+              Inferpipe ID: <strong>{configId}</strong> (cannot be changed)
             </Typography>
           ) : (
             <>
               <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                <strong>💡 InferFlow Config ID Generation:</strong> The above three fields (Real Estate, Tenant, Config Identifier) will be automatically combined using hyphens (-) to create your unique InferFlow Config ID.
+                <strong>💡 Inferpipe ID Generation:</strong> The above three fields (Real Estate, Tenant, Inferpipe Identifier) will be automatically combined using hyphens (-) to create your unique InferFlow inferpipe ID.
               </Typography>
               <Typography variant="caption" sx={{ color: '#666', mt: 0.5, display: 'block' }}>
                 Example: <code>fy-organic-nqd</code>
