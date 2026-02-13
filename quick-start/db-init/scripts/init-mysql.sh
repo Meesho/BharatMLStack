@@ -359,7 +359,6 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     test_results json,
-    source_config_id varchar(255) NULL,
     PRIMARY KEY (id),
     UNIQUE KEY config_id (config_id)
   );
@@ -440,7 +439,6 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     test_results json,
     has_nil_data boolean DEFAULT false,
-    source_model_name varchar(255) NULL,
     PRIMARY KEY (id)
   );
   
@@ -520,8 +518,6 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     deployment_run_id varchar(255),
     deployable_health enum('DEPLOYMENT_REASON_ARGO_APP_HEALTH_DEGRADED', 'DEPLOYMENT_REASON_ARGO_APP_HEALTHY'),
     work_flow_status enum('WORKFLOW_COMPLETED','WORKFLOW_NOT_FOUND','WORKFLOW_RUNNING','WORKFLOW_FAILED','WORKFLOW_NOT_STARTED'),
-    override_testing TINYINT(1) DEFAULT 0,
-    deployable_tag varchar(255) NULL,
     PRIMARY KEY (id),
     UNIQUE KEY host (host)
   );
