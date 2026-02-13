@@ -27,6 +27,7 @@ type WrapAppendFile struct {
 	WriteFile            *os.File // write file
 	ReadFile             *os.File // read file
 	Stat                 *Stat    // file statistics
+	WriteRing            *IoUring // optional io_uring ring for batched writes
 }
 
 func NewWrapAppendFile(config FileConfig) (*WrapAppendFile, error) {
@@ -89,6 +90,79 @@ func (r *WrapAppendFile) Pwrite(buf []byte) (currentPhysicalOffset int64, err er
 	r.LogicalCurrentOffset += int64(n)
 	r.Stat.WriteCount++
 	return r.PhysicalWriteOffset, nil
+}
+
+// PwriteBatch writes a large buffer in chunkSize pieces using a single batched
+// io_uring submission. All chunks are submitted in one io_uring_enter call so
+// NVMe can process them in parallel rather than sequentially.
+// Returns total bytes written and the final PhysicalWriteOffset.
+// Requires WriteRing to be set; falls back to sequential Pwrite if nil.
+func (r *WrapAppendFile) PwriteBatch(buf []byte, chunkSize int) (totalWritten int, fileOffset int64, err error) {
+	if r.WriteRing == nil {
+		// Fallback: sequential pwrite
+		for written := 0; written < len(buf); written += chunkSize {
+			end := written + chunkSize
+			if end > len(buf) {
+				end = len(buf)
+			}
+			fileOffset, err = r.Pwrite(buf[written:end])
+			if err != nil {
+				return written, fileOffset, err
+			}
+			totalWritten += end - written
+		}
+		return totalWritten, fileOffset, nil
+	}
+
+	if r.WriteDirectIO {
+		if !isAlignedBuffer(buf, r.blockSize) {
+			return 0, 0, ErrBufNoAlign
+		}
+	}
+
+	numChunks := len(buf) / chunkSize
+	if len(buf)%chunkSize != 0 {
+		numChunks++
+	}
+
+	// Pre-compute all offsets, handling ring-buffer wrap
+	bufs := make([][]byte, numChunks)
+	offsets := make([]uint64, numChunks)
+	offset := r.PhysicalWriteOffset
+	wrapped := r.wrapped
+
+	for i := 0; i < numChunks; i++ {
+		start := i * chunkSize
+		end := start + chunkSize
+		if end > len(buf) {
+			end = len(buf)
+		}
+		bufs[i] = buf[start:end]
+		offsets[i] = uint64(offset)
+		offset += int64(end - start)
+		if offset >= r.MaxFileSize {
+			wrapped = true
+			offset = r.PhysicalStartOffset
+		}
+	}
+
+	startTime := time.Now()
+	results, err := r.WriteRing.SubmitWriteBatch(r.WriteFd, bufs, offsets)
+	metrics.Timing(metrics.KEY_PWRITE_LATENCY, time.Since(startTime), []string{})
+	if err != nil {
+		return 0, 0, err
+	}
+
+	// Update state after successful batch write
+	for _, n := range results {
+		totalWritten += n
+	}
+	r.PhysicalWriteOffset = offset
+	r.wrapped = wrapped
+	r.LogicalCurrentOffset += int64(totalWritten)
+	r.Stat.WriteCount += int64(numChunks)
+
+	return totalWritten, r.PhysicalWriteOffset, nil
 }
 
 func (r *WrapAppendFile) TrimHeadIfNeeded() bool {

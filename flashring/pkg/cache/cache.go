@@ -186,6 +186,15 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 		batchReader = nil
 	}
 
+	// Separate io_uring ring dedicated to batched writes (memtable flushes).
+	// Kept separate from the read ring to avoid mutex contention between the
+	// read batch loop and concurrent flushes.
+	writeRing, err := fs.NewIoUring(256, 0)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create io_uring write ring, falling back to sequential pwrite")
+		writeRing = nil
+	}
+
 	batchWindow := time.Duration(0)
 	if config.EnableBatching && config.BatchWindowMicros > 0 {
 		batchWindow = time.Duration(config.BatchWindowMicros) * time.Microsecond
@@ -213,6 +222,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 			EnableLockless: config.EnableLockless,
 
 			BatchIoUringReader: batchReader,
+			WriteRing:          writeRing,
 		}, &shardLocks[i])
 	}
 

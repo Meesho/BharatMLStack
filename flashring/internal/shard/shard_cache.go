@@ -95,6 +95,9 @@ type ShardCacheConfig struct {
 	// Global batched io_uring reader (shared across all shards).
 	// When set, disk reads go through this instead of the per-shard IOUringFile.
 	BatchIoUringReader *fs.BatchIoUringReader
+
+	// Dedicated io_uring ring for batched writes (shared across all shards).
+	WriteRing *fs.IoUring
 }
 
 func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
@@ -127,6 +130,11 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 		log.Panic().Err(err).Msg("Failed to create read page allocator")
 	}
 	dm := indices.NewDeleteManager(ki, file, config.DeleteAmortizedStep)
+
+	// Attach the dedicated write ring so memtable flushes use batched io_uring.
+	if config.WriteRing != nil {
+		file.WriteRing = config.WriteRing
+	}
 
 	sc := &ShardCache{
 		keyIndex:          ki,
