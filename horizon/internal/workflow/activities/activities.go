@@ -254,7 +254,7 @@ func CreateApplicationYaml(payload map[string]interface{}, workingEnv string) er
 
 	// Source Repo URL: Automatically constructed from REPOSITORY_NAME and GITHUB_OWNER
 	// This is derived from deployable onboarding configuration
-	argocdSourceRepoURL := fmt.Sprintf("https://github.com/%s/%s.git", githubOwner, repo)
+	argocdSourceRepoURL := fmt.Sprintf("git@github.com:%s/%s.git", githubOwner, repo)	
 	log.Debug().
 		Str("workingEnv", workingEnv).
 		Str("sourceRepoURL", argocdSourceRepoURL).
