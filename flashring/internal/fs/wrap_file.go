@@ -92,9 +92,9 @@ func (r *WrapAppendFile) Pwrite(buf []byte) (currentPhysicalOffset int64, err er
 	return r.PhysicalWriteOffset, nil
 }
 
-// PwriteBatch writes a large buffer in chunkSize pieces using a single batched
-// io_uring submission. All chunks are submitted in one io_uring_enter call so
-// NVMe can process them in parallel rather than sequentially.
+// PwriteBatch writes a large buffer in chunkSize pieces via io_uring.
+// Chunks are submitted in sub-batches that fit within the ring's SQ depth,
+// so arbitrarily large buffers work regardless of ring size.
 // Returns total bytes written and the final PhysicalWriteOffset.
 // Requires WriteRing to be set; falls back to sequential Pwrite if nil.
 func (r *WrapAppendFile) PwriteBatch(buf []byte, chunkSize int) (totalWritten int, fileOffset int64, err error) {
@@ -120,47 +120,44 @@ func (r *WrapAppendFile) PwriteBatch(buf []byte, chunkSize int) (totalWritten in
 		}
 	}
 
-	numChunks := len(buf) / chunkSize
-	if len(buf)%chunkSize != 0 {
-		numChunks++
-	}
+	// Maximum SQEs per submission -- capped to ring depth.
+	maxPerBatch := int(r.WriteRing.sqEntries)
 
-	// Pre-compute all offsets, handling ring-buffer wrap
-	bufs := make([][]byte, numChunks)
-	offsets := make([]uint64, numChunks)
-	offset := r.PhysicalWriteOffset
-	wrapped := r.wrapped
+	for written := 0; written < len(buf); {
+		// Build a sub-batch that fits within the ring
+		var bufs [][]byte
+		var offsets []uint64
 
-	for i := 0; i < numChunks; i++ {
-		start := i * chunkSize
-		end := start + chunkSize
-		if end > len(buf) {
-			end = len(buf)
+		for i := 0; i < maxPerBatch && written < len(buf); i++ {
+			end := written + chunkSize
+			if end > len(buf) {
+				end = len(buf)
+			}
+			bufs = append(bufs, buf[written:end])
+			offsets = append(offsets, uint64(r.PhysicalWriteOffset))
+
+			// Advance write offset, handle ring-buffer wrap
+			r.PhysicalWriteOffset += int64(end - written)
+			if r.PhysicalWriteOffset >= r.MaxFileSize {
+				r.wrapped = true
+				r.PhysicalWriteOffset = r.PhysicalStartOffset
+			}
+			written = end
 		}
-		bufs[i] = buf[start:end]
-		offsets[i] = uint64(offset)
-		offset += int64(end - start)
-		if offset >= r.MaxFileSize {
-			wrapped = true
-			offset = r.PhysicalStartOffset
+
+		startTime := time.Now()
+		results, serr := r.WriteRing.SubmitWriteBatch(r.WriteFd, bufs, offsets)
+		metrics.Timing(metrics.KEY_PWRITE_LATENCY, time.Since(startTime), []string{})
+		if serr != nil {
+			return totalWritten, r.PhysicalWriteOffset, serr
+		}
+
+		for _, n := range results {
+			totalWritten += n
+			r.LogicalCurrentOffset += int64(n)
+			r.Stat.WriteCount++
 		}
 	}
-
-	startTime := time.Now()
-	results, err := r.WriteRing.SubmitWriteBatch(r.WriteFd, bufs, offsets)
-	metrics.Timing(metrics.KEY_PWRITE_LATENCY, time.Since(startTime), []string{})
-	if err != nil {
-		return 0, 0, err
-	}
-
-	// Update state after successful batch write
-	for _, n := range results {
-		totalWritten += n
-	}
-	r.PhysicalWriteOffset = offset
-	r.wrapped = wrapped
-	r.LogicalCurrentOffset += int64(totalWritten)
-	r.Stat.WriteCount += int64(numChunks)
 
 	return totalWritten, r.PhysicalWriteOffset, nil
 }
