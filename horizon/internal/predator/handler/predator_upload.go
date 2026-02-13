@@ -186,15 +186,13 @@ func (p *Predator) validateCompleteModelStructure(srcBucket, srcPath string) err
 
 // validateVersionHasFiles checks if version folder has at least one non-empty file
 func (p *Predator) validateVersionHasFiles(srcBucket, versionPath string) error {
-	exists, err := p.GcsClient.CheckFolderExists(srcBucket, versionPath)
+	info, err := p.GcsClient.GetFolderInfo(srcBucket, versionPath)
 	if err != nil {
-		return fmt.Errorf("failed to check version folder contents: %w", err)
+		return fmt.Errorf("failed to get version folder info: %w", err)
 	}
-
-	if !exists {
+	if info.FileCount == 0 {
 		return fmt.Errorf("version folder 1/ is empty - must contain model files")
 	}
-
 	log.Info().Msg("Version folder 1/ contains files")
 	return nil
 }

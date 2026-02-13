@@ -632,14 +632,13 @@ func (p *Predator) processDBPopulationStage(requestIdPayloadMap map[uint]*Payloa
 		return nil
 	}
 	tx := p.Repo.DB().Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			log.Error().Msgf("panic recovered, transaction rolled back: %v", r)
+		}
+	}()
 	for i := range predatorRequestList {
-		defer func() {
-			if r := recover(); r != nil {
-				tx.Rollback()
-				log.Printf("panic recovered, transaction rolled back")
-			}
-		}()
-
 		if err := p.createDiscoveryAndPredatorConfigTx(tx, predatorRequestList[i], *requestIdPayloadMap[predatorRequestList[i].RequestID], approvedBy); err != nil {
 			tx.Rollback()
 			log.Error().Err(err).Msg(failedToCreateServiceDiscoveryAndConfig)
@@ -701,6 +700,8 @@ func (p *Predator) processOnboardFlow(requestIdPayloadMap map[uint]*Payload, pre
 	err = p.processDBPopulationStage(requestIdPayloadMap, predatorRequestList, req.ApprovedBy, onboardRequestFlow)
 	if err != nil {
 		p.updateRequestStatusAndStage(req.ApprovedBy, predatorRequestList, statusFailed, predatorStageDBPopulation)
+		p.revert(transferredGcsModelData)
+		return
 	}
 	if err := p.processRestartDeployableStage(req.ApprovedBy, predatorRequestList, requestIdPayloadMap); err != nil {
 		log.Error().Err(err).Msg(errFailedToRestartDeployable)
@@ -756,6 +757,8 @@ func (p *Predator) processScaleUpFlow(requestIdPayloadMap map[uint]*Payload, pre
 	err = p.processDBPopulationStage(requestIdPayloadMap, predatorRequestList, req.ApprovedBy, cloneRequestFlow)
 	if err != nil {
 		p.updateRequestStatusAndStage(req.ApprovedBy, predatorRequestList, statusFailed, predatorStageDBPopulation)
+		p.revert(transferredGcsModelData)
+		return
 	}
 	if err := p.processRestartDeployableStage(req.ApprovedBy, predatorRequestList, requestIdPayloadMap); err != nil {
 		log.Error().Err(err).Msg(errFailedToRestartDeployable)
@@ -783,6 +786,8 @@ func (p *Predator) processPromoteFlow(requestIdPayloadMap map[uint]*Payload, pre
 	err = p.processDBPopulationStage(requestIdPayloadMap, predatorRequestList, req.ApprovedBy, promoteRequestFlow)
 	if err != nil {
 		p.updateRequestStatusAndStage(req.ApprovedBy, predatorRequestList, statusFailed, predatorStageDBPopulation)
+		p.revert(transferredGcsModelData)
+		return
 	}
 	if err := p.processRestartDeployableStage(req.ApprovedBy, predatorRequestList, requestIdPayloadMap); err != nil {
 		log.Error().Err(err).Msg(errFailedToRestartDeployable)
