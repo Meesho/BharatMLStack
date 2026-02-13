@@ -176,6 +176,9 @@ trigger_workflow() {
         "inferflow")
             workflow_file="release-inferflow.yml"
             ;;
+        "skye")
+            workflow_file="release-skye.yml"
+            ;;
         *)
             print_error "Unknown module: $module"
             return 1
