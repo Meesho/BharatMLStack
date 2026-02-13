@@ -15,7 +15,7 @@ stop_services() {
     echo "⚠️  Workspace directory not found, stopping individual containers..."
     
     # Fallback: stop containers individually
-    CONTAINERS=("onfs-consumer" "onfs-consumer-healthcheck" "trufflebox" "trufflebox-healthcheck" "numerix" "numerix-healthcheck" "horizon" "horizon-healthcheck" "onfs-api-server" "onfs-healthcheck" "inferflow" "inferflow-healthcheck" "skye-admin" "skye-admin-healthcheck" "skye-consumers" "skye-consumers-healthcheck" "skye-serving" "skye-serving-healthcheck" "kafka-ui" "etcd-workbench" "db-init" "kafka-init" "kafka" "broker" "zookeeper" "etcd" "redis" "mysql" "scylla")
+    CONTAINERS=("onfs-consumer" "onfs-consumer-healthcheck" "trufflebox" "trufflebox-healthcheck" "numerix" "numerix-healthcheck" "horizon" "horizon-healthcheck" "onfs-api-server" "onfs-healthcheck" "inferflow" "inferflow-healthcheck" "skye-trigger" "skye-admin" "skye-admin-healthcheck" "skye-consumers" "skye-consumers-healthcheck" "skye-serving" "skye-serving-healthcheck" "kafka-ui" "etcd-workbench" "db-init" "kafka-init" "kafka" "broker" "zookeeper" "etcd" "redis" "mysql" "scylla")
     
     for container in "${CONTAINERS[@]}"; do
       if docker ps -q -f name="$container" | grep -q .; then
@@ -35,7 +35,7 @@ remove_containers() {
     (cd "$WORKSPACE_DIR" && docker-compose down --volumes --remove-orphans)
   else
     # Fallback: remove containers individually
-    CONTAINERS=("onfs-consumer" "onfs-consumer-healthcheck" "trufflebox" "trufflebox-healthcheck" "numerix" "numerix-healthcheck" "horizon" "horizon-healthcheck" "onfs-api-server" "onfs-healthcheck" "inferflow" "inferflow-healthcheck" "skye-admin" "skye-admin-healthcheck" "skye-consumers" "skye-consumers-healthcheck" "skye-serving" "skye-serving-healthcheck" "kafka-ui" "etcd-workbench" "db-init" "kafka-init" "kafka" "broker" "zookeeper" "etcd" "redis" "mysql" "scylla")
+    CONTAINERS=("onfs-consumer" "onfs-consumer-healthcheck" "trufflebox" "trufflebox-healthcheck" "numerix" "numerix-healthcheck" "horizon" "horizon-healthcheck" "onfs-api-server" "onfs-healthcheck" "inferflow" "inferflow-healthcheck" "skye-trigger" "skye-admin" "skye-admin-healthcheck" "skye-consumers" "skye-consumers-healthcheck" "skye-serving" "skye-serving-healthcheck" "kafka-ui" "etcd-workbench" "db-init" "kafka-init" "kafka" "broker" "zookeeper" "etcd" "redis" "mysql" "scylla")
     
     for container in "${CONTAINERS[@]}"; do
       if docker ps -aq -f name="$container" | grep -q .; then

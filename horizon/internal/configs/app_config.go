@@ -71,7 +71,7 @@ type Configs struct {
 	BulkDeleteInferflowEnabled                 bool `mapstructure:"bulk_delete_inferflow_enabled"`
 	BulkDeleteNumerixEnabled                   bool `mapstructure:"bulk_delete_numerix_enabled"`
 	BulkDeletePredatorMaxInactiveDays          int  `mapstructure:"bulk_delete_predator_max_inactive_days"`
-	BulkDeleteInferflowMaxInactiveDays        int  `mapstructure:"bulk_delete_inferflow_max_inactive_days"`
+	BulkDeleteInferflowMaxInactiveDays         int  `mapstructure:"bulk_delete_inferflow_max_inactive_days"`
 	BulkDeleteNumerixMaxInactiveDays           int  `mapstructure:"bulk_delete_numerix_max_inactive_days"`
 	BulkDeletePredatorRequestSubmissionEnabled bool `mapstructure:"bulk_delete_predator_request_submission_enabled"`
 
@@ -183,6 +183,10 @@ type Configs struct {
 	SkyePort             string `mapstructure:"skye_port"`
 	SkyeAuthToken        string `mapstructure:"skye_auth_token"`
 	SkyeDeadlineExceedMS int    `mapstructure:"skye_deadline_exceed_ms"`
+
+	// When true, initial ingestion and variant processor call skye-trigger (OSS) instead of Airflow
+	UseSkyeTriggerInsteadOfAirflow bool   `mapstructure:"use_skye_trigger_instead_of_airflow"`
+	SkyeTriggerURL                 string `mapstructure:"skye_trigger_url"`
 }
 
 type DynamicConfigs struct{}

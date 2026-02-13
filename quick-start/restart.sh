@@ -43,6 +43,7 @@ list_services() {
   echo "   • numerix"
   echo "   • trufflebox-ui"
   echo "   • inferflow"
+  echo "   • skye-trigger"
   echo "   • skye-admin"
   echo "   • skye-consumers"
   echo "   • skye-serving"
@@ -137,7 +138,14 @@ update_docker_compose() {
     fi
     cp -r "$script_dir/predator-dummy" "$WORKSPACE_DIR/"
   fi
-  
+
+  if [ -d "$script_dir/skye-trigger" ]; then
+    if [ -d "$WORKSPACE_DIR/skye-trigger" ]; then
+      rm -rf "$WORKSPACE_DIR/skye-trigger"
+    fi
+    cp -r "$script_dir/skye-trigger" "$WORKSPACE_DIR/"
+  fi
+
   # Copy horizon configs directory for service config loading
   local project_root="$(cd "$script_dir/.." && pwd)"
   if [ -d "$project_root/horizon/configs" ]; then

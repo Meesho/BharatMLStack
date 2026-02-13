@@ -17,7 +17,7 @@ HORIZON_SERVICES="horizon horizon-healthcheck"
 NUMERIX_SERVICES="numerix numerix-healthcheck"
 TRUFFLEBOX_SERVICES="trufflebox-ui trufflebox-healthcheck"
 INFERFLOW_SERVICES="inferflow inferflow-healthcheck"
-SKYE_SERVICES="skye-admin skye-admin-healthcheck skye-consumers skye-consumers-healthcheck skye-serving skye-serving-healthcheck"
+SKYE_SERVICES="skye-trigger skye-admin skye-admin-healthcheck skye-consumers skye-consumers-healthcheck skye-serving skye-serving-healthcheck"
 PREDATOR_SERVICES="predator predator-healthcheck"
 
 # Management tools
@@ -90,7 +90,13 @@ setup_workspace() {
     rm -rf "$WORKSPACE_DIR/predator-dummy"
   fi
   cp -r ./predator-dummy "$WORKSPACE_DIR"/
-  
+
+  # Copy skye-trigger directory for OSS Airflow replacement (Docker build)
+  if [ -d "$WORKSPACE_DIR/skye-trigger" ]; then
+    rm -rf "$WORKSPACE_DIR/skye-trigger"
+  fi
+  cp -r ./skye-trigger "$WORKSPACE_DIR"/
+
   # Copy horizon configs directory for service config loading
   local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   local project_root="$(cd "$script_dir/.." && pwd)"
@@ -527,7 +533,7 @@ start_selected_services() {
     echo "   • Inferflow"
   fi
   if [[ $START_SKYE == true ]]; then
-    echo "   • Skye (admin, consumers, serving)"
+    echo "   • Skye (trigger, admin, consumers, serving)"
   fi
   if [[ $START_PREDATOR == true ]]; then
     echo "   • Predator (Dummy gRPC Inference Server)"
