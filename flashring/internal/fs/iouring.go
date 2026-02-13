@@ -460,6 +460,57 @@ func (r *IoUring) SubmitRead(fd int, buf []byte, offset uint64) (int, error) {
 	return int(res), nil
 }
 
+// SubmitWriteBatch submits N pwrite operations in a single io_uring_enter call
+// and waits for all completions. Thread-safe.
+// Returns per-chunk bytes written. On error, partial results may be returned.
+func (r *IoUring) SubmitWriteBatch(fd int, bufs [][]byte, offsets []uint64) ([]int, error) {
+	n := len(bufs)
+	if n == 0 {
+		return nil, nil
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Prepare all SQEs
+	for i := 0; i < n; i++ {
+		sqe := r.getSqe()
+		if sqe == nil {
+			return nil, fmt.Errorf("io_uring: SQ full, need %d slots but ring has %d", n, r.sqEntries)
+		}
+		prepWrite(sqe, fd, bufs[i], offsets[i])
+		sqe.UserData = uint64(i)
+	}
+
+	// Submit all at once; kernel waits for all completions
+	_, err := r.submit(uint32(n))
+	if err != nil {
+		return nil, fmt.Errorf("io_uring_enter: %w", err)
+	}
+
+	// Drain all CQEs (order may differ from submission)
+	results := make([]int, n)
+	for i := 0; i < n; i++ {
+		cqe, err := r.waitCqe()
+		if err != nil {
+			return results, fmt.Errorf("io_uring waitCqe: %w", err)
+		}
+		idx := int(cqe.UserData)
+		res := cqe.Res
+		r.seenCqe()
+
+		if res < 0 {
+			return results, fmt.Errorf("io_uring pwrite errno %d (%s), fd=%d off=%d len=%d",
+				-res, syscall.Errno(-res), fd, offsets[idx], len(bufs[idx]))
+		}
+		if idx >= 0 && idx < n {
+			results[idx] = int(res)
+		}
+	}
+
+	return results, nil
+}
+
 // SubmitWrite submits a pwrite and waits for completion. Thread-safe.
 // Returns bytes written or an error.
 func (r *IoUring) SubmitWrite(fd int, buf []byte, offset uint64) (int, error) {

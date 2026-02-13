@@ -2,7 +2,6 @@ package memtables
 
 import (
 	"errors"
-	"runtime"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
 	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
@@ -100,24 +99,20 @@ func (m *Memtable) Flush() (n int, fileOffset int64, err error) {
 		return 0, 0, ErrMemtableNotReadyForFlush
 	}
 
-	chunkSize := 16 * fs.BLOCK_SIZE
-	totalWritten := 0
-
-	for totalWritten < len(m.page.Buf) {
-		metrics.Count(metrics.KEY_MEMTABLE_FLUSH_COUNT, 1, []string{})
-		chunk := m.page.Buf[totalWritten : totalWritten+chunkSize]
-
-		if err != nil {
-			return 0, 0, err
-		}
-		totalWritten += chunkSize
-		fileOffset, err = m.file.Pwrite(chunk)
-		if err != nil {
-			return 0, 0, err
-		}
-
-		runtime.Gosched()
+	chunkSize := 8 * fs.BLOCK_SIZE
+	numChunks := len(m.page.Buf) / chunkSize
+	if len(m.page.Buf)%chunkSize != 0 {
+		numChunks++
 	}
+	metrics.Count(metrics.KEY_MEMTABLE_FLUSH_COUNT, int64(numChunks), []string{})
+
+	// PwriteBatch submits all chunks in one io_uring_enter when WriteRing is
+	// set, otherwise falls back to sequential pwrite internally.
+	totalWritten, fileOffset, err := m.file.PwriteBatch(m.page.Buf, chunkSize)
+	if err != nil {
+		return 0, 0, err
+	}
+
 	m.currentOffset = 0
 	m.readyForFlush = false
 	return totalWritten, fileOffset, nil
