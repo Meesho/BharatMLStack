@@ -77,10 +77,12 @@ services:
       onfs-network:
         ipv4_address: 172.18.0.3
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:6333/healthz || exit 1"]
-      interval: 30s
-      timeout: 10s
+      # Qdrant image has no curl; use bash TCP check (port 6333 open = ready)
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
       retries: 5
+      start_period: 15s
    
   kafka:
     image: apache/kafka:latest
@@ -777,9 +779,14 @@ services:
       onfs-network:
         ipv4_address: 172.18.0.23
     depends_on:
-      - etcd
-      - kafka
-      - qdrant
+      etcd:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   skye-consumers-healthcheck:
