@@ -45,6 +45,7 @@ type IOField struct {
 
 type ConfigMapping struct {
 	ServiceDeployableID uint `json:"service_deployable_id"`
+	SourceModelName     string `json:"source_model_name,omitempty"`
 }
 
 type FetchModelConfigRequest struct {
@@ -99,6 +100,7 @@ type ModelResponse struct {
 	DeployableRunningStatus string          `json:"deployable_running_status"`
 	TestResults             json.RawMessage `json:"test_results"`
 	HasNilData              bool            `json:"has_nil_data"`
+	SourceModelName         string          `json:"source_model_name,omitempty"`
 }
 
 type PredatorRequestResponse struct {

@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	client *ClientV1
-	once   sync.Once
+	client  *ClientV1
+	once    sync.Once
+	headers metadata.MD
 )
 
 const (
@@ -32,11 +33,32 @@ func InitV1Client() SkyeClient {
 				log.Panic().Err(err).Msgf("Invalid Skye client configs: %#v", clientConfig)
 			}
 			grpcClient, grpcErr := getGrpcClient(clientConfig)
+			headers = getMetadata(clientConfig.AuthToken)
 			if grpcErr != nil {
 				log.Panic().Err(grpcErr).Msgf("Error creating skye service grpc client, client: %#v", grpcClient)
 			}
 			client = &ClientV1{
 				ClientConfigs: clientConfig,
+				GrpcClient:    grpcClient,
+			}
+		})
+	}
+	return client
+}
+
+func InitV1ClientFromConfig(conf ClientConfig, callerId string) SkyeClient {
+	if client == nil {
+		once.Do(func() {
+			grpcClient, grpcErr := getGrpcClient(&conf)
+			if grpcErr != nil {
+				log.Panic().Err(grpcErr).Msgf("Error creating skye service grpc client, client: %#v", grpcClient)
+			}
+			headers = metadata.New(map[string]string{
+				CallerIDMetadata: callerId,
+				AuthMetadata:     conf.AuthToken,
+			})
+			client = &ClientV1{
+				ClientConfigs: &conf,
 				GrpcClient:    grpcClient,
 			}
 		})
@@ -69,8 +91,7 @@ func (c *ClientV1) GetSimilarCandidates(req *grpc2.SkyeRequest) (*grpc2.SkyeResp
 	defer cancel()
 
 	//get metadata headers
-	md := getMetadata(c.ClientConfigs)
-	ctx = metadata.NewOutgoingContext(ctx, md)
+	ctx = metadata.NewOutgoingContext(ctx, headers)
 	// call grpc method
 	protoResponse, err := skyeClient.GetSimilarCandidates(ctx, req)
 	if err != nil {
@@ -90,8 +111,7 @@ func (c *ClientV1) GetEmbeddingsForCandidateIds(request *grpc2.SkyeBulkEmbedding
 	defer cancel()
 
 	//get metadata headers
-	md := getMetadata(c.ClientConfigs)
-	ctx = metadata.NewOutgoingContext(ctx, md)
+	ctx = metadata.NewOutgoingContext(ctx, headers)
 	// call grpc method
 	protoResponse, err := skyeClient.GetEmbeddingsForCandidates(ctx, request)
 	if err != nil {
@@ -111,8 +131,7 @@ func (c *ClientV1) GetDotProductOfCandidatesForEmbedding(request *grpc2.Embeddin
 	defer cancel()
 
 	//get metadata headers
-	md := getMetadata(c.ClientConfigs)
-	ctx = metadata.NewOutgoingContext(ctx, md)
+	ctx = metadata.NewOutgoingContext(ctx, headers)
 	// call grpc method
 	protoResponse, err := skyeClient.GetCandidateEmbeddingScores(ctx, request)
 	if err != nil {
@@ -125,13 +144,13 @@ func (c *ClientV1) GetDotProductOfCandidatesForEmbedding(request *grpc2.Embeddin
 	return protoResponse, nil
 }
 
-func getMetadata(config *ClientConfig) metadata.MD {
-	md := metadata.New(nil)
-	appName := viper.GetString("APP_NAME")
-	if appName == "" {
+func getMetadata(authToken string) metadata.MD {
+	callerId := viper.GetString("APP_NAME")
+	if callerId == "" {
 		log.Panic().Msgf("APP_NAME not set!")
 	}
-	md.Append(CallerIDMetadata, appName)
-	md.Append(AuthMetadata, config.AuthToken)
-	return md
+	return metadata.New(map[string]string{
+		CallerIDMetadata: callerId,
+		AuthMetadata:     authToken,
+	})
 }
