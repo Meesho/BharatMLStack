@@ -21,7 +21,8 @@ services:
       - scylla-data:/var/lib/scylla
     command: --smp 1 --memory 512M
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.2
     healthcheck:
       test: ["CMD-SHELL", "cqlsh -e 'SELECT now() FROM system.local'"]
       interval: 30s
@@ -41,7 +42,8 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.4
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 30s
@@ -55,12 +57,32 @@ services:
       - "6379:6379"
     command: ["redis-server", "--requirepass", ""]
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.5
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
       timeout: 10s
       retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.16.0
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      onfs-network:
+        ipv4_address: 172.18.0.3
+    healthcheck:
+      # Qdrant image has no curl; use bash TCP check (port 6333 open = ready)
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
    
   kafka:
     image: apache/kafka:latest
@@ -87,7 +109,8 @@ services:
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
       KAFKA_CREATE_TOPICS: online-feature-store.feature_ingestion:1:1
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.6
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
       interval: 10s
@@ -99,7 +122,8 @@ services:
     image: apache/kafka:latest
     container_name: kafka-init
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.7
     depends_on:
       kafka:
         condition: service_healthy
@@ -110,10 +134,17 @@ services:
       echo 'Waiting for Kafka to be ready...'
       sleep 10
       
-      # Create the topic
+      # Create ONFS topic
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:29092 --create --if-not-exists --topic online-feature-store.feature_ingestion --partitions 1 --replication-factor 1
       
-      echo 'Topic created successfully!'
+      # Create Skye topics
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:29092 --create --if-not-exists --topic skye.model-state --partitions 1 --replication-factor 1
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:29092 --create --if-not-exists --topic skye.embedding --partitions 1 --replication-factor 1
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:29092 --create --if-not-exists --topic skye.embedding-sequence --partitions 1 --replication-factor 1
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:29092 --create --if-not-exists --topic skye.realtime --partitions 1 --replication-factor 1
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:29092 --create --if-not-exists --topic skye.realtime-delta --partitions 1 --replication-factor 1
+      
+      echo 'Topics created successfully!'
       "
     restart: "no"
 
@@ -125,10 +156,10 @@ services:
       - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
       - ETCD_ADVERTISE_CLIENT_URLS=http://0.0.0.0:2379
     ports:
-      - "2379:2379"
-      - "2380:2380"
+      - "2378:2379"
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.8
     healthcheck:
       test: ["CMD", "etcdctl", "endpoint", "health"]
       interval: 30s
@@ -144,7 +175,8 @@ services:
     environment:
       - INIT_DUMMY_DATA=${INIT_DUMMY_DATA:-false}
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.9
     depends_on:
       scylla:
         condition: service_healthy
@@ -214,7 +246,8 @@ services:
       - P2P_CACHE_ACTIVE_CONFIG_IDS=5
       - ENABLE_HTTP_API=true
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.10
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -225,7 +258,8 @@ services:
     image: alpine:latest
     container_name: onfs-healthcheck
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.11
     depends_on:
       - onfs-api-server
     command: sh -c "apk add --no-cache curl && sleep infinity"
@@ -297,7 +331,8 @@ services:
       - ETCD_SERVER=http://etcd:2379
       - ETCD_WATCHER_ENABLED=true
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.12
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -309,7 +344,8 @@ services:
     image: alpine:latest
     container_name: onfs-consumer-healthcheck
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.13
     depends_on:
       - onfs-consumer
     command: sh -c "apk add --no-cache curl && sleep infinity"
@@ -385,7 +421,7 @@ services:
       - BRANCH_NAME=main
       - GITHUB_APP_ID=2546855
       - GITHUB_INSTALLATION_ID=101432634
-      - GITHUB_PRIVATE_KEY_PATH=/app/configs/github.pem
+      - GITHUB_PRIVATE_KEY=/app/configs/github.pem
       - GITHUB_OWNER=Adit2607
       - GITHUB_COMMIT_AUTHOR=horizon-bot
       - GITHUB_COMMIT_EMAIL=aditya.garg@meesho.com
@@ -399,6 +435,44 @@ services:
       - CLOUDSDK_CONFIG=/home/nonroot/.config/gcloud
       - TEST_DEPLOYABLE_ID=3020
       - TEST_GPU_DEPLOYABLE_ID=3020
+      # Skye configuration
+      - SKYE_APP_NAME=skye
+      - SKYE_SCYLLA_ACTIVE_CONFIG_IDS=2
+      - SKYE_HOST=skye-serving
+      - SKYE_PORT=8094
+      - SKYE_AUTH_TOKEN=c2t5ZS1zZXJ2aWNl
+      - SKYE_DEADLINE_EXCEED_MS=200
+      # Airflow configuration
+      - AIRFLOW_BASE_URL=http://ds-airflow.prd.meesho.int
+      - AIRFLOW_USERNAME=aditya.garg@meesho.com
+      - AIRFLOW_PASSWORD=${AIRFLOW_PASSWORD:-}
+      # Prism configuration
+      - PRISM_BASE_URL=http://di-jobs-service.prd.meesho.int
+      - PRISM_APP_USER_ID=aditya.garg@meesho.com
+      # Initial ingestion configuration
+      - INITIAL_INGESTION_PRISM_JOB_ID=679
+      - INITIAL_INGESTION_PRISM_STEP_ID=1706
+      - INITIAL_INGESTION_AIRFLOW_DAG_ID=JOB_V2_skye_initial_ingestion
+      # Variant configuration
+      - VARIANT_SCALEUP_CRON_EXPRESSION=0 */1 * * * *
+      - VARIANT_SCALEUP_PRISM_JOB_ID=680
+      - VARIANT_SCALEUP_PRISM_STEP_ID=2420
+      - VARIANT_SCALEUP_AIRFLOW_DAG_ID=JOB_V2_variant_processor_skye
+      - VARIANT_ONBOARDING_CRON_EXPRESSION=0 */1 * * * *
+      # Variants list
+      - VARIANTS_LIST=ads_gold,ads_mall,ads_new_catalog,ads,ct_gst,ct_high_asp,ct_non_gst,organic_gold,organic,organic_gst,organic_high_asp,organic_mall,organic_melp,organic_non_gst,widget_ads,organic_gst_pd
+      # MQ configuration
+      - MQ_ID_TOPICS_MAPPING=2450:skye.embeddings-1
+      # Horizon to Skye ScyllaDB configuration
+      - HORIZON_TO_SKYE_SCYLLA_CONF_ID_MAP=2:1
+      - SCYLLA_2_CONTACT_POINTS=scylla
+      - SCYLLA_2_PORT=9042
+      - SCYLLA_2_KEYSPACE=skye
+      - SCYLLA_2_USERNAME=
+      - SCYLLA_2_PASSWORD=
+      # OSS: use skye-trigger instead of Airflow for initial ingestion / variant processor
+      - USE_SKYE_TRIGGER_INSTEAD_OF_AIRFLOW=true
+      - SKYE_TRIGGER_URL=http://skye-trigger:8080
     volumes:
       - ./configs:/app/configs:ro
       # Mount gcloud credentials for Application Default Credentials (ADC)
@@ -406,17 +480,19 @@ services:
       # Container runs as non-root user, so mount to /home/nonroot/.config/gcloud
       - ~/.config/gcloud:/home/nonroot/.config/gcloud:ro
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.14
     depends_on:
       db-init:
         condition: service_completed_successfully
     restart: unless-stopped
-  
+
   horizon-healthcheck:
     image: alpine:latest
     container_name: horizon-healthcheck
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.15
     depends_on:
       - horizon
     command: sh -c "apk add --no-cache curl && sleep infinity"
@@ -444,7 +520,8 @@ services:
       - TELEGRAF_UDP_HOST=host.docker.internal
       - TELEGRAF_UDP_PORT=8125
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.16
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -454,7 +531,8 @@ services:
     image: alpine:latest
     container_name: numerix-healthcheck
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.17
     depends_on:
       - numerix
     command: sh -c "apk add --no-cache curl && sleep infinity"
@@ -511,7 +589,8 @@ services:
       - EXTERNAL_SERVICE_PREDATOR_DEADLINE=200
       - METRIC_SAMPLING_RATE=1
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.18
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -521,12 +600,258 @@ services:
     image: alpine:latest
     container_name: inferflow-healthcheck
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.19
     depends_on:
       - inferflow
     command: sh -c "apk add --no-cache curl && sleep infinity"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://inferflow:8085/health/self"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: "no"
+
+  skye-admin:
+    image: ghcr.io/meesho/skye-admin:${SKYE_VERSION:-latest}
+    container_name: skye-admin
+    ports:
+      - "8092:8092"
+    environment:
+      # Application
+      - APP_NAME=skye
+      - APP_ENV=local
+      - APP_LOG_LEVEL=INFO
+      - APP_METRIC_SAMPLING_RATE=100
+      - PORT=8092
+      # Etcd
+      - ETCD_SERVER=etcd:2379
+      - ETCD_WATCHER_ENABLED=true
+      # Model state Kafka producer (ID=1)
+      - MODEL_STATE_PRODUCER=1
+      - KAFKA_PRODUCER_1_TOPICS=skye.model-state
+      - KAFKA_PRODUCER_1_BOOTSTRAP_SERVERS=broker:29092
+      - KAFKA_PRODUCER_1_CLIENT_ID=skye-admin-producer
+      # Model state Kafka consumer (ID=1)
+      - MODEL_STATE_CONSUMER=1
+      - KAFKA_1_TOPICS=skye.model-state
+      - KAFKA_1_BOOTSTRAP_SERVERS=broker:29092
+      - KAFKA_1_BASIC_AUTH_CREDENTIAL_SOURCE=NONE
+      - KAFKA_1_GROUP_ID=skye-admin-model-state
+      - KAFKA_1_AUTO_OFFSET_RESET=earliest
+      - KAFKA_1_AUTO_COMMIT_INTERVAL_MS=5000
+      - KAFKA_1_ENABLE_AUTO_COMMIT=false
+      - KAFKA_1_LISTENER_CONCURRENCY=1
+      - KAFKA_1_CLIENT_ID=skye-admin-consumer
+      - KAFKA_1_BATCH_SIZE=10
+      - KAFKA_1_POLL_TIMEOUT=1000
+    networks:
+      onfs-network:
+        ipv4_address: 172.18.0.20
+    depends_on:
+      - etcd
+      - kafka
+      - qdrant
+    restart: unless-stopped
+
+  skye-admin-healthcheck:
+    image: alpine:latest
+    container_name: skye-admin-healthcheck
+    networks:
+      onfs-network:
+        ipv4_address: 172.18.0.21
+    depends_on:
+      - skye-admin
+    command: sh -c "apk add --no-cache curl && sleep infinity"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://skye-admin:8092/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: "no"
+
+  # OSS replacement for Airflow: trigger embedding jobs by calling skye-admin and producing random data to Kafka
+  skye-trigger:
+    build:
+      context: ./skye-trigger
+      dockerfile: Dockerfile
+    container_name: skye-trigger
+    ports:
+      - "8095:8080"
+    environment:
+      - PORT=8080
+      - SKYE_ADMIN_URL=http://skye-admin:8092
+      - KAFKA_BOOTSTRAP_SERVERS=broker:29092
+      - SKYE_ENVIRONMENT=local
+      - SKYE_TRIGGER_NUM_POINTS=10000
+      - SKYE_EMBEDDING_DIM=128
+      - LOG_LEVEL=${SKYE_TRIGGER_LOG_LEVEL:-INFO}
+    networks:
+      onfs-network:
+        ipv4_address: 172.18.0.22
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      skye-admin:
+        condition: service_started
+    restart: unless-stopped
+
+  skye-consumers:
+    image: ghcr.io/meesho/skye-consumers:${SKYE_VERSION:-latest}
+    container_name: skye-consumers
+    ports:
+      - "8093:8093"
+    environment:
+      # Application
+      - APP_NAME=skye
+      - APP_ENV=local
+      - APP_LOG_LEVEL=INFO
+      - APP_METRIC_SAMPLING_RATE=100
+      - PORT=8093
+      # Etcd
+      - ETCD_SERVER=etcd:2379
+      - ETCD_WATCHER_ENABLED=true
+      # Embedding consumer (ID=2)
+      - EMBEDDING_CONSUMER_KAFKA_IDS=2
+      - KAFKA_2_TOPICS=skye.embedding
+      - KAFKA_2_BOOTSTRAP_SERVERS=broker:29092
+      - KAFKA_2_BASIC_AUTH_CREDENTIAL_SOURCE=NONE
+      - KAFKA_2_GROUP_ID=skye-embedding-consumer
+      - KAFKA_2_AUTO_OFFSET_RESET=earliest
+      - KAFKA_2_AUTO_COMMIT_INTERVAL_MS=5000
+      - KAFKA_2_ENABLE_AUTO_COMMIT=false
+      - KAFKA_2_LISTENER_CONCURRENCY=1
+      - KAFKA_2_CLIENT_ID=skye-embedding-consumer
+      - KAFKA_2_BATCH_SIZE=10
+      - KAFKA_2_POLL_TIMEOUT=1000
+      # Embedding sequence consumer (ID=3)
+      - EMBEDDING_CONSUMER_SEQUENCE_KAFKA_IDS=3
+      - KAFKA_3_TOPICS=skye.embedding-sequence
+      - KAFKA_3_BOOTSTRAP_SERVERS=broker:29092
+      - KAFKA_3_BASIC_AUTH_CREDENTIAL_SOURCE=NONE
+      - KAFKA_3_GROUP_ID=skye-embedding-seq-consumer
+      - KAFKA_3_AUTO_OFFSET_RESET=earliest
+      - KAFKA_3_AUTO_COMMIT_INTERVAL_MS=5000
+      - KAFKA_3_ENABLE_AUTO_COMMIT=false
+      - KAFKA_3_LISTENER_CONCURRENCY=1
+      - KAFKA_3_CLIENT_ID=skye-embedding-seq-consumer
+      - KAFKA_3_BATCH_SIZE=10
+      - KAFKA_3_POLL_TIMEOUT=1000
+      # Realtime consumer (ID=4)
+      - REALTIME_CONSUMER_KAFKA_IDS=4
+      - KAFKA_4_TOPICS=skye.realtime
+      - KAFKA_4_BOOTSTRAP_SERVERS=broker:29092
+      - KAFKA_4_BASIC_AUTH_CREDENTIAL_SOURCE=NONE
+      - KAFKA_4_GROUP_ID=skye-realtime-consumer
+      - KAFKA_4_AUTO_OFFSET_RESET=earliest
+      - KAFKA_4_AUTO_COMMIT_INTERVAL_MS=5000
+      - KAFKA_4_ENABLE_AUTO_COMMIT=false
+      - KAFKA_4_LISTENER_CONCURRENCY=1
+      - KAFKA_4_CLIENT_ID=skye-realtime-consumer
+      - KAFKA_4_BATCH_SIZE=10
+      - KAFKA_4_POLL_TIMEOUT=1000
+      # Realtime producer (ID=5)
+      - REALTIME_PRODUCER_KAFKA_ID=5
+      - KAFKA_PRODUCER_5_TOPICS=skye.realtime
+      - KAFKA_PRODUCER_5_BOOTSTRAP_SERVERS=broker:29092
+      - KAFKA_PRODUCER_5_CLIENT_ID=skye-realtime-producer
+      # Realtime delta producer (ID=6)
+      - REALTIME_DELTA_PRODUCER_KAFKA_ID=6
+      - KAFKA_PRODUCER_6_TOPICS=skye.realtime-delta
+      - KAFKA_PRODUCER_6_BOOTSTRAP_SERVERS=broker:29092
+      - KAFKA_PRODUCER_6_CLIENT_ID=skye-realtime-delta-producer
+      # Realtime delta consumer (ID=7)
+      - REALTIME_DELTA_CONSUMER_KAFKA_ID=7
+      - KAFKA_7_TOPICS=skye.realtime-delta
+      - KAFKA_7_BOOTSTRAP_SERVERS=broker:29092
+      - KAFKA_7_BASIC_AUTH_CREDENTIAL_SOURCE=NONE
+      - KAFKA_7_GROUP_ID=skye-realtime-delta-consumer
+      - KAFKA_7_AUTO_OFFSET_RESET=earliest
+      - KAFKA_7_AUTO_COMMIT_INTERVAL_MS=5000
+      - KAFKA_7_ENABLE_AUTO_COMMIT=false
+      - KAFKA_7_LISTENER_CONCURRENCY=1
+      - KAFKA_7_CLIENT_ID=skye-realtime-delta-consumer
+      - KAFKA_7_BATCH_SIZE=10
+      - KAFKA_7_POLL_TIMEOUT=1000
+    networks:
+      onfs-network:
+        ipv4_address: 172.18.0.23
+    depends_on:
+      etcd:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  skye-consumers-healthcheck:
+    image: alpine:latest
+    container_name: skye-consumers-healthcheck
+    networks:
+      onfs-network:
+        ipv4_address: 172.18.0.24
+    depends_on:
+      - skye-consumers
+    command: sh -c "apk add --no-cache curl && sleep infinity"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://skye-consumers:8093/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: "no"
+
+  skye-serving:
+    image: ghcr.io/meesho/skye-serving:${SKYE_VERSION:-latest}
+    container_name: skye-serving
+    ports:
+      - "8094:8094"
+    environment:
+      # Application
+      - APP_NAME=skye
+      - APP_ENV=local
+      - APP_LOG_LEVEL=INFO
+      - APP_PORT=8094
+      - APP_METRIC_SAMPLING_RATE=100
+      # In-memory cache (10 MB)
+      - IN_MEMORY_CACHE_SIZE_IN_BYTES=10485760
+      # Etcd
+      - ETCD_SERVER=etcd:2379
+      - ETCD_WATCHER_ENABLED=true
+      # Redis
+      - REDIS_ADDR=redis:6379
+      - REDIS_DB=0
+      # Profiling (disabled for quick-start)
+      - PROFILING_ENABLED=false
+      # Storage (no external ScyllaDB in quick-start)
+      - STORAGE_AGGREGATOR_DB_COUNT=0
+      - STORAGE_EMBEDDING_STORE_COUNT=0
+      - AUTH_TOKENS=test
+    networks:
+      onfs-network:
+        ipv4_address: 172.18.0.25
+    depends_on:
+      - etcd
+      - redis
+      - qdrant
+    restart: unless-stopped
+
+  skye-serving-healthcheck:
+    image: alpine:latest
+    container_name: skye-serving-healthcheck
+    networks:
+      onfs-network:
+        ipv4_address: 172.18.0.26
+    depends_on:
+      - skye-serving
+    command: sh -c "apk add --no-cache curl && sleep infinity"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://skye-serving:8094/health/self"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -547,7 +872,8 @@ services:
       - REACT_APP_PREDATOR_ENABLED=true
       - REACT_APP_EMBEDDING_PLATFORM_ENABLED=false
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.27
     depends_on:
       horizon-healthcheck:
         condition: service_healthy
@@ -557,7 +883,8 @@ services:
     image: alpine:latest
     container_name: trufflebox-healthcheck
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.28
     depends_on:
       - trufflebox-ui
     command: sh -c "apk add --no-cache curl && sleep infinity"
@@ -578,7 +905,8 @@ services:
     environment:
       - PORT=8001
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.29
     healthcheck:
       test: ["CMD-SHELL", "nc -z localhost 8001 || exit 1"]
       interval: 30s
@@ -591,7 +919,8 @@ services:
     image: alpine:latest
     container_name: predator-healthcheck
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.30
     depends_on:
       - predator
     command: sh -c "apk add --no-cache curl netcat-openbsd && sleep infinity"
@@ -614,7 +943,8 @@ services:
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=broker:29092
       - DYNAMIC_CONFIG_ENABLED=true
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.31
     depends_on:
       - kafka
     restart: unless-stopped
@@ -625,7 +955,8 @@ services:
     ports:
       - "8081:8002"
     networks:
-      - onfs-network
+      onfs-network:
+        ipv4_address: 172.18.0.32
     depends_on:
       - etcd
 
@@ -634,8 +965,14 @@ volumes:
     driver: local
   mysql-data:
     driver: local
+  qdrant-data:
+    driver: local
 
 networks:
   onfs-network:
     name: onfs-network
     driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.18.0.0/16
