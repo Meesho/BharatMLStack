@@ -11,8 +11,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 	"unsafe"
 
+	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 	"golang.org/x/sys/unix"
 )
 
@@ -488,6 +490,8 @@ func (r *IoUring) SubmitWriteBatch(fd int, bufs [][]byte, offsets []uint64) ([]i
 		return nil, fmt.Errorf("io_uring_enter: %w", err)
 	}
 
+	startTime := time.Now()
+
 	// Drain all CQEs (order may differ from submission)
 	results := make([]int, n)
 	for i := 0; i < n; i++ {
@@ -506,6 +510,8 @@ func (r *IoUring) SubmitWriteBatch(fd int, bufs [][]byte, offsets []uint64) ([]i
 		if idx >= 0 && idx < n {
 			results[idx] = int(res)
 		}
+
+		metrics.Timing(metrics.KEY_PWRITE_LATENCY, time.Since(startTime), []string{})
 	}
 
 	return results, nil

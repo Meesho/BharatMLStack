@@ -145,9 +145,7 @@ func (r *WrapAppendFile) PwriteBatch(buf []byte, chunkSize int) (totalWritten in
 			written = end
 		}
 
-		startTime := time.Now()
 		results, serr := r.WriteRing.SubmitWriteBatch(r.WriteFd, bufs, offsets)
-		metrics.Timing(metrics.KEY_PWRITE_LATENCY, time.Since(startTime), []string{})
 		if serr != nil {
 			return totalWritten, r.PhysicalWriteOffset, serr
 		}
