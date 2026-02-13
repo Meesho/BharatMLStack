@@ -178,7 +178,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 	batchReader, err := fs.NewBatchIoUringReader(fs.BatchIoUringConfig{
 		RingDepth: 256,
 		MaxBatch:  256,
-		Window:    time.Millisecond,
+		Window:    time.Microsecond * 500,
 		QueueSize: 1024,
 	})
 	if err != nil {

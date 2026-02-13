@@ -8,6 +8,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 )
 
 // batchReadResult holds the outcome of a single batched pread.
@@ -95,6 +97,8 @@ func (b *BatchIoUringReader) Submit(fd int, buf []byte, offset uint64) (int, err
 		return 0, nil
 	}
 
+	startTime := time.Now()
+
 	req := batchReqPool.Get().(*batchReadRequest)
 	req.fd = fd
 	req.buf = buf
@@ -104,6 +108,7 @@ func (b *BatchIoUringReader) Submit(fd int, buf []byte, offset uint64) (int, err
 
 	result := <-req.done
 	n, err := result.N, result.Err
+	metrics.Timing(metrics.KEY_PREAD_LATENCY, time.Since(startTime), []string{})
 
 	// Reset and return to pool
 	req.fd = 0
