@@ -12,7 +12,7 @@ type GitHubConfig struct {
 	// Authentication
 	AppID          int64
 	InstallationID int64
-	PrivateKeyPath string
+	PrivateKey     []byte
 
 	// Organization/Repository
 	Owner string
@@ -47,8 +47,8 @@ func InitGitHub(config GitHubConfig) error {
 	}
 
 	// Initialize GitHub client if credentials are provided
-	if config.AppID > 0 && config.InstallationID > 0 && config.PrivateKeyPath != "" {
-		if err := InitGitHubClient(config.AppID, config.InstallationID, config.PrivateKeyPath); err != nil {
+	if config.AppID > 0 && config.InstallationID > 0 && string(config.PrivateKey) != "" {
+		if err := InitGitHubClient(config.AppID, config.InstallationID, config.PrivateKey); err != nil {
 			log.Warn().Err(err).Msg("Failed to initialize GitHub client - threshold updates will not work")
 			return err
 		}

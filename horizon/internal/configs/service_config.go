@@ -124,7 +124,7 @@ func GetBranchName(workingEnv string) string {
 	case "gcp_stg", "stg":
 		return "develop"
 	case "gcp_int", "int":
-		return "pre-prod"
+		return "develop"
 	case "gcp_prd", "prd":
 		return "main"
 	case "gcp_ftr", "ftr":
@@ -166,7 +166,7 @@ func (l *GitHubServiceConfigLoader) LoadServiceConfig(serviceName, workingEnv st
 	}
 
 	// Construct file path
-	configPath := fmt.Sprintf("services/%s/%s/config.yaml", serviceName, envName)
+	configPath := fmt.Sprintf("horizon/configs/services/%s/%s/config.yaml", serviceName, envName)
 	branchName := GetBranchName(workingEnv)
 
 	log.Info().

@@ -399,6 +399,37 @@ services:
       - CLOUDSDK_CONFIG=/home/nonroot/.config/gcloud
       - TEST_DEPLOYABLE_ID=3020
       - TEST_GPU_DEPLOYABLE_ID=3020
+      - SKYE_APP_NAME=skye
+      - SKYE_SCYLLA_ACTIVE_CONFIG_IDS=2
+      - SKYE_HOST=scylla
+      - SKYE_PORT=9042
+      - SKYE_AUTH_TOKEN=
+      - SKYE_DEADLINE_EXCEED_MS=2000
+      - AIRFLOW_BASE_URL=http://airflow:8080
+      - AIRFLOW_USERNAME=airflow
+      - AIRFLOW_PASSWORD=airflow
+      # Prism configuration
+      - PRISM_BASE_URL=http://prism:8080
+      - PRISM_APP_USER_ID=airflow
+      - INITIAL_INGESTION_PRISM_JOB_ID=679
+      - INITIAL_INGESTION_PRISM_STEP_ID=1706
+      - INITIAL_INGESTION_AIRFLOW_DAG_ID=JOB_V2_skye_initial_ingestion
+      - VARIANT_SCALEUP_CRON_EXPRESSION=0 */1 * * * *
+      - VARIANT_SCALEUP_PRISM_JOB_ID=680
+      - VARIANT_SCALEUP_PRISM_STEP_ID=2420
+      - VARIANT_SCALEUP_AIRFLOW_DAG_ID=JOB_V2_variant_processor_skye
+      - VARIANT_ONBOARDING_CRON_EXPRESSION=0 */1 * * * *
+      # Variants list
+      - VARIANTS_LIST=ads_gold,ads_mall,ads_new_catalog,ads,ct_gst,ct_high_asp,ct_non_gst,organic_gold,organic,organic_gst,organic_high_asp,organic_mall,organic_melp,organic_non_gst,widget_ads,organic_gst_pd
+      # MQ configuration
+      - MQ_ID_TOPICS_MAPPING=2450:skye.embeddings-1
+      # Horizon to Skye ScyllaDB configuration
+      - HORIZON_TO_SKYE_SCYLLA_CONF_ID_MAP=2:1
+      - SCYLLA_2_CONTACT_POINTS=scylla
+      - SCYLLA_2_PORT=9042
+      - SCYLLA_2_KEYSPACE=skye
+      - SCYLLA_2_USERNAME=
+      - SCYLLA_2_PASSWORD=
     volumes:
       - ./configs:/app/configs:ro
       # Mount gcloud credentials for Application Default Credentials (ADC)
