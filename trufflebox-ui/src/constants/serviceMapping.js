@@ -2,6 +2,7 @@ export const SERVICES = {
   PREDATOR: 'predator',
   InferFlow: 'inferflow',
   NUMERIX: 'numerix',
+  EMBEDDING_PLATFORM: 'embedding_platform',
 };
 
 export const MENU_PERMISSION_MAP = {
@@ -17,6 +18,27 @@ export const MENU_PERMISSION_MAP = {
   // Predator service mappings
   'Model': { service: SERVICES.PREDATOR, screenType: 'model' },
   'ModelApproval': { service: SERVICES.PREDATOR, screenType: 'model-approval' },
+  
+  // Embedding Platform service mappings
+  // Note: StoreDiscovery, StoreRegistry, and EntityRegistry also exist in Online Feature Store
+  // They only require permission check when under EmbeddingPlatform parent
+  'StoreDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'store-discovery', requiredParentKey: 'EmbeddingPlatform' },
+  'HierarchicalDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'hierarchical-discovery' },
+  'FilterDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'filter-discovery' },
+  'JobFrequencyDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'job-frequency-discovery' },
+  'StoreRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'store-registry', requiredParentKey: 'EmbeddingPlatform' },
+  'EntityRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'entity-registry', requiredParentKey: 'EmbeddingPlatform' },
+  'ModelRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'model-registry' },
+  'VariantRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'variant-registry' },
+  'FilterRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'filter-registry' },
+  'JobFrequencyRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'job-frequency-registry' },
+  'EmbeddingStoreApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'store-approval' },
+  'EmbeddingEntityApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'entity-approval' },
+  'EmbeddingModelApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'model-approval' },
+  'EmbeddingVariantApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'variant-approval' },
+  'EmbeddingFilterApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'filter-approval' },
+  'EmbeddingJobFrequencyApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'job-frequency-approval' },
+  'DeploymentOperations': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'deployment-operations' },
 };
 
 export const requiresPermissionCheck = (menuKey, parentKey = null) => {
@@ -61,4 +83,5 @@ export const PERMISSION_CONTROLLED_SERVICES = [
   SERVICES.PREDATOR,
   SERVICES.InferFlow, 
   SERVICES.NUMERIX,
+  SERVICES.EMBEDDING_PLATFORM,
 ]; 
