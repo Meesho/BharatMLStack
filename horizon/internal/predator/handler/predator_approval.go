@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/predatorconfig"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/predatorrequest"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/protobuf/encoding/prototext"
 	"gorm.io/gorm"
 )
 
@@ -191,6 +193,12 @@ func (p *Predator) processEditGCSCopyStage(requestIdPayloadMap map[uint]*Payload
 		} else {
 			configBucket := pred.GcsConfigBucket
 			configPath := pred.GcsConfigBasePath
+			if configBucket != "" && configPath != "" && payload.MetaData.InstanceCount > 0 {
+				if err := p.updateInstanceCountInConfigSource(configBucket, configPath, modelName, payload.MetaData.InstanceCount); err != nil {
+					log.Error().Err(err).Msgf("Failed to update instance count in config-source for model %s", modelName)
+					return transferredGcsModelData, err
+				}
+			}
 			if err := p.GcsClient.TransferFolderWithSplitSources(
 				sourceBucket, sourceBasePath, configBucket, configPath,
 				sourceModelName, targetBucket, targetPath, modelName,
@@ -210,6 +218,37 @@ func (p *Predator) processEditGCSCopyStage(requestIdPayloadMap map[uint]*Payload
 	}
 
 	return transferredGcsModelData, nil
+}
+
+func (p *Predator) updateInstanceCountInConfigSource(bucket, basePath, modelName string, instanceCount int) error {
+	if modelName == "" {
+		return fmt.Errorf("model name is empty, required to update instance count in config-source")
+	}
+
+	configPath := path.Join(basePath, modelName, configFile)
+	configData, err := p.GcsClient.ReadFile(bucket, configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config.pbtxt from config-source for model %s: %w", modelName, err)
+	}
+
+	var modelConfig ModelConfig
+	if err := prototext.Unmarshal(configData, &modelConfig); err != nil {
+		return fmt.Errorf("failed to parse config.pbtxt from config-source for model %s: %w", modelName, err)
+	}
+	if len(modelConfig.InstanceGroup) == 0 {
+		return fmt.Errorf("%s (model %s)", errNoInstanceGroup, modelName)
+	}
+
+	newConfigData, err := replaceInstanceCountInConfigPreservingFormat(configData, instanceCount)
+	if err != nil {
+		return fmt.Errorf("failed to update instance count in config for model %s: %w", modelName, err)
+	}
+	if err := p.GcsClient.UploadFile(bucket, configPath, newConfigData); err != nil {
+		return fmt.Errorf("failed to upload config.pbtxt to config-source for model %s: %w", modelName, err)
+	}
+
+	log.Info().Msgf("Updated instance_count to %d in config-source for model %s", instanceCount, modelName)
+	return nil
 }
 
 // processEditDBUpdateStage updates predator config for edit approval
