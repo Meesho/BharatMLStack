@@ -1,143 +1,636 @@
 /**
- * Any CSS included here will be global. The classic template
- * bundles Infima by default. Infima is a CSS framework designed to
- * work well for content-centric websites.
+ * Global theme for BharatMLStack docs site.
+ * Overrides Infima variables to match the homepage's indigo/purple dark theme.
+ * Supports both dark (primary) and light modes.
  */
 
-/* You can override the default Infima variables here. */
+/* ========================================
+   1. Infima Variable Overrides
+   ======================================== */
+
 :root {
-  /* BharatMLStack brand colors - purple/burgundy theme */
-  --ifm-color-primary: #450839;
-  --ifm-color-primary-dark: #3d0732;
-  --ifm-color-primary-darker: #39062f;
-  --ifm-color-primary-darkest: #2f0527;
-  --ifm-color-primary-light: #4d0940;
-  --ifm-color-primary-lighter: #510a43;
-  --ifm-color-primary-lightest: #5d0c4d;
+  /* Primary palette – indigo */
+  --ifm-color-primary: #6366f1;
+  --ifm-color-primary-dark: #4f46e5;
+  --ifm-color-primary-darker: #4338ca;
+  --ifm-color-primary-darkest: #3730a3;
+  --ifm-color-primary-light: #818cf8;
+  --ifm-color-primary-lighter: #a5b4fc;
+  --ifm-color-primary-lightest: #c7d2fe;
+
+  /* Light mode backgrounds and text */
+  --ifm-background-color: #f8fafc;
+  --ifm-background-surface-color: #ffffff;
+  --ifm-font-color-base: #1e293b;
+  --ifm-font-color-secondary: #64748b;
+  --ifm-heading-color: #0f172a;
+  --ifm-link-color: #6366f1;
+  --ifm-link-hover-color: #4f46e5;
+
+  /* Code */
   --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
-  
-  /* Custom BharatMLStack variables with better contrast */
-  --bharatml-primary: #450839;
-  --bharatml-primary-hover: #6a0c59;
-  --bharatml-secondary: #f9f9f9;
-  --bharatml-text: #1c1e21;  /* Much darker for better contrast */
-  --bharatml-text-light: #606770;  /* Darker gray for better readability */
+  --ifm-code-background: #f1f5f9;
+  --ifm-code-border-radius: 6px;
+  --ifm-code-padding-horizontal: 0.4rem;
+  --ifm-code-padding-vertical: 0.15rem;
+  --docusaurus-highlighted-code-line-bg: rgba(99, 102, 241, 0.08);
+
+  /* Cards, borders, shadows */
+  --ifm-card-background-color: #ffffff;
+  --ifm-global-shadow-lw: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --ifm-global-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --ifm-global-shadow-tl: 0 8px 32px rgba(0, 0, 0, 0.1);
+  --ifm-global-radius: 8px;
+
+  /* Table of contents */
+  --ifm-toc-border-color: rgba(0, 0, 0, 0.08);
+
+  /* Navbar height for padding */
+  --ifm-navbar-height: 3.75rem;
 }
 
-/* For readability concerns, you should choose a lighter palette in dark mode. */
+/* Dark mode */
 [data-theme='dark'] {
-  --ifm-color-primary: #8b4582;
-  --ifm-color-primary-dark: #7d3f75;
-  --ifm-color-primary-darker: #763c6e;
-  --ifm-color-primary-darkest: #62315a;
-  --ifm-color-primary-light: #994b8f;
-  --ifm-color-primary-lighter: #a04e96;
-  --ifm-color-primary-lightest: #b657a9;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
-  
-  /* Dark mode BharatMLStack colors */
-  --bharatml-primary: #8b4582;
-  --bharatml-primary-hover: #a04e96;
-  --bharatml-secondary: #1e1e1e;
-  --bharatml-text: #e3e3e3;  /* Light text for dark mode */
-  --bharatml-text-light: #b4b4b4;  /* Lighter gray for dark mode */
+  --ifm-color-primary: #818cf8;
+  --ifm-color-primary-dark: #6366f1;
+  --ifm-color-primary-darker: #4f46e5;
+  --ifm-color-primary-darkest: #4338ca;
+  --ifm-color-primary-light: #a5b4fc;
+  --ifm-color-primary-lighter: #c7d2fe;
+  --ifm-color-primary-lightest: #e0e7ff;
+
+  --ifm-background-color: #0a0e27;
+  --ifm-background-surface-color: #151932;
+  --ifm-font-color-base: #e2e8f0;
+  --ifm-font-color-secondary: #94a3b8;
+  --ifm-heading-color: #f1f5f9;
+  --ifm-link-color: #818cf8;
+  --ifm-link-hover-color: #a5b4fc;
+
+  --ifm-code-background: rgba(255, 255, 255, 0.06);
+  --docusaurus-highlighted-code-line-bg: rgba(99, 102, 241, 0.15);
+
+  --ifm-card-background-color: rgba(255, 255, 255, 0.03);
+  --ifm-global-shadow-lw: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --ifm-global-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --ifm-global-shadow-tl: 0 8px 32px rgba(0, 0, 0, 0.5);
+
+  --ifm-toc-border-color: rgba(255, 255, 255, 0.06);
 }
 
-/* Custom BharatMLStack styles */
-.bharatml-hero {
-  background: linear-gradient(135deg, var(--bharatml-primary) 0%, var(--bharatml-primary-hover) 100%);
-  color: white;
+
+/* ========================================
+   2. Global Gradient Orb Background
+   ======================================== */
+
+.gradient-bg-global {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
 }
 
-/* Hero button styling - both buttons should have white borders and proper text colors */
-.bharatml-hero .bharatml-button {
-  background-color: var(--bharatml-primary);
-  border: 2px solid white !important;
-  color: white !important;
-  transition: all 0.3s ease;
+.gradient-orb-global {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.25;
+  animation: globalOrbFloat 25s ease-in-out infinite;
 }
 
-.bharatml-hero .bharatml-button:hover {
-  background-color: white !important;
-  border-color: white !important;
-  color: var(--bharatml-primary) !important;
+[data-theme='light'] .gradient-orb-global {
+  opacity: 0.10;
 }
 
-.bharatml-hero .button--outline {
-  background-color: transparent !important;
-  border: 2px solid white !important;
-  color: white !important;
-  transition: all 0.3s ease;
+.orb-global-1 {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, #6366f1, transparent);
+  top: -10%;
+  left: -10%;
 }
 
-.bharatml-hero .button--outline:hover {
-  background-color: white !important;
-  border-color: white !important;
-  color: var(--bharatml-primary) !important;
+.orb-global-2 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, #8b5cf6, transparent);
+  top: 50%;
+  right: -10%;
+  animation-delay: 8s;
 }
 
-/* Dark mode hero buttons */
-[data-theme='dark'] .bharatml-hero .bharatml-button {
-  background-color: var(--bharatml-primary);
-  border: 2px solid white !important;
-  color: white !important;
+.orb-global-3 {
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle, #06b6d4, transparent);
+  bottom: -20%;
+  left: 30%;
+  animation-delay: 15s;
 }
 
-[data-theme='dark'] .bharatml-hero .bharatml-button:hover {
-  background-color: white !important;
-  border-color: white !important;
-  color: var(--bharatml-primary) !important;
+@keyframes globalOrbFloat {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(60px, -60px) scale(1.1);
+  }
+  66% {
+    transform: translate(-40px, 40px) scale(0.9);
+  }
 }
 
-[data-theme='dark'] .bharatml-hero .button--outline {
-  background-color: transparent !important;
-  border: 2px solid white !important;
-  color: white !important;
+
+/* ========================================
+   3. Navbar – Glass Morphism
+   ======================================== */
+
+.navbar {
+  background: rgba(10, 14, 39, 0.8) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: none;
+  position: sticky;
+  z-index: 100;
 }
 
-[data-theme='dark'] .bharatml-hero .button--outline:hover {
-  background-color: white !important;
-  border-color: white !important;
-  color: var(--bharatml-primary) !important;
+[data-theme='light'] .navbar {
+  background: rgba(255, 255, 255, 0.85) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
-/* General button styling for other parts of the site */
-.bharatml-button {
-  background-color: var(--bharatml-primary);
-  border-color: var(--bharatml-primary);
-  transition: all 0.3s ease;
+.navbar__title {
+  font-weight: 800;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6, #06b6d4);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: navGradientShift 3s ease infinite;
 }
 
-.bharatml-button:hover {
-  background-color: var(--bharatml-primary-hover);
-  border-color: var(--bharatml-primary-hover);
-  color: white;
+@keyframes navGradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 
-.bharatml-card {
-  border: 1px solid rgba(69, 8, 57, 0.1);
+.navbar__link {
+  font-weight: 500;
+}
+
+[data-theme='dark'] .navbar__link {
+  color: #e2e8f0;
+}
+
+[data-theme='dark'] .navbar__link:hover,
+[data-theme='dark'] .navbar__link--active {
+  color: #818cf8;
+}
+
+.navbar__toggle {
+  color: var(--ifm-font-color-base);
+}
+
+/* Navbar sidebar (mobile) */
+.navbar-sidebar {
+  background: var(--ifm-background-color);
+}
+
+
+/* ========================================
+   4. Footer – Dark Theme
+   ======================================== */
+
+.footer {
+  background: #151932 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+[data-theme='light'] .footer {
+  background: #f1f5f9 !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.footer__title {
+  color: #e2e8f0;
+  font-weight: 700;
+}
+
+[data-theme='light'] .footer__title {
+  color: #1e293b;
+}
+
+.footer__link-item {
+  color: #94a3b8;
+  transition: color 0.3s;
+}
+
+.footer__link-item:hover {
+  color: #818cf8;
+  text-decoration: none;
+}
+
+[data-theme='light'] .footer__link-item {
+  color: #64748b;
+}
+
+[data-theme='light'] .footer__link-item:hover {
+  color: #6366f1;
+}
+
+.footer__copyright {
+  color: #64748b;
+}
+
+
+/* ========================================
+   5. Sidebar – Glass Effect
+   ======================================== */
+
+[data-theme='dark'] .theme-doc-sidebar-container {
+  border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-theme='dark'] .menu {
+  background: transparent;
+}
+
+[data-theme='dark'] .menu__link {
+  color: #cbd5e1;
   border-radius: 8px;
-  padding: 2rem;
-  transition: all 0.3s ease;
-  background: white;
+  transition: all 0.2s;
 }
 
-.bharatml-card:hover {
-  border-color: var(--bharatml-primary);
-  box-shadow: 0 4px 20px rgba(69, 8, 57, 0.1);
-  transform: translateY(-2px);
+[data-theme='dark'] .menu__link:hover {
+  background: rgba(99, 102, 241, 0.1);
+  color: #e2e8f0;
 }
 
-.bharatml-icon {
-  width: 64px;
-  height: 64px;
-  background: linear-gradient(135deg, var(--bharatml-primary), var(--bharatml-primary-hover));
+[data-theme='dark'] .menu__link--active:not(.menu__link--sublist) {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  font-weight: 600;
+}
+
+[data-theme='dark'] .menu__list-item-collapsible:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+[data-theme='dark'] .theme-doc-sidebar-item-category > .menu__list-item-collapsible > .menu__link {
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+
+/* ========================================
+   6. Doc / Blog Content
+   ======================================== */
+
+/* Ensure proper z-index for content above gradient orbs */
+[class*='docMainContainer'],
+[class*='mainWrapper'],
+.main-wrapper {
+  position: relative;
+  z-index: 1;
+}
+
+/* Markdown content */
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  color: var(--ifm-heading-color);
+}
+
+/* Tables */
+[data-theme='dark'] table {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='dark'] table thead tr {
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='dark'] table tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+[data-theme='dark'] table tbody tr:nth-child(2n) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+[data-theme='dark'] th,
+[data-theme='dark'] td {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Blockquotes */
+[data-theme='dark'] blockquote {
+  border-left-color: #818cf8;
+  background: rgba(99, 102, 241, 0.05);
+  color: #cbd5e1;
+}
+
+/* Horizontal rules */
+[data-theme='dark'] hr {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+
+/* ========================================
+   7. Code Blocks
+   ======================================== */
+
+[data-theme='dark'] .prism-code {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+[data-theme='dark'] code {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+}
+
+[data-theme='dark'] a code {
+  color: var(--ifm-link-color);
+}
+
+/* Code block title bar */
+[data-theme='dark'] .codeBlockTitle_node_modules-\@docusaurus-theme-classic-lib-theme-CodeBlock-Content-styles-module {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+
+/* ========================================
+   8. Admonitions
+   ======================================== */
+
+[data-theme='dark'] .alert {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+}
+
+[data-theme='dark'] .alert--info {
+  border-left: 4px solid #06b6d4;
+  background: rgba(6, 182, 212, 0.06);
+}
+
+[data-theme='dark'] .alert--warning {
+  border-left: 4px solid #f59e0b;
+  background: rgba(245, 158, 11, 0.06);
+}
+
+[data-theme='dark'] .alert--danger {
+  border-left: 4px solid #ef4444;
+  background: rgba(239, 68, 68, 0.06);
+}
+
+[data-theme='dark'] .alert--success {
+  border-left: 4px solid #10b981;
+  background: rgba(16, 185, 129, 0.06);
+}
+
+[data-theme='dark'] .alert--secondary {
+  border-left: 4px solid #818cf8;
+  background: rgba(99, 102, 241, 0.06);
+}
+
+[data-theme='dark'] .admonitionHeading_node_modules-\@docusaurus-theme-classic-lib-theme-Admonition-Layout-styles-module {
+  color: inherit;
+}
+
+
+/* ========================================
+   9. Table of Contents (right sidebar)
+   ======================================== */
+
+[data-theme='dark'] .table-of-contents__link {
+  color: #94a3b8;
+}
+
+[data-theme='dark'] .table-of-contents__link:hover,
+[data-theme='dark'] .table-of-contents__link--active {
+  color: #818cf8;
+}
+
+[data-theme='dark'] .table-of-contents {
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+
+/* ========================================
+   10. Pagination / Doc navigation
+   ======================================== */
+
+[data-theme='dark'] .pagination-nav__link {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 1rem;
-  font-size: 1.5rem;
-  color: white;
+  transition: all 0.3s;
+}
+
+[data-theme='dark'] .pagination-nav__link:hover {
+  border-color: rgba(99, 102, 241, 0.3);
+  background: rgba(99, 102, 241, 0.06);
+}
+
+[data-theme='dark'] .pagination-nav__sublabel {
+  color: #94a3b8;
+}
+
+[data-theme='dark'] .pagination-nav__label {
+  color: #e2e8f0;
+}
+
+
+/* ========================================
+   11. Blog-specific
+   ======================================== */
+
+[data-theme='dark'] .blog-post-page article header h1 {
+  color: #f1f5f9;
+}
+
+[data-theme='dark'] article .avatar__name a {
+  color: #818cf8;
+}
+
+[data-theme='dark'] .blog-tags a {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: #818cf8;
+}
+
+[data-theme='dark'] .blog-tags a:hover {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.4);
+  text-decoration: none;
+}
+
+
+/* ========================================
+   12. Search and misc inputs
+   ======================================== */
+
+[data-theme='dark'] .navbar__search-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+}
+
+[data-theme='dark'] .navbar__search-input::placeholder {
+  color: #64748b;
+}
+
+
+/* ========================================
+   13. Breadcrumbs
+   ======================================== */
+
+[data-theme='dark'] .breadcrumbs__link {
+  background: rgba(255, 255, 255, 0.04);
+  color: #94a3b8;
+  border-radius: 6px;
+}
+
+[data-theme='dark'] .breadcrumbs__link:hover {
+  background: rgba(99, 102, 241, 0.1);
+  color: #e2e8f0;
+}
+
+[data-theme='dark'] .breadcrumbs__item--active .breadcrumbs__link {
+  background: rgba(99, 102, 241, 0.12);
+  color: #818cf8;
+}
+
+
+/* ========================================
+   14. Tabs
+   ======================================== */
+
+[data-theme='dark'] .tabs__item {
+  color: #94a3b8;
+  border-bottom-color: transparent;
+}
+
+[data-theme='dark'] .tabs__item:hover {
+  color: #e2e8f0;
+}
+
+[data-theme='dark'] .tabs__item--active {
+  color: #818cf8;
+  border-bottom-color: #818cf8;
+}
+
+
+/* ========================================
+   15. Scrollbar (dark mode)
+   ======================================== */
+
+[data-theme='dark'] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+
+/* ========================================
+   16. Version / Dropdown badges
+   ======================================== */
+
+[data-theme='dark'] .dropdown__menu {
+  background: #151932;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='dark'] .dropdown__link {
+  color: #cbd5e1;
+}
+
+[data-theme='dark'] .dropdown__link:hover {
+  background: rgba(99, 102, 241, 0.1);
+  color: #e2e8f0;
+}
+
+[data-theme='dark'] .dropdown__link--active {
+  color: #818cf8;
+  background: rgba(99, 102, 241, 0.12);
+}
+
+
+/* ========================================
+   17. Homepage Isolation
+       (hide Docusaurus navbar/footer on homepage)
+   ======================================== */
+
+html.homepage-active .navbar {
+  display: none !important;
+}
+
+html.homepage-active .footer {
+  display: none !important;
+}
+
+html.homepage-active main {
+  margin-top: 0;
+}
+
+html.homepage-active [class*='docMainContainer'],
+html.homepage-active [class*='mainWrapper'] {
+  padding-top: 0;
+}
+
+
+/* ========================================
+   18. Light mode refinements
+   ======================================== */
+
+[data-theme='light'] .theme-doc-sidebar-container {
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+[data-theme='light'] .menu__link--active:not(.menu__link--sublist) {
+  background: rgba(99, 102, 241, 0.08);
+  color: #6366f1;
+  font-weight: 600;
+}
+
+[data-theme='light'] .menu__link:hover {
+  background: rgba(99, 102, 241, 0.05);
+}
+
+[data-theme='light'] .pagination-nav__link {
+  border-radius: 12px;
+  transition: all 0.3s;
+}
+
+[data-theme='light'] .pagination-nav__link:hover {
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.08);
+}
+
+[data-theme='light'] blockquote {
+  border-left-color: #6366f1;
 }
