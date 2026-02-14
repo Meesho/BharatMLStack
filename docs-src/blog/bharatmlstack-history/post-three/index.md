@@ -2,7 +2,7 @@
 slug: post-three
 title: "Cracking the Code: Scaling Model Inference & Real-Time Embedding Search"
 authors: [aditya, jaya, adarsha]
-date: 2023-10-21
+date: 2024-05-21
 tags: [model-inference, embedding-search, mlplatform, meesho, bharatmlstack]
 ---
 

@@ -2,7 +2,7 @@
 slug: post-three
 title: "Designing a Production-Grade LLM Inference Platform: From Model Weights to Scalable GPU Serving"
 authors: [jaya]
-date: 2023-10-21
+date: 2025-3-29
 tags: [llm, vllm, tensorrt-llm, mlplatform, meesho, bharatmlstack]
 ---
 

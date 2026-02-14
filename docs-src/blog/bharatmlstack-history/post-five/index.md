@@ -2,7 +2,7 @@
 slug: post-five
 title: "LLM Inference Optimization Techniques: Engineering Sub-Second Latency at Scale"
 authors: [jaya]
-date: 2023-10-21
+date: 2025-6-2
 tags: [llm, vllm, tensorrt-llm, mlplatform, meesho, bharatmlstack]
 ---
 

@@ -180,7 +180,7 @@ function NumerixAbout() {
             <Link
               className="button button--primary"
               to="/category/numerix">
-              Explore SDKs →
+              Explore Numerix →
             </Link>
           </div>
           <div className="col col--6">
