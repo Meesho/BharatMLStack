@@ -13,6 +13,5 @@ type ComponentRequest struct {
 	ComponentConfig *config.ComponentConfig
 	Features        *map[string][]string
 	ModelId         string
-	ModelIdHash     string // Pre-computed CRC32 hash of ModelId for cache key construction
 	Headers         map[string]string
 }

@@ -2,7 +2,6 @@ package inferflow
 
 import (
 	"fmt"
-	"hash/crc32"
 	"strconv"
 	"strings"
 
@@ -11,12 +10,6 @@ import (
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/matrix"
 	pb "github.com/Meesho/BharatMLStack/inferflow/server/grpc/predict"
 )
-
-// hashKeyWithCRC32Split returns a hex-encoded CRC32 hash of the given key.
-func hashKeyWithCRC32Split(key string) string {
-	hash := crc32.ChecksumIEEE([]byte(key))
-	return fmt.Sprintf("%08x", hash)
-}
 
 // adaptPointWiseRequest translates a PointWiseRequest into the existing ComponentRequest.
 // Each Target becomes a row in the ComponentMatrix. Context features are broadcast to all rows.
@@ -36,7 +29,6 @@ func adaptPointWiseRequest(req *pb.PointWiseRequest, conf *config.Config, header
 		Features:        &features,
 		ComponentConfig: &conf.ComponentConfig,
 		ModelId:         req.ModelConfigId,
-		ModelIdHash:     hashKeyWithCRC32Split(req.ModelConfigId),
 		Headers:         headers,
 	}, nil
 }
@@ -74,7 +66,6 @@ func adaptPairWiseRequest(req *pb.PairWiseRequest, conf *config.Config, headers 
 		Features:        &features,
 		ComponentConfig: &conf.ComponentConfig,
 		ModelId:         req.ModelConfigId,
-		ModelIdHash:     hashKeyWithCRC32Split(req.ModelConfigId),
 		Headers:         headers,
 	}, nil
 }
@@ -123,7 +114,6 @@ func adaptSlateWiseRequest(req *pb.SlateWiseRequest, conf *config.Config, header
 		Features:        &features,
 		ComponentConfig: &conf.ComponentConfig,
 		ModelId:         req.ModelConfigId,
-		ModelIdHash:     hashKeyWithCRC32Split(req.ModelConfigId),
 		Headers:         headers,
 	}, nil
 }
