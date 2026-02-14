@@ -11,6 +11,7 @@ import (
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/logger"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/middleware"
 	pb "github.com/Meesho/BharatMLStack/inferflow/server/grpc"
+	predict "github.com/Meesho/BharatMLStack/inferflow/server/grpc/predict"
 	"github.com/cockroachdb/cmux"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -38,6 +39,7 @@ func InitServer(configs *configs.AppConfigs) {
 	)
 	reflection.Register(grpcServer)
 	pb.RegisterInferflowServer(grpcServer, &inferflow.Inferflow{})
+	predict.RegisterPredictServer(grpcServer, &inferflow.PredictService{})
 
 	// HTTP Server :
 	h := http.NewServeMux()

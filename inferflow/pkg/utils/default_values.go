@@ -57,6 +57,20 @@ func GetDefaultValuesInBytes(dataType string) []byte {
 	return []byte("0.0")
 }
 
+// GetDefaultValueByType returns default byte value for scalar types.
+// Vectors are handled separately with empty bytes (2-byte size = 0).
+func GetDefaultValueByType(dataType string) []byte {
+	dt := strings.ToLower(dataType)
+	dt = strings.TrimPrefix(dt, "datatype")
+	dt = strings.TrimPrefix(dt, "_")
+	dt = strings.TrimSpace(dt)
+
+	if val, ok := defaultBytes[dt]; ok {
+		return val
+	}
+	return []byte("0.0")
+}
+
 func GetDefaultValuesInBytesForVector(dataType, featureStoreDataType string, shape []int) []byte {
 	dt := strings.ToLower(dataType)
 

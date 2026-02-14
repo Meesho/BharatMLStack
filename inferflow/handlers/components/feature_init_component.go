@@ -42,6 +42,7 @@ func (fiComponent *FeatureInitComponent) Run(request interface{}) {
 	componentMatrix := req.ComponentData
 	componentMatrix.InitComponentMatrix(rowCount, stringColumnIndexMap, byteColumnIndexMap)
 	populateStringData(componentMatrix, req)
+	initSlateMatrix(req)
 
 	metrics.Timing("inferflow.component.execution.latency", time.Since(startTime), metricTags)
 }
@@ -259,6 +260,9 @@ func extractPredatorColumns(byteColumnIndexMap map[string]matrix.Column, compCon
 		if !ok {
 			continue
 		}
+		if predatorComp.SlateComponent {
+			continue
+		}
 		for _, output := range predatorComp.Outputs {
 			for scoreIdx, modelScore := range output.ModelScores {
 				dataType := output.DataType
@@ -284,6 +288,10 @@ func extractNumerixColumns(byteColumnIndexMap map[string]matrix.Column, compConf
 	for _, comp := range compConfig.NumerixComponentConfig.Values() {
 		numerixComp, ok := comp.(config.NumerixComponentConfig)
 		if ok {
+
+			if numerixComp.SlateComponent {
+				continue
+			}
 			byteColumnIndexMap[numerixComp.ScoreColumn] = matrix.Column{
 				Name:     numerixComp.ScoreColumn,
 				DataType: numerixComp.DataType,
@@ -311,4 +319,137 @@ func extractEntityColumns(stringColumnIndexMap map[string]matrix.Column, req Com
 	for idx, entity := range *req.Entities {
 		stringColumnIndexMap[entity] = matrix.Column{Name: entity, DataType: DataTypeString, Index: idx}
 	}
+}
+
+func initSlateMatrix(req ComponentRequest) {
+	if req.SlateData == nil {
+		return
+	}
+	slateRowCount := len(req.SlateData.Rows)
+	if slateRowCount == 0 {
+		return
+	}
+
+	// Preserve adapter-populated slate string features before matrix re-init.
+	// InitComponentMatrix reallocates rows, so we need to restore these columns.
+	preservedSlateStrings := make(map[string][]string, len(req.SlateData.StringColumnIndexMap))
+	for colName, col := range req.SlateData.StringColumnIndexMap {
+		values := make([]string, slateRowCount)
+		for i := 0; i < slateRowCount && i < len(req.SlateData.Rows); i++ {
+			if col.Index < len(req.SlateData.Rows[i].StringData) {
+				values[i] = req.SlateData.Rows[i].StringData[col.Index]
+			}
+		}
+		preservedSlateStrings[colName] = values
+	}
+	// Preserve adapter-populated slate byte features as well.
+	preservedSlateBytes := make(map[string][][]byte, len(req.SlateData.ByteColumnIndexMap))
+	for colName, col := range req.SlateData.ByteColumnIndexMap {
+		values := make([][]byte, slateRowCount)
+		for i := 0; i < slateRowCount && i < len(req.SlateData.Rows); i++ {
+			if col.Index < len(req.SlateData.Rows[i].ByteData) {
+				values[i] = req.SlateData.Rows[i].ByteData[col.Index]
+			}
+		}
+		preservedSlateBytes[colName] = values
+	}
+
+	slateByteColumns := buildSlateByteDataSchema(req.ComponentConfig, req.SlateData)
+	slateStringColumns := buildSlateStringDataSchema(req.SlateData)
+
+	req.SlateData.InitComponentMatrix(slateRowCount, slateStringColumns, slateByteColumns)
+
+	// Restore adapter-populated slate string features (including slate_target_indices and
+	// any additional slate features passed in the request).
+	for colName, values := range preservedSlateStrings {
+		req.SlateData.PopulateStringData(colName, values)
+	}
+	for colName, values := range preservedSlateBytes {
+		req.SlateData.PopulateByteData(colName, values)
+	}
+}
+
+// buildSlateByteDataSchema creates byte columns for slate-level predator and iris outputs.
+func buildSlateByteDataSchema(compConfig *config.ComponentConfig, slateData *matrix.ComponentMatrix) map[string]matrix.Column {
+	byteColumnIndexMap := make(map[string]matrix.Column)
+	index := 0
+	// Preserve adapter-provided slate byte feature columns first.
+	if slateData != nil {
+		for colName, col := range slateData.ByteColumnIndexMap {
+			byteColumnIndexMap[colName] = matrix.Column{
+				Name:     colName,
+				DataType: col.DataType,
+				Index:    index,
+			}
+			index++
+		}
+	}
+
+	// Slate predator output columns
+	for _, comp := range compConfig.PredatorComponentConfig.Values() {
+		predatorComp, ok := comp.(config.PredatorComponentConfig)
+		if !ok || !predatorComp.SlateComponent {
+			continue
+		}
+		for _, output := range predatorComp.Outputs {
+			for scoreIdx, modelScore := range output.ModelScores {
+				dataType := output.DataType
+				if len(output.ModelScoresDims) > scoreIdx && len(output.ModelScoresDims[scoreIdx]) > 0 {
+					dataType = extactPredatorOutputDataType(&output, output.ModelScoresDims[scoreIdx])
+				}
+				if _, exists := byteColumnIndexMap[modelScore]; exists {
+					continue
+				}
+				byteColumnIndexMap[modelScore] = matrix.Column{
+					Name:     modelScore,
+					DataType: dataType,
+					Index:    index,
+				}
+				index++
+			}
+		}
+	}
+
+	// Slate numerix output columns
+	for _, comp := range compConfig.NumerixComponentConfig.Values() {
+		irisComp, ok := comp.(config.NumerixComponentConfig)
+		if !ok || !irisComp.SlateComponent {
+			continue
+		}
+		if _, exists := byteColumnIndexMap[irisComp.ScoreColumn]; exists {
+			continue
+		}
+		byteColumnIndexMap[irisComp.ScoreColumn] = matrix.Column{
+			Name:     irisComp.ScoreColumn,
+			DataType: irisComp.DataType,
+			Index:    index,
+		}
+		index++
+	}
+
+	return byteColumnIndexMap
+}
+
+// buildSlateStringDataSchema creates string columns for SlateData.
+// It always includes slate_target_indices and preserves any adapter-provided slate feature columns.
+func buildSlateStringDataSchema(slateData *matrix.ComponentMatrix) map[string]matrix.Column {
+	stringColumnIndexMap := make(map[string]matrix.Column, len(slateData.StringColumnIndexMap)+1)
+	stringColumnIndexMap[SlateTargetIndicesColumn] = matrix.Column{
+		Name:     SlateTargetIndicesColumn,
+		DataType: DataTypeString,
+		Index:    0,
+	}
+	index := 1
+	for colName := range slateData.StringColumnIndexMap {
+		if colName == SlateTargetIndicesColumn {
+			continue
+		}
+		stringColumnIndexMap[colName] = matrix.Column{
+			Name:     colName,
+			DataType: DataTypeString,
+			Index:    index,
+		}
+		index++
+	}
+	return stringColumnIndexMap
 }
