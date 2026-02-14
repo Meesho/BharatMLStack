@@ -75,6 +75,12 @@ func bindEnvVars() {
 	viper.BindEnv("externalServicePredator_CallerToken", "EXTERNAL_SERVICE_PREDATOR_CALLER_TOKEN")
 	viper.BindEnv("externalServicePredator_Deadline", "EXTERNAL_SERVICE_PREDATOR_DEADLINE")
 
-	// Metrics config
+	// Metrics / Telegraf config
 	viper.BindEnv("metrics_sampling_rate", "METRIC_SAMPLING_RATE")
+	viper.BindEnv("telegraf_host", "TELEGRAF_HOST")
+	viper.BindEnv("telegraf_port", "TELEGRAF_PORT")
+
+	// Kafka inference logging config
+	viper.BindEnv("kafka_bootstrapServers", "KAFKA_BOOTSTRAP_SERVERS")
+	viper.BindEnv("kafka_v2LogTopic", "KAFKA_V2_LOG_TOPIC")
 }

@@ -111,6 +111,39 @@ func (m *ComponentMatrix) PopulateByteData(columnToPopulate string, score [][]by
 	}
 }
 
+// PopulateByteAndStringData writes byte data to the byte column and, if a matching
+// string column exists, converts and writes the string representation as well.
+func (m *ComponentMatrix) PopulateByteAndStringData(columnToPopulate string, score [][]byte) {
+	col, ok := m.ByteColumnIndexMap[columnToPopulate]
+	if !ok {
+		return
+	}
+	stringCol, hasStringCol := m.StringColumnIndexMap[columnToPopulate]
+	var strVal string
+	if len(score) == 1 {
+		if hasStringCol {
+			strVal, _ = typeconverter.BytesToString(score[0], stringCol.DataType)
+		}
+		for i := 0; i < len(m.Rows); i++ {
+			m.Rows[i].ByteData[col.Index] = score[0]
+			if hasStringCol {
+				m.Rows[i].StringData[stringCol.Index] = strVal
+			}
+		}
+		return
+	}
+
+	for i := 0; i < len(m.Rows) && i < len(score); i++ {
+		m.Rows[i].ByteData[col.Index] = score[i]
+		if hasStringCol {
+			strVal, err := typeconverter.BytesToString(score[i], stringCol.DataType)
+			if err == nil {
+				m.Rows[i].StringData[stringCol.Index] = strVal
+			}
+		}
+	}
+}
+
 func (m *ComponentMatrix) PopulateStringDataFromSingleValue(columnToPopulate string, value string) {
 	col, ok := m.StringColumnIndexMap[columnToPopulate]
 	if !ok {

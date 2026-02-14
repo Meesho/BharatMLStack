@@ -33,7 +33,11 @@ func InitMetrics(configs *configs.AppConfigs) {
 		statsd.WithTags(globalTags),
 	)
 	if err != nil {
-		logger.Panic("StatsD client initialization failed!", err)
+		// In local/dev environments Telegraf may not be running; log and continue
+		// with the default no-op-safe client instead of crashing the service.
+		logger.Error("StatsD client initialization failed, metrics will be unavailable", err)
+		statsDClient = getDefaultClient()
+		return
 	}
 	//go initJMXServer()
 	logger.Info(fmt.Sprintf("Metrics client initialized with telegraf address - %s, global tags - %v, and sampling rate - %f",
@@ -41,7 +45,11 @@ func InitMetrics(configs *configs.AppConfigs) {
 }
 
 func getDefaultClient() *statsd.Client {
-	client, _ := statsd.New("localhost:8125")
+	client, err := statsd.New("localhost:8125")
+	if err != nil {
+		// Return a no-op client so callers never hit nil-pointer panics.
+		client, _ = statsd.New("localhost:8125", statsd.WithoutTelemetry())
+	}
 	return client
 }
 
