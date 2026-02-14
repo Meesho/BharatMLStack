@@ -34,6 +34,10 @@ func buildPairWiseResponse(componentMatrix *matrix.ComponentMatrix, slateData *m
 
 	// Target-level scores from the main matrix (one per target row)
 	targetOutputColumns := conf.ResponseConfig.Features
+	slateCols := slateOutputColumnNames(conf)
+	if len(slateCols) > 0 {
+		targetOutputColumns = excludeColumns(targetOutputColumns, slateCols)
+	}
 	if len(targetOutputColumns) > 0 && len(componentMatrix.Rows) > 0 {
 		targetOutputSchema := buildOutputSchema(targetOutputColumns, componentMatrix)
 		targetScores := make([]*pb.TargetScore, len(componentMatrix.Rows))
@@ -48,7 +52,7 @@ func buildPairWiseResponse(componentMatrix *matrix.ComponentMatrix, slateData *m
 
 	// Pair-level scores from SlateData (one per pair/slate row)
 	if slateData != nil && len(slateData.Rows) > 0 {
-		pairOutputColumns := slateOutputColumnNames(conf)
+		pairOutputColumns := includeColumns(slateCols, conf.ResponseConfig.Features)
 		if len(pairOutputColumns) > 0 {
 			pairOutputSchema := buildOutputSchema(pairOutputColumns, slateData)
 			pairScores := make([]*pb.PairScore, len(slateData.Rows))
@@ -73,6 +77,10 @@ func buildSlateWiseResponse(componentMatrix *matrix.ComponentMatrix, slateData *
 
 	// Target-level scores from the main matrix (one per target row)
 	targetOutputColumns := conf.ResponseConfig.Features
+	slateCols := slateOutputColumnNames(conf)
+	if len(slateCols) > 0 {
+		targetOutputColumns = excludeColumns(targetOutputColumns, slateCols)
+	}
 	if len(targetOutputColumns) > 0 && len(componentMatrix.Rows) > 0 {
 		targetOutputSchema := buildOutputSchema(targetOutputColumns, componentMatrix)
 		targetScores := make([]*pb.TargetScore, len(componentMatrix.Rows))
@@ -87,7 +95,7 @@ func buildSlateWiseResponse(componentMatrix *matrix.ComponentMatrix, slateData *
 
 	// Slate-level scores from SlateData (one per slate row)
 	if slateData != nil && len(slateData.Rows) > 0 {
-		slateOutputColumns := slateOutputColumnNames(conf)
+		slateOutputColumns := includeColumns(slateCols, conf.ResponseConfig.Features)
 		if len(slateOutputColumns) > 0 {
 			slateOutputSchema := buildOutputSchema(slateOutputColumns, slateData)
 			slateScores := make([]*pb.SlateScore, len(slateData.Rows))
@@ -124,6 +132,46 @@ func slateOutputColumnNames(conf *config.Config) []string {
 		cols = append(cols, iComp.ScoreColumn)
 	}
 	return cols
+}
+
+// excludeColumns removes excluded columns from a source list while preserving order.
+func excludeColumns(source []string, excluded []string) []string {
+	if len(source) == 0 || len(excluded) == 0 {
+		return source
+	}
+	excludedSet := make(map[string]struct{}, len(excluded))
+	for _, col := range excluded {
+		excludedSet[col] = struct{}{}
+	}
+
+	filtered := make([]string, 0, len(source))
+	for _, col := range source {
+		if _, ok := excludedSet[col]; ok {
+			continue
+		}
+		filtered = append(filtered, col)
+	}
+	return filtered
+}
+
+// includeColumns keeps only columns that are present in the allowed list while preserving order.
+func includeColumns(source []string, allowed []string) []string {
+	if len(source) == 0 || len(allowed) == 0 {
+		return []string{}
+	}
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, col := range allowed {
+		allowedSet[col] = struct{}{}
+	}
+
+	filtered := make([]string, 0, len(source))
+	for _, col := range source {
+		if _, ok := allowedSet[col]; !ok {
+			continue
+		}
+		filtered = append(filtered, col)
+	}
+	return filtered
 }
 
 // ---------------------------------------------------------------------------
@@ -179,22 +227,44 @@ func mapDataTypeString(dt string) pb.DataType {
 		return pb.DataType_DataTypeUint32
 	case "DataTypeUint64", "uint64":
 		return pb.DataType_DataTypeUint64
+	case "DataTypeString", "string":
+		return pb.DataType_DataTypeString
 	case "DataTypeBool", "bool":
 		return pb.DataType_DataTypeBool
 	case "DataTypeFP8E5M2", "fp8e5m2":
 		return pb.DataType_DataTypeFP8E5M2
 	case "DataTypeFP8E4M3", "fp8e4m3":
 		return pb.DataType_DataTypeFP8E4M3
+	case "DataTypeFP8E5M2Vector", "fp8e5m2vector":
+		return pb.DataType_DataTypeFP8E5M2Vector
+	case "DataTypeFP8E4M3Vector", "fp8e4m3vector":
+		return pb.DataType_DataTypeFP8E4M3Vector
 	case "DataTypeFP32Vector", "fp32vector":
 		return pb.DataType_DataTypeFP32Vector
+	case "DataTypeFP16Vector", "fp16vector":
+		return pb.DataType_DataTypeFP16Vector
 	case "DataTypeFP64Vector", "fp64vector":
 		return pb.DataType_DataTypeFP64Vector
+	case "DataTypeInt8Vector", "int8vector":
+		return pb.DataType_DataTypeInt8Vector
+	case "DataTypeInt16Vector", "int16vector":
+		return pb.DataType_DataTypeInt16Vector
 	case "DataTypeInt32Vector", "int32vector":
 		return pb.DataType_DataTypeInt32Vector
 	case "DataTypeInt64Vector", "int64vector":
 		return pb.DataType_DataTypeInt64Vector
+	case "DataTypeUint8Vector", "uint8vector":
+		return pb.DataType_DataTypeUint8Vector
+	case "DataTypeUint16Vector", "uint16vector":
+		return pb.DataType_DataTypeUint16Vector
+	case "DataTypeUint32Vector", "uint32vector":
+		return pb.DataType_DataTypeUint32Vector
+	case "DataTypeUint64Vector", "uint64vector":
+		return pb.DataType_DataTypeUint64Vector
 	case "DataTypeStringVector", "stringvector":
 		return pb.DataType_DataTypeStringVector
+	case "DataTypeBoolVector", "boolvector":
+		return pb.DataType_DataTypeBoolVector
 	default:
 		return pb.DataType_DataTypeString
 	}
