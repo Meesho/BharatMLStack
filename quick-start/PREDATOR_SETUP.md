@@ -1105,21 +1105,21 @@ kubectl -n prd-predator port-forward svc/prd-predator 8090:80 &
 # Step 3: Test gRPC access from your host machine
 # Predator exposes Triton gRPC on port 8001 (service port 80 -> targetPort 8001)
 grpcurl -plaintext \
-  -import-path helix-client/pkg/clients/predator/client/proto \
+  -import-path go-sdk/pkg/clients/predator/client/proto \
   -proto grpc_service.proto \
   -d '{}' \
   localhost:8090 inference.GRPCInferenceService/ServerLive
 
 # Test server readiness
 grpcurl -plaintext \
-  -import-path helix-client/pkg/clients/predator/client/proto \
+  -import-path go-sdk/pkg/clients/predator/client/proto \
   -proto grpc_service.proto \
   -d '{}' \
   localhost:8090 inference.GRPCInferenceService/ServerReady
 
 # List available services
 grpcurl -plaintext \
-  -import-path helix-client/pkg/clients/predator/client/proto \
+  -import-path go-sdk/pkg/clients/predator/client/proto \
   -proto grpc_service.proto \
   localhost:8090 list
 

@@ -1781,7 +1781,7 @@ print_summary() {
     echo "2. Access Predator service directly via port-forward:"
     echo "   kubectl -n prd-predator port-forward svc/prd-predator 8090:80"
     echo "   Then test with:"
-    echo "   grpcurl -plaintext -import-path helix-client/pkg/clients/predator/client/proto \\"
+    echo "   grpcurl -plaintext -import-path go-sdk/pkg/clients/predator/client/proto \\"
     echo "     -proto grpc_service.proto -d '{}' \\"
     echo "     localhost:8090 inference.GRPCInferenceService/ServerLive"
     echo ""

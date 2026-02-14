@@ -1,5 +1,5 @@
 ---
-slug: post-three
+slug: post-four
 title: "Designing a Production-Grade LLM Inference Platform: From Model Weights to Scalable GPU Serving"
 authors: [jaya]
 date: 2025-3-29

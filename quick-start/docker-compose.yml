@@ -504,7 +504,7 @@ services:
     restart: "no"
 
   numerix:
-    image: numerix:${NUMERIX_VERSION:-latest}
+    image: ghcr.io/meesho/numerix:${NUMERIX_VERSION:-latest}
     container_name: numerix
     ports:
       - "8083:8083"
