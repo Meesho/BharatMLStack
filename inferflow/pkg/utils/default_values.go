@@ -57,24 +57,6 @@ func GetDefaultValuesInBytes(dataType string) []byte {
 	return []byte("0.0")
 }
 
-// getHardcodedZeroBytes returns zero-filled bytes for numeric types from defaultBytes,
-// or 4 zero bytes (fp32 default) for unknown or non-numeric types (e.g. string).
-func getHardcodedZeroBytes(dataType string) []byte {
-	dt := strings.ToLower(dataType)
-	dt = strings.Replace(dt, "vector", "", 1)
-	dt = strings.Replace(dt, "datatype", "", 1)
-	dt = strings.TrimSpace(dt)
-	if val, ok := defaultBytes[dt]; ok {
-		for _, b := range val {
-			if b != 0 {
-				return make([]byte, 4) // non-numeric (e.g. string/bytes)
-			}
-		}
-		return val
-	}
-	return make([]byte, 4)
-}
-
 // GetDefaultValueByType returns default byte value for scalar types.
 // Vectors are handled separately with empty bytes (2-byte size = 0).
 func GetDefaultValueByType(dataType string) []byte {

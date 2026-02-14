@@ -154,7 +154,7 @@ func (iComponent *NumerixComponent) runSlate(
 		iComponent.populateScoreMap(req.ModelId, iConfig, builder.Schema, builder, errLoggingPercent)
 
 		// Take the first output row as the slate-level score
-		if builder.Scores != nil && len(builder.Scores) > 0 {
+		if len(builder.Scores) > 0 {
 			slateScores[s] = builder.Scores[0]
 		}
 	}
