@@ -361,25 +361,38 @@ func buildColumnarRecord(compRequest *components.ComponentRequest, entityColInde
 		for i, keyIface := range rawKeys {
 			fname := keyIface.(string)
 			var val []byte
+			featureType := ""
+			isBytesType := false
+			if infoIface, ok := featureSchema.Get(fname); ok {
+				if info, ok := infoIface.(config.SchemaComponents); ok {
+					featureType = info.FeatureType
+					isBytesType = utils.IsBytesDataType(featureType)
+				}
+			}
 
 			if byteCol, exists := compRequest.ComponentData.ByteColumnIndexMap[fname]; exists {
 				if byteCol.Index >= 0 && byteCol.Index < len(row.ByteData) {
 					val = row.ByteData[byteCol.Index]
 				}
 			} else if strCol, exists := compRequest.ComponentData.StringColumnIndexMap[fname]; exists {
-				var dataType types.DataType
-				if infoIface, ok := featureSchema.Get(fname); ok {
-					if info, ok := infoIface.(config.SchemaComponents); ok {
-						if dt, err := utils.StringToDataType(info.FeatureType); err == nil {
-							dataType = dt
-						}
-					}
-				}
 				if strCol.Index >= 0 && strCol.Index < len(row.StringData) {
 					strVal := row.StringData[strCol.Index]
-					if strVal != "" && dataType != 0 {
-						if converted, err := utils.ConvertStringToType(strVal, dataType); err == nil {
-							val = converted
+					if strVal != "" {
+						if isBytesType {
+							// BYTES fields are already logical raw bytes; use string bytes directly.
+							val = []byte(strVal)
+						} else {
+							var dataType types.DataType
+							if featureType != "" {
+								if dt, err := utils.StringToDataType(featureType); err == nil {
+									dataType = dt
+								}
+							}
+							if dataType != 0 {
+								if converted, err := utils.ConvertStringToType(strVal, dataType); err == nil {
+									val = converted
+								}
+							}
 						}
 					}
 				}
@@ -488,6 +501,14 @@ func buildParquetRows(compRequest *components.ComponentRequest, entityColIndex i
 		for i, keyIface := range rawKeys {
 			fname := keyIface.(string)
 			var val []byte
+			featureType := ""
+			isBytesType := false
+			if infoIface, ok := featureSchema.Get(fname); ok {
+				if info, ok := infoIface.(config.SchemaComponents); ok {
+					featureType = info.FeatureType
+					isBytesType = utils.IsBytesDataType(featureType)
+				}
+			}
 
 			if byteCol, exists := compRequest.ComponentData.ByteColumnIndexMap[fname]; exists {
 				if byteCol.Index >= 0 && byteCol.Index < len(perEntityRow.ByteData) {
@@ -497,12 +518,13 @@ func buildParquetRows(compRequest *components.ComponentRequest, entityColIndex i
 				if strCol.Index >= 0 && strCol.Index < len(perEntityRow.StringData) {
 					strVal := perEntityRow.StringData[strCol.Index]
 					if strVal != "" {
-						if infoIface, ok := featureSchema.Get(fname); ok {
-							if info, ok := infoIface.(config.SchemaComponents); ok {
-								if dt, err := utils.StringToDataType(info.FeatureType); err == nil && dt != 0 {
-									if converted, err := utils.ConvertStringToType(strVal, dt); err == nil {
-										val = converted
-									}
+						if isBytesType {
+							// BYTES fields are already logical raw bytes; use string bytes directly.
+							val = []byte(strVal)
+						} else if featureType != "" {
+							if dt, err := utils.StringToDataType(featureType); err == nil && dt != 0 {
+								if converted, err := utils.ConvertStringToType(strVal, dt); err == nil {
+									val = converted
 								}
 							}
 						}

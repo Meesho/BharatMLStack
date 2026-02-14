@@ -159,7 +159,7 @@ func (pComponent *PredatorComponent) runSlate(
 				for _, scoreName := range out.ModelScores {
 					if counter < len(builder.Scores) && len(builder.Scores[counter]) > 0 {
 						if col, ok := slateMatrix.ByteColumnIndexMap[scoreName]; ok {
-							slateMatrix.Rows[s].ByteData[col.Index] = builder.Scores[0][0]
+							slateMatrix.Rows[s].ByteData[col.Index] = builder.Scores[counter][0]
 						}
 					}
 					counter++
