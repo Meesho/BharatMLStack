@@ -3,8 +3,10 @@ package inferflow
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/inferflow/handlers/components"
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/config"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/logger"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/metrics"
@@ -40,6 +42,7 @@ func (s *PredictService) InferPointWise(ctx context.Context, req *pb.PointWiseRe
 	executor.Execute(conf.DAGExecutionConfig.ComponentDependency, *componentReq)
 
 	resp := buildPointWiseResponse(componentReq.ComponentData, conf)
+	maybeLogInferenceResponse(ctx, req.TrackingId, conf, componentReq)
 
 	metrics.Timing("predict.infer.request.latency", time.Since(startTime), tags)
 	metrics.Count("predict.infer.request.batch.size", int64(len(req.Targets)), tags)
@@ -68,6 +71,7 @@ func (s *PredictService) InferPairWise(ctx context.Context, req *pb.PairWiseRequ
 	executor.Execute(conf.DAGExecutionConfig.ComponentDependency, *componentReq)
 
 	resp := buildPairWiseResponse(componentReq.ComponentData, componentReq.SlateData, conf)
+	maybeLogInferenceResponse(ctx, req.TrackingId, conf, componentReq)
 
 	metrics.Timing("predict.infer.request.latency", time.Since(startTime), tags)
 	metrics.Count("predict.infer.request.batch.size", int64(len(req.Pairs)), tags)
@@ -96,9 +100,28 @@ func (s *PredictService) InferSlateWise(ctx context.Context, req *pb.SlateWiseRe
 	executor.Execute(conf.DAGExecutionConfig.ComponentDependency, *componentReq)
 
 	resp := buildSlateWiseResponse(componentReq.ComponentData, componentReq.SlateData, conf)
+	maybeLogInferenceResponse(ctx, req.TrackingId, conf, componentReq)
 
 	metrics.Timing("predict.infer.request.latency", time.Since(startTime), tags)
 	metrics.Count("predict.infer.request.batch.size", int64(len(req.Slates)), tags)
 
 	return resp, nil
+}
+
+func maybeLogInferenceResponse(ctx context.Context, trackingID string, conf *config.Config, componentReq *components.ComponentRequest) {
+	// Inference logging: log response features based on config
+	if conf.ResponseConfig.LoggingPerc > 0 &&
+		rand.Intn(100)+1 <= conf.ResponseConfig.LoggingPerc &&
+		trackingID != "" {
+		modelConfigMap := config.GetModelConfigMap()
+		// V2 logging: route based on configured format type
+		switch modelConfigMap.ServiceConfig.V2LoggingType {
+		case "proto":
+			go logInferflowResponseBytes(ctx, "", trackingID, conf, componentReq)
+		case "arrow":
+			go logInferflowResponseArrow(ctx, "", trackingID, conf, componentReq)
+		case "parquet":
+			go logInferflowResponseParquet(ctx, "", trackingID, conf, componentReq)
+		}
+	}
 }
