@@ -196,10 +196,23 @@
   margin: 0 auto;
   position: relative;
   z-index: 1;
+  overflow: hidden;
+}
+
+.networkCanvas {
+  position: absolute;
+  top: 0;
+  left: -2rem;
+  width: calc(100% + 4rem);
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
 }
 
 .heroContent {
   animation: hpFadeInUp 1s ease-out;
+  position: relative;
+  z-index: 1;
 }
 
 @keyframes hpFadeInUp {
@@ -259,6 +272,7 @@
 
 .heroImage {
   position: relative;
+  z-index: 1;
   animation: hpFadeInUp 1s ease-out 0.3s both;
 }
 
@@ -535,7 +549,7 @@
 
 .statsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 2.5rem;
   margin-top: 4rem;
 }
@@ -911,6 +925,10 @@
     grid-template-columns: 1fr 1fr;
   }
 
+  .statsGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .footerContent {
     grid-template-columns: 1fr 1fr;
   }
@@ -932,6 +950,10 @@
   .componentsGrid,
   .blogGrid,
   .videosGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .statsGrid {
     grid-template-columns: 1fr;
   }
 
@@ -964,10 +986,6 @@
 
   .sectionTitle {
     font-size: 2rem;
-  }
-
-  .statsGrid {
-    grid-template-columns: 1fr 1fr;
   }
 
   .heroButtons {
