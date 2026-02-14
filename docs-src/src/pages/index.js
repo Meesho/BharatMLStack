@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import Layout from '@theme/Layout';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import useBaseUrl from '@docusaurus/useBaseUrl';
@@ -84,10 +84,10 @@ const COMPONENTS = [
 ];
 
 const STATS = [
-  { value: '4.5M+', label: 'Daily Orders', description: 'Daily orders processed via ML pipelines' },
-  { value: '2.4M', label: 'QPS on FS', description: 'QPS on Feature Store with batch size of 100 id lookups' },
-  { value: '1M+', label: 'QPS Inference', description: 'QPS on Model Inference' },
-  { value: '500K', label: 'QPS Embedding', description: 'QPS Embedding Search' },
+  { target: 4.5, suffix: 'M+', decimals: 1, label: 'Daily Orders', description: 'Daily orders processed via ML pipelines' },
+  { target: 2.4, suffix: 'M', decimals: 1, label: 'QPS on FS', description: 'QPS on Feature Store with batch size of 100 id lookups' },
+  { target: 1, suffix: 'M+', decimals: 0, label: 'QPS Inference', description: 'QPS on Model Inference' },
+  { target: 500, suffix: 'K', decimals: 0, label: 'QPS Embedding', description: 'QPS Embedding Search' },
 ];
 
 const DEMO_VIDEOS = [
@@ -179,10 +179,115 @@ function CustomNav() {
   );
 }
 
+function NetworkBackground() {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let animationId;
+    let nodes = [];
+    const NODE_COUNT = 50;
+    const CONNECTION_DIST = 150;
+
+    function resize() {
+      const parent = canvas.parentElement;
+      canvas.width = parent.offsetWidth;
+      canvas.height = parent.offsetHeight;
+    }
+
+    function initNodes() {
+      nodes = [];
+      for (let i = 0; i < NODE_COUNT; i++) {
+        nodes.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          vx: (Math.random() - 0.5) * 0.4,
+          vy: (Math.random() - 0.5) * 0.4,
+          radius: Math.random() * 2 + 1,
+        });
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw connections
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[i].x - nodes[j].x;
+          const dy = nodes[i].y - nodes[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < CONNECTION_DIST) {
+            const opacity = (1 - dist / CONNECTION_DIST) * 0.25;
+            ctx.beginPath();
+            ctx.moveTo(nodes[i].x, nodes[i].y);
+            ctx.lineTo(nodes[j].x, nodes[j].y);
+            ctx.strokeStyle = `rgba(99, 102, 241, ${opacity})`;
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Draw nodes
+      for (const node of nodes) {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(139, 92, 246, 0.5)';
+        ctx.fill();
+      }
+    }
+
+    function update() {
+      for (const node of nodes) {
+        node.x += node.vx;
+        node.y += node.vy;
+        // Bounce off edges
+        if (node.x < 0 || node.x > canvas.width) node.vx *= -1;
+        if (node.y < 0 || node.y > canvas.height) node.vy *= -1;
+        // Keep in bounds
+        node.x = Math.max(0, Math.min(canvas.width, node.x));
+        node.y = Math.max(0, Math.min(canvas.height, node.y));
+      }
+    }
+
+    function animate() {
+      update();
+      draw();
+      animationId = requestAnimationFrame(animate);
+    }
+
+    resize();
+    initNodes();
+    animate();
+
+    const resizeObserver = new ResizeObserver(() => {
+      resize();
+    });
+    resizeObserver.observe(canvas.parentElement);
+
+    return () => {
+      cancelAnimationFrame(animationId);
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className={styles.networkCanvas}
+      aria-hidden="true"
+    />
+  );
+}
+
 function HeroSection() {
-  const getStartedUrl = useBaseUrl('/category/online-feature-store');
+  const getStartedUrl = useBaseUrl('/intro');
   return (
     <section className={styles.hero}>
+      <NetworkBackground />
       <div className={styles.heroContent}>
         <div className={styles.heroBadge}>Open-source, scalable stack for enterprise ML</div>
         <h1 className={styles.heroTitle}>Build production ML pipelines faster</h1>
@@ -306,6 +411,57 @@ function ComponentsSection() {
   );
 }
 
+function AnimatedCounter({ target, suffix, decimals, duration = 1500 }) {
+  const [count, setCount] = useState(0);
+  const [hasStarted, setHasStarted] = useState(false);
+  const ref = useRef(null);
+
+  const startAnimation = useCallback(() => {
+    if (hasStarted) return;
+    setHasStarted(true);
+
+    const startTime = performance.now();
+    const step = (now) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease-out cubic for a fast start that decelerates
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCount(eased * target);
+      if (progress < 1) {
+        requestAnimationFrame(step);
+      } else {
+        setCount(target);
+      }
+    };
+    requestAnimationFrame(step);
+  }, [target, duration, hasStarted]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          startAnimation();
+        }
+      },
+      { threshold: 0.3 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [startAnimation]);
+
+  const display = decimals > 0
+    ? count.toFixed(decimals)
+    : Math.round(count).toLocaleString();
+
+  return (
+    <div className={styles.statValue} ref={ref}>
+      {display}{suffix}
+    </div>
+  );
+}
+
 function StatsSection() {
   return (
     <section className={`${styles.section} ${styles.statsSection}`} id="stats">
@@ -318,7 +474,11 @@ function StatsSection() {
           {STATS.map((stat, idx) => (
             <div className={styles.statCard} key={idx}>
               <p className={styles.statLabel}>{stat.label}</p>
-              <div className={styles.statValue}>{stat.value}</div>
+              <AnimatedCounter
+                target={stat.target}
+                suffix={stat.suffix}
+                decimals={stat.decimals}
+              />
               <p className={styles.statDescription}>{stat.description}</p>
             </div>
           ))}
@@ -397,7 +557,7 @@ function BlogSection() {
 }
 
 function CTASection() {
-  const getStartedUrl = useBaseUrl('/category/online-feature-store');
+  const getStartedUrl = useBaseUrl('/intro');
   return (
     <section className={styles.section}>
       <div className={styles.container}>
