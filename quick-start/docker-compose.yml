@@ -234,6 +234,7 @@ services:
       - STORAGE_SCYLLA_1_TIMEOUT_IN_MS=300000
       - STORAGE_SCYLLA_1_USERNAME=
       - STORAGE_SCYLLA_1_PASSWORD=
+      - STORAGE_SCYLLA_1_MAJOR_VERSION=5
       - STORAGE_SCYLLA_1_SCYLLA_VERSION=5
       - STORAGE_SCYLLA_ACTIVE_CONFIG_IDS=1
       - P2P_CACHE_5_ENABLED=true
@@ -326,6 +327,7 @@ services:
       - STORAGE_SCYLLA_1_TIMEOUT_IN_MS=300000
       - STORAGE_SCYLLA_1_USERNAME=
       - STORAGE_SCYLLA_1_PASSWORD=
+      - STORAGE_SCYLLA_1_MAJOR_VERSION=5
       - STORAGE_SCYLLA_1_SCYLLA_VERSION=5
       - STORAGE_SCYLLA_ACTIVE_CONFIG_IDS=1
       # Etcd Configuration
@@ -502,7 +504,7 @@ services:
     restart: "no"
 
   numerix:
-    image: numerix:${NUMERIX_VERSION:-latest}
+    image: ghcr.io/meesho/numerix:${NUMERIX_VERSION:-latest}
     container_name: numerix
     ports:
       - "8083:8083"

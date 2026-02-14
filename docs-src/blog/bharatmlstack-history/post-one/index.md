@@ -6,7 +6,7 @@ date: 2022-11-15
 tags: [online-feature-store, interaction-store, mlplatform, meesho]
 ---
 
-![BharatMLStack](./bharatmlstack.png)
+![BharatMLStack](./bms.png)
 ## The Genesis: How a Friday Night Roast Sparked Meesho’s ML Platform
 
 It all started in early 2022, over a casual Friday evening catch-up. Like many great origin stories, this one began with friendly banter between a group of backend engineers and data scientists. As the conversations unfolded, so did the roasting—until one remark hit a little too close to home:

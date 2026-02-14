@@ -167,6 +167,43 @@ function SDKsAbout() {
   );
 }
 
+function NumerixAbout() {
+  return (
+    <section className={styles.aboutSection}>
+      <div className="container">
+        <div className="row">
+          <div className="col col--6">
+            <Heading as="h2">Numerix</Heading>
+            <p>
+              Numerix is a mathematical compute engine for BharatML Stack. It is used to perform mathematical operations on matrices and vectors.
+            </p>
+            <Link
+              className="button button--primary"
+              to="/category/numerix">
+              Explore Numerix →
+            </Link>
+          </div>
+          <div className="col col--6">
+            <div className={styles.highlightBox}>
+              <h3>🛠️ Numerix Features</h3>
+              <ul>
+                <li>✅ Postfix expression evaluation</li>
+                <li>✅ Vectorized math operations</li>
+                <li>✅ Typed evaluation</li>
+                <li>✅ Compiler-assisted SIMD</li>
+                <li>✅ ARM & AMD support</li>
+                <li>✅ Multi-arch builds</li>
+                <li>✅ Deterministic runtime</li>
+
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const {siteConfig} = useDocusaurusContext();
   return (
@@ -181,6 +218,7 @@ export default function Home() {
         <TruffleboxAbout />
         <SDKsFeatures />
         <SDKsAbout />
+        <NumerixAbout />
       </main>
     </Layout>
   );
