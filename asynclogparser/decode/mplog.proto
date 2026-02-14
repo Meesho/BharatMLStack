@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package decode;
+
+option go_package = "./decode";
+
+// MPLog represents a model proxy log entry
+message MPLog {
+  string user_id = 1;
+  string tracking_id = 2;
+  string model_proxy_config_id = 3;
+  int32 version = 4;
+  int32 format_type = 5; // 0 = proto, 1 = arrow, 2 = parquet
+  repeated string entities = 6;
+  repeated string parent_entity = 7;
+  repeated bytes encoded_features = 8; // Per-entity encoded feature blobs
+}
+
