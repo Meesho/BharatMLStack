@@ -1,0 +1,61 @@
+---
+description: These rules cover data shapes, allocation, interface design, and safe concurrency/error handling—areas where AI can subtly violate idioms or introduce leaks and races.
+alwaysApply: false
+globs: *.go
+---
+
+### Effective Go Rules: Data, Allocation, Interfaces, Concurrency, Errors
+
+These rules cover data shapes, allocation, interface design, and safe concurrency/error handling—areas where AI can subtly violate idioms or introduce leaks and races.
+
+## Arrays, Slices, Maps
+- Reassign the result of `append`; capacity may change.
+- Preallocate capacity when known; use `copy` for duplication.
+- If copying a slice or map, the pointers nested in these will not be copied.
+- Maps: missing keys yield zero values; use comma-ok to test presence.
+
+Example:
+```go
+v, ok := m[key]
+if !ok { /* handle missing */ }
+```
+
+## Variadics & Append
+- Use `...T` for flexible APIs; forward with `f(v...)`.
+- Concatenate slices with `append(dst, src...)`.
+
+
+## Methods: Pointer vs Value
+- Pointer receivers for mutation/big copies.
+
+## Interfaces
+- Define small, behavior-driven interfaces near use sites.
+- Constructors should return the narrowest interface needed.
+- Convert types to reuse method sets (e.g., `sort.IntSlice(s).Sort()`).
+
+
+## Concurrency Basics
+- Start goroutines only when beneficial; ensure they can terminate.
+- Use channels for synchronization/communication; avoid shared memory without coordination.
+
+Use Worker pool at appropriate places:
+```go
+jobs := make(chan Job)
+for i := 0; i < N; i++ { go func() { for j := range jobs { handle(j) } }() }
+```
+
+Channel ownership:
+- Close channels only from the sender/owner.
+
+## Context & Cancellation
+- Accept `context.Context` and honor `Done()` for long-lived operations.
+- Avoid `time.Sleep` polling; use timers/tickers with `select`.
+
+## Panic, Recover, Errors
+- Prefer `error` returns; reserve `panic` for unrecoverable programmer errors.
+- At boundaries, `defer` + `recover` to convert internal panics to errors; type-assert expected panic values.
+- Structure error strings without caps/punctuation; prefix with operation or package when helpful.
+- Avoid double-reporting (log and return); choose a single owner.
+- Use rich error types (ex: `*os.PathError`) and `%w` wrapping.
+- Always try to return a meaningfull error code and message, client should be able to find out the failure reason without exposing internal details. 
+- Either log or return - not both. If you're returning an API response, then log it as well.
