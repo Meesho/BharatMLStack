@@ -16,31 +16,6 @@ type ModelConfig struct {
 type ServiceConfig struct {
 	V2LoggingType      string       `json:"v2-logging-type"`
 	CompressionEnabled bool         `json:"compression-enabled"`
-	AsyncLoggerConfig  LoggerConfig `json:"async-logger-config"`
-}
-
-type LoggerConfig struct {
-	Enabled             bool            `json:"enabled"`
-	BufferSize          int             `json:"buffer-size"`
-	NumShards           int             `json:"num-shards"`
-	LogFilePathEnvKey   string          `json:"log-file-path-env-key"`
-	MaxFileSize         int64           `json:"max-file-size"`
-	PreallocateFileSize int64           `json:"preallocate-file-size"`
-	FlushInterval       string          `json:"flush-interval"`
-	FlushTimeout        string          `json:"flush-timeout"`
-	GCSUploadEnabled    bool            `json:"gcs-upload-enabled"`
-	GCSUploadConfig     GCSUploadConfig `json:"gcs-upload-config,omitempty"`
-}
-
-type GCSUploadConfig struct {
-	Bucket              string `json:"bucket"`
-	ObjectPrefix        string `json:"object-prefix"`
-	ChunkSize           int    `json:"chunk-size"`
-	MaxChunksPerCompose int    `json:"max-chunks-per-compose"`
-	MaxRetries          int    `json:"max-retries"`
-	RetryDelay          string `json:"retry-delay"`
-	GRPCPoolSize        int    `json:"grpc-pool-size"`
-	ChannelBufferSize   int    `json:"channel-buffer-size"`
 }
 
 type SchemaComponents struct {
