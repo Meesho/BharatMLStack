@@ -126,12 +126,12 @@ This means new models or configuration changes go live **without redeployment**.
 - Auth via `CALLER_ID` and `CALLER_TOKEN` metadata
 
 #### Predator (Model Serving)
-- Uses `helix-client` for model inference
+- Uses `go-sdk` for model inference
 - Supports **percentage-based traffic routing** across multiple model endpoints
 - Configurable calibration and batch sizing
 
 #### Numerix (Compute Engine)
-- Uses `helix-client` Numerix client
+- Uses `go-sdk` Numerix client
 - RPC: `NumerixService.Compute` with entity score data
 - Used for compute operations like reranking
 
