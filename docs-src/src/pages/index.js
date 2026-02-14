@@ -92,28 +92,28 @@ const STATS = [
 
 const DEMO_VIDEOS = [
   {
-    title: 'Embedding Platform',
-    description: 'See how Skye powers real-time similarity search and embedding retrieval at scale.',
-    url: 'https://videos.meesho.com/reels/embedding_platform.mp4',
-  },
-  {
     title: 'Feature Store',
-    description: 'Watch the Online Feature Store deliver sub-10ms feature serving for real-time inference.',
+    description: 'Learn how to onboard and manage features using the self-serve UI for the Online Feature Store.',
     url: 'https://videos.meesho.com/reels/feature_store.mp4',
   },
   {
+    title: 'Embedding Platform',
+    description: 'Walkthrough of onboarding and managing embedding models via the Skye self-serve UI.',
+    url: 'https://videos.meesho.com/reels/embedding_platform.mp4',
+  },
+  {
     title: 'Numerix',
-    description: 'Explore ultra-fast matrix operations powered by Rust and SIMD acceleration.',
+    description: 'Step-by-step guide to configuring and running matrix operations through the Numerix self-serve UI.',
     url: 'https://videos.meesho.com/reels/numerix.mp4',
   },
   {
     title: 'Predator',
-    description: 'Automated Kubernetes-based model deployment with Helm, Argo CD, and KEDA.',
+    description: 'How to deploy and manage ML models on Kubernetes using the Predator self-serve UI.',
     url: 'https://videos.meesho.com/reels/predator.mp4',
   },
   {
     title: 'Inferflow',
-    description: 'Graph-based feature assembly and intelligent inference gateway in action.',
+    description: 'Setting up inferpipes and feature retrieval graphs through the Inferflow self-serve UI.',
     url: 'https://videos.meesho.com/reels/inferflow.mp4',
   },
 ];
