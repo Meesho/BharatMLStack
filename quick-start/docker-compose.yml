@@ -511,7 +511,7 @@ services:
       - EXTERNAL_SERVICE_PREDATOR_DEADLINE=200
       - METRIC_SAMPLING_RATE=1
       - KAFKA_BOOTSTRAP_SERVERS=broker:29092
-      - KAFKA_V2_LOG_TOPIC=inferflow_inference_logs
+      - KAFKA_LOGGING_TOPIC=inferflow_inference_logs
     networks:
       - onfs-network
     depends_on:

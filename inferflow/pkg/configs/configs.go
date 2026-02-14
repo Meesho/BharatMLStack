@@ -51,7 +51,7 @@ type Configs struct {
 
 	// Kafka config for inference logging
 	KafkaBootstrapServers string `mapstructure:"kafka_bootstrapServers"`
-	KafkaV2LogTopic       string `mapstructure:"kafka_v2LogTopic"`
+	KafkaLoggingTopic     string `mapstructure:"kafka_loggingTopic"`
 }
 
 type DynamicConfigs struct {

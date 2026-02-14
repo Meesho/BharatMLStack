@@ -34,7 +34,7 @@ func newV1Etcd(config interface{}, configs *configs.AppConfigs) Etcd {
 	}
 	appName := configs.Configs.ApplicationName
 	etcdServers := configs.Configs.ETCD_SERVER
-	etcdBasePath := basePath
+	etcdBasePath := basePath + appName + configPath
 	servers := strings.Split(etcdServers, ",")
 	username := configs.Configs.ETCD_USERNAME
 	password := configs.Configs.ETCD_PASSWORD

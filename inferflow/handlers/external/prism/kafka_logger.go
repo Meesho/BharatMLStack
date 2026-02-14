@@ -26,7 +26,7 @@ func InitKafkaLogger(appConfigs *configs.AppConfigs) {
 		return
 	}
 
-	if topic := appConfigs.Configs.KafkaV2LogTopic; topic != "" {
+	if topic := appConfigs.Configs.KafkaLoggingTopic; topic != "" {
 		v2Writer = &kafka.Writer{
 			Addr:         kafka.TCP(bootstrapServers),
 			Topic:        topic,
