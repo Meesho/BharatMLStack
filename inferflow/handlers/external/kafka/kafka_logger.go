@@ -1,4 +1,4 @@
-package prism
+package kafka
 
 import (
 	"context"
@@ -13,10 +13,10 @@ import (
 )
 
 var (
-	v2Writer *kafka.Writer
+	kafkaWriter *kafka.Writer
 )
 
-func v2ErrorTags(metricTags []string, errType string) []string {
+func getMetricTags(metricTags []string, errType string) []string {
 	metricTags = append(metricTags, "error-type:"+errType)
 	return metricTags
 }
@@ -30,7 +30,7 @@ func InitKafkaLogger(appConfigs *configs.AppConfigs) {
 	}
 
 	if topic := appConfigs.Configs.KafkaLoggingTopic; topic != "" {
-		v2Writer = &kafka.Writer{
+		kafkaWriter = &kafka.Writer{
 			Addr:         kafka.TCP(bootstrapServers),
 			Topic:        topic,
 			Balancer:     &kafka.LeastBytes{},
@@ -45,7 +45,7 @@ func InitKafkaLogger(appConfigs *configs.AppConfigs) {
 
 // publishInferenceInsightsLog sends inference insights (protobuf) to Kafka.
 func publishInferenceInsightsLog(msg proto.Message, modelId string) {
-	if v2Writer == nil {
+	if kafkaWriter == nil {
 		return
 	}
 	if msg == nil {
@@ -57,13 +57,13 @@ func publishInferenceInsightsLog(msg proto.Message, modelId string) {
 	metricTags := []string{"model-id", modelId}
 	if err != nil {
 		logger.Error("Error marshalling proto for V2 log:", err)
-		metrics.Count("inferflow.logging.error", 1, v2ErrorTags(metricTags, PROTO_MARSHAL_ERR))
+		metrics.Count("inferflow.logging.error", 1, getMetricTags(metricTags, PROTO_MARSHAL_ERR))
 		return
 	}
 
-	if err := v2Writer.WriteMessages(context.Background(), kafka.Message{Value: data}); err != nil {
+	if err := kafkaWriter.WriteMessages(context.Background(), kafka.Message{Value: data}); err != nil {
 		logger.Error("Error sending V2 log to Kafka:", err)
-		metrics.Count("inferflow.logging.error", 1, v2ErrorTags(metricTags, KAFKA_V2_ERR))
+		metrics.Count("inferflow.logging.error", 1, getMetricTags(metricTags, KAFKA_V2_ERR))
 		return
 	}
 
@@ -74,8 +74,8 @@ func publishInferenceInsightsLog(msg proto.Message, modelId string) {
 var PublishInferenceInsightsLog = publishInferenceInsightsLog
 
 func CloseKafkaLogger() {
-	if v2Writer != nil {
-		if err := v2Writer.Close(); err != nil {
+	if kafkaWriter != nil {
+		if err := kafkaWriter.Close(); err != nil {
 			logger.Error("Error closing Kafka V2 writer:", err)
 		}
 	}

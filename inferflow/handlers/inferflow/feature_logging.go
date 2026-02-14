@@ -12,7 +12,7 @@ import (
 
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/components"
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/config"
-	kafkaLogger "github.com/Meesho/BharatMLStack/inferflow/handlers/external/prism"
+	kafkaLogger "github.com/Meesho/BharatMLStack/inferflow/handlers/external/kafka"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/logger"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/metrics"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/utils"
