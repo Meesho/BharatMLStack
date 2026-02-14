@@ -67,7 +67,7 @@ remove_images() {
   echo "🖼️  Removing Docker images..."
   
   # List of image patterns to remove
-  IMAGES=("ghcr.io/meesho/onfs-consumer" "ghcr.io/meesho/trufflebox-ui" "numerix" "ghcr.io/meesho/horizon" "ghcr.io/meesho/onfs-api-server" "ghcr.io/meesho/inferflow" "ghcr.io/meesho/skye-admin" "ghcr.io/meesho/skye-consumers" "ghcr.io/meesho/skye-serving" "provectuslabs/kafka-ui" "apache/kafka" "quay.io/coreos/etcd" "tzfun/etcd-workbench" "redis" "mysql" "scylladb/scylla" "workspace-db-init" "alpine")
+  IMAGES=("ghcr.io/meesho/onfs-consumer" "ghcr.io/meesho/trufflebox-ui" "ghcr.io/meesho/numerix" "ghcr.io/meesho/horizon" "ghcr.io/meesho/onfs-api-server" "ghcr.io/meesho/inferflow" "ghcr.io/meesho/skye-admin" "ghcr.io/meesho/skye-consumers" "ghcr.io/meesho/skye-serving" "provectuslabs/kafka-ui" "apache/kafka" "quay.io/coreos/etcd" "tzfun/etcd-workbench" "redis" "mysql" "scylladb/scylla" "workspace-db-init" "alpine")
   
   for image_pattern in "${IMAGES[@]}"; do
     # Find images that match the pattern
