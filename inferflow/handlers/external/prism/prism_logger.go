@@ -1,4 +1,4 @@
-package external
+package prism
 
 import (
 	"context"
@@ -14,9 +14,12 @@ import (
 
 var (
 	v2Writer *kafka.Writer
-
-	v2MetricTags = []string{"transport:kafka", "version:v2"}
 )
+
+func v2ErrorTags(metricTags []string, errType string) []string {
+	metricTags = append(metricTags, "error-type:"+errType)
+	return metricTags
+}
 
 // InitKafkaLogger initializes Kafka writers for inference logging.
 func InitKafkaLogger(appConfigs *configs.AppConfigs) {
@@ -51,19 +54,20 @@ func publishInferenceInsightsLog(msg proto.Message, modelId string) {
 	}
 
 	data, err := proto.Marshal(msg)
+	metricTags := []string{"model-id", modelId}
 	if err != nil {
 		logger.Error("Error marshalling proto for V2 log:", err)
-		metrics.Count("inferflow.logging.error", 1, append(v2MetricTags, ERROR_TYPE, PROTO_MARSHAL_ERR))
+		metrics.Count("inferflow.logging.error", 1, v2ErrorTags(metricTags, PROTO_MARSHAL_ERR))
 		return
 	}
 
 	if err := v2Writer.WriteMessages(context.Background(), kafka.Message{Value: data}); err != nil {
 		logger.Error("Error sending V2 log to Kafka:", err)
-		metrics.Count("inferflow.logging.error", 1, append(v2MetricTags, ERROR_TYPE, KAFKA_V2_ERR))
+		metrics.Count("inferflow.logging.error", 1, v2ErrorTags(metricTags, KAFKA_V2_ERR))
 		return
 	}
 
-	metrics.Count("inferflow.logging.kafka_sent", 1, []string{"model-id", modelId})
+	metrics.Count("inferflow.logging.kafka_sent", 1, metricTags)
 }
 
 // PublishInferenceInsightsLog is kept as an exported alias for cross-package callers.

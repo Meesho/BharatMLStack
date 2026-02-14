@@ -1,4 +1,4 @@
-package external
+package prism
 
 const (
 	ERROR_TYPE        = "error-type"
