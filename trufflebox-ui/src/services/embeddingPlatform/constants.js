@@ -1,16 +1,9 @@
-/**
- * Constants for Embedding Platform (Skye)
- * Business rules, validation constants, and UI configurations
- */
-
-// =============================================================================
 // BUSINESS RULE CONSTANTS
-// =============================================================================
 
 export const BUSINESS_RULES = {
   // Store Management
   STORE: {
-    REQUIRED_CONF_ID: 2, // Only conf_id = 2 is allowed
+    REQUIRED_CONF_ID: 1, // Only conf_id = 1 is allowed
     SUPPORTED_DATABASES: ['scylla'],
   },
 
@@ -25,13 +18,11 @@ export const BUSINESS_RULES = {
   VARIANT: {
     FORCED_VECTOR_DB_TYPE: 'QDRANT', // Always QDRANT
     FORCED_TYPE: 'EXPERIMENT', // Always EXPERIMENT
-    ADMIN_ONLY_FIELDS: ['vector_db_config', 'rate_limiter', 'rt_partition'],
+    ADMIN_ONLY_FIELDS: ['vector_db_config', 'rate_limiter'],
   },
 };
 
-// =============================================================================
 // STATUS CONSTANTS
-// =============================================================================
 
 export const REQUEST_STATUS = {
   PENDING: 'PENDING',
@@ -40,6 +31,7 @@ export const REQUEST_STATUS = {
   REJECTED: 'REJECTED',
   COMPLETED: 'COMPLETED',
   FAILED: 'FAILED',
+  SUCCESS: 'SUCCESS',
   CANCELLED: 'CANCELLED',
 };
 
@@ -49,9 +41,7 @@ export const APPROVAL_DECISIONS = {
   NEEDS_MODIFICATION: 'NEEDS_MODIFICATION',
 };
 
-// =============================================================================
 // JOB FREQUENCY OPTIONS
-// =============================================================================
 
 export const JOB_FREQUENCIES = [
   { id: 'FREQ_1H', label: 'Hourly', description: 'Runs every hour' },
@@ -66,9 +56,7 @@ export const JOB_FREQUENCIES = [
   { id: 'FREQ_1M', label: 'Monthly', description: 'Runs every month' },
 ];
 
-// =============================================================================
 // DISTANCE FUNCTIONS
-// =============================================================================
 
 export const DISTANCE_FUNCTIONS = [
   { id: 'EUCLIDEAN', label: 'Euclidean Distance' },
@@ -79,9 +67,7 @@ export const DISTANCE_FUNCTIONS = [
 
 
 
-// =============================================================================
 // STATUS COLOR MAPPINGS
-// =============================================================================
 
 export const STATUS_COLORS = {
   [REQUEST_STATUS.PENDING]: {
@@ -114,6 +100,11 @@ export const STATUS_COLORS = {
     text: '#D32F2F',
     label: 'Failed',
   },
+  [REQUEST_STATUS.SUCCESS]: {
+    background: '#E8F5E8',
+    text: '#2E7D32',
+    label: 'Success',
+  },
   [REQUEST_STATUS.CANCELLED]: {
     background: '#F5F5F5',
     text: '#757575',
@@ -121,9 +112,16 @@ export const STATUS_COLORS = {
   },
 };
 
-// =============================================================================
+// Status options for filter dropdowns/chips (Registry & Approval pages).
+export const STATUS_FILTER_OPTIONS = [
+  { value: REQUEST_STATUS.PENDING, label: 'Pending', color: STATUS_COLORS[REQUEST_STATUS.PENDING].background, textColor: STATUS_COLORS[REQUEST_STATUS.PENDING].text },
+  { value: REQUEST_STATUS.APPROVED, label: 'Approved', color: STATUS_COLORS[REQUEST_STATUS.APPROVED].background, textColor: STATUS_COLORS[REQUEST_STATUS.APPROVED].text },
+  { value: REQUEST_STATUS.REJECTED, label: 'Rejected', color: STATUS_COLORS[REQUEST_STATUS.REJECTED].background, textColor: STATUS_COLORS[REQUEST_STATUS.REJECTED].text },
+  { value: REQUEST_STATUS.CANCELLED, label: 'Cancelled', color: STATUS_COLORS[REQUEST_STATUS.CANCELLED].background, textColor: STATUS_COLORS[REQUEST_STATUS.CANCELLED].text },
+  { value: REQUEST_STATUS.FAILED, label: 'Failed', color: STATUS_COLORS[REQUEST_STATUS.FAILED].background, textColor: STATUS_COLORS[REQUEST_STATUS.FAILED].text },
+];
+
 // FORM VALIDATION PATTERNS
-// =============================================================================
 
 export const VALIDATION_PATTERNS = {
   EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
@@ -136,9 +134,7 @@ export const VALIDATION_PATTERNS = {
   DNS_SUBDOMAIN: /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/, // RFC 1123 subdomain
 };
 
-// =============================================================================
 // ERROR MESSAGES
-// =============================================================================
 
 export const ERROR_MESSAGES = {
   REQUIRED_FIELD: 'This field is required',
@@ -146,7 +142,7 @@ export const ERROR_MESSAGES = {
   INVALID_FORMAT: 'Invalid format',
   INVALID_NUMBER: 'Please enter a valid number',
   POSITIVE_NUMBER_REQUIRED: 'Must be a positive number',
-  CONF_ID_FIXED: 'Configuration ID must be 2',
+  CONF_ID_FIXED: 'Configuration ID must be 1',
   PARTITIONS_FIXED: 'Number of partitions is fixed at 24',
   VECTOR_DB_FIXED: 'Vector DB type is fixed as QDRANT',
   TYPE_FIXED: 'Type is fixed as EXPERIMENT',
@@ -167,7 +163,7 @@ export default {
   JOB_FREQUENCIES,
   DISTANCE_FUNCTIONS,
   STATUS_COLORS,
+  STATUS_FILTER_OPTIONS,
   VALIDATION_PATTERNS,
   ERROR_MESSAGES,
 };
-

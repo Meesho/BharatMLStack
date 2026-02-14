@@ -4,576 +4,771 @@ import {
   Card,
   CardContent,
   Typography,
-  Grid,
-  LinearProgress,
-  Chip,
-  Alert,
   Button,
+  LinearProgress,
+  IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Chip,
+  Collapse,
+  Snackbar,
+  Alert,
+  useTheme,
+  alpha,
+  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Snackbar,
-  IconButton,
-  Tooltip,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import SearchIcon from '@mui/icons-material/Search';
 import DeploymentIcon from '@mui/icons-material/RocketLaunch';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import PendingIcon from '@mui/icons-material/Pending';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import StopIcon from '@mui/icons-material/Stop';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import GenericTable from '../../../OnlineFeatureStore/common/GenericTable';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import PromoteIcon from '@mui/icons-material/KeyboardDoubleArrowUp';
+import ScienceIcon from '@mui/icons-material/Science';
 import { useAuth } from '../../../Auth/AuthContext';
+import usePromoteWithProdCredentials from '../../../../common/PromoteWithProdCredentials';
 import embeddingPlatformAPI from '../../../../services/embeddingPlatform/api';
-import { 
-  transformToTableData,
-} from '../../../../services/embeddingPlatform/utils';
+import * as URL_CONSTANTS from '../../../../config';
+import { useNotification } from '../shared/hooks/useNotification';
 
-const DEPLOYMENT_STATUS = {
-  PENDING: 'pending',
-  DEPLOYING: 'deploying',
-  DEPLOYED: 'deployed',
-  FAILED: 'failed',
-  STOPPED: 'stopped',
-  RESTARTING: 'restarting'
+const ACCENT = '#522b4a';
+
+const PAYLOAD_DETAIL_FIELDS = [
+  { key: 'collection_status', label: 'Collection Status' },
+  { key: 'indexed_vector_count', label: 'Indexed Vector Count' },
+  { key: 'points_count', label: 'Points Count' },
+  { key: 'segments_count', label: 'Segments Count' },
+];
+
+const parsePayload = (payload) => {
+  if (payload == null || payload === '') return {};
+  if (typeof payload === 'object') return payload;
+  try {
+    return typeof payload === 'string' ? JSON.parse(payload) : {};
+  } catch {
+    return {};
+  }
+};
+
+const normalizeTaskStatus = (status) => (status || '').toString().toUpperCase().replace(/\s+/g, '_').trim();
+
+const getStatusIcon = (status) => {
+  const s = normalizeTaskStatus(status);
+  if (s === 'DEPLOYED' || s === 'SUCCESS' || s === 'COMPLETED' || s === 'TESTED_SUCCESSFULLY') return <CheckCircleIcon sx={{ color: 'success.main' }} />;
+  if (s === 'FAILED' || s === 'STOPPED') return <ErrorIcon sx={{ color: 'error.main' }} />;
+  return <PendingIcon sx={{ color: 'warning.main' }} />;
+};
+
+const getStatusColor = (status) => {
+  const s = normalizeTaskStatus(status);
+  if (s === 'DEPLOYED' || s === 'SUCCESS' || s === 'COMPLETED' || s === 'TESTED_SUCCESSFULLY') return 'success';
+  if (s === 'FAILED' || s === 'STOPPED') return 'error';
+  return 'warning';
+};
+
+const isCompleted = (status) => normalizeTaskStatus(status) === 'COMPLETED';
+const isTestedSuccessfully = (status) => normalizeTaskStatus(status) === 'TESTED_SUCCESSFULLY';
+
+/** Returns color for collection_status dot: green, red, yellow; gray for empty/unknown */
+const getCollectionStatusDotColor = (value) => {
+  const v = (value ?? '').toString().toLowerCase().trim();
+  if (v === 'green') return '#4caf50';
+  if (v === 'red') return '#f44336';
+  if (v === 'yellow') return '#ffc107';
+  return '#9e9e9e';
+};
+
+const isModelPresentOnProd = (modelsResponse, entity, model) => {
+  const models = modelsResponse?.models ?? modelsResponse?.Models ?? {};
+  const entityData = models[entity];
+  const modelsObj = entityData?.Models ?? entityData?.models;
+  if (!modelsObj || typeof modelsObj !== 'object') return false;
+  return Object.prototype.hasOwnProperty.call(modelsObj, model);
+};
+
+const isVariantPresentOnProd = (variantsResponse, variant) => {
+  const variants = variantsResponse?.variants ?? variantsResponse?.Variants ?? {};
+  if (typeof variants !== 'object') return false;
+  return Object.prototype.hasOwnProperty.call(variants, variant);
+};
+
+const buildModelRegisterPayloadFromDev = (devModelData, entity, model) => {
+  const mt = devModelData?.model_type ?? devModelData?.ModelType ?? 'RESET';
+  const mc = devModelData?.model_config ?? devModelData?.ModelConfig ?? {};
+  const jf = devModelData?.job_frequency ?? devModelData?.JobFrequency ?? '';
+  return {
+    entity: String(entity),
+    model: String(model),
+    model_type: mt,
+    model_config: mc,
+    job_frequency: jf,
+    embedding_store_enabled: devModelData?.embedding_store_enabled ?? devModelData?.EmbeddingStoreEnabled ?? false,
+    embedding_store_ttl: devModelData?.embedding_store_ttl ?? devModelData?.EmbeddingStoreTTL ?? 0,
+    mq_id: devModelData?.mq_id ?? devModelData?.MQID ?? 0,
+    training_data_path: devModelData?.training_data_path ?? devModelData?.TrainingDataPath ?? '',
+    number_of_partitions: devModelData?.number_of_partitions ?? devModelData?.NumberOfPartitions ?? 24,
+    topic_name: devModelData?.topic_name ?? devModelData?.TopicName ?? '',
+    metadata: devModelData?.metadata ?? devModelData?.Metadata ?? {},
+    failure_producer_mq_id: devModelData?.failure_producer_mq_id ?? devModelData?.FailureProducerMqId ?? 0,
+  };
 };
 
 const DeploymentDashboard = () => {
-  const [deployments, setDeployments] = useState([]);
-  const [searchDeploymentId, setSearchDeploymentId] = useState('');
-  const [selectedDeployment, setSelectedDeployment] = useState(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
+  const { user } = useAuth();
+  const { initiatePromotion, ProductionCredentialModalComponent } = usePromoteWithProdCredentials();
+  const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterType, setFilterType] = useState('');
-  const [notification, setNotification] = useState({
-    open: false,
-    message: '',
-    severity: 'success'
-  });
-  const { user } = useAuth();
+  const [expandedTaskId, setExpandedTaskId] = useState(null);
+  const [promotingTaskId, setPromotingTaskId] = useState(null);
+  const { notification, showNotification, closeNotification } = useNotification();
+  const theme = useTheme();
 
-  useEffect(() => {
-    fetchDeployments();
-    // Set up polling for real-time updates every 30 seconds
-    const interval = setInterval(fetchDeployments, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  const [testModalOpen, setTestModalOpen] = useState(false);
+  const [testTask, setTestTask] = useState(null);
+  const [testGeneratedRequestJson, setTestGeneratedRequestJson] = useState('');
+  const [testStep, setTestStep] = useState('idle');
+  const [testGenerateLoading, setTestGenerateLoading] = useState(false);
+  const [testExecuteLoading, setTestExecuteLoading] = useState(false);
+  const [testError, setTestError] = useState('');
+  const [testSuccessMsg, setTestSuccessMsg] = useState('');
+  const [testExecuteResponse, setTestExecuteResponse] = useState(null);
 
-  const fetchDeployments = async (showRefreshIndicator = false) => {
+  const fetchTasks = async (showRefreshIndicator = false) => {
     try {
-      if (showRefreshIndicator) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+      if (showRefreshIndicator) setRefreshing(true);
+      else setLoading(true);
 
-      // Fetch available deployment data (currently only Qdrant clusters)
-      const [
-        qdrantClusters,
-      ] = await Promise.all([
-        embeddingPlatformAPI.getQdrantClusters().catch(() => ({ data: { clusters: [] } })),
-      ]);
+      const response = await embeddingPlatformAPI.getVariantOnboardingTasks().catch(() => ({
+        variant_onboarding_tasks: [],
+        total_count: 0,
+      }));
 
-      // Transform Qdrant clusters into deployment format
-      const combinedDeployments = [
-        ...(qdrantClusters.data?.clusters || []).map(cluster => ({
-          ...cluster,
-          type: 'Qdrant Cluster',
-          deployment_id: cluster.cluster_id,
-          status: cluster.status || DEPLOYMENT_STATUS.DEPLOYED,
-          created_by: cluster.created_by || 'System',
-          created_at: cluster.created_at || new Date().toISOString(),
-          updated_at: cluster.updated_at || new Date().toISOString(),
-          environment: cluster.environment || 'production'
-        })),
-      ];
-
-      const transformedDeployments = transformToTableData(combinedDeployments, 'deployments')
-        .map(dep => ({
-          ...dep,
-          Type: dep.type,
-          EntityLabel: dep.Type,
-          FeatureGroupLabel: dep.environment || '-',
-          Actions: 'manage'
-        }))
-        .sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt));
-
-      setDeployments(transformedDeployments);
+      setTasks(response.variant_onboarding_tasks || []);
     } catch (error) {
-      console.error('Error fetching deployments:', error);
-      showNotification('Error fetching deployments', 'error');
+      console.error('Error fetching tasks:', error);
+      showNotification('Error fetching tasks', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const handleRefresh = () => {
-    fetchDeployments(true);
+  useEffect(() => {
+    fetchTasks();
+    const interval = setInterval(fetchTasks, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleRefresh = () => fetchTasks(true);
+
+  const toggleExpand = (taskId) => {
+    setExpandedTaskId((prev) => (prev === taskId ? null : taskId));
   };
 
-  const handleViewDeployment = async (deployment) => {
-    setSelectedDeployment(deployment);
-    setShowDetailModal(true);
-  };
+  const handlePromote = (task) => {
+    if (!task.entity || !task.model || !task.variant) {
+      showNotification('Task missing entity, model or variant', 'error');
+      return;
+    }
+    const prodBaseUrl = (URL_CONSTANTS.REACT_APP_HORIZON_PROD_BASE_URL || '').replace(/\/$/, '');
+    if (!prodBaseUrl) {
+      showNotification('Production Horizon URL is not configured', 'error');
+      return;
+    }
 
-  const closeDetailModal = () => {
-    setShowDetailModal(false);
-    setSelectedDeployment(null);
-  };
+    initiatePromotion(task, async (item, prodCredentials) => {
+      const { entity, model, variant } = item;
+      const token = prodCredentials?.token;
+      const requestor = prodCredentials?.email || '';
 
-  const handleSearch = () => {
-    if (searchDeploymentId.trim()) {
-      const foundDeployment = deployments.find(dep => 
-        dep.deployment_id?.toString() === searchDeploymentId.trim() ||
-        dep.cluster_id?.toString() === searchDeploymentId.trim() ||
-        dep.RequestId?.toString() === searchDeploymentId.trim()
-      );
-      if (foundDeployment) {
-        handleViewDeployment(foundDeployment);
-      } else {
-        showNotification('Deployment ID not found', 'warning');
+      setPromotingTaskId(item.task_id);
+      try {
+        const prodModelsResponse = await embeddingPlatformAPI.getModelsWithAuth(prodBaseUrl, token);
+        const modelExistsOnProd = isModelPresentOnProd(prodModelsResponse, entity, model);
+
+        if (!modelExistsOnProd) {
+          const devModelsResponse = await embeddingPlatformAPI.getModels().catch(() => ({}));
+          const devModels = devModelsResponse?.models ?? devModelsResponse?.Models ?? {};
+          const devEntityData = devModels[entity];
+          const devModelsObj = devEntityData?.Models ?? devEntityData?.models;
+          const devModelData = devModelsObj?.[model];
+
+          if (!devModelData) {
+            showNotification(
+              `Model "${entity}/${model}" not found on dev. Cannot promote model to prod.`,
+              'error'
+            );
+            return;
+          }
+
+          const modelPayload = buildModelRegisterPayloadFromDev(devModelData, entity, model);
+          await embeddingPlatformAPI.registerModelWithAuth(prodBaseUrl, token, {
+            requestor,
+            reason: 'Promote model to prod (from variant promotion)',
+            payload: modelPayload,
+          });
+        } else {
+          const prodVariantsResponse = await embeddingPlatformAPI.getVariantsWithAuth(
+            prodBaseUrl,
+            token,
+            entity,
+            model
+          );
+          if (isVariantPresentOnProd(prodVariantsResponse, variant)) {
+            showNotification('This variant already exists on prod.', 'info');
+            return;
+          }
+        }
+
+        const variantResult = await embeddingPlatformAPI.registerVariantWithAuth(prodBaseUrl, token, {
+          requestor,
+          reason: 'Promoted from completed onboarding task',
+          payload: { entity, model, variant },
+          request_type: 'PROMOTE',
+        });
+        showNotification(
+          variantResult?.message || 'Variant promotion request submitted successfully.',
+          'success'
+        );
+        fetchTasks(true);
+      } catch (error) {
+        console.error('Error during promotion:', error);
+        showNotification(error.message || 'Failed to complete promotion', 'error');
+      } finally {
+        setPromotingTaskId(null);
       }
-    }
-  };
-
-  const handleDeploymentAction = async (deploymentId, action) => {
-    try {
-      // Placeholder implementation - these methods would need to be added to the API
-      switch (action) {
-        case 'start':
-          showNotification('Start deployment functionality not yet implemented', 'info');
-          break;
-        case 'stop':
-          showNotification('Stop deployment functionality not yet implemented', 'info');
-          break;
-        case 'restart':
-          showNotification('Restart deployment functionality not yet implemented', 'info');
-          break;
-        default:
-          return;
-      }
-      
-      // Refresh deployments after action (when implemented)
-      // fetchDeployments();
-    } catch (error) {
-      console.error(`Error ${action}ing deployment:`, error);
-      showNotification(`Error ${action}ing deployment`, 'error');
-    }
-  };
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case DEPLOYMENT_STATUS.DEPLOYED:
-        return <CheckCircleIcon sx={{ color: 'success.main' }} />;
-      case DEPLOYMENT_STATUS.FAILED:
-      case DEPLOYMENT_STATUS.STOPPED:
-        return <ErrorIcon sx={{ color: 'error.main' }} />;
-      case DEPLOYMENT_STATUS.DEPLOYING:
-      case DEPLOYMENT_STATUS.RESTARTING:
-        return <PendingIcon sx={{ color: 'warning.main' }} />;
-      default:
-        return <PendingIcon sx={{ color: 'warning.main' }} />;
-    }
-  };
-
-  const getProgressValue = (status) => {
-    switch (status) {
-      case DEPLOYMENT_STATUS.PENDING:
-        return 25;
-      case DEPLOYMENT_STATUS.DEPLOYING:
-        return 50;
-      case DEPLOYMENT_STATUS.DEPLOYED:
-        return 100;
-      case DEPLOYMENT_STATUS.RESTARTING:
-        return 75;
-      case DEPLOYMENT_STATUS.FAILED:
-      case DEPLOYMENT_STATUS.STOPPED:
-        return 100;
-      default:
-        return 0;
-    }
-  };
-
-  const getProgressColor = (status) => {
-    switch (status) {
-      case DEPLOYMENT_STATUS.DEPLOYED:
-        return 'success';
-      case DEPLOYMENT_STATUS.FAILED:
-      case DEPLOYMENT_STATUS.STOPPED:
-        return 'error';
-      case DEPLOYMENT_STATUS.DEPLOYING:
-      case DEPLOYMENT_STATUS.RESTARTING:
-        return 'info';
-      default:
-        return 'primary';
-    }
-  };
-
-  const getDeploymentSummary = () => {
-    const total = deployments.length;
-    const deployed = deployments.filter(dep => dep.Status === DEPLOYMENT_STATUS.DEPLOYED).length;
-    const deploying = deployments.filter(dep => 
-      dep.Status === DEPLOYMENT_STATUS.DEPLOYING || dep.Status === DEPLOYMENT_STATUS.RESTARTING
-    ).length;
-    const failed = deployments.filter(dep => 
-      dep.Status === DEPLOYMENT_STATUS.FAILED || dep.Status === DEPLOYMENT_STATUS.STOPPED
-    ).length;
-    const pending = deployments.filter(dep => dep.Status === DEPLOYMENT_STATUS.PENDING).length;
-
-    return { total, deployed, deploying, failed, pending };
-  };
-
-  const filteredDeployments = deployments.filter(dep => {
-    if (filterStatus && dep.Status !== filterStatus) return false;
-    if (filterType && dep.Type !== filterType) return false;
-    return true;
-  });
-
-  const summary = getDeploymentSummary();
-  const deploymentTypes = [...new Set(deployments.map(dep => dep.Type))];
-
-  const showNotification = (message, severity) => {
-    setNotification({
-      open: true,
-      message,
-      severity
     });
   };
 
-  const handleCloseNotification = () => {
-    setNotification(prev => ({
-      ...prev,
-      open: false
-    }));
+  const handleOpenTestModal = (task) => {
+    setTestTask(task);
+    setTestModalOpen(true);
+    setTestStep('idle');
+    setTestGeneratedRequestJson('');
+    setTestError('');
+    setTestSuccessMsg('');
+    setTestExecuteResponse(null);
   };
 
-  const renderActionButtons = (deployment) => {
-    const canStart = deployment.Status === DEPLOYMENT_STATUS.STOPPED || deployment.Status === DEPLOYMENT_STATUS.FAILED;
-    const canStop = deployment.Status === DEPLOYMENT_STATUS.DEPLOYED || deployment.Status === DEPLOYMENT_STATUS.DEPLOYING;
-    const canRestart = deployment.Status === DEPLOYMENT_STATUS.DEPLOYED;
+  const handleCloseTestModal = () => {
+    setTestModalOpen(false);
+    setTestTask(null);
+    setTestStep('idle');
+    setTestGeneratedRequestJson('');
+    setTestError('');
+    setTestSuccessMsg('');
+    setTestExecuteResponse(null);
+  };
 
-    return (
-      <Box sx={{ display: 'flex', gap: 1 }}>
-        {canStart && (
-          <Tooltip title="Start Deployment">
-            <IconButton 
-              size="small" 
-              color="success"
-              onClick={() => handleDeploymentAction(deployment.deployment_id || deployment.cluster_id, 'start')}
-            >
-              <PlayArrowIcon />
-            </IconButton>
-          </Tooltip>
-        )}
-        {canStop && (
-          <Tooltip title="Stop Deployment">
-            <IconButton 
-              size="small" 
-              color="error"
-              onClick={() => handleDeploymentAction(deployment.deployment_id || deployment.cluster_id, 'stop')}
-            >
-              <StopIcon />
-            </IconButton>
-          </Tooltip>
-        )}
-        {canRestart && (
-          <Tooltip title="Restart Deployment">
-            <IconButton 
-              size="small" 
-              color="primary"
-              onClick={() => handleDeploymentAction(deployment.deployment_id || deployment.cluster_id, 'restart')}
-            >
-              <RestartAltIcon />
-            </IconButton>
-          </Tooltip>
-        )}
-      </Box>
-    );
+  const handleGenerateRequest = async () => {
+    if (!testTask) return;
+    setTestGenerateLoading(true);
+    setTestError('');
+    try {
+      const res = await embeddingPlatformAPI.generateVariantTestRequest({
+        entity: testTask.entity,
+        model: testTask.model,
+        variant: testTask.variant,
+      });
+      const requestObj = res?.request;
+      if (!requestObj) throw new Error('No request in response');
+      setTestGeneratedRequestJson(JSON.stringify(requestObj, null, 2));
+      setTestStep('generated');
+    } catch (err) {
+      setTestError(err?.message || 'Failed to generate request');
+    } finally {
+      setTestGenerateLoading(false);
+    }
+  };
+
+  const handleExecuteRequest = async () => {
+    setTestExecuteLoading(true);
+    setTestError('');
+    setTestSuccessMsg('');
+    setTestExecuteResponse(null);
+    try {
+      let payload;
+      try {
+        payload = JSON.parse(testGeneratedRequestJson);
+      } catch (parseErr) {
+        setTestError('Invalid JSON in request payload. Please fix the editable payload and try again.');
+        return;
+      }
+      const res = await embeddingPlatformAPI.executeVariantTestRequest(payload);
+      setTestExecuteResponse(res?.response ?? res ?? null);
+      setTestSuccessMsg('Successfully tested / executed the request.');
+      fetchTasks(true);
+    } catch (err) {
+      setTestError(err?.message || 'Failed to execute request');
+    } finally {
+      setTestExecuteLoading(false);
+    }
   };
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <DeploymentIcon sx={{ mr: 2, fontSize: 32, color: '#522b4a' }} />
-          <Typography variant="h4">Deployment Operations Dashboard</Typography>
-        </Box>
-        <Button
-          startIcon={refreshing ? <LinearProgress size={20} /> : <RefreshIcon />}
-          onClick={handleRefresh}
-          disabled={refreshing}
-          variant="outlined"
-          sx={{ borderColor: '#522b4a', color: '#522b4a' }}
-        >
-          {refreshing ? 'Refreshing...' : 'Refresh'}
-        </Button>
-      </Box>
-
-      {/* Search Bar */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            <TextField
-              label="Search by Deployment ID"
-              value={searchDeploymentId}
-              onChange={(e) => setSearchDeploymentId(e.target.value)}
-              variant="outlined"
-              size="small"
-              sx={{ minWidth: 200 }}
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-            />
-            <Button
-              startIcon={<SearchIcon />}
-              onClick={handleSearch}
-              variant="contained"
-              sx={{ backgroundColor: '#522b4a', '&:hover': { backgroundColor: '#613a5c' } }}
-            >
-              Search
-            </Button>
-          </Box>
-        </CardContent>
-      </Card>
-
-      {/* Summary Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="primary">
-                {summary.total}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Total Deployments
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="success.main">
-                {summary.deployed}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Active Deployments
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="warning.main">
-                {summary.deploying + summary.pending}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                In Progress
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="error.main">
-                {summary.failed}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Failed/Stopped
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Filters */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <FormControl size="small" sx={{ minWidth: 150 }}>
-              <InputLabel>Filter by Status</InputLabel>
-              <Select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                label="Filter by Status"
+    <Box sx={{ maxWidth: 1400, mx: 'auto', px: { xs: 1, sm: 2 }, py: 2 }}>
+      <Card
+        elevation={0}
+        sx={{
+          mb: 3,
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'divider',
+          backgroundColor: alpha(ACCENT, 0.02),
+        }}
+      >
+        <CardContent sx={{ py: 2.5, '&:last-child': { pb: 2.5 } }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box
+                sx={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: alpha(ACCENT, 0.1),
+                }}
               >
-                <MenuItem value="">All Status</MenuItem>
-                <MenuItem value={DEPLOYMENT_STATUS.PENDING}>Pending</MenuItem>
-                <MenuItem value={DEPLOYMENT_STATUS.DEPLOYING}>Deploying</MenuItem>
-                <MenuItem value={DEPLOYMENT_STATUS.DEPLOYED}>Deployed</MenuItem>
-                <MenuItem value={DEPLOYMENT_STATUS.RESTARTING}>Restarting</MenuItem>
-                <MenuItem value={DEPLOYMENT_STATUS.FAILED}>Failed</MenuItem>
-                <MenuItem value={DEPLOYMENT_STATUS.STOPPED}>Stopped</MenuItem>
-              </Select>
-            </FormControl>
-
-            <FormControl size="small" sx={{ minWidth: 150 }}>
-              <InputLabel>Filter by Type</InputLabel>
-              <Select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                label="Filter by Type"
-              >
-                <MenuItem value="">All Types</MenuItem>
-                {deploymentTypes.map((type) => (
-                  <MenuItem key={type} value={type}>
-                    {type}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
-        </CardContent>
-      </Card>
-
-      {/* Deployments Table */}
-      <GenericTable
-        data={filteredDeployments.map(dep => ({
-          ...dep,
-          Actions: renderActionButtons(dep)
-        }))}
-        excludeColumns={[]}
-        onRowAction={handleViewDeployment}
-        loading={loading}
-        flowType="default"
-      />
-
-        {/* Deployment Detail Modal */}
-        <Dialog open={showDetailModal} onClose={closeDetailModal} maxWidth="md" fullWidth>
-          <DialogTitle>Deployment Details</DialogTitle>
-          <DialogContent>
-            {selectedDeployment && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                    Deployment ID
-                  </Typography>
-                  <Typography variant="body1">
-                    {selectedDeployment.deployment_id || selectedDeployment.cluster_id || selectedDeployment.RequestId || 'N/A'}
-                  </Typography>
-                </Box>
-
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                    Type
-                  </Typography>
-                  <Typography variant="body1">
-                    {selectedDeployment.Type || 'N/A'}
-                  </Typography>
-                </Box>
-
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                    Status
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                    {getStatusIcon(selectedDeployment.Status)}
-                    <Chip 
-                      label={selectedDeployment.Status}
-                      color={getProgressColor(selectedDeployment.Status)}
-                      size="small"
-                    />
-                  </Box>
-                </Box>
-
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                    Progress
-                  </Typography>
-                  <LinearProgress
-                    variant="determinate"
-                    value={getProgressValue(selectedDeployment.Status)}
-                    color={getProgressColor(selectedDeployment.Status)}
-                    sx={{ mt: 1, height: 8, borderRadius: 4 }}
-                  />
-                  <Typography variant="caption" color="text.secondary">
-                    {getProgressValue(selectedDeployment.Status)}% Complete
-                  </Typography>
-                </Box>
-
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                    Environment
-                  </Typography>
-                  <Typography variant="body1">
-                    {selectedDeployment.FeatureGroupLabel || 'N/A'}
-                  </Typography>
-                </Box>
-
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                    Created By
-                  </Typography>
-                  <Typography variant="body1">
-                    {selectedDeployment.CreatedBy || 'N/A'}
-                  </Typography>
-                </Box>
-
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                    Created At
-                  </Typography>
-                  <Typography variant="body1">
-                    {selectedDeployment.CreatedAt || 'N/A'}
-                  </Typography>
-                </Box>
-
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                    Last Updated
-                  </Typography>
-                  <Typography variant="body1">
-                    {selectedDeployment.UpdatedAt || 'N/A'}
-                  </Typography>
-                </Box>
-
-                {/* Deployment Actions */}
-                <Box sx={{ pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 2 }}>
-                    Available Actions
-                  </Typography>
-                  {renderActionButtons(selectedDeployment)}
-                </Box>
+                <DeploymentIcon sx={{ fontSize: 28, color: ACCENT }} />
               </Box>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button 
-              onClick={closeDetailModal}
-              sx={{ 
-                color: '#522b4a',
-                '&:hover': { backgroundColor: 'rgba(82, 43, 74, 0.04)' }
+              <Box>
+                <Typography variant="h5" fontWeight={600} color="text.primary">
+                  Variant Onboarding Tasks
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {tasks.length} task{tasks.length !== 1 ? 's' : ''} • Auto-refresh every 1m
+                </Typography>
+              </Box>
+            </Box>
+            <Button
+              variant="contained"
+              startIcon={<RefreshIcon />}
+              onClick={handleRefresh}
+              disabled={refreshing}
+              sx={{
+                backgroundColor: ACCENT,
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 2,
+                '&:hover': { backgroundColor: alpha(ACCENT, 0.85) },
               }}
             >
-              Close
+              {refreshing ? 'Refreshing…' : 'Refresh'}
             </Button>
-          </DialogActions>
-        </Dialog>
+          </Box>
+        </CardContent>
+      </Card>
 
-      {/* Toast Notifications */}
+      {/* Tasks table card */}
+      <Card
+        elevation={0}
+        sx={{
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'divider',
+          overflow: 'hidden',
+        }}
+      >
+        <TableContainer>
+          <Table size="medium" aria-label="Variant onboarding tasks" stickyHeader>
+            <TableHead>
+              <TableRow
+                sx={{
+                  backgroundColor: alpha(theme.palette.primary.main, 0.04),
+                  '& th': {
+                    fontWeight: 600,
+                    fontSize: '0.8125rem',
+                    color: 'text.secondary',
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                    py: 1.5,
+                  },
+                }}
+              >
+                <TableCell padding="checkbox" sx={{ width: 48 }} />
+                <TableCell>Task ID</TableCell>
+                <TableCell>Entity</TableCell>
+                <TableCell>Model</TableCell>
+                <TableCell>Variant</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Created At</TableCell>
+                <TableCell align="right" sx={{ minWidth: 140 }}>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
+                    <LinearProgress sx={{ maxWidth: 280, mx: 'auto', borderRadius: 1 }} />
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                      Loading tasks…
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+              {!loading && tasks.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
+                    <AssignmentIcon sx={{ fontSize: 48, color: 'action.disabled', mb: 1 }} />
+                    <Typography variant="body1" color="text.secondary" display="block">
+                      No tasks found
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Tasks will appear here when variant onboarding runs.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+              {!loading &&
+                tasks.map((task, index) => {
+                  const taskId = task.task_id;
+                  const isExpanded = expandedTaskId === taskId;
+                  const payloadObj = parsePayload(task.payload);
+
+                  return (
+                    <React.Fragment key={taskId}>
+                      <TableRow
+                        hover
+                        sx={{
+                          backgroundColor: index % 2 === 1 ? alpha(theme.palette.grey[500], 0.02) : undefined,
+                          '& > *': { borderBottom: '1px solid', borderColor: 'divider' },
+                          '&:hover': { backgroundColor: alpha(ACCENT, 0.03) },
+                        }}
+                      >
+                        <TableCell padding="checkbox" sx={{ width: 48 }}>
+                          <IconButton
+                            size="small"
+                            onClick={() => toggleExpand(taskId)}
+                            aria-label={isExpanded ? 'Collapse row' : 'Expand row'}
+                            sx={{
+                              color: isExpanded ? ACCENT : 'text.secondary',
+                              '&:hover': { backgroundColor: alpha(ACCENT, 0.08) },
+                            }}
+                          >
+                            {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                          </IconButton>
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 500 }}>{task.task_id}</TableCell>
+                        <TableCell>{task.entity ?? '—'}</TableCell>
+                        <TableCell>{task.model ?? '—'}</TableCell>
+                        <TableCell>{task.variant ?? '—'}</TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {getStatusIcon(task.status)}
+                            <Chip
+                              label={task.status || '—'}
+                              color={getStatusColor(task.status)}
+                              size="small"
+                              sx={{ fontWeight: 500, textTransform: 'uppercase' }}
+                            />
+                          </Box>
+                        </TableCell>
+                        <TableCell sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>
+                          {task.created_at ?? '—'}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                            <Tooltip title={isCompleted(task.status) ? 'Test this variant' : 'Complete the task to test'}>
+                              <span>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  startIcon={<ScienceIcon />}
+                                  onClick={() => handleOpenTestModal(task)}
+                                  disabled={!isCompleted(task.status)}
+                                  sx={{
+                                    textTransform: 'none',
+                                    fontWeight: 600,
+                                    borderColor: '#1976d2',
+                                    color: '#1976d2',
+                                    '&:hover': { borderColor: '#1976d2', backgroundColor: 'rgba(25, 118, 210, 0.08)' },
+                                  }}
+                                >
+                                  Test
+                                </Button>
+                              </span>
+                            </Tooltip>
+                            <Tooltip title={isTestedSuccessfully(task.status) ? 'Promote this variant' : 'Test the variant first to enable promote'}>
+                              <span>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  startIcon={<PromoteIcon />}
+                                  onClick={() => handlePromote(task)}
+                                  disabled={!isTestedSuccessfully(task.status) || promotingTaskId !== null}
+                                  sx={{
+                                    textTransform: 'none',
+                                    fontWeight: 600,
+                                    borderColor: ACCENT,
+                                    color: ACCENT,
+                                    '&:hover': { borderColor: ACCENT, backgroundColor: alpha(ACCENT, 0.08) },
+                                  }}
+                                >
+                                  {promotingTaskId === taskId ? 'Promoting…' : 'Promote'}
+                                </Button>
+                              </span>
+                            </Tooltip>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell colSpan={8} sx={{ py: 0, borderBottom: isExpanded ? '1px solid' : 0, borderColor: 'divider' }}>
+                          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                            <Box
+                              sx={{
+                                py: 2,
+                                px: 3,
+                                backgroundColor: alpha(theme.palette.grey[500], 0.04),
+                                borderTop: '1px solid',
+                                borderColor: 'divider',
+                              }}
+                            >
+                              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5, fontWeight: 600 }}>
+                                Payload details
+                              </Typography>
+                              <Box
+                                sx={{
+                                  display: 'grid',
+                                  gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+                                  gap: 2,
+                                }}
+                              >
+                                {PAYLOAD_DETAIL_FIELDS.map(({ key, label }) => {
+                                  const value = payloadObj[key];
+                                  const display = value !== undefined && value !== null ? String(value) : '—';
+                                  const isCollectionStatus = key === 'collection_status';
+                                  const dotColor = isCollectionStatus ? getCollectionStatusDotColor(value) : null;
+                                  return (
+                                    <Box
+                                      key={key}
+                                      sx={{
+                                        p: 1.5,
+                                        borderRadius: 1,
+                                        backgroundColor: 'background.paper',
+                                        border: '1px solid',
+                                        borderColor: 'divider',
+                                      }}
+                                    >
+                                      <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 500 }}>
+                                        {label}
+                                      </Typography>
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.25 }}>
+                                        {dotColor != null && (
+                                          <Box
+                                            sx={{
+                                              width: 10,
+                                              height: 10,
+                                              borderRadius: '50%',
+                                              backgroundColor: dotColor,
+                                              flexShrink: 0,
+                                            }}
+                                            aria-hidden
+                                          />
+                                        )}
+                                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                                          {display}
+                                        </Typography>
+                                      </Box>
+                                    </Box>
+                                  );
+                                })}
+                              </Box>
+                              {PAYLOAD_DETAIL_FIELDS.every(({ key }) => payloadObj[key] === undefined) ? (
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+                                  No payload detail fields available for this task.
+                                </Typography>
+                              ) : null}
+                            </Box>
+                          </Collapse>
+                        </TableCell>
+                      </TableRow>
+                    </React.Fragment>
+                  );
+                })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Card>
+
+      {/* Test Variant Modal */}
+      <Dialog open={testModalOpen} onClose={handleCloseTestModal} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ pb: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <ScienceIcon sx={{ color: '#1976d2', fontSize: 28 }} />
+            <Box>
+              <Typography variant="h6" component="span" sx={{ fontWeight: 600 }}>
+                Test Variant
+              </Typography>
+              {testTask && (
+                <Typography display="block" variant="body2" color="text.secondary" sx={{ fontWeight: 500, mt: 0.25 }}>
+                  {testTask.entity} → {testTask.model} → {testTask.variant}
+                </Typography>
+              )}
+            </Box>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2.5, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          {testError && (
+            <Alert severity="error" onClose={() => setTestError('')}>
+              {testError}
+            </Alert>
+          )}
+          {testSuccessMsg && (
+            <Alert severity="success">{testSuccessMsg}</Alert>
+          )}
+
+          <Paper variant="outlined" sx={{ p: 2, backgroundColor: 'rgba(25, 118, 210, 0.02)', borderColor: 'rgba(25, 118, 210, 0.2)' }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5, color: 'text.primary' }}>
+              1. Generate request
+            </Typography>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+              Payload sent to generate-request (read-only)
+            </Typography>
+            <Box
+              sx={{
+                p: 1.5,
+                borderRadius: 1,
+                backgroundColor: 'grey.50',
+                border: '1px solid',
+                borderColor: 'divider',
+                mb: 1.5,
+              }}
+            >
+              <Typography
+                component="pre"
+                variant="body2"
+                sx={{
+                  fontFamily: 'monospace',
+                  fontSize: '0.8125rem',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  m: 0,
+                }}
+              >
+                {testTask
+                  ? JSON.stringify(
+                      { entity: testTask.entity, model: testTask.model, variant: testTask.variant },
+                      null,
+                      2
+                    )
+                  : '—'}
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={handleGenerateRequest}
+              disabled={testGenerateLoading}
+              sx={{ backgroundColor: '#1976d2', '&:hover': { backgroundColor: '#1565c0' } }}
+            >
+              {testGenerateLoading ? 'Generating…' : 'Generate Request'}
+            </Button>
+          </Paper>
+
+          {testStep === 'generated' && (
+            <Paper variant="outlined" sx={{ p: 2, backgroundColor: 'rgba(46, 125, 50, 0.02)', borderColor: 'rgba(46, 125, 50, 0.2)' }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: 'text.primary' }}>
+                2. Execute request
+              </Typography>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                Edit payload if needed, then run execute-request
+              </Typography>
+              <TextField
+                multiline
+                minRows={6}
+                maxRows={14}
+                fullWidth
+                value={testGeneratedRequestJson}
+                onChange={(e) => setTestGeneratedRequestJson(e.target.value)}
+                variant="outlined"
+                size="small"
+                InputProps={{ style: { fontFamily: 'monospace', fontSize: '0.8125rem' } }}
+                sx={{ mb: 1.5, backgroundColor: '#fafafa', '& .MuiOutlinedInput-root': { alignItems: 'flex-start' } }}
+              />
+              <Button
+                variant="contained"
+                size="small"
+                onClick={handleExecuteRequest}
+                disabled={testExecuteLoading}
+                sx={{ backgroundColor: '#2e7d32', '&:hover': { backgroundColor: '#1b5e20' } }}
+              >
+                {testExecuteLoading ? 'Executing…' : 'Execute Request'}
+              </Button>
+            </Paper>
+          )}
+
+          {testExecuteResponse != null && (
+            <Paper variant="outlined" sx={{ p: 2, backgroundColor: 'rgba(102, 187, 106, 0.04)', borderColor: 'rgba(46, 125, 50, 0.3)' }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: 'text.primary' }}>
+                Execute response
+              </Typography>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                Response from execute-request API
+              </Typography>
+              <Box
+                sx={{
+                  p: 1.5,
+                  borderRadius: 1,
+                  backgroundColor: '#fafafa',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  maxHeight: 280,
+                  overflow: 'auto',
+                }}
+              >
+                <Typography
+                  component="pre"
+                  variant="body2"
+                  sx={{
+                    fontFamily: 'monospace',
+                    fontSize: '0.8125rem',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    m: 0,
+                  }}
+                >
+                  {typeof testExecuteResponse === 'object'
+                    ? JSON.stringify(testExecuteResponse, null, 2)
+                    : String(testExecuteResponse)}
+                </Typography>
+              </Box>
+            </Paper>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+          <Button onClick={handleCloseTestModal} sx={{ color: ACCENT, fontWeight: 600 }}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <ProductionCredentialModalComponent
+        title="Promote Variant"
+        description="Enter your production credentials to promote this variant."
+      />
+
       <Snackbar
         open={notification.open}
         autoHideDuration={6000}
-        onClose={handleCloseNotification}
+        onClose={closeNotification}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
-        <Alert
-          onClose={handleCloseNotification}
-          severity={notification.severity}
-          sx={{ width: '100%' }}
-        >
+        <Alert onClose={closeNotification} severity={notification.severity} sx={{ width: '100%' }}>
           {notification.message}
         </Alert>
       </Snackbar>

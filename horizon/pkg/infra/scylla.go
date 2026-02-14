@@ -54,9 +54,14 @@ func initScyllaClusterConns(config configs.Configs) {
 	if activeConfIdsStr == "" {
 		return
 	}
+	skyeActiveConfIdsStr := config.SkyeScyllaActiveConfigIds
+	if skyeActiveConfIdsStr == "" {
+		return
+	}
 	activeIds := strings.Split(activeConfIdsStr, ",")
-	ScyllaConnections := make(map[int]ConnectionFacade, len(activeIds))
-	for _, configIdStr := range activeIds {
+	skyeActiveIds := strings.Split(skyeActiveConfIdsStr, ",")
+	ScyllaConnections := make(map[int]ConnectionFacade, len(activeIds)+len(skyeActiveIds))
+	for _, configIdStr := range append(activeIds, skyeActiveIds...) {
 		envPrefix := storageScyllaPrefix + configIdStr
 		cfg, err := BuildClusterConfigFromEnv(envPrefix)
 		if err != nil {

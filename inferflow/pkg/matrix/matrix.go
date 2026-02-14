@@ -185,7 +185,7 @@ func (m *ComponentMatrix) PopulateMatrixOfColumnSlice(numerixComponentBuilder *m
 			stringCol, hasStringData := m.StringColumnIndexMap[col]
 			switch {
 			case hasByteData:
-				if row.ByteData[byteCol.Index] != nil && len(row.ByteData[byteCol.Index]) > 0 {
+				if len(row.ByteData[byteCol.Index]) > 0 {
 					numerixComponentBuilder.Matrix[i][j] = row.ByteData[byteCol.Index]
 				} else {
 					numerixComponentBuilder.Matrix[i][j] = utils.GetDefaultValuesInBytes(byteCol.DataType)

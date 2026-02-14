@@ -46,7 +46,7 @@ const InferflowConfigApproval = () => {
       });
 
       if (!response.ok) {
-        console.log(`Failed to ${action.toLowerCase()} configuration`);
+        console.log(`Failed to ${action.toLowerCase()} inferpipe`);
       }
 
       const result = await response.json();
@@ -56,7 +56,7 @@ const InferflowConfigApproval = () => {
 
       return true;
     } catch (error) {
-      console.error(`Error ${action.toLowerCase()} configuration:`, error);
+      console.error(`Error ${action.toLowerCase()} inferpipe:`, error);
       return false;
     }
   }, [hasPermission, service, screenType, user.token]);
@@ -82,7 +82,7 @@ const InferflowConfigApproval = () => {
       }}>
         <Alert severity="warning">
           <Typography variant="h6">Access Denied</Typography>
-          <Typography>You do not have permission to view InferFlow config approvals.</Typography>
+          <Typography>You do not have permission to view Inferpipe approvals.</Typography>
         </Alert>
       </Box>
     );
