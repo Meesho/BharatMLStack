@@ -1,4 +1,4 @@
-package prism
+package kafka
 
 const (
 	ERROR_TYPE        = "error-type"
