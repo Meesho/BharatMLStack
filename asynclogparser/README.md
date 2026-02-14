@@ -70,14 +70,6 @@ Features:
 
 ## Architecture
 
-### Components
-
-1. **reader/deframe.go**: Deframes binary log files (removes headers, extracts records)
-2. **decode/mplog.go**: Unmarshals MPLog protobuf messages
-3. **decode/features.go**: Decodes proto-encoded features using schema
-4. **inference/client.go**: Fetches feature schemas from inference API
-5. **cmd/asynclogparse/main.go**: Main command orchestrating the pipeline
-
 ### Log File Format
 
 The binary log files follow this format:
@@ -95,15 +87,4 @@ The binary log files follow this format:
 - `entities` (repeated string)
 - `parent_entity` (repeated string)
 - `encoded_features` (repeated bytes): Per-entity encoded feature blobs
-
-## Building
-
-```bash
-cd asynclogparser
-go build -o asynclogparse ./cmd/asynclogparse
-```
-
-## Dependencies
-
-- `google.golang.org/protobuf`: Protobuf support for unmarshaling
 
