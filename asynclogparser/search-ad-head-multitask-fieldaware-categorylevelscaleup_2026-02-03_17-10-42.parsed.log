@@ -1,0 +1,9656 @@
+=== Record 1 ===
+User ID: 212079220
+Tracking ID: abc
+Model Config ID: search-ad-head-multitask-fieldaware-categorylevelscaleup
+Schema Version: 4 (present in log)
+Format Type: 0 (proto)
+Entities: 300
+Entity IDs: ['60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110']
+Parent Entities: 1
+Parent Entity IDs: ['saree']
+Encoded Features: 300
+
+--- Entity 1 ---
+Entity ID: 60889110
+Parent Entity: saree
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 2 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 3 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 4 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 5 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 6 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 7 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 8 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 9 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 10 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 11 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 12 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 13 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 14 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 15 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 16 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 17 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 18 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 19 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 20 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 21 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 22 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 23 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 24 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 25 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 26 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 27 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 28 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 29 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 30 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 31 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 32 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 33 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 34 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 35 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 36 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 37 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 38 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 39 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 40 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 41 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 42 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 43 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 44 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 45 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 46 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 47 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 48 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 49 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 50 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 51 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 52 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 53 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 54 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 55 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 56 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 57 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 58 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 59 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 60 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 61 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 62 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 63 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 64 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 65 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 66 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 67 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 68 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 69 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 70 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 71 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 72 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 73 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 74 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 75 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 76 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 77 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 78 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 79 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 80 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 81 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 82 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 83 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 84 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 85 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 86 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 87 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 88 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 89 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 90 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 91 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 92 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 93 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 94 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 95 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 96 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 97 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 98 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 99 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 100 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 101 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 102 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 103 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 104 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 105 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 106 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 107 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 108 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 109 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 110 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 111 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 112 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 113 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 114 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 115 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 116 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 117 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 118 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 119 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 120 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 121 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 122 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 123 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 124 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 125 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 126 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 127 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 128 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 129 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 130 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 131 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 132 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 133 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 134 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 135 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 136 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 137 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 138 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 139 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 140 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 141 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 142 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 143 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 144 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 145 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 146 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 147 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 148 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 149 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 150 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 151 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 152 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 153 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 154 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 155 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 156 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 157 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 158 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 159 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 160 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 161 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 162 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 163 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 164 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 165 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 166 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 167 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 168 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 169 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 170 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 171 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 172 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 173 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 174 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 175 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 176 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 177 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 178 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 179 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 180 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 181 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 182 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 183 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 184 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 185 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 186 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 187 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 188 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 189 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 190 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 191 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 192 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 193 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 194 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 195 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 196 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 197 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 198 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 199 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 200 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 201 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 202 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 203 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 204 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 205 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 206 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 207 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 208 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 209 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 210 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 211 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 212 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 213 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 214 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 215 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 216 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 217 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 218 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 219 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 220 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 221 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 222 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 223 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 224 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 225 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 226 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 227 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 228 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 229 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 230 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 231 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 232 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 233 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 234 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 235 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 236 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 237 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 238 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 239 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 240 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 241 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 242 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 243 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 244 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 245 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 246 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 247 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 248 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 249 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 250 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 251 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 252 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 253 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 254 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 255 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 256 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 257 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 258 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 259 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 260 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 261 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 262 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 263 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 264 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 265 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 266 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 267 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 268 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 269 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 270 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 271 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 272 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 273 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 274 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 275 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 276 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 277 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 278 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 279 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 280 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 281 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 282 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 283 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 284 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 285 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 286 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 287 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 288 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 289 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 290 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 291 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 292 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 293 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 294 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 295 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 296 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 297 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 298 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 299 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 300 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+
+=== Record 2 ===
+User ID: 212079220
+Tracking ID: abc
+Model Config ID: search-ad-head-multitask-fieldaware-categorylevelscaleup
+Schema Version: 4 (present in log)
+Format Type: 0 (proto)
+Entities: 300
+Entity IDs: ['60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110']
+Parent Entities: 1
+Parent Entity IDs: ['saree']
+Encoded Features: 300
+
+--- Entity 1 ---
+Entity ID: 60889110
+Parent Entity: saree
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 2 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 3 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 4 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 5 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 6 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 7 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 8 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 9 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 10 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 11 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 12 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 13 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 14 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 15 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 16 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 17 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 18 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 19 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 20 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 21 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 22 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 23 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 24 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 25 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 26 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 27 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 28 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 29 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 30 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 31 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 32 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 33 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 34 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 35 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 36 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 37 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 38 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 39 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 40 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 41 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 42 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 43 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 44 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 45 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 46 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 47 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 48 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 49 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 50 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 51 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 52 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 53 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 54 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 55 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 56 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 57 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 58 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 59 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 60 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 61 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 62 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 63 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 64 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 65 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 66 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 67 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 68 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 69 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 70 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 71 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 72 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 73 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 74 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 75 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 76 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 77 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 78 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 79 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 80 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 81 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 82 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 83 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 84 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 85 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 86 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 87 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 88 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 89 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 90 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 91 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 92 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 93 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 94 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 95 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 96 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 97 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 98 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 99 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 100 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 101 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 102 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 103 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 104 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 105 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 106 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 107 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 108 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 109 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 110 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 111 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 112 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 113 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 114 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 115 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 116 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 117 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 118 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 119 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 120 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 121 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 122 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 123 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 124 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 125 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 126 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 127 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 128 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 129 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 130 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 131 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 132 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 133 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 134 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 135 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 136 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 137 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 138 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 139 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 140 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 141 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 142 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 143 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 144 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 145 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 146 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 147 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 148 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 149 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 150 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 151 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 152 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 153 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 154 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 155 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 156 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 157 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 158 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 159 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 160 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 161 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 162 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 163 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 164 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 165 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 166 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 167 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 168 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 169 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 170 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 171 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 172 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 173 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 174 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 175 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 176 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 177 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 178 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 179 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 180 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 181 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 182 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 183 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 184 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 185 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 186 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 187 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 188 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 189 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 190 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 191 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 192 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 193 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 194 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 195 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 196 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 197 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 198 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 199 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 200 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 201 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 202 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 203 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 204 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 205 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 206 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 207 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 208 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 209 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 210 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 211 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 212 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 213 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 214 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 215 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 216 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 217 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 218 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 219 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 220 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 221 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 222 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 223 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 224 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 225 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 226 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 227 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 228 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 229 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 230 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 231 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 232 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 233 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 234 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 235 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 236 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 237 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 238 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 239 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 240 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 241 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 242 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 243 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 244 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 245 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 246 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 247 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 248 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 249 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 250 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 251 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 252 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 253 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 254 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 255 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 256 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 257 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 258 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 259 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 260 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 261 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 262 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 263 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 264 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 265 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 266 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 267 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 268 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 269 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 270 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 271 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 272 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 273 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 274 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 275 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 276 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 277 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 278 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 279 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 280 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 281 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 282 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 283 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 284 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 285 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 286 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 287 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 288 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 289 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 290 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 291 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 292 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 293 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 294 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 295 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 296 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 297 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 298 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 299 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 300 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+
+=== Record 3 ===
+User ID: 212079220
+Tracking ID: abc
+Model Config ID: search-ad-head-multitask-fieldaware-categorylevelscaleup
+Schema Version: 4 (present in log)
+Format Type: 0 (proto)
+Entities: 300
+Entity IDs: ['60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110']
+Parent Entities: 1
+Parent Entity IDs: ['saree']
+Encoded Features: 300
+
+--- Entity 1 ---
+Entity ID: 60889110
+Parent Entity: saree
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 2 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 3 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 4 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 5 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 6 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 7 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 8 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 9 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 10 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 11 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 12 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 13 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 14 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 15 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 16 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 17 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 18 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 19 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 20 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 21 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 22 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 23 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 24 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 25 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 26 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 27 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 28 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 29 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 30 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 31 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 32 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 33 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 34 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 35 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 36 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 37 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 38 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 39 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 40 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 41 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 42 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 43 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 44 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 45 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 46 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 47 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 48 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 49 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 50 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 51 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 52 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 53 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 54 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 55 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 56 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 57 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 58 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 59 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 60 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 61 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 62 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 63 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 64 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 65 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 66 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 67 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 68 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 69 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 70 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 71 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 72 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 73 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 74 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 75 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 76 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 77 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 78 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 79 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 80 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 81 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 82 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 83 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 84 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 85 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 86 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 87 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 88 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 89 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 90 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 91 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 92 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 93 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 94 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 95 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 96 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 97 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 98 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 99 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 100 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 101 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 102 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 103 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 104 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 105 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 106 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 107 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 108 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 109 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 110 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 111 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 112 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 113 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 114 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 115 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 116 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 117 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 118 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 119 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 120 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 121 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 122 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 123 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 124 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 125 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 126 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 127 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 128 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 129 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 130 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 131 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 132 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 133 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 134 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 135 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 136 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 137 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 138 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 139 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 140 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 141 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 142 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 143 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 144 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 145 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 146 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 147 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 148 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 149 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 150 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 151 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 152 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 153 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 154 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 155 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 156 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 157 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 158 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 159 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 160 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 161 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 162 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 163 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 164 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 165 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 166 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 167 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 168 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 169 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 170 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 171 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 172 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 173 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 174 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 175 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 176 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 177 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 178 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 179 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 180 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 181 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 182 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 183 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 184 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 185 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 186 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 187 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 188 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 189 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 190 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 191 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 192 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 193 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 194 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 195 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 196 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 197 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 198 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 199 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 200 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 201 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 202 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 203 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 204 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 205 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 206 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 207 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 208 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 209 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 210 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 211 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 212 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 213 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 214 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 215 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 216 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 217 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 218 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 219 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 220 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 221 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 222 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 223 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 224 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 225 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 226 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 227 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 228 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 229 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 230 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 231 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 232 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 233 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 234 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 235 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 236 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 237 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 238 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 239 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 240 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 241 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 242 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 243 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 244 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 245 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 246 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 247 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 248 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 249 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 250 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 251 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 252 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 253 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 254 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 255 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 256 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 257 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 258 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 259 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 260 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 261 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 262 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 263 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 264 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 265 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 266 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 267 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 268 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 269 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 270 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 271 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 272 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 273 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 274 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 275 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 276 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 277 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 278 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 279 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 280 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 281 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 282 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 283 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 284 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 285 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 286 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 287 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 288 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 289 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 290 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 291 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 292 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 293 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 294 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 295 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 296 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 297 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 298 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 299 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 300 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+
+=== Record 4 ===
+User ID: 212079220
+Tracking ID: abc
+Model Config ID: search-ad-head-multitask-fieldaware-categorylevelscaleup
+Schema Version: 4 (present in log)
+Format Type: 0 (proto)
+Entities: 300
+Entity IDs: ['60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110', '60889110']
+Parent Entities: 1
+Parent Entity IDs: ['saree']
+Encoded Features: 300
+
+--- Entity 1 ---
+Entity ID: 60889110
+Parent Entity: saree
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 2 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 3 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 4 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 5 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 6 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 7 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 8 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 9 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 10 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 11 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 12 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 13 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 14 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 15 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 16 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 17 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 18 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 19 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 20 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 21 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 22 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 23 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 24 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 25 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 26 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 27 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 28 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 29 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 30 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 31 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 32 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 33 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 34 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 35 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 36 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 37 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 38 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 39 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 40 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 41 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 42 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 43 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 44 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 45 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 46 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 47 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 48 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 49 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 50 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 51 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 52 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 53 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 54 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 55 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 56 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 57 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 58 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 59 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 60 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 61 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 62 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 63 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 64 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 65 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 66 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 67 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 68 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 69 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 70 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 71 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 72 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 73 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 74 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 75 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 76 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 77 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 78 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 79 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 80 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 81 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 82 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 83 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 84 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 85 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 86 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 87 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 88 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 89 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 90 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 91 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 92 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 93 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 94 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 95 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 96 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 97 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 98 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 99 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 100 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 101 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 102 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 103 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 104 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 105 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 106 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 107 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 108 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 109 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 110 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 111 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 112 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 113 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 114 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 115 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 116 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 117 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 118 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 119 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 120 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 121 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 122 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 123 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 124 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 125 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 126 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 127 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 128 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 129 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 130 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 131 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 132 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 133 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 134 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 135 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 136 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 137 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 138 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 139 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 140 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 141 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 142 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 143 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 144 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 145 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 146 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 147 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 148 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 149 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 150 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 151 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 152 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 153 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 154 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 155 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 156 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 157 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 158 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 159 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 160 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 161 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 162 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 163 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 164 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 165 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 166 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 167 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 168 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 169 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 170 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 171 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 172 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 173 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 174 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 175 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 176 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 177 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 178 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 179 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 180 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 181 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 182 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 183 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 184 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 185 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 186 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 187 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 188 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 189 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 190 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 191 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 192 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 193 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 194 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 195 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 196 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 197 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 198 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 199 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 200 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 201 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 202 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 203 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 204 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 205 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 206 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 207 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 208 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 209 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 210 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 211 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 212 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 213 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 214 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 215 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 216 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 217 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 218 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 219 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 220 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 221 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 222 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 223 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 224 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 225 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 226 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 227 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 228 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 229 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 230 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 231 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 232 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 233 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 234 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 235 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 236 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 237 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 238 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 239 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 240 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 241 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 242 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 243 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 244 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 245 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 246 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 247 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 248 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 249 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 250 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 251 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 252 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 253 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 254 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 255 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 256 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 257 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 258 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 259 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 260 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 261 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 262 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 263 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 264 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 265 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 266 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 267 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 268 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 269 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 270 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 271 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 272 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 273 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 274 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 275 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 276 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 277 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 278 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 279 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 280 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 281 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 282 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 283 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 284 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 285 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 286 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 287 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 288 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 289 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 290 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 291 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 292 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 293 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 294 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 295 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 296 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 297 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 298 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 299 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+--- Entity 300 ---
+Entity ID: 60889110
+Features:
+  catalog_id: 60889110
+  user_id: None
+  pcvr_score: 0.0
+  score: 0.000302
+
+
