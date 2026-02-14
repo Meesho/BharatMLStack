@@ -11,7 +11,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Available modules for release
-AVAILABLE_MODULES=("horizon" "trufflebox-ui" "numerix" "online-feature-store" "go-sdk" "py-sdk" "helix-client" "inferflow" "skye")
+AVAILABLE_MODULES=("horizon" "trufflebox-ui" "numerix" "online-feature-store" "go-sdk" "py-sdk" "inferflow" "skye")
 
 # Python SDK subdirectories
 PY_SDK_MODULES=("bharatml_commons" "grpc_feature_client" "spark_feature_push_client")
@@ -169,9 +169,6 @@ trigger_workflow() {
             ;;
         "py-sdk")
             workflow_file="release-py-sdk.yml"
-            ;;
-        "helix-client")
-            workflow_file="release-helix-client.yml"
             ;;
         "inferflow")
             workflow_file="release-inferflow.yml"
