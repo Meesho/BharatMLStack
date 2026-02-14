@@ -44,6 +44,9 @@ func adaptPairWiseRequest(req *pb.PairWiseRequest, conf *config.Config, headers 
 	if len(req.Targets) == 0 {
 		return nil, fmt.Errorf("pairwise request must have at least one target")
 	}
+	if err := validatePairIndices(req.Pairs, len(req.Targets)); err != nil {
+		return nil, err
+	}
 
 	firstEntity := firstEntityFromConfig(conf)
 
@@ -94,6 +97,9 @@ func adaptSlateWiseRequest(req *pb.SlateWiseRequest, conf *config.Config, header
 	}
 	if len(req.Targets) == 0 {
 		return nil, fmt.Errorf("slatewise request must have at least one target")
+	}
+	if err := validateSlateIndices(req.Slates, len(req.Targets)); err != nil {
+		return nil, err
 	}
 
 	firstEntity := firstEntityFromConfig(conf)
@@ -359,4 +365,48 @@ func buildSlateData(
 	}
 
 	return slateMatrix
+}
+
+func validatePairIndices(pairs []*pb.TargetPair, targetCount int) error {
+	for i, pair := range pairs {
+		if pair == nil {
+			return fmt.Errorf("pairwise request has nil pair at index %d", i)
+		}
+
+		firstIndex := int(pair.FirstTargetIndex)
+		if firstIndex < 0 || firstIndex >= targetCount {
+			return fmt.Errorf(
+				"pairwise request has out-of-range first_target_index=%d at pair index %d (target count=%d)",
+				pair.FirstTargetIndex, i, targetCount,
+			)
+		}
+
+		secondIndex := int(pair.SecondTargetIndex)
+		if secondIndex < 0 || secondIndex >= targetCount {
+			return fmt.Errorf(
+				"pairwise request has out-of-range second_target_index=%d at pair index %d (target count=%d)",
+				pair.SecondTargetIndex, i, targetCount,
+			)
+		}
+	}
+	return nil
+}
+
+func validateSlateIndices(slates []*pb.TargetSlate, targetCount int) error {
+	for slateIdx, slate := range slates {
+		if slate == nil {
+			return fmt.Errorf("slatewise request has nil slate at index %d", slateIdx)
+		}
+
+		for targetIdxPos, targetIdx := range slate.TargetIndices {
+			index := int(targetIdx)
+			if index < 0 || index >= targetCount {
+				return fmt.Errorf(
+					"slatewise request has out-of-range target index=%d at slates[%d].target_indices[%d] (target count=%d)",
+					targetIdx, slateIdx, targetIdxPos, targetCount,
+				)
+			}
+		}
+	}
+	return nil
 }

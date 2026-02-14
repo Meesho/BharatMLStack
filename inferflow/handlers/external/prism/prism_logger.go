@@ -68,3 +68,11 @@ func publishInferenceInsightsLog(msg proto.Message, modelId string) {
 
 // PublishInferenceInsightsLog is kept as an exported alias for cross-package callers.
 var PublishInferenceInsightsLog = publishInferenceInsightsLog
+
+func CloseKafkaLogger() {
+	if v2Writer != nil {
+		if err := v2Writer.Close(); err != nil {
+			logger.Error("Error closing Kafka V2 writer:", err)
+		}
+	}
+}

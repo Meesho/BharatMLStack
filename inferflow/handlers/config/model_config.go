@@ -21,7 +21,6 @@ func GetModelConfig(modelConfigId string) (*Config, error) {
 }
 
 func SetModelConfigMap(config *ModelConfig) {
-	println(config.ConfigMap)
 	mConfig = config
 }
 
