@@ -753,7 +753,8 @@
    ======================================== */
 
 .ctaSection {
-  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  background: linear-gradient(135deg, rgba(139, 0, 77, 0.3), rgba(99, 0, 54, 0.4));
+  border: 2px solid rgba(139, 0, 77, 0.5);
   border-radius: 40px;
   padding: 6rem 4rem;
   text-align: center;
@@ -907,6 +908,15 @@
     grid-template-columns: 1fr;
     text-align: center;
     padding-top: 8rem;
+  }
+
+  .heroImage {
+    order: -1;
+    margin: 2rem 0 0 0;
+  }
+
+  .heroContent {
+    order: 1;
   }
 
   .heroButtons {
