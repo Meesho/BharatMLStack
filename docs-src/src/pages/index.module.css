@@ -14,12 +14,12 @@
   --hp-secondary: #8b5cf6;
   --hp-accent: #06b6d4;
   --hp-success: #10b981;
-  --hp-dark: #0a0e27;
-  --hp-dark-light: #151932;
+  --hp-dark: #27001D;
+  --hp-dark-light: #3d0029;
   --hp-text: #e2e8f0;
   --hp-text-muted: #94a3b8;
   --hp-bg-card: rgba(255, 255, 255, 0.03);
-  --hp-bg-page: #0a0e27;
+  --hp-bg-page: #27001D;
 }
 
 [data-theme='light'] {

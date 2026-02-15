@@ -59,8 +59,8 @@
   --ifm-color-primary-lighter: #c7d2fe;
   --ifm-color-primary-lightest: #e0e7ff;
 
-  --ifm-background-color: #0a0e27;
-  --ifm-background-surface-color: #151932;
+  --ifm-background-color: #27001D;
+  --ifm-background-surface-color: #3d0029;
   --ifm-font-color-base: #e2e8f0;
   --ifm-font-color-secondary: #94a3b8;
   --ifm-heading-color: #f1f5f9;
@@ -149,7 +149,7 @@
    ======================================== */
 
 .navbar {
-  background: rgba(10, 14, 39, 0.8) !important;
+  background: rgba(39, 0, 29, 0.8) !important;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -206,7 +206,7 @@
    ======================================== */
 
 .footer {
-  background: #151932 !important;
+  background: #3d0029 !important;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -561,7 +561,7 @@
    ======================================== */
 
 [data-theme='dark'] .dropdown__menu {
-  background: #151932;
+  background: #3d0029;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
