@@ -7,15 +7,43 @@ sidebar_position: 1
 
 Predator is a scalable, high-performance model inference service built as a wrapper around the **NVIDIA Triton Inference Server**. It is designed to serve a variety of machine learning models (Deep Learning, Tree-based, etc.) with low latency in a **Kubernetes (K8s)** environment.
 
-The system integrates seamlessly with the **Online Feature Store (OnFS)** for real-time feature retrieval and uses **Interflow** as an orchestration layer to manage traffic between client applications (e.g. IOP), feature store and inference engine.
+The system integrates seamlessly with the **Online Feature Store (OnFS)** for real-time feature retrieval and uses **Horizon** as the deployment orchestration layer. Deployments follow a **GitOps** pipeline — Horizon generates Helm configurations, commits them to GitHub, and **Argo Sync** reconciles the desired state onto Kubernetes.
 
 ---
 
 ## High-Level Design
 
-![Predator HLD - Triton image build, K8s pod, inference flow, metrics](../../../static/img/v1.0.0-predator-hld.png)
+![Predator HLD - End-to-end deployment and inference architecture](../../../static/img/v1.0.0-predator-hld.png)
 
-The diagram shows the Predator inference service in Kubernetes: custom Triton images are built on a GCP VM, pushed to Artifact Registry, and cached in the nodepool. The **Predator K8s GPU/CPU Pod** runs an **Init Container** that downloads model artifacts from **GCS**, and a **Triton Inference Container** that loads models and serves inference requests via the **Helix Client**. Metrics are emitted to **Grafana**.
+### End-to-End Flow
+
+1. **Model Deployment Trigger**: An actor initiates deployment through **Trufflebox UI**, specifying the GCS path (`gcs://`) of the trained model. Separately, post-training pipelines write model artifacts to **GCS Artifactory**.
+
+2. **Orchestration via Horizon**: Trufflebox UI communicates with **Horizon**, the deployment orchestration layer. Horizon generates the appropriate **Helm** chart configuration for the inference service.
+
+3. **GitOps Pipeline**: Horizon commits the Helm values to a **GitHub** repository. **Argo Sync** watches the repo and reconciles the desired state onto the Kubernetes cluster, creating or updating deployable units.
+
+4. **Deployable Units (Deployable 1 … N)**: Each deployable is an independent Kubernetes deployment that:
+   - Downloads model artifacts from **GCS** at startup via an `init.sh` script.
+   - Launches a **Triton Inference Server** instance loaded with the model.
+   - Runs one or more pods, each containing the inference runtime and configured backends.
+
+5. **Triton Backends**: Each Triton instance supports pluggable backends based on the model type:
+   - **FIL** — GPU-accelerated tree-based models (XGBoost, LightGBM, Random Forest).
+   - **PyTorch** — Native PyTorch models via LibTorch.
+   - **Python** — Custom preprocessing/postprocessing or unsupported model formats.
+   - **TRT (TensorRT)** — GPU-optimized serialized TensorRT engines.
+   - **ONNX** — Framework-agnostic execution via ONNX Runtime.
+   - **DALI** — GPU-accelerated data preprocessing (image, audio, video).
+
+6. **Autoscaling with KEDA**: The cluster uses **KEDA** (Kubernetes Event-Driven Autoscaling) to scale deployable pods based on custom metrics (CPU utilization, GPU utilization via DCGM, queue depth, etc.). The underlying **Kubernetes** scheduler places pods across GPU/CPU node pools.
+
+### Key Design Principles
+
+- **GitOps-driven**: All deployment state is version-controlled in Git; Argo Sync ensures cluster state matches the declared configuration.
+- **Isolation per deployable**: Each model or model group gets its own deployable unit, preventing noisy-neighbor interference.
+- **Init-based model loading**: Models are materialized to local disk before Triton starts, ensuring deterministic startup and no runtime dependency on remote storage.
+- **Pluggable backends**: The same infrastructure serves deep learning, tree-based, and custom models through Triton's backend abstraction.
 
 ---
 
@@ -143,7 +171,13 @@ limits:
 
 ### Autoscaling Architecture
 
-Predator uses autoscaling based on **CPU** and **GPU** (for GPU pods) metrics. GPU scaling uses **DCGM** (Data Center GPU Manager) for utilization, memory, power, etc.; custom queries drive scale-up/scale-down.
+Predator uses **KEDA** (Kubernetes Event-Driven Autoscaling) for scaling deployable pods. KEDA supports custom metric sources including:
+
+- **CPU / Memory utilization** for CPU-based deployments.
+- **GPU utilization** via **DCGM** (Data Center GPU Manager) for GPU pods — covering utilization, memory, power, etc.
+- **Custom Prometheus queries** for application-level scaling signals (e.g., inference queue depth, request latency).
+
+KEDA ScaledObjects are configured per deployable, enabling fine-grained, independent scaling for each model or model group.
 
 ---
 
