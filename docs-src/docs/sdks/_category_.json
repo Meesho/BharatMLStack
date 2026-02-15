@@ -1,6 +1,6 @@
 {
     "label": "SDKs",
-    "position": 3,
+    "position": 5,
     "link": {
         "type": "generated-index",
         "description": "Software Development Kits (SDKs) for BharatML Stack. Includes client libraries for Go and Python to interact with the online feature store and other platform components."
