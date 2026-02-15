@@ -139,9 +139,9 @@ func (c *ClientV1) InferSlateWise(req *grpc2.SlateWiseRequest) (*grpc2.SlateWise
 }
 
 func getMetadata(authToken string) metadata.MD {
-	callerId := viper.GetString("APP_NAME")
+	callerId := viper.GetString("INFERFLOW_CALLER_ID")
 	if callerId == "" {
-		log.Panic().Msgf("APP_NAME not set!")
+		log.Panic().Msgf("INFERFLOW_CALLER_ID not set!")
 	}
 	md := metadata.New(map[string]string{
 		CallerIDMetadata: callerId,
