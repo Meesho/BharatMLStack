@@ -41,81 +41,38 @@
  * deployments/ contain deployment related files
 
 
-## inferflow-client
+## Go SDK Client
 
-## Install
+The Go client for Inferflow is available in the BharatMLStack Go SDK at [`go-sdk/pkg/clients/inferflow`](../go-sdk/pkg/clients/inferflow/).
 
-```xml
+It supports all three Predict service APIs over gRPC:
 
-<dependency>
-    <groupId>com.meesho.ml</groupId>
-    <artifactId>inferflow-client</artifactId>
-    <version>1.0.2-RELEASE</version>
-</dependency>
+| API | Method | Use Case |
+|-----|--------|----------|
+| **PointWise** | `InferPointWise` | Per-target scoring (CTR, fraud, relevance) |
+| **PairWise** | `InferPairWise` | Pair-level ranking (preference learning) |
+| **SlateWise** | `InferSlateWise` | Group-level scoring (page optimization, diversity-aware reranking) |
+
+### Quick Start
+
+```go
+import (
+    "github.com/Meesho/BharatMLStack/go-sdk/pkg/clients/inferflow"
+    grpc "github.com/Meesho/BharatMLStack/go-sdk/pkg/clients/inferflow/client/grpc"
+)
+
+client := inferflow.GetInferflowClientFromConfig(1, inferflow.ClientConfig{
+    Host:             "inferflow.svc",
+    Port:             "8080",
+    DeadlineExceedMS: 500,
+    PlainText:        true,
+}, "my-service")
+
+resp, err := client.InferPointWise(&grpc.PointWiseRequest{
+    ModelConfigId: "ranking_model_v1",
+    TrackingId:    "req-123",
+    Targets:       targets,
+})
 ```
 
-### Properties:-
-
-application.yml
-
-```yml
-
-grpc:
-    inferflow-enabled: true 
-
-client:
-  inferflow-grpc:
-    host: ${INFERFLOW_GRPC_HOST}
-    port: ${INFERFLOW_GRPC_PORT}
-    http2-config:
-      grpc-deadline: ${INFERFLOW_GRPC_DEADLINE}
-      connect-timeout: ${INFERFLOW_GRPC_CONNECT_TIMEOUT}
-      keepAliveTime: ${INFERFLOW_GRPC_KEEP_ALIVE_TIMEOUT}
-      connection-request-timeout: ${INFERFLOW_GRPC_CONN_REQUEST_TIMEOUT}
-      pool-size: ${INFERFLOW_GRPC_CHANNEL_POOL_SIZE}
-      thread-pool-size: ${INFERFLOW_GRPC_THREAD_POOL_SIZE}
-      bounded-queue-size: ${INFERFLOW_GRPC_QUEUE_POOL_SIZE}
-      is-plain-text: ${INFERFLOW_GRPC_PLAIN_TEXT}
-      
-```
-    
-Prod:
-```properties
-    INFERFLOW_GRPC_HOST=inferflow.cluster.meeshoint.in
-    INFERFLOW_GRPC_PORT=80
-    INFERFLOW_GRPC_DEADLINE=500
-    INFERFLOW_GRPC_CONNECT_TIMEOUT=100
-    INFERFLOW_GRPC_KEEP_ALIVE_TIMEOUT=10000
-    INFERFLOW_GRPC_CONN_REQUEST_TIMEOUT=100
-    INFERFLOW_GRPC_CHANNEL_POOL_SIZE=1
-    INFERFLOW_GRPC_THREAD_POOL_SIZE=100
-    INFERFLOW_GRPC_QUEUE_POOL_SIZE=100
-    INFERFLOW_GRPC_PLAIN_TEXT=true
-```    
-
-To Connect Prod from Local:
-```properties
-    INFERFLOW_GRPC_HOST=inferflow.meesho.com
-    INFERFLOW_GRPC_PORT=443
-    INFERFLOW_GRPC_DEADLINE=50000
-    INFERFLOW_GRPC_CONNECT_TIMEOUT=10000
-    INFERFLOW_GRPC_KEEP_ALIVE_TIMEOUT=10000
-    INFERFLOW_GRPC_CONN_REQUEST_TIMEOUT=10000
-    INFERFLOW_GRPC_CHANNEL_POOL_SIZE=1
-    INFERFLOW_GRPC_THREAD_POOL_SIZE=100
-    INFERFLOW_GRPC_QUEUE_POOL_SIZE=100
-    INFERFLOW_GRPC_PLAIN_TEXT=false
-```
-### Usage
-
-API-1: Get model score for entities (eg.catalog)
-
-Class: @Qualifier(InferflowConstants.BeanNames.INFERFLOW_SERVICE) IInferflow Inferflow;
-
-Method: retrieveModelScore
-
-* Note : Implement batching at client side and configure batch size as per your latency needs.
-
-
-
-temp change
+See the full [Go SDK Inferflow README](../go-sdk/pkg/clients/inferflow/README.md) for detailed usage, configuration options, and examples for all three APIs.
