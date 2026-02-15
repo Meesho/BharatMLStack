@@ -14,9 +14,10 @@ import (
 )
 
 var (
-	client  *ClientV1
-	once    sync.Once
-	headers metadata.MD
+	client     *ClientV1
+	onceEnv    sync.Once
+	onceConfig sync.Once
+	headers    metadata.MD
 )
 
 const (
@@ -25,44 +26,44 @@ const (
 	AuthMetadata     = "inferflow-auth-token"
 )
 
+// InitV1Client initializes the client from environment variables (via viper).
+// Safe to call multiple times; initialization runs once.
 func InitV1Client() InferflowClient {
-	if client == nil {
-		once.Do(func() {
-			clientConfig, err := getClientConfigs(V1Prefix)
-			if err != nil {
-				log.Panic().Err(err).Msgf("Invalid Inferflow client configs: %#v", clientConfig)
-			}
-			grpcClient, grpcErr := getGrpcClient(clientConfig)
-			headers = getMetadata(clientConfig.AuthToken)
-			if grpcErr != nil {
-				log.Panic().Err(grpcErr).Msgf("Error creating inferflow service grpc client, client: %#v", grpcClient)
-			}
-			client = &ClientV1{
-				ClientConfigs: clientConfig,
-				GrpcClient:    grpcClient,
-			}
-		})
-	}
+	onceEnv.Do(func() {
+		clientConfig, err := getClientConfigs(V1Prefix)
+		if err != nil {
+			log.Panic().Err(err).Msgf("Invalid Inferflow client configs: %#v", clientConfig)
+		}
+		grpcClient, grpcErr := getGrpcClient(clientConfig)
+		if grpcErr != nil {
+			log.Panic().Err(grpcErr).Msgf("Error creating inferflow service grpc client, client: %#v", grpcClient)
+		}
+		headers = getMetadata(clientConfig.AuthToken)
+		client = &ClientV1{
+			ClientConfigs: clientConfig,
+			GrpcClient:    grpcClient,
+		}
+	})
 	return client
 }
 
+// InitV1ClientFromConfig initializes the client from an explicit config.
+// Uses a separate sync.Once so it is not blocked by a prior InitV1Client call.
 func InitV1ClientFromConfig(conf ClientConfig, callerId string) InferflowClient {
-	if client == nil {
-		once.Do(func() {
-			grpcClient, grpcErr := getGrpcClient(&conf)
-			if grpcErr != nil {
-				log.Panic().Err(grpcErr).Msgf("Error creating inferflow service grpc client, client: %#v", grpcClient)
-			}
-			headers = metadata.New(map[string]string{
-				CallerIDMetadata: callerId,
-				AuthMetadata:     conf.AuthToken,
-			})
-			client = &ClientV1{
-				ClientConfigs: &conf,
-				GrpcClient:    grpcClient,
-			}
+	onceConfig.Do(func() {
+		grpcClient, grpcErr := getGrpcClient(&conf)
+		if grpcErr != nil {
+			log.Panic().Err(grpcErr).Msgf("Error creating inferflow service grpc client, client: %#v", grpcClient)
+		}
+		headers = metadata.New(map[string]string{
+			CallerIDMetadata: callerId,
+			AuthMetadata:     conf.AuthToken,
 		})
-	}
+		client = &ClientV1{
+			ClientConfigs: &conf,
+			GrpcClient:    grpcClient,
+		}
+	})
 	return client
 }
 
