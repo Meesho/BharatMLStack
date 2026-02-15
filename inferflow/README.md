@@ -56,7 +56,10 @@ It supports all three Predict service APIs over gRPC:
 ### Quick Start
 
 ```go
-import "github.com/Meesho/BharatMLStack/go-sdk/pkg/clients/inferflow"
+import (
+    "github.com/Meesho/BharatMLStack/go-sdk/pkg/clients/inferflow"
+    grpc "github.com/Meesho/BharatMLStack/go-sdk/pkg/clients/inferflow/client/grpc"
+)
 
 client := inferflow.GetInferflowClientFromConfig(1, inferflow.ClientConfig{
     Host:             "inferflow.svc",
