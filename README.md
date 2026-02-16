@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/bharatmlstack-logo.png" />
     <source media="(prefers-color-scheme: light)" srcset="assets/bharatmlstack-logo.png" />
-    <img src="assets/bharatmlstack-logo.png" alt="BharatMLStack" width="350"/>
+    <img src="assets/bharatmlstack-logo.png" alt="BharatMLStack" width="500"/>
   </picture>
 </div>
 
