@@ -65,6 +65,10 @@ func (e *EmbeddingConsumer) produceFailureEvents(failedEvents []Event) {
 			continue
 		}
 		failureProducerKafkaId := modelConf.FailureProducerKafkaId
+		if failureProducerKafkaId == 0 {
+			log.Debug().Msg("Skipping failure topic produce (failure_producer_kafka_id=0)")
+			continue
+		}
 		skafka.InitProducer(failureProducerKafkaId) // idempotent — ensures producer exists for this dynamic ID
 		jsonBytes, err := json.Marshal(failedEvent)
 		if err != nil {
@@ -301,15 +305,23 @@ func (e *EmbeddingConsumer) shouldIndex(event Event, variant string, aggregatorD
 		log.Error().Msgf("Error getting variant config for entity %s, model %s, variant %s: %v", event.Entity, event.Model, variant, err)
 		return false, err
 	}
+	if variantConfig == nil {
+		return false, fmt.Errorf("variant config is nil for entity %s model %s variant %s", event.Entity, event.Model, variant)
+	}
 	aggregatorFilters := variantConfig.Filter
 	if aggregatorFilters == nil {
 		return true, nil
 	}
+	if aggregatorData == nil {
+		aggregatorData = make(map[string]interface{})
+	}
 	for _, criteria := range aggregatorFilters {
 		for _, filter := range criteria {
 			filterData := filter.DefaultValue
-			if dataValue, exists := aggregatorData[filter.ColumnName]; exists {
-				filterData = dataValue.(string)
+			if dataValue, exists := aggregatorData[filter.ColumnName]; exists && dataValue != nil {
+				if s, ok := dataValue.(string); ok {
+					filterData = s
+				}
 			}
 			if filterData != filter.FilterValue {
 				return false, nil
@@ -324,6 +336,9 @@ func (e *EmbeddingConsumer) preparePayloadIndexMap(event Event, rtColumns map[st
 	if err != nil {
 		log.Error().Msgf("Error getting variant config for entity %s, model %s, variant %s: %v", event.Entity, event.Model, variant, err)
 		return nil, err
+	}
+	if variantConfig == nil || variantConfig.VectorDbConfig.Payload == nil {
+		return make(map[string]interface{}), nil
 	}
 	variantPayload := variantConfig.VectorDbConfig.Payload
 	payloadIndexMap := make(map[string]interface{})
