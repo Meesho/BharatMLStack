@@ -63,53 +63,22 @@ Built for the demands of one of the world's largest e-commerce platforms:
 | **Embedding Search** | 500K QPS |
 | **Feature Retrieval Latency** | Sub-10ms |
 
-## Documentation & Blogs
-
-### Documentation
-| Component | Link |
-|-----------|------|
-| Docs Home | [meesho.github.io/BharatMLStack](https://meesho.github.io/BharatMLStack/) |
-| Online Feature Store | [Docs](https://meesho.github.io/BharatMLStack/category/online-feature-store) |
-| Inferflow | [Docs](https://meesho.github.io/BharatMLStack/category/inferflow) |
-| Skye | [Docs](https://meesho.github.io/BharatMLStack/category/skye) |
-| Numerix | [Docs](https://meesho.github.io/BharatMLStack/category/numerix) |
-| Go SDK | [Docs](https://meesho.github.io/BharatMLStack/category/go-sdk) |
-| Python SDK | [Docs](https://meesho.github.io/BharatMLStack/category/python-sdk) |
-| Quick Start | [Guide](https://meesho.github.io/BharatMLStack/category/quick-start) |
-
-### Blogs
-- [All Blog Posts](https://meesho.github.io/BharatMLStack/blog)
-
-## Current Releases
-
-| Component | Version |
-|-----------|---------|
-| **Horizon** (Control Plane) | `v1.3.0` |
-| **TruffleBox UI** (ML Console) | `v1.3.0` |
-| **Online Feature Store** | `v1.2.0` |
-| **Go SDK** | `v1.2.0` |
-| **Python SDK** | `v1.0.1` |
-| **Numerix** (Compute Engine) | `v1.0.0` |
-| **Inferflow** (Inference Orchestration) | `v1.0.0` |
-| **Skye** (Embedding Search) | `v1.0.0` |
-
 ## Core Components
 
-**Horizon** — Central control plane that orchestrates all BharatMLStack services and serves as the backend for TruffleBox UI.
+| Component | Description | Version | Docs |
+|-----------|-------------|---------|------|
+| **[Horizon](./horizon/)** | Control plane that orchestrates all services and powers TruffleBox UI | `v1.3.0` | [Docs](https://meesho.github.io/BharatMLStack/) |
+| **[TruffleBox UI](./trufflebox-ui/)** | Web console for feature registry, cataloging, and approval workflows | `v1.3.0` | [Docs](https://meesho.github.io/BharatMLStack/trufflebox-ui/v1.0.0/userguide) |
+| **[Online Feature Store](./online-feature-store/)** | Sub-10ms feature retrieval at millions of QPS with streaming ingestion | `v1.2.0` | [Docs](https://meesho.github.io/BharatMLStack/category/online-feature-store) |
+| **[Inferflow](./inferflow/)** | DAG-based real-time inference orchestration for composable ML pipelines | `v1.0.0` | [Docs](https://meesho.github.io/BharatMLStack/category/inferflow) |
+| **[Numerix](./numerix/)** | Rust-powered math compute engine for high-performance matrix ops | `v1.0.0` | [Docs](https://meesho.github.io/BharatMLStack/category/numerix) |
+| **[Skye](./skye/)** | Vector similarity search with pluggable backends | `v1.0.0` | [Docs](https://meesho.github.io/BharatMLStack/category/skye) |
+| **[Interaction Store](./interaction-store/)** | ScyllaDB-backed store for user interaction signals at sub-10ms | — | — |
+| **[Go SDK](./go-sdk/)** | Go client for Feature Store, Interaction Store, and logging | `v1.2.0` | [Docs](https://meesho.github.io/BharatMLStack/category/go-sdk) |
+| **[Python SDK](./py-sdk/)** | Python client libraries for Feature Store and inference logging | `v1.0.1` | [Docs](https://meesho.github.io/BharatMLStack/category/python-sdk) |
 
-**TruffleBox UI** — Web console for feature registry, cataloging, approval workflows, and feature store management.
-
-**Online Feature Store** — High-performance feature store delivering sub-10ms retrieval at millions of QPS with streaming ingestion and backward-compatible versioning.
-
-**Inferflow** — DAG-based real-time ML inference orchestration engine that chains feature retrieval, model execution, and post-processing into composable pipelines.
-
-**Numerix** — Rust-powered mathematical compute engine for high-performance matrix operations over gRPC.
-
-**Skye** — Vector similarity search platform for fast semantic retrieval with pluggable vector DB backends.
-
-**Interaction Store** — ScyllaDB-backed system for storing and querying user interaction signals (clicks, orders, wishlist) with sub-10ms latency.
-
-**Go SDK / Python SDK** — Client libraries for integrating with the Online Feature Store, Interaction Store, and inference logging.
+> Full documentation at [meesho.github.io/BharatMLStack](https://meesho.github.io/BharatMLStack/) | [Blogs](https://meesho.github.io/BharatMLStack/blog)
+- [All Blog Posts](https://meesho.github.io/BharatMLStack/blog)
 
 ## Quick Start
 
