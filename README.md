@@ -20,121 +20,123 @@
 
 ## What is BharatMLStack?
 
-BharatMLStack is a comprehensive, production-ready machine learning infrastructure platform designed to democratize ML capabilities across India and beyond. Our mission is to provide a robust, scalable, and accessible ML stack that empowers organizations to build, deploy, and manage machine learning solutions at massive scale.
+BharatMLStack is a production-ready, cloud-agnostic ML infrastructure platform that powers real-time feature serving, model inference, and embedding search at massive scale. Built and battle-tested at [Meesho](https://meesho.com), it is designed to help organizations ship ML to production faster, cheaper, and more reliably.
 
 ## Our Vision
 
-- 🎯 **Democratize Machine Learning**: Make advanced ML infrastructure accessible to organizations of all sizes
-- 🚀 **Scale Without Limits**: Built to handle millions of requests per second with enterprise-grade reliability
-- 🇮🇳 **Bharat-First Approach**: Optimized for Indian market needs while maintaining global standards
-- ⚡ **Real-Time Intelligence**: Enable instant decision-making with sub-millisecond feature serving
-- 🔧 **Developer-Friendly**: Intuitive APIs and interfaces that accelerate ML development cycles
+BharatMLStack is built around **four core tenets**:
 
-## Star History
+### Workflow Integration & Productivity
+> Ship ML to production faster than ever.
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Meesho/BharatMLStack&type=Date)](https://www.star-history.com/#Meesho/BharatMLStack&Date)
+- **3x faster** experiment-to-deployment cycles
+- **95% reduction** in model onboarding time
 
-## Running at Million Scale
+### Cloud-Agnostic & Lock-In Free
+> Run anywhere. Own your stack.
 
-BharatMLStack is battle-tested in production environments, powering:
-- **1M+ feature vector retrievals per second** across distributed deployments
-- **Sub-10ms latency** for real-time feature retrieval
-- **99.99% uptime** with auto-scaling and fault tolerance
-- **Petabyte-scale** feature storage and processing
-- **Multi-region deployments** with global load balancing
+- Runs across **public cloud, on-prem, and edge**
+- Kubernetes-native with zero vendor lock-in
 
-## Document
-- [Doc](https://meesho.github.io/BharatMLStack/)
-- [Blogs](https://meesho.github.io/BharatMLStack/blog)
+### Economic Efficiency
+> Do more with less.
+
+- **60–70% lower** infrastructure costs vs hyperscaler managed services
+- Optimized resource utilization across CPU and GPU workloads
+
+### Availability & Scalability
+> Enterprise-grade reliability at internet scale.
+
+- **99.99% uptime** across clusters
+- **1M+ QPS** with low latency
+
+## Designed Truly for Bharat Scale
+
+Built for the demands of one of the world's largest e-commerce platforms:
+
+| Metric | Performance |
+|--------|-------------|
+| **Feature Store** | 2.4M QPS (batch of 100 id lookups) |
+| **Model Inference** | 1M+ QPS |
+| **Embedding Search** | 500K QPS |
+| **Feature Retrieval Latency** | Sub-10ms |
+
+## Documentation & Blogs
+
+### Documentation
+| Component | Link |
+|-----------|------|
+| Docs Home | [meesho.github.io/BharatMLStack](https://meesho.github.io/BharatMLStack/) |
+| Online Feature Store | [Docs](https://meesho.github.io/BharatMLStack/category/online-feature-store) |
+| Inferflow | [Docs](https://meesho.github.io/BharatMLStack/category/inferflow) |
+| Skye | [Docs](https://meesho.github.io/BharatMLStack/category/skye) |
+| Numerix | [Docs](https://meesho.github.io/BharatMLStack/category/numerix) |
+| Go SDK | [Docs](https://meesho.github.io/BharatMLStack/category/go-sdk) |
+| Python SDK | [Docs](https://meesho.github.io/BharatMLStack/category/python-sdk) |
+| Quick Start | [Guide](https://meesho.github.io/BharatMLStack/category/quick-start) |
+
+### Blogs
+- [All Blog Posts](https://meesho.github.io/BharatMLStack/blog)
+
+## Current Releases
+
+| Component | Version |
+|-----------|---------|
+| **Horizon** (Control Plane) | `v1.3.0` |
+| **TruffleBox UI** (ML Console) | `v1.3.0` |
+| **Online Feature Store** | `v1.2.0` |
+| **Go SDK** | `v1.2.0` |
+| **Python SDK** | `v1.0.1` |
+| **Numerix** (Compute Engine) | `v1.0.0` |
+| **Inferflow** (Inference Orchestration) | `v1.0.0` |
+| **Skye** (Embedding Search) | `v1.0.0` |
+
 ## Core Components
 
-### 📋 Current Releases
+**Horizon** — Central control plane that orchestrates all BharatMLStack services and serves as the backend for TruffleBox UI.
 
-| Component | Version | Description |
-|-----------|---------|-------------|
-| 🚀 **Horizon** | `v1.0.0` | Control Plane & Backend |
-| 🎨 **Trufflebox UI** | `v1.0.0` | ML Management Console |
-| 🗄️ **Online Feature Store** | `v1.0.0` | Real-Time Features |
-| 🐹 **Go SDK** | `v1.0.0` | Go Client Library |
-| 🐍 **Python SDK** | `v1.0.1` | Python Client Library |
-| 🚀 **Numerix** | `v1.0.0` | Mathematical Compute Engine |
+**TruffleBox UI** — Web console for feature registry, cataloging, approval workflows, and feature store management.
 
-### 🚀 Horizon - Control Plane & Backend
-The central control plane for BharatMLStack components, serving as the backend for Trufflebox UI.
-- **Component orchestration**: Manages and coordinates all BharatMLStack services
-- **API gateway**: Unified interface for all MLOps and workflows
+**Online Feature Store** — High-performance feature store delivering sub-10ms retrieval at millions of QPS with streaming ingestion and backward-compatible versioning.
 
-### 🎨 Trufflebox UI - ML Management Console  
-Modern web interface for managing ML models, features, and experiments. Currently it supports:
-- **Feature Registry**: Centralized repository for feature definitions and metadata
-- **Feature Cataloging**: Discovery and search capabilities for available features
-- **Online Feature Store Control System**: Management interface for feature store operations
-- **Approval Flows**: Workflow management for feature deployment and changes 
+**Inferflow** — DAG-based real-time ML inference orchestration engine that chains feature retrieval, model execution, and post-processing into composable pipelines.
 
-### 🗄️ Online Feature Store - Real-Time Features
-High-performance feature store for real-time ML inference and training.
-- **Real-time serving**: Sub-10ms feature retrieval at scale  
-- **Streaming ingestion**: Process millions of feature updates per second
-- **Feature Backward Compatible Versioning**: Track and manage feature evolution
-- **Multi-source integration**: Push from stream, batch and real-time sources
+**Numerix** — Rust-powered mathematical compute engine for high-performance matrix operations over gRPC.
 
-### 🗄️ Numerix - Mathematical Compute Engine
-High-performance feature store for real-time ML inference and training.
-- **Matrix Operations**: High-performance matrix computations and transformations
-- **gRPC API**: Fast binary protocol for efficient data transfer
-- **Multi-format Support**: String and byte-based matrix formats
-- **Optimized Performance**: Built with Rust for maximum efficiency
-- **Scalable Architecture**: Designed for distributed processing
+**Skye** — Vector similarity search platform for fast semantic retrieval with pluggable vector DB backends.
 
-## Key Differentiators
+**Interaction Store** — ScyllaDB-backed system for storing and querying user interaction signals (clicks, orders, wishlist) with sub-10ms latency.
 
-- ✨ **Production-Ready**: Battle-tested components used in high-traffic production systems
-- 🌐 **Cloud Agnostic**: Kubernetes-native, so deploy on the cloud you love
-- 📊 **Observability**: Built-in monitoring, logging
+**Go SDK / Python SDK** — Client libraries for integrating with the Online Feature Store, Interaction Store, and inference logging.
 
 ## Quick Start
 
-🚀 **Get started with BharatMLStack in minutes!**
-
-For comprehensive setup instructions, examples, and deployment guides, see our detailed Quick Start documentation:
-
-📖 **[Quick Start Guide →](./quick-start/README.md)**
-
-### What You'll Find:
-
-- **🐳 Docker Setup**: Complete stack deployment with Docker Compose
-- **📊 Sample Data**: Pre-configured examples to get you started
-- **🔍 Health Checks**: Verify your deployment is working
-- **📝 Step-by-Step Tutorials**: From installation to first feature operations
-
-### TL;DR - One Command Setup:
-
 ```bash
-# Clone and start the complete stack
 git clone https://github.com/Meesho/BharatMLStack.git
 cd BharatMLStack/quick-start
-ONFS_VERSION=<version> HORIZON_VERSION=<version> TRUFFLEBOX_VERSION=<version> NUMERIX_VERSION=<version> ./start.sh
+ONFS_VERSION=v1.2.0 HORIZON_VERSION=v1.3.0 TRUFFLEBOX_VERSION=v1.3.0 NUMERIX_VERSION=v1.0.0 ./start.sh
 ```
 
-Then follow the [Quick Start Guide](./quick-start/README.md) for detailed setup and usage instructions.
+For step-by-step setup, Docker Compose details, sample data, and health checks, see the full **[Quick Start Guide →](./quick-start/README.md)**.
 
 ## Architecture
 
-BharatMLStack follows a microservices architecture designed for scalability and maintainability. Several components are to be open-sourced
-
 <div align="center">
-  <img src="assets/bharatmlstack-layered.png" alt="BharatMLStack Logo" width="1000"/>
+  <img src="assets/bharatmlstack-architecture.png" alt="BharatMLStack Architecture" width="1000"/>
 </div>
 
-### 🚀 Quick Navigation
+## Use-Cases
 
-| Component | Documentation | Quick Start |
-|-----------|--------------|-------------|
-| **Online Feature Store** | [Docs](https://meesho.github.io/BharatMLStack/category/online-feature-store) | [Setup](./quick-start/README.md) |
-| **Go SDK** | [Docs](./go-sdk/README.md) | [Examples](./go-sdk/README.md) |
-| **Python SDK** | [Docs](./py-sdk/README.md) | [Quickstart](./py-sdk/README.md) |
-| **User Guide** | [Docs](https://meesho.github.io/BharatMLStack/trufflebox-ui/v1.0.0/userguide) | [Setup](./quick-start/README.md) |
-| **Numerix** | [Docs](https://meesho.github.io/BharatMLStack/category/numerix) | [Setup](./quick-start/README.md) |
+BharatMLStack powers a wide range of ML-driven applications:
+
+| Use-Case | What BharatMLStack Enables |
+|----------|---------------------------|
+| **Personalized Candidate Generation** | Retrieve and rank millions of candidates in real time using feature vectors and embedding similarity |
+| **Personalized Ranking** | Serve user, item, and context features at ultra-low latency to power real-time ranking models |
+| **Fraud & Risk Detection** | Stream interaction signals and features to detect anomalies and fraudulent patterns in milliseconds |
+| **Image Search** | Run embedding search at 500K QPS to match visual queries against massive product catalogs |
+| **LLM Recommender Systems** | Orchestrate LLM inference pipelines with feature enrichment for next-gen recommendation engines |
+| **DL & LLM Deployments at Scale** | Deploy and scale deep learning and large language models across GPU clusters with Inferflow orchestration |
 
 ## Contributing
 
@@ -142,9 +144,9 @@ We welcome contributions from the community! Please see our [Contributing Guide]
 
 ## Community & Support
 
-- 💬 **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
-- 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
-- 📧 **Email**: Contact us at [ml-oss@meesho.com](mailto:ml-oss@meesho.com )
+- **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
+- **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
+- **Email**: Contact us at [ml-oss@meesho.com](mailto:ml-oss@meesho.com)
 
 ## License
 
