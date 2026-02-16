@@ -461,7 +461,7 @@ services:
       # Variants list
       - VARIANTS_LIST=ads_gold,ads_mall,ads_new_catalog,ads,ct_gst,ct_high_asp,ct_non_gst,organic_gold,organic,organic_gst,organic_high_asp,organic_mall,organic_melp,organic_non_gst,widget_ads,organic_gst_pd
       # MQ configuration
-      - MQ_ID_TOPICS_MAPPING=2450:skye.embeddings-1
+      - MQ_ID_TOPICS_MAPPING=2450:skye.embedding
       # Horizon to Skye ScyllaDB configuration
       - HORIZON_TO_SKYE_SCYLLA_CONF_ID_MAP=2:1
       - SCYLLA_2_CONTACT_POINTS=scylla
@@ -651,9 +651,14 @@ services:
       onfs-network:
         ipv4_address: 172.18.0.20
     depends_on:
-      - etcd
-      - kafka
-      - qdrant
+      etcd:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   skye-admin-healthcheck:
@@ -714,18 +719,25 @@ services:
       # Etcd
       - ETCD_SERVER=etcd:2379
       - ETCD_WATCHER_ENABLED=true
+      # Admin HTTP client (used by embedding consumer for e.g. trigger indexing)
+      - ADMIN_HOST=skye-admin
+      - ADMIN_PORT=8092
+      - ADMIN_TIMEOUT_IN_MS=30000
+      - ADMIN_MAX_IDLE_CONNS=100
+      - ADMIN_MAX_IDLE_CONNS_PER_HOST=100
+      - ADMIN_IDLE_CONN_TIMEOUT_IN_MS=30000
       # Embedding consumer (ID=2)
       - EMBEDDING_CONSUMER_KAFKA_IDS=2
       - KAFKA_2_TOPICS=skye.embedding
       - KAFKA_2_BOOTSTRAP_SERVERS=broker:29092
       - KAFKA_2_BASIC_AUTH_CREDENTIAL_SOURCE=NONE
-      - KAFKA_2_GROUP_ID=skye-embedding-consumer
+      - KAFKA_2_GROUP_ID=skye-embedding-consumer-v2
       - KAFKA_2_AUTO_OFFSET_RESET=earliest
       - KAFKA_2_AUTO_COMMIT_INTERVAL_MS=5000
       - KAFKA_2_ENABLE_AUTO_COMMIT=false
       - KAFKA_2_LISTENER_CONCURRENCY=1
-      - KAFKA_2_CLIENT_ID=skye-embedding-consumer
-      - KAFKA_2_BATCH_SIZE=10
+      - KAFKA_2_CLIENT_ID=skye-embedding-consumer-v2
+      - KAFKA_2_BATCH_SIZE=1
       - KAFKA_2_POLL_TIMEOUT=1000
       # Embedding sequence consumer (ID=3)
       - EMBEDDING_CONSUMER_SEQUENCE_KAFKA_IDS=3
@@ -776,6 +788,11 @@ services:
       - KAFKA_7_CLIENT_ID=skye-realtime-delta-consumer
       - KAFKA_7_BATCH_SIZE=10
       - KAFKA_7_POLL_TIMEOUT=1000
+      # Aggregator DB (Scylla) - required for embedding consumer when entity store uses conf_id=1
+      - STORAGE_AGGREGATOR_DB_COUNT=1
+      - STORAGE_AGGREGATOR_DB_1_CONTACT_POINTS=scylla
+      - STORAGE_AGGREGATOR_DB_1_PORT=9042
+      - STORAGE_AGGREGATOR_DB_1_KEYSPACE=skye
     networks:
       onfs-network:
         ipv4_address: 172.18.0.23
@@ -788,6 +805,10 @@ services:
         condition: service_healthy
       kafka-init:
         condition: service_completed_successfully
+      skye-admin:
+        condition: service_started
+      scylla:
+        condition: service_healthy
     restart: unless-stopped
 
   skye-consumers-healthcheck:
