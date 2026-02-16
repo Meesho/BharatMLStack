@@ -1,0 +1,8 @@
+{
+  "label": "Predator",
+  "position": 7,
+  "link": {
+    "type": "generated-index",
+    "description": "Predator is a scalable, high-performance model inference service built as a wrapper around NVIDIA Triton Inference Server, designed to serve ML models with low latency in Kubernetes, with OnFS and Interflow integration."
+  }
+}

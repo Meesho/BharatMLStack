@@ -314,8 +314,8 @@ function HeroSection() {
       </div>
       <div className={styles.heroImage}>
         <img
-          src="https://cdn.prod.website-files.com/698b10a6a7625eb340f3ae09/698b5bbdf7c6b6cda9addc72_ade02631-3927-487e-a128-c38ab39588a4.avif"
-          alt="ML Infrastructure"
+          src={useBaseUrl('/img/bharatml-stack-logo.jpg')}
+          alt="BharatML Stack Logo"
           loading="eager"
         />
       </div>
