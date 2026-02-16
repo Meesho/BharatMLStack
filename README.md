@@ -85,7 +85,10 @@ Built for the demands of one of the world's largest e-commerce platforms:
 ```bash
 git clone https://github.com/Meesho/BharatMLStack.git
 cd BharatMLStack/quick-start
-ONFS_VERSION=v1.2.0 HORIZON_VERSION=v1.3.0 TRUFFLEBOX_VERSION=v1.3.0 NUMERIX_VERSION=v1.0.0 ./start.sh
+#Set versions
+ONFS_VERSION=v1.2.0 HORIZON_VERSION=v1.3.0 TRUFFLEBOX_VERSION=v1.3.0 NUMERIX_VERSION=v1.0.0
+
+./start.sh
 ```
 
 For step-by-step setup, Docker Compose details, sample data, and health checks, see the full **[Quick Start Guide →](./quick-start/README.md)**.
