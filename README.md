@@ -1,7 +1,7 @@
 # BharatMLStack
 
 <div align="center">
-  <img src="assets/bharatmlstack.jpg" alt="BharatMLStack Logo" width="400"/>
+  <img src="assets/bharatmlstack-logo.png" alt="BharatMLStack Logo" width="400"/>
 </div>
 
 
