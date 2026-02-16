@@ -1,0 +1,10 @@
+apiVersion: v2
+name: horizon
+description: A Helm chart for the Horizon control plane service (onboarding, GitOps, ArgoCD orchestration)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+maintainers:
+  - name: BharatMLStack Team
+    email: ml-oss@meesho.com
