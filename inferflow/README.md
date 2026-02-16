@@ -189,7 +189,7 @@ docker run -p 8085:8085 --env-file .env inferflow:latest
 
 | Version | Link |
 |---------|------|
-| Latest | [Inferflow Documentation](https://meesho.github.io/BharatMLStack/docs/inferflow) |
+| Latest | [Inferflow Documentation](https://meesho.github.io/BharatMLStack/category/inferflow) |
 
 ## 🤝 Contributing
 
