@@ -3,16 +3,21 @@
 # Skye End-to-End Test Script
 # =============================================================================
 # Tests the full Skye flow:
-#   1. Health checks on all Skye services
+#   1. Health checks on all Skye services (admin, serving, qdrant, consumers)
 #   2. Register store, frequency, entity, model, variant via skye-admin
 #   3. Create Qdrant collection directly
 #   4. Insert test vectors into Qdrant
-#   5. Query similar candidates via skye-serving (gRPC)
+#   5. Send 3 embedding events to Kafka (skye-consumers consume them)
+#   6. Verify Qdrant search
+#   7. Query similar candidates via skye-serving (gRPC)
 # =============================================================================
 
 ADMIN_URL="http://localhost:8092"
 SERVING_URL="localhost:8094"
 QDRANT_URL="http://localhost:6333"
+CONSUMERS_URL="http://localhost:8093"
+BROKER_CONTAINER="${BROKER_CONTAINER:-broker}"
+SKYE_EMBEDDING_TOPIC="${SKYE_EMBEDDING_TOPIC:-skye.embedding}"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -52,6 +57,7 @@ info "Checking service health..."
 curl -sf "${ADMIN_URL}/health" > /dev/null && pass "skye-admin is healthy" || fail "skye-admin is not reachable at ${ADMIN_URL}"
 curl -sf "http://${SERVING_URL}/health/self" > /dev/null && pass "skye-serving is healthy" || fail "skye-serving is not reachable at ${SERVING_URL}"
 curl -sf "${QDRANT_URL}/healthz" > /dev/null && pass "Qdrant is healthy" || fail "Qdrant is not reachable at ${QDRANT_URL}"
+curl -sf "${CONSUMERS_URL}/health" > /dev/null && pass "skye-consumers is healthy" || fail "skye-consumers is not reachable at ${CONSUMERS_URL}"
 
 echo ""
 
@@ -94,7 +100,7 @@ admin_post "Register model" "/api/v1/model/register-model" '{
   },
   "model_type": "RESET",
   "kafka_id": 0,
-  "training_data_path": "",
+  "training_data_path": "gs://test",
   "metadata": {
     "entity": "test-products",
     "key-type": "product_id"
@@ -114,8 +120,8 @@ admin_post "Register variant" "/api/v1/model/register-variant" '{
   "variant": "v1",
   "vector_db_type": "QDRANT",
   "vector_db_config": {
-    "read_host": "qdrant:6334",
-    "write_host": "qdrant:6334",
+    "read_host": "172.18.0.3",
+    "write_host": "172.18.0.3",
     "port": "6334",
     "http2config": {
       "deadline": 5000,
@@ -182,7 +188,31 @@ echo "  Response: ${RESP}"
 pass "Test vectors inserted (upserted)"
 
 # ---------------------------------------------------------------------------
-# Step 8: Verify vectors via Qdrant search (sanity check)
+# Step 8: Send 3 embedding events to Kafka (skye-consumers will consume them)
+# ---------------------------------------------------------------------------
+info "Sending 3 embedding events to topic ${SKYE_EMBEDDING_TOPIC}..."
+# Minimal valid event JSON (one line each) for entity=test-products, model=product-embeddings, vector_dim=4
+EVT1='{"candidate_id":"1","entity":"test-products","model_name":"product-embeddings","environment":"local","embedding_store_version":1,"partition":"","index_space":{"embedding":[0.1,0.2,0.3,0.4],"variants_version_map":{"v1":1},"variants_index_map":{"v1":true},"operation":"ADD","payload":{"portfolio_id":"0"}},"search_space":{"embedding":[0.1,0.2,0.3,0.4]}}'
+EVT2='{"candidate_id":"2","entity":"test-products","model_name":"product-embeddings","environment":"local","embedding_store_version":1,"partition":"","index_space":{"embedding":[0.2,0.3,0.4,0.5],"variants_version_map":{"v1":1},"variants_index_map":{"v1":true},"operation":"ADD","payload":{"portfolio_id":"0"}},"search_space":{"embedding":[0.2,0.3,0.4,0.5]}}'
+EVT3='{"candidate_id":"3","entity":"test-products","model_name":"product-embeddings","environment":"local","embedding_store_version":1,"partition":"","index_space":{"embedding":[0.9,0.8,0.7,0.6],"variants_version_map":{"v1":1},"variants_index_map":{"v1":true},"operation":"ADD","payload":{"portfolio_id":"0"}},"search_space":{"embedding":[0.9,0.8,0.7,0.6]}}'
+
+if docker exec -i "${BROKER_CONTAINER}" /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server broker:29092 --topic "${SKYE_EMBEDDING_TOPIC}" 2>/dev/null <<EOF
+${EVT1}
+${EVT2}
+${EVT3}
+EOF
+then
+  pass "Produced 3 messages to ${SKYE_EMBEDDING_TOPIC}"
+else
+  fail "Failed to produce messages (is container ${BROKER_CONTAINER} running?)"
+fi
+
+info "Waiting 5s for skye-consumers to process..."
+sleep 5
+pass "Check skye-consumers logs for 'Processing N embedding events' to confirm consumption"
+
+# ---------------------------------------------------------------------------
+# Step 9: Verify vectors via Qdrant search (sanity check)
 # ---------------------------------------------------------------------------
 info "Verifying Qdrant search works..."
 RESP=$(curl -s -X POST "${QDRANT_URL}/collections/${COLLECTION_NAME}/points/search" \
@@ -196,11 +226,10 @@ echo "  Response: ${RESP}"
 pass "Qdrant search verified"
 
 # ---------------------------------------------------------------------------
-# Step 9: Query via skye-serving gRPC
+# Step 10: Query via skye-serving gRPC
 # ---------------------------------------------------------------------------
 info "Querying similar candidates via skye-serving gRPC..."
 
-# Check if grpcurl is available
 if command -v grpcurl &> /dev/null; then
   RESP=$(grpcurl -plaintext \
     -H "skye-caller-id: test-script" \
@@ -217,9 +246,7 @@ if command -v grpcurl &> /dev/null; then
   echo "  Response: ${RESP}"
   pass "gRPC query completed"
 else
-  echo -e "${YELLOW}  ⚠️  grpcurl not installed. Install it to test gRPC:${NC}"
-  echo "     brew install grpcurl"
-  echo ""
+  warn "grpcurl not installed. Install it to test gRPC: brew install grpcurl"
   echo "  Then run manually:"
   echo '  grpcurl -plaintext -H "skye-caller-id: test" -H "skye-auth-token: test" -d '"'"'{"entity":"test-products","modelName":"product-embeddings","variant":"v1","limit":3,"embeddings":[{"embedding":[0.1,0.2,0.3,0.4]}]}'"'"' localhost:8094 SkyeSimilarCandidateService/getSimilarCandidates'
 fi
