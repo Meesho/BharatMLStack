@@ -469,7 +469,7 @@ func (s *skyeConfig) RegisterVariant(request VariantRegisterRequest) (RequestSta
 				return fmt.Errorf("model with name '%s' does not exist for entity '%s'", variantPayload.Model, variantPayload.Entity)
 			}
 
-			if models.Models[variantPayload.Model].ModelType != enums.ModelType(enums.DELTA) && variantPayload.OTDTrainingDataPath == "" {
+			if models.Models[variantPayload.Model].ModelType == enums.ModelType(enums.DELTA) && variantPayload.OTDTrainingDataPath == "" {
 				return fmt.Errorf("otd_training_data_path is required for DELTA model type")
 			}
 

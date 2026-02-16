@@ -28,6 +28,18 @@ const (
 	clientId             = "client.id"
 )
 
+// splitAndTrimTopics splits a comma-separated topic list and trims spaces (e.g. "a, b" -> ["a", "b"]).
+func splitAndTrimTopics(topicsStr string) []string {
+	parts := strings.Split(topicsStr, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // BatchHandler processes a batch of raw Kafka messages.
 // Return nil on success (processBatch will commit); return error to trigger seek-back.
 type BatchHandler func(msgs []*kafka.Message, c *kafka.Consumer) error
@@ -53,6 +65,8 @@ func StartConsumers(kafkaIds string, consumerName string, handler BatchHandler) 
 			log.Error().Err(err).Msgf("Failed to build kafka config for %s (kafkaId=%s)", consumerName, kafkaId)
 			continue
 		}
+		log.Info().Str("topic", cfg.Topics).Str("bootstrap", cfg.BootstrapURLs).Str("group", cfg.GroupID).
+			Msgf("Starting %s consumer kafkaId=%s (subscribe to topic)", consumerName, kafkaId)
 		kl := NewKafkaListener(cfg, handler)
 		kl.Init()
 		kl.Consume()
@@ -95,9 +109,13 @@ func (k *KafkaListener) Init() {
 		if err != nil {
 			log.Panic().Err(err).Msg("Failed to create Kafka consumer.")
 		}
-		err = consumer.SubscribeTopics([]string{k.kafkaConfig.Topics}, nil)
+		topics := splitAndTrimTopics(k.kafkaConfig.Topics)
+		if len(topics) == 0 {
+			topics = []string{strings.TrimSpace(k.kafkaConfig.Topics)}
+		}
+		err = consumer.SubscribeTopics(topics, nil)
 		if err != nil {
-			log.Panic().Err(err).Msgf("Failed to subscribe to topic %s", k.kafkaConfig.Topics)
+			log.Panic().Err(err).Msgf("Failed to subscribe to topics %v", topics)
 		}
 		k.consumers = append(k.consumers, consumer)
 	}
@@ -147,7 +165,7 @@ func (k *KafkaListener) Consume() {
 
 				case <-flushTimer.C:
 					if msgCount > 0 {
-						log.Debug().Msgf("Processing %d messages due to timeout", msgCount)
+						log.Info().Int("msgCount", msgCount).Msg("Flushing batch due to timeout")
 						k.processBatch(consumer, messages)
 						msgCount = 0
 						messages = messages[:0]
@@ -165,12 +183,13 @@ func (k *KafkaListener) Consume() {
 							"group:" + k.kafkaConfig.GroupID,
 							"client:" + k.kafkaConfig.ClientID,
 						})
+						log.Info().Str("topic", *e.TopicPartition.Topic).Int32("partition", e.TopicPartition.Partition).Msg("Kafka message received")
 
 						messages = append(messages, e)
 						msgCount++
 
 						if msgCount == k.kafkaConfig.BatchSize {
-							log.Debug().Msgf("Processing batch of %d messages", msgCount)
+							log.Info().Int("msgCount", msgCount).Msg("Processing batch (batch full)")
 							k.processBatch(consumer, messages)
 							msgCount = 0
 							messages = messages[:0]

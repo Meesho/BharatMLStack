@@ -28,6 +28,7 @@ func ProcessEmbeddingEvents(record []skafka.ConsumerRecord[string, []byte], c *k
 			"environment", event.Environment})
 		events = append(events, event)
 	}
+	log.Info().Msgf("Processing %d embedding events", len(events))
 
 	err := embeddingConsumer.Process(events)
 	if err != nil {
