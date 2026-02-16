@@ -680,9 +680,6 @@ There are several ways to get help with Online-feature-store:
 
 Feedback and contributions are welcome!
 
-## Contributing
-
-We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to get started.
 
 ## Community & Support
 

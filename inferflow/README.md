@@ -191,27 +191,25 @@ docker run -p 8085:8085 --env-file .env inferflow:latest
 |---------|------|
 | Latest | [Inferflow Documentation](https://meesho.github.io/BharatMLStack/docs/inferflow) |
 
-## Contributing
+## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Add tests for your changes
-5. Ensure all tests pass (`go test ./...`)
-6. Update documentation if needed
-7. Submit a pull request
+Contributions are welcome! Please check our [Contribution Guide](../CONTRIBUTING.md) for details on how to get started.
 
-For more details, see [CONTRIBUTING.md](../CONTRIBUTING.md).
+We encourage you to:
+- Join our [Discord community](https://discord.gg/XkT7XsV2AU) to discuss features, ideas, and questions
+- Check existing issues before opening a new one
+- Follow our coding guidelines and pull request process
+- Participate in code reviews and discussions
 
 ## Community & Support
 
 - 💬 **Discord**: Join our [community chat](https://discord.gg/XkT7XsV2AU)
 - 🐛 **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/Meesho/BharatMLStack/issues)
-- 📧 **Email**: Contact us at [ml-oss@meesho.com](mailto:ml-oss@meesho.com)
+- 📧 **Email**: Contact us at [ml-oss@meesho.com](mailto:ml-oss@meesho.com )
 
 ## License
 
-BharatMLStack is open-source software licensed under the [BharatMLStack Business Source License 1.1](../LICENSE.md).
+BharatMLStack is open-source software licensed under the [BharatMLStack Business Source License 1.1](LICENSE.md).
 
 ---
 
