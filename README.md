@@ -67,15 +67,15 @@ Built for the demands of one of the world's largest e-commerce platforms:
 
 | Component | Description | Version | Docs |
 |-----------|-------------|---------|------|
-| **[Horizon](./horizon/)** | Control plane that orchestrates all services and powers TruffleBox UI | `v1.3.0` | [Docs](https://meesho.github.io/BharatMLStack/) |
 | **[TruffleBox UI](./trufflebox-ui/)** | Web console for feature registry, cataloging, and approval workflows | `v1.3.0` | [Docs](https://meesho.github.io/BharatMLStack/trufflebox-ui/v1.0.0/userguide) |
 | **[Online Feature Store](./online-feature-store/)** | Sub-10ms feature retrieval at millions of QPS with streaming ingestion | `v1.2.0` | [Docs](https://meesho.github.io/BharatMLStack/category/online-feature-store) |
 | **[Inferflow](./inferflow/)** | DAG-based real-time inference orchestration for composable ML pipelines | `v1.0.0` | [Docs](https://meesho.github.io/BharatMLStack/category/inferflow) |
 | **[Numerix](./numerix/)** | Rust-powered math compute engine for high-performance matrix ops | `v1.0.0` | [Docs](https://meesho.github.io/BharatMLStack/category/numerix) |
 | **[Skye](./skye/)** | Vector similarity search with pluggable backends | `v1.0.0` | [Docs](https://meesho.github.io/BharatMLStack/category/skye) |
-| **[Interaction Store](./interaction-store/)** | ScyllaDB-backed store for user interaction signals at sub-10ms | — | — |
-| **[Go SDK](./go-sdk/)** | Go client for Feature Store, Interaction Store, and logging | `v1.2.0` | [Docs](https://meesho.github.io/BharatMLStack/category/go-sdk) |
+| **[Go SDK](./go-sdk/)** | Go client for Feature Store, Interaction Store, and logging | `v1.3.0` | [Docs](https://meesho.github.io/BharatMLStack/category/go-sdk) |
 | **[Python SDK](./py-sdk/)** | Python client libraries for Feature Store and inference logging | `v1.0.1` | [Docs](https://meesho.github.io/BharatMLStack/category/python-sdk) |
+| **[Interaction Store](./interaction-store/)** | ScyllaDB-backed store for user interaction signals at sub-10ms | — | — |
+| **[Horizon](./horizon/)** | Control plane that orchestrates all services and powers TruffleBox UI | `v1.3.0` | — |
 
 > Full documentation at [meesho.github.io/BharatMLStack](https://meesho.github.io/BharatMLStack/) | [Blogs](https://meesho.github.io/BharatMLStack/blog)
 - [All Blog Posts](https://meesho.github.io/BharatMLStack/blog)
