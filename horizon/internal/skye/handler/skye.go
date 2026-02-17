@@ -469,7 +469,7 @@ func (s *skyeConfig) RegisterVariant(request VariantRegisterRequest) (RequestSta
 				return fmt.Errorf("model with name '%s' does not exist for entity '%s'", variantPayload.Model, variantPayload.Entity)
 			}
 
-			if models.Models[variantPayload.Model].ModelType != enums.ModelType(enums.DELTA) && variantPayload.OTDTrainingDataPath == "" {
+			if models.Models[variantPayload.Model].ModelType == enums.ModelType(enums.DELTA) && variantPayload.OTDTrainingDataPath == "" {
 				return fmt.Errorf("otd_training_data_path is required for DELTA model type")
 			}
 
@@ -565,6 +565,7 @@ func (s *skyeConfig) ApproveVariantRequest(requestID int, approval ApprovalReque
 			// 	return fmt.Errorf("admin must provide caching_configuration during variant approval")
 			// }
 			// For RT Partition, collect all RT partitions for all models across all entities
+
 			rtPartitions := make(map[int]bool)
 			entities, err := s.EtcdConfig.GetEntities()
 			if err != nil {
