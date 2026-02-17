@@ -39,12 +39,16 @@ var batchReqPool = sync.Pool{
 // syscall overhead (1 io_uring_enter instead of N) and lets NVMe process
 // multiple commands in parallel (queue depth > 1).
 //
-// Typical usage: create one global instance shared across all shards.
+// Collection uses non-blocking channel drain: after receiving the first
+// request, it drains whatever else is already queued (no timer). Under load
+// this provides natural batching; under low load single requests go out
+// with zero added latency.
+//
+// CQEs are dispatched individually as they complete (no head-of-line blocking).
 type BatchIoUringReader struct {
 	ring     *IoUring
 	reqCh    chan *batchReadRequest
 	maxBatch int
-	window   time.Duration
 	closeCh  chan struct{}
 	wg       sync.WaitGroup
 }
@@ -53,7 +57,7 @@ type BatchIoUringReader struct {
 type BatchIoUringConfig struct {
 	RingDepth uint32        // io_uring SQ/CQ size (default 256)
 	MaxBatch  int           // max requests per batch (capped to RingDepth)
-	Window    time.Duration // collection window after first request arrives
+	Window    time.Duration // unused, kept for config compatibility
 	QueueSize int           // channel buffer size (default 1024)
 }
 
@@ -65,9 +69,6 @@ func NewBatchIoUringReader(cfg BatchIoUringConfig) (*BatchIoUringReader, error) 
 	}
 	if cfg.MaxBatch == 0 || cfg.MaxBatch > int(cfg.RingDepth) {
 		cfg.MaxBatch = int(cfg.RingDepth)
-	}
-	if cfg.Window == 0 {
-		cfg.Window = time.Millisecond
 	}
 	if cfg.QueueSize == 0 {
 		cfg.QueueSize = 1024
@@ -82,7 +83,6 @@ func NewBatchIoUringReader(cfg BatchIoUringConfig) (*BatchIoUringReader, error) 
 		ring:     ring,
 		reqCh:    make(chan *batchReadRequest, cfg.QueueSize),
 		maxBatch: cfg.MaxBatch,
-		window:   cfg.Window,
 		closeCh:  make(chan struct{}),
 	}
 	b.wg.Add(1)
@@ -129,21 +129,15 @@ func (b *BatchIoUringReader) Close() {
 // loop is the single background goroutine that collects and submits batches.
 //
 // Phase 1: block on first request (no timer ticking when idle).
-// Phase 2: collect up to maxBatch or until the window expires.
-// Phase 3: submit the batch in one io_uring_enter call.
+// Phase 2: non-blocking drain of whatever else is already queued.
+// Phase 3: submit the batch and dispatch CQEs as they complete.
 func (b *BatchIoUringReader) loop() {
 	defer b.wg.Done()
 
 	batch := make([]*batchReadRequest, 0, b.maxBatch)
 
-	// Pre-allocate and stop the timer so Reset works correctly.
-	collectTimer := time.NewTimer(0)
-	if !collectTimer.Stop() {
-		<-collectTimer.C
-	}
-
 	for {
-		// Phase 1: wait for first request (idle)
+		// Phase 1: block until the first request arrives
 		select {
 		case req := <-b.reqCh:
 			batch = append(batch, req)
@@ -151,35 +145,29 @@ func (b *BatchIoUringReader) loop() {
 			return
 		}
 
-		// Phase 2: collect more within the window
-		collectTimer.Reset(b.window)
-	collect:
+		// Phase 2: non-blocking drain -- grab everything already queued
+		// without waiting. Under load this naturally batches many requests;
+		// under low load the single request goes out immediately.
+	drain:
 		for len(batch) < b.maxBatch {
 			select {
 			case req := <-b.reqCh:
 				batch = append(batch, req)
-			case <-collectTimer.C:
-				break collect
-			}
-		}
-		// Drain timer if we exited early (maxBatch reached before timer fired)
-		if !collectTimer.Stop() {
-			select {
-			case <-collectTimer.C:
 			default:
+				break drain
 			}
 		}
 
-		// Phase 3: submit the batch
+		// Phase 3: submit and dispatch
 		b.submitBatch(batch)
 		batch = batch[:0]
 	}
 }
 
-// submitBatch prepares N SQEs, submits them in one io_uring_enter(N, N),
-// drains all CQEs, and dispatches results back to callers via done channels.
+// submitBatch prepares N SQEs, submits them (fire-and-forget), then dispatches
+// each CQE individually as it completes. Fast reads are dispatched immediately
+// without waiting for slow reads in the same batch (no head-of-line blocking).
 func (b *BatchIoUringReader) submitBatch(batch []*batchReadRequest) {
-	// log.Info().Msgf("submitting batch of %d requests", len(batch))
 	n := len(batch)
 	if n == 0 {
 		return
@@ -210,8 +198,10 @@ func (b *BatchIoUringReader) submitBatch(batch []*batchReadRequest) {
 		return
 	}
 
-	// Submit all at once; kernel waits for all completions before returning.
-	_, err := b.ring.submit(uint32(prepared))
+	// Submit SQEs but do NOT wait for completions (waitNr=0).
+	// The kernel starts processing I/O immediately; we dispatch each CQE
+	// as it arrives below, so fast reads aren't blocked by slow ones.
+	_, err := b.ring.submit(0)
 	if err != nil {
 		b.ring.mu.Unlock()
 		for i := 0; i < prepared; i++ {
@@ -220,7 +210,7 @@ func (b *BatchIoUringReader) submitBatch(batch []*batchReadRequest) {
 		return
 	}
 
-	// Drain CQEs -- order may differ from submission order.
+	// Dispatch CQEs one-by-one as they complete.
 	completed := 0
 	for completed < prepared {
 		cqe, err := b.ring.waitCqe()

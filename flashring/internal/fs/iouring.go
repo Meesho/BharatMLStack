@@ -329,6 +329,7 @@ func ioUringEnter(fd int, toSubmit, minComplete, flags uint32) (int, error) {
 }
 
 // submit flushes SQEs and calls io_uring_enter if needed.
+// Retries automatically on EINTR (signal interruption).
 func (r *IoUring) submit(waitNr uint32) (int, error) {
 	submitted := r.flushSq()
 	var flags uint32 = 0
@@ -338,7 +339,13 @@ func (r *IoUring) submit(waitNr uint32) (int, error) {
 		if waitNr > 0 {
 			flags |= iouringEnterGetEvents
 		}
-		return ioUringEnter(r.fd, submitted, waitNr, flags)
+		for {
+			ret, err := ioUringEnter(r.fd, submitted, waitNr, flags)
+			if err == syscall.EINTR {
+				continue
+			}
+			return ret, err
+		}
 	}
 
 	// SQPOLL: only enter if kernel thread needs wakeup
@@ -349,7 +356,13 @@ func (r *IoUring) submit(waitNr uint32) (int, error) {
 		flags |= iouringEnterGetEvents
 	}
 	if flags != 0 {
-		return ioUringEnter(r.fd, submitted, waitNr, flags)
+		for {
+			ret, err := ioUringEnter(r.fd, submitted, waitNr, flags)
+			if err == syscall.EINTR {
+				continue
+			}
+			return ret, err
+		}
 	}
 	return int(submitted), nil
 }
@@ -367,6 +380,9 @@ func (r *IoUring) waitCqe() (*ioUringCqe, error) {
 		// No CQE available, ask the kernel
 		_, err := ioUringEnter(r.fd, 0, 1, iouringEnterGetEvents)
 		if err != nil {
+			if err == syscall.EINTR {
+				continue // signal interrupted the syscall; retry
+			}
 			return nil, err
 		}
 	}
@@ -382,6 +398,10 @@ func (r *IoUring) seenCqe() {
 // -----------------------------------------------------------------------
 
 func prepRead(sqe *ioUringSqe, fd int, buf []byte, offset uint64) {
+	if len(buf) == 0 {
+		sqe.Opcode = iouringOpNop
+		return
+	}
 	sqe.Opcode = iouringOpRead
 	sqe.Fd = int32(fd)
 	sqe.Addr = uint64(uintptr(unsafe.Pointer(&buf[0])))
@@ -390,6 +410,10 @@ func prepRead(sqe *ioUringSqe, fd int, buf []byte, offset uint64) {
 }
 
 func prepWrite(sqe *ioUringSqe, fd int, buf []byte, offset uint64) {
+	if len(buf) == 0 {
+		sqe.Opcode = iouringOpNop
+		return
+	}
 	sqe.Opcode = iouringOpWrite
 	sqe.Fd = int32(fd)
 	sqe.Addr = uint64(uintptr(unsafe.Pointer(&buf[0])))
