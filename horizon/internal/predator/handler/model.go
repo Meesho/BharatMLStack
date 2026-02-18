@@ -44,7 +44,7 @@ type IOField struct {
 }
 
 type ConfigMapping struct {
-	ServiceDeployableID uint `json:"service_deployable_id"`
+	ServiceDeployableID uint   `json:"service_deployable_id"`
 	SourceModelName     string `json:"source_model_name,omitempty"`
 }
 
@@ -269,4 +269,12 @@ type TritonInputTensor struct {
 
 type TritonOutputTensor struct {
 	Name string `json:"name"`
+}
+
+// fileViolationInfo groups all detected violations for a single Python file.
+// Used by validateNoLoggerOrPrintStatements and buildBalancedViolationSummary
+// to produce balanced, capped error messages.
+type fileViolationInfo struct {
+	fileName string
+	details  []string
 }
