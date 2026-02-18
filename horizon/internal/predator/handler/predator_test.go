@@ -8,6 +8,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/servicedeployableconfig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestPredator_ValidateRequest_InvalidGroupIDFormat(t *testing.T) {
@@ -187,4 +188,7 @@ func (m *predatorMockServiceDeployableRepo) GetByNameAndService(_, _ string) (*s
 }
 func (m *predatorMockServiceDeployableRepo) GetByIds(_ []int) ([]servicedeployableconfig.ServiceDeployableConfig, error) {
 	return nil, nil
+}
+func (m *predatorMockServiceDeployableRepo) GetTestDeployableIDByNodePool(_ string) (int, error) {
+	return 0, gorm.ErrRecordNotFound
 }

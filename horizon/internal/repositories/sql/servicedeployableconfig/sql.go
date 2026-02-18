@@ -19,6 +19,8 @@ type ServiceDeployableRepository interface {
 	GetByDeployableHealth(health string) ([]ServiceDeployableConfig, error)
 	GetByNameAndService(name, service string) (*ServiceDeployableConfig, error)
 	GetByIds(ids []int) ([]ServiceDeployableConfig, error)
+	// GetTestDeployableIDByNodePool returns the ID of a test deployable whose config.nodeSelectorValue matches the node pool.
+	GetTestDeployableIDByNodePool(nodePool string) (int, error)
 }
 
 type serviceDeployableRepo struct {
@@ -107,4 +109,27 @@ func (r *serviceDeployableRepo) GetByIds(ids []int) ([]ServiceDeployableConfig, 
 	var deployables []ServiceDeployableConfig
 	err := r.db.Where("id IN ?", ids).Find(&deployables).Error
 	return deployables, err
+}
+
+func (r *serviceDeployableRepo) GetTestDeployableIDByNodePool(nodePool string) (int, error) {
+	var id int
+
+	tx := r.db.
+		Model(&ServiceDeployableConfig{}).
+		Select("id").
+		Where("deployable_type = ?", DeployableTypeTest).
+		Where("JSON_UNQUOTE(JSON_EXTRACT(config, '$.nodeSelectorValue')) = ?", nodePool).
+		Limit(1).
+		Scan(&id)
+
+	if tx.Error != nil {
+		return 0, tx.Error
+	}
+
+	if tx.RowsAffected == 0 || id == 0 {
+		return 0, gorm.ErrRecordNotFound
+	}
+
+
+	return id, nil
 }

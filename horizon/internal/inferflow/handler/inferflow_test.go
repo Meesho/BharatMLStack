@@ -7,6 +7,7 @@ import (
 	service_deployable_config "github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/servicedeployableconfig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestInferFlow_GetLoggingTTL(t *testing.T) {
@@ -150,4 +151,7 @@ func (m *mockServiceDeployableRepo) GetByNameAndService(_, _ string) (*service_d
 }
 func (m *mockServiceDeployableRepo) GetByIds(_ []int) ([]service_deployable_config.ServiceDeployableConfig, error) {
 	return nil, nil
+}
+func (m *mockServiceDeployableRepo) GetTestDeployableIDByNodePool(_ string) (int, error) {
+	return 0, gorm.ErrRecordNotFound
 }

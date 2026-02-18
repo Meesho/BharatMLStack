@@ -676,8 +676,7 @@ func (p *Predator) ValidateRequest(groupId string) (string, int) {
 	lock, err := p.validationLockRepo.AcquireLock(lockKey, 30*time.Minute)
 	if err != nil {
 		log.Warn().Err(err).Msgf("Validation request for group ID %s rejected - failed to acquire lock for deployable %d", groupId, testDeployableID)
-		return fmt.Sprintf("Request Validation Failed. Another validation is already in progress for %s deployable. Please try again later.",
-			map[int]string{pred.TestDeployableID: "CPU", pred.TestGpuDeployableID: "GPU"}[testDeployableID]), http.StatusConflict
+		return fmt.Sprintf("Request Validation Failed. Another validation is already in progress for deployable %d. Please try again later.", testDeployableID), http.StatusConflict
 	}
 
 	log.Info().Msgf("Starting validation for group ID: %s on deployable %d (lock acquired by %s)", groupId, testDeployableID, lock.LockedBy)

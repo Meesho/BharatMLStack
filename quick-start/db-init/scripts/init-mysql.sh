@@ -391,6 +391,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     work_flow_status enum('WORKFLOW_COMPLETED','WORKFLOW_NOT_FOUND','WORKFLOW_RUNNING','WORKFLOW_FAILED','WORKFLOW_NOT_STARTED'),
     override_testing TINYINT(1) DEFAULT 0,
     deployable_tag varchar(255) NULL,
+    deployable_type enum('test', 'target') NOT NULL DEFAULT 'target',
     PRIMARY KEY (id),
     UNIQUE KEY host (host)
   );
@@ -459,7 +460,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   # VALUES (1, 1, NOW(), NOW());
 
   INSERT IGNORE INTO service_deployable_config (
-    id, name, host, service, active, created_by, updated_by,
+    id, name, host, service, deployable_type, active, created_by, updated_by,
     created_at, updated_at, config, monitoring_url, deployable_running_status,
     deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
   ) VALUES (
@@ -467,6 +468,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
       'numerix',
       'numerix:8083',
       'numerix',
+      'target',
       1,
       'admin@admin.com',
       NULL,
@@ -482,7 +484,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   );
 
   INSERT IGNORE INTO service_deployable_config (
-    id, name, host, service, active, created_by, updated_by,
+    id, name, host, service, deployable_type, active, created_by, updated_by,
     created_at, updated_at, config, monitoring_url, deployable_running_status,
     deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
   ) VALUES (
@@ -490,6 +492,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
       'inferflow',
       'inferflow:8085',
       'inferflow',
+      'target',
       1,
       'admin@admin.com',
       NULL,
