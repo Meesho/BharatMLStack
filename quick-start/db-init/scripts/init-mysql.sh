@@ -520,15 +520,9 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     deployment_run_id varchar(255),
     deployable_health enum('DEPLOYMENT_REASON_ARGO_APP_HEALTH_DEGRADED', 'DEPLOYMENT_REASON_ARGO_APP_HEALTHY'),
     work_flow_status enum('WORKFLOW_COMPLETED','WORKFLOW_NOT_FOUND','WORKFLOW_RUNNING','WORKFLOW_FAILED','WORKFLOW_NOT_STARTED'),
-<<<<<<< HEAD
-    override_testing TINYINT(1) DEFAULT 0,
-    deployable_tag varchar(255) NULL,
-    deployable_type enum('test', 'target') NOT NULL DEFAULT 'target',
-=======
     override_testing tinyint(1) DEFAULT 0,
     deployable_tag varchar(255),
     bulk_delete_enabled tinyint(1) NOT NULL DEFAULT 0,
->>>>>>> origin/develop
     PRIMARY KEY (id),
     UNIQUE KEY host (host)
   );

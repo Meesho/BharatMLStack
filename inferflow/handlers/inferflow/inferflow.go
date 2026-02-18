@@ -72,13 +72,10 @@ func InitInferflowHandler(configs *configs.AppConfigs) {
 			},
 		},
 	}
-<<<<<<< HEAD
-=======
 
 	// Initialize Kafka writers for inference logging
 	kafkaLogger.InitKafkaLogger(configs)
 
->>>>>>> origin/develop
 	logger.Info("Inferflow handler initialized")
 }
 
