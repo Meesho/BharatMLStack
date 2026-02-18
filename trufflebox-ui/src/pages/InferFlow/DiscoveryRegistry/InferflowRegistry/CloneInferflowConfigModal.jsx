@@ -862,7 +862,7 @@ const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => 
         justifyContent: 'space-between',
         alignItems: 'center'
       }}>
-        <Typography variant="h6">Clone InferFlow Config</Typography>
+        <Typography variant="h6">Clone Inferpipe</Typography>
         <IconButton
           edge="end"
           color="inherit"
@@ -877,7 +877,7 @@ const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => 
         <Box sx={{ p: 2 }}>
           <Alert severity="info" sx={{ mb: 2 }}>
             <Typography variant="body2">
-              <strong>Cloning Configuration:</strong> You can modify any field to create a new configuration. Change the Config Identifier to create a different config ID.
+              <strong>Cloning Inferpipe:</strong> You can modify any field to create a new inferpipe. Change the inferpipe Identifier to create a different inferpipe ID.
             </Typography>
           </Alert>
           
@@ -935,7 +935,7 @@ const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => 
             '&:hover': { bgcolor: '#380730' }
           }}
         >
-          {loading ? 'Cloning...' : 'Clone Config'}
+          {loading ? 'Cloning...' : 'Clone Inferpipe'}
         </Button>
       </DialogActions>
 

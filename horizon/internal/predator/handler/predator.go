@@ -780,7 +780,6 @@ func (p *Predator) GetValidationJobStatus(groupId string) (*validationjob.Table,
 	return job, nil
 }
 
-
 func (p *Predator) GenerateFunctionalTestRequest(req RequestGenerationRequest) (RequestGenerationResponse, error) {
 
 	modelConfig, err := p.PredatorConfigRepo.GetActiveModelByModelName(req.ModelName)

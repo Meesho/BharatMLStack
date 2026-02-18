@@ -217,21 +217,6 @@ func (p *Predator) getServiceNameFromDeployable(deployableID int) (string, error
 	return serviceDeployable.Name, nil
 }
 
-// scaleTestDeployable sets min/max replicas for the test deployable (by ID) via the infrastructure handler.
-func (p *Predator) scaleTestDeployable(deployableID int, minReplica, maxReplica int) error {
-	if deployableID <= 0 {
-		return fmt.Errorf("invalid deployable ID for scaling: %d", deployableID)
-	}
-	sd, err := p.ServiceDeployableRepo.GetById(deployableID)
-	if err != nil {
-		return fmt.Errorf("failed to fetch test deployable: %w", err)
-	}
-	if strings.TrimSpace(sd.Name) == "" {
-		return fmt.Errorf("test deployable %d has no name; cannot scale", deployableID)
-	}
-	return p.infrastructureHandler.ScaleDeployable(sd.Name, p.workingEnv, minReplica, maxReplica)
-}
-
 // performAsyncValidation performs the actual validation process asynchronously
 func (p *Predator) performAsyncValidation(job *validationjob.Table, requests []predatorrequest.PredatorRequest, payload *Payload, testDeployableID int) {
 	defer func() {
@@ -241,21 +226,8 @@ func (p *Predator) performAsyncValidation(job *validationjob.Table, requests []p
 		}
 		log.Info().Msgf("Released validation lock for job %d", job.ID)
 	}()
-	defer func() {
-		// Always scale test deployable back to 0 when validation finishes (success or failure)
-		if scaleErr := p.scaleTestDeployable(testDeployableID, 0, 0); scaleErr != nil {
-			log.Error().Err(scaleErr).Msgf("Failed to scale down test deployable %d after validation", testDeployableID)
-		}
-	}()
 
 	log.Info().Msgf("Starting async validation for job %d, group %s", job.ID, job.GroupID)
-
-	// Scale up test deployable from 0 to 1 so validation can run
-	if err := p.scaleTestDeployable(testDeployableID, 1, 1); err != nil {
-		log.Error().Err(err).Msg("Failed to scale up test deployable")
-		p.failValidationJob(job.ID, "Failed to scale up test deployable: "+err.Error())
-		return
-	}
 
 	// Step 1: Clear temporary deployable
 	if err := p.clearTemporaryDeployable(testDeployableID); err != nil {

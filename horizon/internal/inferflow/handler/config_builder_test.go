@@ -3,10 +3,38 @@ package handler
 import (
 	"testing"
 
+	"github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type mockEtcdManager struct {
+	components map[string]*etcd.ComponentData
+}
+
+func (f *mockEtcdManager) GetComponentData(componentName string) *etcd.ComponentData {
+	if f.components == nil {
+		return nil
+	}
+	return f.components[componentName]
+}
+
+func (f *mockEtcdManager) CreateConfig(serviceName string, ConfigId string, InferflowConfig etcd.InferflowConfig) error {
+	return nil
+}
+
+func (f *mockEtcdManager) UpdateConfig(serviceName string, ConfigId string, InferflowConfig etcd.InferflowConfig) error {
+	return nil
+}
+
+func (f *mockEtcdManager) DeleteConfig(serviceName string, ConfigId string) error {
+	return nil
+}
+
+func (f *mockEtcdManager) GetConfiguredEndpoints(serviceDeployableName string) mapset.Set[string] {
+	return mapset.NewSet[string]()
+}
 
 func TestExtractEntityIDs(t *testing.T) {
 	request := InferflowOnboardRequest{
@@ -39,11 +67,11 @@ func TestExtractEntityIDs_Empty(t *testing.T) {
 
 func TestTransformFeature(t *testing.T) {
 	tests := []struct {
-		name          string
-		feature       string
-		wantFeature   string
-		wantType      string
-		wantErr       bool
+		name        string
+		feature     string
+		wantFeature string
+		wantType    string
+		wantErr     bool
 	}{
 		{"invalid - single part", "onlyone", "", featureClassInvalid, true},
 		{"default feature", "DEFAULT|foo", "foo", featureClassDefault, false},
@@ -116,6 +144,57 @@ func TestGetComponentList(t *testing.T) {
 func TestGetComponentList_Empty(t *testing.T) {
 	got := getComponentList(mapset.NewSet[string](), nil, nil)
 	assert.True(t, got.IsEmpty())
+}
+
+func TestGetComponentDataOrDefault_MissingComponent_UsesDefaults(t *testing.T) {
+	manager := &mockEtcdManager{
+		components: map[string]*etcd.ComponentData{},
+	}
+
+	got := getComponentDataOrDefault(manager, "campaign")
+	require.NotNil(t, got)
+
+	assert.Equal(t, "campaign_id", got.ComponentID)
+	assert.False(t, got.CompositeID)
+	assert.Equal(t, FEATURE_INITIALIZER, got.ExecutionDependency)
+	assert.Equal(t, map[string]string{"0": "campaign_id"}, got.FSFlattenResKeys)
+	require.Contains(t, got.FSIdSchemaToValueColumns, "0")
+	assert.Equal(t, etcd.FSIdSchemaToValueColumnPair{
+		Schema:   "campaign_id",
+		ValueCol: "campaign_id",
+		DataType: "FP32",
+	}, got.FSIdSchemaToValueColumns["0"])
+	assert.Empty(t, got.Overridecomponent)
+}
+
+func TestGetComponentDataOrDefault_ExistingComponent_PreservesDataAndInitializesMaps(t *testing.T) {
+	manager := &mockEtcdManager{
+		components: map[string]*etcd.ComponentData{
+			"catalog": {
+				ComponentID:         "catalog_id",
+				ExecutionDependency: "upstream_component",
+				FSFlattenResKeys:    nil,
+				FSIdSchemaToValueColumns: map[string]etcd.FSIdSchemaToValueColumnPair{
+					"0": {
+						Schema:   "catalog_id",
+						ValueCol: "catalog_id",
+						DataType: "INT64",
+					},
+				},
+				Overridecomponent: nil,
+			},
+		},
+	}
+
+	got := getComponentDataOrDefault(manager, "catalog")
+	require.NotNil(t, got)
+
+	assert.Equal(t, "catalog_id", got.ComponentID)
+	assert.Equal(t, "upstream_component", got.ExecutionDependency)
+	require.NotNil(t, got.FSFlattenResKeys)
+	require.NotNil(t, got.FSIdSchemaToValueColumns)
+	require.NotNil(t, got.Overridecomponent)
+	assert.Equal(t, "INT64", got.FSIdSchemaToValueColumns["0"].DataType)
 }
 
 func TestGetResponseConfigs(t *testing.T) {
@@ -268,7 +347,7 @@ func TestGetNumerixComponents_Simple(t *testing.T) {
 
 func TestGetNumerixScoreMapping_OfflineNotFound(t *testing.T) {
 	eqVariables := map[string]string{"k": "OFFLINE|off_feat"}
-	offlineMapping := map[string]string{} // no mapping for off_feat
+	offlineMapping := map[string]string{}                       // no mapping for off_feat
 	featureToDataType := map[string]string{"off_feat": "Float"} // set so we reach offline-mapping check
 	_, err := getNumerixScoreMapping(eqVariables, offlineMapping, nil, featureToDataType)
 	require.Error(t, err)

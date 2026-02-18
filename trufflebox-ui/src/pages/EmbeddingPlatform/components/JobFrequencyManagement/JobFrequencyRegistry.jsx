@@ -28,41 +28,29 @@ import {
   FormControlLabel,
   Switch,
   FormHelperText,
-  Popover,
-  List,
-  ListItem,
-  ListItemButton,
-  Checkbox,
-  Divider
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import ScheduleIcon from '@mui/icons-material/Schedule';
-import FilterListIcon from '@mui/icons-material/FilterList';
 import { useAuth } from '../../../Auth/AuthContext';
 import embeddingPlatformAPI from '../../../../services/embeddingPlatform/api';
 import { JOB_FREQUENCIES } from '../../../../services/embeddingPlatform/constants';
+import { useNotification } from '../shared/hooks/useNotification';
+import { useStatusFilter, useTableFilter, StatusChip, StatusFilterHeader, ViewDetailModal } from '../shared';
 
 const JobFrequencyRegistry = () => {
   const [frequencyRequests, setFrequencyRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatuses, setSelectedStatuses] = useState(['APPROVED', 'PENDING', 'REJECTED']);
+  const { selectedStatuses, setSelectedStatuses, handleStatusChange } = useStatusFilter(['APPROVED', 'PENDING', 'REJECTED']);
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedFrequency, setSelectedFrequency] = useState(null);
   const { user } = useAuth();
-  const [notification, setNotification] = useState({ open: false, message: "", severity: "success" });
-  
-  const statusOptions = [
-    { value: 'PENDING', label: 'Pending', color: '#FFF8E1', textColor: '#F57C00' },
-    { value: 'APPROVED', label: 'Approved', color: '#E7F6E7', textColor: '#2E7D32' },
-    { value: 'REJECTED', label: 'Rejected', color: '#FFEBEE', textColor: '#D32F2F' },
-  ];
-  
-  // Job frequency form data
+  const { notification, showNotification, closeNotification } = useNotification();
+
   const [frequencyData, setFrequencyData] = useState({
     job_frequency: '',
     reason: '',
@@ -92,199 +80,19 @@ const JobFrequencyRegistry = () => {
     }
   };
 
-  // Search and filter logic
-  const filteredRequests = frequencyRequests.filter(request => {
-    const searchTerm = searchQuery.toLowerCase();
-    const matchesSearch = !searchQuery || 
-      request.request_id?.toLowerCase().includes(searchTerm) ||
-      request.payload?.job_frequency?.toLowerCase().includes(searchTerm) ||
-      request.created_by?.toLowerCase().includes(searchTerm);
-    
-    const matchesStatus = selectedStatuses.includes(request.status || 'PENDING');
-    
-    return matchesSearch && matchesStatus;
+  const filteredRequests = useTableFilter({
+    data: frequencyRequests,
+    searchQuery,
+    selectedStatuses,
+    searchFields: (request) => [
+      request.request_id,
+      request.payload?.job_frequency,
+      request.created_by,
+      request.status,
+    ],
+    sortField: 'created_at',
+    sortOrder: 'desc',
   });
-
-  // Status Column Header with filtering (same pattern as ModelRegistry)
-  const StatusColumnHeader = () => {
-    const [anchorEl, setAnchorEl] = useState(null);
-    
-    const handleClick = (event) => {
-      setAnchorEl(event.currentTarget);
-    };
-
-    const handleClose = () => {
-      setAnchorEl(null);
-    };
-
-    const handleStatusToggle = (status) => {
-      setSelectedStatuses(prev => 
-        prev.includes(status) 
-          ? prev.filter(s => s !== status)
-          : [...prev, status]
-      );
-    };
-
-    const handleSelectAll = () => {
-      setSelectedStatuses(statusOptions.map(option => option.value));
-    };
-
-    const handleClearAll = () => {
-      setSelectedStatuses([]);
-    };
-
-    const open = Boolean(anchorEl);
-
-    return (
-      <>
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            flexDirection: 'column',
-            alignItems: 'flex-start',
-            width: '100%'
-          }}
-        >
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              cursor: 'pointer',
-              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
-              borderRadius: 1,
-              p: 0.5
-            }}
-            onClick={handleClick}
-          >
-            <Typography sx={{ fontWeight: 'bold', color: '#031022' }}>
-              Status
-            </Typography>
-            <FilterListIcon 
-              sx={{ 
-                ml: 0.5, 
-                fontSize: 16,
-                color: selectedStatuses.length < statusOptions.length ? '#1976d2' : '#666'
-              }} 
-            />
-            {selectedStatuses.length > 0 && selectedStatuses.length < statusOptions.length && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: 2,
-                  right: 2,
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  backgroundColor: '#1976d2',
-                }}
-              />
-            )}
-          </Box>
-
-          {selectedStatuses.length > 0 && (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5, maxWidth: '100%' }}>
-              {selectedStatuses.slice(0, 2).map((status) => {
-                const option = statusOptions.find(opt => opt.value === status);
-                return option ? (
-                  <Chip
-                    key={status}
-                    label={option.label}
-                    size="small"
-                    sx={{
-                      backgroundColor: option.color,
-                      color: option.textColor,
-                      fontWeight: 'bold',
-                      fontSize: '0.65rem',
-                      height: 18,
-                      '& .MuiChip-label': { px: 0.5 }
-                    }}
-                  />
-                ) : null;
-              })}
-              {selectedStatuses.length > 2 && (
-                <Chip
-                  label={`+${selectedStatuses.length - 2}`}
-                  size="small"
-                  sx={{
-                    backgroundColor: '#f5f5f5',
-                    color: '#666',
-                    fontWeight: 'bold',
-                    fontSize: '0.65rem',
-                    height: 18,
-                    '& .MuiChip-label': { px: 0.5 }
-                  }}
-                />
-              )}
-            </Box>
-          )}
-        </Box>
-        <Popover
-          open={open}
-          anchorEl={anchorEl}
-          onClose={handleClose}
-          anchorOrigin={{
-            vertical: 'bottom',
-            horizontal: 'left',
-          }}
-          transformOrigin={{
-            vertical: 'top',
-            horizontal: 'left',
-          }}
-          PaperProps={{
-            sx: {
-              width: 200,
-              maxHeight: 300,
-              overflow: 'auto'
-            }
-          }}
-        >
-          <Box sx={{ p: 1 }}>
-            <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-              <Button 
-                size="small" 
-                onClick={handleSelectAll}
-                sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 'auto' }}
-              >
-                All
-              </Button>
-              <Button 
-                size="small" 
-                onClick={handleClearAll}
-                sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 'auto' }}
-              >
-                Clear
-              </Button>
-            </Box>
-            <Divider sx={{ mb: 1 }} />
-            <List dense>
-              {statusOptions.map((option) => (
-                <ListItem key={option.value} disablePadding>
-                  <ListItemButton onClick={() => handleStatusToggle(option.value)} sx={{ py: 0.5 }}>
-                    <Checkbox
-                      edge="start"
-                      checked={selectedStatuses.includes(option.value)}
-                      size="small"
-                      sx={{ mr: 1 }}
-                    />
-                    <Chip
-                      label={option.label}
-                      size="small"
-                      sx={{
-                        backgroundColor: option.color,
-                        color: option.textColor,
-                        fontWeight: 'bold',
-                        minWidth: '80px'
-                      }}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          </Box>
-        </Popover>
-      </>
-    );
-  };
 
   const handleViewFrequency = (frequency) => {
     setSelectedFrequency(frequency);
@@ -366,36 +174,26 @@ const JobFrequencyRegistry = () => {
 
     try {
       const payload = {
-        job_frequency: frequencyData.job_frequency,
+        requestor: user?.email,
         reason: frequencyData.reason,
-        created_by: user?.email || 'user@example.com'
+        request_type: "CREATE",
+        payload: {
+          job_frequency: frequencyData.job_frequency
+        }
       };
 
       await embeddingPlatformAPI.registerJobFrequency(payload);
       
-      setNotification({
-        open: true,
-        message: 'Job frequency registration submitted successfully!',
-        severity: 'success'
-      });
+      showNotification('Job frequency registration submitted successfully!', 'success');
       
         handleClose();
       fetchData(); // Refresh the data
     } catch (error) {
       console.error('Error registering job frequency:', error);
-      setNotification({
-        open: true,
-        message: error.message || 'Failed to register job frequency. Please try again.',
-        severity: 'error'
-      });
+      showNotification(error.message || 'Failed to register job frequency. Please try again.', 'error');
     }
   };
 
-  const handleCloseNotification = () => {
-    setNotification(prev => ({ ...prev, open: false }));
-  };
-
-  // Generate description for frequency
   const generateDescription = (frequency) => {
     if (!frequency) return 'N/A';
     
@@ -505,7 +303,7 @@ const JobFrequencyRegistry = () => {
                   position: 'relative'
                 }}
               >
-                <StatusColumnHeader />
+                <StatusFilterHeader selectedStatuses={selectedStatuses} onStatusChange={handleStatusChange} />
               </TableCell>
               <TableCell sx={{ backgroundColor: '#E6EBF2', fontWeight: 'bold', color: '#031022' }}>
                 Actions
@@ -517,7 +315,7 @@ const JobFrequencyRegistry = () => {
               <TableRow>
                 <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                   <Typography color="text.secondary">
-                    {searchQuery || selectedStatuses.length < statusOptions.length ? 'No requests match your search and filters' : 'No job frequency requests available'}
+                    {frequencyRequests.length === 0 ? 'No job frequency requests available' : 'No requests match your search and filters'}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -705,125 +503,62 @@ const JobFrequencyRegistry = () => {
       </Dialog>
 
       {/* View Modal */}
-      <Dialog open={showViewModal} onClose={handleCloseViewModal} maxWidth="md" fullWidth>
-        <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <ScheduleIcon sx={{ color: '#522b4a' }} />
-            Job Frequency Request Details
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          {selectedFrequency && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-              {/* Request Info Section */}
-              <Box sx={{ backgroundColor: '#f8f4f6', p: 2, borderRadius: 1, border: '1px solid #e4d5db' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                  <ScheduleIcon sx={{ color: '#522b4a', fontSize: 20 }} />
-                  <Typography variant="h6" sx={{ color: '#522b4a', fontWeight: 600 }}>
-                    Request Information
-                  </Typography>
-                </Box>
+      <ViewDetailModal
+        open={showViewModal}
+        onClose={handleCloseViewModal}
+        data={selectedFrequency}
+        config={{
+          title: 'Job Frequency Request Details',
+          icon: ScheduleIcon,
+          sections: [
+            {
+              title: 'Request Information',
+              icon: ScheduleIcon,
+              layout: 'grid',
+              fields: [
+                { label: 'Request ID', key: 'request_id', type: 'monospace' },
+                { label: 'Status', key: 'status', type: 'status' },
+                { label: 'Created At', key: 'created_at', type: 'date' },
+                { label: 'Created By', key: 'created_by' }
+              ]
+            },
+            {
+              title: 'Frequency Configuration',
+              icon: ScheduleIcon,
+              backgroundColor: 'rgba(25, 118, 210, 0.02)',
+              borderColor: 'rgba(25, 118, 210, 0.1)',
+              render: (data) => (
                 <Grid container spacing={2}>
                   <Grid item xs={6}>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Request ID
-                    </Typography>
-                    <Typography variant="body1" sx={{ fontFamily: 'monospace' }}>
-                      {selectedFrequency.request_id || 'N/A'}
+                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>Job Frequency</Typography>
+                    <Typography variant="body1" sx={{ fontFamily: 'monospace', backgroundColor: '#f5f5f5', px: 1, borderRadius: 1, display: 'inline-block', mt: 0.5 }}>
+                      {data?.payload?.job_frequency || 'N/A'}
                     </Typography>
                   </Grid>
                   <Grid item xs={6}>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Status
-                    </Typography>
-                    <Typography variant="body1">
-                      <Chip
-                        label={selectedFrequency.status || 'PENDING'}
-                        size="small"
-            sx={{
-                          backgroundColor: selectedFrequency.status === 'APPROVED' ? '#E7F6E7' : selectedFrequency.status === 'REJECTED' ? '#FFEBEE' : '#FFF8E1',
-                          color: selectedFrequency.status === 'APPROVED' ? '#2E7D32' : selectedFrequency.status === 'REJECTED' ? '#D32F2F' : '#F57C00',
-                          fontWeight: 600
-                        }}
-                      />
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Created At
-                    </Typography>
-                    <Typography variant="body1">
-                      {selectedFrequency.created_at ? new Date(selectedFrequency.created_at).toLocaleString() : 'N/A'}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Created By
-                    </Typography>
-                    <Typography variant="body1">
-                      {selectedFrequency.created_by || 'N/A'}
-                    </Typography>
-                  </Grid>
-                </Grid>
-              </Box>
-
-              {/* Frequency Configuration Section */}
-              <Box sx={{ backgroundColor: '#f0f7ff', p: 2, borderRadius: 1, border: '1px solid #d1e7ff' }}>
-                <Typography variant="h6" sx={{ color: '#1976d2', fontWeight: 600, mb: 2 }}>
-                  Frequency Configuration
-                </Typography>
-                <Grid container spacing={2}>
-                  <Grid item xs={6}>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Job Frequency
-                    </Typography>
-                    <Typography variant="body1" sx={{ fontFamily: 'monospace', backgroundColor: '#f5f5f5', px: 1, borderRadius: 1, display: 'inline-block' }}>
-                      {selectedFrequency.payload?.job_frequency || 'N/A'}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Description
-                    </Typography>
-                    <Typography variant="body1">
-                      {generateDescription(selectedFrequency.payload?.job_frequency)}
-                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>Description</Typography>
+                    <Typography variant="body1" sx={{ mt: 0.5 }}>{generateDescription(data?.payload?.job_frequency)}</Typography>
                   </Grid>
                   <Grid item xs={12}>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Reason
-                    </Typography>
-                    <Typography variant="body1">
-                      {selectedFrequency.payload?.reason || 'N/A'}
-                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>Reason</Typography>
+                    <Typography variant="body1" sx={{ mt: 0.5 }}>{data?.payload?.reason || 'N/A'}</Typography>
                   </Grid>
                 </Grid>
-              </Box>
-          </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ backgroundColor: '#fafafa', borderTop: '1px solid #e0e0e0' }}>
-          <Button 
-            onClick={handleCloseViewModal}
-            sx={{
-              color: '#522b4a',
-              '&:hover': { backgroundColor: 'rgba(82, 43, 74, 0.04)' }
-            }}
-          >
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
-    
+              )
+            }
+          ]
+        }}
+      />
+
         {/* Toast Notification */}
         <Snackbar
           open={notification.open}
           autoHideDuration={6000}
-          onClose={handleCloseNotification}
+          onClose={closeNotification}
           anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         >
           <Alert
-            onClose={handleCloseNotification}
+            onClose={closeNotification}
             severity={notification.severity}
             sx={{ width: '100%' }}
           >

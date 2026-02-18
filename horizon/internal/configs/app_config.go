@@ -71,11 +71,13 @@ type Configs struct {
 	BulkDeleteInferflowEnabled                 bool `mapstructure:"bulk_delete_inferflow_enabled"`
 	BulkDeleteNumerixEnabled                   bool `mapstructure:"bulk_delete_numerix_enabled"`
 	BulkDeletePredatorMaxInactiveDays          int  `mapstructure:"bulk_delete_predator_max_inactive_days"`
-	BulkDeleteInferflowMaxInactiveDays        int  `mapstructure:"bulk_delete_inferflow_max_inactive_days"`
+	BulkDeleteInferflowMaxInactiveDays         int  `mapstructure:"bulk_delete_inferflow_max_inactive_days"`
 	BulkDeleteNumerixMaxInactiveDays           int  `mapstructure:"bulk_delete_numerix_max_inactive_days"`
 	BulkDeletePredatorRequestSubmissionEnabled bool `mapstructure:"bulk_delete_predator_request_submission_enabled"`
 
 	InferflowAppName string `mapstructure:"inferflow_app_name"`
+
+	SkyeAppName string `mapstructure:"skye_app_name"`
 
 	PhoenixServerBaseUrl string `mapstructure:"phoenix_server_base_url"`
 
@@ -109,7 +111,7 @@ type Configs struct {
 
 	GitHubAppID          int64  `mapstructure:"github_app_id"`
 	GitHubInstallationID int64  `mapstructure:"github_installation_id"`
-	GitHubPrivateKeyPath string `mapstructure:"github_private_key_path"`
+	GitHubPrivateKey     string `mapstructure:"github_private_key"`
 	GitHubOwner          string `mapstructure:"github_owner"`
 	LocalModelPath       string `mapstructure:"local_model_path"`
 
@@ -143,6 +145,48 @@ type Configs struct {
 	// DNS API configuration (for Meesho builds only)
 	DNSAPIBaseURL string `mapstructure:"dns_api_base_url"`
 	DNSAPIKey     string `mapstructure:"dns_api_key"`
+
+	ScyllaActiveConfigIds string `mapstructure:"scylla_active_config_ids"`
+	Scylla1ContactPoints  string `mapstructure:"scylla_1_contact_points"`
+	Scylla1Port           int    `mapstructure:"scylla_1_port"`
+	Scylla1Keyspace       string `mapstructure:"scylla_1_keyspace"`
+	Scylla1Username       string `mapstructure:"scylla_1_username"`
+	Scylla1Password       string `mapstructure:"scylla_1_password"`
+
+	PrismBaseUrl                    string `mapstructure:"prism_base_url"`
+	PrismAppUserID                  string `mapstructure:"prism_app_user_id"`
+	AirflowBaseUrl                  string `mapstructure:"airflow_base_url"`
+	AirflowUsername                 string `mapstructure:"airflow_username"`
+	AirflowPassword                 string `mapstructure:"airflow_password"`
+	InitialIngestionPrismJobID      int    `mapstructure:"initial_ingestion_prism_job_id"`
+	InitialIngestionPrismStepID     int    `mapstructure:"initial_ingestion_prism_step_id"`
+	InitialIngestionAirflowDAGID    string `mapstructure:"initial_ingestion_airflow_dag_id"`
+	VariantScaleUpPrismJobID        int    `mapstructure:"variant_scaleup_prism_job_id"`
+	VariantScaleUpPrismStepID       int    `mapstructure:"variant_scaleup_prism_step_id"`
+	VariantScaleUpAirflowDAGID      string `mapstructure:"variant_scaleup_airflow_dag_id"`
+	VariantOnboardingCronExpression string `mapstructure:"variant_onboarding_cron_expression"`
+	VariantScaleUpCronExpression    string `mapstructure:"variant_scaleup_cron_expression"`
+	MQIdTopicsMapping               string `mapstructure:"mq_id_topics_mapping"`
+	VariantsList                    string `mapstructure:"variants_list"`
+
+	SkyeScyllaActiveConfigIds    string `mapstructure:"skye_scylla_active_config_ids"`
+	Scylla2ContactPoints         string `mapstructure:"scylla_2_contact_points"`
+	Scylla2Port                  int    `mapstructure:"scylla_2_port"`
+	Scylla2Keyspace              string `mapstructure:"scylla_2_keyspace"`
+	Scylla2Username              string `mapstructure:"scylla_2_username"`
+	Scylla2Password              string `mapstructure:"scylla_2_password"`
+	SkyeNumberOfPartitions       int    `mapstructure:"skye_number_of_partitions"`
+	SkyeFailureProducerMqId      int    `mapstructure:"skye_failure_producer_mq_id"`
+	HorizonToSkyeScyllaConfIdMap string `mapstructure:"horizon_to_skye_scylla_conf_id_map"`
+
+	SkyeHost             string `mapstructure:"skye_host"`
+	SkyePort             string `mapstructure:"skye_port"`
+	SkyeAuthToken        string `mapstructure:"skye_auth_token"`
+	SkyeDeadlineExceedMS int    `mapstructure:"skye_deadline_exceed_ms"`
+
+	// When true, initial ingestion and variant processor call skye-trigger (OSS) instead of Airflow
+	UseSkyeTriggerInsteadOfAirflow bool   `mapstructure:"use_skye_trigger_instead_of_airflow"`
+	SkyeTriggerURL                 string `mapstructure:"skye_trigger_url"`
 }
 
 type DynamicConfigs struct{}

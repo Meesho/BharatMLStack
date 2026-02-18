@@ -1,0 +1,166 @@
+# Default values for numerix helm chart
+
+namespace: prd-numerix
+applicationName: numerix
+replicaCount: 2
+
+labels:
+  env: prd
+  team: bharatml
+  bu: ml
+  priority: p1
+  priority_v2: cp3
+  service_type: ""
+
+# Priority class (leave empty to skip)
+priorityClassName: ""
+
+# Telegraf sidecar metrics
+telegraf:
+  enabled: false
+
+# OTEL tracing
+otel_enabled: false
+
+# Infrastructure configuration
+infrastructure:
+  secretStore:
+    name: vault-backend
+    kind: ClusterSecretStore
+  vault:
+    basePath: ""
+    otelTokenPath: ""
+
+# Deployment configuration
+deployment:
+  enabled: true
+  replicaCount: 2
+  revisionHistoryLimit: 3
+  image:
+    repository: ghcr.io/meesho/numerix
+    tag: latest
+    pullPolicy: IfNotPresent
+  ports:
+    - containerPort: 8083
+      name: grpc
+      protocol: TCP
+  probes:
+    liveness:
+      path: /health
+      port: 8083
+      scheme: HTTP
+      initialDelaySeconds: 15
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 5
+    readiness:
+      path: /health
+      port: 8083
+      scheme: HTTP
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 5
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  env:
+    - name: APPLICATION_PORT
+      value: "8083"
+    - name: APP_ENV
+      value: "prd"
+    - name: APP_NAME
+      value: "numerix"
+    - name: APP_LOG_LEVEL
+      value: "ERROR"
+    - name: CHANNEL_BUFFER_SIZE
+      value: "10000"
+    - name: ETCD_SERVERS
+      value: "http://etcd:2379"
+    - name: METRIC_SAMPLING_RATE
+      value: "1"
+    - name: LOG_SAMPLING_RATE
+      value: "1"
+  serviceAccount:
+    enabled: false
+    annotations: {}
+  updateStrategy:
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+  terminationGracePeriodSeconds: 30
+
+# Service configuration
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: 80
+      targetPort: 8083
+      protocol: TCP
+
+# Autoscaling (KEDA ScaledObject)
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  pollingInterval: 30
+  scaledown:
+    stabilizationWindowSeconds: 300
+    policies:
+      - type: Percent
+        value: 10
+        periodseconds: 60
+    selectpolicy: Min
+  scaleup:
+    stabilizationWindowSeconds: 0
+    policies:
+      - type: Percent
+        value: 50
+        periodseconds: 60
+    selectpolicy: Max
+  triggers:
+    - type: cpu
+      metadata:
+        value: "70"
+      metricType: Utilization
+
+# Ingress (Contour HTTPProxy)
+ingress:
+  enabled: false
+  ingressClassName: contour-internal
+createContourGateway: false
+
+# External secrets (Vault)
+externalSecret:
+  enabled: false
+  path: ""
+
+# ConfigMap for non-secret env vars
+configMap:
+  enabled: false
+
+# Canary / Flagger
+canary:
+  enabled: false
+  promURL: ""
+  slackChannel: ""
+  slackWebhookURL: ""
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: "10%"
+
+# Disaster Recovery
+disasterRecovery:
+  enabled: false

@@ -40,8 +40,6 @@ import {
 
 // Embedding Platform Components
 import DeploymentOperations from './pages/EmbeddingPlatform/components/DeploymentOperations';
-import OnboardVariantToDB from './pages/EmbeddingPlatform/components/OnboardVariantToDB';
-import OnboardVariantApproval from './pages/EmbeddingPlatform/components/OnboardVariantApproval';
 import EmbeddingStoreRegistry from './pages/EmbeddingPlatform/components/StoreManagement/StoreRegistry';
 import EmbeddingStoreApproval from './pages/EmbeddingPlatform/components/StoreManagement/StoreApproval';
 import EmbeddingEntityRegistry from './pages/EmbeddingPlatform/components/EntityManagement/EntityRegistry';
@@ -55,9 +53,7 @@ import EmbeddingFilterApproval from './pages/EmbeddingPlatform/components/Filter
 import EmbeddingJobFrequencyRegistry from './pages/EmbeddingPlatform/components/JobFrequencyManagement/JobFrequencyRegistry';
 import EmbeddingJobFrequencyApproval from './pages/EmbeddingPlatform/components/JobFrequencyManagement/JobFrequencyApproval';
 import { default as EmbeddingStoreDiscovery } from './pages/EmbeddingPlatform/components/StoreManagement/StoreDiscovery';
-import { default as EmbeddingEntityDiscovery } from './pages/EmbeddingPlatform/components/EntityManagement/EntityDiscovery';
-import { default as EmbeddingModelDiscovery } from './pages/EmbeddingPlatform/components/ModelManagement/ModelDiscovery';
-import { default as EmbeddingVariantDiscovery } from './pages/EmbeddingPlatform/components/VariantManagement/VariantDiscovery';
+import { default as EmbeddingHierarchicalDiscovery } from './pages/EmbeddingPlatform/components/HierarchicalDiscovery';
 import { default as EmbeddingFilterDiscovery } from './pages/EmbeddingPlatform/components/FilterManagement/FilterDiscovery';
 import { default as EmbeddingJobFrequencyDiscovery } from './pages/EmbeddingPlatform/components/JobFrequencyManagement/JobFrequencyDiscovery';
 
@@ -293,26 +289,10 @@ function App() {
           }
         />
         <Route
-          path="/embedding-platform/discovery/entities"
+          path="/embedding-platform/discovery/hierarchical"
           element={
-            <ProtectedRoute service="embedding_platform" screenType="entity-discovery">
-              <EmbeddingEntityDiscovery />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/embedding-platform/discovery/models"
-          element={
-            <ProtectedRoute service="embedding_platform" screenType="model-discovery">
-              <EmbeddingModelDiscovery />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/embedding-platform/discovery/variants"
-          element={
-            <ProtectedRoute service="embedding_platform" screenType="variant-discovery">
-              <EmbeddingVariantDiscovery />
+            <ProtectedRoute service="embedding_platform" screenType="hierarchical-discovery">
+              <EmbeddingHierarchicalDiscovery />
             </ProtectedRoute>
           }
         />
@@ -437,22 +417,6 @@ function App() {
           element={
             <ProtectedRoute service="embedding_platform" screenType="deployment-operations">
               <DeploymentOperations />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/embedding-platform/onboard-variant-to-db"
-          element={
-            <ProtectedRoute service="embedding_platform" screenType="onboard-variant-to-db">
-              <OnboardVariantToDB />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/embedding-platform/onboard-variant-approval"
-          element={
-            <ProtectedRoute service="embedding_platform" screenType="onboard-variant-approval">
-              <OnboardVariantApproval />
             </ProtectedRoute>
           }
         />

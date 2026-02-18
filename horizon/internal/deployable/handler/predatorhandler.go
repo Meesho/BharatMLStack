@@ -97,7 +97,7 @@ func (h *Handler) loadServiceConfig(serviceName, workingEnv string) (*serviceCon
 				Str("serviceName", serviceName).
 				Str("workingEnv", workingEnv).
 				Msg("Failed to load service config from config-as-code - atomic onboarding requires each environment to have its own config.yaml")
-			return nil, fmt.Errorf("atomic onboarding violation: config.yaml not found for environment %s (expected: configs/services/%s/%s/config.yaml): %w", workingEnv, serviceName, workingEnv, err)
+			return nil, fmt.Errorf("atomic onboarding violation: config.yaml not found for environment %s (expected: horizon/configs/services/%s/%s/config.yaml): %w", workingEnv, serviceName, workingEnv, err)
 		}
 
 		log.Info().

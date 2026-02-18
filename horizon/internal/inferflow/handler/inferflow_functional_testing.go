@@ -32,10 +32,14 @@ func (m *InferFlow) GenerateFunctionalTestRequest(request GenerateRequestFunctio
 		},
 	}
 
-	batchSize, err := strconv.Atoi(request.BatchSize)
+	batchSize, err := strconv.Atoi(strings.TrimSpace(request.BatchSize))
 	if err != nil {
 		response.Error = fmt.Errorf("invalid batch size: %w", err).Error()
 		return response, errors.New("invalid batch size: " + err.Error())
+	}
+	if batchSize <= 0 {
+		response.Error = "batch size must be a positive integer"
+		return response, errors.New(response.Error)
 	}
 
 	response.RequestBody.Entities[0].Entity = request.Entity + "_id"
@@ -88,6 +92,7 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 		response.Error = err.Error()
 		return response, errors.New("failed to get connection: " + err.Error())
 	}
+	defer conn.Close()
 
 	protoRequest := &pb.InferflowRequestProto{}
 	protoRequest.ModelConfigId = request.RequestBody.ModelConfigID
@@ -157,25 +162,28 @@ func (m *InferFlow) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctiona
 	inferFlowConfig, err := m.InferFlowConfigRepo.GetByID(request.RequestBody.ModelConfigID)
 
 	if err != nil {
-		fmt.Println("Error getting inferflow config: ", err)
-	} else if inferFlowConfig == nil {
-		log.Error().Msgf("inferflow config '%s' does not exist in DB", request.RequestBody.ModelConfigID)
+		response.Error = fmt.Sprintf("failed to get inferflow config: %v", err)
+		return response, errors.New(response.Error)
+	}
+	if inferFlowConfig == nil {
+		response.Error = fmt.Sprintf("inferflow config '%s' does not exist in DB", request.RequestBody.ModelConfigID)
+		return response, errors.New(response.Error)
+	}
+
+	if response.Error != emptyResponse {
+		inferFlowConfig.TestResults = inferflow.TestResults{
+			Tested:  false,
+			Message: response.Error,
+		}
 	} else {
-		if response.Error != emptyResponse {
-			inferFlowConfig.TestResults = inferflow.TestResults{
-				Tested:  false,
-				Message: response.Error,
-			}
-		} else {
-			inferFlowConfig.TestResults = inferflow.TestResults{
-				Tested:  true,
-				Message: "Functional test request executed successfully",
-			}
+		inferFlowConfig.TestResults = inferflow.TestResults{
+			Tested:  true,
+			Message: "Functional test request executed successfully",
 		}
-		err = m.InferFlowConfigRepo.Update(inferFlowConfig)
-		if err != nil {
-			fmt.Println("Error updating inferflow config: ", err)
-		}
+	}
+	if err := m.InferFlowConfigRepo.Update(inferFlowConfig); err != nil {
+		response.Error = fmt.Sprintf("failed to update inferflow config: %v", err)
+		return response, errors.New(response.Error)
 	}
 
 	return response, nil

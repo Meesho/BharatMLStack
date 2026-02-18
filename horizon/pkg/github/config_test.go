@@ -19,7 +19,7 @@ func TestInitGitHub(t *testing.T) {
 			config: GitHubConfig{
 				AppID:                        12345,
 				InstallationID:               67890,
-				PrivateKeyPath:               "/path/to/key.pem",
+				PrivateKey:                   []byte("test-key"),
 				Owner:                        "test-org",
 				CommitAuthor:                 "test-bot",
 				CommitEmail:                  "test@example.com",
@@ -59,7 +59,7 @@ func TestInitGitHub(t *testing.T) {
 			config: GitHubConfig{
 				AppID:          12345,
 				InstallationID: 67890,
-				PrivateKeyPath: "/nonexistent/path.pem",
+				PrivateKey:     []byte("test-key"),
 				Owner:          "test-org",
 			},
 			expectError: true,
@@ -70,7 +70,7 @@ func TestInitGitHub(t *testing.T) {
 			config: GitHubConfig{
 				AppID:          0,
 				InstallationID: 67890,
-				PrivateKeyPath: "/path/to/key.pem",
+				PrivateKey:     []byte("test-key"),
 				Owner:          "test-org",
 			},
 			expectError: false,
@@ -108,7 +108,7 @@ func TestInitGitHub(t *testing.T) {
 			config: GitHubConfig{
 				AppID:          12345,
 				InstallationID: 67890,
-				PrivateKeyPath: "/path/to/key.pem",
+				PrivateKey:     []byte("test-key"),
 				// Other fields use defaults
 			},
 			expectError: true, // Will fail due to invalid key path

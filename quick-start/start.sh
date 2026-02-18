@@ -17,6 +17,7 @@ HORIZON_SERVICES="horizon horizon-healthcheck"
 NUMERIX_SERVICES="numerix numerix-healthcheck"
 TRUFFLEBOX_SERVICES="trufflebox-ui trufflebox-healthcheck"
 INFERFLOW_SERVICES="inferflow inferflow-healthcheck"
+SKYE_SERVICES="skye-trigger skye-admin skye-admin-healthcheck skye-consumers skye-consumers-healthcheck skye-serving skye-serving-healthcheck"
 PREDATOR_SERVICES="predator predator-healthcheck"
 
 # Management tools
@@ -29,6 +30,7 @@ HORIZON_VERSION="${HORIZON_VERSION:-latest}"
 NUMERIX_VERSION="${NUMERIX_VERSION:-latest}"
 TRUFFLEBOX_VERSION="${TRUFFLEBOX_VERSION:-latest}"
 INFERFLOW_VERSION="${INFERFLOW_VERSION:-latest}"
+SKYE_VERSION="${SKYE_VERSION:-latest}"
 
 # Global variables for user selection
 SELECTED_SERVICES="$INFRASTRUCTURE_SERVICES $MANAGEMENT_SERVICES"
@@ -38,6 +40,7 @@ START_HORIZON=false
 START_NUMERIX=false
 START_TRUFFLEBOX=false
 START_INFERFLOW=false
+START_SKYE=false
 START_PREDATOR=false
 INIT_DUMMY_DATA=false
 ENABLE_LOCAL_BUILD=false
@@ -87,7 +90,13 @@ setup_workspace() {
     rm -rf "$WORKSPACE_DIR/predator-dummy"
   fi
   cp -r ./predator-dummy "$WORKSPACE_DIR"/
-  
+
+  # Copy skye-trigger directory for OSS Airflow replacement (Docker build)
+  if [ -d "$WORKSPACE_DIR/skye-trigger" ]; then
+    rm -rf "$WORKSPACE_DIR/skye-trigger"
+  fi
+  cp -r ./skye-trigger "$WORKSPACE_DIR"/
+
   # Copy horizon configs directory for service config loading
   local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   local project_root="$(cd "$script_dir/.." && pwd)"
@@ -99,6 +108,14 @@ setup_workspace() {
     echo "   ✅ Copied horizon configs to workspace"
   else
     echo "   ⚠️  Warning: horizon/configs directory not found at $project_root/horizon/configs"
+  fi
+  # Copy skye-config for Skye services
+  if [ -d "$script_dir/skye-config" ]; then
+    if [ -d "$WORKSPACE_DIR/skye-config" ]; then
+      rm -rf "$WORKSPACE_DIR/skye-config"
+    fi
+    cp -r "$script_dir/skye-config" "$WORKSPACE_DIR"/
+    echo "   ✅ Copied skye-config to workspace"
   fi
   
   echo "✅ Workspace setup complete"
@@ -177,6 +194,16 @@ setup_local_builds() {
     fi
   fi
   
+  if [[ "$START_SKYE" == true && "$SKYE_VERSION" == "local" ]]; then
+    echo "   📦 Preparing Skye for local build..."
+    if [ -d "$project_root/skye" ]; then
+      cp -r "$project_root/skye" "$WORKSPACE_DIR"/
+      needs_local_build=true
+    else
+      echo "   ⚠️  Warning: $project_root/skye not found, skipping local build for Skye"
+    fi
+  fi
+  
   if [[ "$needs_local_build" == true ]]; then
     echo "   🔧 Modifying docker-compose.yml for local builds..."
     # Get absolute path for compose file to avoid path issues
@@ -184,8 +211,8 @@ setup_local_builds() {
     local compose_file_abs="$(cd "$script_dir" && cd "$WORKSPACE_DIR" && pwd)/docker-compose.yml"
     # Export variables for Python script
     export COMPOSE_FILE="$compose_file_abs"
-    export START_ONFS START_ONFS_CONSUMER START_HORIZON START_NUMERIX START_TRUFFLEBOX START_INFERFLOW
-    export ONFS_VERSION ONFS_CONSUMER_VERSION HORIZON_VERSION NUMERIX_VERSION TRUFFLEBOX_VERSION INFERFLOW_VERSION
+    export START_ONFS START_ONFS_CONSUMER START_HORIZON START_NUMERIX START_TRUFFLEBOX START_INFERFLOW START_SKYE
+    export ONFS_VERSION ONFS_CONSUMER_VERSION HORIZON_VERSION NUMERIX_VERSION TRUFFLEBOX_VERSION INFERFLOW_VERSION SKYE_VERSION
     modify_docker_compose_for_local_builds
     echo "✅ Local build setup complete"
   else
@@ -222,6 +249,8 @@ start_trufflebox = os.environ.get('START_TRUFFLEBOX', 'false')
 trufflebox_version = os.environ.get('TRUFFLEBOX_VERSION', '')
 start_inferflow = os.environ.get('START_INFERFLOW', 'false')
 inferflow_version = os.environ.get('INFERFLOW_VERSION', '')
+start_skye = os.environ.get('START_SKYE', 'false')
+skye_version = os.environ.get('SKYE_VERSION', '')
 
 with open(compose_file, 'r') as f:
     content = f.read()
@@ -263,6 +292,13 @@ if start_inferflow == 'true' and inferflow_version == 'local':
     replacement = r'\1    build:\n      context: ./inferflow\n      dockerfile: cmd/inferflow/Dockerfile\n    # \2'
     content = re.sub(pattern, replacement, content)
 
+# Skye (admin, consumers, serving)
+if start_skye == 'true' and skye_version == 'local':
+    for svc, dockerfile in [('skye-admin', 'cmd/admin/Dockerfile'), ('skye-consumers', 'cmd/consumers/Dockerfile'), ('skye-serving', 'cmd/serving/Dockerfile')]:
+        pattern = r'(  ' + re.escape(svc) + r':\s*\n)\s+(image:.*\n)'
+        replacement = r'\1    build:\n      context: ./skye\n      dockerfile: ' + dockerfile + r'\n    # \2'
+        content = re.sub(pattern, replacement, content)
+
 with open(compose_file, 'w') as f:
     f.write(content)
 
@@ -284,9 +320,11 @@ if start_inferflow == 'true' and inferflow_version == 'local' and 'build:' in co
         changes_made = True
     else:
         sys.stderr.write("Warning: inferflow build context not found after replacement\n")
+if start_skye == 'true' and skye_version == 'local' and './skye' in content:
+    changes_made = True
 
 if not changes_made and (start_onfs == 'true' or start_onfs_consumer == 'true' or start_horizon == 'true' or 
-                         start_numerix == 'true' or start_trufflebox == 'true' or start_inferflow == 'true'):
+                         start_numerix == 'true' or start_trufflebox == 'true' or start_inferflow == 'true' or start_skye == 'true'):
     sys.stderr.write("Warning: Failed to modify docker-compose.yml for local builds\n")
     sys.exit(1)
 PYTHON_SCRIPT
@@ -301,7 +339,7 @@ show_service_menu() {
   echo "Choose which application services to start:"
   echo ""
   echo "1) 🚀 All Services"
-  echo "   • Online Feature Store + Consumer + Horizon + Numerix + TruffleBox UI + Inferflow + Predator"
+  echo "   • Online Feature Store + Consumer + Horizon + Numerix + TruffleBox UI + Inferflow + Skye + Predator"
   echo ""
   echo "2) 🎛️  Custom Selection"
   echo "   • Choose individual services"
@@ -318,13 +356,14 @@ get_user_choice() {
     case $choice in
       1)
         echo "✅ Selected: All Services"
-        SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES $INFERFLOW_SERVICES $PREDATOR_SERVICES"
+        SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES $INFERFLOW_SERVICES $SKYE_SERVICES $PREDATOR_SERVICES"
         START_ONFS=true
         START_ONFS_CONSUMER=true
         START_HORIZON=true
         START_NUMERIX=true
         START_TRUFFLEBOX=true
         START_INFERFLOW=true
+        START_SKYE=true
         START_PREDATOR=true
         echo ""
         echo "🔧 Optional Infrastructure:"
@@ -404,6 +443,13 @@ custom_selection() {
     echo "✅ Added: Inferflow"
   fi
   
+  read -p "Include Skye (Vector Similarity Search - admin, consumers, serving)? [y/N]: " include_skye
+  if [[ $include_skye =~ ^[Yy]$ ]]; then
+    SELECTED_SERVICES="$SELECTED_SERVICES $SKYE_SERVICES"
+    START_SKYE=true
+    echo "✅ Added: Skye"
+  fi
+  
   read -p "Include Predator (Dummy gRPC Inference Server)? [y/N]: " include_predator
   if [[ $include_predator =~ ^[Yy]$ ]]; then
     SELECTED_SERVICES="$SELECTED_SERVICES $PREDATOR_SERVICES"
@@ -413,7 +459,7 @@ custom_selection() {
   
   
   echo ""
-  if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false && $START_INFERFLOW == false && $START_PREDATOR == false ]]; then
+  if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false && $START_INFERFLOW == false && $START_SKYE == false && $START_PREDATOR == false ]]; then
     echo "🎯 Custom selection complete: Only infrastructure services will be started"
   else
     echo "🎯 Custom selection complete!"
@@ -486,12 +532,15 @@ start_selected_services() {
   if [[ $START_INFERFLOW == true ]]; then
     echo "   • Inferflow"
   fi
+  if [[ $START_SKYE == true ]]; then
+    echo "   • Skye (trigger, admin, consumers, serving)"
+  fi
   if [[ $START_PREDATOR == true ]]; then
     echo "   • Predator (Dummy gRPC Inference Server)"
   fi
   
   
-  if [[ $START_ONFS == true || $START_ONFS_CONSUMER == true || $START_HORIZON == true || $START_NUMERIX == true || $START_TRUFFLEBOX == true || $START_INFERFLOW == true || $START_PREDATOR == true ]]; then
+  if [[ $START_ONFS == true || $START_ONFS_CONSUMER == true || $START_HORIZON == true || $START_NUMERIX == true || $START_TRUFFLEBOX == true || $START_INFERFLOW == true || $START_SKYE == true || $START_PREDATOR == true ]]; then
     echo ""
     echo "🏷️  Application versions:"
     if [[ $START_ONFS == true ]]; then
@@ -536,6 +585,13 @@ start_selected_services() {
         echo "   • Inferflow: ${INFERFLOW_VERSION}"
       fi
     fi
+    if [[ $START_SKYE == true ]]; then
+      if [[ "$SKYE_VERSION" == "local" ]]; then
+        echo "   • Skye: ${SKYE_VERSION} (building from local Dockerfile)"
+      else
+        echo "   • Skye: ${SKYE_VERSION}"
+      fi
+    fi
   else
     echo ""
     echo "🏷️  Infrastructure-only setup (no application services selected)"
@@ -549,6 +605,7 @@ start_selected_services() {
   export NUMERIX_VERSION
   export TRUFFLEBOX_VERSION
   export INFERFLOW_VERSION
+  export SKYE_VERSION
   
   # Export INIT_DUMMY_DATA if set (will be passed to db-init container)
   if [[ "$INIT_DUMMY_DATA" == true ]]; then
@@ -597,7 +654,7 @@ verify_services() {
   echo ""
   
   # If no application services selected, skip health checks
-  if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false && $START_INFERFLOW == false ]]; then
+  if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false && $START_INFERFLOW == false && $START_SKYE == false ]]; then
     echo "🏥 Infrastructure-only setup - skipping application health checks..."
     echo "✅ Infrastructure services started successfully!"
     return 0
@@ -653,6 +710,19 @@ verify_services() {
       fi
     fi
     
+    # Check Skye if selected
+    if [[ $START_SKYE == true ]]; then
+      if ! curl -s http://localhost:8092/health > /dev/null 2>&1; then
+        all_healthy=false
+      fi
+      if ! curl -s http://localhost:8093/health > /dev/null 2>&1; then
+        all_healthy=false
+      fi
+      if ! curl -s http://localhost:8094/health/self > /dev/null 2>&1; then
+        all_healthy=false
+      fi
+    fi
+    
     # Check Predator if selected (gRPC service, just check if port is open)
     if [[ $START_PREDATOR == true ]]; then
       if ! nc -z localhost 8001 2>/dev/null; then
@@ -675,7 +745,7 @@ verify_services() {
 
 show_access_info() {
   echo ""
-  if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false && $START_INFERFLOW == false && $START_PREDATOR == false ]]; then
+  if [[ $START_ONFS == false && $START_ONFS_CONSUMER == false && $START_HORIZON == false && $START_NUMERIX == false && $START_TRUFFLEBOX == false && $START_INFERFLOW == false && $START_SKYE == false && $START_PREDATOR == false ]]; then
     echo "🎉 BharatML Stack infrastructure is now running!"
   else
     echo "🎉 BharatML Stack services are now running!"
@@ -687,7 +757,7 @@ show_access_info() {
   echo "   🔧 etcd Workbench:    http://localhost:8081"
   echo "   📊 Kafka UI:          http://localhost:8084"
   
-  if [[ $START_ONFS == true || $START_ONFS_CONSUMER == true || $START_HORIZON == true || $START_NUMERIX == true || $START_TRUFFLEBOX == true || $START_INFERFLOW == true || $START_PREDATOR == true ]]; then
+  if [[ $START_ONFS == true || $START_ONFS_CONSUMER == true || $START_HORIZON == true || $START_NUMERIX == true || $START_TRUFFLEBOX == true || $START_INFERFLOW == true || $START_SKYE == true || $START_PREDATOR == true ]]; then
     echo ""
     echo "   Application Services:"
   fi
@@ -709,6 +779,11 @@ show_access_info() {
   fi
   if [[ $START_INFERFLOW == true ]]; then
     echo "   🔮 Inferflow:         http://localhost:8085"
+  fi
+  if [[ $START_SKYE == true ]]; then
+    echo "   🔍 Skye Admin:        http://localhost:8092"
+    echo "   🔍 Skye Consumers:   http://localhost:8093"
+    echo "   🔍 Skye Serving:     http://localhost:8094"
   fi
   if [[ $START_PREDATOR == true ]]; then
     echo "   🦁 Predator gRPC:     localhost:8001"
@@ -759,6 +834,7 @@ if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   echo "  • Numerix Matrix Operations"
   echo "  • TruffleBox UI"
   echo "  • Inferflow"
+  echo "  • Skye (Vector Similarity Search)"
   echo "  • Predator (Dummy gRPC Inference Server)"
   echo ""
   echo "Dummy Data Initialization:"
@@ -767,7 +843,7 @@ if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   echo ""
   echo "Version Control:"
   echo "  Set version environment variables to control which images to use:"
-  echo "  • ONFS_VERSION, ONFS_CONSUMER_VERSION, HORIZON_VERSION, etc."
+  echo "  • ONFS_VERSION, ONFS_CONSUMER_VERSION, HORIZON_VERSION, SKYE_VERSION, etc."
   echo "  • Use 'local' as version to build from local Dockerfiles"
   echo "  • Example: ONFS_VERSION=local HORIZON_VERSION=v1.0.0 ./start.sh"
   echo ""
@@ -781,7 +857,7 @@ check_go_version
 # Check Python 3 if any version is set to "local"
 if [[ "${ONFS_VERSION}" == "local" || "${ONFS_CONSUMER_VERSION}" == "local" || \
       "${HORIZON_VERSION}" == "local" || "${NUMERIX_VERSION}" == "local" || \
-      "${TRUFFLEBOX_VERSION}" == "local" || "${INFERFLOW_VERSION}" == "local" ]]; then
+      "${TRUFFLEBOX_VERSION}" == "local" || "${INFERFLOW_VERSION}" == "local" || "${SKYE_VERSION}" == "local" ]]; then
   check_python3
 fi
 
@@ -792,24 +868,26 @@ for arg in "$@"; do
   case $arg in
     --all)
       echo "🎯 Non-interactive mode: Starting all services"
-      SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES $INFERFLOW_SERVICES $PREDATOR_SERVICES"
+      SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES $INFERFLOW_SERVICES $SKYE_SERVICES $PREDATOR_SERVICES"
       START_ONFS=true
       START_ONFS_CONSUMER=true
       START_HORIZON=true
       START_NUMERIX=true
       START_TRUFFLEBOX=true
       START_INFERFLOW=true
+      START_SKYE=true
       START_PREDATOR=true
       ;;
     --all-local)
       echo "🎯 Non-interactive mode: Starting all services in local mode"
-      SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES $INFERFLOW_SERVICES $PREDATOR_SERVICES"
+      SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES $ONFS_CONSUMER_SERVICES $HORIZON_SERVICES $NUMERIX_SERVICES $TRUFFLEBOX_SERVICES $INFERFLOW_SERVICES $SKYE_SERVICES $PREDATOR_SERVICES"
       START_ONFS=true
       START_ONFS_CONSUMER=true
       START_HORIZON=true
       START_NUMERIX=true
       START_TRUFFLEBOX=true
       START_INFERFLOW=true
+      START_SKYE=true
       START_PREDATOR=true
       ENABLE_LOCAL_BUILD=true
       ;;
@@ -825,7 +903,7 @@ for arg in "$@"; do
 done
 
 # If --all or --all-local was not specified, use interactive mode
-if [[ "$START_ONFS" == false && "$START_ONFS_CONSUMER" == false && "$START_HORIZON" == false && "$START_NUMERIX" == false && "$START_TRUFFLEBOX" == false && "$START_INFERFLOW" == false && "$START_PREDATOR" == false ]]; then
+if [[ "$START_ONFS" == false && "$START_ONFS_CONSUMER" == false && "$START_HORIZON" == false && "$START_NUMERIX" == false && "$START_TRUFFLEBOX" == false && "$START_INFERFLOW" == false && "$START_SKYE" == false && "$START_PREDATOR" == false ]]; then
   get_user_choice
   if [ "$1" = "--local" ]; then
     ENABLE_LOCAL_BUILD=true
@@ -837,7 +915,7 @@ fi
 if [[ "$ENABLE_LOCAL_BUILD" = true || \
       "$ONFS_VERSION" == "local" || "$ONFS_CONSUMER_VERSION" == "local" || \
       "$HORIZON_VERSION" == "local" || "$NUMERIX_VERSION" == "local" || \
-      "$TRUFFLEBOX_VERSION" == "local" || "$INFERFLOW_VERSION" == "local" ]]; then
+      "$TRUFFLEBOX_VERSION" == "local" || "$INFERFLOW_VERSION" == "local" || "$SKYE_VERSION" == "local" ]]; then
   setup_local_builds
 fi
 

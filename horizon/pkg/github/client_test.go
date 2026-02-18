@@ -12,7 +12,7 @@ func TestInitGitHubClient(t *testing.T) {
 		name        string
 		appID       int64
 		installID   int64
-		privateKey  string
+		privateKey  []byte
 		expectError bool
 		description string
 	}{
@@ -20,7 +20,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:        "Test 1: Initialize with invalid private key path",
 			appID:       12345,
 			installID:   67890,
-			privateKey:  "/nonexistent/path/to/key.pem",
+			privateKey:  []byte("test-key"),
 			expectError: true,
 			description: "Initialization with invalid key path should fail",
 		},
@@ -28,7 +28,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:        "Test 2: Initialize with zero app ID",
 			appID:       0,
 			installID:   67890,
-			privateKey:  "/tmp/test-key.pem",
+			privateKey:  []byte("test-key"),
 			expectError: true,
 			description: "Initialization with zero app ID may fail",
 		},
@@ -36,7 +36,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:        "Test 3: Initialize with zero installation ID",
 			appID:       12345,
 			installID:   0,
-			privateKey:  "/tmp/test-key.pem",
+			privateKey:  []byte("test-key"),
 			expectError: true,
 			description: "Initialization with zero installation ID may fail",
 		},
@@ -44,7 +44,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:        "Test 4: Initialize with empty private key path",
 			appID:       12345,
 			installID:   67890,
-			privateKey:  "",
+			privateKey:  []byte(""),
 			expectError: true,
 			description: "Initialization with empty key path should fail",
 		},
@@ -52,7 +52,7 @@ func TestInitGitHubClient(t *testing.T) {
 			name:        "Test 5: Multiple initialization calls",
 			appID:       12345,
 			installID:   67890,
-			privateKey:  "/tmp/test-key.pem",
+			privateKey:  []byte("test-key"),
 			expectError: true,
 			description: "Multiple initialization calls should use sync.Once",
 		},
