@@ -850,11 +850,11 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
         return;
       }
 
-      const successMessage = response.data.data?.message || 'InferFlow Config updated successfully';
+      const successMessage = response.data.data?.message || 'Inferpipe updated successfully';
       onSuccess(successMessage);
       onClose();
     } catch (error) {
-      setError(error.response?.data?.error || error.message || 'Failed to update InferFlow config');
+      setError(error.response?.data?.error || error.message || 'Failed to update Inferpipe');
     } finally {
       setLoading(false);
     }
@@ -871,7 +871,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
         <DialogContent>
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 4 }}>
             <CircularProgress />
-            <Typography sx={{ ml: 2 }}>Loading configuration...</Typography>
+            <Typography sx={{ ml: 2 }}>Loading inferpipe...</Typography>
           </Box>
         </DialogContent>
       </Dialog>
@@ -896,7 +896,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
         justifyContent: 'space-between',
         alignItems: 'center'
       }}>
-        <Typography variant="h6">Edit InferFlow Config</Typography>
+        <Typography variant="h6">Edit Inferpipe</Typography>
         <IconButton
           edge="end"
           color="inherit"
@@ -1008,7 +1008,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <CompareArrowsIcon />
-          <Typography variant="h6">Configuration Changes</Typography>
+          <Typography variant="h6">Inferpipe Changes</Typography>
         </Box>
         <IconButton
           edge="end"
@@ -1024,7 +1024,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
           <JsonDiffView
             originalText={JSON.stringify(originalConfig, null, 2)}
             changedText={JSON.stringify(formData, null, 2)}
-            title="Original vs Current Configuration"
+            title="Original vs Current Inferpipe"
           />
         )}
       </DialogContent>

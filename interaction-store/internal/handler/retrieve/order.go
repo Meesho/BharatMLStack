@@ -54,7 +54,7 @@ func (o *OrderRetrieveHandler) Retrieve(userId string, startTimestampMs int64, e
 
 	allEvents := make([]model.FlattenedOrderEvent, 0)
 	for _, ddb := range weekToDeserializedBlocks {
-		events, err := ddb.RetrieveEventData()
+		events, err := ddb.RetrieveEventData(userId)
 		if err != nil {
 			return nil, err
 		}

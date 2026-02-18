@@ -1,11 +1,6 @@
 package config
 
-import (
-	"fmt"
-
-	"github.com/Meesho/BharatMLStack/inferflow/internal/errors"
-	"github.com/Meesho/BharatMLStack/inferflow/pkg/logger"
-)
+import "fmt"
 
 var mConfig *ModelConfig
 
@@ -13,24 +8,20 @@ func GetModelConfigMap() *ModelConfig {
 	return mConfig
 }
 
-func SetModelConfigMap(config *ModelConfig) {
-	mConfig = config
+// GetModelConfig returns the Config for a specific model config ID.
+func GetModelConfig(modelConfigId string) (*Config, error) {
+	if mConfig == nil {
+		return nil, fmt.Errorf("model config map not initialised")
+	}
+	conf, ok := mConfig.ConfigMap[modelConfigId]
+	if !ok || !validateModelConfig(&conf) {
+		return nil, fmt.Errorf("model config not found or invalid for id: %s", modelConfigId)
+	}
+	return &conf, nil
 }
 
-func GetModelConfig(modelId string) (*Config, error) {
-
-	configMap := GetModelConfigMap()
-	if len(configMap.ConfigMap) == 0 {
-		logger.Error("Error while fetching Inferflow config ", nil)
-		return nil, &errors.RequestError{ErrorMsg: "Error while fetching Inferflow config"}
-	}
-	config := configMap.ConfigMap[modelId]
-	isValid := validateModelConfig(&config)
-	if !isValid {
-		logger.Error(fmt.Sprintf("Invalid model config for modelId %s ", modelId), nil)
-		return nil, &errors.RequestError{ErrorMsg: fmt.Sprintf("Invalid model config for modelId %s ", modelId)}
-	}
-	return &config, nil
+func SetModelConfigMap(config *ModelConfig) {
+	mConfig = config
 }
 
 func validateModelConfig(c *Config) bool {

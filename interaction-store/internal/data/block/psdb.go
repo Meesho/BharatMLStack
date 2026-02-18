@@ -21,6 +21,7 @@ type PermanentStorageDataBlock struct {
 	Data              any
 	InteractionType   enum.InteractionType
 	Buf               []byte
+	Builder           *PermanentStorageDataBlockBuilder
 }
 
 func (p *PermanentStorageDataBlock) Clear() {
@@ -54,9 +55,6 @@ func (p *PermanentStorageDataBlock) serializeLayout1() ([]byte, error) {
 	if p.Data == nil {
 		return nil, fmt.Errorf("data is nil")
 	}
-	if err := setHeader(p); err != nil {
-		return nil, err
-	}
 	switch p.InteractionType {
 	case enum.InteractionTypeClick:
 		err := p.serializeClickEvents()
@@ -70,6 +68,9 @@ func (p *PermanentStorageDataBlock) serializeLayout1() ([]byte, error) {
 		}
 	default:
 		return nil, fmt.Errorf("unsupported interaction type: %s", p.InteractionType)
+	}
+	if err := setHeader(p); err != nil {
+		return nil, err
 	}
 	return compressAndAppendData(p)
 }
@@ -156,6 +157,15 @@ func setHeader(p *PermanentStorageDataBlock) error {
 	return nil
 }
 
+func setCompressionTypeInHeader(p *PermanentStorageDataBlock) error {
+	if len(p.Buf) < PSDBLayout1HeaderLength {
+		return fmt.Errorf("buffer too small: required=%d, actual=%d", PSDBLayout1HeaderLength, len(p.Buf))
+	}
+	// Clear compression bits (4-6) and set new compression type
+	p.Buf[0] = (p.Buf[0] & 0x8F) | ((uint8(p.CompressionType) & 0x07) << 4)
+	return nil
+}
+
 func compressAndAppendData(p *PermanentStorageDataBlock) ([]byte, error) {
 	// If no compression requested, append original data directly
 	if p.CompressionType == compression.TypeNone {
@@ -183,7 +193,7 @@ func encodeData(p *PermanentStorageDataBlock, enc compression.Encoder) ([]byte, 
 		// Reset compression type to None
 		p.CompressionType = compression.TypeNone
 		// Update header with new compression type
-		if err := setHeader(p); err != nil {
+		if err := setCompressionTypeInHeader(p); err != nil {
 			return nil, err
 		}
 		// Use original data instead of compressed data

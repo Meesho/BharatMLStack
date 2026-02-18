@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"slices"
@@ -149,7 +150,16 @@ func (s *skyeConfig) RegisterStore(request StoreRegisterRequest) (RequestStatus,
 				return fmt.Errorf("invalid payload type for store registration")
 			}
 			activeConfigIds := strings.Split(s.AppConfig.SkyeScyllaActiveConfigIds, ",")
-			if !slices.Contains(activeConfigIds, fmt.Sprintf("%d", storePayload.ConfID)) {
+			configIdMapping := parseHorizonToSkyeScyllaConfIdMap(s.AppConfig.HorizonToSkyeScyllaConfIdMap)
+			var convertedConfId []string
+			for _, confId := range activeConfigIds {
+				confIdInt, err := strconv.Atoi(confId)
+				if err != nil {
+					return fmt.Errorf("invalid config_id: %s", confId)
+				}
+				convertedConfId = append(convertedConfId, strconv.Itoa(configIdMapping[confIdInt]))
+			}
+			if !slices.Contains(convertedConfId, fmt.Sprintf("%d", storePayload.ConfID)) {
 				return fmt.Errorf("invalid config_id: %d. Allowed config_ids: %s", storePayload.ConfID, strings.Join(activeConfigIds, ", "))
 			}
 			return nil
@@ -346,15 +356,6 @@ func (s *skyeConfig) RegisterModel(request ModelRegisterRequest) (RequestStatus,
 				return fmt.Errorf("job frequency '%s' is not registered in etcd", modelPayload.JobFrequency)
 			}
 
-			// 5. Check mqId and topic_name match the mapping
-			expectedTopic, exists := s.MQIdTopicsMapping[modelPayload.MQID]
-			if !exists {
-				return fmt.Errorf("mq_id %d is not present in mq_id_topics_mapping", modelPayload.MQID)
-			}
-			if expectedTopic != modelPayload.TopicName {
-				return fmt.Errorf("topic_name '%s' does not match the mapping for mq_id %d (expected: '%s')", modelPayload.TopicName, modelPayload.MQID, expectedTopic)
-			}
-
 			if modelPayload.TrainingDataPath == "" {
 				return fmt.Errorf("training_data_path must be provided")
 			}
@@ -391,14 +392,23 @@ func (s *skyeConfig) ApproveModelRequest(requestID int, approval ApprovalRequest
 			if numberOfPartitions == 0 {
 				numberOfPartitions = 24
 			}
+
+			// 5. Check mqId and topic_name match the mapping
+			expectedTopic, exists := s.MQIdTopicsMapping[approval.MQID]
+			if !exists {
+				return fmt.Errorf("mq_id %d is not present in mq_id_topics_mapping", approval.MQID)
+			}
+			if expectedTopic != approval.TopicName {
+				return fmt.Errorf("topic_name '%s' does not match the mapping for mq_id %d (expected: '%s')", approval.TopicName, approval.MQID, expectedTopic)
+			}
 			failureProducerMqId := s.AppConfig.SkyeFailureProducerMqId
 			payload, err := parsePayload[ModelRequestPayload](payloadJSON)
 			if err != nil {
 				return fmt.Errorf("failed to parse model request payload: %w", err)
 			}
 			if err := s.EtcdConfig.RegisterModel(payload.Entity, payload.Model, payload.EmbeddingStoreEnabled,
-				payload.EmbeddingStoreTTL, payload.ModelConfig, payload.ModelType, payload.MQID, payload.TrainingDataPath,
-				payload.Metadata, payload.JobFrequency, numberOfPartitions, failureProducerMqId, payload.TopicName); err != nil {
+				payload.EmbeddingStoreTTL, payload.ModelConfig, payload.ModelType, approval.MQID, payload.TrainingDataPath,
+				payload.Metadata, payload.JobFrequency, numberOfPartitions, failureProducerMqId, approval.TopicName); err != nil {
 				log.Error().Err(err).Msgf("Failed to register model in ETCD for model: %s", payload.Model)
 				return fmt.Errorf("failed to register model in ETCD: %w", err)
 			}
@@ -438,7 +448,6 @@ func (s *skyeConfig) RegisterVariant(request VariantRegisterRequest) (RequestSta
 			return req.RequestID, req.CreatedAt, err
 		},
 		func(payload interface{}) error {
-
 			variantPayload, ok := payload.(VariantRequestPayload)
 			if !ok {
 				return fmt.Errorf("invalid payload type for variant registration")
@@ -460,6 +469,10 @@ func (s *skyeConfig) RegisterVariant(request VariantRegisterRequest) (RequestSta
 				return fmt.Errorf("model with name '%s' does not exist for entity '%s'", variantPayload.Model, variantPayload.Entity)
 			}
 
+			if models.Models[variantPayload.Model].ModelType == enums.ModelType(enums.DELTA) && variantPayload.OTDTrainingDataPath == "" {
+				return fmt.Errorf("otd_training_data_path is required for DELTA model type")
+			}
+
 			// Variant should be present from variantList in config (i.e., must be pre-defined as allowed)
 			allowedVariants := s.VariantsList
 			if !slices.Contains(allowedVariants, variantPayload.Variant) {
@@ -476,6 +489,53 @@ func (s *skyeConfig) RegisterVariant(request VariantRegisterRequest) (RequestSta
 
 			return nil
 		})
+}
+
+func (s *skyeConfig) GetVariantApprovalData() (ApprovalData, error) {
+	approvalData := ApprovalData{
+		AdminVectorDBConfig: skyeEtcd.VectorDbConfig{
+			ReadHost:  "10.138.64.68",
+			WriteHost: "10.138.64.68",
+			Port:      "6334",
+			Http2Config: skyeEtcd.Http2Config{
+				Deadline:       200,
+				WriteDeadline:  10000,
+				KeepAliveTime:  "30000",
+				ThreadPoolSize: "32",
+				IsPlainText:    false,
+			},
+			Http1Config: skyeEtcd.Http1Config{
+				TimeoutInMs:               0,
+				DialTimeoutInMs:           0,
+				MaxIdleConnections:        0,
+				MaxIdleConnectionsPerHost: 0,
+				IdleConnTimeoutInMs:       0,
+				KeepAliveTimeoutInMs:      0,
+			},
+			Params: map[string]string{
+				"default_indexing_threshold": "100",
+				"indexing_threshold":         "100",
+				"max_indexing_threads":       "2",
+				"on_disk_payload":            "false",
+				"replication_factor":         "3",
+				"search_indexed_only":        "true",
+				"shard_number":               "1",
+				"write_consistency_factor":   "2",
+			},
+			Payload: nil,
+		},
+		AdminRateLimiter: skyeEtcd.RateLimiter{
+			RateLimit:  100,
+			BurstLimit: 100,
+		},
+		AdminCachingConfiguration: CachingConfiguration{
+			InMemoryCachingEnabled:     false,
+			InMemoryCacheTTLSeconds:    0,
+			DistributedCachingEnabled:  false,
+			DistributedCacheTTLSeconds: 0,
+		},
+	}
+	return approvalData, nil
 }
 
 func (s *skyeConfig) ApproveVariantRequest(requestID int, approval ApprovalRequest) (ApprovalResponse, error) {
@@ -501,9 +561,9 @@ func (s *skyeConfig) ApproveVariantRequest(requestID int, approval ApprovalReque
 			if approval.AdminRateLimiter.RateLimit == 0 || approval.AdminRateLimiter.BurstLimit == 0 {
 				return fmt.Errorf("admin must provide rate_limiter during variant approval")
 			}
-			if approval.AdminCachingConfiguration.DistributedCachingEnabled || approval.AdminCachingConfiguration.DistributedCacheTTLSeconds == 0 || approval.AdminCachingConfiguration.InMemoryCachingEnabled || approval.AdminCachingConfiguration.InMemoryCacheTTLSeconds == 0 {
-				return fmt.Errorf("admin must provide caching_configuration during variant approval")
-			}
+			// if approval.AdminCachingConfiguration.DistributedCachingEnabled || approval.AdminCachingConfiguration.DistributedCacheTTLSeconds == 0 || approval.AdminCachingConfiguration.InMemoryCachingEnabled || approval.AdminCachingConfiguration.InMemoryCacheTTLSeconds == 0 {
+			// 	return fmt.Errorf("admin must provide caching_configuration during variant approval")
+			// }
 			// For RT Partition, collect all RT partitions for all models across all entities
 			rtPartitions := make(map[int]bool)
 			entities, err := s.EtcdConfig.GetEntities()
@@ -570,12 +630,20 @@ func (s *skyeConfig) ApproveVariantRequest(requestID int, approval ApprovalReque
 				log.Error().Err(err).Msgf("Failed to register variant in ETCD for variant: %s", payload.Variant)
 				return fmt.Errorf("failed to register variant in ETCD: %w", err)
 			}
-
+			otdPayload := map[string]interface{}{
+				"otd_path": payload.OTDTrainingDataPath,
+			}
+			otdPayloadBytes, err := json.Marshal(otdPayload)
+			if err != nil {
+				log.Error().Err(err).Msgf("Failed to marshal otd payload for onboarding task: %s", payload.Variant)
+				return fmt.Errorf("failed to marshal otd payload: %w", err)
+			}
+			otdPayloadJsonStr := string(otdPayloadBytes)
 			task := &variant_onboarding_tasks.VariantOnboardingTask{
 				Entity:  payload.Entity,
 				Model:   payload.Model,
 				Variant: payload.Variant,
-				Payload: "{}",
+				Payload: otdPayloadJsonStr,
 				Status:  StatusPending,
 			}
 			if err := s.VariantOnboardingTaskRepo.Create(task); err != nil {

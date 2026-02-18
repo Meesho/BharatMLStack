@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
+	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/job_locks"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/embedding/variant_scaleup_tasks"
 	skyeEtcd "github.com/Meesho/BharatMLStack/horizon/internal/skye/etcd"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
@@ -26,6 +28,7 @@ type VariantScaleUpJob struct {
 	taskRepo   variant_scaleup_tasks.VariantScaleUpTaskRepository
 	etcdConfig skyeEtcd.Manager
 	appConfig  configs.Configs
+	lockRepo   job_locks.JobLocksRepository
 }
 
 type ScaleUpCollectionStatusPayload struct {
@@ -48,11 +51,17 @@ func InitVariantScaleUpJob(config configs.Configs) *VariantScaleUpJob {
 			log.Fatal().Err(err).Msg("Failed to create variant scale-up task repository")
 		}
 
+		lockRepo, err := job_locks.Repository(sqlConn)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Failed to create job locks repository")
+		}
+
 		etcdConfig := skyeEtcd.NewEtcdConfig(config)
 		variantScaleUpJob = &VariantScaleUpJob{
 			taskRepo:   taskRepo,
 			etcdConfig: etcdConfig,
 			appConfig:  config,
+			lockRepo:   lockRepo,
 		}
 	})
 	return variantScaleUpJob
@@ -65,6 +74,15 @@ func (j *VariantScaleUpJob) Run() {
 		}
 	}()
 	log.Info().Msg("Starting variant scale-up job")
+	if err := j.lockRepo.AcquireLockNowait(context.Background(), "variant_scaleup_job"); err != nil {
+		log.Error().Err(err).Msg("Failed to acquire job lock")
+		return
+	}
+	defer func() {
+		if err := j.lockRepo.ReleaseLock(context.Background(), "variant_scaleup_job"); err != nil {
+			log.Error().Err(err).Msg("Failed to release job lock")
+		}
+	}()
 
 	// Process all IN_PROGRESS tasks
 	inProgressTasks, err := j.taskRepo.GetByStatus("IN_PROGRESS")
@@ -125,6 +143,9 @@ func (j *VariantScaleUpJob) Run() {
 }
 
 func (j *VariantScaleUpJob) checkPreviousDAGRunSuccess() error {
+	if j.appConfig.UseSkyeTriggerInsteadOfAirflow {
+		return nil
+	}
 	airflowClient := externalcall.GetAirflowClient()
 	// TODO: Update to use scale-up specific Airflow DAG ID from config
 	dagRuns, err := airflowClient.ListDAGRuns(j.appConfig.VariantScaleUpAirflowDAGID)
@@ -291,6 +312,15 @@ func (j *VariantScaleUpJob) checkAirflowDAGRunStatus(payload map[string]interfac
 		return nil, fmt.Errorf("dag_run_id not found in airflow_response")
 	}
 
+	// OSS: when using skye-trigger, we stored a synthetic response; return success without calling Airflow
+	if dagRunID == externalcall.SkyeTriggerDAGRunID {
+		return &externalcall.AirflowDAGRun{
+			DagID:    j.appConfig.VariantScaleUpAirflowDAGID,
+			DagRunID: externalcall.SkyeTriggerDAGRunID,
+			State:    "success",
+		}, nil
+	}
+
 	// Get DAG run status from Airflow
 	airflowClient := externalcall.GetAirflowClient()
 	dagRun, err := airflowClient.GetDAGRun(j.appConfig.VariantScaleUpAirflowDAGID, dagRunID)
@@ -364,39 +394,27 @@ func (j *VariantScaleUpJob) checkCollectionStatus(apiURL string) (*ScaleUpCollec
 }
 
 func (j *VariantScaleUpJob) triggerPrismAndAirflow(task *variant_scaleup_tasks.VariantScaleUpTask) error {
-	// Get model config from etcd
-	model, err := j.etcdConfig.GetModelConfig(task.Entity, task.Model)
-	if err != nil {
-		return fmt.Errorf("failed to get model from etcd: %w", err)
+	// Prism flow: only when not using OSS skye-trigger
+	if !j.appConfig.UseSkyeTriggerInsteadOfAirflow {
+		model, err := j.etcdConfig.GetModelConfig(task.Entity, task.Model)
+		if err != nil {
+			return fmt.Errorf("failed to get model from etcd: %w", err)
+		}
+		prismClient := externalcall.GetPrismV2Client()
+		parameters := make(map[string]interface{})
+		parameters["entity_name"] = task.Entity
+		parameters["frequency"] = model.JobFrequency
+		parameters["environment"] = j.appConfig.AppEnv
+		parameters["vector_db_type"] = task.VectorDBType
+		parameters["model_name"] = task.Model
+		parameters["variant_name"] = task.Variant
+		parameters["training_data_path"] = task.TrainingDataPath
+		parameters["host"] = task.ScaleUpHost
+		if err := prismClient.UpdateStepParameters(j.appConfig.VariantScaleUpPrismJobID, j.appConfig.VariantScaleUpPrismStepID, parameters); err != nil {
+			return fmt.Errorf("failed to update Prism step parameters for scale-up: %w", err)
+		}
 	}
 
-	// Prepare Prism parameters
-	prismClient := externalcall.GetPrismV2Client()
-	parameters := make(map[string]interface{})
-	parameters["entity_name"] = task.Entity
-	parameters["frequency"] = model.JobFrequency
-	parameters["environment"] = j.appConfig.AppEnv
-	parameters["vector_db_type"] = task.VectorDBType
-	parameters["model_name"] = task.Model
-	parameters["variant_name"] = task.Variant
-	parameters["training_data_path"] = task.TrainingDataPath
-	parameters["host"] = task.ScaleUpHost
-
-	// TODO: Update to use scale-up specific Prism Job ID and Step ID from config
-	// Update Prism step parameters
-	if err := prismClient.UpdateStepParameters(j.appConfig.VariantScaleUpPrismJobID, j.appConfig.VariantScaleUpPrismStepID, parameters); err != nil {
-		return fmt.Errorf("failed to update Prism step parameters for scale-up: %w", err)
-	}
-
-	// TODO: Update to use scale-up specific Airflow DAG ID from config
-	// Trigger Airflow DAG
-	airflowClient := externalcall.GetAirflowClient()
-	airflowResponse, err := airflowClient.TriggerDAG(j.appConfig.VariantScaleUpAirflowDAGID)
-	if err != nil {
-		return fmt.Errorf("failed to trigger Airflow DAG for scale-up: %w", err)
-	}
-
-	// Add or update the "airflow_response" key
 	var payload map[string]interface{}
 	if task.Payload != "" {
 		if err := json.Unmarshal([]byte(task.Payload), &payload); err != nil {
@@ -404,6 +422,32 @@ func (j *VariantScaleUpJob) triggerPrismAndAirflow(task *variant_scaleup_tasks.V
 		}
 	} else {
 		payload = make(map[string]interface{})
+	}
+
+	var airflowResponse interface{}
+	if j.appConfig.UseSkyeTriggerInsteadOfAirflow {
+		// OSS: call skye-trigger instead of Airflow
+		if err := externalcall.TriggerSkyeTrigger(
+			j.appConfig.SkyeTriggerURL,
+			task.Entity,
+			task.Model,
+			[]string{task.Variant},
+			j.appConfig.AppEnv,
+		); err != nil {
+			return fmt.Errorf("failed to trigger skye-trigger for scale-up: %w", err)
+		}
+		airflowResponse = map[string]interface{}{
+			"dag_run_id": externalcall.SkyeTriggerDAGRunID,
+			"state":      "success",
+		}
+	} else {
+		// Trigger Airflow DAG
+		airflowClient := externalcall.GetAirflowClient()
+		var err error
+		airflowResponse, err = airflowClient.TriggerDAG(j.appConfig.VariantScaleUpAirflowDAGID)
+		if err != nil {
+			return fmt.Errorf("failed to trigger Airflow DAG for scale-up: %w", err)
+		}
 	}
 	payload["airflow_response"] = airflowResponse
 	payloadJSON, err := json.Marshal(payload)

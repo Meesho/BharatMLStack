@@ -34,6 +34,7 @@ func Init(appConfig configs.Configs) {
 
 	variantRequests := v1.Group("/requests/variant")
 	variantRequests.POST("/register", ctrl.RegisterVariant)
+	variantRequests.GET("/approval-data", ctrl.GetVariantApprovalData)
 	variantRequests.POST("/approve", ctrl.ApproveVariantRequest)
 	variantRequests.POST("/scaleup", ctrl.ScaleUpVariant)
 	variantRequests.POST("/scaleup/approve", ctrl.ApproveVariantScaleUpRequest)

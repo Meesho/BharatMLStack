@@ -14,9 +14,7 @@ type PermanentStorageDataBlockBuilder struct {
 }
 
 func NewPermanentStorageDataBlockBuilder() *PermanentStorageDataBlockBuilder {
-	return &PermanentStorageDataBlockBuilder{
-		psdb: GetPSDBPool().Get(),
-	}
+	return GetPSDBPool().Get().Builder
 }
 
 func (p *PermanentStorageDataBlockBuilder) SetLayoutVersion(version uint8) *PermanentStorageDataBlockBuilder {
@@ -50,6 +48,9 @@ func (p *PermanentStorageDataBlockBuilder) Build() *PermanentStorageDataBlock {
 	}
 	if p.psdb.OriginalData == nil {
 		p.psdb.OriginalData = make([]byte, 0)
+	}
+	if p.psdb.CompressedData == nil {
+		p.psdb.CompressedData = make([]byte, 0)
 	}
 	return p.psdb
 }

@@ -505,19 +505,22 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     id int NOT NULL AUTO_INCREMENT,
     name varchar(255),
     host varchar(255) NOT NULL,
+    active tinyint(1) DEFAULT 0,
     service enum('inferflow', 'predator', 'numerix'),
-    active boolean DEFAULT false,
     created_by varchar(255),
     updated_by varchar(255),
-    created_at datetime DEFAULT CURRENT_TIMESTAMP,
-    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     config json,
-    monitoring_url varchar(255) DEFAULT NULL,
-    deployable_running_status boolean,
+    monitoring_url varchar(512) DEFAULT NULL,
+    deployable_running_status tinyint(1),
     deployable_work_flow_id varchar(255),
     deployment_run_id varchar(255),
     deployable_health enum('DEPLOYMENT_REASON_ARGO_APP_HEALTH_DEGRADED', 'DEPLOYMENT_REASON_ARGO_APP_HEALTHY'),
     work_flow_status enum('WORKFLOW_COMPLETED','WORKFLOW_NOT_FOUND','WORKFLOW_RUNNING','WORKFLOW_FAILED','WORKFLOW_NOT_STARTED'),
+    override_testing tinyint(1) DEFAULT 0,
+    deployable_tag varchar(255),
+    bulk_delete_enabled tinyint(1) NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
     UNIQUE KEY host (host)
   );
@@ -564,14 +567,26 @@ echo "  📦 Inserting deployable metadata..."
 mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   INSERT IGNORE INTO deployable_metadata (id,\`key\`, value, active, created_at, updated_at) VALUES
     (1, 'node_selectors', 'bharatml-stack-control-plane', 1, NOW(), NOW()),
-    (3, 'gcs_base_path', 'NA', 1, NOW(), NOW()),
-    (4, 'gcs_base_path', 'gs://gcs-dsci-model-repository-int/dummy-tmp/*', 1, NOW(), NOW()),
     (6, 'triton_image_tags', '25.06-py3', 1, NOW(), NOW()),
     (7, 'gcs_triton_path', 'NA', 1, NOW(), NOW()),
     (8, 'gcs_triton_path', 'some_path', 1, NOW(), NOW()),
     (9, 'service_account', 'NA', 1, NOW(), NOW()),
-    (10, 'service_account', 'sa-dsci-model-inference-svc@meesho-shared-int-0525.iam.gserviceaccount.com', 1, NOW(), NOW())
-  ON DUPLICATE KEY UPDATE 
+    (10, 'service_account', 'sa-dsci-model-inference-svc@meesho-shared-int-0525.iam.gserviceaccount.com', 1, NOW(), NOW()),
+    (11, 'machine_type', 'GPU', 1, NOW(), NOW()),
+    (12, 'machine_type', 'CPU', 1, NOW(), NOW()),
+    (14, 'cpu_limit_unit', 'm', 1, NOW(), NOW()),
+    (15, 'cpu_request_unit', 'm', 1, NOW(), NOW()),
+    (16, 'memory_request_unit', 'M', 1, NOW(), NOW()),
+    (17, 'memory_limit_unit', 'M', 1, NOW(), NOW()),
+    (18, 'deployment_strategy', 'rollingUpdate', 1, NOW(), NOW()),
+    (19, 'memory_request_unit', 'G', 1, NOW(), NOW()),
+    (20, 'memory_limit_unit', 'G', 1, NOW(), NOW()),
+    (21, 'gcs_triton_path', 'gs://gcs-dsci-model-repository-int/scripts/launch_triton_server.py', 1, NOW(), NOW()),
+    (22, 'deployment_strategy', 'canary', 1, NOW(), NOW()),
+    (86, 'gcs_base_path', 'gs://gcs-dsci-model-repository-int/BMS/predator-gpu/*', 1, NOW(), NOW()),
+    (87, 'gcs_base_path', 'gs://gcs-dsci-model-repository-int/BMS/predator-cpu/*', 1, NOW(), NOW()),
+    (88, 'gcs_base_path', 'NA', 1, NOW(), NOW())
+  ON DUPLICATE KEY UPDATE
     value = VALUES(value),
     updated_at = NOW();
 "

@@ -47,7 +47,7 @@ func (c *ClickConsumer) preprocessAndValidateEvents(events []model.ClickEvent) m
 	for _, event := range events {
 		userID := c.extractUserID(event)
 		if userID == "" {
-			log.Error().Msgf("event missing both user_id and anonymous_user_id: %v", event)
+			log.Info().Msgf("event missing both user_id and anonymous_user_id: %+v", event)
 			continue
 		}
 		userEvents[userID] = append(userEvents[userID], event)
@@ -57,14 +57,17 @@ func (c *ClickConsumer) preprocessAndValidateEvents(events []model.ClickEvent) m
 }
 
 // extractUserID extracts and validates user ID from click event
-// Returns user_id if present, otherwise anonymous_user_id, or empty string if both missing
+// Returns user_id if present and valid, otherwise anonymous_user_id if valid, or empty string if both missing/invalid
 func (c *ClickConsumer) extractUserID(event model.ClickEvent) string {
 	userID := strings.TrimSpace(event.ClickEventData.Payload.UserId)
-	if userID != "" {
+	if userID != "" && userID != "-1" {
 		return userID
 	}
 	anonymousUserID := strings.TrimSpace(event.ClickEventData.Payload.AnonymousUserId)
-	return anonymousUserID
+	if anonymousUserID != "" && anonymousUserID != "-1" {
+		return anonymousUserID
+	}
+	return ""
 }
 
 // persistUserEvents persists events for each user in parallel

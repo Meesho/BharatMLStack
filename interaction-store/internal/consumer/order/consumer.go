@@ -47,7 +47,7 @@ func (c *OrderConsumer) preprocessAndValidateEvents(events []model.OrderPlacedEv
 	for _, event := range events {
 		userID := c.extractAndValidateUserID(event)
 		if userID == "" {
-			log.Error().Msgf("order event missing user_id: %v", event)
+			log.Info().Msgf("order event missing user_id: %+v", event)
 			continue
 		}
 

@@ -54,7 +54,7 @@ func (c *ClickRetrieveHandler) Retrieve(userId string, startTimestampMs int64, e
 
 	allEvents := make([]model.ClickEvent, 0)
 	for _, ddb := range weekToDeserializedBlocks {
-		events, err := ddb.RetrieveEventData()
+		events, err := ddb.RetrieveEventData(userId)
 		if err != nil {
 			return nil, err
 		}
@@ -79,7 +79,6 @@ func (c *ClickRetrieveHandler) Retrieve(userId string, startTimestampMs int64, e
 
 	return filteredEvents, nil
 }
-
 
 // buildTableToFieldsMapping creates a mapping of table names to week field names
 // based on the timestamp range. It handles both normal ranges and wrap-around scenarios.

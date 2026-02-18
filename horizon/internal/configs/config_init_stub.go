@@ -125,7 +125,7 @@ func bindEnvVars() {
 
 	viper.BindEnv("github_app_id", "GITHUB_APP_ID")
 	viper.BindEnv("github_installation_id", "GITHUB_INSTALLATION_ID")
-	viper.BindEnv("github_private_key_path", "GITHUB_PRIVATE_KEY_PATH")
+	viper.BindEnv("github_private_key", "GITHUB_PRIVATE_KEY")
 	viper.BindEnv("github_owner", "GITHUB_OWNER")
 	viper.BindEnv("github_commit_author", "GITHUB_COMMIT_AUTHOR")
 	viper.BindEnv("github_commit_email", "GITHUB_COMMIT_EMAIL")
@@ -198,4 +198,8 @@ func bindEnvVars() {
 	viper.BindEnv("skye_port", "SKYE_PORT")
 	viper.BindEnv("skye_auth_token", "SKYE_AUTH_TOKEN")
 	viper.BindEnv("skye_deadline_exceed_ms", "SKYE_DEADLINE_EXCEED_MS")
+
+	// OSS: use skye-trigger instead of Airflow for initial ingestion / variant processor
+	viper.BindEnv("use_skye_trigger_instead_of_airflow", "USE_SKYE_TRIGGER_INSTEAD_OF_AIRFLOW")
+	viper.BindEnv("skye_trigger_url", "SKYE_TRIGGER_URL")
 }
