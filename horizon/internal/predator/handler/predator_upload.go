@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path"
@@ -463,7 +464,7 @@ func (p *Predator) validateModelConfiguration(gcsPath string) error {
 	// hold weights that need warming up.
 	if !isEnsembleModel(&modelConfig) {
 		if len(modelConfig.GetModelWarmup()) == 0 {
-			return fmt.Errorf(errWarmupConfigMissing)
+			return errors.New(errWarmupConfigMissing)
 		}
 		log.Info().Msg("Warmup configuration validation passed for non-ensemble model")
 	} else {
