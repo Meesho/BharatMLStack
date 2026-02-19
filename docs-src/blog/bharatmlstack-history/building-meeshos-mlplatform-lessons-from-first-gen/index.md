@@ -1,14 +1,13 @@
 ---
-slug: post-two
 title: "Building Meesho’s ML Platform: Lessons from the First-Gen System (Part 2)"
+description: "Lessons from scaling Meesho's first-gen ML platform—building Inferflow for no-code feature retrieval, migrating from Cassandra to ScyllaDB, optimizing the Interaction Store with tiered storage, and cutting infra costs by 60% while hitting 1M QPS."
 authors: [bhawani, jigar, adarsha]
+slug: building-meeshos-mlplatform-lessons-from-first-gen
 date: 2023-4-10
 tags: [inferflow, interaction-store, mlplatform, meesho, bharatmlstack]
 ---
 
 ![BharatMLStack](./bms.png)
-## Building Meesho’s ML Platform: Lessons from the First-Gen System (Part 2)
-
 By late 2022, we had built something we were truly proud of—a real-time ML serving system with a DAG-based executor, a feature store, and an interaction store powering key ranking and personalization models. It was a major milestone, the culmination of months of effort from data scientists, ML engineers, and backend teams. Our system was live, and we were ready to push the boundaries of experimentation.
 And it worked. Mostly.
 But soon, cracks appeared. Every new model needed custom feature retrieval logic, DAGs became dense and unmanageable, and scaling turned into a constant firefight. Costs surged, and infra bottlenecks slowed experimentation. Our system worked, but it wasn’t built for scale.

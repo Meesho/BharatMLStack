@@ -1,16 +1,13 @@
 ---
-slug: post-four
 title: "Designing a Production-Grade LLM Inference Platform: From Model Weights to Scalable GPU Serving"
+description: "A deep dive into building a production-grade LLM inference platform—covering the full LLMOps lifecycle from model onboarding and automated compilation to multi-engine serving with TensorRT-LLM, vLLM, and Dynamo, along with cold-start mitigation and LLM-specific observability."
 authors: [jaya]
+slug: multi-engine-llm-inferencing-platform
 date: 2025-3-29
 tags: [llm, vllm, tensorrt-llm, mlplatform, meesho, bharatmlstack]
 ---
 
 ![BharatMLStack](./bms.png)
-## Designing a Production-Grade LLM Inference Platform: From Model Weights to Scalable GPU Serving
-
-
-
 Serving large language models in production introduces new challenges across infrastructure, performance optimization, and operational lifecycle management. The LLM Inference Platform addresses these challenges by providing a unified system for deploying and managing open-source and fine-tuned LLMs at scale.
 
 The platform implements a complete LLMOps lifecycle — from model registration and automated compilation to deployment, runtime optimization, and monitoring. Designed as a self-service environment, users can onboard models directly from open repositories such as Hugging Face or upload custom fine-tuned models, and deploy them using a single-click workflow with no manual infrastructure or configuration steps required.

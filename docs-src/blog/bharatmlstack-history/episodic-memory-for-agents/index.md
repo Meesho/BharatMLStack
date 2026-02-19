@@ -1,5 +1,5 @@
 ---
-title: "Your AI Agent Doesn't Learn From Mistakes. We Built One That Does."
+title: "Your AI Agent Doesn't Learn From Mistakes. We Are Trying To Built One That Does."
 description: "Current agent memory is just search. We built an episodic memory system that tracks outcomes, forms causal links, extracts reasoning heuristics, and actually learns from failure — without retraining the model."
 slug: episodic-memory-for-agents
 authors: [adarsha]
@@ -208,18 +208,11 @@ python -m eval.compare
 
 Without an API key, it runs in heuristic mode (keyword-based decisions). With a key, both agents use Claude Sonnet for reasoning — that's where the quality gap becomes visible.
 
-## What's Next
 
-The POC validates the architecture. The next step is proving it generalizes beyond synthetic scenarios. We're targeting three production workloads:
-
-1. **SRE incident response** — agents that remember past incidents and apply lessons to new ones
-2. **Code review** — agents that learn from reviewer feedback and stop making the same suggestions
-3. **Customer support** — agents that recall how similar issues were resolved and what worked
-
-The production architecture is designed as a standalone microservice with a REST API. Any agent framework that can make HTTP calls — LangGraph, CrewAI, custom agents — can use it. We're also building an MCP server so Claude Code, Cursor, and other MCP clients can use episodic memory natively.
-
-If you're building agents that need to learn from experience rather than just retrieve text, this is the memory layer that's been missing.
+## Conclusion
+If you're building agents that need to learn from experience rather than just retrieve text, this might be the memory layer that's been missing.
+If this sparks interest do trigger github discussion.
 
 ---
 
-*The episodic memory prototype is available at [`/experiments/episodic-memory-prototype`](/experiments/episodic-memory-prototype). The full technical design document and production architecture specification are available on request.*
+*The episodic memory prototype is available in `BharatMLStack` repo at `/experiments/episodic-memory-prototype`*

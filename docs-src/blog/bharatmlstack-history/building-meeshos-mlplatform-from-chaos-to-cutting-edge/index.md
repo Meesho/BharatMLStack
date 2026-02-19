@@ -1,14 +1,12 @@
 ---
-slug: post-one
 title: "Building Meesho’s ML Platform: From Chaos to Cutting-Edge (Part 1)"
+description: "How Meesho transitioned from batch-based recommendations to a real-time ML platform—building an Online Feature Store, Interaction Store, and DAG execution framework that became BharatMLStack."
+slug: building-meeshos-mlplatform
 authors: [adarsha, aditya, bhawani, jigar]
 date: 2022-11-15
 tags: [online-feature-store, interaction-store, mlplatform, meesho]
 ---
-
 ![BharatMLStack](./bms.png)
-## The Genesis: How a Friday Night Roast Sparked Meesho’s ML Platform
-
 It all started in early 2022, over a casual Friday evening catch-up. Like many great origin stories, this one began with friendly banter between a group of backend engineers and data scientists. As the conversations unfolded, so did the roasting—until one remark hit a little too close to home:
 
 *"Why are we still crunching data for Monthly Active Users (MAU) when the next day it’s all about Daily Active Users (DAU)?"*

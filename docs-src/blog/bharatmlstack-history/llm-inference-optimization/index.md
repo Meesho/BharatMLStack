@@ -1,14 +1,13 @@
 ---
-slug: post-five
 title: "LLM Inference Optimization Techniques: Engineering Sub-Second Latency at Scale"
+description: "A practical guide to the optimization techniques behind sub-second LLM inference—covering paged KV caching, INT4 AWQ and FP8 quantization, kernel fusion, inflight batching, parallelism strategies, and speculative decoding, with production benchmarks on L4 and A100 GPUs."
 authors: [jaya]
+slug: llm-inference-optimization-sub-sec-latency
 date: 2025-6-2
 tags: [llm, vllm, tensorrt-llm, mlplatform, meesho, bharatmlstack]
 ---
 
 ![BharatMLStack](./bms.png)
-## LLM Inference Optimization Techniques: Engineering Sub-Second Latency at Scale
-
 Raw execution of Large Language Models is inherently expensive and memory-intensive. To achieve sub-second latency and high throughput, we implement a multi-layered optimization strategy that targets the entire inference stack—from memory management to kernel execution.
 
 ## 1. Advanced Memory Management: Paged & Prefix KV Caching

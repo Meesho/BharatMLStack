@@ -1,15 +1,13 @@
 ---
-slug: post-three
 title: "Cracking the Code: Scaling Model Inference & Real-Time Embedding Search"
+description: "How Meesho scaled model inference with self-hosted Triton on GKE—slashing latency and costs by 65%—and built a real-time embedding search system on Qdrant to power personalized recommendations at scale."
 authors: [aditya, jaya, adarsha]
+slug: scaling-model-inference-and-embedding-search
 date: 2024-05-21
 tags: [model-inference, embedding-search, mlplatform, meesho, bharatmlstack]
 ---
 
 ![BharatMLStack](./bms.png)
-
-## Cracking the Code: Scaling Model Inference & Real-Time Embedding Search
-
 By mid-2023, we had transformed our ML stack—building a real-time feature store, optimizing model retrieval, and fine-tuning ranking. But two critical gaps remained:
 
 - 🔹 Scaling model inference without hitting infrastructure roadblocks
