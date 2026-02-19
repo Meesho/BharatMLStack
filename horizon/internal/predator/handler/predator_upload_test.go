@@ -264,6 +264,62 @@ logger.info('module level - should flag')
 			wantFound:   false,
 			wantDetails: 0,
 		},
+		{
+			name: "nested def inside initialize is allowed",
+			content: `def initialize(self, args):
+    def _load_model():
+        logger.info('loading weights')
+        print('progress')
+    _load_model()
+`,
+			wantFound:   false,
+			wantDetails: 0,
+		},
+		{
+			name: "nested def inside finalize is allowed",
+			content: `def finalize(self):
+    def _cleanup():
+        logger.info('releasing resources')
+    _cleanup()
+`,
+			wantFound:   false,
+			wantDetails: 0,
+		},
+		{
+			name: "nested def inside execute is still flagged",
+			content: `def execute(self, requests):
+    def _process():
+        logger.info('processing batch')
+    _process()
+    return []
+`,
+			wantFound:   true,
+			wantDetails: 1,
+		},
+		{
+			name:        "inline comment with logger is not flagged",
+			content:     "def execute(requests):\n    x = compute()  # logger.info('debug')\n    return x\n",
+			wantFound:   false,
+			wantDetails: 0,
+		},
+		{
+			name:        "inline comment with print is not flagged",
+			content:     "def execute(requests):\n    x = compute()  # print('debug')\n    return x\n",
+			wantFound:   false,
+			wantDetails: 0,
+		},
+		{
+			name:        "hash inside string literal is not treated as comment",
+			content:     "def execute(requests):\n    print('value is # 42')\n    return []\n",
+			wantFound:   true,
+			wantDetails: 1,
+		},
+		{
+			name:        "line matching both logger and print reports once",
+			content:     "def execute(requests):\n    print(logger.info('x'))\n    return []\n",
+			wantFound:   true,
+			wantDetails: 1,
+		},
 	}
 
 	for _, tt := range tests {
@@ -628,4 +684,58 @@ max_batch_size: 8
 	errMsg := err.Error()
 	assert.Contains(t, errMsg, "model.py")
 	assert.Contains(t, errMsg, "utils.py")
+}
+
+func TestStripInlineComment(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		want string
+	}{
+		{name: "no comment", line: "x = 1", want: "x = 1"},
+		{name: "trailing comment", line: "x = 1  # set x", want: "x = 1  "},
+		{name: "hash in single quotes", line: "x = 'a#b'", want: "x = 'a#b'"},
+		{name: "hash in double quotes", line: `x = "a#b"`, want: `x = "a#b"`},
+		{name: "hash after quoted string", line: `x = "a#b"  # comment`, want: `x = "a#b"  `},
+		{name: "escaped quote", line: `x = 'it\'s'  # note`, want: `x = 'it\'s'  `},
+		{name: "full line comment", line: "# comment", want: ""},
+		{name: "empty line", line: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripInlineComment(tt.line)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestIsInsideAllowedFunction(t *testing.T) {
+	tests := []struct {
+		name  string
+		stack []funcScopeEntry
+		want  bool
+	}{
+		{name: "empty stack", stack: nil, want: false},
+		{name: "non-allowed function", stack: []funcScopeEntry{{name: "execute", indent: 0}}, want: false},
+		{name: "initialize on stack", stack: []funcScopeEntry{{name: "initialize", indent: 0}}, want: true},
+		{name: "finalize on stack", stack: []funcScopeEntry{{name: "finalize", indent: 0}}, want: true},
+		{
+			name:  "nested inside initialize",
+			stack: []funcScopeEntry{{name: "initialize", indent: 0}, {name: "helper", indent: 4}},
+			want:  true,
+		},
+		{
+			name:  "nested inside non-allowed",
+			stack: []funcScopeEntry{{name: "execute", indent: 0}, {name: "helper", indent: 4}},
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isInsideAllowedFunction(tt.stack)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

@@ -278,3 +278,9 @@ type fileViolationInfo struct {
 	fileName string
 	details  []string
 }
+
+// funcScopeEntry represents a Python function scope on the tracking stack.
+type funcScopeEntry struct {
+	name   string
+	indent int
+}

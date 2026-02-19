@@ -165,10 +165,6 @@ func (p *Predator) validateSourceModel(gcsPath string, isPartial bool) error {
 			return fmt.Errorf("complete model structure validation failed: %w", err)
 		}
 
-		// Validate that Python backend models don't contain logger/print statements
-		// outside of initialize() and finalize() functions. This check only applies to
-		// full uploads because partial uploads only sync config.pbtxt — the Python
-		// model files in the source aren't modified or uploaded during partial syncs.
 		if err := p.validateNoLoggerOrPrintStatements(gcsPath); err != nil {
 			return fmt.Errorf("logger/print statement validation failed: %w", err)
 		}
@@ -459,9 +455,6 @@ func (p *Predator) validateModelConfiguration(gcsPath string) error {
 
 	log.Info().Msgf("Parsed model config - Name: %s, Backend: %s", modelConfig.Name, modelConfig.Backend)
 
-	// Validate warmup configuration for non-ensemble models.
-	// Ensemble models are excluded because they orchestrate sub-models and don't
-	// hold weights that need warming up.
 	if !isEnsembleModel(&modelConfig) {
 		if len(modelConfig.GetModelWarmup()) == 0 {
 			return errors.New(errWarmupConfigMissing)
@@ -605,8 +598,6 @@ func (p *Predator) validateNoLoggerOrPrintStatements(gcsPath string) error {
 		return nil
 	}
 
-	// Collect per-file violations so we can produce a balanced error message
-	// that caps the total shown violations at maxDisplayedViolations.
 	var perFileViolations []fileViolationInfo
 	totalViolations := 0
 
@@ -703,82 +694,113 @@ func buildBalancedViolationSummary(perFileViolations []fileViolationInfo, totalV
 // logger.info, logger.debug, or print() statements that are NOT inside
 // initialize() or finalize() functions.
 //
-// The logic tracks which Python function scope each line belongs to by:
-//  1. Detecting "def funcname(" patterns and recording the function name + indentation.
-//  2. When a subsequent non-empty line appears at the same or lesser indentation,
-//     considering the function scope exited (Python's indentation-based scoping).
-//  3. Skipping any logger/print matches found inside initialize() or finalize().
+// The logic tracks nested Python function scopes using a stack of (name, indent)
+// entries so that nested defs inside initialize/finalize are correctly treated as
+// allowed:
+//  1. On each non-empty, non-comment line, pop stack entries whose indentation is
+//     >= the current line's indentation (dedent = scope exit).
+//  2. If the line is a "def funcname(" pattern, push the new scope onto the stack.
+//  3. If any entry on the stack is initialize or finalize, skip the line.
 //
-// Lines that are entirely comments (start with '#' after stripping whitespace) are
-// skipped.
+// Inline comments are stripped before pattern matching to avoid false positives on
+// trailing comments like `x = f()  # logger.info(...)`.
+//
 // Returns:
 //   - found: true if any violations were detected
 //   - details: human-readable descriptions of each violation (line number + content)
 func hasPythonLoggerOrPrintStatements(content []byte) (found bool, details []string) {
 	lines := strings.Split(string(content), "\n")
 
-	// Pre-compile regex patterns once per invocation (not per line).
-	// funcDefPattern matches Python function definitions: "def funcname("
 	funcDefPattern := regexp.MustCompile(`^def\s+(\w+)\s*\(`)
-	// loggerPattern matches logger.info(...) and logger.debug(...) calls, case-insensitive.
 	loggerPattern := regexp.MustCompile(`(?i)logger\.(info|debug)\s*\(`)
-	// printPattern matches print(...) calls with a word boundary to avoid matching
-	// identifiers like "fingerprint(" or "blueprint(".
 	printPattern := regexp.MustCompile(`\bprint\s*\(`)
 
-	// Track which Python function we're currently inside to skip initialize/finalize.
-	var currentFunction string
-	var functionIndent int
+	var functionStack []funcScopeEntry
 
 	for lineNum, line := range lines {
 		strippedLine := strings.TrimSpace(line)
 
-		// Skip empty lines — they don't affect scope tracking or contain statements.
 		if strippedLine == "" {
 			continue
 		}
 
-		// Skip lines that are entirely comments (e.g., "# logger.info(...)").
 		if strings.HasPrefix(strippedLine, "#") {
 			continue
 		}
 
-		// Calculate indentation level (number of leading space/tab characters).
 		lineIndent := len(line) - len(strings.TrimLeft(line, " \t"))
 
-		// Detect function definitions: "def funcname("
+		for len(functionStack) > 0 && functionStack[len(functionStack)-1].indent >= lineIndent {
+			functionStack = functionStack[:len(functionStack)-1]
+		}
+
 		if funcMatch := funcDefPattern.FindStringSubmatch(strippedLine); len(funcMatch) > 1 {
-			currentFunction = funcMatch[1]
-			functionIndent = lineIndent
+			functionStack = append(functionStack, funcScopeEntry{name: funcMatch[1], indent: lineIndent})
 			continue
 		}
 
-		// If the current line's indentation is at or below the function definition's level,
-		// we've exited that function's scope (Python's indentation-based scoping).
-		if currentFunction != "" && lineIndent <= functionIndent && strippedLine != "" {
-			currentFunction = ""
-		}
-
-		// Skip statements inside initialize() and finalize() — these only execute during
-		// model load/unload, not during inference, so logging there is acceptable.
-		if currentFunction == allowedFuncInitialize || currentFunction == allowedFuncFinalize {
+		if isInsideAllowedFunction(functionStack) {
 			continue
 		}
 
-		// Check for logger.info() or logger.debug() calls (case-insensitive).
-		if loggerPattern.MatchString(line) {
+		codePortion := stripInlineComment(line)
+
+		if loggerPattern.MatchString(codePortion) {
 			details = append(details, fmt.Sprintf("line %d: %s", lineNum+1, strippedLine))
 			found = true
-		}
-
-		// Check for print() calls.
-		if printPattern.MatchString(line) {
+		} else if printPattern.MatchString(codePortion) {
 			details = append(details, fmt.Sprintf("line %d: %s", lineNum+1, strippedLine))
 			found = true
 		}
 	}
 
 	return found, details
+}
+
+// isInsideAllowedFunction returns true if any entry on the function scope stack
+// is initialize() or finalize().
+func isInsideAllowedFunction(stack []funcScopeEntry) bool {
+	for _, entry := range stack {
+		if entry.name == allowedFuncInitialize || entry.name == allowedFuncFinalize {
+			return true
+		}
+	}
+	return false
+}
+
+// stripInlineComment removes a trailing Python inline comment (# ...) from a
+// line while preserving '#' characters that appear inside string literals.
+// Uses simple single/double quote state tracking with backslash-escape awareness.
+func stripInlineComment(line string) string {
+	inSingle := false
+	inDouble := false
+	escaped := false
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+		switch ch {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		case '#':
+			if !inSingle && !inDouble {
+				return line[:i]
+			}
+		}
+	}
+	return line
 }
 
 // isEnsembleModel checks if the model configuration represents a Triton ensemble model.
@@ -793,7 +815,7 @@ func isEnsembleModel(config *ModelConfig) bool {
 	if config.GetPlatform() == ensemblePlatform {
 		return true
 	}
-	// Also check if ensemble_scheduling is defined, which implies an ensemble model
+
 	if config.GetEnsembleScheduling() != nil {
 		return true
 	}
