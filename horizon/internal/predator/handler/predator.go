@@ -172,6 +172,13 @@ func (p *Predator) HandleModelRequest(req ModelRequest, requestType string) (str
 		if err := json.Unmarshal(payloadBytes, &payloadObject); err != nil {
 			return constant.EmptyString, http.StatusInternalServerError, errors.New(errMsgProcessPayload)
 		}
+		// Validate load test fields for promote requests
+		if requestType == PromoteRequestType && payloadObject.IsLoadTested {
+			if payloadObject.LoadTestResultsLink == constant.EmptyString {
+				return constant.EmptyString, http.StatusBadRequest, errors.New("load test results link is required when load tested is true for the model requested")
+			}
+		}
+
 		derivedModelName, err := p.GetDerivedModelName(payloadObject, requestType)
 		if err != nil {
 			return constant.EmptyString, http.StatusInternalServerError, fmt.Errorf("failed to fetch derived model name: %w", err)

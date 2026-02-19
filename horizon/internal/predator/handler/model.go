@@ -6,11 +6,13 @@ import (
 )
 
 type Payload struct {
-	ModelName         string        `json:"model_name"`
-	ModelSource       string        `json:"model_source_path,omitempty"`
-	MetaData          MetaData      `json:"meta_data"`
-	ConfigMapping     ConfigMapping `json:"config_mapping"`
-	DiscoveryConfigID uint          `json:"discovery_config_id"`
+	ModelName           string        `json:"model_name"`
+	ModelSource         string        `json:"model_source_path,omitempty"`
+	MetaData            MetaData      `json:"meta_data"`
+	ConfigMapping       ConfigMapping `json:"config_mapping"`
+	DiscoveryConfigID   uint          `json:"discovery_config_id"`
+	IsLoadTested        bool          `json:"is_load_tested,omitempty"`
+	LoadTestResultsLink string        `json:"load_test_results_link,omitempty"`
 }
 
 type MetaData struct {
@@ -44,7 +46,7 @@ type IOField struct {
 }
 
 type ConfigMapping struct {
-	ServiceDeployableID uint `json:"service_deployable_id"`
+	ServiceDeployableID uint   `json:"service_deployable_id"`
 	SourceModelName     string `json:"source_model_name,omitempty"`
 }
 
