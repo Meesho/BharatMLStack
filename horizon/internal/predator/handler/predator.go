@@ -174,8 +174,8 @@ func (p *Predator) HandleModelRequest(req ModelRequest, requestType string) (str
 		}
 		// Validate load test fields for promote requests
 		if requestType == PromoteRequestType && payloadObject.IsLoadTested {
-			if err := validateGrafanaLink(payloadObject.GrafanaLink); err != nil {
-				return constant.EmptyString, http.StatusBadRequest, err
+			if payloadObject.LoadTestResultsLink == constant.EmptyString {
+				return constant.EmptyString, http.StatusBadRequest, errors.New("load test results link is required when load tested is true for the model requested")
 			}
 		}
 

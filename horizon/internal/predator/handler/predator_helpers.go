@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"net/url"
 	"path"
 	"strings"
 
@@ -106,31 +105,4 @@ func (p *Predator) isNonProductionEnvironment() bool {
 		return false
 	}
 	return true
-}
-
-// validateGrafanaLink checks that the provided link is a valid HTTPS Grafana URL.
-func validateGrafanaLink(link string) error {
-	if strings.TrimSpace(link) == "" {
-		return fmt.Errorf("grafana_link is required when is_load_tested is true")
-	}
-
-	parsedURL, err := url.Parse(link)
-	if err != nil {
-		return fmt.Errorf("grafana_link is not a valid URL")
-	}
-
-	if parsedURL.Scheme != "https" {
-		return fmt.Errorf("grafana_link must use https scheme")
-	}
-
-	if parsedURL.Host == "" {
-		return fmt.Errorf("grafana_link must have a valid host")
-	}
-
-	// Validate that the hostname contains "grafana" to ensure it's a Grafana link
-	if !strings.Contains(strings.ToLower(parsedURL.Hostname()), "grafana") {
-		return fmt.Errorf("grafana_link must point to a valid grafana host")
-	}
-
-	return nil
 }

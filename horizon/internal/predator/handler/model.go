@@ -6,13 +6,13 @@ import (
 )
 
 type Payload struct {
-	ModelName         string        `json:"model_name"`
-	ModelSource       string        `json:"model_source_path,omitempty"`
-	MetaData          MetaData      `json:"meta_data"`
-	ConfigMapping     ConfigMapping `json:"config_mapping"`
-	DiscoveryConfigID uint          `json:"discovery_config_id"`
-	IsLoadTested      bool          `json:"is_load_tested,omitempty"`
-	GrafanaLink       string        `json:"grafana_link,omitempty"`
+	ModelName           string        `json:"model_name"`
+	ModelSource         string        `json:"model_source_path,omitempty"`
+	MetaData            MetaData      `json:"meta_data"`
+	ConfigMapping       ConfigMapping `json:"config_mapping"`
+	DiscoveryConfigID   uint          `json:"discovery_config_id"`
+	IsLoadTested        bool          `json:"is_load_tested,omitempty"`
+	LoadTestResultsLink string        `json:"load_test_results_link,omitempty"`
 }
 
 type MetaData struct {
