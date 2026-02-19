@@ -15,6 +15,7 @@ import (
 	"github.com/Meesho/BharatMLStack/resource-manager/internal/api"
 	"github.com/Meesho/BharatMLStack/resource-manager/internal/application"
 	"github.com/Meesho/BharatMLStack/resource-manager/internal/data/models"
+	"github.com/Meesho/BharatMLStack/resource-manager/internal/ports"
 	rmtypes "github.com/Meesho/BharatMLStack/resource-manager/internal/types"
 	"github.com/Meesho/BharatMLStack/resource-manager/pkg/config"
 )
@@ -25,13 +26,34 @@ type Server struct {
 
 func NewServer() *Server {
 	envCfg := config.Instance()
-	shadowStore := etcd.NewMemoryShadowStateStore(seedShadowDeployables())
-	idempotencyStore := etcd.NewMemoryIdempotencyKeyStore()
+
+	var shadowStore ports.ShadowStateStore
+	var idempotencyStore ports.IdempotencyKeyStore
+	var operationStore ports.OperationStore
+
+	if envCfg.UseMockAdapters {
+		shadowStore = etcd.NewMemoryShadowStateStore(seedShadowDeployables())
+		idempotencyStore = etcd.NewMemoryIdempotencyKeyStore()
+	} else {
+		etcdClient, err := etcd.NewClient(etcd.ClientConfig{
+			Endpoints: envCfg.EtcdEndpoints,
+			Username:  envCfg.EtcdUsername,
+			Password:  envCfg.EtcdPassword,
+			Timeout:   envCfg.EtcdTimeout,
+		})
+		if err != nil {
+			panic(err)
+		}
+		shadowStore = etcd.NewEtcdShadowStateStore(etcdClient.Raw())
+		idempotencyStore = etcd.NewEtcdIdempotencyKeyStore(etcdClient.Raw())
+		operationStore = etcd.NewEtcdOperationStore(etcdClient.Raw())
+	}
+
 	publisher := redisq.NewInMemoryPublisher()
 	kubeExecutor := kubernetes.NewMockExecutor()
 
 	shadowService := application.NewShadowService(shadowStore)
-	operationService := application.NewOperationService(publisher, kubeExecutor)
+	operationService := application.NewOperationService(publisher, kubeExecutor, operationStore)
 	handler := api.NewHandler(shadowService, operationService, idempotencyStore)
 
 	mux := http.NewServeMux()

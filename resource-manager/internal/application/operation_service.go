@@ -11,10 +11,11 @@ import (
 type OperationService struct {
 	publisher ports.QueuePublisher
 	kube      ports.KubernetesExecutor
+	ops       ports.OperationStore
 }
 
-func NewOperationService(publisher ports.QueuePublisher, kube ports.KubernetesExecutor) *OperationService {
-	return &OperationService{publisher: publisher, kube: kube}
+func NewOperationService(publisher ports.QueuePublisher, kube ports.KubernetesExecutor, ops ports.OperationStore) *OperationService {
+	return &OperationService{publisher: publisher, kube: kube, ops: ops}
 }
 
 func (s *OperationService) CreateDeployable(ctx context.Context, env string, spec models.DeployableSpec) error {
@@ -51,6 +52,12 @@ func (s *OperationService) SubmitAsyncOperation(
 		Callback:         callback,
 		Workflow:         workflow,
 		CreatedAt:        time.Now().UTC(),
+	}
+
+	if s.ops != nil {
+		if err := s.ops.SaveWatchIntent(ctx, intent); err != nil {
+			return models.PublishResult{}, err
+		}
 	}
 	return s.publisher.PublishWatchIntent(ctx, intent)
 }

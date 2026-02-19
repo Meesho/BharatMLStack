@@ -31,7 +31,7 @@ func TestListShadowDeployables(t *testing.T) {
 	})
 	h := NewHandler(
 		application.NewShadowService(store),
-		application.NewOperationService(redisq.NewInMemoryPublisher(), kubernetes.NewMockExecutor()),
+		application.NewOperationService(redisq.NewInMemoryPublisher(), kubernetes.NewMockExecutor(), nil),
 		etcd.NewMemoryIdempotencyKeyStore(),
 	)
 	mux := http.NewServeMux()
@@ -53,7 +53,7 @@ func TestCreateDeployableRequiresIdempotencyKey(t *testing.T) {
 	store := etcd.NewMemoryShadowStateStore(nil)
 	h := NewHandler(
 		application.NewShadowService(store),
-		application.NewOperationService(redisq.NewInMemoryPublisher(), kubernetes.NewMockExecutor()),
+		application.NewOperationService(redisq.NewInMemoryPublisher(), kubernetes.NewMockExecutor(), nil),
 		etcd.NewMemoryIdempotencyKeyStore(),
 	)
 	mux := http.NewServeMux()
@@ -86,7 +86,7 @@ func TestAllContractEndpointsAreWired(t *testing.T) {
 	})
 	h := NewHandler(
 		application.NewShadowService(store),
-		application.NewOperationService(redisq.NewInMemoryPublisher(), kubernetes.NewMockExecutor()),
+		application.NewOperationService(redisq.NewInMemoryPublisher(), kubernetes.NewMockExecutor(), nil),
 		etcd.NewMemoryIdempotencyKeyStore(),
 	)
 	mux := http.NewServeMux()

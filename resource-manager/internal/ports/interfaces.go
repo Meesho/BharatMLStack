@@ -25,6 +25,10 @@ type QueuePublisher interface {
 	PublishWatchIntent(ctx context.Context, intent models.WatchIntent) (models.PublishResult, error)
 }
 
+type OperationStore interface {
+	SaveWatchIntent(ctx context.Context, intent models.WatchIntent) error
+}
+
 type IdempotencyKeyStore interface {
 	Get(ctx context.Context, scope, key string) (*models.IdempotencyRecord, error)
 	Put(ctx context.Context, scope, key string, record models.IdempotencyRecord) error
