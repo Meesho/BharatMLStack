@@ -14,10 +14,10 @@
         <updated>2026-02-19T00:00:00.000Z</updated>
         <summary type="html"><![CDATA[Current agent memory is just search. We built an episodic memory system that tracks outcomes, forms causal links, extracts reasoning heuristics, and actually learns from failure — without retraining the model.]]></summary>
         <content type="html"><![CDATA[<p><img decoding="async" loading="lazy" alt="BharatMLStack" src="https://meesho.github.io/BharatMLStack/assets/images/bms-7399e8796d2cd24617c432518ce3f312.png" width="1396" height="460" class="img_ev3q">
-Every agent framework on the market will tell you their agents "have memory." What they mean is: they have a vector database.</p>
-<p>They chunk text, embed it, store it, and retrieve whatever looks similar at query time. This works for document Q&amp;A. It fails the moment you expect an agent to recall what happened last time, learn from a mistake, or avoid repeating a failed approach.</p>
-<p>We are trying to built something different. An episodic memory system where a frozen LLM — same weights, no retraining — produces increasingly better decisions over time because the memory feeding it context is continuously evolving.</p>
-<p>Then we tested it. The results surprised us.</p>
+Agent memory has come a long way. Persistent context, vector retrieval, knowledge graphs — the building blocks are real and getting better fast.</p>
+<p>But most of what we call "memory" today is still closer to search: chunk text, embed it, retrieve whatever looks similar at query time. That works well for recalling facts and preferences. It starts to break down when you need an agent to recall what happened last time, learn from a mistake, or avoid repeating a failed approach.</p>
+<p>We are trying to experiment something different. An episodic memory system where a frozen LLM — same weights, no retraining — produces increasingly better decisions over time because the memory feeding it context is continuously evolving.
+Then we tested it. The results were interesting.</p>
 <h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-gap-nobody-talks-about">The Gap Nobody Talks About<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#the-gap-nobody-talks-about" class="hash-link" aria-label="Direct link to The Gap Nobody Talks About" title="Direct link to The Gap Nobody Talks About">​</a></h2>
 <p>Here's a scenario every engineering team has encountered: AI agent hits a Redis connection pool exhaustion issue. It misdiagnoses it as a database problem. You correct it. Next week, a different service has the exact same failure pattern. The agent makes the exact same mistake.</p>
 <p>Why? Because LLMs don't learn at inference time. Corrections adjust behavior within a conversation. Once the session ends, the lesson is gone. The model weights haven't changed. The next conversation starts from zero.</p>
