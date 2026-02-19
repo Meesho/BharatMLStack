@@ -22,6 +22,7 @@ type InfrastructureHandler interface {
 	GetConfig(serviceName, workingEnv string) Config
 	GetResourceDetail(appName, workingEnv string) (*ResourceDetail, error)
 	RestartDeployment(appName, workingEnv string, isCanary bool) error
+	ScaleDeployable(appName, workingEnv string, minReplica, maxReplica int) error
 	UpdateCPUThreshold(appName, threshold, email, workingEnv string) error
 	UpdateGPUThreshold(appName, threshold, email, workingEnv string) error
 	UpdateSharedMemory(appName, size, email, workingEnv string) error
@@ -235,6 +236,29 @@ func (h *infrastructureHandler) RestartDeployment(appName, workingEnv string, is
 		return fmt.Errorf("failed to restart deployment: %w", err)
 	}
 
+	return nil
+}
+
+func (h *infrastructureHandler) ScaleDeployable(appName, workingEnv string, minReplica, maxReplica int) error {
+	if appName == "" {
+		return fmt.Errorf("appName is required")
+	}
+	if workingEnv == "" {
+		return fmt.Errorf("workingEnv is required")
+	}
+	argocdAppName := getArgoCDApplicationName(appName, workingEnv)
+	log.Info().
+		Str("appName", appName).
+		Str("argocdAppName", argocdAppName).
+		Str("workingEnv", workingEnv).
+		Int("minReplica", minReplica).
+		Int("maxReplica", maxReplica).
+		Msg("ScaleDeployable: scaling deployable")
+	err := argocd.SetDeployableReplicas(argocdAppName, workingEnv, minReplica, maxReplica)
+	if err != nil {
+		log.Error().Err(err).Str("appName", appName).Msg("Failed to scale deployable")
+		return fmt.Errorf("failed to scale deployable: %w", err)
+	}
 	return nil
 }
 

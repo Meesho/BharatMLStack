@@ -41,6 +41,7 @@ func (h *InferflowHandler) CreateDeployable(request *DeployableRequest) error {
 	deployableConfig := &servicedeployableconfig.ServiceDeployableConfig{
 		Name:                    request.AppName,
 		Service:                 request.ServiceName,
+		DeployableType:          servicedeployableconfig.DeployableTypeTarget,
 		Host:                    request.AppName + "." + hostUrlSuffix,
 		Active:                  true,
 		CreatedBy:               request.CreatedBy,

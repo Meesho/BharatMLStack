@@ -13,6 +13,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/predatorrequest"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/validationjob"
 	"github.com/rs/zerolog/log"
+	"gorm.io/gorm"
 )
 
 func (p *Predator) ValidateDeleteRequest(predatorConfigList []predatorconfig.PredatorConfig, ids []int) (bool, error) {
@@ -142,36 +143,69 @@ func (p *Predator) releaseLockWithError(lockID uint, groupID, errorMsg string) {
 	log.Error().Msgf("Validation failed for group ID %s: %s", groupID, errorMsg)
 }
 
-// getTestDeployableID determines the appropriate test deployable ID based on machine type
+// getTestDeployableID resolves the test deployable ID: tries DB lookup by node pool when available;
+// if not found or no node pool, falls back to env-based ID by machine type (CPU: TEST_DEPLOYABLE_ID, GPU: TEST_GPU_DEPLOYABLE_ID).
 func (p *Predator) getTestDeployableID(payload *Payload) (int, error) {
-	// Get the target deployable ID from the request
+	if payload == nil {
+		return 0, fmt.Errorf("payload is required")
+	}
+	if payload.ConfigMapping.ServiceDeployableID == 0 {
+		return 0, fmt.Errorf("service_deployable_id is required in config_mapping")
+	}
+
 	targetDeployableID := int(payload.ConfigMapping.ServiceDeployableID)
-	// Fetch the service deployable config to check machine type
 	serviceDeployable, err := p.ServiceDeployableRepo.GetById(targetDeployableID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to fetch service deployable config: %w", err)
+		return 0, fmt.Errorf("failed to fetch service deployable %d: %w", targetDeployableID, err)
 	}
 
-	// Parse the deployable config to extract machine type
+	if len(serviceDeployable.Config) == 0 {
+		return 0, fmt.Errorf("target deployable %d has no config; cannot determine machine type", targetDeployableID)
+	}
+
 	var deployableConfig PredatorDeployableConfig
 	if err := json.Unmarshal(serviceDeployable.Config, &deployableConfig); err != nil {
-		return 0, fmt.Errorf("failed to parse service deployable config: %w", err)
+		return 0, fmt.Errorf("failed to parse service deployable config %d: %w", targetDeployableID, err)
 	}
 
-	// Select test deployable ID based on machine type
-	switch strings.ToUpper(deployableConfig.MachineType) {
-	case "CPU":
-		log.Info().Msgf("Using CPU test deployable ID: %d", pred.TestDeployableID)
-		return pred.TestDeployableID, nil
-	case "GPU":
-		log.Info().Msgf("Using GPU test deployable ID: %d", pred.TestGpuDeployableID)
-		return pred.TestGpuDeployableID, nil
-	default:
-		// Default to CPU if machine type is not specified or unknown
-		log.Warn().Msgf("Unknown machine type '%s', defaulting to CPU test deployable ID: %d",
-			deployableConfig.MachineType, pred.TestDeployableID)
-		return pred.TestDeployableID, nil
+	return p.resolveTestDeployableID(deployableConfig)
+}
+
+// resolveTestDeployableID resolves test deployable ID from deployableConfig: node-pool lookup first, then machine-type fallback.
+func (p *Predator) resolveTestDeployableID(deployableConfig PredatorDeployableConfig) (int, error) {
+	var testID int
+	nodePool := strings.TrimSpace(deployableConfig.NodeSelectorValue)
+	if nodePool != "" {
+		id, lookupErr := p.ServiceDeployableRepo.GetTestDeployableIDByNodePool(nodePool)
+		if lookupErr == nil {
+			testID = id
+			log.Info().Msgf("Using test deployable ID %d for node pool %s", testID, nodePool)
+		} else if errors.Is(lookupErr, gorm.ErrRecordNotFound) {
+			log.Info().Str("nodePool", nodePool).Msgf("no test deployable for node pool %q (deployable_type=test, config.nodeSelectorValue=%q), using machine-type fallback", nodePool, nodePool)
+		} else {
+			log.Info().Err(lookupErr).Str("nodePool", nodePool).Msg("Test deployable lookup by node pool failed, using machine-type fallback")
+		}
 	}
+
+	if testID == 0 {
+		switch strings.ToUpper(deployableConfig.MachineType) {
+		case "CPU":
+			testID = pred.TestDeployableID
+			log.Info().Msgf("Using CPU fallback test deployable ID: %d", testID)
+		case "GPU":
+			testID = pred.TestGpuDeployableID
+			log.Info().Msgf("Using GPU fallback test deployable ID: %d", testID)
+		default:
+			testID = pred.TestDeployableID
+			log.Warn().Msgf("Unknown machine type %q, defaulting to CPU fallback test deployable ID: %d",
+				deployableConfig.MachineType, testID)
+		}
+	}
+
+	if testID <= 0 {
+		return 0, fmt.Errorf("invalid test deployable ID (not configured or not found); check TEST_DEPLOYABLE_ID (CPU), TEST_GPU_DEPLOYABLE_ID or deployable_type=test for node pool (GPU)")
+	}
+	return testID, nil
 }
 
 // getServiceNameFromDeployable extracts service name from deployable configuration

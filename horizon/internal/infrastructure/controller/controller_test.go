@@ -47,6 +47,11 @@ func (m *MockInfrastructureHandler) RestartDeployment(appName, workingEnv string
 	return args.Error(0)
 }
 
+func (m *MockInfrastructureHandler) ScaleDeployable(appName, workingEnv string, minReplica, maxReplica int) error {
+	args := m.Called(appName, workingEnv, minReplica, maxReplica)
+	return args.Error(0)
+}
+
 func (m *MockInfrastructureHandler) UpdateCPUThreshold(appName, threshold, email, workingEnv string) error {
 	args := m.Called(appName, threshold, email, workingEnv)
 	return args.Error(0)
