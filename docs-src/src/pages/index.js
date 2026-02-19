@@ -150,7 +150,7 @@ const BLOG_POSTS = [
     link: '/blog/post-five',
   },
   {
-    title: "Your AI Agent Doesn't Learn From Mistakes. We Are Trying To Built One That Does.",
+    title: "Beyond Vector RAG: Building Agent Memory That Learns From Experience.",
     category: 'AI Agents',
     icon: '\u{1F9E0}',
     link: '/blog/episodic-memory-for-agents',
