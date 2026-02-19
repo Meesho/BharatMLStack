@@ -33,6 +33,7 @@ type GCSClientInterface interface {
 	GetFolderInfo(bucket, folderPrefix string) (*GCSFolderInfo, error)
 	ListFoldersWithTimestamp(bucket, prefix string) ([]GCSFolderInfo, error)
 	FindFileWithSuffix(bucket, folderPath, suffix string) (bool, string, error)
+	ListFilesWithSuffix(bucket, folderPath, suffix string) ([]string, error)
 }
 
 const (
@@ -769,6 +770,39 @@ func (g *GCSClient) FindFileWithSuffix(bucket, folderPath, suffix string) (bool,
 		return false, "", fmt.Errorf("no file found with suffix '%s' in %s/%s", suffix, bucket, folderPath)
 	}
 	return true, foundFile, nil
+}
+
+// ListFilesWithSuffix returns all object paths (full GCS object keys) ending with the given
+// suffix under folderPath. Unlike FindFileWithSuffix which returns only the first match,
+// this method collects every matching file path. Directory markers are skipped.
+func (g *GCSClient) ListFilesWithSuffix(bucket, folderPath, suffix string) ([]string, error) {
+	if g.client == nil {
+		return nil, fmt.Errorf("GCS client not initialized properly")
+	}
+
+	if !strings.HasSuffix(folderPath, "/") {
+		folderPath += "/"
+	}
+
+	log.Info().Msgf("Listing files with suffix '%s' in GCS bucket %s with prefix %s", suffix, bucket, folderPath)
+
+	var files []string
+	err := g.forEachObject(bucket, folderPath, func(attrs *storage.ObjectAttrs) error {
+		// Skip directory markers
+		if strings.HasSuffix(attrs.Name, "/") {
+			return nil
+		}
+		if strings.HasSuffix(attrs.Name, suffix) {
+			files = append(files, attrs.Name)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list files with suffix '%s': %w", suffix, err)
+	}
+
+	log.Info().Msgf("Found %d files with suffix '%s' under %s/%s", len(files), suffix, bucket, folderPath)
+	return files, nil
 }
 
 // forEachObject iterates over all objects with the given prefix and calls the visitor for each.
