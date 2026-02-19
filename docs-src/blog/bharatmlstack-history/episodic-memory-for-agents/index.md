@@ -1,5 +1,5 @@
 ---
-title: "Your AI Agent Doesn't Learn From Mistakes. We Are Trying To Built One That Does."
+title: "Beyond Vector RAG: Building Agent Memory That Learns From Experience."
 description: "Current agent memory is just search. We built an episodic memory system that tracks outcomes, forms causal links, extracts reasoning heuristics, and actually learns from failure — without retraining the model."
 slug: episodic-memory-for-agents
 authors: [adarsha]
@@ -11,7 +11,7 @@ Every agent framework on the market will tell you their agents "have memory." Wh
 
 They chunk text, embed it, store it, and retrieve whatever looks similar at query time. This works for document Q&A. It fails the moment you expect an agent to recall what happened last time, learn from a mistake, or avoid repeating a failed approach.
 
-We built something different. An episodic memory system where a frozen LLM — same weights, no retraining — produces increasingly better decisions over time because the memory feeding it context is continuously evolving.
+We are trying to built something different. An episodic memory system where a frozen LLM — same weights, no retraining — produces increasingly better decisions over time because the memory feeding it context is continuously evolving.
 
 Then we tested it. The results surprised us.
 
@@ -19,11 +19,11 @@ Then we tested it. The results surprised us.
 
 ## The Gap Nobody Talks About
 
-Here's a scenario every engineering team has encountered: your AI agent hits a Redis connection pool exhaustion issue. It misdiagnoses it as a database problem. You correct it. Next week, a different service has the exact same failure pattern. The agent makes the exact same mistake.
+Here's a scenario every engineering team has encountered: AI agent hits a Redis connection pool exhaustion issue. It misdiagnoses it as a database problem. You correct it. Next week, a different service has the exact same failure pattern. The agent makes the exact same mistake.
 
 Why? Because LLMs don't learn at inference time. Corrections adjust behavior within a conversation. Once the session ends, the lesson is gone. The model weights haven't changed. The next conversation starts from zero.
 
-Current "memory" systems don't fix this. They store facts — user preferences, document chunks, conversation summaries. But facts aren't experience. Knowing that "Redis connection pools can exhaust under load" is different from remembering "last time I saw 500 errors under load, I assumed it was the database, I was wrong, it was actually the connection pool, and here's the correction I received."
+Current "memory" systems don't fully address this. They store facts — user preferences, document chunks, conversation summaries. But facts aren't experience. Knowing that "Redis connection pools can exhaust under load" is different from remembering "last time I saw 500 errors under load, I assumed it was the database, I was wrong, it was actually the connection pool, and here's the correction I received."
 
 The first is a fact. The second is an episode. The difference matters.
 
@@ -35,7 +35,7 @@ We identified five structural gaps in how current agent frameworks handle memory
 
 **No concept of situation.** A production incident and a design review might use the same technical vocabulary. Flat vector search can't distinguish them. Your agent retrieves planning notes when it should be retrieving incident postmortems.
 
-**No outcome tracking.** This is the killer. The system stores *what happened* but not *whether it worked*. A failed approach and a successful one are equally retrievable. The agent has no way to prefer strategies that worked over strategies that didn't.
+**No outcome tracking.** The system stores *what happened* but not *whether it worked*. A failed approach and a successful one are equally retrievable. The agent has no way to prefer strategies that worked over strategies that didn't.
 
 **Summaries destroy evidence.** Summarization-based memory compresses experience but discards the reasoning chain. The agent loses the ability to explain *how* it arrived at a conclusion. The audit trail is gone.
 
@@ -147,7 +147,7 @@ The episodic agent correctly applied the connection pool pattern in all four rou
 
 ## What Didn't Work
 
-Honesty matters. Two things didn't work as hoped:
+Two things didn't work as anticipated:
 
 **Round 3 (red herring):** Both agents failed. The symptoms looked like connection pool issues, but the root cause was a deployment config change. At this point, the episodic agent had only seen connection pool episodes — it had no counter-evidence for deployment-correlated errors. You can't distinguish patterns you've only seen one side of. After Round 8 introduced a correction, the agent successfully avoided this mistake in Round 9.
 
@@ -170,17 +170,18 @@ The model didn't change. The memory evolved. That's the whole point.
 
 ## How It Compares to Existing Solutions
 
-We looked at every production agent memory system available:
+Agent memory is a fast-moving space with several strong systems, each solving a different slice of the problem:
 
-**Mem0** stores user preferences and conversation summaries. It's memory *about* users, not memory that learns from mistakes. No outcome tracking, no causal links, no reinforcement.
+**Mem0** excels at persistent personalization — extracting user preferences, managing session context, and reducing token costs through intelligent compression. It's the most production-ready memory layer available and integrates with nearly every agent framework. Its focus is on remembering about users and conversations rather than learning from task-level outcomes, which is a different problem than the one we're exploring here.
 
-**Zep/Graphiti** builds temporal knowledge graphs from conversations. Strong on entity relationships and temporal reasoning, but fundamentally about knowledge tracking — who said what when. No outcome tracking, no generalized fact extraction from failure patterns.
+**Zep/Graphiti** is doing some of the most interesting work in temporal knowledge graphs. Their bi-temporal model — tracking both when an event occurred and when it was ingested — addresses a real structural gap in how agent memory handles changing facts over time. Their episode and entity subgraphs share some philosophical DNA with our approach. Where our work diverges is in outcome tracking and reinforcement: we're specifically focused on whether a decision worked, and using that signal to update memory structure.
 
-**Letta (formerly MemGPT)** gives the LLM tools to manage its own memory blocks. Powerful for personalization, but the agent decides what to remember based on current reasoning. There's no structural learning from outcomes. Letta's own website states: "Today's AI agents struggle to remember previous mistakes."
+**Letta (formerly MemGPT)** pioneered self-editing memory — giving the LLM tools to manage its own memory blocks. This is a powerful paradigm, and their recent work on "Context Repositories" and sleep-time compute suggests they're actively pushing toward agents that learn over time. Their team has been transparent that experiential learning is an unsolved problem, which is part of what motivated our exploration.
 
-**MemRL (Jan 2026 paper)** is the closest academically. It uses RL to learn Q-values for memory utility. Similar philosophy — decouple stable reasoning from plastic memory — but requires training a value function. Our approach is purely structural: no training, no Q-values, just graph evolution.
+**MemRL (Jan 2026 paper)** is the closest to our work academically. It shares the core insight of decoupling stable LLM reasoning from plastic, evolving memory. Their approach uses reinforcement learning to assign utility Q-values to memories, which is elegant but requires training a value function. Our approach is purely structural — no training step, no Q-values, just graph evolution and LLM-based reasoning over outcomes.
 
-The gap: existing systems help agents *remember facts*. Our architecture helps agents *learn from experience*. Different problem.
+
+The common thread: most existing systems focus on knowledge persistence — remembering facts, preferences, and conversation history across sessions. The problem we're exploring is experiential learning — tracking whether past decisions worked, forming causal chains between episodes, and extracting reasoning heuristics that improve over time. These are complementary capabilities that would be needed by an ideal production system.
 
 ## Try It Yourself
 
@@ -210,7 +211,7 @@ Without an API key, it runs in heuristic mode (keyword-based decisions). With a 
 
 
 ## Conclusion
-If you're building agents that need to learn from experience rather than just retrieve text, this might be the memory layer that's been missing.
+This is a 9-round synthetic scenario we designed. It demonstrates the poc architecture works end-to-end and shows where episodic memory provides qualitatively different reasoning. It is not a peer-reviewed benchmark and should not be interpreted as a statistically rigorous claim. We're publishing the prototype so others can reproduce and extend the evaluation.
 If this sparks interest do trigger github discussion.
 
 ---
