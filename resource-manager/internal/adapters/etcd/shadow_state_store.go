@@ -31,6 +31,10 @@ func NewMemoryShadowStateStore(seed map[string][]models.ShadowDeployable) *Memor
 }
 
 func (s *MemoryShadowStateStore) List(_ context.Context, env string, filter models.ShadowFilter) ([]models.ShadowDeployable, error) {
+	if !rmtypes.IsSupportedPoolEnv(env) {
+		return nil, rmerrors.ErrUnsupportedEnv
+	}
+	env = string(rmtypes.NormalizePoolEnv(env))
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -50,6 +54,10 @@ func (s *MemoryShadowStateStore) List(_ context.Context, env string, filter mode
 }
 
 func (s *MemoryShadowStateStore) Procure(_ context.Context, env, name, runID, plan string) (models.ShadowDeployable, bool, error) {
+	if !rmtypes.IsSupportedPoolEnv(env) {
+		return models.ShadowDeployable{}, false, rmerrors.ErrUnsupportedEnv
+	}
+	env = string(rmtypes.NormalizePoolEnv(env))
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -75,6 +83,10 @@ func (s *MemoryShadowStateStore) Procure(_ context.Context, env, name, runID, pl
 }
 
 func (s *MemoryShadowStateStore) Release(_ context.Context, env, name, runID string) (models.ShadowDeployable, bool, error) {
+	if !rmtypes.IsSupportedPoolEnv(env) {
+		return models.ShadowDeployable{}, false, rmerrors.ErrUnsupportedEnv
+	}
+	env = string(rmtypes.NormalizePoolEnv(env))
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -100,6 +112,10 @@ func (s *MemoryShadowStateStore) Release(_ context.Context, env, name, runID str
 }
 
 func (s *MemoryShadowStateStore) ChangeMinPodCount(_ context.Context, env, name string, action rmtypes.Action, count int) (models.ShadowDeployable, error) {
+	if !rmtypes.IsSupportedPoolEnv(env) {
+		return models.ShadowDeployable{}, rmerrors.ErrUnsupportedEnv
+	}
+	env = string(rmtypes.NormalizePoolEnv(env))
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

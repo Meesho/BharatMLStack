@@ -174,3 +174,23 @@ func TestAllContractEndpointsAreWired(t *testing.T) {
 		})
 	}
 }
+
+func TestUnsupportedEnvReturnsBadRequest(t *testing.T) {
+	store := etcd.NewMemoryShadowStateStore(map[string][]models.ShadowDeployable{
+		"int": {},
+	})
+	h := NewHandler(
+		application.NewShadowService(store),
+		application.NewOperationService(redisq.NewInMemoryPublisher(), kubernetes.NewMockExecutor(), nil),
+		etcd.NewMemoryIdempotencyKeyStore(),
+	)
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/1.0/stg/shadow-deployables", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+}

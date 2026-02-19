@@ -51,6 +51,11 @@ func (h *Handler) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "route not found")
 		return
 	}
+	if !rmtypes.IsSupportedPoolEnv(env) {
+		writeErr(w, http.StatusBadRequest, "env must be one of: int, prod")
+		return
+	}
+	env = string(rmtypes.NormalizePoolEnv(env))
 	route = normalizeRoute(route)
 
 	switch {
@@ -89,6 +94,10 @@ func (h *Handler) listShadowDeployables(w http.ResponseWriter, r *http.Request, 
 
 	items, err := h.shadows.List(r.Context(), env, filter)
 	if err != nil {
+		if errors.Is(err, rmerrors.ErrUnsupportedEnv) {
+			writeErr(w, http.StatusBadRequest, "env must be one of: int, prod")
+			return
+		}
 		writeErr(w, http.StatusInternalServerError, "failed to list shadow deployables")
 		return
 	}
@@ -149,6 +158,8 @@ func (h *Handler) mutateShadowDeployables(w http.ResponseWriter, r *http.Request
 
 	if err != nil {
 		switch {
+		case errors.Is(err, rmerrors.ErrUnsupportedEnv):
+			writeErr(w, http.StatusBadRequest, "env must be one of: int, prod")
 		case errors.Is(err, rmerrors.ErrNotFound):
 			writeErr(w, http.StatusBadRequest, "shadow deployable not found")
 		case errors.Is(err, rmerrors.ErrInvalidOwner):
@@ -189,6 +200,8 @@ func (h *Handler) changeMinPodCount(w http.ResponseWriter, r *http.Request, env 
 	_, err := h.shadows.ChangeMinPodCount(r.Context(), env, req.Name, req.Action, req.Count)
 	if err != nil {
 		switch {
+		case errors.Is(err, rmerrors.ErrUnsupportedEnv):
+			writeErr(w, http.StatusBadRequest, "env must be one of: int, prod")
 		case errors.Is(err, rmerrors.ErrNotFound):
 			writeErr(w, http.StatusBadRequest, "shadow deployable not found")
 		case errors.Is(err, rmerrors.ErrInvalidAction):

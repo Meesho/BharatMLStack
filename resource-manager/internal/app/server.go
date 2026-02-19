@@ -120,5 +120,25 @@ func seedShadowDeployables() map[string][]models.ShadowDeployable {
 				Version:       1,
 			},
 		},
+		"prod": {
+			{
+				Name:          "prd-predator-g2-std-8",
+				NodePool:      "g2-std-8",
+				DNS:           "predator-g2-std-8.meesho.io",
+				State:         rmtypes.ShadowStateFree,
+				MinPodCount:   1,
+				LastUpdatedAt: now,
+				Version:       1,
+			},
+			{
+				Name:          "prd-predator-g2-std-16",
+				NodePool:      "g2-std-16",
+				DNS:           "predator-g2-std-16.meesho.io",
+				State:         rmtypes.ShadowStateFree,
+				MinPodCount:   1,
+				LastUpdatedAt: now,
+				Version:       1,
+			},
+		},
 	}
 }
