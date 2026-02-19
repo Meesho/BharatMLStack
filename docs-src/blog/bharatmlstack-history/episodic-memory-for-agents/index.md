@@ -7,13 +7,13 @@ date: 2026-02-19
 tags: [ai-agents, memory, architecture, llm, episodic-memory]
 ---
 ![BharatMLStack](./bms.png)
-Every agent framework on the market will tell you their agents "have memory." What they mean is: they have a vector database.
+Agent memory has come a long way. Persistent context, vector retrieval, knowledge graphs — the building blocks are real and getting better fast.
 
-They chunk text, embed it, store it, and retrieve whatever looks similar at query time. This works for document Q&A. It fails the moment you expect an agent to recall what happened last time, learn from a mistake, or avoid repeating a failed approach.
+But most of what we call "memory" today is still closer to search: chunk text, embed it, retrieve whatever looks similar at query time. That works well for recalling facts and preferences. It starts to break down when you need an agent to recall what happened last time, learn from a mistake, or avoid repeating a failed approach.
 
-We are trying to built something different. An episodic memory system where a frozen LLM — same weights, no retraining — produces increasingly better decisions over time because the memory feeding it context is continuously evolving.
+We are trying to experiment something different. An episodic memory system where a frozen LLM — same weights, no retraining — produces increasingly better decisions over time because the memory feeding it context is continuously evolving.
+Then we tested it. The results were interesting.
 
-Then we tested it. The results surprised us.
 
 <!-- truncate -->
 
