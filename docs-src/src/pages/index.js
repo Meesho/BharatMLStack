@@ -149,6 +149,12 @@ const BLOG_POSTS = [
     icon: '\u{1F52C}',
     link: '/blog/post-five',
   },
+  {
+    title: "Your AI Agent Doesn't Learn From Mistakes. We Are Trying To Built One That Does.",
+    category: 'AI Agents',
+    icon: '\u{1F9E0}',
+    link: '/blog/episodic-memory-for-agents',
+  },
 ];
 
 // ─── Components ────────────────────────────────────────
