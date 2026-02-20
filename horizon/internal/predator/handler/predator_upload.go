@@ -10,6 +10,7 @@ import (
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
 	pred "github.com/Meesho/BharatMLStack/horizon/internal/predator"
+	"github.com/Meesho/BharatMLStack/horizon/internal/predator/proto/modelconfig"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/encoding/prototext"
 )
@@ -88,8 +89,10 @@ func (p *Predator) copyConfigToProdConfigSource(gcsPath, modelName string) error
 		return fmt.Errorf("failed to read config.pbtxt from source: %w", err)
 	}
 
-	updatedConfigData := p.replaceModelNameInConfigPreservingFormat(configData, modelName)
-
+	updatedConfigData, err := externalcall.ReplaceModelNameInConfig(configData, modelName)
+	if err != nil {
+		return fmt.Errorf("failed to replace model name in config: %w", err)
+	}
 	destConfigPath := path.Join(pred.GcsConfigBasePath, modelName, configFile)
 	if err := p.GcsClient.UploadFile(pred.GcsConfigBucket, destConfigPath, updatedConfigData); err != nil {
 		return fmt.Errorf("failed to upload config.pbtxt to config source: %w", err)
@@ -437,7 +440,7 @@ func (p *Predator) validateModelConfiguration(gcsPath string) error {
 		return fmt.Errorf("failed to read config.pbtxt from %s/%s: %w", srcBucket, configPath, err)
 	}
 
-	var modelConfig ModelConfig
+	var modelConfig modelconfig.ModelConfig
 	if err := prototext.Unmarshal(configData, &modelConfig); err != nil {
 		return fmt.Errorf("failed to parse config.pbtxt as proto: %w", err)
 	}
@@ -481,8 +484,10 @@ func (p *Predator) copyConfigToNewNameInConfigSource(oldModelName, newModelName 
 		return fmt.Errorf("failed to read config.pbtxt from %s: %w", srcConfigPath, err)
 	}
 
-	updatedConfigData := p.replaceModelNameInConfigPreservingFormat(configData, newModelName)
-
+	updatedConfigData, err := externalcall.ReplaceModelNameInConfig(configData, newModelName)
+	if err != nil {
+		return fmt.Errorf("failed to replace model name in config: %w", err)
+	}
 	if err := p.GcsClient.UploadFile(pred.GcsConfigBucket, destConfigPath, updatedConfigData); err != nil {
 		return fmt.Errorf("failed to upload config.pbtxt to %s: %w", destConfigPath, err)
 	}

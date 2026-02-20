@@ -4,7 +4,7 @@
 // 	protoc        v5.29.3
 // source: proto/model_config.proto
 
-package handler
+package modelconfig
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"

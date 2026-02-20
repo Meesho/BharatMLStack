@@ -16,6 +16,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/encoding/prototext"
 	"gorm.io/gorm"
+	"github.com/Meesho/BharatMLStack/horizon/internal/predator/proto/modelconfig"
 )
 
 func (p *Predator) processRequest(requestIdPayloadMap map[uint]*Payload, predatorRequestList []predatorrequest.PredatorRequest, req ApproveRequest) {
@@ -231,7 +232,7 @@ func (p *Predator) updateInstanceCountInConfigSource(bucket, basePath, modelName
 		return fmt.Errorf("failed to read config.pbtxt from config-source for model %s: %w", modelName, err)
 	}
 
-	var modelConfig ModelConfig
+	var modelConfig modelconfig.ModelConfig
 	if err := prototext.Unmarshal(configData, &modelConfig); err != nil {
 		return fmt.Errorf("failed to parse config.pbtxt from config-source for model %s: %w", modelName, err)
 	}
@@ -239,9 +240,16 @@ func (p *Predator) updateInstanceCountInConfigSource(bucket, basePath, modelName
 		return fmt.Errorf("%s (model %s)", errNoInstanceGroup, modelName)
 	}
 
-	newConfigData, err := replaceInstanceCountInConfigPreservingFormat(configData, instanceCount)
+	modelConfig.InstanceGroup[0].Count = int32(instanceCount)
+
+	opts := prototext.MarshalOptions{
+		Multiline: true,
+		Indent:    "  ",
+	}
+
+	newConfigData, err := opts.Marshal(&modelConfig)
 	if err != nil {
-		return fmt.Errorf("failed to update instance count in config for model %s: %w", modelName, err)
+		return fmt.Errorf("failed to marshal config.pbtxt for model %s: %w", modelName, err)
 	}
 	if err := p.GcsClient.UploadFile(bucket, configPath, newConfigData); err != nil {
 		return fmt.Errorf("failed to upload config.pbtxt to config-source for model %s: %w", modelName, err)

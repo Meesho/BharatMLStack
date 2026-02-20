@@ -36,6 +36,7 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/pkg/random"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/serializer"
 	"github.com/rs/zerolog/log"
+	"github.com/Meesho/BharatMLStack/horizon/internal/predator/proto/modelconfig"
 )
 
 type Predator struct {
@@ -353,7 +354,7 @@ func (p *Predator) FetchModelConfig(req FetchModelConfigRequest) (ModelParamsRes
 		}
 	}
 
-	var modelConfig ModelConfig
+	var modelConfig modelconfig.ModelConfig
 	if err := prototext.Unmarshal(configData, &modelConfig); err != nil {
 		return ModelParamsResponse{}, http.StatusInternalServerError, fmt.Errorf(errUnmarshalProtoFormat, err)
 	}
@@ -391,7 +392,7 @@ func parseModelPath(modelPath string) (bucket, objectPath string) {
 	return parts[0], parts[1]
 }
 
-func validateModelConfig(cfg *ModelConfig) error {
+func validateModelConfig(cfg *modelconfig.ModelConfig) error {
 	switch {
 	case cfg.Name == constant.EmptyString:
 		return errors.New(errModelNameMissing)
@@ -423,7 +424,7 @@ func convertFields(name string, dims []int64, dataType string) (IO, bool) {
 	}, true
 }
 
-func convertInputWithFeatures(fields []*ModelInput, featureMap map[string][]string) []IO {
+func convertInputWithFeatures(fields []*modelconfig.ModelInput, featureMap map[string][]string) []IO {
 	ios := make([]IO, 0, len(fields))
 	for _, f := range fields {
 		if io, ok := convertFields(f.Name, f.Dims, f.DataType.String()); ok {
@@ -437,7 +438,7 @@ func convertInputWithFeatures(fields []*ModelInput, featureMap map[string][]stri
 	return ios
 }
 
-func convertOutput(fields []*ModelOutput) []IO {
+func convertOutput(fields []*modelconfig.ModelOutput) []IO {
 	ios := make([]IO, 0, len(fields))
 	for _, f := range fields {
 		if io, ok := convertFields(f.Name, f.Dims, f.DataType.String()); ok {
@@ -447,7 +448,7 @@ func convertOutput(fields []*ModelOutput) []IO {
 	return ios
 }
 
-func createModelParamsResponse(modelConfig *ModelConfig, objectPath string, inputs, outputs []IO) ModelParamsResponse {
+func createModelParamsResponse(modelConfig *modelconfig.ModelConfig, objectPath string, inputs, outputs []IO) ModelParamsResponse {
 	var resp ModelParamsResponse
 
 	if len(modelConfig.InstanceGroup) > 0 {

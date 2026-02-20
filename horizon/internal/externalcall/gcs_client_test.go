@@ -10,50 +10,54 @@ import (
 
 func TestReplaceModelNameInConfig(t *testing.T) {
 	tests := []struct {
-		name           string
-		data           []byte
-		destModelName  string
-		expectContains string
+		name          string
+		data          []byte
+		destModelName string
+		wantTopLevel  string
+		wantNested    string
+		expectError   bool
 	}{
 		{
 			name: "replaces top-level name only",
-			data: []byte(`name: "old_model"
+			data: []byte(`
+name: "old_model"
 instance_group {
-  name: "old_model"
+  name: "nested_model"
 }
 `),
-			destModelName:  "new_model",
-			expectContains: `name: "new_model"`,
+			destModelName: "new_model",
+			wantTopLevel:  `name: "new_model"`,
+			wantNested:    `name: "nested_model"`,
 		},
 		{
-			name: "preserves nested name with indentation",
-			data: []byte(`name: "top_level"
-  instance_group {
-    name: "nested_name"
-  }
-`),
-			destModelName:  "replaced",
-			expectContains: `name: "replaced"`,
+			name:          "single line config",
+			data:          []byte(`name: "single_model"` + "\n"),
+			destModelName: "replaced_model",
+			wantTopLevel:  `name: "replaced_model"`,
 		},
 		{
-			name: "single line config",
-			data: []byte(`name: "single_model"` + "\n"),
-			destModelName:  "replaced_model",
-			expectContains: `name: "replaced_model"`,
-		},
-		{
-			name: "no name field returns unchanged",
-			data: []byte(`platform: "tensorflow"
-version: 1
-`),
+			name:          "invalid pbtxt returns error",
+			data:          []byte(`invalid_field: "x"`),
 			destModelName: "any",
-			expectContains: `platform: "tensorflow"`,
+			expectError:   true,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := replaceModelNameInConfig(tt.data, tt.destModelName)
-			assert.Contains(t, string(got), tt.expectContains)
+			got, err := ReplaceModelNameInConfig(tt.data, tt.destModelName)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Contains(t, string(got), tt.wantTopLevel)
+
+			if tt.wantNested != "" {
+				assert.Contains(t, string(got), tt.wantNested)
+			}
 		})
 	}
 }
