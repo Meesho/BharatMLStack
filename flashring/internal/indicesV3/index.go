@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
+	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 	"github.com/cespare/xxhash/v2"
-	"github.com/rs/zerolog/log"
 	"github.com/zeebo/xxh3"
 )
 
@@ -22,20 +22,22 @@ const (
 )
 
 type Index struct {
-	rm       sync.Map
+	mu       *sync.RWMutex
+	rm       map[uint64]int
 	rb       *RingBuffer
 	mc       *maths.MorrisLogCounter
 	startAt  int64
 	hashBits int
 }
 
-func NewIndex(hashBits int, rbInitial, rbMax, deleteAmortizedStep int) *Index {
+func NewIndex(hashBits int, rbInitial, rbMax, deleteAmortizedStep int, mu *sync.RWMutex) *Index {
 	if ByteOrder == nil {
 		loadByteOrder()
 	}
 	// rm := make(map[uint64]int)
 	return &Index{
-		rm:       sync.Map{},
+		mu:       mu,
+		rm:       make(map[uint64]int),
 		rb:       NewRingBuffer(rbInitial, rbMax),
 		mc:       maths.New(12),
 		startAt:  time.Now().Unix(),
@@ -52,15 +54,15 @@ func (i *Index) Put(key string, length, ttlInMinutes uint16, memId, offset uint3
 	delta := uint16(expiryAt - (i.startAt / 60))
 	encode(key, length, delta, lastAccess, freq, memId, offset, entry)
 
-	if headIdx, ok := i.rm.Load(hlo); !ok {
+	if headIdx, ok := i.rm[hlo]; !ok {
 		encodeHashNextPrev(hhi, hlo, -1, -1, hashNextPrev)
-		i.rm.Store(hlo, idx)
+		i.rm[hlo] = idx
 		return
 	} else {
-		_, headHashNextPrev, _ := i.rb.Get(int(headIdx.(int)))
+		_, headHashNextPrev, _ := i.rb.Get(int(headIdx))
 		encodeUpdatePrev(int32(idx), headHashNextPrev)
-		encodeHashNextPrev(hhi, hlo, -1, int32(headIdx.(int)), hashNextPrev)
-		i.rm.Store(hlo, idx)
+		encodeHashNextPrev(hhi, hlo, -1, int32(headIdx), hashNextPrev)
+		i.rm[hlo] = idx
 		return
 	}
 
@@ -68,9 +70,16 @@ func (i *Index) Put(key string, length, ttlInMinutes uint16, memId, offset uint3
 
 func (i *Index) Get(key string) (length, lastAccess, remainingTTL uint16, freq uint64, memId, offset uint32, status Status) {
 	hhi, hlo := hash128(key)
-	if idx, ok := i.rm.Load(hlo); ok {
-		entry, hashNextPrev, _ := i.rb.Get(int(idx.(int)))
+
+	start := time.Now()
+	i.mu.RLock()
+	idx, ok := i.rm[hlo]
+	i.mu.RUnlock()
+	metrics.Timing(metrics.LATENCY_RLOCK, time.Since(start), []string{})
+
+	if ok {
 		for {
+			entry, hashNextPrev, _ := i.rb.Get(int(idx))
 			if isHashMatch(hhi, hlo, hashNextPrev) {
 				length, deltaExptime, lastAccess, freq, memId, offset := decode(entry)
 				exptime := int(deltaExptime) + int(i.startAt/60)
@@ -96,6 +105,9 @@ func (i *Index) Get(key string) (length, lastAccess, remainingTTL uint16, freq u
 }
 
 func (ix *Index) Delete(count int) (uint32, int) {
+	if count == 0 {
+		return 0, 0
+	}
 	for i := 0; i < count; i++ {
 		deleted, deletedHashNextPrev, deletedIdx, next := ix.rb.Delete()
 		if deleted == nil {
@@ -103,15 +115,15 @@ func (ix *Index) Delete(count int) (uint32, int) {
 		}
 		delMemId, _ := decodeMemIdOffset(deleted)
 		deletedHlo := decodeHashLo(deletedHashNextPrev)
-		mapIdx, ok := ix.rm.Load(deletedHlo)
-		if ok && mapIdx.(int) == deletedIdx {
-			ix.rm.Delete(deletedHlo)
+		mapIdx, ok := ix.rm[deletedHlo]
+		if ok && mapIdx == deletedIdx {
+			delete(ix.rm, deletedHlo)
 		} else if ok && hasPrev(deletedHashNextPrev) {
 			prevIdx := decodePrev(deletedHashNextPrev)
 			_, hashNextPrev, _ := ix.rb.Get(int(prevIdx))
 			encodeUpdateNext(-1, hashNextPrev)
 		} else {
-			log.Warn().Msgf("broken link. Entry in RB but cannot be linked to map. deletedIdx: %d", deletedIdx)
+			//log.Warn().Msgf("broken link. Entry in RB but cannot be linked to map. deletedIdx: %d", deletedIdx)
 		}
 
 		nextMemId, _ := decodeMemIdOffset(next)

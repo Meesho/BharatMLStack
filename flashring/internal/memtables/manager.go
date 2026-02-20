@@ -3,6 +3,7 @@ package memtables
 import (
 	"github.com/Meesho/BharatMLStack/flashring/internal/allocators"
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
+	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 	"github.com/rs/zerolog/log"
 )
 
@@ -16,11 +17,6 @@ type MemtableManager struct {
 	nextFileOffset int64
 	nextId         uint32
 	semaphore      chan int
-	stats          Stats
-}
-
-type Stats struct {
-	Flushes int64
 }
 
 func NewMemtableManager(file *fs.WrapAppendFile, capacity int32) (*MemtableManager, error) {
@@ -62,7 +58,6 @@ func NewMemtableManager(file *fs.WrapAppendFile, capacity int32) (*MemtableManag
 		nextFileOffset: 2 * int64(capacity),
 		nextId:         2,
 		semaphore:      make(chan int, 1),
-		stats:          Stats{},
 	}
 	return memtableManager, nil
 }
@@ -92,7 +87,7 @@ func (mm *MemtableManager) flushConsumer(memtable *Memtable) {
 	memtable.Id = mm.nextId
 	mm.nextId++
 	mm.nextFileOffset += int64(n)
-	mm.stats.Flushes++
+	metrics.Incr(metrics.KEY_MEMTABLE_FLUSH_COUNT, append(metrics.GetShardTag(memtable.ShardIdx), metrics.GetMemtableTag(memtable.Id)...))
 }
 func (mm *MemtableManager) Flush() error {
 
