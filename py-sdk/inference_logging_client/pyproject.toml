@@ -28,7 +28,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "pandas>=1.3.0",
+    "pyspark>=3.3.0",
     "pyarrow>=5.0.0",
     "zstandard>=0.15.0",
 ]
