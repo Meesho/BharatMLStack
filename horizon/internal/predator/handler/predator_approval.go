@@ -240,6 +240,15 @@ func (p *Predator) updateInstanceCountInConfigSource(bucket, basePath, modelName
 		return fmt.Errorf("%s (model %s)", errNoInstanceGroup, modelName)
 	}
 
+	currentCount := modelConfig.InstanceGroup[0].Count
+	if currentCount == int32(instanceCount) {
+		log.Info().
+			Str("model", modelName).
+			Int("instance_count", instanceCount).
+			Msg("instance_count unchanged, skipping config update")
+		return nil
+	}
+	
 	modelConfig.InstanceGroup[0].Count = int32(instanceCount)
 
 	opts := prototext.MarshalOptions{

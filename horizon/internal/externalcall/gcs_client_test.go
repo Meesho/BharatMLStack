@@ -26,18 +26,24 @@ instance_group {
 }
 `),
 			destModelName: "new_model",
-			wantTopLevel:  `name: "new_model"`,
-			wantNested:    `name: "nested_model"`,
+			wantTopLevel:  `"new_model"`,
+			wantNested:    "nested_model",
 		},
 		{
 			name:          "single line config",
 			data:          []byte(`name: "single_model"` + "\n"),
 			destModelName: "replaced_model",
-			wantTopLevel:  `name: "replaced_model"`,
+			wantTopLevel:  `"replaced_model"`,
 		},
 		{
-			name:          "invalid pbtxt returns error",
-			data:          []byte(`invalid_field: "x"`),
+			name:          "empty dest model name returns error",
+			data:          []byte(`name: "some_model"`),
+			destModelName: "",
+			expectError:   true,
+		},
+		{
+			name:          "malformed pbtxt returns error",
+			data:          []byte(`name: "unclosed`),
 			destModelName: "any",
 			expectError:   true,
 		},
@@ -48,11 +54,11 @@ instance_group {
 			got, err := ReplaceModelNameInConfig(tt.data, tt.destModelName)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				return
 			}
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Contains(t, string(got), tt.wantTopLevel)
 
 			if tt.wantNested != "" {

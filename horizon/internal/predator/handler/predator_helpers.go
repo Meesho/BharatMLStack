@@ -3,9 +3,7 @@ package handler
 import (
 	"fmt"
 	"path"
-	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/constant"
 	pred "github.com/Meesho/BharatMLStack/horizon/internal/predator"
@@ -107,68 +105,4 @@ func (p *Predator) isNonProductionEnvironment() bool {
 		return false
 	}
 	return true
-}
-
-func replaceInstanceCountInConfigPreservingFormat(data []byte, newCount int) ([]byte, error) {
-	input := string(data)
-	var output strings.Builder
-
-	inInstanceGroup := false
-	bracket := 0
-	brace := 0
-
-	i := 0
-	for i < len(input) {
-
-		if !inInstanceGroup && strings.HasPrefix(input[i:], "instance_group") {
-			inInstanceGroup = true
-			output.WriteString("instance_group")
-			i += len("instance_group")
-			continue
-		}
-
-		ch := input[i]
-
-		if inInstanceGroup {
-			if ch == '[' {
-				bracket++
-			}
-			if ch == ']' {
-				bracket--
-				if bracket == 0 {
-					inInstanceGroup = false
-				}
-			}
-
-			if ch == '{' {
-				brace++
-			}
-			if ch == '}' {
-				brace--
-			}
-			if brace > 0 && strings.HasPrefix(input[i:], "count") {
-				j := i + len("count")
-				for j < len(input) && unicode.IsSpace(rune(input[j])) {
-					j++
-				}
-				if j < len(input) && input[j] == ':' {
-					j++
-					for j < len(input) && unicode.IsSpace(rune(input[j])) {
-						j++
-					}
-					k := j
-					for k < len(input) && unicode.IsDigit(rune(input[k])) {
-						k++
-					}
-					output.WriteString(input[i:j])
-					output.WriteString(strconv.Itoa(newCount))
-					output.WriteString(input[k:])
-					return []byte(output.String()), nil
-				}
-			}
-		}
-		output.WriteByte(ch)
-		i++
-	}
-	return nil, fmt.Errorf("%s", errNoInstanceGroup)
 }
