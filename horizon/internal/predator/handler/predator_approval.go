@@ -16,7 +16,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/encoding/prototext"
 	"gorm.io/gorm"
-	"github.com/Meesho/BharatMLStack/horizon/internal/predator/proto/modelconfig"
+	"github.com/Meesho/BharatMLStack/horizon/internal/predator/proto/protogen"
 )
 
 func (p *Predator) processRequest(requestIdPayloadMap map[uint]*Payload, predatorRequestList []predatorrequest.PredatorRequest, req ApproveRequest) {
@@ -232,7 +232,7 @@ func (p *Predator) updateInstanceCountInConfigSource(bucket, basePath, modelName
 		return fmt.Errorf("failed to read config.pbtxt from config-source for model %s: %w", modelName, err)
 	}
 
-	var modelConfig modelconfig.ModelConfig
+	var modelConfig protogen.ModelConfig
 	if err := prototext.Unmarshal(configData, &modelConfig); err != nil {
 		return fmt.Errorf("failed to parse config.pbtxt from config-source for model %s: %w", modelName, err)
 	}

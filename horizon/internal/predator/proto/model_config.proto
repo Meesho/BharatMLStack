@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package proto;
 
-option go_package = "horizon/internal/predator";
+option go_package = "github.com/Meesho/BharatMLStack/horizon/internal/predator/proto/protogen";
 
 enum DataType {
   TYPE_INVALID = 0;

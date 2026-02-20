@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/Meesho/BharatMLStack/horizon/internal/predator/proto/modelconfig"
+	"github.com/Meesho/BharatMLStack/horizon/internal/predator/proto/protogen"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/api/iterator"
 	"google.golang.org/protobuf/encoding/prototext"
@@ -473,7 +473,7 @@ func ReplaceModelNameInConfig(data []byte, destModelName string) ([]byte, error)
 		return nil, fmt.Errorf("destination model name cannot be empty")
 	}
 
-	var modelConfig modelconfig.ModelConfig
+	var modelConfig protogen.ModelConfig
 
 	if err := prototext.Unmarshal(data, &modelConfig); err != nil {
 		return nil, fmt.Errorf("failed to parse config.pbtxt: %w", err)

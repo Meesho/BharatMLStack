@@ -10,7 +10,7 @@ import (
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
 	pred "github.com/Meesho/BharatMLStack/horizon/internal/predator"
-	"github.com/Meesho/BharatMLStack/horizon/internal/predator/proto/modelconfig"
+	"github.com/Meesho/BharatMLStack/horizon/internal/predator/proto/protogen"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/encoding/prototext"
 )
@@ -440,7 +440,7 @@ func (p *Predator) validateModelConfiguration(gcsPath string) error {
 		return fmt.Errorf("failed to read config.pbtxt from %s/%s: %w", srcBucket, configPath, err)
 	}
 
-	var modelConfig modelconfig.ModelConfig
+	var modelConfig protogen.ModelConfig
 	if err := prototext.Unmarshal(configData, &modelConfig); err != nil {
 		return fmt.Errorf("failed to parse config.pbtxt as proto: %w", err)
 	}
