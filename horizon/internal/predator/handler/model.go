@@ -3,6 +3,8 @@ package handler
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/Meesho/BharatMLStack/horizon/internal/predator/proto/protogen"
 )
 
 type Payload struct {
@@ -169,7 +171,7 @@ type ModelParamsResponse struct {
 	Backend                string           `json:"backend"`
 	DynamicBatchingEnabled bool             `json:"dynamic_batching_enabled"`
 	Platform               string           `json:"platform"`
-	EnsembleScheduling     *ModelEnsembling `json:"ensemble_scheduling,omitempty"`
+	EnsembleScheduling     *protogen.ModelEnsembling `json:"ensemble_scheduling,omitempty"`
 }
 
 type RequestGenerationRequest struct {
