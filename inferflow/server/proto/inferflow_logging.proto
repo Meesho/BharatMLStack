@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option go_package = "../grpc";
+
+// InferflowLog is the message structure for inference logging
+message InferflowLog {
+    string user_id = 1;
+    string tracking_id = 2;
+    string model_config_id = 3;
+    repeated string entities = 4;
+    repeated PerEntityFeatures features = 5;
+    bytes metadata = 6;
+    repeated string parent_entity = 7;
+}
+
+message PerEntityFeatures {
+    bytes encoded_features = 1;
+}

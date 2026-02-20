@@ -1,0 +1,171 @@
+# Default values for skye-serving helm chart
+
+namespace: prd-skye-serving
+applicationName: skye-serving
+replicaCount: 2
+
+labels:
+  env: prd
+  team: bharatml
+  bu: ml
+  priority: p1
+  priority_v2: cp3
+  service_type: ""
+
+priorityClassName: ""
+
+telegraf:
+  enabled: false
+
+otel_enabled: false
+
+infrastructure:
+  secretStore:
+    name: vault-backend
+    kind: ClusterSecretStore
+  vault:
+    basePath: ""
+    otelTokenPath: ""
+
+deployment:
+  enabled: true
+  replicaCount: 2
+  revisionHistoryLimit: 3
+  image:
+    repository: ghcr.io/meesho/skye-serving
+    tag: latest
+    pullPolicy: IfNotPresent
+  ports:
+    - containerPort: 8094
+      name: http
+      protocol: TCP
+  probes:
+    liveness:
+      path: /health/self
+      port: 8094
+      scheme: HTTP
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 5
+    readiness:
+      path: /health/self
+      port: 8094
+      scheme: HTTP
+      initialDelaySeconds: 20
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 5
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  env:
+    - name: APP_NAME
+      value: "skye"
+    - name: APP_ENV
+      value: "local"
+    - name: APP_LOG_LEVEL
+      value: "INFO"
+    - name: APP_PORT
+      value: "8094"
+    - name: APP_METRIC_SAMPLING_RATE
+      value: "100"
+    # In-memory cache (10 MB)
+    - name: IN_MEMORY_CACHE_SIZE_IN_BYTES
+      value: "10485760"
+    # Etcd
+    - name: ETCD_SERVER
+      value: "etcd:2379"
+    - name: ETCD_WATCHER_ENABLED
+      value: "true"
+    # Redis
+    - name: REDIS_ADDR
+      value: "redis:6379"
+    - name: REDIS_DB
+      value: "0"
+    # Profiling
+    - name: PROFILING_ENABLED
+      value: "false"
+    # Storage
+    - name: STORAGE_AGGREGATOR_DB_COUNT
+      value: "0"
+    - name: STORAGE_EMBEDDING_STORE_COUNT
+      value: "0"
+    # Auth
+    - name: AUTH_TOKENS
+      value: "test"
+  serviceAccount:
+    enabled: false
+    annotations: {}
+  updateStrategy:
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+  terminationGracePeriodSeconds: 30
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8094
+      protocol: TCP
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  pollingInterval: 30
+  scaledown:
+    stabilizationWindowSeconds: 300
+    policies:
+      - type: Percent
+        value: 10
+        periodseconds: 60
+    selectpolicy: Min
+  scaleup:
+    stabilizationWindowSeconds: 0
+    policies:
+      - type: Percent
+        value: 50
+        periodseconds: 60
+    selectpolicy: Max
+  triggers:
+    - type: cpu
+      metadata:
+        value: "70"
+      metricType: Utilization
+
+ingress:
+  enabled: false
+  ingressClassName: contour-internal
+createContourGateway: false
+
+externalSecret:
+  enabled: false
+  path: ""
+
+configMap:
+  enabled: false
+
+canary:
+  enabled: false
+  promURL: ""
+  slackChannel: ""
+  slackWebhookURL: ""
+
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: "10%"
+
+disasterRecovery:
+  enabled: false

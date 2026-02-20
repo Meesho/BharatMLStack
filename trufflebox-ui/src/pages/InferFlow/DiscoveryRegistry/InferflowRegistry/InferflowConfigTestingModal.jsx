@@ -273,7 +273,7 @@ const InferflowConfigTestingModal = ({ open, onClose, configData, onTestComplete
             <BugReportIcon sx={{ fontSize: 24 }} />
             <Box>
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                Test InferFlow Config
+                Test Inferpipe
               </Typography>
               <Typography variant="body2" sx={{ opacity: 0.8 }}>
                 {configData?.config_id}

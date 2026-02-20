@@ -1,0 +1,7 @@
+numpy>=1.24
+sentence-transformers>=2.2
+anthropic>=0.30
+
+[dev]
+pytest>=7.0
+ruff>=0.4

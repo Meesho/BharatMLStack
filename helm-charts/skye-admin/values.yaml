@@ -1,0 +1,186 @@
+# Default values for skye-admin helm chart
+
+namespace: prd-skye-admin
+applicationName: skye-admin
+replicaCount: 2
+
+labels:
+  env: prd
+  team: bharatml
+  bu: ml
+  priority: p1
+  priority_v2: cp3
+  service_type: ""
+
+priorityClassName: ""
+
+telegraf:
+  enabled: false
+
+otel_enabled: false
+
+infrastructure:
+  secretStore:
+    name: vault-backend
+    kind: ClusterSecretStore
+  vault:
+    basePath: ""
+    otelTokenPath: ""
+
+deployment:
+  enabled: true
+  replicaCount: 2
+  revisionHistoryLimit: 3
+  image:
+    repository: ghcr.io/meesho/skye-admin
+    tag: latest
+    pullPolicy: IfNotPresent
+  ports:
+    - containerPort: 8092
+      name: http
+      protocol: TCP
+  probes:
+    liveness:
+      path: /health
+      port: 8092
+      scheme: HTTP
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 5
+    readiness:
+      path: /health
+      port: 8092
+      scheme: HTTP
+      initialDelaySeconds: 20
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 5
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  env:
+    - name: APP_NAME
+      value: "skye"
+    - name: APP_ENV
+      value: "local"
+    - name: APP_LOG_LEVEL
+      value: "INFO"
+    - name: APP_METRIC_SAMPLING_RATE
+      value: "100"
+    - name: PORT
+      value: "8092"
+    # Etcd
+    - name: ETCD_SERVER
+      value: "etcd:2379"
+    - name: ETCD_WATCHER_ENABLED
+      value: "true"
+    # Kafka producer (model state)
+    - name: MODEL_STATE_PRODUCER
+      value: "1"
+    - name: KAFKA_PRODUCER_1_TOPICS
+      value: "skye.model-state"
+    - name: KAFKA_PRODUCER_1_BOOTSTRAP_SERVERS
+      value: "broker:29092"
+    - name: KAFKA_PRODUCER_1_CLIENT_ID
+      value: "skye-admin-producer"
+    # Kafka consumer (model state)
+    - name: MODEL_STATE_CONSUMER
+      value: "1"
+    - name: KAFKA_1_TOPICS
+      value: "skye.model-state"
+    - name: KAFKA_1_BOOTSTRAP_SERVERS
+      value: "broker:29092"
+    - name: KAFKA_1_BASIC_AUTH_CREDENTIAL_SOURCE
+      value: "NONE"
+    - name: KAFKA_1_GROUP_ID
+      value: "skye-admin-model-state"
+    - name: KAFKA_1_AUTO_OFFSET_RESET
+      value: "earliest"
+    - name: KAFKA_1_AUTO_COMMIT_INTERVAL_MS
+      value: "5000"
+    - name: KAFKA_1_ENABLE_AUTO_COMMIT
+      value: "false"
+    - name: KAFKA_1_LISTENER_CONCURRENCY
+      value: "1"
+    - name: KAFKA_1_CLIENT_ID
+      value: "skye-admin-consumer"
+    - name: KAFKA_1_BATCH_SIZE
+      value: "10"
+    - name: KAFKA_1_POLL_TIMEOUT
+      value: "1000"
+  serviceAccount:
+    enabled: false
+    annotations: {}
+  updateStrategy:
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+  terminationGracePeriodSeconds: 30
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8092
+      protocol: TCP
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  pollingInterval: 30
+  scaledown:
+    stabilizationWindowSeconds: 300
+    policies:
+      - type: Percent
+        value: 10
+        periodseconds: 60
+    selectpolicy: Min
+  scaleup:
+    stabilizationWindowSeconds: 0
+    policies:
+      - type: Percent
+        value: 50
+        periodseconds: 60
+    selectpolicy: Max
+  triggers:
+    - type: cpu
+      metadata:
+        value: "70"
+      metricType: Utilization
+
+ingress:
+  enabled: false
+  ingressClassName: contour-internal
+createContourGateway: false
+
+externalSecret:
+  enabled: false
+  path: ""
+
+configMap:
+  enabled: false
+
+canary:
+  enabled: false
+  promURL: ""
+  slackChannel: ""
+  slackWebhookURL: ""
+
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: "10%"
+
+disasterRecovery:
+  enabled: false

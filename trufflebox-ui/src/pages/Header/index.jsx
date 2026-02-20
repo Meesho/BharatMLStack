@@ -139,10 +139,10 @@ function Header({ onMenuItemClick }) {
       children: [
         {
           key: 'MPDiscovery',
-          label: 'Discovery / Registry',
+          label: 'Registry',
           subItems: [
-            { key: 'Deployable', label: 'Deployable', path: '/inferflow/deployable', screenType: 'deployable' },
-            { key: 'MPConfig', label: 'Config', path: '/inferflow/config-registry', screenType: 'inferflow-config' },
+            { key: 'Deployable', label: 'Deployables', path: '/inferflow/deployable', screenType: 'deployable' },
+            { key: 'MPConfig', label: 'Inferpipes', path: '/inferflow/config-registry', screenType: 'inferflow-config' },
           ],
           roles: null,
         },
@@ -150,7 +150,7 @@ function Header({ onMenuItemClick }) {
           key: 'MPApproval',
           label: 'Approval',
           subItems: [
-            { key: 'MPConfigApproval', label: 'Config', path: '/inferflow/config-approval', screenType: 'inferflow-config-approval' },
+            { key: 'MPConfigApproval', label: 'Inferpipes', path: '/inferflow/config-approval', screenType: 'inferflow-config-approval' },
           ],
           roles: null,
         },

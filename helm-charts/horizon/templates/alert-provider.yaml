@@ -1,0 +1,14 @@
+{{- if and .Values.canary (.Values.canary.enabled) .Values.canary.slackWebhookURL (ne .Values.canary.slackWebhookURL "") }}
+apiVersion: flagger.app/v1beta1
+kind: AlertProvider
+metadata:
+  name: flagger-status
+  namespace: {{ .Values.namespace }}
+spec:
+  type: slack
+  {{- if .Values.canary.slackChannel }}
+  channel: {{ .Values.canary.slackChannel }}
+  {{- end }}
+  username: flagger
+  address: {{ .Values.canary.slackWebhookURL }}
+{{- end }}

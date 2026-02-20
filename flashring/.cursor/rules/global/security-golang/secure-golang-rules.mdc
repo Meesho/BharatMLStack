@@ -1,0 +1,211 @@
+---
+description: Rules to ensure secure coding in Golang
+globs: **/*.go
+alwaysApply: true
+---
+These rules apply to all Go code in the repository and aim to prevent common security risks through disciplined input handling, safe APIs, and secure defaults.
+
+All violations must include a clear explanation of which rule was triggered and why, so developers can fix issues quickly.\
+Generated code must not violate these rules. If a rule is violated, add a code comment that explains the problem and proposes a correction.
+
+## 1. Decode Untrusted Data Safely
+
+- <Rule> Do not deserialize untrusted data with unsafe or permissive decoders. Prefer strict JSON or protobuf with size limits. Reject unknown fields. Avoid `encoding/gob` for untrusted input. Use strict YAML decoding only if required.
+- <Unsafe>
+  ```go
+  // Accepts arbitrarily large input and unknown fields
+  var in any
+  _ = json.NewDecoder(r.Body).Decode(&in)
+  ```
+- <Safe>
+  ```go
+  type CreateUser struct {
+      Name  string `json:"name"`
+      Email string `json:"email"`
+  }
+
+  dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)) // 1 MB cap
+  dec.DisallowUnknownFields()
+  dec.UseNumber()
+
+  var in CreateUser
+  if err := dec.Decode(&in); err != nil { /* handle */ }
+  ```
+- **YAML (only if needed):**
+  ```go
+  dec := yaml.NewDecoder(bytes.NewReader(b))
+  dec.KnownFields(true) // yaml.v3
+  if err := dec.Decode(&cfg); err != nil { /* handle */ }
+  ```
+- **Protobuf JSON:**
+  ```go
+  opts := protojson.UnmarshalOptions{DiscardUnknown: false}
+  if err := opts.Unmarshal(b, msg); err != nil { /* handle */ }
+  ```
+
+## 2. Use Parameterized Queries for Database Access
+
+- <Rule> Never format SQL or NoSQL queries with user input. Use placeholders and arguments. Use context with timeouts.
+- <Unsafe>
+  ```go
+  query := fmt.Sprintf("SELECT * FROM users WHERE name = '%s'", name)
+  rows, _ := db.Query(query)
+  ```
+- <Safe>
+  ```go
+  ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+  defer cancel()
+
+  row := db.QueryRowContext(ctx, "SELECT id FROM users WHERE name = $1", name)
+  ```
+
+## 3. Prevent Command Injection
+
+- <Rule> Do not pass untrusted input to shells. Use `exec.CommandContext` with fixed program and separate args. Validate inputs against allow lists.
+- <Unsafe>
+  ```go
+  exec.Command("sh", "-c", "ls "+userArg).Run()
+  ```
+- <Safe>
+  ```go
+  // validatedArg must pass strict allow list or regex
+  cmd := exec.CommandContext(ctx, "ls", validatedArg)
+  cmd.Stdout = w
+  cmd.Stderr = w
+  _ = cmd.Run()
+  ```
+
+## 4. Prevent Path Traversal Vulnerabilities
+
+- <Rule>: Do not use untrusted input directly in filesystem APIs (os.Open, os.ReadFile, os.Create). 
+  Always sanitize path input to remove traversal elements and enforce a strict allow-list for filenames.
+- <Rule>: If the filename doesn't need to be user-controlled, use a UUID or another randomly generated string instead. This is the most secure method.
+- <Unsafe>:
+  ```go
+  import "path/filepath"
+  
+  fileName := r.URL.Query().Get("filename") // Attacker can provide "../../etc/passwd" as a filename
+  path := filepath.Join("/var/data/", fileName) 
+  data, err := os.ReadFile(path)
+  ```
+- <Safe> (Never use user input directly. Sanitize it with filepath.Base and validate with an allow-list):
+  ```go
+  import (
+    "path/filepath"
+    "regexp"
+  )
+  
+  userInput := r.URL.Query().Get("filename")
+  
+  // 1. Sanitize the input to get only the final path component.
+  // removes and turns "../../etc/passwd" into "passwd".
+  filename := filepath.Base(userInput) 
+  
+  // 2. Validate the sanitized filename against a strict allow-list.
+  isValid, _ := regexp.MatchString(`^[A-Za-z0-9_-]{1,200}\.png$`, filename)
+  
+  if !isValid {
+      return 
+  }
+  ```
+
+// 3. Now it's safe to join with the base directory.
+safePath := filepath.Join("/var/data/", filename)
+  ```
+
+## 5. Template Safety
+
+- <Rule> Use `html/template` for HTML to get auto-escaping. Never use `text/template` for HTML.
+- <Unsafe>
+  ```go
+  t := template.Must(template.New("x").Parse("<div>{{.UserInput}}</div>"))
+  ```
+- <Safe>
+  ```go
+  t := template.Must(htmltemplate.New("x").Parse("<div>{{.UserInput}}</div>"))
+  ```
+
+## 6. Log and Error Hygiene
+
+- <Rule> Do not log secrets, tokens, personal data, or full request bodies. Redact sensitive fields. Return generic error messages to clients. Use a recover middleware to hide panics.
+- <Safe>
+  ```go
+  // Example redaction
+  logger.Info("login", "user", in.Email, "token", "[redacted]")
+
+  // Recover middleware
+  func Recover(next http.Handler) http.Handler {
+      return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+          defer func() {
+              if rec := recover(); rec != nil {
+                  http.Error(w, "internal error", http.StatusInternalServerError)
+              }
+          }()
+          next.ServeHTTP(w, r)
+      })
+  }
+  ```
+
+## 7. Concurrency and Race Safety
+
+- <Rule> Avoid TOCTOU on files and permissions. Guard shared state.
+- <Safe>
+  ```go
+  f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+  ```
+
+## 8. Cookies and Sessions
+
+- <Rule> Set `Secure`, `HttpOnly`, and an appropriate `SameSite`. Do not store secrets in client cookies unless encrypted and signed with a server key.
+- <Safe>
+  ```go
+  http.SetCookie(w, &http.Cookie{
+      Name:     "sid",
+      Value:    token,
+      Secure:   true,
+      HttpOnly: true,
+      SameSite: http.SameSiteLaxMode,
+      Path:     "/",
+  })
+  ```
+
+## 9. CSRF and CORS
+
+- <Rule> Use CSRF protections for state-changing requests in browser-based apps. For CORS, allow list origins and avoid `Access-Control-Allow-Origin: *` with credentials.
+- <Safe>:
+  ```go
+  // Pseudocode: only allow https://app.example.com
+  w.Header().Set("Access-Control-Allow-Origin", "https://app.example.com")
+  w.Header().Set("Vary", "Origin")
+  ```
+
+## 10. Avoid Reflection, `unsafe`, and Cgo for Untrusted Data
+
+- <Rule> Do not use `reflect`, `unsafe`, or Cgo to parse or transform untrusted inputs. Keep type boundaries strict.
+
+## 11. Operational Hardening
+
+- <Rule> Run with least privilege. In containers, avoid root, drop capabilities, mount only what you need. Never expose debug endpoints publicly.
+- <Unsafe>
+  ```go
+  // Exposing pprof on 0.0.0.0 in prod
+  http.ListenAndServe(":6060", http.DefaultServeMux)
+  ```
+- <Safe>
+  ```go
+  // Bind pprof to localhost only, or protect with auth and network policy
+  go func() { _ = http.ListenAndServe("127.0.0.1:6060", nil) }()
+  ```
+## 12. Parsing XML Securly:
+- <Rule> Use encoding/xml for parsing XML. It does not support DTDs or external entities, so it’s safe against XXE by default. Always limit input size and nesting depth to prevent denial-of-service.
+- Never use third-party XML libraries that enable DTDs or external entities. Wrap input with io.LimitReader to cap size. Track nesting depth in custom decoders to prevent stack exhaustion. Validate parsed data against business rules (schemas, required fields, etc.).
+
+---
+
+### Additional Guidance
+
+- Check inputs as early as possible: validate type, length, format, and restrict to safe values.
+- Impose strict size limits on untrusted data such as HTTP requests, file uploads, or archives.
+- Avoid reflecting user-controlled content in error messages, HTML, or logs.
+- Use `context.Context` to manage timeouts and cancellations consistently across I/O operations.
+- Clearly explain any deviations from these rules in the code, along with a follow-up task to remove them.

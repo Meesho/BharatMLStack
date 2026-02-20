@@ -143,6 +143,9 @@ func (j *VariantOnboardingJob) Run() {
 }
 
 func (j *VariantOnboardingJob) checkIfPreviousDAGRunIsPending() error {
+	if j.appConfig.UseSkyeTriggerInsteadOfAirflow {
+		return nil
+	}
 	airflowClient := externalcall.GetAirflowClient()
 	dagRuns, err := airflowClient.ListDAGRuns(j.appConfig.InitialIngestionAirflowDAGID)
 	if err != nil {
@@ -300,6 +303,15 @@ func (j *VariantOnboardingJob) checkAirflowDAGRunStatus(payload map[string]inter
 		return nil, fmt.Errorf("dag_run_id not found in airflow_response")
 	}
 
+	// OSS: when using skye-trigger, we stored a synthetic response; return success without calling Airflow
+	if dagRunID == externalcall.SkyeTriggerDAGRunID {
+		return &externalcall.AirflowDAGRun{
+			DagID:    j.appConfig.InitialIngestionAirflowDAGID,
+			DagRunID: externalcall.SkyeTriggerDAGRunID,
+			State:    "success",
+		}, nil
+	}
+
 	// Get DAG run status from Airflow
 	airflowClient := externalcall.GetAirflowClient()
 	dagRun, err := airflowClient.GetDAGRun(j.appConfig.InitialIngestionAirflowDAGID, dagRunID)
@@ -384,52 +396,66 @@ func (j *VariantOnboardingJob) checkCollectionStatus(apiURL string) (*Collection
 }
 
 func (j *VariantOnboardingJob) triggerPrismAndAirflow(task *variant_onboarding_tasks.VariantOnboardingTask) error {
-	// Get model config from etcd
-	model, err := j.etcdConfig.GetModelConfig(task.Entity, task.Model)
-	if err != nil {
-		return fmt.Errorf("failed to get model from etcd: %w", err)
-	}
-
-	// Get variant config to extract vector_db_type
-	variant, err := j.etcdConfig.GetVariantConfig(task.Entity, task.Model, task.Variant)
-	if err != nil {
-		return fmt.Errorf("failed to get variants from etcd: %w", err)
-	}
-
 	var payload map[string]interface{}
 	if err := json.Unmarshal([]byte(task.Payload), &payload); err != nil {
 		return fmt.Errorf("failed to unmarshal payload: %w", err)
 	}
-	trainingDataPath := model.TrainingDataPath
-	if model.ModelType == enums.DELTA {
-		trainingDataPath = payload["otd_path"].(string)
+
+	// Prism flow: only when not using OSS skye-trigger
+	if !j.appConfig.UseSkyeTriggerInsteadOfAirflow {
+		model, err := j.etcdConfig.GetModelConfig(task.Entity, task.Model)
+		if err != nil {
+			return fmt.Errorf("failed to get model from etcd: %w", err)
+		}
+		variant, err := j.etcdConfig.GetVariantConfig(task.Entity, task.Model, task.Variant)
+		if err != nil {
+			return fmt.Errorf("failed to get variants from etcd: %w", err)
+		}
+		trainingDataPath := model.TrainingDataPath
+		if model.ModelType == enums.DELTA {
+			trainingDataPath = payload["otd_path"].(string)
+		}
+		prismClient := externalcall.GetPrismV2Client()
+		parameters := make(map[string]interface{})
+		parameters["entity_name"] = task.Entity
+		parameters["frequency"] = model.JobFrequency
+		parameters["environment"] = j.appConfig.AppEnv
+		parameters["vector_db_type"] = variant.VectorDbType
+		parameters["model_name"] = task.Model
+		parameters["variant_name"] = task.Variant
+		parameters["training_data_path"] = trainingDataPath
+		if err := prismClient.UpdateStepParameters(j.appConfig.InitialIngestionPrismJobID, j.appConfig.InitialIngestionPrismStepID, parameters); err != nil {
+			return fmt.Errorf("failed to update Prism step parameters: %w", err)
+		}
 	}
 
-	// Prepare Prism parameters
-	prismClient := externalcall.GetPrismV2Client()
-	parameters := make(map[string]interface{})
-	parameters["entity_name"] = task.Entity
-	parameters["frequency"] = model.JobFrequency
-	parameters["environment"] = j.appConfig.AppEnv
-	parameters["vector_db_type"] = variant.VectorDbType
-	parameters["model_name"] = task.Model
-	parameters["variant_name"] = task.Variant
-	parameters["training_data_path"] = trainingDataPath
-
-	// Update Prism step parameters
-	if err := prismClient.UpdateStepParameters(j.appConfig.InitialIngestionPrismJobID, j.appConfig.InitialIngestionPrismStepID, parameters); err != nil {
-		return fmt.Errorf("failed to update Prism step parameters: %w", err)
-	}
-
-	// Trigger Airflow DAG
-	airflowClient := externalcall.GetAirflowClient()
-	airflowResponse, err := airflowClient.TriggerDAG(j.appConfig.InitialIngestionAirflowDAGID)
-	if err != nil {
-		return fmt.Errorf("failed to trigger Airflow DAG: %w", err)
+	var airflowResponse interface{}
+	if j.appConfig.UseSkyeTriggerInsteadOfAirflow {
+		// OSS: call skye-trigger instead of Airflow
+		if err := externalcall.TriggerSkyeTrigger(
+			j.appConfig.SkyeTriggerURL,
+			task.Entity,
+			task.Model,
+			[]string{task.Variant},
+			j.appConfig.AppEnv,
+		); err != nil {
+			return fmt.Errorf("failed to trigger skye-trigger: %w", err)
+		}
+		airflowResponse = map[string]interface{}{
+			"dag_run_id": externalcall.SkyeTriggerDAGRunID,
+			"state":      "success",
+		}
+	} else {
+		// Trigger Airflow DAG
+		airflowClient := externalcall.GetAirflowClient()
+		var err error
+		airflowResponse, err = airflowClient.TriggerDAG(j.appConfig.InitialIngestionAirflowDAGID)
+		if err != nil {
+			return fmt.Errorf("failed to trigger Airflow DAG: %w", err)
+		}
 	}
 
 	// Add or update the "airflow_response" key
-
 	payload["airflow_response"] = airflowResponse
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {

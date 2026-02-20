@@ -356,6 +356,18 @@ ls -la horizon/configs/github.pem
 
 ## Step 8: Configure Docker Compose
 
+### Where models need to be (so they are loaded)
+
+Predator loads models from a path you configure. That path is mounted into the pod as **hostPath** at `/local-models`, then an init container copies its contents to `/models`, which the main container uses.
+
+| Environment | Where models must be | What to do |
+|-------------|----------------------|------------|
+| **Docker Desktop** | A path on your **host** (e.g. `/Users/<you>/models`). | Put your model files in that directory. Set `LOCAL_MODEL_PATH` in docker-compose to the same path (see 8.1). |
+| **kind** | A path on the **kind node** (e.g. `/tmp/models`). The node is a container; the host path is not mounted into the pod. | Copy models into the node (see [8.2 Copy models to the node](#82-copy-models-to-kubernetes-node-for-kindminikube)). Set `LOCAL_MODEL_PATH=/tmp/models` (or the path you used on the node). |
+| **minikube** | A path inside the **minikube VM** (e.g. `/tmp/models`). | Use `minikube ssh` and copy files there, or mount a host dir when starting minikube. Set `LOCAL_MODEL_PATH` to that path. |
+
+The value of `LOCAL_MODEL_PATH` (in docker-compose for Horizon / in deployable config for Argo CD) is passed to the Predator Helm chart as `localModelPath`. That path must already contain your model files **on the machine that runs the K8s node** (Docker Desktop host, kind node, or minikube VM). If you use GCS for models instead, leave GCS config set and do not rely on this local path.
+
 ### 8.1 Update docker-compose.yml
 
 Edit `quick-start/docker-compose.yml` and update the following environment variables in the `horizon` service:
@@ -1093,21 +1105,21 @@ kubectl -n prd-predator port-forward svc/prd-predator 8090:80 &
 # Step 3: Test gRPC access from your host machine
 # Predator exposes Triton gRPC on port 8001 (service port 80 -> targetPort 8001)
 grpcurl -plaintext \
-  -import-path helix-client/pkg/clients/predator/client/proto \
+  -import-path go-sdk/pkg/clients/predator/client/proto \
   -proto grpc_service.proto \
   -d '{}' \
   localhost:8090 inference.GRPCInferenceService/ServerLive
 
 # Test server readiness
 grpcurl -plaintext \
-  -import-path helix-client/pkg/clients/predator/client/proto \
+  -import-path go-sdk/pkg/clients/predator/client/proto \
   -proto grpc_service.proto \
   -d '{}' \
   localhost:8090 inference.GRPCInferenceService/ServerReady
 
 # List available services
 grpcurl -plaintext \
-  -import-path helix-client/pkg/clients/predator/client/proto \
+  -import-path go-sdk/pkg/clients/predator/client/proto \
   -proto grpc_service.proto \
   localhost:8090 list
 

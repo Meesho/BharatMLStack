@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package embedding;
+
+option go_package = "gongt/proto";
+
+// Service definition for embedding operations
+service EmbeddingService {
+  // Search for similar embeddings
+  rpc Search(SearchRequest) returns (SearchResponse);
+}
+
+// Request message for embedding search
+message SearchRequest {
+  repeated double embedding = 1;
+  int32 k = 2;
+  double epsilon = 3;
+  double radius = 4;
+}
+
+// Response message containing search results
+message SearchResponse {
+  repeated SearchResult results = 1;
+}
+
+// Individual search result
+message SearchResult {
+  int32 id = 1;
+  double distance = 2;
+} 
