@@ -15,6 +15,7 @@ func Init(version int, config interface{}) {
 		switch version {
 		case DefaultVersion:
 			instance = newV1Etcd(config)
+			bootstrapIfEnabled(instance)
 		default:
 			log.Panic().Msgf("invalid version %d", version)
 		}

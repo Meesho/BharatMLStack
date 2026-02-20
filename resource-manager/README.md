@@ -30,7 +30,7 @@ For each mutating API:
 
 Shadow deployables are stored as:
 
-`/shadow-deployables/{env}/{deployable_name}`
+`/config/resource-manager/shadow-deployables/{env}/{deployable_name}`
 
 ```json
 {
@@ -48,9 +48,10 @@ Shadow deployables are stored as:
 }
 ```
 
-Secondary key used for in-use index:
+Supported pool envs are fixed:
 
-`/shadow-deployables-index/{env}/in-use/{deployable_name}`
+- `int`: shadow traffic deployables
+- `prod`: production deployables
 
 ## CAS Semantics
 
@@ -64,7 +65,7 @@ Secondary key used for in-use index:
   - `state = PROCURED`
   - set `owner` fields
   - `version = version + 1`
-  - set in-use index to `true`
+  - no secondary index update (admin service; in-memory filtering is used)
 
 ### Release
 
@@ -78,7 +79,6 @@ Secondary key used for in-use index:
   - `owner = null`
   - `min_pod_count = 0`
   - `version = version + 1`
-  - set in-use index to `false`
 
 ## API Surface
 
@@ -113,5 +113,5 @@ Controlled via env:
 - `USE_MOCK_ADAPTERS=true`: in-memory adapters (local/dev)
 - `USE_MOCK_ADAPTERS=false`: etcd-backed state/idempotency/operation stores
 
-See `.env.example` for full variable list.
+See `sample.env` for full variable list.
 

@@ -33,6 +33,9 @@ func newV1Etcd(config interface{}) Etcd {
 		log.Panic().Msgf("%s or %s is not set", envAppName, envEtcdServer)
 	}
 	appName := viper.GetString(envAppName)
+	if viper.IsSet(envEtcdAppName) {
+		appName = viper.GetString(envEtcdAppName)
+	}
 	etcdServers := viper.GetString(envEtcdServer)
 	etcdBasePath := configPath + appName
 	servers := strings.Split(etcdServers, ",")
@@ -42,7 +45,15 @@ func newV1Etcd(config interface{}) Etcd {
 		password = viper.GetString(envEtcdPassword)
 	}
 
-	conn, err := clientv3.New(clientv3.Config{Endpoints: servers, Username: username, Password: password, DialTimeout: timeout, DialKeepAliveTime: timeout, PermitWithoutStream: true})
+	reqTimeout := getEtcdRequestTimeout()
+	conn, err := clientv3.New(clientv3.Config{
+		Endpoints:           servers,
+		Username:            username,
+		Password:            password,
+		DialTimeout:         reqTimeout,
+		DialKeepAliveTime:   reqTimeout,
+		PermitWithoutStream: true,
+	})
 	if err != nil {
 		log.Error().Msgf("failed to create etcd client: %v", err)
 	}
@@ -157,14 +168,25 @@ func (v *V1) updateMaps(event *clientv3.Event, nodePath, value string) {
 }
 
 func GetChildren(etcdAbsolutePath string, conn *clientv3.Client, dataMap, metaMap *map[string]string) error {
-	children, err := conn.Get(context.Background(), etcdAbsolutePath, clientv3.WithPrefix())
+	if conn == nil {
+		return fmt.Errorf("etcd client is nil for path %s", etcdAbsolutePath)
+	}
+	reqTimeout := getEtcdRequestTimeout()
+	ctx, cancel := context.WithTimeout(context.Background(), reqTimeout)
+	defer cancel()
+
+	children, err := conn.Get(ctx, etcdAbsolutePath, clientv3.WithPrefix())
 
 	if err != nil {
 		log.Error().Msgf("Error getting config from etcd path %s ", etcdAbsolutePath)
 	}
 	if err != nil {
-		log.Error().Err(err).Msgf("Error getting config from etcd path %s ", etcdAbsolutePath)
+		log.Error().Err(err).Msgf("Error getting config from etcd path %s (endpoints=%v, timeout=%s)", etcdAbsolutePath, conn.Endpoints(), reqTimeout)
 		return err
+	}
+	if len(children.Kvs) == 0 {
+		log.Debug().Msgf("No keys found under etcd path %s", etcdAbsolutePath)
+		return nil
 	}
 
 	// Iterate over the child nodes and fetch data for each one
@@ -186,6 +208,16 @@ func GetChildren(etcdAbsolutePath string, conn *clientv3.Client, dataMap, metaMa
 		}
 	}
 	return nil
+}
+
+func getEtcdRequestTimeout() time.Duration {
+	if viper.IsSet(envEtcdReqTimeout) {
+		sec := viper.GetInt(envEtcdReqTimeout)
+		if sec > 0 {
+			return time.Duration(sec) * time.Second
+		}
+	}
+	return timeout
 }
 
 func (v *V1) handleStruct(dataMap, metaMap *map[string]string, output interface{}, prefix string) error {

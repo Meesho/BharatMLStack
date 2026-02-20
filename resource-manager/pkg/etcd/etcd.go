@@ -9,10 +9,12 @@ const (
 	configPath        = "/config/"
 	timeout           = 30 * time.Second
 	envAppName        = "APP_NAME"
+	envEtcdAppName    = "ETCD_APP_NAME"
 	envEtcdServer     = "ETCD_SERVER"
 	envEtcdUsername   = "ETCD_USERNAME"
 	envEtcdPassword   = "ETCD_PASSWORD"
 	envWatcherEnabled = "ETCD_WATCHER_ENABLED"
+	envEtcdReqTimeout = "ETCD_REQUEST_TIMEOUT_SECONDS"
 )
 
 var (

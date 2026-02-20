@@ -54,6 +54,7 @@ type WatchIntent struct {
 }
 
 type ShadowFilter struct {
+	Env      string
 	InUse    *bool
 	NodePool string
 }

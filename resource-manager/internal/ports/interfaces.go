@@ -21,6 +21,10 @@ type ShadowStateStore interface {
 	ChangeMinPodCount(ctx context.Context, env, name string, action rmtypes.Action, count int) (models.ShadowDeployable, error)
 }
 
+type ShadowCache interface {
+	ListShadowDeployables(filter models.ShadowFilter) []models.ShadowDeployable
+}
+
 type QueuePublisher interface {
 	PublishWatchIntent(ctx context.Context, intent models.WatchIntent) (models.PublishResult, error)
 }

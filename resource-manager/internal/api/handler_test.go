@@ -30,7 +30,7 @@ func TestListShadowDeployables(t *testing.T) {
 		},
 	})
 	h := NewHandler(
-		application.NewShadowService(store),
+		application.NewShadowService(store, nil),
 		application.NewOperationService(redisq.NewInMemoryPublisher(), kubernetes.NewMockExecutor(), nil),
 		etcd.NewMemoryIdempotencyKeyStore(),
 	)
@@ -52,7 +52,7 @@ func TestListShadowDeployables(t *testing.T) {
 func TestCreateDeployableRequiresIdempotencyKey(t *testing.T) {
 	store := etcd.NewMemoryShadowStateStore(nil)
 	h := NewHandler(
-		application.NewShadowService(store),
+		application.NewShadowService(store, nil),
 		application.NewOperationService(redisq.NewInMemoryPublisher(), kubernetes.NewMockExecutor(), nil),
 		etcd.NewMemoryIdempotencyKeyStore(),
 	)
@@ -85,7 +85,7 @@ func TestAllContractEndpointsAreWired(t *testing.T) {
 		},
 	})
 	h := NewHandler(
-		application.NewShadowService(store),
+		application.NewShadowService(store, nil),
 		application.NewOperationService(redisq.NewInMemoryPublisher(), kubernetes.NewMockExecutor(), nil),
 		etcd.NewMemoryIdempotencyKeyStore(),
 	)
@@ -180,7 +180,7 @@ func TestUnsupportedEnvReturnsBadRequest(t *testing.T) {
 		"int": {},
 	})
 	h := NewHandler(
-		application.NewShadowService(store),
+		application.NewShadowService(store, nil),
 		application.NewOperationService(redisq.NewInMemoryPublisher(), kubernetes.NewMockExecutor(), nil),
 		etcd.NewMemoryIdempotencyKeyStore(),
 	)
