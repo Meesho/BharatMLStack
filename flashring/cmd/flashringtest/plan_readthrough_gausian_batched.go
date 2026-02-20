@@ -14,7 +14,6 @@ import (
 	"time"
 
 	cachepkg "github.com/Meesho/BharatMLStack/flashring/pkg/cache"
-	metrics "github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -111,23 +110,7 @@ func planReadthroughGaussianBatched() {
 		MaxBatchSize:      maxBatchSize,
 	}
 
-	metricsConfig := metrics.MetricsCollectorConfig{
-		StatsEnabled:    true,
-		CsvLogging:      true,
-		ConsoleLogging:  true,
-		StatsdLogging:   false,
-		InstantMetrics:  false,
-		AveragedMetrics: true,
-		Metadata: map[string]any{
-			"shards":         numShards,
-			"keys-per-shard": keysPerShard,
-			"read-workers":   readWorkers,
-			"write-workers":  writeWorkers,
-			"plan":           "readthrough-batched"},
-	}
-	metricsCollector := metrics.InitMetricsCollector(metricsConfig)
-
-	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, metricsCollector)
+	pc, err := cachepkg.NewWrapCache(cfg, mountPoint)
 	if err != nil {
 		panic(err)
 	}

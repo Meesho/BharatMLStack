@@ -11,7 +11,6 @@ type LeakyPool struct {
 	usage            int
 	idx              int
 	lock             sync.RWMutex
-	stats            *Stats
 }
 
 type Stats struct {
@@ -34,7 +33,6 @@ func NewLeakyPool(config LeakyPoolConfig) *LeakyPool {
 		usage:            0,
 		idx:              -1,
 		preDrefHook:      nil,
-		stats:            &Stats{Usage: 0, Capacity: config.Capacity},
 	}
 }
 

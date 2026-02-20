@@ -68,7 +68,6 @@ func (br *BatchReader) processBatches() {
 			return
 		case firstReq := <-br.requests:
 			batch := br.collectBatch(firstReq)
-			br.shardCache.Stats.BatchTracker.RecordBatchSize(len(batch))
 			br.executeBatch(batch)
 		}
 	}

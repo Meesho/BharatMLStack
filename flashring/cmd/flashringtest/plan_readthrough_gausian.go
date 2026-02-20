@@ -16,8 +16,6 @@ import (
 	cachepkg "github.com/Meesho/BharatMLStack/flashring/pkg/cache"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-
-	metrics "github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 )
 
 func planReadthroughGaussian() {
@@ -88,21 +86,6 @@ func planReadthroughGaussian() {
 	memtableSizeInBytes := int32(memtableMB) * 1024 * 1024
 	fileSizeInBytes := int64(float64(fileSizeMultiplier) * 1024 * 1024 * 1024) // fileSizeMultiplier in GiB
 
-	metricsConfig := metrics.MetricsCollectorConfig{
-		StatsEnabled:    true,
-		CsvLogging:      true,
-		ConsoleLogging:  true,
-		StatsdLogging:   true,
-		InstantMetrics:  false,
-		AveragedMetrics: true,
-		Metadata: map[string]any{
-			"shards":         numShards,
-			"keys-per-shard": keysPerShard,
-			"read-workers":   readWorkers,
-			"write-workers":  writeWorkers,
-			"plan":           "readthrough"},
-	}
-
 	cfg := cachepkg.WrapCacheConfig{
 		NumShards:             numShards,
 		KeysPerShard:          keysPerShard,
@@ -113,9 +96,7 @@ func planReadthroughGaussian() {
 		SampleDuration:        time.Duration(sampleSecs) * time.Second,
 	}
 
-	metricsCollector := metrics.InitMetricsCollector(metricsConfig)
-
-	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, metricsCollector)
+	pc, err := cachepkg.NewWrapCache(cfg, mountPoint)
 	if err != nil {
 		panic(err)
 	}
@@ -196,7 +177,7 @@ func planReadthroughGaussian() {
 					if found && string(val) != fmt.Sprintf(str1kb, randomval) {
 						panic("value mismatch")
 					}
-					if k%5000000 == 0 {
+					if k%50000 == 0 {
 						fmt.Printf("----------------------------------------------read %d keys %d readerid\n", k, workerID)
 					}
 				}

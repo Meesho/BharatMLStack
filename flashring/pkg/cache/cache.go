@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
@@ -42,27 +41,10 @@ var (
 )
 
 type WrapCache struct {
-	shards           []*filecache.ShardCache
-	shardLocks       []sync.RWMutex
-	predictor        *maths.Predictor
-	stats            []*CacheStats
-	metricsCollector *metrics.MetricsCollector
-	batchReader      *fs.BatchIoUringReader // global batched io_uring reader
-}
-
-type CacheStats struct {
-	Hits                   atomic.Uint64
-	TotalGets              atomic.Uint64
-	TotalPuts              atomic.Uint64
-	ReWrites               atomic.Uint64
-	Expired                atomic.Uint64
-	ShardWiseActiveEntries atomic.Uint64
-	LatencyTracker         *filecache.LatencyTracker
-	BatchTracker           *filecache.BatchTracker
-
-	PrevHits      atomic.Uint64
-	PrevTotalGets atomic.Uint64
-	timeStarted   time.Time
+	shards      []*filecache.ShardCache
+	shardLocks  []sync.RWMutex
+	predictor   *maths.Predictor
+	batchReader *fs.BatchIoUringReader // global batched io_uring reader
 }
 
 type WrapCacheConfig struct {
@@ -82,14 +64,11 @@ type WrapCacheConfig struct {
 	//lockless mode for PutLL/GetLL
 	EnableLockless bool
 
-	// Optional metrics recorder
-	MetricsRecorder metrics.MetricsRecorder
-
 	//Badger
 	MountPoint string
 }
 
-func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *metrics.MetricsCollector) (*WrapCache, error) {
+func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error) {
 	if config.NumShards <= 0 {
 		return nil, ErrNumShardLessThan1
 	}
@@ -226,72 +205,13 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string, metricsCollector *m
 		}, &shardLocks[i])
 	}
 
-	stats := make([]*CacheStats, config.NumShards)
-	for i := 0; i < config.NumShards; i++ {
-		stats[i] = &CacheStats{LatencyTracker: filecache.NewLatencyTracker(), BatchTracker: filecache.NewBatchTracker()}
-	}
 	wc := &WrapCache{
-		shards:           shards,
-		shardLocks:       shardLocks,
-		predictor:        predictor,
-		stats:            stats,
-		metricsCollector: metricsCollector,
-		batchReader:      batchReader,
+		shards:      shards,
+		shardLocks:  shardLocks,
+		predictor:   predictor,
+		batchReader: batchReader,
 	}
 
-	if metricsCollector.Config.StatsEnabled {
-
-		go func() {
-			sleepDuration := 10 * time.Second
-
-			for {
-				time.Sleep(sleepDuration)
-
-				for i := 0; i < config.NumShards; i++ {
-
-					getP25, getP50, getP99 := wc.stats[i].LatencyTracker.GetLatencyPercentiles()
-					putP25, putP50, putP99 := wc.stats[i].LatencyTracker.PutLatencyPercentiles()
-
-					shardGets := wc.stats[i].TotalGets.Load()
-					shardPuts := wc.stats[i].TotalPuts.Load()
-					shardHits := wc.stats[i].Hits.Load()
-					shardExpired := wc.stats[i].Expired.Load()
-					shardReWrites := wc.stats[i].ReWrites.Load()
-					shardActiveEntries := wc.stats[i].ShardWiseActiveEntries.Load()
-
-					wc.metricsCollector.RecordRP25(i, getP25)
-					wc.metricsCollector.RecordRP50(i, getP50)
-					wc.metricsCollector.RecordRP99(i, getP99)
-					wc.metricsCollector.RecordWP25(i, putP25)
-					wc.metricsCollector.RecordWP50(i, putP50)
-					wc.metricsCollector.RecordWP99(i, putP99)
-
-					wc.metricsCollector.RecordActiveEntries(i, int64(shardActiveEntries))
-					wc.metricsCollector.RecordExpiredEntries(i, int64(shardExpired))
-					wc.metricsCollector.RecordRewrites(i, int64(shardReWrites))
-					wc.metricsCollector.RecordGets(i, int64(shardGets))
-					wc.metricsCollector.RecordPuts(i, int64(shardPuts))
-					wc.metricsCollector.RecordHits(i, int64(shardHits))
-
-					//shard level index and rb data - actually send to metrics collector!
-					wc.metricsCollector.RecordKeyNotFoundCount(i, wc.shards[i].Stats.KeyNotFoundCount.Load())
-					wc.metricsCollector.RecordKeyExpiredCount(i, wc.shards[i].Stats.KeyExpiredCount.Load())
-					wc.metricsCollector.RecordBadDataCount(i, wc.shards[i].Stats.BadDataCount.Load())
-					wc.metricsCollector.RecordBadLengthCount(i, wc.shards[i].Stats.BadLengthCount.Load())
-					wc.metricsCollector.RecordBadCR32Count(i, wc.shards[i].Stats.BadCR32Count.Load())
-					wc.metricsCollector.RecordBadKeyCount(i, wc.shards[i].Stats.BadKeyCount.Load())
-					wc.metricsCollector.RecordDeletedKeyCount(i, wc.shards[i].Stats.DeletedKeyCount.Load())
-
-					//wrapAppendFilt stats
-					wc.metricsCollector.RecordWriteCount(i, wc.shards[i].GetFileStat().WriteCount)
-					wc.metricsCollector.RecordPunchHoleCount(i, wc.shards[i].GetFileStat().PunchHoleCount)
-
-				}
-
-				log.Error().Msgf("GridSearchActive: %v", wc.predictor.GridSearchEstimator.IsGridSearchActive())
-			}
-		}()
-	}
 	return wc, nil
 }
 
@@ -311,14 +231,13 @@ func (wc *WrapCache) PutLL(key string, value []byte, exptimeInMinutes uint16) er
 	}
 
 	if h32%100 < 10 {
-		wc.stats[shardIdx].ShardWiseActiveEntries.Store(uint64(wc.shards[shardIdx].GetRingBufferActiveEntries()))
+		metrics.Incr(metrics.KEY_RINGBUFFER_ACTIVE_ENTRIES, metrics.GetShardTag(shardIdx))
 	}
 
 	op := <-result
 	filecache.ErrorPool.Put(result)
-	wc.stats[shardIdx].TotalPuts.Add(1)
-	wc.stats[shardIdx].LatencyTracker.RecordPut(time.Since(start))
-	metrics.Timing(metrics.KEY_WRITE_LATENCY_STATSD, time.Since(start), metrics.BuildTag(metrics.NewTag(metrics.TAG_SHARD_IDX, strconv.Itoa(int(shardIdx)))))
+	metrics.Incr(metrics.KEY_PUTS, metrics.GetShardTag(shardIdx))
+	metrics.Timing(metrics.KEY_PUT_LATENCY, time.Since(start), metrics.GetShardTag(shardIdx))
 	return op
 }
 
@@ -355,14 +274,13 @@ func (wc *WrapCache) GetLL(key string) ([]byte, bool, bool) {
 	filecache.ReadRequestPool.Put(req)
 
 	if op.Found && !op.Expired {
-		wc.stats[shardIdx].Hits.Add(1)
+		metrics.Incr(metrics.KEY_HITS, metrics.GetShardTag(shardIdx))
 	}
 	if op.Expired {
-		wc.stats[shardIdx].Expired.Add(1)
+		metrics.Incr(metrics.KEY_EXPIRED_ENTRIES, metrics.GetShardTag(shardIdx))
 	}
-	wc.stats[shardIdx].LatencyTracker.RecordGet(time.Since(start))
-	metrics.Timing(metrics.KEY_READ_LATENCY_STATSD, time.Since(start), metrics.BuildTag(metrics.NewTag(metrics.TAG_SHARD_IDX, strconv.Itoa(int(shardIdx)))))
-	wc.stats[shardIdx].TotalGets.Add(1)
+	metrics.Timing(metrics.KEY_GET_LATENCY, time.Since(start), metrics.GetShardTag(shardIdx))
+	metrics.Incr(metrics.KEY_GETS, metrics.GetShardTag(shardIdx))
 
 	return op.Data, op.Found, op.Expired
 }
@@ -374,8 +292,7 @@ func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) erro
 
 	start := time.Now()
 	defer func() {
-		wc.stats[shardIdx].LatencyTracker.RecordPut(time.Since(start))
-		metrics.Timing(metrics.KEY_WRITE_LATENCY_STATSD, time.Since(start), metrics.BuildTag(metrics.NewTag(metrics.TAG_SHARD_IDX, strconv.Itoa(int(shardIdx)))))
+		metrics.Timing(metrics.KEY_PUT_LATENCY, time.Since(start), metrics.GetShardTag(shardIdx))
 	}()
 
 	start = time.Now()
@@ -388,9 +305,9 @@ func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) erro
 		log.Error().Err(err).Msgf("Put failed for key: %s", key)
 		return fmt.Errorf("put failed for key: %s", key)
 	}
-	wc.stats[shardIdx].TotalPuts.Add(1)
+	metrics.Incr(metrics.KEY_PUTS, metrics.GetShardTag(shardIdx))
 	if h32%100 < 10 {
-		wc.stats[shardIdx].ShardWiseActiveEntries.Store(uint64(wc.shards[shardIdx].GetRingBufferActiveEntries()))
+		metrics.Incr(metrics.KEY_RINGBUFFER_ACTIVE_ENTRIES, metrics.GetShardTag(shardIdx))
 	}
 
 	return nil
@@ -402,8 +319,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 
 	start := time.Now()
 	defer func() {
-		wc.stats[shardIdx].LatencyTracker.RecordGet(time.Since(start))
-		metrics.Timing(metrics.KEY_READ_LATENCY_STATSD, time.Since(start), metrics.BuildTag(metrics.NewTag(metrics.TAG_SHARD_IDX, strconv.Itoa(int(shardIdx)))))
+		metrics.Timing(metrics.KEY_GET_LATENCY, time.Since(start), metrics.GetShardTag(shardIdx))
 	}()
 
 	var keyFound bool
@@ -442,26 +358,19 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	}
 
 	if keyFound && !expired {
-		wc.stats[shardIdx].Hits.Add(1)
+		metrics.Incr(metrics.KEY_HITS, metrics.GetShardTag(shardIdx))
 	}
 	if expired {
-		wc.stats[shardIdx].Expired.Add(1)
+		metrics.Incr(metrics.KEY_EXPIRED_ENTRIES, metrics.GetShardTag(shardIdx))
 	}
-	wc.stats[shardIdx].TotalGets.Add(1)
+	metrics.Incr(metrics.KEY_GETS, metrics.GetShardTag(shardIdx))
 	if shouldReWrite {
-		wc.stats[shardIdx].ReWrites.Add(1)
+		metrics.Incr(metrics.KEY_REWRITES, metrics.GetShardTag(shardIdx))
 		wc.Put(key, valCopy, remainingTTL)
 	}
 
-	if time.Since(wc.stats[shardIdx].timeStarted) > 10*time.Second {
-		//observing hit rate every call can be avoided because average remains the same
-		hitRate := float64(wc.stats[shardIdx].Hits.Load()-wc.stats[shardIdx].PrevHits.Load()) / float64(wc.stats[shardIdx].TotalGets.Load()-wc.stats[shardIdx].PrevTotalGets.Load())
-		wc.predictor.Observe(hitRate)
-
-		wc.stats[shardIdx].timeStarted = time.Now()
-		wc.stats[shardIdx].PrevHits.Store(wc.stats[shardIdx].Hits.Load())
-		wc.stats[shardIdx].PrevTotalGets.Store(wc.stats[shardIdx].TotalGets.Load())
-	}
+	//todo: track hit rate here using
+	// wc.predictor.Observe(hitRate)
 	return val, keyFound, expired
 }
 

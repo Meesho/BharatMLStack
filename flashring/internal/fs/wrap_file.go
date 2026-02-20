@@ -88,7 +88,7 @@ func (r *WrapAppendFile) Pwrite(buf []byte) (currentPhysicalOffset int64, err er
 		r.PhysicalWriteOffset = r.PhysicalStartOffset
 	}
 	r.LogicalCurrentOffset += int64(n)
-	r.Stat.WriteCount++
+
 	return r.PhysicalWriteOffset, nil
 }
 
@@ -282,6 +282,7 @@ func (f *IOUringFile) PreadAsync(fileOffset int64, buf []byte) (int, error) {
 
 	startTime := time.Now()
 	n, err := f.ring.SubmitRead(f.ReadFd, buf, uint64(fileOffset))
+	metrics.Incr(metrics.KEY_PREAD_COUNT, []string{})
 	metrics.Timing(metrics.KEY_PREAD_LATENCY, time.Since(startTime), []string{})
 	if err != nil {
 		return 0, err
@@ -307,7 +308,7 @@ func (r *WrapAppendFile) TrimHead() (err error) {
 	if r.PhysicalStartOffset >= r.MaxFileSize {
 		r.PhysicalStartOffset = 0
 	}
-	r.Stat.PunchHoleCount++
+	metrics.Incr(metrics.KEY_PUNCH_HOLE_COUNT, []string{})
 	metrics.Timing(metrics.KEY_TRIM_HEAD_LATENCY, time.Since(startTime), []string{})
 	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
-	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 )
 
 var (
@@ -25,6 +24,7 @@ type Memtable struct {
 	readyForFlush bool
 	next          *Memtable
 	prev          *Memtable
+	ShardIdx      uint32
 }
 
 type MemtableConfig struct {
@@ -32,6 +32,7 @@ type MemtableConfig struct {
 	id       uint32
 	page     *fs.AlignedPage
 	file     *fs.WrapAppendFile
+	shardIdx uint32
 }
 
 func NewMemtable(config MemtableConfig) (*Memtable, error) {
@@ -49,6 +50,7 @@ func NewMemtable(config MemtableConfig) (*Memtable, error) {
 	}
 	return &Memtable{
 		Id:            config.id,
+		ShardIdx:      config.shardIdx,
 		capacity:      config.capacity,
 		currentOffset: 0,
 		file:          config.file,
@@ -104,7 +106,6 @@ func (m *Memtable) Flush() (n int, fileOffset int64, err error) {
 	if len(m.page.Buf)%chunkSize != 0 {
 		numChunks++
 	}
-	metrics.Count(metrics.KEY_MEMTABLE_FLUSH_COUNT, int64(numChunks), []string{})
 
 	// PwriteBatch submits all chunks in one io_uring_enter when WriteRing is
 	// set, otherwise falls back to sequential pwrite internally.

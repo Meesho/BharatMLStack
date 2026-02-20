@@ -2,17 +2,19 @@ package indicesv2
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 )
 
 func TestIndexAddRbMax(t *testing.T) {
 	loadByteOrder()
 
+	mu := &sync.RWMutex{}
 	// Use equal initial and max capacity for the fixed-size ring buffer.
 	rbMax := 1000_000
 	rbInitial := rbMax
 	hashBits := 16
-	idx := NewIndex(hashBits, rbInitial, rbMax, 1)
+	idx := NewIndex(hashBits, rbInitial, rbMax, 1, mu)
 
 	// Insert exactly rbMax distinct keys
 	for i := 0; i < rbMax; i++ {
@@ -64,7 +66,7 @@ func TestIndexDeleteAndGet(t *testing.T) {
 	rbMax := 99
 	rbInitial := rbMax
 	hashBits := 16
-	idx := NewIndex(hashBits, rbInitial, rbMax, 1)
+	idx := NewIndex(hashBits, rbInitial, rbMax, 1, nil)
 
 	// Insert exactly rbMax distinct keys in order
 	for i := 0; i < 33; i++ {
@@ -137,11 +139,13 @@ func TestIndexDeleteAndGet(t *testing.T) {
 func TestIndexDeleteAndGetOverlappingHash(t *testing.T) {
 	loadByteOrder()
 
+	mu := &sync.RWMutex{}
+
 	// Keep this small and fast
 	rbMax := 99
 	rbInitial := rbMax
 	hashBits := 16
-	idx := NewIndex(hashBits, rbInitial, rbMax, 1)
+	idx := NewIndex(hashBits, rbInitial, rbMax, 1, mu)
 
 	// Insert exactly rbMax distinct keys in order
 	for i := 0; i < 33; i++ {
