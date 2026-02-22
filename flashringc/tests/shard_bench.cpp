@@ -11,7 +11,8 @@
 #include <unistd.h>
 #include <vector>
 
-static const char* BENCH_PATH = "/tmp/flashring_shard_bench.dat";
+static const char* DEFAULT_PATH = "/tmp/flashring_shard_bench.dat";
+static const char* g_path       = DEFAULT_PATH;
 
 using Clock = std::chrono::high_resolution_clock;
 using ns_d  = std::chrono::duration<double, std::nano>;
@@ -31,7 +32,7 @@ static Stats summarise(std::vector<double>& v) {
 
 static void cleanup(uint32_t max_shards) {
     for (uint32_t i = 0; i < max_shards; ++i) {
-        std::string path = std::string(BENCH_PATH) + "." + std::to_string(i);
+        std::string path = std::string(g_path) + "." + std::to_string(i);
         ::unlink(path.c_str());
     }
 }
@@ -57,7 +58,7 @@ static void run_bench(uint32_t num_shards, size_t val_sz) {
     size_t mt_size = static_cast<size_t>(NUM_KEYS) * (val_sz + 64) + (1 << 20);
 
     auto cache = Cache::open({
-        .device_path    = BENCH_PATH,
+        .device_path    = g_path,
         .ring_capacity  = ring_cap,
         .memtable_size  = mt_size,
         .index_capacity = NUM_KEYS,
@@ -168,11 +169,14 @@ static void run_bench(uint32_t num_shards, size_t val_sz) {
     cleanup(64);
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    if (argc > 1) g_path = argv[1];
+
     const size_t val_sizes[]    = {1024, 2048, 4096};
     const uint32_t shard_counts[] = {1, 2, 4, 8};
 
-    std::printf("flashringc shard benchmark  (10K keys, 50K measure ops)\n\n");
+    std::printf("flashringc shard benchmark  (10K keys, 50K measure ops)\n");
+    std::printf("path: %s\n\n", g_path);
 
     for (size_t val_sz : val_sizes) {
         for (uint32_t shards : shard_counts) {
