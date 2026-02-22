@@ -1,5 +1,0 @@
-/Users/adarsha.das/Desktop/open_source/BharatMLStack/flashringc/build/CMakeFiles/flashring.dir
-/Users/adarsha.das/Desktop/open_source/BharatMLStack/flashringc/build/CMakeFiles/ring_test.dir
-/Users/adarsha.das/Desktop/open_source/BharatMLStack/flashringc/build/CMakeFiles/perf_test.dir
-/Users/adarsha.das/Desktop/open_source/BharatMLStack/flashringc/build/CMakeFiles/edit_cache.dir
-/Users/adarsha.das/Desktop/open_source/BharatMLStack/flashringc/build/CMakeFiles/rebuild_cache.dir
