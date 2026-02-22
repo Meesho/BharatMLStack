@@ -11,10 +11,18 @@
 #include <shared_mutex>
 #include <string>
 #include <thread>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
-static const char* TEST_PATH = "/tmp/flashring_cache_perf.dat";
+static const char* DEFAULT_PATH = "/tmp/flashring_cache_perf.dat";
+static const char* g_path       = DEFAULT_PATH;
+static bool        g_is_blk     = false;
+
+static bool is_block_device(const char* path) {
+    struct stat st{};
+    return (::stat(path, &st) == 0 && S_ISBLK(st.st_mode));
+}
 
 using Clock = std::chrono::high_resolution_clock;
 using ns_d  = std::chrono::duration<double, std::nano>;
@@ -78,11 +86,13 @@ static std::vector<uint8_t> gen_value(size_t sz) {
 
 // ─── Benchmarks ──────────────────────────────────────────────────────────────
 
+static void cleanup() { if (!g_is_blk) ::unlink(g_path); }
+
 static void bench_put(uint32_t n, size_t val_sz) {
-    ::unlink(TEST_PATH);
+    cleanup();
     auto cache = Cache::open({
-        .device_path    = TEST_PATH,
-        .ring_capacity  = static_cast<uint64_t>(n) * (val_sz + 64) * 2,
+        .device_path    = g_path,
+        .ring_capacity  = g_is_blk ? 0 : static_cast<uint64_t>(n) * (val_sz + 64) * 2,
         .memtable_size  = 4 << 20,
         .index_capacity = n,
     });
@@ -100,14 +110,14 @@ static void bench_put(uint32_t n, size_t val_sz) {
     }
     auto s = summarise(lat);
     print_row("put", n, val_sz, 1, s);
-    ::unlink(TEST_PATH);
+    cleanup();
 }
 
 static void bench_get_mem(uint32_t n, size_t val_sz) {
-    ::unlink(TEST_PATH);
+    cleanup();
     auto cache = Cache::open({
-        .device_path    = TEST_PATH,
-        .ring_capacity  = static_cast<uint64_t>(n) * (val_sz + 64) * 2,
+        .device_path    = g_path,
+        .ring_capacity  = g_is_blk ? 0 : static_cast<uint64_t>(n) * (val_sz + 64) * 2,
         .memtable_size  = static_cast<size_t>(n) * (val_sz + 64) + (1 << 20),
         .index_capacity = n,
     });
@@ -133,15 +143,15 @@ static void bench_get_mem(uint32_t n, size_t val_sz) {
     }
     auto s = summarise(lat);
     print_row("get_mem", n, val_sz, 1, s);
-    ::unlink(TEST_PATH);
+    cleanup();
 }
 
 static void bench_get_disk(uint32_t n, size_t val_sz) {
-    ::unlink(TEST_PATH);
+    cleanup();
     auto cache = Cache::open({
-        .device_path    = TEST_PATH,
-        .ring_capacity  = static_cast<uint64_t>(n) * (val_sz + 64) * 2,
-        .memtable_size  = 256 * 1024,  // small memtable to force flushes
+        .device_path    = g_path,
+        .ring_capacity  = g_is_blk ? 0 : static_cast<uint64_t>(n) * (val_sz + 64) * 2,
+        .memtable_size  = 256 * 1024,
         .index_capacity = n,
     });
 
@@ -167,14 +177,14 @@ static void bench_get_disk(uint32_t n, size_t val_sz) {
     }
     auto s = summarise(lat);
     print_row("get_disk", n, val_sz, 1, s);
-    ::unlink(TEST_PATH);
+    cleanup();
 }
 
 static void bench_get_miss(uint32_t n, size_t val_sz) {
-    ::unlink(TEST_PATH);
+    cleanup();
     auto cache = Cache::open({
-        .device_path    = TEST_PATH,
-        .ring_capacity  = 16 << 20,
+        .device_path    = g_path,
+        .ring_capacity  = g_is_blk ? 0 : static_cast<uint64_t>(16 << 20),
         .memtable_size  = 4 << 20,
         .index_capacity = n,
     });
@@ -192,14 +202,14 @@ static void bench_get_miss(uint32_t n, size_t val_sz) {
     }
     auto s = summarise(lat);
     print_row("get_miss", n, val_sz, 1, s);
-    ::unlink(TEST_PATH);
+    cleanup();
 }
 
 static void bench_remove(uint32_t n, size_t val_sz) {
-    ::unlink(TEST_PATH);
+    cleanup();
     auto cache = Cache::open({
-        .device_path    = TEST_PATH,
-        .ring_capacity  = static_cast<uint64_t>(n) * (val_sz + 64) * 2,
+        .device_path    = g_path,
+        .ring_capacity  = g_is_blk ? 0 : static_cast<uint64_t>(n) * (val_sz + 64) * 2,
         .memtable_size  = 4 << 20,
         .index_capacity = n,
     });
@@ -223,15 +233,14 @@ static void bench_remove(uint32_t n, size_t val_sz) {
     }
     auto s = summarise(lat);
     print_row("remove", n, val_sz, 1, s);
-    ::unlink(TEST_PATH);
+    cleanup();
 }
 
-// Mixed: 90% get / 10% put, multi-threaded.
 static void bench_mixed(uint32_t n, size_t val_sz, int num_threads) {
-    ::unlink(TEST_PATH);
+    cleanup();
     auto cache = Cache::open({
-        .device_path    = TEST_PATH,
-        .ring_capacity  = static_cast<uint64_t>(n) * (val_sz + 64) * 4,
+        .device_path    = g_path,
+        .ring_capacity  = g_is_blk ? 0 : static_cast<uint64_t>(n) * (val_sz + 64) * 4,
         .memtable_size  = 4 << 20,
         .index_capacity = n,
     });
@@ -283,13 +292,18 @@ static void bench_mixed(uint32_t n, size_t val_sz, int num_threads) {
     auto s = summarise(merged);
     s.mops *= num_threads;
     print_row("mixed_90r", n, val_sz, num_threads, s);
-    ::unlink(TEST_PATH);
+    cleanup();
 }
 
 // ─── main ────────────────────────────────────────────────────────────────────
 
-int main() {
-    std::printf("flashringc cache perf benchmark\n\n");
+int main(int argc, char* argv[]) {
+    if (argc > 1) g_path = argv[1];
+    g_is_blk = is_block_device(g_path);
+
+    const char* mode = g_is_blk ? "raw block device" : "file-backed";
+    std::printf("flashringc cache perf benchmark  (%s)\n", mode);
+    std::printf("path: %s\n\n", g_path);
 
     struct Scenario {
         uint32_t keys;
