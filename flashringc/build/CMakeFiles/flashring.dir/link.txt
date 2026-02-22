@@ -1,0 +1,2 @@
+/usr/bin/ar qc libflashring.a CMakeFiles/flashring.dir/src/ring_device.cpp.o CMakeFiles/flashring.dir/src/memtable.cpp.o
+/usr/bin/ranlib libflashring.a
