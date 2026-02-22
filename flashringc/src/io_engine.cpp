@@ -1,7 +1,9 @@
 #include "io_engine.h"
 
-#include <unistd.h>
 #include <algorithm>
+#include <cstring>
+#include <new>
+#include <unistd.h>
 
 #if defined(__linux__) && defined(HAVE_IO_URING)
 #include <liburing.h>
@@ -15,7 +17,8 @@ IoEngine::IoEngine(bool use_uring, uint32_t queue_depth)
     : queue_depth_(queue_depth) {
 #if defined(__linux__) && defined(HAVE_IO_URING)
     if (use_uring) {
-        auto* ring = new struct io_uring{};
+        auto* ring = new (std::nothrow) struct io_uring;
+        std::memset(ring, 0, sizeof(*ring));
         int ret = io_uring_queue_init(queue_depth_, ring, 0);
         if (ret == 0) {
             ring_ptr_ = ring;
