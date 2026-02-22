@@ -85,3 +85,6 @@ target_link_libraries(cache_perf_test PRIVATE flashring)
 
 add_executable(shard_bench tests/shard_bench.cpp)
 target_link_libraries(shard_bench PRIVATE flashring)
+
+add_executable(batch_ttl_stress_test tests/batch_ttl_stress_test.cpp)
+target_link_libraries(batch_ttl_stress_test PRIVATE flashring)
