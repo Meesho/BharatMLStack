@@ -192,22 +192,11 @@ bool Shard::read_record(const LookupResult& lr, std::vector<uint8_t>& buf) {
     if (file_off < 0)
         return false;
 
-    uint64_t ring_offset = static_cast<uint64_t>(file_off) + lr.offset;
+    uint64_t abs_offset = static_cast<uint64_t>(file_off) + lr.offset;
     size_t aligned_len = AlignedBuffer::align_up(lr.length);
-    if (ring_offset + aligned_len > ring_.capacity())
-        return false;
-
     auto tmp = AlignedBuffer::allocate(aligned_len);
-
-    ReadOp op = {
-        .buf    = tmp.data(),
-        .len    = aligned_len,
-        .offset = ring_offset + ring_.base_offset(),
-        .fd     = ring_.read_fd(),
-    };
-    io_engine_.read_batch(&op, 1);
-
-    if (!op.ok)
+    ssize_t n = ring_.read(tmp.data(), aligned_len, abs_offset);
+    if (n != static_cast<ssize_t>(aligned_len))
         return false;
     std::memcpy(buf.data(), tmp.bytes(), lr.length);
     return true;
