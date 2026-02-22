@@ -42,6 +42,8 @@ bool Shard::get(Hash128 h, const void* key, size_t key_len,
 
     DecodedRecord dr = decode_record(buf.data());
 
+    if (kRecordHeaderSize + dr.key_len + dr.val_len > lr.length)
+        return false;
     if (dr.key_len != key_len ||
         std::memcmp(dr.key, key, key_len) != 0)
         return false;
@@ -86,8 +88,9 @@ void Shard::get_batch(const BatchGetRequest* reqs, BatchGetResult* results,
                 if (memtables_.try_read_from_memory(
                         mem_bufs[i].data(), lrs[i].length,
                         lrs[i].mem_id, lrs[i].offset)) {
-                    // Served from memtable — decode and verify
                     DecodedRecord dr = decode_record(mem_bufs[i].data());
+                    if (kRecordHeaderSize + dr.key_len + dr.val_len > lrs[i].length)
+                        continue;
                     if (dr.key_len == reqs[i].key_len &&
                         std::memcmp(dr.key, reqs[i].key, dr.key_len) == 0) {
                         results[i].found = true;
@@ -103,7 +106,7 @@ void Shard::get_batch(const BatchGetRequest* reqs, BatchGetResult* results,
         }
     }
 
-    // Phase 2: collect disk reads
+    // Phase 2: collect disk reads (with ring-region bounds check)
     std::vector<PendingRead> pending;
     for (size_t i = 0; i < count; ++i) {
         if (!found_in_index[i]) continue;
@@ -111,7 +114,10 @@ void Shard::get_batch(const BatchGetRequest* reqs, BatchGetResult* results,
         int64_t file_off = memtables_.file_offset_for(lrs[i].mem_id);
         if (file_off < 0) continue;
 
+        uint64_t ring_offset = static_cast<uint64_t>(file_off) + lrs[i].offset;
         size_t aligned_len = AlignedBuffer::align_up(lrs[i].length);
+        if (ring_offset + aligned_len > ring_.capacity()) continue;
+
         auto abuf = AlignedBuffer::allocate(aligned_len);
         if (!abuf.valid()) continue;
 
@@ -124,12 +130,11 @@ void Shard::get_batch(const BatchGetRequest* reqs, BatchGetResult* results,
     std::vector<ReadOp> ops(pending.size());
     for (size_t j = 0; j < pending.size(); ++j) {
         auto& p = pending[j];
-        uint64_t abs_offset = static_cast<uint64_t>(p.file_off) +
-                              p.lr.offset + ring_.base_offset();
+        uint64_t ring_off = static_cast<uint64_t>(p.file_off) + p.lr.offset;
         ops[j] = {
             .buf    = p.abuf.data(),
             .len    = p.aligned_len,
-            .offset = abs_offset,
+            .offset = ring_off + ring_.base_offset(),
             .fd     = ring_.read_fd(),
         };
     }
@@ -143,6 +148,8 @@ void Shard::get_batch(const BatchGetRequest* reqs, BatchGetResult* results,
         auto& p = pending[j];
         DecodedRecord dr = decode_record(p.abuf.bytes());
 
+        if (kRecordHeaderSize + dr.key_len + dr.val_len > p.lr.length)
+            continue;
         if (dr.key_len != reqs[p.req_idx].key_len ||
             std::memcmp(dr.key, reqs[p.req_idx].key, dr.key_len) != 0)
             continue;
@@ -185,15 +192,17 @@ bool Shard::read_record(const LookupResult& lr, std::vector<uint8_t>& buf) {
     if (file_off < 0)
         return false;
 
-    uint64_t abs_offset = static_cast<uint64_t>(file_off) + lr.offset +
-                          ring_.base_offset();
+    uint64_t ring_offset = static_cast<uint64_t>(file_off) + lr.offset;
     size_t aligned_len = AlignedBuffer::align_up(lr.length);
+    if (ring_offset + aligned_len > ring_.capacity())
+        return false;
+
     auto tmp = AlignedBuffer::allocate(aligned_len);
 
     ReadOp op = {
         .buf    = tmp.data(),
         .len    = aligned_len,
-        .offset = abs_offset,
+        .offset = ring_offset + ring_.base_offset(),
         .fd     = ring_.read_fd(),
     };
     io_engine_.read_batch(&op, 1);
