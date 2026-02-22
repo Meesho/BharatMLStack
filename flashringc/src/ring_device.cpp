@@ -63,24 +63,30 @@ uint64_t block_device_size(int fd) {
 // ---------------------------------------------------------------------------
 
 RingDevice::~RingDevice() {
-    if (fd_ >= 0) ::close(fd_);
+    if (write_fd_ >= 0) ::close(write_fd_);
+    if (read_fd_  >= 0) ::close(read_fd_);
 }
 
 RingDevice::RingDevice(RingDevice&& o) noexcept
-    : fd_(o.fd_), capacity_(o.capacity_), write_offset_(o.write_offset_),
+    : write_fd_(o.write_fd_), read_fd_(o.read_fd_),
+      capacity_(o.capacity_), write_offset_(o.write_offset_),
       wrapped_(o.wrapped_), is_blk_(o.is_blk_) {
-    o.fd_ = -1;
+    o.write_fd_ = -1;
+    o.read_fd_  = -1;
 }
 
 RingDevice& RingDevice::operator=(RingDevice&& o) noexcept {
     if (this != &o) {
-        if (fd_ >= 0) ::close(fd_);
-        fd_           = o.fd_;
+        if (write_fd_ >= 0) ::close(write_fd_);
+        if (read_fd_  >= 0) ::close(read_fd_);
+        write_fd_     = o.write_fd_;
+        read_fd_      = o.read_fd_;
         capacity_     = o.capacity_;
         write_offset_ = o.write_offset_;
         wrapped_      = o.wrapped_;
         is_blk_       = o.is_blk_;
-        o.fd_ = -1;
+        o.write_fd_ = -1;
+        o.read_fd_  = -1;
     }
     return *this;
 }
@@ -96,13 +102,18 @@ RingDevice RingDevice::open(const std::string& path, uint64_t capacity) {
     bool exists = (::stat(path.c_str(), &st) == 0);
 
     if (exists && S_ISBLK(st.st_mode)) {
-        // --- Block device ---
-        dev.fd_ = open_direct(path.c_str(), O_RDWR);
-        if (dev.fd_ < 0)
-            throw std::runtime_error("open block device: " +
+        // --- Block device: two independent fds ---
+        dev.write_fd_ = open_direct(path.c_str(), O_RDWR);
+        if (dev.write_fd_ < 0)
+            throw std::runtime_error("open block device (write): " +
                                      std::string(std::strerror(errno)));
+        dev.read_fd_ = open_direct(path.c_str(), O_RDONLY);
+        if (dev.read_fd_ < 0)
+            throw std::runtime_error("open block device (read): " +
+                                     std::string(std::strerror(errno)));
+
         dev.is_blk_   = true;
-        dev.capacity_ = block_device_size(dev.fd_);
+        dev.capacity_ = block_device_size(dev.write_fd_);
         if (dev.capacity_ == 0)
             throw std::runtime_error("cannot determine block device size");
     } else {
@@ -112,13 +123,18 @@ RingDevice RingDevice::open(const std::string& path, uint64_t capacity) {
 
         capacity = AlignedBuffer::align_up(capacity);
 
-        dev.fd_ = open_direct(path.c_str(), O_RDWR | O_CREAT, 0644);
-        if (dev.fd_ < 0)
-            throw std::runtime_error("open file: " +
+        dev.write_fd_ = open_direct(path.c_str(), O_RDWR | O_CREAT, 0644);
+        if (dev.write_fd_ < 0)
+            throw std::runtime_error("open file (write): " +
                                      std::string(std::strerror(errno)));
 
-        if (preallocate_file(dev.fd_, capacity) < 0)
+        if (preallocate_file(dev.write_fd_, capacity) < 0)
             throw std::runtime_error("preallocate: " +
+                                     std::string(std::strerror(errno)));
+
+        dev.read_fd_ = open_direct(path.c_str(), O_RDONLY);
+        if (dev.read_fd_ < 0)
+            throw std::runtime_error("open file (read): " +
                                      std::string(std::strerror(errno)));
 
         dev.is_blk_   = false;
@@ -141,7 +157,7 @@ int64_t RingDevice::write(const void* buf, size_t len) {
         wrapped_ = true;
     }
 
-    ssize_t n = ::pwrite(fd_, buf, len, static_cast<off_t>(write_offset_));
+    ssize_t n = ::pwrite(write_fd_, buf, len, static_cast<off_t>(write_offset_));
     if (n != static_cast<ssize_t>(len)) return -1;
 
     int64_t written_at = static_cast<int64_t>(write_offset_);
@@ -164,7 +180,7 @@ ssize_t RingDevice::read(void* buf, size_t len, uint64_t offset) const {
     if ((offset & (kBlockSize - 1)) != 0) return -1;
     if (offset + len > capacity_) return -1;
 
-    return ::pread(fd_, buf, len, static_cast<off_t>(offset));
+    return ::pread(read_fd_, buf, len, static_cast<off_t>(offset));
 }
 
 // ---------------------------------------------------------------------------
@@ -182,7 +198,7 @@ ssize_t RingDevice::read_unaligned(void* buf, size_t len, uint64_t offset) const
     auto tmp = AlignedBuffer::allocate(aligned_len);
     if (!tmp.valid()) return -1;
 
-    ssize_t n = ::pread(fd_, tmp.data(), aligned_len,
+    ssize_t n = ::pread(read_fd_, tmp.data(), aligned_len,
                         static_cast<off_t>(aligned_start));
     if (n < static_cast<ssize_t>(aligned_len)) return -1;
 
@@ -199,7 +215,7 @@ int RingDevice::discard(uint64_t offset, uint64_t length) {
 #ifdef __linux__
     if (!is_blk_) return 0;
     uint64_t range[2] = {offset, length};
-    return ::ioctl(fd_, BLKDISCARD, range);
+    return ::ioctl(write_fd_, BLKDISCARD, range);
 #else
     (void)offset; (void)length;
     return 0;

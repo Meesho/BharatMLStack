@@ -6,8 +6,9 @@
 
 // Circular ring buffer backed by a raw block device or pre-allocated file.
 //
-// Writes are sequential and wrap around when capacity is reached.
-// Reads use O_DIRECT to bypass the kernel page cache.
+// Uses separate file descriptors for reads and writes so they can proceed
+// on independent NVMe submission queues without kernel-level fd contention.
+// Both fds use O_DIRECT to bypass the kernel page cache.
 // On block devices, BLKDISCARD sends TRIM to the SSD controller.
 class RingDevice {
 public:
@@ -45,7 +46,8 @@ public:
 private:
     RingDevice() = default;
 
-    int      fd_           = -1;
+    int      write_fd_     = -1;   // O_DIRECT fd used exclusively for pwrite
+    int      read_fd_      = -1;   // O_DIRECT fd used exclusively for pread
     uint64_t capacity_     = 0;
     uint64_t write_offset_ = 0;
     bool     wrapped_      = false;

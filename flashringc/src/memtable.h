@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
+#include <shared_mutex>
 #include <thread>
 #include <unordered_map>
 
@@ -86,10 +87,12 @@ private:
     std::unordered_map<uint32_t, int64_t> flush_info_;
 
     // Synchronisation for the background flush thread.
-    std::mutex              mu_;
-    std::condition_variable flush_cv_;   // signals flush thread
-    std::condition_variable swap_cv_;    // signals put() after flush completes
-    std::thread             flush_thread_;
-    bool                    flush_pending_ = false;
-    bool                    shutdown_      = false;
+    // shared_mutex: readers (try_read_from_memory) take shared_lock,
+    // writers (put/flush/flush_loop) take unique_lock.
+    mutable std::shared_mutex       mu_;
+    std::condition_variable_any     flush_cv_;   // signals flush thread
+    std::condition_variable_any     swap_cv_;    // signals put() after flush completes
+    std::thread                     flush_thread_;
+    bool                            flush_pending_ = false;
+    bool                            shutdown_      = false;
 };

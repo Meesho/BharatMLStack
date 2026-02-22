@@ -100,7 +100,7 @@ WriteResult MemtableManager::put(const void* data, size_t len) {
 
 bool MemtableManager::try_read_from_memory(void* buf, size_t len,
                                            uint32_t mem_id, uint32_t offset) {
-    std::lock_guard lk(mu_);
+    std::shared_lock lk(mu_);
     for (int i = 0; i < 2; ++i) {
         if (mt_[i].id() == mem_id)
             return mt_[i].read(buf, len, offset);
@@ -138,7 +138,7 @@ void MemtableManager::flush() {
 }
 
 uint32_t MemtableManager::active_mem_id() const {
-    // Relaxed: informational only.
+    std::shared_lock lk(mu_);
     return mt_[active_idx_].id();
 }
 
