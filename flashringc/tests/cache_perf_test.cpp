@@ -86,7 +86,15 @@ static std::vector<uint8_t> gen_value(size_t sz) {
 
 // ─── Benchmarks ──────────────────────────────────────────────────────────────
 
-static void cleanup() { if (!g_is_blk) ::unlink(g_path); }
+static constexpr uint32_t PERF_SHARDS = 4;
+
+static void cleanup() {
+    if (g_is_blk) return;
+    for (uint32_t i = 0; i < 256; ++i) {
+        std::string path = std::string(g_path) + "." + std::to_string(i);
+        ::unlink(path.c_str());
+    }
+}
 
 static void bench_put(uint32_t n, size_t val_sz) {
     cleanup();
@@ -95,6 +103,7 @@ static void bench_put(uint32_t n, size_t val_sz) {
         .ring_capacity  = g_is_blk ? 0 : static_cast<uint64_t>(n) * (val_sz + 64) * 2,
         .memtable_size  = 4 << 20,
         .index_capacity = n,
+        .num_shards     = PERF_SHARDS,
     });
 
     auto keys = gen_keys(n);
@@ -120,6 +129,7 @@ static void bench_get_mem(uint32_t n, size_t val_sz) {
         .ring_capacity  = g_is_blk ? 0 : static_cast<uint64_t>(n) * (val_sz + 64) * 2,
         .memtable_size  = static_cast<size_t>(n) * (val_sz + 64) + (1 << 20),
         .index_capacity = n,
+        .num_shards     = PERF_SHARDS,
     });
 
     auto keys = gen_keys(n);
@@ -153,6 +163,7 @@ static void bench_get_disk(uint32_t n, size_t val_sz) {
         .ring_capacity  = g_is_blk ? 0 : static_cast<uint64_t>(n) * (val_sz + 64) * 2,
         .memtable_size  = 256 * 1024,
         .index_capacity = n,
+        .num_shards     = PERF_SHARDS,
     });
 
     auto keys = gen_keys(n);
@@ -187,6 +198,7 @@ static void bench_get_miss(uint32_t n, size_t val_sz) {
         .ring_capacity  = g_is_blk ? 0 : static_cast<uint64_t>(16 << 20),
         .memtable_size  = 4 << 20,
         .index_capacity = n,
+        .num_shards     = PERF_SHARDS,
     });
 
     uint32_t m = std::min(n, kMaxMeasure);
@@ -212,6 +224,7 @@ static void bench_remove(uint32_t n, size_t val_sz) {
         .ring_capacity  = g_is_blk ? 0 : static_cast<uint64_t>(n) * (val_sz + 64) * 2,
         .memtable_size  = 4 << 20,
         .index_capacity = n,
+        .num_shards     = PERF_SHARDS,
     });
 
     auto keys = gen_keys(n);
@@ -243,6 +256,7 @@ static void bench_mixed(uint32_t n, size_t val_sz, int num_threads) {
         .ring_capacity  = g_is_blk ? 0 : static_cast<uint64_t>(n) * (val_sz + 64) * 4,
         .memtable_size  = 4 << 20,
         .index_capacity = n,
+        .num_shards     = PERF_SHARDS,
     });
 
     auto keys = gen_keys(n);

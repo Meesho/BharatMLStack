@@ -8,17 +8,25 @@
 #include <vector>
 
 static const char* TEST_PATH = "/tmp/flashring_cache_test.dat";
+static constexpr uint32_t TEST_SHARDS = 4;
 
 static int tests_run = 0;
 static int tests_passed = 0;
+
+static void cleanup_shard_files() {
+    for (uint32_t i = 0; i < 256; ++i) {
+        std::string path = std::string(TEST_PATH) + "." + std::to_string(i);
+        ::unlink(path.c_str());
+    }
+}
 
 #define RUN(name)                                       \
     do {                                                \
         ++tests_run;                                    \
         printf("  %-40s ", #name);                      \
-        ::unlink(TEST_PATH);                            \
+        cleanup_shard_files();                          \
         name();                                         \
-        ::unlink(TEST_PATH);                            \
+        cleanup_shard_files();                          \
         ++tests_passed;                                 \
         printf("PASS\n");                               \
     } while (0)
@@ -26,9 +34,10 @@ static int tests_passed = 0;
 static CacheConfig test_cfg(uint32_t index_cap = 1024) {
     return {
         .device_path    = TEST_PATH,
-        .ring_capacity  = 16 * 1024 * 1024,  // 16 MB
-        .memtable_size  = 256 * 1024,         // 256 KB
+        .ring_capacity  = 16 * 1024 * 1024,   // 16 MB total
+        .memtable_size  = 1024 * 1024,         // 1 MB total (256 KB per shard)
         .index_capacity = index_cap,
+        .num_shards     = TEST_SHARDS,
     };
 }
 
@@ -171,19 +180,19 @@ static void test_key_count() {
 }
 
 static void test_eviction_on_full_index() {
-    auto cache = Cache::open(test_cfg(32));
+    // 128 total keys / 4 shards = 32 per shard.
+    auto cache = Cache::open(test_cfg(128));
 
-    for (int i = 0; i < 64; ++i) {
+    for (int i = 0; i < 256; ++i) {
         std::string key = "ek_" + std::to_string(i);
         std::string val = "ev_" + std::to_string(i);
         assert(cache.put(key.data(), key.size(), val.data(), val.size()));
     }
 
-    assert(cache.key_count() <= 32);
+    assert(cache.key_count() <= 128);
 
-    // Recent keys should still be accessible.
-    std::string last_key = "ek_63";
-    std::string last_val = "ev_63";
+    std::string last_key = "ek_255";
+    std::string last_val = "ev_255";
     char buf[32] = {};
     size_t actual = 0;
     assert(cache.get(last_key.data(), last_key.size(), buf, sizeof(buf), &actual));
@@ -206,6 +215,36 @@ static void test_truncated_read() {
     assert(std::memcmp(buf, val.data(), 5) == 0);
 }
 
+static void test_delete_manager_eviction() {
+    // Ring large enough to hold all data; index small enough to force eviction.
+    CacheConfig cfg{
+        .device_path    = TEST_PATH,
+        .ring_capacity  = 4 * 1024 * 1024,   // 4 MB total
+        .memtable_size  = 256 * 1024,         // 256 KB total
+        .index_capacity = 128,
+        .num_shards     = 2,
+    };
+    auto cache = Cache::open(cfg);
+
+    for (int i = 0; i < 200; ++i) {
+        std::string key = "dm_" + std::to_string(i);
+        std::string val = "val_" + std::to_string(i);
+        assert(cache.put(key.data(), key.size(), val.data(), val.size()));
+    }
+
+    // Eviction should have pruned older entries.
+    assert(cache.key_count() <= 128);
+
+    // Recent keys should still be retrievable.
+    std::string last_key = "dm_199";
+    std::string last_val = "val_199";
+    char buf[32] = {};
+    size_t actual = 0;
+    assert(cache.get(last_key.data(), last_key.size(), buf, sizeof(buf), &actual));
+    assert(actual == last_val.size());
+    assert(std::memcmp(buf, last_val.data(), last_val.size()) == 0);
+}
+
 // ─── main ────────────────────────────────────────────────────────────────────
 
 int main() {
@@ -221,6 +260,7 @@ int main() {
     RUN(test_key_count);
     RUN(test_eviction_on_full_index);
     RUN(test_truncated_read);
+    RUN(test_delete_manager_eviction);
 
     printf("\n%d / %d tests passed.\n", tests_passed, tests_run);
     return (tests_passed == tests_run) ? 0 : 1;

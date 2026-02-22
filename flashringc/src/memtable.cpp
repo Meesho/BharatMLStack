@@ -13,10 +13,13 @@ Memtable::Memtable(size_t capacity)
 }
 
 int32_t Memtable::append(const void* data, size_t len) {
-    if (used_ + len > buf_.size()) return -1;
+    size_t aligned_len = AlignedBuffer::align_up(len);
+    if (used_ + aligned_len > buf_.size()) return -1;
     std::memcpy(buf_.bytes() + used_, data, len);
+    if (aligned_len > len)
+        std::memset(buf_.bytes() + used_ + len, 0, aligned_len - len);
     auto off = static_cast<int32_t>(used_);
-    used_ += len;
+    used_ += aligned_len;
     return off;
 }
 
@@ -74,7 +77,7 @@ WriteResult MemtableManager::put(const void* data, size_t len) {
     std::unique_lock lk(mu_);
 
     // If active memtable can't fit this record, swap + schedule flush.
-    if (mt_[active_idx_].remaining() < len) {
+    if (mt_[active_idx_].remaining() < AlignedBuffer::align_up(len)) {
         // Back-pressure: wait until previous flush is done so the other
         // memtable is free to accept writes.
         swap_cv_.wait(lk, [&] { return !flush_pending_; });
@@ -91,7 +94,7 @@ WriteResult MemtableManager::put(const void* data, size_t len) {
         throw std::runtime_error("record too large for memtable");
 
     return {active.id(), static_cast<uint32_t>(off),
-            static_cast<uint16_t>(len)};
+            static_cast<uint32_t>(len)};
 }
 
 // ---------------------------------------------------------------------------

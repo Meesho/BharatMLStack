@@ -1,36 +1,52 @@
 #include "cache.h"
 #include "record.h"
 
-#include <algorithm>
-#include <chrono>
 #include <cstring>
 #include <stdexcept>
+#include <vector>
 
 // ---------------------------------------------------------------------------
 // open / move / destructor
 // ---------------------------------------------------------------------------
 
 Cache Cache::open(const CacheConfig& cfg) {
+    if (cfg.num_shards == 0)
+        throw std::invalid_argument("num_shards must be > 0");
+
     Cache c;
-    c.ring_      = std::make_unique<RingDevice>(
-                       RingDevice::open(cfg.device_path, cfg.ring_capacity));
-    c.memtables_ = std::make_unique<MemtableManager>(*c.ring_, cfg.memtable_size);
-    c.index_     = std::make_unique<KeyIndex>(cfg.index_capacity);
+    c.num_shards_ = cfg.num_shards;
+    c.shards_.reserve(cfg.num_shards);
+
+    uint64_t per_shard_capacity =
+        AlignedBuffer::align_up(cfg.ring_capacity / cfg.num_shards);
+    size_t per_shard_mt =
+        AlignedBuffer::align_up(cfg.memtable_size / cfg.num_shards);
+    uint32_t per_shard_keys = cfg.index_capacity / cfg.num_shards;
+    if (per_shard_keys == 0) per_shard_keys = 1;
+
+    for (uint32_t i = 0; i < cfg.num_shards; ++i) {
+        std::string path = cfg.device_path + "." + std::to_string(i);
+        auto ring = RingDevice::open(path, per_shard_capacity);
+        c.shards_.push_back(
+            std::make_unique<Shard>(std::move(ring), per_shard_mt, per_shard_keys));
+    }
+
     return c;
 }
 
 Cache::~Cache() = default;
 
 Cache::Cache(Cache&& o) noexcept
-    : ring_(std::move(o.ring_)),
-      memtables_(std::move(o.memtables_)),
-      index_(std::move(o.index_)) {}
+    : shards_(std::move(o.shards_)),
+      num_shards_(o.num_shards_) {
+    o.num_shards_ = 0;
+}
 
 Cache& Cache::operator=(Cache&& o) noexcept {
     if (this != &o) {
-        ring_      = std::move(o.ring_);
-        memtables_ = std::move(o.memtables_);
-        index_     = std::move(o.index_);
+        shards_     = std::move(o.shards_);
+        num_shards_ = o.num_shards_;
+        o.num_shards_ = 0;
     }
     return *this;
 }
@@ -47,14 +63,7 @@ bool Cache::put(const void* key, size_t key_len,
                   val, static_cast<uint32_t>(val_len));
 
     Hash128 h = hash_key(key, key_len);
-
-    WriteResult wr = memtables_->put(rec.data(), rec_len);
-
-    {
-        std::unique_lock lk(mu_);
-        index_->put(h, wr.mem_id, wr.offset, wr.length);
-    }
-    return true;
+    return shard_for(h).put(h, rec.data(), rec_len);
 }
 
 // ---------------------------------------------------------------------------
@@ -64,36 +73,7 @@ bool Cache::put(const void* key, size_t key_len,
 bool Cache::get(const void* key, size_t key_len,
                 void* val_buf, size_t val_buf_len, size_t* actual_len) {
     Hash128 h = hash_key(key, key_len);
-
-    LookupResult lr{};
-    {
-        auto now = std::chrono::steady_clock::now().time_since_epoch();
-        auto delta = static_cast<uint16_t>(
-            std::chrono::duration_cast<std::chrono::seconds>(now).count() & 0xFFFF);
-        std::shared_lock lk(mu_);
-        if (!index_->get(h, delta, lr))
-            return false;
-    }
-
-    std::vector<uint8_t> buf(lr.length);
-    if (!read_record(lr, buf))
-        return false;
-
-    DecodedRecord dr = decode_record(buf.data());
-
-    // Collision guard: verify the key matches.
-    if (dr.key_len != key_len ||
-        std::memcmp(dr.key, key, key_len) != 0)
-        return false;
-
-    if (actual_len)
-        *actual_len = dr.val_len;
-
-    size_t copy_len = std::min(static_cast<size_t>(dr.val_len), val_buf_len);
-    if (copy_len > 0)
-        std::memcpy(val_buf, dr.val, copy_len);
-
-    return true;
+    return shard_for(h).get(h, key, key_len, val_buf, val_buf_len, actual_len);
 }
 
 // ---------------------------------------------------------------------------
@@ -102,8 +82,7 @@ bool Cache::get(const void* key, size_t key_len,
 
 bool Cache::remove(const void* key, size_t key_len) {
     Hash128 h = hash_key(key, key_len);
-    std::unique_lock lk(mu_);
-    return index_->remove(h);
+    return shard_for(h).remove(h);
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +90,8 @@ bool Cache::remove(const void* key, size_t key_len) {
 // ---------------------------------------------------------------------------
 
 void Cache::flush() {
-    memtables_->flush();
+    for (auto& s : shards_)
+        s->flush();
 }
 
 // ---------------------------------------------------------------------------
@@ -119,32 +99,15 @@ void Cache::flush() {
 // ---------------------------------------------------------------------------
 
 uint32_t Cache::key_count() const {
-    std::shared_lock lk(mu_);
-    return index_->size();
+    uint32_t total = 0;
+    for (auto& s : shards_)
+        total += s->key_count();
+    return total;
 }
 
 uint64_t Cache::ring_usage() const {
-    return ring_->write_offset();
-}
-
-// ---------------------------------------------------------------------------
-// read_record  (internal helper)
-// ---------------------------------------------------------------------------
-
-bool Cache::read_record(const LookupResult& lr, std::vector<uint8_t>& buf) {
-    buf.resize(lr.length);
-
-    // Fast path: data may still be in a memtable.
-    if (memtables_->try_read_from_memory(buf.data(), lr.length,
-                                          lr.mem_id, lr.offset))
-        return true;
-
-    // Slow path: read from ring device.
-    int64_t file_off = memtables_->file_offset_for(lr.mem_id);
-    if (file_off < 0)
-        return false;
-
-    uint64_t abs_offset = static_cast<uint64_t>(file_off) + lr.offset;
-    ssize_t n = ring_->read_unaligned(buf.data(), lr.length, abs_offset);
-    return n == static_cast<ssize_t>(lr.length);
+    uint64_t total = 0;
+    for (auto& s : shards_)
+        total += s->ring_usage();
+    return total;
 }

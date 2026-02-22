@@ -1,4 +1,5 @@
 #include "key_index.h"
+#include "aligned_buffer.h"
 
 #include <cstdlib>
 #include <stdexcept>
@@ -49,7 +50,7 @@ KeyIndex::KeyIndex(uint32_t capacity)
 // ---------------------------------------------------------------------------
 
 uint32_t KeyIndex::put(Hash128 h, uint32_t mem_id,
-                       uint32_t offset, uint16_t length) {
+                       uint32_t offset, uint32_t length) {
     // Check for existing entry (update case).
     auto it = map_.find(h.lo);
     if (it != map_.end()) {
@@ -66,7 +67,7 @@ uint32_t KeyIndex::put(Hash128 h, uint32_t mem_id,
     }
 
     // If ring is full, evict one entry at head to make room.
-    if (size_ >= capacity_)
+    if (ring_used_ >= capacity_)
         evict_oldest(1);
 
     uint32_t idx = tail_;
@@ -84,6 +85,7 @@ uint32_t KeyIndex::put(Hash128 h, uint32_t mem_id,
 
     map_[h.lo] = idx;
     ++size_;
+    ++ring_used_;
 
     return idx;
 }
@@ -134,16 +136,19 @@ bool KeyIndex::remove(Hash128 h) {
 // evict_oldest
 // ---------------------------------------------------------------------------
 
-uint32_t KeyIndex::evict_oldest(uint32_t count) {
+uint32_t KeyIndex::evict_oldest(uint32_t count, uint64_t* evicted_bytes) {
     uint32_t evicted = 0;
-    while (evicted < count && head_ != tail_) {
+    while (evicted < count && ring_used_ > 0) {
         Entry& e = ring_[head_];
         if (e.flags == Entry::kOccupied) {
+            if (evicted_bytes)
+                *evicted_bytes += AlignedBuffer::align_up(e.length);
             map_.erase(e.hash_lo);
             e.flags = Entry::kDeleted;
             --size_;
         }
         head_ = next(head_);
+        --ring_used_;
         ++evicted;
     }
     return evicted;

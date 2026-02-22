@@ -14,8 +14,8 @@
 // Location of a record produced by MemtableManager::put().
 struct WriteResult {
     uint32_t mem_id;   // memtable generation
-    uint32_t offset;   // byte offset inside that memtable
-    uint16_t length;   // record length
+    uint32_t offset;   // byte offset inside that memtable (4KB-aligned)
+    uint32_t length;   // actual record length (not padded)
 };
 
 // A single aligned write buffer that accumulates records and flushes to disk

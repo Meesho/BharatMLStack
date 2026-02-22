@@ -35,6 +35,8 @@ add_library(flashring
     src/ring_device.cpp
     src/memtable.cpp
     src/key_index.cpp
+    src/delete_manager.cpp
+    src/shard.cpp
     src/cache.cpp
 )
 target_include_directories(flashring PUBLIC src/ PRIVATE ${XXHASH_INCLUDE_DIR})
@@ -60,3 +62,6 @@ target_link_libraries(cache_test PRIVATE flashring)
 
 add_executable(cache_perf_test tests/cache_perf_test.cpp)
 target_link_libraries(cache_perf_test PRIVATE flashring)
+
+add_executable(shard_bench tests/shard_bench.cpp)
+target_link_libraries(shard_bench PRIVATE flashring)

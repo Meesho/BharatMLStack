@@ -23,11 +23,10 @@ struct alignas(32) Entry {
     uint64_t                 hash_hi;      // collision check
     uint32_t                 mem_id;
     uint32_t                 offset;
-    uint16_t                 length;
+    uint32_t                 length;
     std::atomic<uint16_t>    last_access;  // delta from epoch, updated with relaxed store
     std::atomic<uint8_t>     freq;         // Morris log counter, updated with relaxed store
     uint8_t                  flags;        // kEmpty / kOccupied / kDeleted
-    uint16_t                 reserved;
 
     static constexpr uint8_t kEmpty    = 0;
     static constexpr uint8_t kOccupied = 1;
@@ -40,7 +39,7 @@ static_assert(sizeof(Entry) == 32, "Entry must be 32 bytes");
 struct LookupResult {
     uint32_t mem_id;
     uint32_t offset;
-    uint16_t length;
+    uint32_t length;
     uint16_t last_access;
     uint8_t  freq;
 };
@@ -54,7 +53,7 @@ public:
     explicit KeyIndex(uint32_t capacity);
 
     // Insert or update.  Returns the ring slot index.
-    uint32_t put(Hash128 h, uint32_t mem_id, uint32_t offset, uint16_t length);
+    uint32_t put(Hash128 h, uint32_t mem_id, uint32_t offset, uint32_t length);
 
     // Lookup.  Returns true and fills `out` if found.
     // Also bumps freq (Morris counter) and stores `now_delta` as last_access.
@@ -65,7 +64,9 @@ public:
 
     // Evict up to `count` oldest entries from the ring head.
     // Returns the number actually evicted.
-    uint32_t evict_oldest(uint32_t count);
+    // If `evicted_bytes` is non-null, accumulates the aligned byte footprint
+    // of evicted occupied entries (for BLKDISCARD accounting).
+    uint32_t evict_oldest(uint32_t count, uint64_t* evicted_bytes = nullptr);
 
     uint32_t capacity() const { return capacity_; }
     uint32_t size()     const { return size_; }
@@ -78,9 +79,10 @@ private:
     static void morris_increment(std::atomic<uint8_t>& freq);
 
     uint32_t capacity_;
-    uint32_t size_ = 0;
-    uint32_t head_ = 0;   // oldest occupied slot
-    uint32_t tail_ = 0;   // next free slot
+    uint32_t size_      = 0;
+    uint32_t ring_used_ = 0;   // total allocated slots (occupied + deleted)
+    uint32_t head_      = 0;   // oldest occupied slot
+    uint32_t tail_      = 0;   // next free slot
 
     std::vector<Entry> ring_;
     absl::flat_hash_map<uint64_t, uint32_t> map_;  // hash_lo -> ring index
