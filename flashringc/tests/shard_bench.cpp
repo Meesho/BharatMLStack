@@ -121,9 +121,8 @@ static void run_bench(uint32_t num_shards, size_t val_sz) {
                     s.avg_ns, s.p50_ns, s.p99_ns, s.mops);
     }
 
-    // --- MIXED (4 threads, 90% read / 10% write) ---
-    {
-        int num_threads = 4;
+    // --- MIXED (N threads, 90% read / 10% write) ---
+    for (int num_threads : {8, 16, 32, 64}) {
         uint32_t ops_per_thread = MEASURE;
         std::vector<std::vector<double>> all_lat(num_threads);
         std::vector<std::thread> threads;
@@ -162,7 +161,8 @@ static void run_bench(uint32_t num_shards, size_t val_sz) {
             merged.insert(merged.end(), v.begin(), v.end());
         auto s = summarise(merged);
         s.mops *= num_threads;
-        std::printf("  mixed_4t     %9.0f %9.0f %9.0f %9.2f\n",
+        std::printf("  mixed_%dt  %s%9.0f %9.0f %9.0f %9.2f\n",
+                    num_threads, num_threads < 10 ? " " : "",
                     s.avg_ns, s.p50_ns, s.p99_ns, s.mops);
     }
 
