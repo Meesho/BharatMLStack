@@ -8,6 +8,7 @@
 #include <numeric>
 #include <random>
 #include <shared_mutex>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
