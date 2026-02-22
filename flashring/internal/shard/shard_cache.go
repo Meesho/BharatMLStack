@@ -187,6 +187,8 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		return false, nil, 0, false, false
 	}
 
+	metrics.Timing(metrics.KEY_DATA_LENGTH, time.Duration(length), metrics.GetShardTag(fc.ShardIdx))
+
 	if status == indices.StatusExpired {
 		metrics.Incr(metrics.KEY_KEY_EXPIRED_COUNT, metrics.GetShardTag(fc.ShardIdx))
 		return false, nil, 0, true, false
@@ -203,6 +205,7 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		memtableExists = false
 	}
 	if !memtableExists {
+		metrics.Incr(metrics.KEY_MEMTABLE_MISS, metrics.GetShardTag(fc.ShardIdx))
 		// Allocate buffer of exact size needed - no pool since readFromDisk already copies once
 		buf = make([]byte, length)
 		fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
@@ -212,6 +215,7 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 			return false, nil, 0, false, shouldReWrite
 		}
 	} else {
+		metrics.Incr(metrics.KEY_MEMTABLE_HIT, metrics.GetShardTag(fc.ShardIdx))
 		buf, exists = mt.GetBufForRead(int(offset), length)
 		if !exists {
 			panic("memtable exists but buf not found")

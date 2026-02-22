@@ -46,6 +46,11 @@ const (
 	KEY_RINGBUFFER_ACTIVE_ENTRIES = "flashring_ringbuffer_active_entries"
 
 	KEY_MEMTABLE_ENTRY_COUNT = "flashring_memtable_entry_count"
+
+	KEY_MEMTABLE_HIT  = "flashring_memtable_hit"
+	KEY_MEMTABLE_MISS = "flashring_memtable_miss"
+
+	KEY_DATA_LENGTH = "flashring_data_length"
 )
 
 func GetShardTag(shardIdx uint32) []string {
