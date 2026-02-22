@@ -169,6 +169,7 @@ func (b *BatchIoUringReader) loop() {
 // each CQE individually as it completes. Fast reads are dispatched immediately
 // without waiting for slow reads in the same batch (no head-of-line blocking).
 func (b *BatchIoUringReader) submitBatch(batch []*batchReadRequest) {
+	metrics.Timing(metrics.KEY_IOURING_SIZE, time.Duration(len(batch))*time.Millisecond, []string{})
 	n := len(batch)
 	if n == 0 {
 		return

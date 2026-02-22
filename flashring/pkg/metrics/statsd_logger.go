@@ -51,6 +51,8 @@ const (
 	KEY_MEMTABLE_MISS = "flashring_memtable_miss"
 
 	KEY_DATA_LENGTH = "flashring_data_length"
+
+	KEY_IOURING_SIZE = "flashring_iouring_size"
 )
 
 func GetShardTag(shardIdx uint32) []string {
