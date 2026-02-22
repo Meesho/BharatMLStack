@@ -14,7 +14,7 @@ struct CacheConfig {
     size_t      memtable_size  = 64 << 20;   // 64 MB
     uint32_t    index_capacity = 1'000'000;  // max keys
     uint32_t    num_shards     = 64;
-    bool        use_io_uring   = true;      // enable io_uring for reads (Linux only)
+    bool        use_io_uring   = false;      // enable io_uring for reads (Linux only)
 };
 
 class Cache {
