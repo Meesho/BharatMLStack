@@ -23,6 +23,15 @@ public:
     // `capacity` bytes, must be > 0).
     static RingDevice open(const std::string& path, uint64_t capacity = 0);
 
+    // Open a region of an existing block device or file.
+    // The ring operates within [base_offset, base_offset + region_capacity).
+    static RingDevice open_region(const std::string& path,
+                                  uint64_t base_offset,
+                                  uint64_t region_capacity);
+
+    // Returns true if `path` refers to a block device.
+    static bool is_block_device_path(const std::string& path);
+
     // Append `len` bytes (must be block-aligned).
     // Returns the offset where data was written, or -1 on error.
     // Wraps to offset 0 when remaining space < len.
@@ -49,6 +58,7 @@ private:
     int      write_fd_     = -1;   // O_DIRECT fd used exclusively for pwrite
     int      read_fd_      = -1;   // O_DIRECT fd used exclusively for pread
     uint64_t capacity_     = 0;
+    uint64_t base_offset_  = 0;    // start of this ring's region on the device
     uint64_t write_offset_ = 0;
     bool     wrapped_      = false;
     bool     is_blk_       = false;

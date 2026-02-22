@@ -17,16 +17,28 @@ Cache Cache::open(const CacheConfig& cfg) {
     c.num_shards_ = cfg.num_shards;
     c.shards_.reserve(cfg.num_shards);
 
+    bool is_blk = RingDevice::is_block_device_path(cfg.device_path);
+
+    uint64_t total_capacity = cfg.ring_capacity;
+    if (is_blk && total_capacity == 0) {
+        auto probe = RingDevice::open(cfg.device_path, 0);
+        total_capacity = probe.capacity();
+    }
+
     uint64_t per_shard_capacity =
-        AlignedBuffer::align_up(cfg.ring_capacity / cfg.num_shards);
+        AlignedBuffer::align_up(total_capacity / cfg.num_shards);
     size_t per_shard_mt =
         AlignedBuffer::align_up(cfg.memtable_size / cfg.num_shards);
     uint32_t per_shard_keys = cfg.index_capacity / cfg.num_shards;
     if (per_shard_keys == 0) per_shard_keys = 1;
 
     for (uint32_t i = 0; i < cfg.num_shards; ++i) {
-        std::string path = cfg.device_path + "." + std::to_string(i);
-        auto ring = RingDevice::open(path, per_shard_capacity);
+        RingDevice ring = is_blk
+            ? RingDevice::open_region(cfg.device_path,
+                                      i * per_shard_capacity,
+                                      per_shard_capacity)
+            : RingDevice::open(cfg.device_path + "." + std::to_string(i),
+                               per_shard_capacity);
         c.shards_.push_back(
             std::make_unique<Shard>(std::move(ring), per_shard_mt, per_shard_keys));
     }

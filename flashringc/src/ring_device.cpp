@@ -69,7 +69,8 @@ RingDevice::~RingDevice() {
 
 RingDevice::RingDevice(RingDevice&& o) noexcept
     : write_fd_(o.write_fd_), read_fd_(o.read_fd_),
-      capacity_(o.capacity_), write_offset_(o.write_offset_),
+      capacity_(o.capacity_), base_offset_(o.base_offset_),
+      write_offset_(o.write_offset_),
       wrapped_(o.wrapped_), is_blk_(o.is_blk_) {
     o.write_fd_ = -1;
     o.read_fd_  = -1;
@@ -82,6 +83,7 @@ RingDevice& RingDevice::operator=(RingDevice&& o) noexcept {
         write_fd_     = o.write_fd_;
         read_fd_      = o.read_fd_;
         capacity_     = o.capacity_;
+        base_offset_  = o.base_offset_;
         write_offset_ = o.write_offset_;
         wrapped_      = o.wrapped_;
         is_blk_       = o.is_blk_;
@@ -145,6 +147,48 @@ RingDevice RingDevice::open(const std::string& path, uint64_t capacity) {
 }
 
 // ---------------------------------------------------------------------------
+// open_region  (block device or file region)
+// ---------------------------------------------------------------------------
+
+RingDevice RingDevice::open_region(const std::string& path,
+                                   uint64_t base_offset,
+                                   uint64_t region_capacity) {
+    if (region_capacity == 0)
+        throw std::invalid_argument("region_capacity must be > 0");
+    if ((base_offset & (kBlockSize - 1)) != 0)
+        throw std::invalid_argument("base_offset must be block-aligned");
+
+    region_capacity = AlignedBuffer::align_up(region_capacity);
+
+    RingDevice dev;
+    dev.write_fd_ = open_direct(path.c_str(), O_RDWR);
+    if (dev.write_fd_ < 0)
+        throw std::runtime_error("open region (write): " +
+                                 std::string(std::strerror(errno)));
+    dev.read_fd_ = open_direct(path.c_str(), O_RDONLY);
+    if (dev.read_fd_ < 0)
+        throw std::runtime_error("open region (read): " +
+                                 std::string(std::strerror(errno)));
+
+    struct stat st{};
+    if (::fstat(dev.write_fd_, &st) == 0 && S_ISBLK(st.st_mode))
+        dev.is_blk_ = true;
+
+    dev.base_offset_ = base_offset;
+    dev.capacity_    = region_capacity;
+    return dev;
+}
+
+// ---------------------------------------------------------------------------
+// is_block_device_path
+// ---------------------------------------------------------------------------
+
+bool RingDevice::is_block_device_path(const std::string& path) {
+    struct stat st{};
+    return (::stat(path.c_str(), &st) == 0 && S_ISBLK(st.st_mode));
+}
+
+// ---------------------------------------------------------------------------
 // write  (sequential, wrap-around)
 // ---------------------------------------------------------------------------
 
@@ -157,7 +201,8 @@ int64_t RingDevice::write(const void* buf, size_t len) {
         wrapped_ = true;
     }
 
-    ssize_t n = ::pwrite(write_fd_, buf, len, static_cast<off_t>(write_offset_));
+    ssize_t n = ::pwrite(write_fd_, buf, len,
+                         static_cast<off_t>(base_offset_ + write_offset_));
     if (n != static_cast<ssize_t>(len)) return -1;
 
     int64_t written_at = static_cast<int64_t>(write_offset_);
@@ -180,7 +225,8 @@ ssize_t RingDevice::read(void* buf, size_t len, uint64_t offset) const {
     if ((offset & (kBlockSize - 1)) != 0) return -1;
     if (offset + len > capacity_) return -1;
 
-    return ::pread(read_fd_, buf, len, static_cast<off_t>(offset));
+    return ::pread(read_fd_, buf, len,
+                   static_cast<off_t>(base_offset_ + offset));
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +245,7 @@ ssize_t RingDevice::read_unaligned(void* buf, size_t len, uint64_t offset) const
     if (!tmp.valid()) return -1;
 
     ssize_t n = ::pread(read_fd_, tmp.data(), aligned_len,
-                        static_cast<off_t>(aligned_start));
+                        static_cast<off_t>(base_offset_ + aligned_start));
     if (n < static_cast<ssize_t>(aligned_len)) return -1;
 
     size_t skip = static_cast<size_t>(offset - aligned_start);
@@ -214,7 +260,7 @@ ssize_t RingDevice::read_unaligned(void* buf, size_t len, uint64_t offset) const
 int RingDevice::discard(uint64_t offset, uint64_t length) {
 #ifdef __linux__
     if (!is_blk_) return 0;
-    uint64_t range[2] = {offset, length};
+    uint64_t range[2] = {base_offset_ + offset, length};
     return ::ioctl(write_fd_, BLKDISCARD, range);
 #else
     (void)offset; (void)length;
