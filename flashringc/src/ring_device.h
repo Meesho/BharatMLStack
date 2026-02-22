@@ -51,6 +51,8 @@ public:
     uint64_t write_offset() const { return write_offset_; }
     bool     wrapped()      const { return wrapped_; }
     bool     is_block_device() const { return is_blk_; }
+    int      read_fd()      const { return read_fd_; }
+    uint64_t base_offset()  const { return base_offset_; }
 
 private:
     RingDevice() = default;

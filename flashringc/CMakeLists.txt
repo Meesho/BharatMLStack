@@ -31,12 +31,27 @@ FetchContent_Declare(
 FetchContent_Populate(xxHash)
 set(XXHASH_INCLUDE_DIR "${xxhash_SOURCE_DIR}")
 
+# --- liburing (optional, Linux only) ---
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_library(URING_LIB uring)
+    if(URING_LIB)
+        set(HAVE_IO_URING TRUE)
+        message(STATUS "Found liburing: ${URING_LIB}")
+    else()
+        set(HAVE_IO_URING FALSE)
+        message(STATUS "liburing not found — io_uring disabled, using pread fallback")
+    endif()
+else()
+    set(HAVE_IO_URING FALSE)
+endif()
+
 add_library(flashring
     src/ring_device.cpp
     src/memtable.cpp
     src/key_index.cpp
     src/delete_manager.cpp
     src/shard.cpp
+    src/io_engine.cpp
     src/cache.cpp
 )
 target_include_directories(flashring PUBLIC src/ PRIVATE ${XXHASH_INCLUDE_DIR})
@@ -44,6 +59,11 @@ target_link_libraries(flashring
     PUBLIC  absl::flat_hash_map
     PRIVATE pthread
 )
+
+if(HAVE_IO_URING)
+    target_compile_definitions(flashring PUBLIC HAVE_IO_URING)
+    target_link_libraries(flashring PRIVATE ${URING_LIB})
+endif()
 
 add_executable(ring_test tests/ring_test.cpp)
 target_link_libraries(ring_test PRIVATE flashring)

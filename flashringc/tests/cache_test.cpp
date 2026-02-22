@@ -215,6 +215,103 @@ static void test_truncated_read() {
     assert(std::memcmp(buf, val.data(), 5) == 0);
 }
 
+static void test_batch_get_memory() {
+    auto cache = Cache::open(test_cfg(4096));
+
+    for (int i = 0; i < 100; ++i) {
+        std::string key = "bk_" + std::to_string(i);
+        std::string val = "bv_" + std::to_string(i) + "_payload";
+        assert(cache.put(key.data(), key.size(), val.data(), val.size()));
+    }
+
+    // Batch get 10 keys (from memtable)
+    constexpr int BATCH = 10;
+    std::vector<std::string> keys(BATCH);
+    std::vector<std::string> expected(BATCH);
+    std::vector<char> bufs(BATCH * 64, 0);
+    std::vector<BatchGetRequest> reqs(BATCH);
+    std::vector<BatchGetResult>  results(BATCH);
+
+    for (int i = 0; i < BATCH; ++i) {
+        keys[i] = "bk_" + std::to_string(i * 10);
+        expected[i] = "bv_" + std::to_string(i * 10) + "_payload";
+        reqs[i] = {keys[i].data(), keys[i].size(),
+                   bufs.data() + i * 64, 64};
+    }
+
+    cache.get_batch(reqs.data(), results.data(), BATCH);
+
+    for (int i = 0; i < BATCH; ++i) {
+        assert(results[i].found);
+        assert(results[i].actual_len == expected[i].size());
+        assert(std::memcmp(bufs.data() + i * 64,
+                           expected[i].data(), expected[i].size()) == 0);
+    }
+}
+
+static void test_batch_get_disk() {
+    auto cache = Cache::open(test_cfg(4096));
+
+    for (int i = 0; i < 50; ++i) {
+        std::string key = "dk_" + std::to_string(i);
+        std::string val = "dv_" + std::to_string(i) + "_diskdata";
+        assert(cache.put(key.data(), key.size(), val.data(), val.size()));
+    }
+
+    cache.flush();
+
+    constexpr int BATCH = 5;
+    std::vector<std::string> keys(BATCH);
+    std::vector<std::string> expected(BATCH);
+    std::vector<char> bufs(BATCH * 64, 0);
+    std::vector<BatchGetRequest> reqs(BATCH);
+    std::vector<BatchGetResult>  results(BATCH);
+
+    for (int i = 0; i < BATCH; ++i) {
+        keys[i] = "dk_" + std::to_string(i * 10);
+        expected[i] = "dv_" + std::to_string(i * 10) + "_diskdata";
+        reqs[i] = {keys[i].data(), keys[i].size(),
+                   bufs.data() + i * 64, 64};
+    }
+
+    cache.get_batch(reqs.data(), results.data(), BATCH);
+
+    for (int i = 0; i < BATCH; ++i) {
+        assert(results[i].found);
+        assert(results[i].actual_len == expected[i].size());
+        assert(std::memcmp(bufs.data() + i * 64,
+                           expected[i].data(), expected[i].size()) == 0);
+    }
+}
+
+static void test_batch_get_mixed_hit_miss() {
+    auto cache = Cache::open(test_cfg(4096));
+
+    for (int i = 0; i < 20; ++i) {
+        std::string key = "mk_" + std::to_string(i);
+        std::string val = "mv_" + std::to_string(i);
+        assert(cache.put(key.data(), key.size(), val.data(), val.size()));
+    }
+
+    constexpr int BATCH = 4;
+    std::string k0 = "mk_0",  k1 = "mk_5", k2 = "nonexistent", k3 = "mk_19";
+    char bufs[BATCH][32] = {};
+    BatchGetRequest reqs[BATCH] = {
+        {k0.data(), k0.size(), bufs[0], 32},
+        {k1.data(), k1.size(), bufs[1], 32},
+        {k2.data(), k2.size(), bufs[2], 32},
+        {k3.data(), k3.size(), bufs[3], 32},
+    };
+    BatchGetResult results[BATCH] = {};
+
+    cache.get_batch(reqs, results, BATCH);
+
+    assert(results[0].found);
+    assert(results[1].found);
+    assert(!results[2].found);
+    assert(results[3].found);
+}
+
 static void test_delete_manager_eviction() {
     // Ring large enough to hold all data; index small enough to force eviction.
     CacheConfig cfg{
@@ -260,6 +357,9 @@ int main() {
     RUN(test_key_count);
     RUN(test_eviction_on_full_index);
     RUN(test_truncated_read);
+    RUN(test_batch_get_memory);
+    RUN(test_batch_get_disk);
+    RUN(test_batch_get_mixed_hit_miss);
     RUN(test_delete_manager_eviction);
 
     printf("\n%d / %d tests passed.\n", tests_passed, tests_run);

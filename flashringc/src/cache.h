@@ -14,6 +14,7 @@ struct CacheConfig {
     size_t      memtable_size  = 64 << 20;   // 64 MB
     uint32_t    index_capacity = 1'000'000;  // max keys
     uint32_t    num_shards     = 64;
+    bool        use_io_uring   = false;      // enable io_uring for reads (Linux only)
 };
 
 class Cache {
@@ -31,6 +32,9 @@ public:
 
     bool get(const void* key, size_t key_len,
              void* val_buf, size_t val_buf_len, size_t* actual_len);
+
+    void get_batch(const BatchGetRequest* reqs, BatchGetResult* results,
+                   size_t count);
 
     bool remove(const void* key, size_t key_len);
 

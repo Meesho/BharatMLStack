@@ -40,7 +40,8 @@ Cache Cache::open(const CacheConfig& cfg) {
             : RingDevice::open(cfg.device_path + "." + std::to_string(i),
                                per_shard_capacity);
         c.shards_.push_back(
-            std::make_unique<Shard>(std::move(ring), per_shard_mt, per_shard_keys));
+            std::make_unique<Shard>(std::move(ring), per_shard_mt,
+                                   per_shard_keys, cfg.use_io_uring));
     }
 
     return c;
@@ -86,6 +87,47 @@ bool Cache::get(const void* key, size_t key_len,
                 void* val_buf, size_t val_buf_len, size_t* actual_len) {
     Hash128 h = hash_key(key, key_len);
     return shard_for(h).get(h, key, key_len, val_buf, val_buf_len, actual_len);
+}
+
+// ---------------------------------------------------------------------------
+// get_batch
+// ---------------------------------------------------------------------------
+
+void Cache::get_batch(const BatchGetRequest* reqs, BatchGetResult* results,
+                      size_t count) {
+    if (count == 0) return;
+
+    // Hash all keys and group by shard
+    std::vector<Hash128> hashes(count);
+    std::vector<std::vector<size_t>> shard_groups(num_shards_);
+
+    for (size_t i = 0; i < count; ++i) {
+        hashes[i] = hash_key(reqs[i].key, reqs[i].key_len);
+        uint32_t shard_id = hashes[i].lo % num_shards_;
+        shard_groups[shard_id].push_back(i);
+    }
+
+    // Dispatch each shard's batch
+    for (uint32_t s = 0; s < num_shards_; ++s) {
+        auto& group = shard_groups[s];
+        if (group.empty()) continue;
+
+        size_t n = group.size();
+        std::vector<BatchGetRequest> sub_reqs(n);
+        std::vector<BatchGetResult>  sub_results(n);
+        std::vector<Hash128>         sub_hashes(n);
+
+        for (size_t j = 0; j < n; ++j) {
+            sub_reqs[j]   = reqs[group[j]];
+            sub_hashes[j] = hashes[group[j]];
+        }
+
+        shards_[s]->get_batch(sub_reqs.data(), sub_results.data(),
+                              n, sub_hashes.data());
+
+        for (size_t j = 0; j < n; ++j)
+            results[group[j]] = sub_results[j];
+    }
 }
 
 // ---------------------------------------------------------------------------

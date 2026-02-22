@@ -121,6 +121,38 @@ static void run_bench(uint32_t num_shards, size_t val_sz) {
                     s.avg_ns, s.p50_ns, s.p99_ns, s.mops);
     }
 
+    // --- BATCH GET (disk) benchmark ---
+    {
+        constexpr uint32_t BATCH_SZ = 32;
+        uint32_t iters = MEASURE / BATCH_SZ;
+        std::mt19937 rng(77);
+        std::uniform_int_distribution<uint32_t> dist(0, NUM_KEYS - 1);
+
+        std::vector<double> lat(iters);
+        for (uint32_t i = 0; i < iters; ++i) {
+            std::vector<BatchGetRequest> reqs(BATCH_SZ);
+            std::vector<BatchGetResult>  results(BATCH_SZ);
+            std::vector<std::vector<uint8_t>> bufs(BATCH_SZ,
+                                                    std::vector<uint8_t>(val_sz));
+            std::vector<uint32_t> kidxs(BATCH_SZ);
+
+            for (uint32_t b = 0; b < BATCH_SZ; ++b) {
+                kidxs[b] = dist(rng);
+                reqs[b] = {keys[kidxs[b]].data(), keys[kidxs[b]].size(),
+                           bufs[b].data(), bufs[b].size()};
+            }
+
+            auto t0 = Clock::now();
+            cache.get_batch(reqs.data(), results.data(), BATCH_SZ);
+            auto t1 = Clock::now();
+            lat[i] = std::chrono::duration_cast<ns_d>(t1 - t0).count()
+                     / BATCH_SZ;
+        }
+        auto s = summarise(lat);
+        std::printf("  batch32_disk %9.0f %9.0f %9.0f %9.2f\n",
+                    s.avg_ns, s.p50_ns, s.p99_ns, s.mops);
+    }
+
     // --- MIXED (N threads, 90% read / 10% write) ---
     for (int num_threads : {8, 16, 32, 64}) {
         uint32_t ops_per_thread = MEASURE;
