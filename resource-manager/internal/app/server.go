@@ -8,6 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/Meesho/BharatMLStack/resource-manager/pkg/config"
 )
 
 type Server struct {
@@ -15,9 +17,10 @@ type Server struct {
 }
 
 func NewServer(port int, handler http.Handler) *Server {
+	envCfg := config.Instance()
 	server := &http.Server{
 		Addr:              ":" + intToString(port),
-		Handler:           metricsMiddleware(requestIDMiddleware(handler)),
+		Handler:           metricsMiddleware(requestIDMiddleware(authMiddleware(envCfg.APIAuthToken, handler))),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,

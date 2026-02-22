@@ -22,10 +22,6 @@ func (s *ShadowService) List(ctx context.Context, env string, filter models.Shad
 	if !rmtypes.IsSupportedPoolEnv(env) {
 		return nil, rmerrors.ErrUnsupportedEnv
 	}
-	if s.cache != nil {
-		filter.Env = env
-		return s.cache.ListShadowDeployables(filter), nil
-	}
 	return s.store.List(ctx, env, filter)
 }
 

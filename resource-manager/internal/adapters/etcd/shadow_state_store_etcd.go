@@ -11,6 +11,7 @@ import (
 	"github.com/Meesho/BharatMLStack/resource-manager/internal/data/models"
 	rmerrors "github.com/Meesho/BharatMLStack/resource-manager/internal/errors"
 	rmtypes "github.com/Meesho/BharatMLStack/resource-manager/internal/types"
+	"github.com/rs/zerolog/log"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -55,6 +56,7 @@ func (s *EtcdShadowStateStore) Procure(ctx context.Context, env, name, runID, pl
 		return models.ShadowDeployable{}, false, rmerrors.ErrUnsupportedEnv
 	}
 	key := shadowKey(env, name)
+	log.Debug().Str("env", env).Str("name", name).Str("run_id", runID).Str("key", key).Msg("procure requested")
 
 	resp, err := s.client.Get(ctx, key)
 	if err != nil {
@@ -69,7 +71,19 @@ func (s *EtcdShadowStateStore) Procure(ctx context.Context, env, name, runID, pl
 	if err := json.Unmarshal(kv.Value, &current); err != nil {
 		return models.ShadowDeployable{}, false, err
 	}
+	log.Debug().
+		Str("env", env).
+		Str("name", name).
+		Str("state_before", string(current.State)).
+		Int64("version_before", current.Version).
+		Int64("mod_revision_before", kv.ModRevision).
+		Msg("procure loaded current deployable state from etcd")
 	if current.State != rmtypes.ShadowStateFree {
+		log.Info().
+			Str("env", env).
+			Str("name", name).
+			Str("state_before", string(current.State)).
+			Msg("procure skipped because deployable is not FREE")
 		return current, true, nil
 	}
 
@@ -100,8 +114,22 @@ func (s *EtcdShadowStateStore) Procure(ctx context.Context, env, name, runID, pl
 		return models.ShadowDeployable{}, false, err
 	}
 	if !cas.Applied {
+		log.Info().
+			Str("env", env).
+			Str("name", name).
+			Str("run_id", runID).
+			Msg("procure CAS not applied (conflict/stale value)")
 		return current, true, nil
 	}
+	log.Info().
+		Str("env", env).
+		Str("name", name).
+		Str("run_id", runID).
+		Str("state_before", string(current.State)).
+		Str("state_after", string(updated.State)).
+		Int64("version_before", current.Version).
+		Int64("version_after", updated.Version).
+		Msg("procure CAS applied and etcd state updated")
 	return updated, false, nil
 }
 

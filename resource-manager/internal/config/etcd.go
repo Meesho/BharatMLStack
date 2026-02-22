@@ -40,17 +40,23 @@ func (e *Etcd) RefreshShadowDeployables() error {
 	instance := e.GetEtcdInstance()
 
 	tmp := make(map[string][]models.ShadowDeployable)
+	total := 0
 	for env, byName := range instance.ShadowDeployables {
 		items := make([]models.ShadowDeployable, 0, len(byName))
 		for _, item := range byName {
 			items = append(items, item)
 		}
 		tmp[env] = items
+		total += len(items)
 	}
 
 	e.mu.Lock()
 	e.shadow = tmp
 	e.mu.Unlock()
+	log.Info().
+		Int("env_count", len(tmp)).
+		Int("deployable_count", total).
+		Msg("shadow deployables cache refreshed from watcher/config bridge")
 	return nil
 }
 

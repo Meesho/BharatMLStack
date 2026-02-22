@@ -17,6 +17,8 @@ type Env struct {
 	AppName                string
 	AppLogLevel            string
 	AppEnv                 string
+	APIAuthToken           string
+	IdempotencyTTLSeconds  int64
 	EtcdEndpoints          []string
 	EtcdUsername           string
 	EtcdPassword           string
@@ -86,11 +88,26 @@ func Load() (Env, error) {
 		endpoints = parseEtcdEndpoints(raw)
 	}
 
+	apiAuthToken := strings.TrimSpace(os.Getenv("API_AUTH_TOKEN"))
+	if apiAuthToken == "" {
+		return Env{}, fmt.Errorf("invalid API_AUTH_TOKEN: cannot be empty")
+	}
+	idempotencyTTLSeconds := int64(24 * 60 * 60)
+	if raw := strings.TrimSpace(os.Getenv("IDEMPOTENCY_TTL_SECONDS")); raw != "" {
+		ttl, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || ttl <= 0 {
+			return Env{}, fmt.Errorf("invalid IDEMPOTENCY_TTL_SECONDS: %q", raw)
+		}
+		idempotencyTTLSeconds = ttl
+	}
+
 	return Env{
 		AppPort:                port,
 		AppName:                strings.TrimSpace(os.Getenv("APP_NAME")),
 		AppLogLevel:            strings.TrimSpace(os.Getenv("APP_LOG_LEVEL")),
 		AppEnv:                 strings.TrimSpace(os.Getenv("APP_ENV")),
+		APIAuthToken:           apiAuthToken,
+		IdempotencyTTLSeconds:  idempotencyTTLSeconds,
 		EtcdEndpoints:          endpoints,
 		EtcdUsername:           strings.TrimSpace(os.Getenv("ETCD_USERNAME")),
 		EtcdPassword:           os.Getenv("ETCD_PASSWORD"),

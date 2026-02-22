@@ -27,7 +27,7 @@ func BuildHandler() (http.Handler, error) {
 	if envCfg.UseMockAdapters {
 		log.Warn().Msg("USE_MOCK_ADAPTERS=true, using in-memory stores")
 		shadowStore = etcdadapter.NewMemoryShadowStateStore(map[string][]models.ShadowDeployable{})
-		idempotencyStore = etcdadapter.NewMemoryIdempotencyKeyStore()
+		idempotencyStore = etcdadapter.NewMemoryIdempotencyKeyStore(envCfg.IdempotencyTTLSeconds)
 	} else {
 		log.Info().Strs("endpoints", envCfg.EtcdEndpoints).Dur("etcd_timeout", envCfg.EtcdTimeout).Msg("initializing etcd-backed adapters")
 		etcdClient, err := etcdadapter.NewClient(etcdadapter.ClientConfig{
@@ -41,7 +41,7 @@ func BuildHandler() (http.Handler, error) {
 		}
 
 		shadowStore = etcdadapter.NewEtcdShadowStateStore(etcdClient.Raw())
-		idempotencyStore = etcdadapter.NewEtcdIdempotencyKeyStore(etcdClient.Raw())
+		idempotencyStore = etcdadapter.NewEtcdIdempotencyKeyStore(etcdClient.Raw(), envCfg.IdempotencyTTLSeconds)
 		operationStore = etcdadapter.NewEtcdOperationStore(etcdClient.Raw())
 
 		configManager := rmconfig.Instance(rmconfig.DefaultVersion)

@@ -20,9 +20,8 @@ import (
 	rmerrors "github.com/Meesho/BharatMLStack/resource-manager/internal/errors"
 	"github.com/Meesho/BharatMLStack/resource-manager/internal/ports"
 	rmtypes "github.com/Meesho/BharatMLStack/resource-manager/internal/types"
+	"github.com/rs/zerolog/log"
 )
-
-const idempotencyHeader = "X-Idempotency-Key"
 
 type Handler struct {
 	shadows     *application.ShadowService
@@ -117,7 +116,9 @@ func (h *Handler) listShadowDeployables(w http.ResponseWriter, r *http.Request, 
 
 func (h *Handler) mutateShadowDeployables(w http.ResponseWriter, r *http.Request, env string) {
 	var req ShadowDeployableCommandRequest
-	hash, reused, done := h.decodeWithIdempotency(w, r, env+"/shadow-deployables", &req)
+	hash, idempotencyKey, reused, done := h.decodeWithIdempotency(w, r, env+"/shadow-deployables", &req, func() (string, error) {
+		return serverIdempotencyKey(req.WorkflowRunID, string(req.Action), req.Name)
+	})
 	if done {
 		return
 	}
@@ -172,7 +173,7 @@ func (h *Handler) mutateShadowDeployables(w http.ResponseWriter, r *http.Request
 
 	writeJSON(w, status, response)
 	if !reused {
-		_ = h.idempotency.Put(r.Context(), env+"/shadow-deployables", r.Header.Get(idempotencyHeader), models.IdempotencyRecord{
+		_ = h.idempotency.Put(r.Context(), env+"/shadow-deployables", idempotencyKey, models.IdempotencyRecord{
 			RequestHash:  hash,
 			StatusCode:   status,
 			ResponseBody: mustJSON(response),
@@ -183,7 +184,9 @@ func (h *Handler) mutateShadowDeployables(w http.ResponseWriter, r *http.Request
 
 func (h *Handler) changeMinPodCount(w http.ResponseWriter, r *http.Request, env string) {
 	var req MinPodCountRequest
-	hash, reused, done := h.decodeWithIdempotency(w, r, env+"/shadow-deployables/min-pod-count", &req)
+	hash, idempotencyKey, reused, done := h.decodeWithIdempotency(w, r, env+"/shadow-deployables/min-pod-count", &req, func() (string, error) {
+		return serverIdempotencyKey(req.WorkflowRunID, string(req.Action), req.Name)
+	})
 	if done {
 		return
 	}
@@ -215,7 +218,7 @@ func (h *Handler) changeMinPodCount(w http.ResponseWriter, r *http.Request, env 
 	response := map[string]string{"status": "UPDATED"}
 	writeJSON(w, http.StatusOK, response)
 	if !reused {
-		_ = h.idempotency.Put(r.Context(), env+"/shadow-deployables/min-pod-count", r.Header.Get(idempotencyHeader), models.IdempotencyRecord{
+		_ = h.idempotency.Put(r.Context(), env+"/shadow-deployables/min-pod-count", idempotencyKey, models.IdempotencyRecord{
 			RequestHash:  hash,
 			StatusCode:   http.StatusOK,
 			ResponseBody: mustJSON(response),
@@ -226,7 +229,9 @@ func (h *Handler) changeMinPodCount(w http.ResponseWriter, r *http.Request, env 
 
 func (h *Handler) createDeployable(w http.ResponseWriter, r *http.Request, env string) {
 	var req CreateDeployableRequest
-	hash, reused, done := h.decodeWithIdempotency(w, r, env+"/deployables", &req)
+	hash, idempotencyKey, reused, done := h.decodeWithIdempotency(w, r, env+"/deployables", &req, func() (string, error) {
+		return serverIdempotencyKey(req.WorkflowRunID, "CREATE_DEPLOYABLE", req.Name)
+	})
 	if done {
 		return
 	}
@@ -281,7 +286,7 @@ func (h *Handler) createDeployable(w http.ResponseWriter, r *http.Request, env s
 	}
 	writeJSON(w, http.StatusAccepted, response)
 	if !reused {
-		_ = h.idempotency.Put(r.Context(), env+"/deployables", r.Header.Get(idempotencyHeader), models.IdempotencyRecord{
+		_ = h.idempotency.Put(r.Context(), env+"/deployables", idempotencyKey, models.IdempotencyRecord{
 			RequestHash:  hash,
 			StatusCode:   http.StatusAccepted,
 			ResponseBody: mustJSON(response),
@@ -292,7 +297,10 @@ func (h *Handler) createDeployable(w http.ResponseWriter, r *http.Request, env s
 
 func (h *Handler) loadModel(w http.ResponseWriter, r *http.Request, env string) {
 	var req LoadModelRequest
-	hash, reused, done := h.decodeWithIdempotency(w, r, env+"/models/load", &req)
+	hash, idempotencyKey, reused, done := h.decodeWithIdempotency(w, r, env+"/models/load", &req, func() (string, error) {
+		target := req.DeployableName + ":" + req.Model.Name + ":" + req.Model.Version
+		return serverIdempotencyKey(req.WorkflowRunID, "LOAD_MODEL", target)
+	})
 	if done {
 		return
 	}
@@ -341,7 +349,7 @@ func (h *Handler) loadModel(w http.ResponseWriter, r *http.Request, env string) 
 	}
 	writeJSON(w, http.StatusAccepted, response)
 	if !reused {
-		_ = h.idempotency.Put(r.Context(), env+"/models/load", r.Header.Get(idempotencyHeader), models.IdempotencyRecord{
+		_ = h.idempotency.Put(r.Context(), env+"/models/load", idempotencyKey, models.IdempotencyRecord{
 			RequestHash:  hash,
 			StatusCode:   http.StatusAccepted,
 			ResponseBody: mustJSON(response),
@@ -352,7 +360,9 @@ func (h *Handler) loadModel(w http.ResponseWriter, r *http.Request, env string) 
 
 func (h *Handler) triggerJob(w http.ResponseWriter, r *http.Request, env string) {
 	var req TriggerJobRequest
-	hash, reused, done := h.decodeWithIdempotency(w, r, env+"/jobs", &req)
+	hash, idempotencyKey, reused, done := h.decodeWithIdempotency(w, r, env+"/jobs", &req, func() (string, error) {
+		return serverIdempotencyKey(req.WorkflowRunID, "TRIGGER_JOB", req.JobName)
+	})
 	if done {
 		return
 	}
@@ -399,7 +409,7 @@ func (h *Handler) triggerJob(w http.ResponseWriter, r *http.Request, env string)
 	}
 	writeJSON(w, http.StatusAccepted, response)
 	if !reused {
-		_ = h.idempotency.Put(r.Context(), env+"/jobs", r.Header.Get(idempotencyHeader), models.IdempotencyRecord{
+		_ = h.idempotency.Put(r.Context(), env+"/jobs", idempotencyKey, models.IdempotencyRecord{
 			RequestHash:  hash,
 			StatusCode:   http.StatusAccepted,
 			ResponseBody: mustJSON(response),
@@ -410,7 +420,9 @@ func (h *Handler) triggerJob(w http.ResponseWriter, r *http.Request, env string)
 
 func (h *Handler) restartDeployable(w http.ResponseWriter, r *http.Request, env string) {
 	var req RestartDeployableRequest
-	hash, reused, done := h.decodeWithIdempotency(w, r, env+"/deployables/restart", &req)
+	hash, idempotencyKey, reused, done := h.decodeWithIdempotency(w, r, env+"/deployables/restart", &req, func() (string, error) {
+		return serverIdempotencyKey(req.WorkflowRunID, "RESTART_DEPLOYABLE", req.Namespace)
+	})
 	if done {
 		return
 	}
@@ -457,7 +469,7 @@ func (h *Handler) restartDeployable(w http.ResponseWriter, r *http.Request, env 
 	}
 	writeJSON(w, http.StatusAccepted, response)
 	if !reused {
-		_ = h.idempotency.Put(r.Context(), env+"/deployables/restart", r.Header.Get(idempotencyHeader), models.IdempotencyRecord{
+		_ = h.idempotency.Put(r.Context(), env+"/deployables/restart", idempotencyKey, models.IdempotencyRecord{
 			RequestHash:  hash,
 			StatusCode:   http.StatusAccepted,
 			ResponseBody: mustJSON(response),
@@ -531,47 +543,71 @@ func isBlockedIP(ip netip.Addr) bool {
 	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 }
 
-func (h *Handler) decodeWithIdempotency(w http.ResponseWriter, r *http.Request, scope string, out interface{}) (string, bool, bool) {
-	key := strings.TrimSpace(r.Header.Get(idempotencyHeader))
-	if key == "" {
-		writeErr(w, http.StatusBadRequest, idempotencyHeader+" header is required")
-		return "", false, true
-	}
-
+func (h *Handler) decodeWithIdempotency(w http.ResponseWriter, r *http.Request, scope string, out interface{}, keyBuilder func() (string, error)) (string, string, bool, bool) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid request body")
-		return "", false, true
+		return "", "", false, true
 	}
 	defer r.Body.Close()
 
 	hash := sha256.Sum256(body)
 	requestHash := hex.EncodeToString(hash[:])
 
-	record, err := h.idempotency.Get(r.Context(), scope, key)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "idempotency lookup failed")
-		return "", false, true
-	}
-	if record != nil {
-		if record.RequestHash != requestHash {
-			writeErr(w, http.StatusConflict, rmerrors.ErrIdempotencyMismatch.Error())
-			return "", false, true
-		}
-		w.Header().Set("Content-Type", record.ContentType)
-		w.WriteHeader(record.StatusCode)
-		_, _ = w.Write(record.ResponseBody)
-		return requestHash, true, true
-	}
-
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(out); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid request payload")
-		return "", false, true
+		return "", "", false, true
 	}
 
-	return requestHash, false, false
+	key, err := keyBuilder()
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return "", "", false, true
+	}
+	log.Debug().Str("scope", scope).Str("idempotency_key", key).Str("request_hash", requestHash).Msg("derived server-side idempotency key")
+
+	record, err := h.idempotency.Get(r.Context(), scope, key)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "idempotency lookup failed")
+		return "", "", false, true
+	}
+	if record != nil {
+		if record.RequestHash != requestHash {
+			log.Info().
+				Str("scope", scope).
+				Str("idempotency_key", key).
+				Str("incoming_request_hash", requestHash).
+				Str("stored_request_hash", record.RequestHash).
+				Msg("idempotency mismatch detected")
+			writeErr(w, http.StatusConflict, rmerrors.ErrIdempotencyMismatch.Error())
+			return "", "", false, true
+		}
+		log.Info().
+			Str("scope", scope).
+			Str("idempotency_key", key).
+			Int("status_code", record.StatusCode).
+			Msg("idempotency replay hit: returning cached response from etcd store")
+		w.Header().Set("Content-Type", record.ContentType)
+		w.WriteHeader(record.StatusCode)
+		_, _ = w.Write(record.ResponseBody)
+		return requestHash, key, true, true
+	}
+
+	return requestHash, key, false, false
+}
+
+func serverIdempotencyKey(runID, action, target string) (string, error) {
+	runID = strings.TrimSpace(runID)
+	action = strings.ToUpper(strings.TrimSpace(action))
+	target = strings.TrimSpace(target)
+	if runID == "" || action == "" || target == "" {
+		return "", fmt.Errorf("failed to derive idempotency key: run_id, action and target are required")
+	}
+	fingerprint := strings.ToLower(runID) + "|" + strings.ToLower(action) + "|" + strings.ToLower(target)
+	sum := sha256.Sum256([]byte(fingerprint))
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func writeErr(w http.ResponseWriter, status int, message string) {

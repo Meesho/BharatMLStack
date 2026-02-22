@@ -3,30 +3,54 @@ package etcd
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/Meesho/BharatMLStack/resource-manager/internal/data/models"
 )
 
-type MemoryIdempotencyKeyStore struct {
-	mu      sync.RWMutex
-	records map[string]models.IdempotencyRecord
+const cleanupEveryPuts = 100
+
+type memoryIdempotencyRecord struct {
+	record    models.IdempotencyRecord
+	expiresAt time.Time
 }
 
-func NewMemoryIdempotencyKeyStore() *MemoryIdempotencyKeyStore {
+type MemoryIdempotencyKeyStore struct {
+	mu         sync.RWMutex
+	records    map[string]memoryIdempotencyRecord
+	ttl        time.Duration
+	putCounter uint64
+}
+
+func NewMemoryIdempotencyKeyStore(ttlSeconds ...int64) *MemoryIdempotencyKeyStore {
+	ttl := 24 * time.Hour
+	if len(ttlSeconds) > 0 && ttlSeconds[0] > 0 {
+		ttl = time.Duration(ttlSeconds[0]) * time.Second
+	}
 	return &MemoryIdempotencyKeyStore{
-		records: make(map[string]models.IdempotencyRecord),
+		records: make(map[string]memoryIdempotencyRecord),
+		ttl:     ttl,
 	}
 }
 
 func (s *MemoryIdempotencyKeyStore) Get(_ context.Context, scope, key string) (*models.IdempotencyRecord, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	composite := scope + "::" + key
 
-	record, ok := s.records[scope+"::"+key]
+	s.mu.RLock()
+	record, ok := s.records[composite]
 	if !ok {
+		s.mu.RUnlock()
 		return nil, nil
 	}
-	copied := record
+	if time.Now().After(record.expiresAt) {
+		s.mu.RUnlock()
+		s.mu.Lock()
+		delete(s.records, composite)
+		s.mu.Unlock()
+		return nil, nil
+	}
+	copied := record.record
+	s.mu.RUnlock()
 	return &copied, nil
 }
 
@@ -34,6 +58,22 @@ func (s *MemoryIdempotencyKeyStore) Put(_ context.Context, scope, key string, re
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.records[scope+"::"+key] = record
+	s.records[scope+"::"+key] = memoryIdempotencyRecord{
+		record:    record,
+		expiresAt: time.Now().Add(s.ttl),
+	}
+	s.putCounter++
+	if s.putCounter%cleanupEveryPuts == 0 {
+		s.cleanupExpiredLocked()
+	}
 	return nil
+}
+
+func (s *MemoryIdempotencyKeyStore) cleanupExpiredLocked() {
+	now := time.Now()
+	for key, record := range s.records {
+		if now.After(record.expiresAt) {
+			delete(s.records, key)
+		}
+	}
 }

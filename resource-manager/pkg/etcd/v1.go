@@ -102,7 +102,6 @@ func (v *V1) updateConfig(config interface{}) error {
 }
 
 func (v *V1) WatchPrefix(ctx context.Context, prefix string) {
-	watchChan := v.conn.Watch(ctx, prefix, clientv3.WithPrefix())
 	go func() {
 		for {
 			func() {
@@ -111,7 +110,13 @@ func (v *V1) WatchPrefix(ctx context.Context, prefix string) {
 						log.Error().Msgf("panic in watch prefix: %v", r)
 					}
 				}()
+				watchChan := v.conn.Watch(ctx, prefix, clientv3.WithPrefix())
+				log.Info().Msgf("etcd watcher started for prefix %s", prefix)
 				for watchResp := range watchChan {
+					if watchResp.Err() != nil {
+						log.Error().Err(watchResp.Err()).Msgf("watch prefix stream error for %s", prefix)
+						return
+					}
 					for _, event := range watchResp.Events {
 						v.HandledPrefix = make(map[string]string)
 						log.Debug().Msgf("Key: %s | Type: %s | Value: %s", event.Kv.Key, event.Type.String(), event.Kv.Value)
@@ -124,7 +129,9 @@ func (v *V1) WatchPrefix(ctx context.Context, prefix string) {
 						for key, functions := range v.WatchPathCallbacks {
 							watchPath := prefix + key
 							if strings.HasPrefix(string(event.Kv.Key), watchPath) {
+								log.Info().Msgf("etcd watch event matched callback path %s for key %s", key, string(event.Kv.Key))
 								for _, value := range functions {
+									log.Debug().Msgf("executing watch callback for path %s", key)
 									err = value.(func() error)()
 									if err != nil {
 										log.Error().Err(err).Msgf("unable to execute the function for path %s", key)
