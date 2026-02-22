@@ -22,7 +22,7 @@
 
 static const char* DEFAULT_PATH = "/tmp/flashring_batch_ttl_stress.dat";
 
-static constexpr uint64_t KEY_SPACE    = 50'000'000ULL;
+static constexpr uint64_t KEY_SPACE    = 32'000'000ULL;
 static constexpr size_t   VAL_SIZE     = 4096;
 static constexpr size_t   BATCH_SIZE   = 100;
 static constexpr uint64_t TTL_MS       = 15ULL * 60 * 1000;
