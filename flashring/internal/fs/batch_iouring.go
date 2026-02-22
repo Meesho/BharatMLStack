@@ -6,6 +6,7 @@ package fs
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -246,4 +247,46 @@ func (b *BatchIoUringReader) submitBatch(batch []*batchReadRequest) {
 	}
 
 	b.ring.mu.Unlock()
+}
+
+// ParallelBatchIoUringReader distributes pread requests across N independent
+// BatchIoUringReader instances (each with its own io_uring ring and goroutine)
+// using round-robin. This removes the single-ring serialization bottleneck and
+// lets NVMe service requests across multiple hardware queues in parallel.
+type ParallelBatchIoUringReader struct {
+	readers []*BatchIoUringReader
+	next    atomic.Uint64
+}
+
+// NewParallelBatchIoUringReader creates numRings independent batch readers.
+// Each ring gets its own io_uring instance and background goroutine.
+func NewParallelBatchIoUringReader(cfg BatchIoUringConfig, numRings int) (*ParallelBatchIoUringReader, error) {
+	if numRings <= 0 {
+		numRings = 1
+	}
+	readers := make([]*BatchIoUringReader, numRings)
+	for i := 0; i < numRings; i++ {
+		r, err := NewBatchIoUringReader(cfg)
+		if err != nil {
+			for j := 0; j < i; j++ {
+				readers[j].Close()
+			}
+			return nil, fmt.Errorf("parallel batch reader ring %d: %w", i, err)
+		}
+		readers[i] = r
+	}
+	return &ParallelBatchIoUringReader{readers: readers}, nil
+}
+
+// Submit routes the pread to the next ring via round-robin. Thread-safe.
+func (p *ParallelBatchIoUringReader) Submit(fd int, buf []byte, offset uint64) (int, error) {
+	idx := p.next.Add(1) % uint64(len(p.readers))
+	return p.readers[idx].Submit(fd, buf, offset)
+}
+
+// Close shuts down all underlying batch readers.
+func (p *ParallelBatchIoUringReader) Close() {
+	for _, r := range p.readers {
+		r.Close()
+	}
 }

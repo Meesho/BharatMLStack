@@ -44,7 +44,7 @@ type WrapCache struct {
 	shards      []*filecache.ShardCache
 	shardLocks  []sync.RWMutex
 	predictor   *maths.Predictor
-	batchReader *fs.BatchIoUringReader // global batched io_uring reader
+	batchReader *fs.ParallelBatchIoUringReader // global batched io_uring reader
 }
 
 type WrapCacheConfig struct {
@@ -154,12 +154,12 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error)
 	// Create a single global batched io_uring reader shared across all shards.
 	// All disk reads funnel into one channel; the background goroutine collects
 	// them for up to 1ms and submits them in a single io_uring_enter call.
-	batchReader, err := fs.NewBatchIoUringReader(fs.BatchIoUringConfig{
+	batchReader, err := fs.NewParallelBatchIoUringReader(fs.BatchIoUringConfig{
 		RingDepth: 256,
 		MaxBatch:  256,
 		Window:    time.Millisecond * 2,
 		QueueSize: 1024,
-	})
+	}, 4)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to create batched io_uring reader, falling back to per-shard rings")
 		batchReader = nil

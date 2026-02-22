@@ -19,7 +19,7 @@ type ShardCache struct {
 	keyIndex          *indices.Index
 	file              *fs.WrapAppendFile
 	ioFile            *fs.IOUringFile
-	batchReader       *fs.BatchIoUringReader // global batched io_uring reader (shared across shards)
+	batchReader       *fs.ParallelBatchIoUringReader // global batched io_uring reader (shared across shards)
 	mm                *memtables.MemtableManager
 	readPageAllocator *allocators.SlabAlignedPageAllocator
 	dm                *indices.DeleteManager
@@ -59,7 +59,7 @@ type ShardCacheConfig struct {
 
 	// Global batched io_uring reader (shared across all shards).
 	// When set, disk reads go through this instead of the per-shard IOUringFile.
-	BatchIoUringReader *fs.BatchIoUringReader
+	BatchIoUringReader *fs.ParallelBatchIoUringReader
 
 	// Dedicated io_uring ring for batched writes (shared across all shards).
 	WriteRing *fs.IoUring
