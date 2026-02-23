@@ -50,6 +50,7 @@ type BatchIoUringReader struct {
 	ring     *IoUring
 	reqCh    chan *batchReadRequest
 	maxBatch int
+	window   time.Duration // wait up to this for more requests before submit (0 = drain only)
 	closeCh  chan struct{}
 	wg       sync.WaitGroup
 }
@@ -58,7 +59,7 @@ type BatchIoUringReader struct {
 type BatchIoUringConfig struct {
 	RingDepth uint32        // io_uring SQ/CQ size (default 256)
 	MaxBatch  int           // max requests per batch (capped to RingDepth)
-	Window    time.Duration // unused, kept for config compatibility
+	Window    time.Duration // wait up to this for requests to accumulate before submit (e.g. 500*time.Microsecond); 0 = drain only, no wait
 	QueueSize int           // channel buffer size (default 1024)
 }
 
@@ -84,6 +85,7 @@ func NewBatchIoUringReader(cfg BatchIoUringConfig) (*BatchIoUringReader, error) 
 		ring:     ring,
 		reqCh:    make(chan *batchReadRequest, cfg.QueueSize),
 		maxBatch: cfg.MaxBatch,
+		window:   cfg.Window,
 		closeCh:  make(chan struct{}),
 	}
 	b.wg.Add(1)
@@ -151,17 +153,37 @@ func (b *BatchIoUringReader) loop() {
 			return
 		}
 
-		// Phase 2: non-blocking drain -- grab everything already queued
-		// without waiting. Under load this naturally batches many requests;
-		// under low load the single request goes out immediately.
+		// Phase 2: drain with optional wait — if window > 0, wait up to window
+		// for more requests; otherwise non-blocking drain only.
+		var timer *time.Timer
+		if b.window > 0 {
+			timer = time.NewTimer(b.window)
+		}
 	drain:
 		for len(batch) < b.maxBatch {
-			select {
-			case req := <-b.reqCh:
-				batch = append(batch, req)
-			default:
-				break drain
+			if b.window > 0 {
+				select {
+				case req := <-b.reqCh:
+					batch = append(batch, req)
+				case <-timer.C:
+					break drain
+				case <-b.closeCh:
+					if timer != nil {
+						timer.Stop()
+					}
+					return
+				}
+			} else {
+				select {
+				case req := <-b.reqCh:
+					batch = append(batch, req)
+				default:
+					break drain
+				}
 			}
+		}
+		if timer != nil {
+			timer.Stop()
 		}
 
 		// Phase 3: submit and dispatch
