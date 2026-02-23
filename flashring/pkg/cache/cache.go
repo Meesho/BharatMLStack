@@ -64,6 +64,11 @@ type WrapCacheConfig struct {
 	//lockless mode for PutLL/GetLL
 	EnableLockless bool
 
+	// PinToCores optionally pins each io_uring batch reader loop to a CPU core.
+	// If non-nil and len(PinToCores) >= numRings (4), ring i is pinned to core PinToCores[i].
+	// E.g. []int{2, 3, 4, 5} pins the four rings to cores 2–5. Nil = no pinning (default).
+	PinToCores []int
+
 	//Badger
 	MountPoint string
 }
@@ -155,10 +160,11 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error)
 	// All disk reads funnel into one channel; the background goroutine collects
 	// them for up to 1ms and submits them in a single io_uring_enter call.
 	batchReader, err := fs.NewParallelBatchIoUringReader(fs.BatchIoUringConfig{
-		RingDepth: 256,
-		MaxBatch:  256,
-		Window:    time.Millisecond * 2,
-		QueueSize: 1024,
+		RingDepth:  256,
+		MaxBatch:   256,
+		Window:     time.Millisecond * 2,
+		QueueSize:  1024,
+		PinToCores: config.PinToCores,
 	}, 4)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to create batched io_uring reader, falling back to per-shard rings")

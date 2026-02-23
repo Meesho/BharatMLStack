@@ -5,12 +5,15 @@ package fs
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
+	"github.com/rs/zerolog/log"
+	"golang.org/x/sys/unix"
 )
 
 // batchReadResult holds the outcome of a single batched pread.
@@ -47,11 +50,25 @@ var batchReqPool = sync.Pool{
 //
 // CQEs are dispatched individually as they complete (no head-of-line blocking).
 type BatchIoUringReader struct {
-	ring     *IoUring
-	reqCh    chan *batchReadRequest
-	maxBatch int
-	closeCh  chan struct{}
-	wg       sync.WaitGroup
+	ring      *IoUring
+	reqCh     chan *batchReadRequest
+	maxBatch  int
+	closeCh   chan struct{}
+	wg        sync.WaitGroup
+	pinToCore int // -1 = do not pin; >= 0 = CPU core index to pin this loop's thread to
+}
+
+// pinThreadToCore pins the current OS thread to the given CPU core.
+// Must be called from a goroutine that has already called runtime.LockOSThread()
+// so that the same thread is used for the rest of the goroutine's lifetime.
+// cpu is the core index (e.g. 0, 1, 2, ...). No-op if cpu < 0.
+func pinThreadToCore(cpu int) error {
+	if cpu < 0 {
+		return nil
+	}
+	var set unix.CPUSet
+	set.Set(cpu)
+	return unix.SchedSetaffinity(0, &set)
 }
 
 // BatchIoUringConfig configures the batch reader.
@@ -60,6 +77,13 @@ type BatchIoUringConfig struct {
 	MaxBatch  int           // max requests per batch (capped to RingDepth)
 	Window    time.Duration // unused, kept for config compatibility
 	QueueSize int           // channel buffer size (default 1024)
+	// PinToCore pins this reader's loop goroutine to the given CPU core index.
+	// -1 or negative = do not pin. Requires runtime.LockOSThread for the loop.
+	PinToCore int
+	// PinToCores is used by NewParallelBatchIoUringReader: if non-nil and
+	// len(PinToCores) >= numRings, ring i is pinned to core PinToCores[i].
+	// Ignored when creating a single BatchIoUringReader.
+	PinToCores []int
 }
 
 // NewBatchIoUringReader creates a batch reader with its own io_uring ring
@@ -81,10 +105,11 @@ func NewBatchIoUringReader(cfg BatchIoUringConfig) (*BatchIoUringReader, error) 
 	}
 
 	b := &BatchIoUringReader{
-		ring:     ring,
-		reqCh:    make(chan *batchReadRequest, cfg.QueueSize),
-		maxBatch: cfg.MaxBatch,
-		closeCh:  make(chan struct{}),
+		ring:      ring,
+		reqCh:     make(chan *batchReadRequest, cfg.QueueSize),
+		maxBatch:  cfg.MaxBatch,
+		closeCh:   make(chan struct{}),
+		pinToCore: cfg.PinToCore,
 	}
 	b.wg.Add(1)
 	go b.loop()
@@ -113,6 +138,7 @@ func (b *BatchIoUringReader) Submit(fd int, buf []byte, offset uint64) (int, err
 	result := <-req.done
 	n, err := result.N, result.Err
 	if metrics.Enabled() {
+		metrics.Incr(metrics.KEY_PREAD_COUNT, []string{})
 		metrics.Timing(metrics.KEY_PREAD_LATENCY, time.Since(startTime), []string{})
 	}
 
@@ -139,6 +165,13 @@ func (b *BatchIoUringReader) Close() {
 // Phase 3: submit the batch and dispatch CQEs as they complete.
 func (b *BatchIoUringReader) loop() {
 	defer b.wg.Done()
+
+	if b.pinToCore >= 0 {
+		runtime.LockOSThread()
+		if err := pinThreadToCore(b.pinToCore); err != nil {
+			log.Warn().Err(err).Int("core", b.pinToCore).Msg("failed to pin io_uring loop to core, continuing without pinning")
+		}
+	}
 
 	batch := make([]*batchReadRequest, 0, b.maxBatch)
 
@@ -268,13 +301,19 @@ type ParallelBatchIoUringReader struct {
 
 // NewParallelBatchIoUringReader creates numRings independent batch readers.
 // Each ring gets its own io_uring instance and background goroutine.
+// If cfg.PinToCores has at least numRings elements, ring i is pinned to core PinToCores[i].
 func NewParallelBatchIoUringReader(cfg BatchIoUringConfig, numRings int) (*ParallelBatchIoUringReader, error) {
 	if numRings <= 0 {
 		numRings = 1
 	}
 	readers := make([]*BatchIoUringReader, numRings)
 	for i := 0; i < numRings; i++ {
-		r, err := NewBatchIoUringReader(cfg)
+		ringCfg := cfg
+		ringCfg.PinToCore = -1
+		if len(cfg.PinToCores) > i {
+			ringCfg.PinToCore = cfg.PinToCores[i]
+		}
+		r, err := NewBatchIoUringReader(ringCfg)
 		if err != nil {
 			for j := 0; j < i; j++ {
 				readers[j].Close()
