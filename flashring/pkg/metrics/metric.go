@@ -94,7 +94,7 @@ var (
 func loadMetricsEnabled() bool {
 	v := os.Getenv("FLASHRING_METRICS_ENABLED")
 	if v == "" {
-		return true
+		return false
 	}
 	return strings.EqualFold(v, "true") || v == "1"
 }
