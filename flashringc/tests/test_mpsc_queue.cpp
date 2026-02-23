@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <chrono>
 #include <cstdio>
 #include <thread>
 #include <vector>
@@ -25,38 +26,51 @@ static int tests_passed = 0;
 static void test_single_push_pop() {
     MPSCQueue<int> q(4);
     int val = 0;
-    assert(!q.try_pop(val));
+    bool ok;
 
-    assert(q.try_push(42));
-    assert(q.try_pop(val));
+    ok = q.try_pop(val);
+    assert(!ok);
+
+    ok = q.try_push(42);
+    assert(ok);
+
+    ok = q.try_pop(val);
+    assert(ok);
     assert(val == 42);
-    assert(!q.try_pop(val));
+
+    ok = q.try_pop(val);
+    assert(!ok);
 }
 
 static void test_fill_and_drain() {
     MPSCQueue<int> q(8);
-    for (int i = 0; i < 8; ++i)
-        assert(q.try_push(std::move(i)));
+    for (int i = 0; i < 8; ++i) {
+        bool ok = q.try_push(std::move(i));
+        assert(ok);
+    }
 
-    // Queue is full (capacity rounded to 8).
     int overflow = 99;
-    assert(!q.try_push(std::move(overflow)));
+    bool full = q.try_push(std::move(overflow));
+    assert(!full);
 
     for (int i = 0; i < 8; ++i) {
         int val = -1;
-        assert(q.try_pop(val));
+        bool ok = q.try_pop(val);
+        assert(ok);
         assert(val == i);
     }
 
     int val = -1;
-    assert(!q.try_pop(val));
+    bool ok = q.try_pop(val);
+    assert(!ok);
 }
 
 static void test_drain_batch() {
     MPSCQueue<int> q(16);
     for (int i = 0; i < 10; ++i) {
         int v = i;
-        assert(q.try_push(std::move(v)));
+        bool ok = q.try_push(std::move(v));
+        assert(ok);
     }
 
     int buf[16] = {};
@@ -109,7 +123,6 @@ static void test_multi_producer() {
 
     assert(push_failures.load() == 0);
 
-    // Drain all items — verify we got exactly TOTAL.
     std::vector<bool> seen(TOTAL, false);
     int val = 0;
     int count = 0;
@@ -134,10 +147,38 @@ static void test_move_only_type() {
     };
 
     MPSCQueue<MoveOnly> q(4);
-    assert(q.try_push(MoveOnly(42)));
+    bool ok;
+
+    ok = q.try_push(MoveOnly(42));
+    assert(ok);
+
     MoveOnly out;
-    assert(q.try_pop(out));
+    ok = q.try_pop(out);
+    assert(ok);
     assert(out.val == 42);
+}
+
+static void test_pop_blocking() {
+    MPSCQueue<int> q(4);
+
+    std::atomic<bool> popped{false};
+    int result = -1;
+
+    std::thread consumer([&]() {
+        q.pop_blocking(result);
+        popped.store(true, std::memory_order_release);
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    assert(!popped.load(std::memory_order_acquire));
+
+    int val = 77;
+    bool ok = q.try_push(std::move(val));
+    assert(ok);
+
+    consumer.join();
+    assert(popped.load());
+    assert(result == 77);
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +186,7 @@ static void test_move_only_type() {
 // ---------------------------------------------------------------------------
 
 int main() {
+    setbuf(stdout, NULL);
     printf("test_mpsc_queue\n");
 
     RUN(test_single_push_pop);
@@ -153,6 +195,7 @@ int main() {
     RUN(test_power_of_two_rounding);
     RUN(test_multi_producer);
     RUN(test_move_only_type);
+    RUN(test_pop_blocking);
 
     printf("\n%d / %d tests passed.\n", tests_passed, tests_run);
     return (tests_passed == tests_run) ? 0 : 1;

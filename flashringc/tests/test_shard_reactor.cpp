@@ -50,7 +50,8 @@ static std::future<Result> submit_put(ShardReactor& reactor,
     req.value = val;
     req.hash  = hash_key(key.data(), key.size());
     auto fut  = req.promise.get_future();
-    assert(reactor.submit(std::move(req)));
+    bool ok = reactor.submit(std::move(req));
+    assert(ok);
     return fut;
 }
 
@@ -61,7 +62,8 @@ static std::future<Result> submit_get(ShardReactor& reactor,
     req.key  = key;
     req.hash = hash_key(key.data(), key.size());
     auto fut = req.promise.get_future();
-    assert(reactor.submit(std::move(req)));
+    bool ok = reactor.submit(std::move(req));
+    assert(ok);
     return fut;
 }
 
@@ -72,7 +74,8 @@ static std::future<Result> submit_del(ShardReactor& reactor,
     req.key  = key;
     req.hash = hash_key(key.data(), key.size());
     auto fut = req.promise.get_future();
-    assert(reactor.submit(std::move(req)));
+    bool ok = reactor.submit(std::move(req));
+    assert(ok);
     return fut;
 }
 

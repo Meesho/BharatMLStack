@@ -1,8 +1,10 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <new>
 #include <type_traits>
 #include <utility>
@@ -52,6 +54,10 @@ public:
                 {
                     slot.data = std::move(item);
                     slot.seq.store(pos + 1, std::memory_order_release);
+                    {
+                        std::lock_guard<std::mutex> lk(mu_);
+                        cv_.notify_one();
+                    }
                     return true;
                 }
             } else if (diff < 0) {
@@ -84,6 +90,22 @@ public:
         return n;
     }
 
+    // Blocking push — spin-retries try_push() until success.
+    // Used by stop() for the shutdown sentinel which must not fail.
+    void push(T&& item) {
+        while (!try_push(std::move(item))) {}
+    }
+
+    // Blocking pop (consumer only). Fast path: lock-free try_pop.
+    // Slow path: condvar wait. Only used in State 2 (idle reactor).
+    bool pop_blocking(T& item) {
+        if (try_pop(item))
+            return true;
+        std::unique_lock<std::mutex> lk(mu_);
+        cv_.wait(lk, [&] { return try_pop(item); });
+        return true;
+    }
+
     uint32_t capacity() const { return mask_ + 1; }
 
 private:
@@ -106,4 +128,7 @@ private:
 
     alignas(kCacheLine) std::atomic<uint32_t> head_{0};
     alignas(kCacheLine) uint32_t              tail_{0};
+
+    std::mutex              mu_;
+    std::condition_variable cv_;
 };

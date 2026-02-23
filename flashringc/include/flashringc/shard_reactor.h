@@ -29,7 +29,7 @@ public:
     ShardReactor(const ShardReactor&) = delete;
     ShardReactor& operator=(const ShardReactor&) = delete;
 
-    // Push a request from any thread. Spins briefly if queue is full.
+    // Push a request from any thread. Returns false if queue is full.
     bool submit(Request&& req);
 
     // Main event loop — runs on a dedicated thread, returns on stop().
@@ -47,10 +47,10 @@ private:
     void handle_put(Request& req);
     void handle_delete(Request& req);
 
+    void dispatch(Request& req);
     void reap_completions();
     void maybe_flush_memtable();
     void maybe_run_eviction();
-    void idle_wait();
     void drain_remaining();
 
     uint16_t now_delta() const;
@@ -71,9 +71,6 @@ private:
     absl::flat_hash_map<uint64_t, Request> pending_requests_;
 
     std::atomic<bool> running_{false};
-    uint32_t idle_spins_ = 0;
-
-    static constexpr uint32_t kMaxIdleSpins = 1000;
 
 #if defined(__linux__) && defined(HAVE_IO_URING)
     struct io_uring uring_;

@@ -31,7 +31,7 @@ struct KVPair {
 // Request — submitted to a ShardReactor via MPSC queue
 // ---------------------------------------------------------------------------
 
-enum class OpType : uint8_t { Get, Put, Delete };
+enum class OpType : uint8_t { Get, Put, Delete, Shutdown };
 
 struct Request {
     OpType               type;

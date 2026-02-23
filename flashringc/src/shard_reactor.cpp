@@ -2,17 +2,8 @@
 
 #include <chrono>
 #include <cstring>
-#include <thread>
 #include <vector>
 
-#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
-#include <immintrin.h>
-#define PAUSE_INSTR() _mm_pause()
-#elif defined(__aarch64__)
-#define PAUSE_INSTR() __asm__ volatile("yield")
-#else
-#define PAUSE_INSTR() ((void)0)
-#endif
 
 // ---------------------------------------------------------------------------
 // Construction / Destruction
@@ -46,15 +37,7 @@ ShardReactor::~ShardReactor() {
 // ---------------------------------------------------------------------------
 
 bool ShardReactor::submit(Request&& req) {
-    constexpr int kMaxRetries = 4096;
-    for (int i = 0; i < kMaxRetries; ++i) {
-        if (inbox_.try_push(std::move(req)))
-            return true;
-        PAUSE_INSTR();
-        if (i > 64)
-            std::this_thread::yield();
-    }
-    return false;
+    return inbox_.try_push(std::move(req));
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +46,9 @@ bool ShardReactor::submit(Request&& req) {
 
 void ShardReactor::stop() {
     running_.store(false, std::memory_order_release);
+    Request sentinel;
+    sentinel.type = OpType::Shutdown;
+    inbox_.push(std::move(sentinel));
 }
 
 // ---------------------------------------------------------------------------
@@ -82,18 +68,24 @@ uint16_t ShardReactor::now_delta() const {
 void ShardReactor::run() {
     running_.store(true, std::memory_order_release);
 
-    while (running_.load(std::memory_order_acquire)) {
-        process_inbox(kMaxInboxBatch);
-
+    while (running_.load(std::memory_order_relaxed)) {
+        if (inflight_.empty()) {
+            // State 2: idle — block until a request arrives.
+            Request req;
+            if (!inbox_.pop_blocking(req)) continue;
+            if (req.type == OpType::Shutdown) break;
+            dispatch(req);
 #if defined(__linux__) && defined(HAVE_IO_URING)
-        if (uring_ok_)
-            io_uring_submit(&uring_);
+            if (uring_ok_)
+                io_uring_submit(&uring_);
 #endif
-
-        reap_completions();
+        } else {
+            // State 1: IO in-flight — tight poll loop.
+            process_inbox(kMaxInboxBatch);
+            reap_completions();
+        }
         maybe_flush_memtable();
         maybe_run_eviction();
-        idle_wait();
     }
 
     drain_remaining();
@@ -105,18 +97,34 @@ void ShardReactor::run() {
 
 void ShardReactor::process_inbox(int max_batch) {
     Request req;
-    int processed = 0;
-    while (processed < max_batch && inbox_.try_pop(req)) {
-        switch (req.type) {
-            case OpType::Get:    handle_get(req);    break;
-            case OpType::Put:    handle_put(req);    break;
-            case OpType::Delete: handle_delete(req); break;
+    int count = 0;
+    while (count < max_batch && inbox_.try_pop(req)) {
+        if (req.type == OpType::Shutdown) {
+            running_.store(false, std::memory_order_relaxed);
+            return;
         }
-        ++processed;
+        dispatch(req);
+        ++count;
     }
+    if (count > 0) {
+#if defined(__linux__) && defined(HAVE_IO_URING)
+        if (uring_ok_)
+            io_uring_submit(&uring_);
+#endif
+    }
+}
 
-    if (processed > 0)
-        idle_spins_ = 0;
+// ---------------------------------------------------------------------------
+// dispatch
+// ---------------------------------------------------------------------------
+
+void ShardReactor::dispatch(Request& req) {
+    switch (req.type) {
+        case OpType::Get:      handle_get(req);    break;
+        case OpType::Put:      handle_put(req);    break;
+        case OpType::Delete:   handle_delete(req); break;
+        case OpType::Shutdown: break;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -373,31 +381,6 @@ void ShardReactor::maybe_run_eviction() {
 }
 
 // ---------------------------------------------------------------------------
-// idle_wait
-// ---------------------------------------------------------------------------
-
-void ShardReactor::idle_wait() {
-    ++idle_spins_;
-    if (idle_spins_ < kMaxIdleSpins) {
-        PAUSE_INSTR();
-        return;
-    }
-
-#if defined(__linux__) && defined(HAVE_IO_URING)
-    if (uring_ok_ && !inflight_.empty()) {
-        struct __kernel_timespec ts = {0, 100'000};  // 100µs
-        struct io_uring_cqe* cqe = nullptr;
-        io_uring_wait_cqe_timeout(&uring_, &cqe, &ts);
-        idle_spins_ = 0;
-        return;
-    }
-#endif
-
-    std::this_thread::sleep_for(std::chrono::microseconds(100));
-    idle_spins_ = 0;
-}
-
-// ---------------------------------------------------------------------------
 // drain_remaining — shutdown path
 // ---------------------------------------------------------------------------
 
@@ -405,11 +388,8 @@ void ShardReactor::drain_remaining() {
     // Process remaining inbox items.
     Request req;
     while (inbox_.try_pop(req)) {
-        switch (req.type) {
-            case OpType::Get:    handle_get(req);    break;
-            case OpType::Put:    handle_put(req);    break;
-            case OpType::Delete: handle_delete(req); break;
-        }
+        if (req.type == OpType::Shutdown) continue;
+        dispatch(req);
     }
 
 #if defined(__linux__) && defined(HAVE_IO_URING)
