@@ -553,15 +553,6 @@ func (p *Predator) replaceModelNameInConfigPreservingFormat(data []byte, destMod
 // validateNoLoggerOrPrintStatements checks that Python backend models do not contain
 // uncommented logger.info, logger.debug, or print statements outside of initialize()
 // and finalize() functions.
-//
-// Workflow:
-//  1. Reads and parses config.pbtxt to determine the model backend type.
-//  2. If the backend is NOT "python", the check is skipped (non-Python backends
-//     like tensorrt or onnxruntime don't contain .py files).
-//  3. If the backend IS "python", enumerates all .py files in the model source
-//     directory using ListFilesWithSuffix.
-//  4. For each .py file, reads its content and scans for logger/print statements.
-//  5. Returns an error listing violations summary if any violations are found.
 func (p *Predator) validateNoLoggerOrPrintStatements(gcsPath string) error {
 	srcBucket, srcPath := extractGCSPath(gcsPath)
 	if srcBucket == "" || srcPath == "" {
@@ -633,12 +624,7 @@ func (p *Predator) validateNoLoggerOrPrintStatements(gcsPath string) error {
 // buildBalancedViolationSummary produces a human-readable error string that shows
 // at most maxDisplayedViolations individual violation details, distributed fairly
 // across all files using round-robin allocation. Each file entry includes its
-// total violation count, and files whose violations exceed their allocated share
-// get an "...and N more" suffix.
-//
-// Round-robin ensures fair distribution: each file gets one slot per round until
-// all slots are consumed. Files with fewer violations than their fair share
-// naturally release unused slots to files with more violations.
+// total violation count.
 func buildBalancedViolationSummary(perFileViolations []fileViolationInfo, totalViolations int) string {
 	const maxDisplayedViolations = maxDisplayedViolationsForPythonModel
 
@@ -693,21 +679,6 @@ func buildBalancedViolationSummary(perFileViolations []fileViolationInfo, totalV
 // hasPythonLoggerOrPrintStatements scans Python source code for uncommented
 // logger.info, logger.debug, or print() statements that are NOT inside
 // initialize() or finalize() functions.
-//
-// The logic tracks nested Python function scopes using a stack of (name, indent)
-// entries so that nested defs inside initialize/finalize are correctly treated as
-// allowed:
-//  1. On each non-empty, non-comment line, pop stack entries whose indentation is
-//     >= the current line's indentation (dedent = scope exit).
-//  2. If the line is a "def funcname(" pattern, push the new scope onto the stack.
-//  3. If any entry on the stack is initialize or finalize, skip the line.
-//
-// Inline comments are stripped before pattern matching to avoid false positives on
-// trailing comments like `x = f()  # logger.info(...)`.
-//
-// Returns:
-//   - found: true if any violations were detected
-//   - details: human-readable descriptions of each violation (line number + content)
 func hasPythonLoggerOrPrintStatements(content []byte) (found bool, details []string) {
 	lines := strings.Split(string(content), "\n")
 
@@ -770,7 +741,6 @@ func isInsideAllowedFunction(stack []funcScopeEntry) bool {
 
 // stripInlineComment removes a trailing Python inline comment (# ...) from a
 // line while preserving '#' characters that appear inside string literals.
-// Uses simple single/double quote state tracking with backslash-escape awareness.
 func stripInlineComment(line string) string {
 	inSingle := false
 	inDouble := false
@@ -804,10 +774,6 @@ func stripInlineComment(line string) string {
 }
 
 // isEnsembleModel checks if the model configuration represents a Triton ensemble model.
-// Ensemble models are identified by:
-//   - backend field set to "ensemble", OR
-//   - platform field set to "ensemble", OR
-//   - ensemble_scheduling section being present in the config
 func isEnsembleModel(config *ModelConfig) bool {
 	if config.GetBackend() == ensembleBackend {
 		return true
