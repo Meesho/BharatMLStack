@@ -2,6 +2,7 @@
 #include "record.h"
 
 #include <cstring>
+#include <future>
 #include <stdexcept>
 #include <vector>
 
@@ -107,27 +108,30 @@ void Cache::get_batch(const BatchGetRequest* reqs, BatchGetResult* results,
         shard_groups[shard_id].push_back(i);
     }
 
-    // Dispatch each shard's batch
+    // Dispatch each shard's batch in parallel (batch latency = max over shards, not sum)
+    std::vector<std::future<void>> futures;
+    futures.reserve(num_shards_);
     for (uint32_t s = 0; s < num_shards_; ++s) {
-        auto& group = shard_groups[s];
+        const std::vector<size_t>& group = shard_groups[s];
         if (group.empty()) continue;
 
-        size_t n = group.size();
-        std::vector<BatchGetRequest> sub_reqs(n);
-        std::vector<BatchGetResult>  sub_results(n);
-        std::vector<Hash128>         sub_hashes(n);
-
-        for (size_t j = 0; j < n; ++j) {
-            sub_reqs[j]   = reqs[group[j]];
-            sub_hashes[j] = hashes[group[j]];
-        }
-
-        shards_[s]->get_batch(sub_reqs.data(), sub_results.data(),
-                              n, sub_hashes.data());
-
-        for (size_t j = 0; j < n; ++j)
-            results[group[j]] = sub_results[j];
+        futures.push_back(std::async(std::launch::async, [this, s, &reqs, &results, &hashes, &shard_groups]() {
+            const std::vector<size_t>& g = shard_groups[s];
+            const size_t n = g.size();
+            std::vector<BatchGetRequest> sub_reqs(n);
+            std::vector<BatchGetResult>  sub_results(n);
+            std::vector<Hash128>         sub_hashes(n);
+            for (size_t j = 0; j < n; ++j) {
+                sub_reqs[j]   = reqs[g[j]];
+                sub_hashes[j] = hashes[g[j]];
+            }
+            shards_[s]->get_batch(sub_reqs.data(), sub_results.data(), n, sub_hashes.data());
+            for (size_t j = 0; j < n; ++j)
+                results[g[j]] = sub_results[j];
+        }));
     }
+    for (auto& f : futures)
+        f.get();
 }
 
 // ---------------------------------------------------------------------------
