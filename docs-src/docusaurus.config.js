@@ -52,6 +52,7 @@ const config = {
           routeBasePath: '/',
         },
         blog: {
+          blogSidebarCount: 'ALL',
           showReadingTime: true,
           feedOptions: {
             type: ['rss', 'atom'],

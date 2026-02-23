@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: episodic-memory-prototype
+Version: 0.1.0
+Summary: Episodic memory system for LLM agents — prototype & evaluation
+Requires-Python: >=3.10
+Requires-Dist: numpy>=1.24
+Requires-Dist: sentence-transformers>=2.2
+Requires-Dist: anthropic>=0.30
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: ruff>=0.4; extra == "dev"
