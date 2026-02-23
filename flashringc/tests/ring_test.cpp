@@ -1,5 +1,5 @@
-#include "ring_device.h"
-#include "memtable.h"
+#include "flashringc/ring_device.h"
+#include "flashringc/memtable_manager.h"
 
 #include <cassert>
 #include <cstdio>
@@ -147,17 +147,15 @@ static void test_memtable_swap() {
     size_t plen = std::strlen(payload);
     auto first = mgr.put(payload, plen);
 
-    // Fill the active memtable until a swap occurs.
+    // Fill the active memtable until it needs flush, then swap + sync flush.
     char filler[1024];
     std::memset(filler, 'X', sizeof(filler));
-    uint32_t initial_id = first.mem_id;
-    while (true) {
-        auto wr = mgr.put(filler, sizeof(filler));
-        if (wr.mem_id != initial_id) break;   // swap happened
+    while (!mgr.needs_flush(sizeof(filler))) {
+        mgr.put(filler, sizeof(filler));
     }
 
-    // Force-flush so the flushing memtable completes.
-    mgr.flush();
+    // Synchronously flush (swap + write to disk + complete).
+    mgr.flush_sync();
 
     // The first record should now be on disk.
     int64_t file_off = mgr.file_offset_for(first.mem_id);

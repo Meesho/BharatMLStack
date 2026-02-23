@@ -1,5 +1,5 @@
-#include "ring_device.h"
-#include "aligned_buffer.h"
+#include "flashringc/ring_device.h"
+#include "flashringc/common.h"
 
 #include <algorithm>
 #include <chrono>

@@ -1,4 +1,4 @@
-#include "ring_device.h"
+#include "flashringc/ring_device.h"
 
 #include <cerrno>
 #include <cstring>

@@ -1,5 +1,5 @@
-#include "key_index.h"
-#include "aligned_buffer.h"
+#include "flashringc/key_index.h"
+#include "flashringc/common.h"
 
 #include <cstdlib>
 #include <stdexcept>
@@ -15,24 +15,6 @@ Hash128 hash_key(const void* key, size_t len) {
     XXH128_hash_t h = XXH3_128bits(key, len);
     return {h.low64, h.high64};
 }
-
-// ---------------------------------------------------------------------------
-// Fast thread-local xorshift for Morris counter probability check.
-// ---------------------------------------------------------------------------
-
-namespace {
-
-uint32_t fast_rand() {
-    // Per-thread state avoids atomic contention.
-    thread_local uint32_t s = 2654435769u ^ static_cast<uint32_t>(
-        reinterpret_cast<uintptr_t>(&s));
-    s ^= s << 13;
-    s ^= s >> 17;
-    s ^= s << 5;
-    return s;
-}
-
-} // namespace
 
 // ---------------------------------------------------------------------------
 // KeyIndex
@@ -51,7 +33,6 @@ KeyIndex::KeyIndex(uint32_t capacity)
 
 uint32_t KeyIndex::put(Hash128 h, uint32_t mem_id,
                        uint32_t offset, uint32_t length) {
-    // Check for existing entry (update case).
     auto it = map_.find(h.lo);
     if (it != map_.end()) {
         uint32_t idx = it->second;
@@ -66,7 +47,6 @@ uint32_t KeyIndex::put(Hash128 h, uint32_t mem_id,
         }
     }
 
-    // If ring is full, evict one entry at head to make room.
     if (ring_used_ >= capacity_)
         evict_oldest(1);
 
@@ -108,7 +88,6 @@ bool KeyIndex::get(Hash128 h, uint16_t now_delta, LookupResult& out) {
     out.last_access = e.last_access.load(std::memory_order_relaxed);
     out.freq        = e.freq.load(std::memory_order_relaxed);
 
-    // Update access metadata (safe under shared_lock — relaxed atomics).
     e.last_access.store(now_delta, std::memory_order_relaxed);
     morris_increment(e.freq);
 
@@ -155,13 +134,15 @@ uint32_t KeyIndex::evict_oldest(uint32_t count, uint64_t* evicted_bytes) {
 }
 
 // ---------------------------------------------------------------------------
-// Morris log counter increment
+// Morris log counter increment (member xorshift RNG — single-threaded)
 // ---------------------------------------------------------------------------
 
 void KeyIndex::morris_increment(std::atomic<uint8_t>& freq) {
     uint8_t cur = freq.load(std::memory_order_relaxed);
     if (cur >= 255) return;
-    // Increment with probability 1 / 2^cur.
-    if ((fast_rand() & ((1u << cur) - 1)) == 0)
+    rand_state_ ^= rand_state_ << 13;
+    rand_state_ ^= rand_state_ >> 17;
+    rand_state_ ^= rand_state_ << 5;
+    if ((rand_state_ & ((1u << cur) - 1)) == 0)
         freq.store(cur + 1, std::memory_order_relaxed);
 }

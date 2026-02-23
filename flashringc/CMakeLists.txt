@@ -31,7 +31,7 @@ FetchContent_Declare(
 FetchContent_Populate(xxHash)
 set(XXHASH_INCLUDE_DIR "${xxhash_SOURCE_DIR}")
 
-# --- liburing (optional, Linux only) ---
+# --- liburing (Linux only) ---
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     find_library(URING_LIB uring)
     if(URING_LIB)
@@ -39,22 +39,28 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         message(STATUS "Found liburing: ${URING_LIB}")
     else()
         set(HAVE_IO_URING FALSE)
-        message(STATUS "liburing not found — io_uring disabled, using pread fallback")
+        message(STATUS "liburing not found — reactor will use pread fallback")
     endif()
 else()
     set(HAVE_IO_URING FALSE)
+    message(STATUS "Non-Linux platform — reactor uses pread fallback")
 endif()
 
+# --- Library ---
 add_library(flashring
     src/ring_device.cpp
-    src/memtable.cpp
+    src/memtable_manager.cpp
     src/key_index.cpp
     src/delete_manager.cpp
-    src/shard.cpp
-    src/io_engine.cpp
+    src/shard_reactor.cpp
     src/cache.cpp
 )
-target_include_directories(flashring PUBLIC src/ PRIVATE ${XXHASH_INCLUDE_DIR})
+
+target_include_directories(flashring
+    PUBLIC  include/
+    PRIVATE ${XXHASH_INCLUDE_DIR}
+)
+
 target_link_libraries(flashring
     PUBLIC  absl::flat_hash_map
     PRIVATE pthread
@@ -65,11 +71,22 @@ if(HAVE_IO_URING)
     target_link_libraries(flashring PRIVATE ${URING_LIB})
 endif()
 
+# --- Tests ---
+add_executable(test_mpsc_queue tests/test_mpsc_queue.cpp)
+target_link_libraries(test_mpsc_queue PRIVATE flashring)
+
+add_executable(test_shard_reactor tests/test_shard_reactor.cpp)
+target_link_libraries(test_shard_reactor PRIVATE flashring)
+
+add_executable(test_cache tests/test_cache.cpp)
+target_link_libraries(test_cache PRIVATE flashring)
+
+add_executable(bench_cache tests/bench_cache.cpp)
+target_link_libraries(bench_cache PRIVATE flashring)
+
+# --- Legacy tests (kept for reference, may need updating) ---
 add_executable(ring_test tests/ring_test.cpp)
 target_link_libraries(ring_test PRIVATE flashring)
-
-add_executable(perf_test tests/perf_test.cpp)
-target_link_libraries(perf_test PRIVATE flashring)
 
 add_executable(index_test tests/index_test.cpp)
 target_link_libraries(index_test PRIVATE flashring)
@@ -77,14 +94,5 @@ target_link_libraries(index_test PRIVATE flashring)
 add_executable(index_perf_test tests/index_perf_test.cpp)
 target_link_libraries(index_perf_test PRIVATE flashring)
 
-add_executable(cache_test tests/cache_test.cpp)
-target_link_libraries(cache_test PRIVATE flashring)
-
-add_executable(cache_perf_test tests/cache_perf_test.cpp)
-target_link_libraries(cache_perf_test PRIVATE flashring)
-
-add_executable(shard_bench tests/shard_bench.cpp)
-target_link_libraries(shard_bench PRIVATE flashring)
-
-add_executable(batch_ttl_stress_test tests/batch_ttl_stress_test.cpp)
-target_link_libraries(batch_ttl_stress_test PRIVATE flashring)
+add_executable(perf_test tests/perf_test.cpp)
+target_link_libraries(perf_test PRIVATE flashring)

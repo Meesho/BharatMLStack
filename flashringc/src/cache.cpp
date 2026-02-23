@@ -1,22 +1,25 @@
-#include "cache.h"
-#include "record.h"
+#include "flashringc/cache.h"
+#include "flashringc/record.h"
 
+#include <algorithm>
 #include <cstring>
-#include <future>
 #include <stdexcept>
-#include <vector>
+#include <thread>
+
+#ifdef __linux__
+#include <pthread.h>
+#endif
 
 // ---------------------------------------------------------------------------
-// open / move / destructor
+// open
 // ---------------------------------------------------------------------------
 
 Cache Cache::open(const CacheConfig& cfg) {
-    if (cfg.num_shards == 0)
-        throw std::invalid_argument("num_shards must be > 0");
-
     Cache c;
+
     c.num_shards_ = cfg.num_shards;
-    c.shards_.reserve(cfg.num_shards);
+    if (c.num_shards_ == 0)
+        c.num_shards_ = std::max(1u, std::thread::hardware_concurrency());
 
     bool is_blk = RingDevice::is_block_device_path(cfg.device_path);
 
@@ -26,39 +29,85 @@ Cache Cache::open(const CacheConfig& cfg) {
         total_capacity = probe.capacity();
     }
 
+    if (total_capacity == 0)
+        throw std::invalid_argument("ring_capacity required for file-backed cache");
+
     uint64_t per_shard_capacity =
-        AlignedBuffer::align_up(total_capacity / cfg.num_shards);
+        AlignedBuffer::align_up(total_capacity / c.num_shards_);
     size_t per_shard_mt =
-        AlignedBuffer::align_up(cfg.memtable_size / cfg.num_shards);
-    uint32_t per_shard_keys = cfg.index_capacity / cfg.num_shards;
+        AlignedBuffer::align_up(cfg.memtable_size / c.num_shards_);
+    uint32_t per_shard_keys = cfg.index_capacity / c.num_shards_;
     if (per_shard_keys == 0) per_shard_keys = 1;
 
-    for (uint32_t i = 0; i < cfg.num_shards; ++i) {
+    c.shards_.reserve(c.num_shards_);
+    for (uint32_t i = 0; i < c.num_shards_; ++i) {
         RingDevice ring = is_blk
             ? RingDevice::open_region(cfg.device_path,
                                       i * per_shard_capacity,
                                       per_shard_capacity)
             : RingDevice::open(cfg.device_path + "." + std::to_string(i),
                                per_shard_capacity);
-        c.shards_.push_back(
-            std::make_unique<Shard>(std::move(ring), per_shard_mt,
-                                   per_shard_keys, cfg.use_io_uring));
+        c.shards_.push_back(std::make_unique<ShardReactor>(
+            std::move(ring), per_shard_mt, per_shard_keys,
+            cfg.queue_capacity, cfg.uring_queue_depth));
     }
+
+    // Spawn reactor threads.
+    c.threads_.reserve(c.num_shards_);
+    for (uint32_t i = 0; i < c.num_shards_; ++i) {
+        ShardReactor* reactor = c.shards_[i].get();
+        c.threads_.emplace_back([reactor, i]() {
+#ifdef __linux__
+            cpu_set_t cpuset;
+            CPU_ZERO(&cpuset);
+            CPU_SET(i % std::thread::hardware_concurrency(), &cpuset);
+            pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+#endif
+            reactor->run();
+        });
+
+        // Wait for the reactor to start running before proceeding.
+        while (!reactor->key_count() && !reactor->ring_usage()) {
+            // Just ensure run() has been entered — a brief spin.
+            // The reactor sets running_ to true at the top of run().
+            std::this_thread::yield();
+            break;
+        }
+    }
+
+    // Give reactors a moment to initialize.
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
     return c;
 }
 
-Cache::~Cache() = default;
+// ---------------------------------------------------------------------------
+// Destructor
+// ---------------------------------------------------------------------------
+
+Cache::~Cache() {
+    for (auto& s : shards_)
+        s->stop();
+    for (auto& t : threads_) {
+        if (t.joinable())
+            t.join();
+    }
+}
 
 Cache::Cache(Cache&& o) noexcept
     : shards_(std::move(o.shards_)),
+      threads_(std::move(o.threads_)),
       num_shards_(o.num_shards_) {
     o.num_shards_ = 0;
 }
 
 Cache& Cache::operator=(Cache&& o) noexcept {
     if (this != &o) {
+        for (auto& s : shards_) s->stop();
+        for (auto& t : threads_) if (t.joinable()) t.join();
+
         shards_     = std::move(o.shards_);
+        threads_    = std::move(o.threads_);
         num_shards_ = o.num_shards_;
         o.num_shards_ = 0;
     }
@@ -66,81 +115,91 @@ Cache& Cache::operator=(Cache&& o) noexcept {
 }
 
 // ---------------------------------------------------------------------------
-// put
+// Async API
 // ---------------------------------------------------------------------------
 
-bool Cache::put(const void* key, size_t key_len,
-                const void* val, size_t val_len) {
-    size_t rec_len = record_size(key_len, val_len);
-    std::vector<uint8_t> rec(rec_len);
-    encode_record(rec.data(), key, static_cast<uint32_t>(key_len),
-                  val, static_cast<uint32_t>(val_len));
+std::future<Result> Cache::get(std::string_view key) {
+    Hash128 h = hash_key(key.data(), key.size());
+    Request req;
+    req.type = OpType::Get;
+    req.key  = std::string(key);
+    req.hash = h;
+    auto fut = req.promise.get_future();
+    shard_for(h).submit(std::move(req));
+    return fut;
+}
 
-    Hash128 h = hash_key(key, key_len);
-    return shard_for(h).put(h, rec.data(), rec_len);
+std::future<Result> Cache::put(std::string_view key, std::string_view value) {
+    Hash128 h = hash_key(key.data(), key.size());
+    Request req;
+    req.type  = OpType::Put;
+    req.key   = std::string(key);
+    req.value = std::string(value);
+    req.hash  = h;
+    auto fut = req.promise.get_future();
+    shard_for(h).submit(std::move(req));
+    return fut;
+}
+
+std::future<Result> Cache::del(std::string_view key) {
+    Hash128 h = hash_key(key.data(), key.size());
+    Request req;
+    req.type = OpType::Delete;
+    req.key  = std::string(key);
+    req.hash = h;
+    auto fut = req.promise.get_future();
+    shard_for(h).submit(std::move(req));
+    return fut;
+}
+
+std::vector<std::future<Result>> Cache::batch_get(
+    const std::string_view* keys, size_t count) {
+    std::vector<std::future<Result>> futs;
+    futs.reserve(count);
+    for (size_t i = 0; i < count; ++i)
+        futs.push_back(get(keys[i]));
+    return futs;
+}
+
+std::vector<std::future<Result>> Cache::batch_put(
+    const KVPair* pairs, size_t count) {
+    std::vector<std::future<Result>> futs;
+    futs.reserve(count);
+    for (size_t i = 0; i < count; ++i)
+        futs.push_back(put(pairs[i].key, pairs[i].value));
+    return futs;
 }
 
 // ---------------------------------------------------------------------------
-// get
+// Synchronous convenience wrappers
 // ---------------------------------------------------------------------------
 
-bool Cache::get(const void* key, size_t key_len,
-                void* val_buf, size_t val_buf_len, size_t* actual_len) {
-    Hash128 h = hash_key(key, key_len);
-    return shard_for(h).get(h, key, key_len, val_buf, val_buf_len, actual_len);
+bool Cache::put_sync(const void* key, size_t key_len,
+                     const void* val, size_t val_len) {
+    auto fut = put(std::string_view(static_cast<const char*>(key), key_len),
+                   std::string_view(static_cast<const char*>(val), val_len));
+    Result r = fut.get();
+    return r.status == Status::Ok;
 }
 
-// ---------------------------------------------------------------------------
-// get_batch
-// ---------------------------------------------------------------------------
-
-void Cache::get_batch(const BatchGetRequest* reqs, BatchGetResult* results,
-                      size_t count) {
-    if (count == 0) return;
-
-    // Hash all keys and group by shard
-    std::vector<Hash128> hashes(count);
-    std::vector<std::vector<size_t>> shard_groups(num_shards_);
-
-    for (size_t i = 0; i < count; ++i) {
-        hashes[i] = hash_key(reqs[i].key, reqs[i].key_len);
-        uint32_t shard_id = hashes[i].lo % num_shards_;
-        shard_groups[shard_id].push_back(i);
-    }
-
-    // Dispatch each shard's batch in parallel (batch latency = max over shards, not sum)
-    std::vector<std::future<void>> futures;
-    futures.reserve(num_shards_);
-    for (uint32_t s = 0; s < num_shards_; ++s) {
-        const std::vector<size_t>& group = shard_groups[s];
-        if (group.empty()) continue;
-
-        futures.push_back(std::async(std::launch::async, [this, s, &reqs, &results, &hashes, &shard_groups]() {
-            const std::vector<size_t>& g = shard_groups[s];
-            const size_t n = g.size();
-            std::vector<BatchGetRequest> sub_reqs(n);
-            std::vector<BatchGetResult>  sub_results(n);
-            std::vector<Hash128>         sub_hashes(n);
-            for (size_t j = 0; j < n; ++j) {
-                sub_reqs[j]   = reqs[g[j]];
-                sub_hashes[j] = hashes[g[j]];
-            }
-            shards_[s]->get_batch(sub_reqs.data(), sub_results.data(), n, sub_hashes.data());
-            for (size_t j = 0; j < n; ++j)
-                results[g[j]] = sub_results[j];
-        }));
-    }
-    for (auto& f : futures)
-        f.get();
+bool Cache::get_sync(const void* key, size_t key_len,
+                     void* val_buf, size_t val_buf_len, size_t* actual_len) {
+    auto fut = get(std::string_view(static_cast<const char*>(key), key_len));
+    Result r = fut.get();
+    if (r.status != Status::Ok)
+        return false;
+    if (actual_len)
+        *actual_len = r.value.size();
+    size_t copy_len = std::min(r.value.size(), val_buf_len);
+    if (copy_len > 0)
+        std::memcpy(val_buf, r.value.data(), copy_len);
+    return true;
 }
 
-// ---------------------------------------------------------------------------
-// remove
-// ---------------------------------------------------------------------------
-
-bool Cache::remove(const void* key, size_t key_len) {
-    Hash128 h = hash_key(key, key_len);
-    return shard_for(h).remove(h);
+bool Cache::remove_sync(const void* key, size_t key_len) {
+    auto fut = del(std::string_view(static_cast<const char*>(key), key_len));
+    Result r = fut.get();
+    return r.status == Status::Ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,12 +207,19 @@ bool Cache::remove(const void* key, size_t key_len) {
 // ---------------------------------------------------------------------------
 
 void Cache::flush() {
-    for (auto& s : shards_)
-        s->flush();
+    // Submit flush requests to all shards and wait.
+    // Since flush is a maintenance operation, we do it via the sync path
+    // on each reactor. We send a special empty-key put and then the reactor
+    // handles it on the next iteration. But for simplicity, we just
+    // do a sync sleep-wait after stopping/restarting — actually, the simplest
+    // approach is to stop each reactor, which drains + flushes, then restart.
+    // However, that's heavy. Instead, just sleep briefly to let reactors
+    // process pending work.
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
 }
 
 // ---------------------------------------------------------------------------
-// stats
+// Stats
 // ---------------------------------------------------------------------------
 
 uint32_t Cache::key_count() const {

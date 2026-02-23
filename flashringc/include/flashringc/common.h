@@ -6,9 +6,35 @@
 #include <cstring>
 #include <utility>
 
-constexpr size_t kBlockSize = 4096;
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
-// RAII wrapper for block-aligned memory required by O_DIRECT.
+constexpr size_t   kBlockSize         = 4096;
+constexpr uint32_t kDefaultQueueDepth = 1024;
+constexpr int      kMaxInboxBatch     = 64;
+
+// ---------------------------------------------------------------------------
+// Status
+// ---------------------------------------------------------------------------
+
+enum class Status : uint8_t { Ok, NotFound, Error };
+
+// ---------------------------------------------------------------------------
+// Hash128
+// ---------------------------------------------------------------------------
+
+struct Hash128 {
+    uint64_t lo;
+    uint64_t hi;
+};
+
+Hash128 hash_key(const void* key, size_t len);
+
+// ---------------------------------------------------------------------------
+// AlignedBuffer — RAII wrapper for block-aligned memory (O_DIRECT)
+// ---------------------------------------------------------------------------
+
 class AlignedBuffer {
 public:
     AlignedBuffer() = default;
@@ -44,8 +70,8 @@ public:
     AlignedBuffer(const AlignedBuffer&) = delete;
     AlignedBuffer& operator=(const AlignedBuffer&) = delete;
 
-    void*       data()       { return data_; }
-    const void* data() const { return data_; }
+    void*          data()       { return data_; }
+    const void*    data() const { return data_; }
     uint8_t*       bytes()       { return static_cast<uint8_t*>(data_); }
     const uint8_t* bytes() const { return static_cast<const uint8_t*>(data_); }
     size_t size()  const { return size_; }

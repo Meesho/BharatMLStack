@@ -1,7 +1,7 @@
 #pragma once
 
-#include "key_index.h"
-#include "ring_device.h"
+#include "flashringc/key_index.h"
+#include "flashringc/ring_device.h"
 
 #include <cstdint>
 
@@ -12,13 +12,7 @@ public:
                   uint32_t n_delete = 10,
                   uint64_t discard_batch = 64 * 1024 * 1024);
 
-    // Called inside put()'s unique_lock.
-    // Evicts n_delete entries if ring usage exceeds the watermark.
-    // Returns number of entries evicted.
     uint32_t maybe_evict();
-
-    // Issue pending BLKDISCARD if accumulated bytes >= discard_batch.
-    // Safe to call outside the lock.
     void flush_discards();
 
 private:

@@ -1,4 +1,4 @@
-#include "delete_manager.h"
+#include "flashringc/delete_manager.h"
 
 DeleteManager::DeleteManager(RingDevice& ring, KeyIndex& index,
                              double high_watermark, uint32_t n_delete,
