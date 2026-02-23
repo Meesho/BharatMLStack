@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <random>
 #include <string>
 #include <thread>
@@ -14,6 +15,8 @@
 #ifdef __linux__
 #include <pthread.h>
 #endif
+
+using Clock = std::chrono::high_resolution_clock;
 
 static std::string g_bench_path = "/tmp/flashring_heavy.dat";
 
@@ -35,17 +38,36 @@ static void pin_thread(int cpu) {
 #endif
 }
 
+struct Percentiles {
+    double p50_us;
+    double p90_us;
+    double p99_us;
+    double avg_us;
+};
+
+static Percentiles compute_percentiles(std::vector<double>& lats) {
+    if (lats.empty()) return {0, 0, 0, 0};
+    std::sort(lats.begin(), lats.end());
+    size_t n = lats.size();
+    double sum = 0;
+    for (double l : lats) sum += l;
+    return {
+        lats[n / 2],
+        lats[static_cast<size_t>(n * 0.90)],
+        lats[std::min(static_cast<size_t>(n * 0.99), n - 1)],
+        sum / static_cast<double>(n),
+    };
+}
+
 struct HeavyResult {
     uint64_t total_ops;
     uint64_t put_ops;
     uint64_t get_ops;
     uint64_t get_hits;
     double   elapsed_s;
+    Percentiles batch_lat;  // latency of 100-op batch (submit to last future)
 };
 
-// Each producer thread: PUTs a batch of unique keys, then GETs them back.
-// Keys are large enough (with 4KB values) to overflow the memtable,
-// forcing disk reads on the GET path.
 static HeavyResult run_heavy_bench(uint32_t total_unique_keys,
                                    uint32_t num_shards,
                                    int num_producers,
@@ -56,7 +78,6 @@ static HeavyResult run_heavy_bench(uint32_t total_unique_keys,
         512ULL * 1024 * 1024,
         static_cast<uint64_t>(total_unique_keys) * (VAL_SIZE + 128) * 2);
 
-    // Small memtable to force data to disk quickly.
     size_t mt_size = std::min<size_t>(4ULL * 1024 * 1024, ring_cap / 32);
 
     CacheConfig cfg{
@@ -72,18 +93,19 @@ static HeavyResult run_heavy_bench(uint32_t total_unique_keys,
 
     std::string val(VAL_SIZE, 'V');
 
-    // Phase 1: pre-fill all keys so GETs have data.
     for (uint32_t i = 0; i < total_unique_keys; ++i) {
         std::string key = "hk_" + std::to_string(i);
         cache.put_sync(key.data(), key.size(), val.data(), val.size());
     }
 
-    // Phase 2: multi-threaded mixed workload.
     std::atomic<uint64_t> total_puts{0};
     std::atomic<uint64_t> total_gets{0};
     std::atomic<uint64_t> total_hits{0};
 
-    auto t0 = std::chrono::high_resolution_clock::now();
+    std::mutex lat_mu;
+    std::vector<double> all_lats;
+
+    auto t0 = Clock::now();
 
     std::vector<std::thread> workers;
     workers.reserve(num_producers);
@@ -96,12 +118,18 @@ static HeavyResult run_heavy_bench(uint32_t total_unique_keys,
             std::uniform_int_distribution<uint32_t> key_dist(0, total_unique_keys - 1);
 
             uint64_t puts = 0, gets = 0, hits = 0;
-            char read_buf[VAL_SIZE + 256];
 
-            for (int batch = 0; batch < ops_per_producer / 100; ++batch) {
-                // Fire 100 async ops per batch.
+            // Batch latencies: time from first submit to last future resolved.
+            std::vector<double> local_batch_lats;
+            int num_batches = ops_per_producer / 100;
+            local_batch_lats.reserve(num_batches);
+
+            for (int batch = 0; batch < num_batches; ++batch) {
                 std::vector<std::future<Result>> futs;
                 futs.reserve(100);
+                int batch_puts = 0, batch_gets = 0;
+
+                auto t_batch_start = Clock::now();
 
                 for (int j = 0; j < 100; ++j) {
                     uint32_t idx = key_dist(rng);
@@ -109,10 +137,10 @@ static HeavyResult run_heavy_bench(uint32_t total_unique_keys,
 
                     if (j % 10 == 0) {
                         futs.push_back(cache.put(key, std::string_view(val)));
-                        ++puts;
+                        ++batch_puts;
                     } else {
                         futs.push_back(cache.get(key));
-                        ++gets;
+                        ++batch_gets;
                     }
                 }
 
@@ -121,24 +149,39 @@ static HeavyResult run_heavy_bench(uint32_t total_unique_keys,
                     if (r.status == Status::Ok && !r.value.empty())
                         ++hits;
                 }
+
+                auto t_batch_end = Clock::now();
+                double batch_us = std::chrono::duration<double, std::micro>(
+                    t_batch_end - t_batch_start).count();
+                local_batch_lats.push_back(batch_us);
+
+                puts += batch_puts;
+                gets += batch_gets;
             }
 
             total_puts.fetch_add(puts, std::memory_order_relaxed);
             total_gets.fetch_add(gets, std::memory_order_relaxed);
             total_hits.fetch_add(hits, std::memory_order_relaxed);
+
+            std::lock_guard<std::mutex> lk(lat_mu);
+            all_lats.insert(all_lats.end(),
+                            local_batch_lats.begin(), local_batch_lats.end());
         });
     }
 
     for (auto& t : workers) t.join();
 
-    auto t1 = std::chrono::high_resolution_clock::now();
+    auto t1 = Clock::now();
     double elapsed = std::chrono::duration<double>(t1 - t0).count();
 
-    uint64_t ops = total_puts.load() + total_gets.load();
     cleanup();
 
-    return {ops, total_puts.load(), total_gets.load(),
-            total_hits.load(), elapsed};
+    return {
+        total_puts.load() + total_gets.load(),
+        total_puts.load(), total_gets.load(), total_hits.load(),
+        elapsed,
+        compute_percentiles(all_lats),
+    };
 }
 
 int main(int argc, char* argv[]) {
@@ -153,17 +196,19 @@ int main(int argc, char* argv[]) {
     static const int kProducerCounts[] = {4, 8, 16, 32, 64, 128};
     static const uint32_t kShardCounts[] = {4, 8, 16};
 
-    // Large key counts to overflow memtable (4KB vals, small memtable).
-    // 50K keys × 4KB ≈ 200MB — well beyond the 4MB memtable.
     static const uint32_t kTotalKeys = 50000;
     static const int kOpsPerProducer = 10000;
 
-    printf("%-8s  %-8s  %-10s  %12s  %12s  %12s  %10s  %10s  %8s\n",
-           "Shards", "Threads", "TotalOps", "PUTs", "GETs",
-           "GET Hits", "Mops/s", "Elapsed", "HitRate");
-    printf("%-8s  %-8s  %-10s  %12s  %12s  %12s  %10s  %10s  %8s\n",
-           "------", "-------", "--------", "----", "----",
-           "--------", "------", "-------", "-------");
+    printf("Batch = 100 ops (90%% GET / 10%% PUT). Latency = wall time per batch.\n\n");
+
+    printf("%-6s %-5s %8s %8s %8s │ %10s %10s %10s %10s │ %7s %6s\n",
+           "Shrd", "Thrd", "Ops", "PUTs", "GETs",
+           "Bat avg", "Bat p50", "Bat p90", "Bat p99",
+           "Mops/s", "Hit%");
+    printf("%-6s %-5s %8s %8s %8s │ %10s %10s %10s %10s │ %7s %6s\n",
+           "-----", "----", "------", "------", "------",
+           "--------", "--------", "--------", "--------",
+           "------", "----");
 
     for (uint32_t shards : kShardCounts) {
         for (int producers : kProducerCounts) {
@@ -175,13 +220,14 @@ int main(int argc, char* argv[]) {
                         / static_cast<double>(r.get_ops)
                 : 0.0;
 
-            printf("%-8u  %-8d  %-10lu  %12lu  %12lu  %12lu  %10.2f  %8.2fs  %7.1f%%\n",
+            auto& b = r.batch_lat;
+            printf("%-6u %-5d %8lu %8lu %8lu │ %8.0fµs %8.0fµs %8.0fµs %8.0fµs │ %7.2f %5.1f%%\n",
                    shards, producers,
-                   static_cast<unsigned long>(r.total_ops),
-                   static_cast<unsigned long>(r.put_ops),
-                   static_cast<unsigned long>(r.get_ops),
-                   static_cast<unsigned long>(r.get_hits),
-                   mops, r.elapsed_s, hit_rate);
+                   (unsigned long)r.total_ops,
+                   (unsigned long)r.put_ops,
+                   (unsigned long)r.get_ops,
+                   b.avg_us, b.p50_us, b.p90_us, b.p99_us,
+                   mops, hit_rate);
         }
         printf("\n");
     }
