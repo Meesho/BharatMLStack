@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 
 struct ReadOp {
     void*    buf;
@@ -33,6 +34,7 @@ private:
     void*    ring_ptr_   = nullptr;
 #endif
 
-    uint32_t queue_depth_ = 64;
-    bool     uring_ok_    = false;
+    std::mutex mu_;           // serializes submit/wait; io_uring is not thread-safe
+    uint32_t   queue_depth_ = 64;
+    bool       uring_ok_    = false;
 };

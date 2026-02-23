@@ -145,6 +145,7 @@ uint32_t IoEngine::read_batch_uring(ReadOp* ops, uint32_t count) {
 
 uint32_t IoEngine::read_batch(ReadOp* ops, uint32_t count) {
     if (count == 0) return 0;
+    std::lock_guard<std::mutex> lock(mu_);
 #if defined(__linux__) && defined(HAVE_IO_URING)
     if (uring_ok_)
         return read_batch_uring(ops, count);
