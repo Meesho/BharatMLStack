@@ -1,6 +1,7 @@
 #include "io_engine.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <new>
 #include <unistd.h>
@@ -137,6 +138,45 @@ uint32_t IoEngine::read_batch_uring(ReadOp* ops, uint32_t count) {
 
     return ok_count;
 }
+
+void IoEngine::submit_only_uring(ReadOp* ops, uint32_t count) {
+    auto* ring = static_cast<struct io_uring*>(ring_ptr_);
+    uint32_t pos = 0;
+    while (pos < count) {
+        uint32_t chunk = std::min(queue_depth_, count - pos);
+        for (uint32_t i = 0; i < chunk; ++i) {
+            auto& op = ops[pos + i];
+            struct io_uring_sqe* sqe = io_uring_get_sqe(ring);
+            if (!sqe) {
+                io_uring_submit(ring);
+                sqe = io_uring_get_sqe(ring);
+                if (!sqe) continue;
+            }
+            io_uring_prep_read(sqe, op.fd, op.buf, op.len, op.offset);
+            io_uring_sqe_set_data(sqe, &op);
+        }
+        io_uring_submit(ring);
+        pos += chunk;
+    }
+}
+
+uint32_t IoEngine::reap_ready_uring(uint32_t max_reap) {
+    auto* ring = static_cast<struct io_uring*>(ring_ptr_);
+    uint32_t reaped = 0;
+    const uint32_t limit = max_reap > 0 ? max_reap : UINT32_MAX;
+    while (reaped < limit) {
+        struct io_uring_cqe* cqe = nullptr;
+        int ret = io_uring_peek_cqe(ring, &cqe);
+        if (ret != 0 || !cqe) break;
+        auto* op = static_cast<ReadOp*>(io_uring_cqe_get_data(cqe));
+        if (op) {
+            op->ok = (cqe->res >= 0 && static_cast<size_t>(cqe->res) == op->len);
+            ++reaped;
+        }
+        io_uring_cqe_seen(ring, cqe);
+    }
+    return reaped;
+}
 #endif
 
 // ---------------------------------------------------------------------------
@@ -151,4 +191,26 @@ uint32_t IoEngine::read_batch(ReadOp* ops, uint32_t count) {
         return read_batch_uring(ops, count);
 #endif
     return read_batch_pread(ops, count);
+}
+
+void IoEngine::submit_only(ReadOp* ops, uint32_t count) {
+    if (count == 0) return;
+    std::lock_guard<std::mutex> lock(mu_);
+#if defined(__linux__) && defined(HAVE_IO_URING)
+    if (uring_ok_) {
+        submit_only_uring(ops, count);
+        return;
+    }
+#endif
+    (void)ops;
+    (void)count;
+}
+
+uint32_t IoEngine::reap_ready(uint32_t max_reap) {
+    std::lock_guard<std::mutex> lock(mu_);
+#if defined(__linux__) && defined(HAVE_IO_URING)
+    if (uring_ok_)
+        return reap_ready_uring(max_reap);
+#endif
+    return 0;
 }

@@ -24,6 +24,11 @@ public:
 
     uint32_t read_batch(ReadOp* ops, uint32_t count);
 
+    // Non-blocking: submit only, then call reap_ready() later. io_uring only.
+    void submit_only(ReadOp* ops, uint32_t count);
+    // Non-blocking reap; returns number of completions processed. Sets op->ok.
+    uint32_t reap_ready(uint32_t max_reap = 0);
+
     bool uring_enabled() const { return uring_ok_; }
 
 private:
@@ -31,6 +36,8 @@ private:
 
 #if defined(__linux__) && defined(HAVE_IO_URING)
     uint32_t read_batch_uring(ReadOp* ops, uint32_t count);
+    void     submit_only_uring(ReadOp* ops, uint32_t count);
+    uint32_t reap_ready_uring(uint32_t max_reap);
     void*    ring_ptr_   = nullptr;
 #endif
 

@@ -2,7 +2,6 @@
 #include "record.h"
 
 #include <cstring>
-#include <future>
 #include <stdexcept>
 #include <vector>
 
@@ -98,7 +97,7 @@ void Cache::get_batch(const BatchGetRequest* reqs, BatchGetResult* results,
                       size_t count) {
     if (count == 0) return;
 
-    // Hash all keys and group by shard
+    // Hash all keys and group by shard (caller thread only)
     std::vector<Hash128> hashes(count);
     std::vector<std::vector<size_t>> shard_groups(num_shards_);
 
@@ -108,30 +107,43 @@ void Cache::get_batch(const BatchGetRequest* reqs, BatchGetResult* results,
         shard_groups[shard_id].push_back(i);
     }
 
-    // Dispatch each shard's batch in parallel (batch latency = max over shards, not sum)
-    std::vector<std::future<void>> futures;
-    futures.reserve(num_shards_);
+    uint32_t num_shards_with_keys = 0;
+    for (uint32_t s = 0; s < num_shards_; ++s)
+        if (!shard_groups[s].empty()) ++num_shards_with_keys;
+
+    BatchCompletion completion(num_shards_with_keys);
+
+    // Keep sub_reqs/sub_hashes alive until reactors finish
+    std::vector<std::vector<BatchGetRequest>> sub_reqs_storage;
+    std::vector<std::vector<Hash128>> sub_hashes_storage;
+    sub_reqs_storage.reserve(num_shards_with_keys);
+    sub_hashes_storage.reserve(num_shards_with_keys);
+
     for (uint32_t s = 0; s < num_shards_; ++s) {
         const std::vector<size_t>& group = shard_groups[s];
         if (group.empty()) continue;
 
-        futures.push_back(std::async(std::launch::async, [this, s, &reqs, &results, &hashes, &shard_groups]() {
-            const std::vector<size_t>& g = shard_groups[s];
-            const size_t n = g.size();
-            std::vector<BatchGetRequest> sub_reqs(n);
-            std::vector<BatchGetResult>  sub_results(n);
-            std::vector<Hash128>         sub_hashes(n);
-            for (size_t j = 0; j < n; ++j) {
-                sub_reqs[j]   = reqs[g[j]];
-                sub_hashes[j] = hashes[g[j]];
-            }
-            shards_[s]->get_batch(sub_reqs.data(), sub_results.data(), n, sub_hashes.data());
-            for (size_t j = 0; j < n; ++j)
-                results[g[j]] = sub_results[j];
-        }));
+        const size_t n = group.size();
+        sub_reqs_storage.emplace_back(n);
+        sub_hashes_storage.emplace_back(n);
+        auto& sub_reqs = sub_reqs_storage.back();
+        auto& sub_hashes = sub_hashes_storage.back();
+        for (size_t j = 0; j < n; ++j) {
+            sub_reqs[j] = reqs[group[j]];
+            sub_hashes[j] = hashes[group[j]];
+        }
+
+        ShardBatchRequest shard_req;
+        shard_req.completion = &completion;
+        shard_req.count = n;
+        shard_req.reqs = sub_reqs.data();
+        shard_req.hashes = sub_hashes.data();
+        shard_req.results = results;
+        shard_req.result_indices = group.data();
+        shards_[s]->submit_batch(std::move(shard_req));
     }
-    for (auto& f : futures)
-        f.get();
+
+    completion.wait();
 }
 
 // ---------------------------------------------------------------------------
