@@ -183,14 +183,20 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 	if status == indices.StatusNotFound {
-		metrics.Incr(metrics.KEY_KEY_NOT_FOUND_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_KEY_NOT_FOUND_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		}
 		return false, nil, 0, false, false
 	}
 
-	metrics.Timing(metrics.KEY_DATA_LENGTH, time.Duration(length), metrics.GetShardTag(fc.ShardIdx))
+	if metrics.Enabled() {
+		metrics.Timing(metrics.KEY_DATA_LENGTH, time.Duration(length), metrics.GetShardTag(fc.ShardIdx))
+	}
 
 	if status == indices.StatusExpired {
-		metrics.Incr(metrics.KEY_KEY_EXPIRED_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_KEY_EXPIRED_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		}
 		return false, nil, 0, true, false
 	}
 
@@ -205,17 +211,22 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		memtableExists = false
 	}
 	if !memtableExists {
-		metrics.Incr(metrics.KEY_MEMTABLE_MISS, metrics.GetShardTag(fc.ShardIdx))
-		// Allocate buffer of exact size needed - no pool since readFromDisk already copies once
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_MEMTABLE_MISS, metrics.GetShardTag(fc.ShardIdx))
+		}
 		buf = make([]byte, length)
 		fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
 		n := fc.readFromDiskAsync(int64(fileOffset), length, buf)
 		if n != int(length) {
-			metrics.Incr(metrics.KEY_BAD_LENGTH_COUNT, append(metrics.GetShardTag(fc.ShardIdx)))
+			if metrics.Enabled() {
+				metrics.Incr(metrics.KEY_BAD_LENGTH_COUNT, metrics.GetShardTag(fc.ShardIdx))
+			}
 			return false, nil, 0, false, shouldReWrite
 		}
 	} else {
-		metrics.Incr(metrics.KEY_MEMTABLE_HIT, metrics.GetShardTag(fc.ShardIdx))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_MEMTABLE_HIT, metrics.GetShardTag(fc.ShardIdx))
+		}
 		buf, exists = mt.GetBufForRead(int(offset), length)
 		if !exists {
 			panic("memtable exists but buf not found")
@@ -225,11 +236,15 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotCR32 != computedCR32 {
-		metrics.Incr(metrics.KEY_BAD_CR32_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_BAD_CR32_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
+		}
 		return false, nil, 0, false, shouldReWrite
 	}
 	if gotKey != key {
-		metrics.Incr(metrics.KEY_BAD_KEY_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_BAD_KEY_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
+		}
 		return false, nil, 0, false, shouldReWrite
 	}
 	valLen := int(length) - 4 - len(key)
@@ -242,12 +257,16 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 func (fc *ShardCache) GetFastPath(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 	if status == indices.StatusNotFound {
-		metrics.Incr(metrics.KEY_KEY_NOT_FOUND_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_KEY_NOT_FOUND_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		}
 		return false, nil, 0, false, false // needsSlowPath = false (not found)
 	}
 
 	if status == indices.StatusExpired {
-		metrics.Incr(metrics.KEY_KEY_EXPIRED_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_KEY_EXPIRED_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		}
 		return false, nil, 0, true, false // needsSlowPath = false (expired)
 	}
 
@@ -268,16 +287,20 @@ func (fc *ShardCache) GetFastPath(key string) (bool, []byte, uint16, bool, bool)
 	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
 	computedCR32 := crc32.ChecksumIEEE(buf[4:])
 	if gotCR32 != computedCR32 {
-		metrics.Incr(metrics.KEY_BAD_CR32_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_BAD_CR32_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
+		}
 		_, currMemId, _ := fc.mm.GetMemtable()
 		shouldReWrite := fc.predictor.Predict(uint64(freq), uint64(lastAccess), memId, currMemId)
-		_ = shouldReWrite // Not returning shouldReWrite in fast path for simplicity
+		_ = shouldReWrite
 		return false, nil, 0, false, false
 	}
 
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotKey != key {
-		metrics.Incr(metrics.KEY_BAD_KEY_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_BAD_KEY_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
+		}
 		return false, nil, 0, false, false
 	}
 
@@ -290,12 +313,16 @@ func (fc *ShardCache) GetFastPath(key string) (bool, []byte, uint16, bool, bool)
 func (fc *ShardCache) GetSlowPath(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 	if status == indices.StatusNotFound {
-		metrics.Incr(metrics.KEY_KEY_NOT_FOUND_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_KEY_NOT_FOUND_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		}
 		return false, nil, 0, false, false
 	}
 
 	if status == indices.StatusExpired {
-		metrics.Incr(metrics.KEY_KEY_EXPIRED_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_KEY_EXPIRED_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		}
 		return false, nil, 0, true, false
 	}
 
@@ -305,7 +332,6 @@ func (fc *ShardCache) GetSlowPath(key string) (bool, []byte, uint16, bool, bool)
 	// Check memtable again (might have changed since fast path check)
 	mt := fc.mm.GetMemtableById(memId)
 	if mt != nil {
-		// Data is now in memtable, use fast path logic
 		buf, exists := mt.GetBufForRead(int(offset), length)
 		if !exists {
 			panic("memtable exists but buf not found")
@@ -313,12 +339,13 @@ func (fc *ShardCache) GetSlowPath(key string) (bool, []byte, uint16, bool, bool)
 		return fc.validateAndReturnBuffer(key, buf, length, memId, remainingTTL, shouldReWrite)
 	}
 
-	// Read from disk - allocate buffer of exact size needed (no pool since readFromDisk already copies once)
 	buf := make([]byte, length)
 	fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
 	n := fc.readFromDisk(int64(fileOffset), length, buf)
 	if n != int(length) {
-		metrics.Incr(metrics.KEY_BAD_LENGTH_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_BAD_LENGTH_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		}
 		return false, nil, 0, false, shouldReWrite
 	}
 
@@ -330,13 +357,17 @@ func (fc *ShardCache) validateAndReturnBuffer(key string, buf []byte, length uin
 	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
 	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
 	if gotCR32 != computedCR32 {
-		metrics.Incr(metrics.KEY_BAD_CR32_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_BAD_CR32_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
+		}
 		return false, nil, 0, false, shouldReWrite
 	}
 
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotKey != key {
-		metrics.Incr(metrics.KEY_BAD_KEY_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_BAD_KEY_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
+		}
 		return false, nil, 0, false, shouldReWrite
 	}
 
@@ -418,11 +449,15 @@ func (fc *ShardCache) processBuffer(key string, buf []byte, length uint16) ReadR
 	gotKey := string(buf[4 : 4+len(key)])
 
 	if gotCR32 != computedCR32 {
-		metrics.Incr(metrics.KEY_BAD_CR32_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_BAD_CR32_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		}
 		return ReadResult{Found: false, Error: fmt.Errorf("crc mismatch")}
 	}
 	if gotKey != key {
-		metrics.Incr(metrics.KEY_BAD_KEY_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		if metrics.Enabled() {
+			metrics.Incr(metrics.KEY_BAD_KEY_COUNT, metrics.GetShardTag(fc.ShardIdx))
+		}
 		return ReadResult{Found: false, Error: fmt.Errorf("key mismatch")}
 	}
 

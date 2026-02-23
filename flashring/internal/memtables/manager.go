@@ -87,7 +87,9 @@ func (mm *MemtableManager) flushConsumer(memtable *Memtable) {
 	memtable.Id = mm.nextId
 	mm.nextId++
 	mm.nextFileOffset += int64(n)
-	metrics.Incr(metrics.KEY_MEMTABLE_FLUSH_COUNT, append(metrics.GetShardTag(memtable.ShardIdx), metrics.GetMemtableTag(memtable.Id)...))
+	if metrics.Enabled() {
+		metrics.Incr(metrics.KEY_MEMTABLE_FLUSH_COUNT, append(metrics.GetShardTag(memtable.ShardIdx), metrics.GetMemtableTag(memtable.Id)...))
+	}
 }
 func (mm *MemtableManager) Flush() error {
 

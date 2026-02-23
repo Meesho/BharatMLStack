@@ -98,7 +98,10 @@ func (b *BatchIoUringReader) Submit(fd int, buf []byte, offset uint64) (int, err
 		return 0, nil
 	}
 
-	startTime := time.Now()
+	var startTime time.Time
+	if metrics.Enabled() {
+		startTime = time.Now()
+	}
 
 	req := batchReqPool.Get().(*batchReadRequest)
 	req.fd = fd
@@ -109,7 +112,9 @@ func (b *BatchIoUringReader) Submit(fd int, buf []byte, offset uint64) (int, err
 
 	result := <-req.done
 	n, err := result.N, result.Err
-	metrics.Timing(metrics.KEY_PREAD_LATENCY, time.Since(startTime), []string{})
+	if metrics.Enabled() {
+		metrics.Timing(metrics.KEY_PREAD_LATENCY, time.Since(startTime), []string{})
+	}
 
 	// Reset and return to pool
 	req.fd = 0
@@ -169,7 +174,9 @@ func (b *BatchIoUringReader) loop() {
 // each CQE individually as it completes. Fast reads are dispatched immediately
 // without waiting for slow reads in the same batch (no head-of-line blocking).
 func (b *BatchIoUringReader) submitBatch(batch []*batchReadRequest) {
-	metrics.Timing(metrics.KEY_IOURING_SIZE, time.Duration(len(batch))*time.Millisecond, []string{})
+	if metrics.Enabled() {
+		metrics.Timing(metrics.KEY_IOURING_SIZE, time.Duration(len(batch))*time.Millisecond, []string{})
+	}
 	n := len(batch)
 	if n == 0 {
 		return

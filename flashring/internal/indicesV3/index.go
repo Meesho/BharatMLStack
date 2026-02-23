@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
-	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 	"github.com/cespare/xxhash/v2"
 	"github.com/zeebo/xxh3"
 )
@@ -71,11 +70,9 @@ func (i *Index) Put(key string, length, ttlInMinutes uint16, memId, offset uint3
 func (i *Index) Get(key string) (length, lastAccess, remainingTTL uint16, freq uint64, memId, offset uint32, status Status) {
 	hhi, hlo := hash128(key)
 
-	start := time.Now()
 	i.mu.RLock()
 	idx, ok := i.rm[hlo]
 	i.mu.RUnlock()
-	metrics.Timing(metrics.LATENCY_RLOCK, time.Since(start), []string{})
 
 	if ok {
 		for {
