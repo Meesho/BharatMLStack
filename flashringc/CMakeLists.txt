@@ -87,6 +87,9 @@ target_link_libraries(bench_cache PRIVATE flashring)
 add_executable(bench_heavy tests/bench_heavy.cpp)
 target_link_libraries(bench_heavy PRIVATE flashring)
 
+add_executable(test_eviction tests/test_eviction.cpp)
+target_link_libraries(test_eviction PRIVATE flashring)
+
 # --- Legacy tests (kept for reference, may need updating) ---
 add_executable(ring_test tests/ring_test.cpp)
 target_link_libraries(ring_test PRIVATE flashring)
