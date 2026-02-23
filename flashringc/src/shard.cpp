@@ -3,7 +3,10 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <thread>
 #include <unordered_map>
 
 // ---------------------------------------------------------------------------
@@ -22,10 +25,23 @@ void BatchCompletion::wait() {
 }
 
 // ---------------------------------------------------------------------------
-// Wide-read constants
+// Wide-read constants / debug
 // ---------------------------------------------------------------------------
 
 static constexpr size_t kWideReadBlockSize = 128 * 1024;
+
+// Set to true (or use getenv) to log reactor/put activity to stderr
+static bool reactor_log_enabled() {
+    static bool once = []() {
+        const char* e = std::getenv("FLASHRING_REACTOR_LOG");
+        return e && (e[0] == '1' || e[0] == 'y' || e[0] == 'Y');
+    }();
+    return once;
+}
+#define REACT_LOG(fmt, ...) \
+    do { if (reactor_log_enabled()) std::fprintf(stderr, "[reactor] " fmt "\n", ##__VA_ARGS__); } while (0)
+#define PUT_LOG(fmt, ...) \
+    do { if (reactor_log_enabled()) std::fprintf(stderr, "[put] " fmt "\n", ##__VA_ARGS__); } while (0)
 
 // ---------------------------------------------------------------------------
 // Shard ctor/dtor
@@ -52,6 +68,7 @@ Shard::~Shard() {
 }
 
 bool Shard::put(Hash128 h, const void* rec, size_t rec_len) {
+    PUT_LOG("enter rec_len=%zu", rec_len);
     WriteResult wr = memtables_.put(rec, rec_len);
     {
         std::unique_lock lk(mu_);
@@ -59,6 +76,7 @@ bool Shard::put(Hash128 h, const void* rec, size_t rec_len) {
         delete_mgr_.maybe_evict();
     }
     delete_mgr_.flush_discards();
+    PUT_LOG("done");
     return true;
 }
 
@@ -255,7 +273,8 @@ void Shard::reactor_loop() {
     while (true) {
         // Reap any ready completions (non-blocking); sets op->ok for completed ops
         if (io_engine_.uring_enabled()) {
-            io_engine_.reap_ready(0);
+            uint32_t reaped = io_engine_.reap_ready(0);
+            if (reaped > 0) REACT_LOG("reap reaped=%u in_flight=%zu", reaped, in_flight.size());
             // Scan in_flight for completed ops (op.ok set by reap)
             for (size_t i = 0; i < in_flight.size(); ) {
                 if (!in_flight[i].op.ok) { ++i; continue; }
@@ -278,20 +297,35 @@ void Shard::reactor_loop() {
                     bool any_left = false;
                     for (const auto& r : in_flight)
                         if (r.completion == comp) { any_left = true; break; }
-                    if (!any_left) comp->mark_one_done();
+                    if (!any_left) {
+                        REACT_LOG("mark_one_done (batch slice complete)");
+                        comp->mark_one_done();
+                    }
                 }
             }
         }
 
-        // Drain one request from queue
+        // Drain one request from queue; don't block when in_flight (need to reap first)
         ShardBatchRequest batch;
         {
             std::unique_lock<std::mutex> lock(queue_mu_);
-            queue_cv_.wait(lock, [this] { return shutdown_ || !request_queue_.empty(); });
-            if (shutdown_ && request_queue_.empty()) return;
-            if (request_queue_.empty()) continue;
+            for (;;) {
+                if (!request_queue_.empty()) {
             batch = std::move(request_queue_.front());
             request_queue_.pop();
+            REACT_LOG("drain count=%zu queue_sz=%zu", batch.count, request_queue_.size());
+            break;
+        }
+        if (shutdown_) return;
+                if (!in_flight.empty()) {
+                    REACT_LOG("queue empty in_flight=%zu yield", in_flight.size());
+                    lock.unlock();
+                    std::this_thread::sleep_for(std::chrono::microseconds(50));
+                    lock.lock();
+                    continue;  // re-check queue; top of loop will reap
+                }
+                queue_cv_.wait(lock, [this] { return shutdown_ || !request_queue_.empty(); });
+            }
         }
 
         const BatchGetRequest* reqs = batch.reqs;
@@ -402,6 +436,7 @@ void Shard::reactor_loop() {
             size_t submit_start = in_flight.size() - block_to_entries.size();
             for (size_t i = submit_start; i < in_flight.size(); ++i)
                 io_engine_.submit_only(&in_flight[i].op, 1);
+            REACT_LOG("submit_uring blocks=%zu in_flight=%zu", block_to_entries.size(), in_flight.size());
             pending_disk.clear();
         } else if (should_flush && !io_engine_.uring_enabled()) {
             // Fallback: small reads with blocking read_batch
@@ -432,12 +467,13 @@ void Shard::reactor_loop() {
                 if (cpy > 0) std::memcpy(e.val_buf, dr.val, cpy);
             }
             pending_disk.clear();
-            // Don't mark_one_done here; reaper will call it when in_flight for this batch are done
         } else if (should_flush && !io_engine_.uring_enabled()) {
-            // Blocking path: we've filled all results in this block
+            // Blocking path: we've filled all results
             pending_disk.clear();
+            REACT_LOG("blocking_done mark_one_done");
             if (completion) completion->mark_one_done();
         } else {
+            REACT_LOG("no_disk mark_one_done");
             if (completion) completion->mark_one_done();
         }
     }

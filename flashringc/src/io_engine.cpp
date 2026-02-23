@@ -193,9 +193,9 @@ uint32_t IoEngine::read_batch(ReadOp* ops, uint32_t count) {
     return read_batch_pread(ops, count);
 }
 
+// No mutex: only the shard's reactor thread calls submit_only/reap_ready.
 void IoEngine::submit_only(ReadOp* ops, uint32_t count) {
     if (count == 0) return;
-    std::lock_guard<std::mutex> lock(mu_);
 #if defined(__linux__) && defined(HAVE_IO_URING)
     if (uring_ok_) {
         submit_only_uring(ops, count);
@@ -207,7 +207,6 @@ void IoEngine::submit_only(ReadOp* ops, uint32_t count) {
 }
 
 uint32_t IoEngine::reap_ready(uint32_t max_reap) {
-    std::lock_guard<std::mutex> lock(mu_);
 #if defined(__linux__) && defined(HAVE_IO_URING)
     if (uring_ok_)
         return reap_ready_uring(max_reap);
