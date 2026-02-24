@@ -39,6 +39,8 @@ Cache Cache::open(const CacheConfig& cfg) {
     uint32_t per_shard_keys = cfg.index_capacity / c.num_shards_;
     if (per_shard_keys == 0) per_shard_keys = 1;
 
+    c.sem_pool_ = std::make_unique<SemaphorePool>(cfg.sem_pool_capacity);
+
     c.shards_.reserve(c.num_shards_);
     for (uint32_t i = 0; i < c.num_shards_; ++i) {
         RingDevice ring = is_blk
@@ -49,6 +51,7 @@ Cache Cache::open(const CacheConfig& cfg) {
                                per_shard_capacity);
         c.shards_.push_back(std::make_unique<ShardReactor>(
             std::move(ring), per_shard_mt, per_shard_keys,
+            c.sem_pool_.get(),
             cfg.queue_capacity, cfg.uring_queue_depth));
     }
 
@@ -95,7 +98,8 @@ Cache::~Cache() {
 }
 
 Cache::Cache(Cache&& o) noexcept
-    : shards_(std::move(o.shards_)),
+    : sem_pool_(std::move(o.sem_pool_)),
+      shards_(std::move(o.shards_)),
       threads_(std::move(o.threads_)),
       num_shards_(o.num_shards_) {
     o.num_shards_ = 0;
@@ -106,6 +110,7 @@ Cache& Cache::operator=(Cache&& o) noexcept {
         for (auto& s : shards_) s->stop();
         for (auto& t : threads_) if (t.joinable()) t.join();
 
+        sem_pool_   = std::move(o.sem_pool_);
         shards_     = std::move(o.shards_);
         threads_    = std::move(o.threads_);
         num_shards_ = o.num_shards_;
@@ -115,59 +120,106 @@ Cache& Cache::operator=(Cache&& o) noexcept {
 }
 
 // ---------------------------------------------------------------------------
-// Async API
+// Blocking API (semaphore pool)
 // ---------------------------------------------------------------------------
 
-std::future<Result> Cache::get(std::string_view key) {
+Result Cache::get(std::string_view key) {
     Hash128 h = hash_key(key.data(), key.size());
+    uint32_t slot = sem_pool_->acquire();
+    Result result;
     Request req;
     req.type = OpType::Get;
-    req.key  = std::string(key);
     req.hash = h;
-    auto fut = req.promise.get_future();
+    req.key = key;
+    req.result = &result;
+    req.sem_slot = slot;
+    req.batch_remaining = nullptr;
     shard_for(h).submit(std::move(req));
-    return fut;
+    sem_pool_->wait(slot);
+    sem_pool_->release(slot);
+    return result;
 }
 
-std::future<Result> Cache::put(std::string_view key, std::string_view value) {
+Result Cache::put(std::string_view key, std::string_view value) {
     Hash128 h = hash_key(key.data(), key.size());
+    uint32_t slot = sem_pool_->acquire();
+    Result result;
     Request req;
-    req.type  = OpType::Put;
-    req.key   = std::string(key);
-    req.value = std::string(value);
-    req.hash  = h;
-    auto fut = req.promise.get_future();
+    req.type = OpType::Put;
+    req.hash = h;
+    req.key = key;
+    req.value = value;
+    req.result = &result;
+    req.sem_slot = slot;
+    req.batch_remaining = nullptr;
     shard_for(h).submit(std::move(req));
-    return fut;
+    sem_pool_->wait(slot);
+    sem_pool_->release(slot);
+    return result;
 }
 
-std::future<Result> Cache::del(std::string_view key) {
+Result Cache::del(std::string_view key) {
     Hash128 h = hash_key(key.data(), key.size());
+    uint32_t slot = sem_pool_->acquire();
+    Result result;
     Request req;
     req.type = OpType::Delete;
-    req.key  = std::string(key);
     req.hash = h;
-    auto fut = req.promise.get_future();
+    req.key = key;
+    req.result = &result;
+    req.sem_slot = slot;
+    req.batch_remaining = nullptr;
     shard_for(h).submit(std::move(req));
-    return fut;
+    sem_pool_->wait(slot);
+    sem_pool_->release(slot);
+    return result;
 }
 
-std::vector<std::future<Result>> Cache::batch_get(
-    const std::string_view* keys, size_t count) {
-    std::vector<std::future<Result>> futs;
-    futs.reserve(count);
-    for (size_t i = 0; i < count; ++i)
-        futs.push_back(get(keys[i]));
-    return futs;
+std::vector<Result> Cache::batch_get(const std::vector<std::string_view>& keys) {
+    if (keys.empty()) return {};
+    std::vector<Result> results(keys.size());
+    std::atomic<int> remaining{static_cast<int>(keys.size())};
+    uint32_t slot = sem_pool_->acquire();
+
+    for (size_t i = 0; i < keys.size(); ++i) {
+        Hash128 h = hash_key(keys[i].data(), keys[i].size());
+        Request req;
+        req.type = OpType::Get;
+        req.hash = h;
+        req.key = keys[i];
+        req.result = &results[i];
+        req.sem_slot = slot;
+        req.batch_remaining = &remaining;
+        shard_for(h).submit(std::move(req));
+    }
+
+    sem_pool_->wait(slot);
+    sem_pool_->release(slot);
+    return results;
 }
 
-std::vector<std::future<Result>> Cache::batch_put(
-    const KVPair* pairs, size_t count) {
-    std::vector<std::future<Result>> futs;
-    futs.reserve(count);
-    for (size_t i = 0; i < count; ++i)
-        futs.push_back(put(pairs[i].key, pairs[i].value));
-    return futs;
+std::vector<Result> Cache::batch_put(const std::vector<KVPair>& pairs) {
+    if (pairs.empty()) return {};
+    std::vector<Result> results(pairs.size());
+    std::atomic<int> remaining{static_cast<int>(pairs.size())};
+    uint32_t slot = sem_pool_->acquire();
+
+    for (size_t i = 0; i < pairs.size(); ++i) {
+        Hash128 h = hash_key(pairs[i].key.data(), pairs[i].key.size());
+        Request req;
+        req.type = OpType::Put;
+        req.hash = h;
+        req.key = pairs[i].key;
+        req.value = pairs[i].value;
+        req.result = &results[i];
+        req.sem_slot = slot;
+        req.batch_remaining = &remaining;
+        shard_for(h).submit(std::move(req));
+    }
+
+    sem_pool_->wait(slot);
+    sem_pool_->release(slot);
+    return results;
 }
 
 // ---------------------------------------------------------------------------
@@ -176,16 +228,14 @@ std::vector<std::future<Result>> Cache::batch_put(
 
 bool Cache::put_sync(const void* key, size_t key_len,
                      const void* val, size_t val_len) {
-    auto fut = put(std::string_view(static_cast<const char*>(key), key_len),
+    Result r = put(std::string_view(static_cast<const char*>(key), key_len),
                    std::string_view(static_cast<const char*>(val), val_len));
-    Result r = fut.get();
     return r.status == Status::Ok;
 }
 
 bool Cache::get_sync(const void* key, size_t key_len,
                      void* val_buf, size_t val_buf_len, size_t* actual_len) {
-    auto fut = get(std::string_view(static_cast<const char*>(key), key_len));
-    Result r = fut.get();
+    Result r = get(std::string_view(static_cast<const char*>(key), key_len));
     if (r.status != Status::Ok)
         return false;
     if (actual_len)
@@ -197,8 +247,7 @@ bool Cache::get_sync(const void* key, size_t key_len,
 }
 
 bool Cache::remove_sync(const void* key, size_t key_len) {
-    auto fut = del(std::string_view(static_cast<const char*>(key), key_len));
-    Result r = fut.get();
+    Result r = del(std::string_view(static_cast<const char*>(key), key_len));
     return r.status == Status::Ok;
 }
 

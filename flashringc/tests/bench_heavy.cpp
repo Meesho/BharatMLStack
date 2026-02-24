@@ -125,8 +125,6 @@ static HeavyResult run_heavy_bench(uint32_t total_unique_keys,
             local_batch_lats.reserve(num_batches);
 
             for (int batch = 0; batch < num_batches; ++batch) {
-                std::vector<std::future<Result>> futs;
-                futs.reserve(100);
                 int batch_puts = 0, batch_gets = 0;
 
                 auto t_batch_start = Clock::now();
@@ -136,18 +134,15 @@ static HeavyResult run_heavy_bench(uint32_t total_unique_keys,
                     std::string key = "hk_" + std::to_string(idx);
 
                     if (j % 10 == 0) {
-                        futs.push_back(cache.put(key, std::string_view(val)));
+                        Result r = cache.put(key, std::string_view(val));
+                        if (r.status == Status::Ok) ++hits;
                         ++batch_puts;
                     } else {
-                        futs.push_back(cache.get(key));
+                        Result r = cache.get(key);
+                        if (r.status == Status::Ok && !r.value.empty())
+                            ++hits;
                         ++batch_gets;
                     }
-                }
-
-                for (auto& f : futs) {
-                    Result r = f.get();
-                    if (r.status == Status::Ok && !r.value.empty())
-                        ++hits;
                 }
 
                 auto t_batch_end = Clock::now();

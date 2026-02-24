@@ -1,4 +1,5 @@
 #include "flashringc/shard_reactor.h"
+#include "flashringc/semaphore_pool.h"
 
 #include <chrono>
 #include <cstring>
@@ -10,11 +11,13 @@
 // ---------------------------------------------------------------------------
 
 ShardReactor::ShardReactor(RingDevice ring, size_t mt_size, uint32_t index_cap,
+                           SemaphorePool* sem_pool,
                            uint32_t queue_capacity, uint32_t uring_depth)
     : ring_(std::move(ring)),
       memtables_(ring_, mt_size),
       index_(index_cap),
       delete_mgr_(ring_, index_),
+      sem_pool_(sem_pool),
       inbox_(queue_capacity),
       uring_depth_(uring_depth)
 {
@@ -115,6 +118,20 @@ void ShardReactor::process_inbox(int max_batch) {
 }
 
 // ---------------------------------------------------------------------------
+// complete_request — write result, then post; never use req.key/req.value after post
+// ---------------------------------------------------------------------------
+
+void ShardReactor::complete_request(Request& req, Result result) {
+    *req.result = std::move(result);
+    if (req.batch_remaining) {
+        if (req.batch_remaining->fetch_sub(1, std::memory_order_acq_rel) == 1)
+            sem_pool_->post(req.sem_slot);
+    } else {
+        sem_pool_->post(req.sem_slot);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // dispatch
 // ---------------------------------------------------------------------------
 
@@ -134,7 +151,7 @@ void ShardReactor::dispatch(Request& req) {
 void ShardReactor::handle_get(Request& req) {
     LookupResult lr{};
     if (!index_.get(req.hash, now_delta(), lr)) {
-        req.promise.set_value({Status::NotFound, {}});
+        complete_request(req, {Status::NotFound, {}});
         return;
     }
 
@@ -146,10 +163,10 @@ void ShardReactor::handle_get(Request& req) {
         if (kRecordHeaderSize + dr.key_len + dr.val_len > lr.length ||
             dr.key_len != req.key.size() ||
             std::memcmp(dr.key, req.key.data(), dr.key_len) != 0) {
-            req.promise.set_value({Status::NotFound, {}});
+            complete_request(req, {Status::NotFound, {}});
             return;
         }
-        req.promise.set_value({Status::Ok,
+        complete_request(req, {Status::Ok,
             std::string(reinterpret_cast<const char*>(dr.val), dr.val_len)});
         return;
     }
@@ -157,14 +174,14 @@ void ShardReactor::handle_get(Request& req) {
     // Need disk read.
     int64_t file_off = memtables_.file_offset_for(lr.mem_id);
     if (file_off < 0) {
-        req.promise.set_value({Status::NotFound, {}});
+        complete_request(req, {Status::NotFound, {}});
         return;
     }
 
     uint64_t ring_offset = static_cast<uint64_t>(file_off) + lr.offset;
     size_t aligned_len = AlignedBuffer::align_up(lr.length);
     if (ring_offset + aligned_len > ring_.capacity()) {
-        req.promise.set_value({Status::Error, {}});
+        complete_request(req, {Status::Error, {}});
         return;
     }
 
@@ -172,7 +189,7 @@ void ShardReactor::handle_get(Request& req) {
     if (uring_ok_) {
         auto abuf = AlignedBuffer::allocate(aligned_len);
         if (!abuf.valid()) {
-            req.promise.set_value({Status::Error, {}});
+            complete_request(req, {Status::Error, {}});
             return;
         }
 
@@ -183,7 +200,7 @@ void ShardReactor::handle_get(Request& req) {
             io_uring_submit(&uring_);
             sqe = io_uring_get_sqe(&uring_);
             if (!sqe) {
-                req.promise.set_value({Status::Error, {}});
+                complete_request(req, {Status::Error, {}});
                 return;
             }
         }
@@ -209,13 +226,13 @@ void ShardReactor::handle_get(Request& req) {
     // Fallback: synchronous pread.
     auto abuf = AlignedBuffer::allocate(aligned_len);
     if (!abuf.valid()) {
-        req.promise.set_value({Status::Error, {}});
+        complete_request(req, {Status::Error, {}});
         return;
     }
 
     ssize_t n = ring_.read(abuf.data(), aligned_len, ring_offset);
     if (n != static_cast<ssize_t>(aligned_len)) {
-        req.promise.set_value({Status::Error, {}});
+        complete_request(req, {Status::Error, {}});
         return;
     }
 
@@ -223,10 +240,10 @@ void ShardReactor::handle_get(Request& req) {
     if (kRecordHeaderSize + dr.key_len + dr.val_len > lr.length ||
         dr.key_len != req.key.size() ||
         std::memcmp(dr.key, req.key.data(), dr.key_len) != 0) {
-        req.promise.set_value({Status::NotFound, {}});
+        complete_request(req, {Status::NotFound, {}});
         return;
     }
-    req.promise.set_value({Status::Ok,
+    complete_request(req, {Status::Ok,
         std::string(reinterpret_cast<const char*>(dr.val), dr.val_len)});
 }
 
@@ -262,7 +279,7 @@ void ShardReactor::handle_put(Request& req) {
     index_.put(req.hash, wr.mem_id, wr.offset, wr.length);
     delete_mgr_.maybe_evict();
 
-    req.promise.set_value({Status::Ok, {}});
+    complete_request(req, {Status::Ok, {}});
 }
 
 // ---------------------------------------------------------------------------
@@ -271,7 +288,7 @@ void ShardReactor::handle_put(Request& req) {
 
 void ShardReactor::handle_delete(Request& req) {
     bool removed = index_.remove(req.hash);
-    req.promise.set_value({removed ? Status::Ok : Status::NotFound, {}});
+    complete_request(req, {removed ? Status::Ok : Status::NotFound, {}});
 }
 
 // ---------------------------------------------------------------------------
@@ -302,21 +319,23 @@ void ShardReactor::reap_completions() {
             if (req_it == pending_requests_.end()) break;
 
             Request& req = req_it->second;
-
+            // Use req.key only before complete_request; caller may wake after post.
+            Result res;
             if (cqe->res < 0) {
-                req.promise.set_value({Status::Error, {}});
+                res = {Status::Error, {}};
             } else {
                 DecodedRecord dr = decode_record(pop.buf.bytes());
                 if (kRecordHeaderSize + dr.key_len + dr.val_len > pop.length ||
                     dr.key_len != req.key.size() ||
                     std::memcmp(dr.key, req.key.data(), dr.key_len) != 0) {
-                    req.promise.set_value({Status::NotFound, {}});
+                    res = {Status::NotFound, {}};
                 } else {
-                    req.promise.set_value({Status::Ok,
-                        std::string(reinterpret_cast<const char*>(dr.val),
-                                    dr.val_len)});
+                    res = {Status::Ok,
+                           std::string(reinterpret_cast<const char*>(dr.val),
+                                       dr.val_len)};
                 }
             }
+            complete_request(req, std::move(res));
             pending_requests_.erase(req_it);
             break;
         }

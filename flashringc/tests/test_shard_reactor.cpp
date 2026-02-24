@@ -1,10 +1,10 @@
+#include "flashringc/semaphore_pool.h"
 #include "flashringc/shard_reactor.h"
 
 #include <cassert>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
-#include <future>
 #include <string>
 #include <thread>
 #include <unistd.h>
@@ -30,53 +30,70 @@ static void cleanup() {
         printf("PASS\n");                               \
     } while (0)
 
-static ShardReactor make_reactor(uint32_t index_cap = 1024) {
+static ShardReactor make_reactor(SemaphorePool* pool, uint32_t index_cap = 1024) {
     auto ring = RingDevice::open(std::string(TEST_PATH) + ".0",
                                  4 * 1024 * 1024);
     return ShardReactor(std::move(ring),
                         256 * 1024,   // memtable size
                         index_cap,
+                        pool,
                         1024,         // queue capacity
                         64);          // uring depth
 }
 
-// Helper: submit a request and return its future.
-static std::future<Result> submit_put(ShardReactor& reactor,
-                                      const std::string& key,
-                                      const std::string& val) {
+static Result submit_put(ShardReactor& reactor, SemaphorePool& pool,
+                        const std::string& key, const std::string& val) {
+    uint32_t slot = pool.acquire();
+    Result result;
     Request req;
-    req.type  = OpType::Put;
-    req.key   = key;
+    req.type = OpType::Put;
+    req.key = key;
     req.value = val;
-    req.hash  = hash_key(key.data(), key.size());
-    auto fut  = req.promise.get_future();
+    req.hash = hash_key(key.data(), key.size());
+    req.result = &result;
+    req.sem_slot = slot;
+    req.batch_remaining = nullptr;
     bool ok = reactor.submit(std::move(req));
     assert(ok);
-    return fut;
+    pool.wait(slot);
+    pool.release(slot);
+    return result;
 }
 
-static std::future<Result> submit_get(ShardReactor& reactor,
-                                      const std::string& key) {
+static Result submit_get(ShardReactor& reactor, SemaphorePool& pool,
+                        const std::string& key) {
+    uint32_t slot = pool.acquire();
+    Result result;
     Request req;
     req.type = OpType::Get;
-    req.key  = key;
+    req.key = key;
     req.hash = hash_key(key.data(), key.size());
-    auto fut = req.promise.get_future();
+    req.result = &result;
+    req.sem_slot = slot;
+    req.batch_remaining = nullptr;
     bool ok = reactor.submit(std::move(req));
     assert(ok);
-    return fut;
+    pool.wait(slot);
+    pool.release(slot);
+    return result;
 }
 
-static std::future<Result> submit_del(ShardReactor& reactor,
-                                      const std::string& key) {
+static Result submit_del(ShardReactor& reactor, SemaphorePool& pool,
+                        const std::string& key) {
+    uint32_t slot = pool.acquire();
+    Result result;
     Request req;
     req.type = OpType::Delete;
-    req.key  = key;
+    req.key = key;
     req.hash = hash_key(key.data(), key.size());
-    auto fut = req.promise.get_future();
+    req.result = &result;
+    req.sem_slot = slot;
+    req.batch_remaining = nullptr;
     bool ok = reactor.submit(std::move(req));
     assert(ok);
-    return fut;
+    pool.wait(slot);
+    pool.release(slot);
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,15 +101,14 @@ static std::future<Result> submit_del(ShardReactor& reactor,
 // ---------------------------------------------------------------------------
 
 static void test_put_get_memtable_hit() {
-    auto reactor = make_reactor();
+    SemaphorePool pool(64);
+    auto reactor = make_reactor(&pool);
     std::thread t([&]() { reactor.run(); });
 
-    auto put_fut = submit_put(reactor, "hello", "world");
-    Result pr = put_fut.get();
+    Result pr = submit_put(reactor, pool, "hello", "world");
     assert(pr.status == Status::Ok);
 
-    auto get_fut = submit_get(reactor, "hello");
-    Result gr = get_fut.get();
+    Result gr = submit_get(reactor, pool, "hello");
     assert(gr.status == Status::Ok);
     assert(gr.value == "world");
 
@@ -101,11 +117,11 @@ static void test_put_get_memtable_hit() {
 }
 
 static void test_get_miss() {
-    auto reactor = make_reactor();
+    SemaphorePool pool(64);
+    auto reactor = make_reactor(&pool);
     std::thread t([&]() { reactor.run(); });
 
-    auto fut = submit_get(reactor, "nonexistent");
-    Result r = fut.get();
+    Result r = submit_get(reactor, pool, "nonexistent");
     assert(r.status == Status::NotFound);
 
     reactor.stop();
@@ -113,13 +129,14 @@ static void test_get_miss() {
 }
 
 static void test_put_overwrite() {
-    auto reactor = make_reactor();
+    SemaphorePool pool(64);
+    auto reactor = make_reactor(&pool);
     std::thread t([&]() { reactor.run(); });
 
-    submit_put(reactor, "key1", "val1").get();
-    submit_put(reactor, "key1", "val2_updated").get();
+    submit_put(reactor, pool, "key1", "val1");
+    submit_put(reactor, pool, "key1", "val2_updated");
 
-    auto r = submit_get(reactor, "key1").get();
+    Result r = submit_get(reactor, pool, "key1");
     assert(r.status == Status::Ok);
     assert(r.value == "val2_updated");
 
@@ -128,18 +145,19 @@ static void test_put_overwrite() {
 }
 
 static void test_delete() {
-    auto reactor = make_reactor();
+    SemaphorePool pool(64);
+    auto reactor = make_reactor(&pool);
     std::thread t([&]() { reactor.run(); });
 
-    submit_put(reactor, "delme", "temp").get();
+    submit_put(reactor, pool, "delme", "temp");
 
-    auto r1 = submit_get(reactor, "delme").get();
+    Result r1 = submit_get(reactor, pool, "delme");
     assert(r1.status == Status::Ok);
 
-    auto dr = submit_del(reactor, "delme").get();
+    Result dr = submit_del(reactor, pool, "delme");
     assert(dr.status == Status::Ok);
 
-    auto r2 = submit_get(reactor, "delme").get();
+    Result r2 = submit_get(reactor, pool, "delme");
     assert(r2.status == Status::NotFound);
 
     reactor.stop();
@@ -147,20 +165,21 @@ static void test_delete() {
 }
 
 static void test_many_keys() {
-    auto reactor = make_reactor(4096);
+    SemaphorePool pool(256);
+    auto reactor = make_reactor(&pool, 4096);
     std::thread t([&]() { reactor.run(); });
 
     for (int i = 0; i < 200; ++i) {
         std::string key = "k_" + std::to_string(i);
         std::string val = "v_" + std::to_string(i) + "_payload";
-        auto r = submit_put(reactor, key, val).get();
+        Result r = submit_put(reactor, pool, key, val);
         assert(r.status == Status::Ok);
     }
 
     for (int i = 0; i < 200; ++i) {
         std::string key = "k_" + std::to_string(i);
         std::string expected = "v_" + std::to_string(i) + "_payload";
-        auto r = submit_get(reactor, key).get();
+        Result r = submit_get(reactor, pool, key);
         assert(r.status == Status::Ok);
         assert(r.value == expected);
     }
@@ -170,19 +189,19 @@ static void test_many_keys() {
 }
 
 static void test_eviction() {
-    auto reactor = make_reactor(64);
+    SemaphorePool pool(128);
+    auto reactor = make_reactor(&pool, 64);
     std::thread t([&]() { reactor.run(); });
 
     for (int i = 0; i < 128; ++i) {
         std::string key = "ev_" + std::to_string(i);
         std::string val = "val_" + std::to_string(i);
-        submit_put(reactor, key, val).get();
+        submit_put(reactor, pool, key, val);
     }
 
     assert(reactor.key_count() <= 64);
 
-    // Recent keys should still be accessible.
-    auto r = submit_get(reactor, "ev_127").get();
+    Result r = submit_get(reactor, pool, "ev_127");
     assert(r.status == Status::Ok);
     assert(r.value == "val_127");
 
@@ -191,7 +210,8 @@ static void test_eviction() {
 }
 
 static void test_multi_producer_stress() {
-    auto reactor = make_reactor(4096);
+    SemaphorePool pool(512);
+    auto reactor = make_reactor(&pool, 4096);
     std::thread reactor_thread([&]() { reactor.run(); });
 
     constexpr int NUM_PRODUCERS = 4;
@@ -199,23 +219,22 @@ static void test_multi_producer_stress() {
 
     std::vector<std::thread> producers;
     for (int p = 0; p < NUM_PRODUCERS; ++p) {
-        producers.emplace_back([&reactor, p]() {
+        producers.emplace_back([&reactor, &pool, p]() {
             for (int i = 0; i < ITEMS; ++i) {
                 std::string key = "p" + std::to_string(p) + "_k" + std::to_string(i);
                 std::string val = "v_" + std::to_string(p * ITEMS + i);
-                auto r = submit_put(reactor, key, val).get();
+                Result r = submit_put(reactor, pool, key, val);
                 assert(r.status == Status::Ok);
             }
         });
     }
 
-    for (auto& t : producers) t.join();
+    for (auto& th : producers) th.join();
 
-    // Verify some keys.
     for (int p = 0; p < NUM_PRODUCERS; ++p) {
         std::string key = "p" + std::to_string(p) + "_k0";
         std::string expected = "v_" + std::to_string(p * ITEMS);
-        auto r = submit_get(reactor, key).get();
+        Result r = submit_get(reactor, pool, key);
         assert(r.status == Status::Ok);
         assert(r.value == expected);
     }

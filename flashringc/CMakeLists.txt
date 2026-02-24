@@ -52,8 +52,10 @@ add_library(flashring
     src/memtable_manager.cpp
     src/key_index.cpp
     src/delete_manager.cpp
+    src/semaphore_pool.cpp
     src/shard_reactor.cpp
     src/cache.cpp
+    src/flashringc_capi.cpp
 )
 
 target_include_directories(flashring
@@ -72,6 +74,9 @@ if(HAVE_IO_URING)
 endif()
 
 # --- Tests ---
+add_executable(test_semaphore_pool tests/test_semaphore_pool.cpp)
+target_link_libraries(test_semaphore_pool PRIVATE flashring)
+
 add_executable(test_mpsc_queue tests/test_mpsc_queue.cpp)
 target_link_libraries(test_mpsc_queue PRIVATE flashring)
 
@@ -89,6 +94,9 @@ target_link_libraries(bench_heavy PRIVATE flashring)
 
 add_executable(test_eviction tests/test_eviction.cpp)
 target_link_libraries(test_eviction PRIVATE flashring)
+
+add_executable(test_capi tests/test_capi.cpp)
+target_link_libraries(test_capi PRIVATE flashring)
 
 # --- Legacy tests (kept for reference, may need updating) ---
 add_executable(ring_test tests/ring_test.cpp)

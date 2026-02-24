@@ -205,21 +205,17 @@ static void test_truncated_read() {
 static void test_async_api() {
     auto cache = Cache::open(test_cfg());
 
-    auto put_fut = cache.put("async_key", "async_value");
-    Result pr = put_fut.get();
+    Result pr = cache.put("async_key", "async_value");
     assert(pr.status == Status::Ok);
 
-    auto get_fut = cache.get("async_key");
-    Result gr = get_fut.get();
+    Result gr = cache.get("async_key");
     assert(gr.status == Status::Ok);
     assert(gr.value == "async_value");
 
-    auto del_fut = cache.del("async_key");
-    Result dr = del_fut.get();
+    Result dr = cache.del("async_key");
     assert(dr.status == Status::Ok);
 
-    auto miss_fut = cache.get("async_key");
-    Result mr = miss_fut.get();
+    Result mr = cache.get("async_key");
     assert(mr.status == Status::NotFound);
 }
 
@@ -240,14 +236,13 @@ static void test_batch_api() {
         keys[i] = key_strs[i];
     }
 
-    auto futs = cache.batch_get(keys.data(), BATCH);
-    assert(futs.size() == BATCH);
+    std::vector<Result> results = cache.batch_get(keys);
+    assert(results.size() == BATCH);
 
     for (int i = 0; i < BATCH; ++i) {
-        Result r = futs[i].get();
-        assert(r.status == Status::Ok);
+        assert(results[i].status == Status::Ok);
         std::string expected = "bv_" + std::to_string(i * 10) + "_payload";
-        assert(r.value == expected);
+        assert(results[i].value == expected);
     }
 }
 

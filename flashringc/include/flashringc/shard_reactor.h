@@ -8,6 +8,7 @@
 #include "flashringc/record.h"
 #include "flashringc/request.h"
 #include "flashringc/ring_device.h"
+#include "flashringc/semaphore_pool.h"
 
 #include <atomic>
 #include <cstdint>
@@ -22,6 +23,7 @@
 class ShardReactor {
 public:
     ShardReactor(RingDevice ring, size_t mt_size, uint32_t index_cap,
+                 SemaphorePool* sem_pool,
                  uint32_t queue_capacity = kDefaultQueueDepth,
                  uint32_t uring_depth = 256);
     ~ShardReactor();
@@ -48,6 +50,7 @@ private:
     void handle_delete(Request& req);
 
     void dispatch(Request& req);
+    void complete_request(Request& req, Result result);
     void reap_completions();
     void maybe_flush_memtable();
     void maybe_run_eviction();
@@ -60,6 +63,7 @@ private:
     KeyIndex          index_;
     DeleteManager     delete_mgr_;
 
+    SemaphorePool*     sem_pool_;
     MPSCQueue<Request> inbox_;
 
     // In-flight io_uring operations keyed by tag.

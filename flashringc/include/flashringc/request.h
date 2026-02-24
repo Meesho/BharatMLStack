@@ -2,15 +2,16 @@
 
 #include "flashringc/common.h"
 
+#include <atomic>
 #include <cstdint>
-#include <future>
 #include <string>
+#include <string_view>
 
 // Forward declarations to avoid circular includes.
 struct LookupResult;
 
 // ---------------------------------------------------------------------------
-// Result — returned to callers via std::future<Result>
+// Result — written to caller-owned pointer on completion
 // ---------------------------------------------------------------------------
 
 struct Result {
@@ -29,16 +30,19 @@ struct KVPair {
 
 // ---------------------------------------------------------------------------
 // Request — submitted to a ShardReactor via MPSC queue
+// Caller keeps key/value and result memory alive until sem_wait() returns.
 // ---------------------------------------------------------------------------
 
 enum class OpType : uint8_t { Get, Put, Delete, Shutdown };
 
 struct Request {
-    OpType               type;
-    std::string          key;
-    std::string          value;   // populated for Put
-    Hash128              hash;    // pre-computed by Cache layer
-    std::promise<Result> promise;
+    OpType                  type;
+    Hash128                 hash;    // pre-computed by Cache layer
+    std::string_view        key;
+    std::string_view        value;   // populated for Put
+    Result*                 result          = nullptr;
+    uint32_t                sem_slot        = 0;
+    std::atomic<int>*       batch_remaining = nullptr;
 
     Request() = default;
     Request(Request&&) = default;
