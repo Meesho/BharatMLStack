@@ -21,6 +21,8 @@ struct CacheConfig {
     uint32_t    queue_capacity    = kDefaultQueueDepth;
     uint32_t    uring_queue_depth = 256;
     size_t      sem_pool_capacity = 1024;
+    double      eviction_threshold = 0.75;     // start evicting when usage >= this
+    double      clear_threshold    = 0.65;     // stop evicting when usage <= this
 };
 
 class Cache {

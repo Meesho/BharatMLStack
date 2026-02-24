@@ -17,6 +17,12 @@
 Cache Cache::open(const CacheConfig& cfg) {
     Cache c;
 
+    if (cfg.clear_threshold <= 0 || cfg.eviction_threshold <= cfg.clear_threshold ||
+        cfg.eviction_threshold > 1.0) {
+        throw std::invalid_argument(
+            "CacheConfig: require 0 < clear_threshold < eviction_threshold <= 1");
+    }
+
     c.num_shards_ = cfg.num_shards;
     if (c.num_shards_ == 0)
         c.num_shards_ = std::max(1u, std::thread::hardware_concurrency());
@@ -52,7 +58,8 @@ Cache Cache::open(const CacheConfig& cfg) {
         c.shards_.push_back(std::make_unique<ShardReactor>(
             std::move(ring), per_shard_mt, per_shard_keys,
             c.sem_pool_.get(),
-            cfg.queue_capacity, cfg.uring_queue_depth));
+            cfg.queue_capacity, cfg.uring_queue_depth,
+            cfg.eviction_threshold, cfg.clear_threshold));
     }
 
     // Spawn reactor threads.

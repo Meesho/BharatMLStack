@@ -22,6 +22,8 @@ static constexpr double   kDurationSec   = 300.0;   // 5 min
 static constexpr double   kReportIntervalSec = 15.0;
 static constexpr size_t   kBatchSize     = 100;
 static constexpr size_t   kValSize       = 256;
+static constexpr double   kEvictionThreshold = 0.95;  // start evicting when usage >= this
+static constexpr double   kClearThreshold    = 0.65; // stop evicting when usage <= this
 
 static std::string g_bench_path = "/tmp/flashring_longrun.dat";
 static double g_duration_sec = kDurationSec;
@@ -72,14 +74,16 @@ int main(int argc, char* argv[]) {
     uint32_t index_cap = static_cast<uint32_t>(std::min(g_num_keys * 2ULL, 4'000'000ULL));
 
     CacheConfig cfg{
-        .device_path    = g_bench_path,
-        .ring_capacity  = ring_cap,
-        .memtable_size  = mt_size,
-        .index_capacity = index_cap,
-        .num_shards     = 0,
-        .queue_capacity = 16384,
+        .device_path       = g_bench_path,
+        .ring_capacity     = ring_cap,
+        .memtable_size     = mt_size,
+        .index_capacity    = index_cap,
+        .num_shards        = 0,
+        .queue_capacity    = 16384,
         .uring_queue_depth = 512,
         .sem_pool_capacity = 4096,
+        .eviction_threshold = kEvictionThreshold,
+        .clear_threshold    = kClearThreshold,
     };
 
     printf("bench_long_run: get-batch, put-if-miss, fixed set of %lu keys, %.0fs, report every %.0fs\n",

@@ -25,7 +25,9 @@ public:
     ShardReactor(RingDevice ring, size_t mt_size, uint32_t index_cap,
                  SemaphorePool* sem_pool,
                  uint32_t queue_capacity = kDefaultQueueDepth,
-                 uint32_t uring_depth = 256);
+                 uint32_t uring_depth = 256,
+                 double eviction_threshold = 0.75,
+                 double clear_threshold = 0.65);
     ~ShardReactor();
 
     ShardReactor(const ShardReactor&) = delete;

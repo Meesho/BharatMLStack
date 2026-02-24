@@ -1,10 +1,11 @@
 #include "flashringc/delete_manager.h"
 
 DeleteManager::DeleteManager(RingDevice& ring, KeyIndex& index,
-                             double high_watermark, uint32_t n_delete,
-                             uint64_t discard_batch)
+                             double high_watermark, double low_watermark,
+                             uint32_t n_delete, uint64_t discard_batch)
     : ring_(ring), index_(index),
       high_watermark_(high_watermark),
+      low_watermark_(low_watermark),
       n_delete_(n_delete),
       discard_batch_(discard_batch) {}
 
@@ -19,6 +20,8 @@ uint32_t DeleteManager::maybe_evict() {
     double usage_ratio =
         static_cast<double>(ring_usage()) / static_cast<double>(ring_.capacity());
     if (usage_ratio < high_watermark_)
+        return 0;
+    if (usage_ratio <= low_watermark_)
         return 0;
 
     uint64_t evicted_bytes = 0;

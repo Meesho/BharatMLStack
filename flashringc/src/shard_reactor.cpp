@@ -12,11 +12,12 @@
 
 ShardReactor::ShardReactor(RingDevice ring, size_t mt_size, uint32_t index_cap,
                            SemaphorePool* sem_pool,
-                           uint32_t queue_capacity, uint32_t uring_depth)
+                           uint32_t queue_capacity, uint32_t uring_depth,
+                           double eviction_threshold, double clear_threshold)
     : ring_(std::move(ring)),
       memtables_(ring_, mt_size),
       index_(index_cap),
-      delete_mgr_(ring_, index_),
+      delete_mgr_(ring_, index_, eviction_threshold, clear_threshold),
       sem_pool_(sem_pool),
       inbox_(queue_capacity),
       uring_depth_(uring_depth)
