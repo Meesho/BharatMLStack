@@ -20,6 +20,7 @@ public:
 
 private:
     uint64_t ring_usage() const;
+    void flush_discards_remainder();
 
     RingDevice& ring_;
     KeyIndex&   index_;

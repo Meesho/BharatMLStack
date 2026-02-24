@@ -30,8 +30,10 @@ uint32_t DeleteManager::maybe_evict() {
 
         uint64_t evicted_bytes = 0;
         uint32_t evicted = index_.evict_oldest(n_delete_, &evicted_bytes);
-        if (evicted == 0)
+        if (evicted == 0) {
+            flush_discards_remainder();
             break;
+        }
         total_evicted += evicted;
         pending_discard_bytes_ += evicted_bytes;
 
@@ -45,15 +47,47 @@ void DeleteManager::flush_discards() {
     if (pending_discard_bytes_ < discard_batch_)
         return;
 
-    uint64_t cap = ring_.capacity();
+    const uint64_t cap = ring_.capacity();
+
+    // Flush one or two chunks so we never advance cursor by more than we actually discard.
+    // First chunk may be clamped at wrap; then flush remainder from start of ring.
     uint64_t offset = discard_cursor_ % cap;
     uint64_t length = pending_discard_bytes_;
-
-    // Clamp to avoid wrapping past capacity in a single discard call.
     if (offset + length > cap)
         length = cap - offset;
 
     ring_.discard(offset, length);
-    discard_cursor_ += pending_discard_bytes_;
-    pending_discard_bytes_ = 0;
+    discard_cursor_ += length;
+    pending_discard_bytes_ -= length;
+
+    // If we clamped, flush the remainder from logical start (physical offset 0).
+    if (pending_discard_bytes_ > 0) {
+        length = pending_discard_bytes_;
+        if (length > cap)
+            length = cap;
+        ring_.discard(0, length);
+        discard_cursor_ += length;
+        pending_discard_bytes_ -= length;
+    }
+}
+
+void DeleteManager::flush_discards_remainder() {
+    if (pending_discard_bytes_ == 0)
+        return;
+    const uint64_t cap = ring_.capacity();
+    uint64_t offset = discard_cursor_ % cap;
+    uint64_t length = pending_discard_bytes_;
+    if (offset + length > cap)
+        length = cap - offset;
+    if (length == 0)
+        return;
+    ring_.discard(offset, length);
+    discard_cursor_ += length;
+    pending_discard_bytes_ -= length;
+    if (pending_discard_bytes_ > 0) {
+        length = std::min(pending_discard_bytes_, cap);
+        ring_.discard(0, length);
+        discard_cursor_ += length;
+        pending_discard_bytes_ -= length;
+    }
 }
