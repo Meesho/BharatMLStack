@@ -55,8 +55,10 @@ int main(int argc, char* argv[]) {
         g_duration_sec = std::max(1.0, atof(argv[2]));
     if (argc >= 4)
         g_report_interval_sec = std::max(1.0, atof(argv[3]));
-    if (argc >= 5)
-        g_num_keys = std::max(1ULL, static_cast<uint64_t>(atoll(argv[4])));
+    if (argc >= 5) {
+        long long v = atoll(argv[4]);
+        g_num_keys = (v > 0) ? static_cast<uint64_t>(v) : 1;
+    }
 
     cleanup();
 
