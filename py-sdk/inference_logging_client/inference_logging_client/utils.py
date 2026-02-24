@@ -4,58 +4,112 @@ from typing import Optional
 
 # Feature type to size mapping for scalar types
 SCALAR_TYPE_SIZES = {
-    "INT8": 1, "I8": 1,
-    "INT16": 2, "I16": 2, "SHORT": 2,
-    "INT32": 4, "I32": 4, "INT": 4,
-    "INT64": 8, "I64": 8, "LONG": 8,
-    "UINT8": 1, "U8": 1,
-    "UINT16": 2, "U16": 2,
-    "UINT32": 4, "U32": 4,
-    "UINT64": 8, "U64": 8,
-    "FP8E5M2": 1, "FP8E4M3": 1,
-    "FP16": 2, "FLOAT16": 2, "F16": 2,
-    "FP32": 4, "FLOAT32": 4, "F32": 4, "FLOAT": 4,
-    "FP64": 8, "FLOAT64": 8, "F64": 8, "DOUBLE": 8,
-    "BOOL": 1, "BOOLEAN": 1,
+    "INT8": 1,
+    "I8": 1,
+    "INT16": 2,
+    "I16": 2,
+    "SHORT": 2,
+    "INT32": 4,
+    "I32": 4,
+    "INT": 4,
+    "INT64": 8,
+    "I64": 8,
+    "LONG": 8,
+    "UINT8": 1,
+    "U8": 1,
+    "UINT16": 2,
+    "U16": 2,
+    "UINT32": 4,
+    "U32": 4,
+    "UINT64": 8,
+    "U64": 8,
+    "FP8E5M2": 1,
+    "FP8E4M3": 1,
+    "FP16": 2,
+    "FLOAT16": 2,
+    "F16": 2,
+    "FP32": 4,
+    "FLOAT32": 4,
+    "F32": 4,
+    "FLOAT": 4,
+    "FP64": 8,
+    "FLOAT64": 8,
+    "F64": 8,
+    "DOUBLE": 8,
+    "BOOL": 1,
+    "BOOLEAN": 1,
 }
 
 # Types that use 2-byte size prefix
 SIZED_TYPES = {
-    "STRING", "STR",
+    "STRING",
+    "STR",
     "BYTES",
     # Vector types
-    "FP8E5M2VECTOR", "FP8E4M3VECTOR",
-    "FP16VECTOR", "FLOAT16VECTOR",
-    "FP32VECTOR", "FLOAT32VECTOR",
-    "FP64VECTOR", "FLOAT64VECTOR",
-    "INT8VECTOR", "INT16VECTOR", "INT32VECTOR", "INT64VECTOR",
-    "UINT8VECTOR", "UINT16VECTOR", "UINT32VECTOR", "UINT64VECTOR",
-    "STRINGVECTOR", "BOOLVECTOR",
+    "FP8E5M2VECTOR",
+    "FP8E4M3VECTOR",
+    "FP16VECTOR",
+    "FLOAT16VECTOR",
+    "FP32VECTOR",
+    "FLOAT32VECTOR",
+    "FP64VECTOR",
+    "FLOAT64VECTOR",
+    "INT8VECTOR",
+    "INT16VECTOR",
+    "INT32VECTOR",
+    "INT64VECTOR",
+    "UINT8VECTOR",
+    "UINT16VECTOR",
+    "UINT32VECTOR",
+    "UINT64VECTOR",
+    "STRINGVECTOR",
+    "BOOLVECTOR",
     # With underscore
-    "VECTOR_FP8E5M2", "VECTOR_FP8E4M3",
-    "VECTOR_FP16", "VECTOR_FLOAT16",
-    "VECTOR_FP32", "VECTOR_FLOAT32",
-    "VECTOR_FP64", "VECTOR_FLOAT64",
-    "VECTOR_INT8", "VECTOR_INT16", "VECTOR_INT32", "VECTOR_INT64",
-    "VECTOR_UINT8", "VECTOR_UINT16", "VECTOR_UINT32", "VECTOR_UINT64",
-    "VECTOR_STRING", "VECTOR_BOOL",
+    "VECTOR_FP8E5M2",
+    "VECTOR_FP8E4M3",
+    "VECTOR_FP16",
+    "VECTOR_FLOAT16",
+    "VECTOR_FP32",
+    "VECTOR_FLOAT32",
+    "VECTOR_FP64",
+    "VECTOR_FLOAT64",
+    "VECTOR_INT8",
+    "VECTOR_INT16",
+    "VECTOR_INT32",
+    "VECTOR_INT64",
+    "VECTOR_UINT8",
+    "VECTOR_UINT16",
+    "VECTOR_UINT32",
+    "VECTOR_UINT64",
+    "VECTOR_STRING",
+    "VECTOR_BOOL",
     # DataType prefix variants
     "DATATYPESTRING",
     "DATATYPEBYTES",
-    "DATATYPEFP8E5M2VECTOR", "DATATYPEFP8E4M3VECTOR",
-    "DATATYPEFP16VECTOR", "DATATYPEFP32VECTOR", "DATATYPEFP64VECTOR",
-    "DATATYPEINT8VECTOR", "DATATYPEINT16VECTOR", "DATATYPEINT32VECTOR", "DATATYPEINT64VECTOR",
-    "DATATYPEUINT8VECTOR", "DATATYPEUINT16VECTOR", "DATATYPEUINT32VECTOR", "DATATYPEUINT64VECTOR",
-    "DATATYPESTRINGVECTOR", "DATATYPEBOOLVECTOR",
+    "DATATYPEFP8E5M2VECTOR",
+    "DATATYPEFP8E4M3VECTOR",
+    "DATATYPEFP16VECTOR",
+    "DATATYPEFP32VECTOR",
+    "DATATYPEFP64VECTOR",
+    "DATATYPEINT8VECTOR",
+    "DATATYPEINT16VECTOR",
+    "DATATYPEINT32VECTOR",
+    "DATATYPEINT64VECTOR",
+    "DATATYPEUINT8VECTOR",
+    "DATATYPEUINT16VECTOR",
+    "DATATYPEUINT32VECTOR",
+    "DATATYPEUINT64VECTOR",
+    "DATATYPESTRINGVECTOR",
+    "DATATYPEBOOLVECTOR",
 }
 
 
 def normalize_type(feature_type: str) -> str:
     """Normalize feature type string for consistent comparison.
-    
+
     Args:
         feature_type: The feature type string to normalize
-        
+
     Returns:
         Normalized uppercase string with underscores and DATATYPE prefix removed.
         Returns empty string if feature_type is None.
@@ -68,9 +122,11 @@ def normalize_type(feature_type: str) -> str:
 def is_sized_type(feature_type: str) -> bool:
     """Check if the feature type requires a 2-byte size prefix."""
     normalized = normalize_type(feature_type)
-    return (normalized in {"STRING", "STR"} or 
-            "VECTOR" in normalized.upper() or
-            normalized in SIZED_TYPES)
+    return (
+        normalized in {"STRING", "STR"}
+        or "VECTOR" in normalized.upper()
+        or normalized in SIZED_TYPES
+    )
 
 
 def get_scalar_size(feature_type: str) -> Optional[int]:
@@ -82,11 +138,12 @@ def get_scalar_size(feature_type: str) -> Optional[int]:
 def format_float(value: float) -> float:
     """
     Format float to 6 decimal places without scientific notation.
-    
+
     Returns the float value formatted to 6 decimal places. For special values
     (inf, -inf, nan), returns them as-is. For regular floats, rounds to 6 decimals.
     """
     import math
+
     if math.isnan(value) or math.isinf(value):
         return value
     # Round to 6 decimal places and convert back to float
@@ -96,15 +153,26 @@ def format_float(value: float) -> float:
 
 def format_dataframe_floats(df):
     """
-    Format all float columns in DataFrame to 6 decimal places.
+    Format all float columns in Spark DataFrame to 6 decimal places.
     This ensures no scientific notation in output.
+
+    Args:
+        df: A Spark DataFrame
+
+    Returns:
+        Spark DataFrame with float columns rounded to 6 decimal places
     """
-    import pandas as pd
-    df = df.copy()
-    for col in df.columns:
-        if df[col].dtype == 'float64' or df[col].dtype == 'float32':
-            df[col] = df[col].apply(lambda x: format_float(x) if pd.notna(x) else x)
-    return df
+    from pyspark.sql import functions as spark_funcs
+    from pyspark.sql.types import DoubleType, FloatType
+
+    result_df = df
+    for field in df.schema.fields:
+        if isinstance(field.dataType, (FloatType, DoubleType)):
+            result_df = result_df.withColumn(
+                field.name,
+                spark_funcs.round(spark_funcs.col(field.name), 6)
+            )
+    return result_df
 
 
 def unpack_metadata_byte(metadata_byte: int) -> tuple[bool, int, int]:
@@ -124,7 +192,8 @@ def unpack_metadata_byte(metadata_byte: int) -> tuple[bool, int, int]:
 
 def get_format_name(format_type: int) -> str:
     """Get human-readable format name from format type int."""
-    from .types import FORMAT_TYPE_PROTO, FORMAT_TYPE_ARROW, FORMAT_TYPE_PARQUET
+    from .types import FORMAT_TYPE_ARROW, FORMAT_TYPE_PARQUET, FORMAT_TYPE_PROTO
+
     names = {
         FORMAT_TYPE_PROTO: "proto",
         FORMAT_TYPE_ARROW: "arrow",
