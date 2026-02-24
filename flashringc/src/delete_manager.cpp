@@ -17,17 +17,28 @@ uint64_t DeleteManager::ring_usage() const {
 }
 
 uint32_t DeleteManager::maybe_evict() {
-    double usage_ratio =
-        static_cast<double>(ring_usage()) / static_cast<double>(ring_.capacity());
-    if (usage_ratio < high_watermark_)
-        return 0;
-    if (usage_ratio <= low_watermark_)
-        return 0;
+    const uint64_t cap = ring_.capacity();
+    uint32_t total_evicted = 0;
 
-    uint64_t evicted_bytes = 0;
-    uint32_t evicted = index_.evict_oldest(n_delete_, &evicted_bytes);
-    pending_discard_bytes_ += evicted_bytes;
-    return evicted;
+    while (true) {
+        double usage_ratio =
+            static_cast<double>(ring_usage()) / static_cast<double>(cap);
+        if (usage_ratio < high_watermark_)
+            return total_evicted;
+        if (usage_ratio <= low_watermark_)
+            return total_evicted;
+
+        uint64_t evicted_bytes = 0;
+        uint32_t evicted = index_.evict_oldest(n_delete_, &evicted_bytes);
+        if (evicted == 0)
+            break;
+        total_evicted += evicted;
+        pending_discard_bytes_ += evicted_bytes;
+
+        // Flush when we have enough pending so discard_cursor_ advances and usage drops.
+        flush_discards();
+    }
+    return total_evicted;
 }
 
 void DeleteManager::flush_discards() {

@@ -527,23 +527,15 @@ static void test_multithreaded_churn_15s() {
 }
 
 // -----------------------------------------------------------------------
-// Test 9: Watermark eviction drains index (known bug documentation)
+// Test 9: Watermark eviction stops at clear threshold (index not drained)
 //
-// When the ring device fills past 75%, DeleteManager evicts entries
-// faster than they're inserted. Because discard_cursor_ never advances
-// (discard_batch_ defaults to 64MB > useful ring data), ring_usage()
-// never decreases, and every put triggers maybe_evict(10). This drains
-// the index to 0 keys permanently.
-//
-// This test documents the behavior. It does NOT assert correctness —
-// it asserts the *current* (buggy) behavior so that a future fix
-// can be verified by updating the assertions.
+// When the ring fills past the eviction threshold, DeleteManager evicts
+// in a loop until usage drops to the clear threshold, flushing 64MB
+// discard batches so discard_cursor_ advances. The index is not drained.
 // -----------------------------------------------------------------------
 static void test_watermark_eviction_drains_index() {
-    // 256MB ring with 16MB memtable = 16 flushes per full ring wrap.
-    // Watermark triggers at flush 12 (192MB = 75%). The remaining 4 flushes
-    // (16384 records) under active eviction drain the 500-entry index and
-    // create a degenerate state where head_ laps tail_ in the FIFO ring.
+    // 256MB ring with 16MB memtable. Watermark triggers at 75%.
+    // Eviction loop runs until usage <= clear threshold (65%), so index stays healthy.
     CacheConfig cfg{
         .device_path     = g_test_path,
         .ring_capacity   = 256ULL * 1024 * 1024,
@@ -556,27 +548,15 @@ static void test_watermark_eviction_drains_index() {
 
     std::string val(128, 'W');
 
-    // Write 100K records. Watermark triggers at ~49K (75% of 256MB / 4KB).
-    // After that, maybe_evict(10) fires every put and drains the index.
+    // Write 100K records. Watermark triggers; eviction runs until usage <= clear threshold.
     for (int i = 0; i < 100000; ++i) {
         std::string key = "wm_" + std::to_string(i);
         cache.put_sync(key.data(), key.size(), val.data(), val.size());
     }
 
     uint32_t kc = cache.key_count();
-
-    // KNOWN BUG: once ring fills past 75%, maybe_evict drains the index
-    // to 0 because discard_cursor_ never advances (discard_batch_ = 64MB
-    // exceeds useful evicted bytes), so ring_usage() never drops below
-    // the watermark. Each put inserts 1 entry and immediately evicts it.
-    //
-    // Root cause: head_ in the FIFO ring laps tail_ during bulk eviction,
-    // causing newly inserted entries to be the oldest and immediately
-    // evictable.
-    //
-    // When this bug is fixed, change this to: CHECK(kc > 0);
-    printf("[kc=%u — expected 0 due to watermark bug] ", kc);
-    CHECK(kc == 0);
+    printf("[kc=%u after watermark eviction] ", kc);
+    CHECK(kc > 0);
 }
 
 // -----------------------------------------------------------------------
@@ -613,8 +593,8 @@ int main(int argc, char* argv[]) {
                "  - Eviction is FIFO (oldest-first via KeyIndex ring).\n"
                "  - TTL (time-to-live) is NOT implemented.\n"
                "  - last_access / freq fields are tracked but unused.\n"
-               "  - BUG: DeleteManager watermark eviction permanently\n"
-               "    drains the index when ring fills past 75%%.\n");
+               "  - Watermark eviction runs until usage <= clear threshold;\n"
+               "    discard is batched (64MB) so index is not drained.\n");
     }
 
     return (tests_passed == tests_run) ? 0 : 1;
