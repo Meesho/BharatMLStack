@@ -1,0 +1,36 @@
+---
+description: "Provide the list of rules which are obeyed in every response"
+globs:
+alwaysApply: true
+---
+
+# Rule Compliance Tracking
+
+## Response Format Requirement
+When responding to user queries about code patterns, architecture, or implementation examples:
+
+1. **Always List Obeyed Rules**: At the end of your response, include a section titled "**Rules Followed:**" that lists the specific rules from the codebase that are being obeyed or demonstrated in your response.
+
+2. **Rule Identification**: Identify rules from the following files:
+   - `.cursor/rules/unit-testing.mdc`
+   - `.cursor/rules/requirement-planning.mdc`
+   - `.cursor/rules/code-quality.mdc`
+   - `.cursor/rules/compliance.mdc`
+
+3. **Example Format**:
+   ```
+   **Rules Followed:**
+   - Dependency Injection Pattern
+   - Configuration Management
+   - Interface Design
+   ```
+
+4. **Context Awareness**: Only list rules that are actually relevant to the specific response or examples provided.
+
+5. **Rule Verification**: When analyzing code examples, verify which rule categories are being followed and explicitly mention the rule headings.
+
+## Implementation Guidelines
+- Scan the codebase for examples that demonstrate rule compliance
+- Provide concrete code examples when possible
+- Explain how the examples follow the specific rule categories
+- Use the rule headings/categories from the source files when listing them

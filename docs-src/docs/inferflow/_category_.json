@@ -1,0 +1,8 @@
+{
+    "label": "Inferflow",
+    "position": 2,
+    "link": {
+        "type": "generated-index",
+        "description": "Inferflow is a graph-driven feature retrieval and model inference orchestration engine. It dynamically resolves entity relationships via configurable DAGs, retrieves features from the Online Feature Store, and orchestrates model scoring — all without custom code."
+    }
+}

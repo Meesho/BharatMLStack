@@ -1,0 +1,238 @@
+# Default values for onfs-api-server helm chart
+
+namespace: prd-onfs-api-server
+applicationName: onfs-api-server
+replicaCount: 2
+
+labels:
+  env: prd
+  team: bharatml
+  bu: ml
+  priority: p1
+  priority_v2: cp3
+  service_type: ""
+
+priorityClassName: ""
+
+telegraf:
+  enabled: false
+
+otel_enabled: false
+
+infrastructure:
+  secretStore:
+    name: vault-backend
+    kind: ClusterSecretStore
+  vault:
+    basePath: ""
+    otelTokenPath: ""
+
+deployment:
+  enabled: true
+  replicaCount: 2
+  revisionHistoryLimit: 3
+  image:
+    repository: ghcr.io/meesho/onfs-api-server
+    tag: latest
+    pullPolicy: IfNotPresent
+  ports:
+    - containerPort: 8089
+      name: grpc
+      protocol: TCP
+  probes:
+    liveness:
+      path: /health/self
+      port: 8089
+      scheme: HTTP
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 5
+    readiness:
+      path: /health/self
+      port: 8089
+      scheme: HTTP
+      initialDelaySeconds: 20
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 5
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  env:
+    - name: APP_ENV
+      value: "local"
+    - name: APP_LOG_LEVEL
+      value: "DEBUG"
+    - name: APP_METRIC_SAMPLING_RATE
+      value: "1"
+    - name: APP_NAME
+      value: "onfs"
+    - name: APP_PORT
+      value: "8089"
+    - name: AUTH_TOKEN
+      value: "test"
+    - name: ENABLE_HTTP_API
+      value: "true"
+    # Etcd
+    - name: ETCD_SERVER
+      value: "http://etcd:2379"
+    - name: ETCD_WATCHER_ENABLED
+      value: "true"
+    # ScyllaDB
+    - name: STORAGE_SCYLLA_1_CONTACT_POINTS
+      value: "scylla"
+    - name: STORAGE_SCYLLA_1_KEYSPACE
+      value: "onfs"
+    - name: STORAGE_SCYLLA_1_PORT
+      value: "9042"
+    - name: STORAGE_SCYLLA_1_NUM_CONNS
+      value: "1"
+    - name: STORAGE_SCYLLA_1_TIMEOUT_IN_MS
+      value: "300000"
+    - name: STORAGE_SCYLLA_1_USERNAME
+      value: ""
+    - name: STORAGE_SCYLLA_1_PASSWORD
+      value: ""
+    - name: STORAGE_SCYLLA_1_MAJOR_VERSION
+      value: "5"
+    - name: STORAGE_SCYLLA_1_SCYLLA_VERSION
+      value: "5"
+    - name: STORAGE_SCYLLA_ACTIVE_CONFIG_IDS
+      value: "1"
+    # Redis
+    - name: STORAGE_REDIS_STANDALONE_2_ADDR
+      value: "redis:6379"
+    - name: STORAGE_REDIS_STANDALONE_2_DB
+      value: "0"
+    - name: STORAGE_REDIS_STANDALONE_2_DISABLE_IDENTITY
+      value: "true"
+    - name: STORAGE_REDIS_STANDALONE_2_MAX_IDLE_CONN
+      value: "32"
+    - name: STORAGE_REDIS_STANDALONE_2_MIN_IDLE_CONN
+      value: "20"
+    - name: STORAGE_REDIS_STANDALONE_2_MAX_ACTIVE_CONN
+      value: "32"
+    - name: STORAGE_REDIS_STANDALONE_2_MAX_RETRY
+      value: "-1"
+    - name: STORAGE_REDIS_STANDALONE_2_POOL_FIFO
+      value: "false"
+    - name: STORAGE_REDIS_STANDALONE_2_READ_TIMEOUT_IN_MS
+      value: "300"
+    - name: STORAGE_REDIS_STANDALONE_2_WRITE_TIMEOUT_IN_MS
+      value: "300"
+    - name: STORAGE_REDIS_STANDALONE_2_POOL_TIMEOUT_IN_MS
+      value: "300"
+    - name: STORAGE_REDIS_STANDALONE_2_POOL_SIZE
+      value: "32"
+    - name: STORAGE_REDIS_STANDALONE_2_CONN_MAX_IDLE_TIMEOUT_IN_MINUTES
+      value: "15"
+    - name: STORAGE_REDIS_STANDALONE_2_CONN_MAX_AGE_IN_MINUTES
+      value: "30"
+    - name: STORAGE_REDIS_STANDALONE_ACTIVE_CONFIG_IDS
+      value: "2"
+    - name: DISTRIBUTED_CACHE_CONF_IDS
+      value: "2"
+    # In-memory cache
+    - name: IN_MEM_CACHE_3_ENABLED
+      value: "true"
+    - name: IN_MEM_CACHE_3_NAME
+      value: "onfs"
+    - name: IN_MEM_CACHE_3_SIZE_IN_BYTES
+      value: "100000"
+    - name: IN_MEM_CACHE_ACTIVE_CONFIG_IDS
+      value: "3"
+    # P2P cache
+    - name: P2P_CACHE_5_ENABLED
+      value: "true"
+    - name: P2P_CACHE_5_CLUSTER_NAME
+      value: "onfs-cluster"
+    - name: P2P_CACHE_5_NAME
+      value: "p2p-onfs"
+    - name: P2P_CACHE_5_OWN_PARTITION_SIZE_IN_BYTES
+      value: "100000"
+    - name: P2P_CACHE_5_GLOBAL_SIZE_IN_BYTES
+      value: "1000"
+    - name: P2P_CACHE_5_GLOBAL_CACHE_TTL_IN_SECONDS
+      value: "3600"
+    - name: P2P_CACHE_5_NUM_CLIENTS
+      value: "2"
+    - name: P2P_CACHE_5_SERVER_PORT
+      value: "8088"
+    - name: P2P_CACHE_ACTIVE_CONFIG_IDS
+      value: "5"
+  serviceAccount:
+    enabled: false
+    annotations: {}
+  updateStrategy:
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+  terminationGracePeriodSeconds: 30
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: 80
+      targetPort: 8089
+      protocol: TCP
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  pollingInterval: 30
+  scaledown:
+    stabilizationWindowSeconds: 300
+    policies:
+      - type: Percent
+        value: 10
+        periodseconds: 60
+    selectpolicy: Min
+  scaleup:
+    stabilizationWindowSeconds: 0
+    policies:
+      - type: Percent
+        value: 50
+        periodseconds: 60
+    selectpolicy: Max
+  triggers:
+    - type: cpu
+      metadata:
+        value: "70"
+      metricType: Utilization
+
+ingress:
+  enabled: false
+  ingressClassName: contour-internal
+createContourGateway: false
+
+externalSecret:
+  enabled: false
+  path: ""
+
+configMap:
+  enabled: false
+
+canary:
+  enabled: false
+  promURL: ""
+  slackChannel: ""
+  slackWebhookURL: ""
+
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: "10%"
+
+disasterRecovery:
+  enabled: false

@@ -7,7 +7,7 @@ toolchain go1.24.10
 require (
 	cloud.google.com/go/storage v1.57.2
 	github.com/DataDog/datadog-go/v5 v5.6.0
-	github.com/Meesho/BharatMLStack/helix-client v1.0.0-alpha-649f13
+	github.com/Meesho/BharatMLStack/helix-client v1.0.0-alpha-7f5f39
 	github.com/bradleyfalzon/ghinstallation/v2 v2.17.0
 	github.com/deckarep/golang-set/v2 v2.8.0
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible

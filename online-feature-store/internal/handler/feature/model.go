@@ -14,6 +14,7 @@ type RetrieveData struct {
 	Query                              *retrieve.Query
 	Result                             *retrieve.Result
 	EntityLabel                        string
+	CallerId                           string
 	AllFGIdToDataType                  map[int]types.DataType
 	ReqInMemCachedFGIds                ds.Set[int]
 	ReqDistCachedFGIds                 ds.Set[int]

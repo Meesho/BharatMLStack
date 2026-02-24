@@ -36,7 +36,8 @@ func Init() {
 
 		modelApprovalGroup := httpframework.Instance().Group("/api/v1/horizon/predator-config-approval")
 		{
-			modelApprovalGroup.PUT("/process-request", controller.NewConfigController().ProcessRequest)
+			modelApprovalGroup.PUT("/process-request/approve", controller.NewConfigController().ProcessRequest)
+			modelApprovalGroup.PUT("/process-request/reject", controller.NewConfigController().ProcessRequest)
 			modelApprovalGroup.GET("/requests/:group_id", controller.NewConfigController().Validate)
 			modelApprovalGroup.GET("/requests", controller.NewConfigController().GetAllPredatorRequests)
 		}

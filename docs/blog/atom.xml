@@ -2,20 +2,672 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://meesho.github.io/BharatMLStack/blog</id>
     <title>BharatMLStack Blog</title>
-    <updated>2022-11-15T00:00:00.000Z</updated>
+    <updated>2026-02-19T00:00:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://meesho.github.io/BharatMLStack/blog"/>
     <subtitle>BharatMLStack Blog</subtitle>
     <icon>https://meesho.github.io/BharatMLStack/img/favicon.ico</icon>
     <entry>
+        <title type="html"><![CDATA[Beyond Vector RAG: Building Agent Memory That Learns From Experience.]]></title>
+        <id>https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents</id>
+        <link href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents"/>
+        <updated>2026-02-19T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[Current agent memory is just search. We built an episodic memory system that tracks outcomes, forms causal links, extracts reasoning heuristics, and actually learns from failure — without retraining the model.]]></summary>
+        <content type="html"><![CDATA[<p><img decoding="async" loading="lazy" alt="BharatMLStack" src="https://meesho.github.io/BharatMLStack/assets/images/bms-7399e8796d2cd24617c432518ce3f312.png" width="1396" height="460" class="img_ev3q">
+Agent memory has come a long way. Persistent context, vector retrieval, knowledge graphs — the building blocks are real and getting better fast.</p>
+<p>But most of what we call "memory" today is still closer to search: chunk text, embed it, retrieve whatever looks similar at query time. That works well for recalling facts and preferences. It starts to break down when you need an agent to recall what happened last time, learn from a mistake, or avoid repeating a failed approach.</p>
+<p>We are trying to experiment something different. An episodic memory system where a frozen LLM — same weights, no retraining — produces increasingly better decisions over time because the memory feeding it context is continuously evolving.
+Then we tested it. The results were interesting.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-gap-nobody-talks-about">The Gap Nobody Talks About<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#the-gap-nobody-talks-about" class="hash-link" aria-label="Direct link to The Gap Nobody Talks About" title="Direct link to The Gap Nobody Talks About">​</a></h2>
+<p>Here's a scenario every engineering team has encountered: AI agent hits a Redis connection pool exhaustion issue. It misdiagnoses it as a database problem. You correct it. Next week, a different service has the exact same failure pattern. The agent makes the exact same mistake.</p>
+<p>Why? Because LLMs don't learn at inference time. Corrections adjust behavior within a conversation. Once the session ends, the lesson is gone. The model weights haven't changed. The next conversation starts from zero.</p>
+<p>Current "memory" systems don't fully address this. They store facts — user preferences, document chunks, conversation summaries. But facts aren't experience. Knowing that "Redis connection pools can exhaust under load" is different from remembering "last time I saw 500 errors under load, I assumed it was the database, I was wrong, it was actually the connection pool, and here's the correction I received."</p>
+<p>The first is a fact. The second is an episode. The difference matters.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="whats-wrong-with-vector-rag-as-memory">What's Wrong With Vector RAG as Memory<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#whats-wrong-with-vector-rag-as-memory" class="hash-link" aria-label="Direct link to What's Wrong With Vector RAG as Memory" title="Direct link to What's Wrong With Vector RAG as Memory">​</a></h2>
+<p>We identified five structural gaps in how current agent frameworks handle memory:</p>
+<p><strong>No concept of time.</strong> Two events are either semantically similar or they're not. The system can't represent "this happened after that" without distorting similarity scores. An agent can't reason about sequence or causality.</p>
+<p><strong>No concept of situation.</strong> A production incident and a design review might use the same technical vocabulary. Flat vector search can't distinguish them. Your agent retrieves planning notes when it should be retrieving incident postmortems.</p>
+<p><strong>No outcome tracking.</strong> The system stores <em>what happened</em> but not <em>whether it worked</em>. A failed approach and a successful one are equally retrievable. The agent has no way to prefer strategies that worked over strategies that didn't.</p>
+<p><strong>Summaries destroy evidence.</strong> Summarization-based memory compresses experience but discards the reasoning chain. The agent loses the ability to explain <em>how</em> it arrived at a conclusion. The audit trail is gone.</p>
+<p><strong>No causal links.</strong> Each memory chunk is independent. There's no way to express that incident A caused decision B, which led to outcome C, which was corrected by approach D. Without this structure, the agent can't traverse chains of reasoning.</p>
+<p>These gaps compound. As an agent accumulates more experience, flat vector memory gets noisier, more contradictory, and less useful. The system degrades precisely when it should be improving.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-architecture-episodic-memory">The Architecture: Episodic Memory<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#the-architecture-episodic-memory" class="hash-link" aria-label="Direct link to The Architecture: Episodic Memory" title="Direct link to The Architecture: Episodic Memory">​</a></h2>
+<p>We are building a memory system modeled on how human episodic memory works — not as a metaphor, but as an engineering specification.</p>
+<p>The system has four layers:</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="layer-1-immutable-timeline">Layer 1: Immutable Timeline<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#layer-1-immutable-timeline" class="hash-link" aria-label="Direct link to Layer 1: Immutable Timeline" title="Direct link to Layer 1: Immutable Timeline">​</a></h3>
+<p>Every piece of agent experience is recorded as an append-only timeline entry. Each entry carries a semantic embedding (what it means), a timestamp (when it happened), and a state label (what situation the agent was in — debugging, planning, code review, incident response). Entries are never modified, never deleted, never summarized. This is the source of truth.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="layer-2-episode-segmentation">Layer 2: Episode Segmentation<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#layer-2-episode-segmentation" class="hash-link" aria-label="Direct link to Layer 2: Episode Segmentation" title="Direct link to Layer 2: Episode Segmentation">​</a></h3>
+<p>The system watches the timeline and detects when one coherent unit of experience ends and another begins — via state transitions, semantic shifts, temporal gaps, or explicit signals. Each episode is a reference into the timeline (not a copy) with a generated summary, an outcome (SUCCESS, FAILURE, PARTIAL, UNKNOWN), decisions made, assumptions held, and corrections received.</p>
+<p>The outcome field is the most important thing that doesn't exist in any current memory system. Without it, you can't learn from mistakes.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="layer-3-episodic-graph">Layer 3: Episodic Graph<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#layer-3-episodic-graph" class="hash-link" aria-label="Direct link to Layer 3: Episodic Graph" title="Direct link to Layer 3: Episodic Graph">​</a></h3>
+<p>Episodes are connected through typed, weighted links: CAUSED_BY, LED_TO, RETRY_OF, LEARNED_FROM, CONTINUATION, CONTRADICTED. Over time, this forms a directed graph that enables traversal by meaning and causality. You can follow the chain: "this incident caused that investigation, which led to a failed fix, which was corrected by this approach."</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="layer-4-generalized-facts">Layer 4: Generalized Facts<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#layer-4-generalized-facts" class="hash-link" aria-label="Direct link to Layer 4: Generalized Facts" title="Direct link to Layer 4: Generalized Facts">​</a></h3>
+<p>When multiple episodes exhibit consistent patterns, the system extracts reasoning heuristics: "When services fail immediately after deployment with no traffic change, investigate configuration errors before connection pool problems." Facts are versioned, never overwritten, and maintain links back to supporting and contradicting episodes. When contradicting evidence accumulates, confidence decreases. When confidence drops below a threshold, the fact is revised — but the old version is preserved.</p>
+<p>The LLM sits above all four layers. At query time, the system assembles structured context — relevant episodes with outcomes, applicable facts with confidence scores, causal narratives — and passes it to the LLM for reasoning. The model reasons over structured memory. It doesn't store or manage memory.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="the-reinforcement-loop">The Reinforcement Loop<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#the-reinforcement-loop" class="hash-link" aria-label="Direct link to The Reinforcement Loop" title="Direct link to The Reinforcement Loop">​</a></h3>
+<p>This is where it comes together:</p>
+<ol>
+<li>Agent reasons using retrieved episodes and facts</li>
+<li>Outcome is detected (CI pass/fail, user correction, test result)</li>
+<li>New episode is created with outcome tracking</li>
+<li>Links are created between the retrieved episodes and the new episode</li>
+<li>Facts are reinforced (if outcome aligned) or contradicted (if outcome conflicted)</li>
+<li>If the decision was wrong and corrected, a LEARNED_FROM link is created</li>
+</ol>
+<p>The model weights never change. The memory structure evolves continuously. A frozen LLM produces better decisions over time because it receives better context from richer memory.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-experiment">The Experiment<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#the-experiment" class="hash-link" aria-label="Direct link to The Experiment" title="Direct link to The Experiment">​</a></h2>
+<p>We built the full system in Python (~1,000 lines) and tested it head-to-head against a baseline flat-vector RAG agent across a 9-round synthetic debugging scenario. Both agents used the identical LLM (Claude Sonnet 4) for reasoning. The only variable was the memory system.</p>
+<p>The scenario was designed to test five capabilities:</p>
+<table><thead><tr><th>Round Type</th><th>What It Tests</th><th>Rounds</th></tr></thead><tbody><tr><td>LEARN</td><td>Can the agent build experience from failures?</td><td>1, 2, 4</td></tr><tr><td>RED HERRING</td><td>Can the agent resist applying a pattern when it doesn't fit?</td><td>3</td></tr><tr><td>TEST</td><td>Can the agent apply learned patterns to new services?</td><td>5, 6</td></tr><tr><td>SUBTLE</td><td>Can the agent generalize to different symptoms, same root cause?</td><td>7</td></tr><tr><td>CORRECTION</td><td>After being corrected, does the agent adapt?</td><td>8, 9</td></tr></tbody></table>
+<p>Rounds 1-4 build experience: three connection pool failures across different services, plus one red herring (a deployment config error that <em>looks</em> like a connection pool issue). Rounds 5-7 test whether the agent applies the learned pattern to unfamiliar services and subtle symptom variations. Rounds 8-9 are the critical test: the agent is corrected after misdiagnosing a deployment-correlated error, then tested on a near-identical scenario to see if it adapts.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="results">Results<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#results" class="hash-link" aria-label="Direct link to Results" title="Direct link to Results">​</a></h2>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="decision-accuracy">Decision Accuracy<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#decision-accuracy" class="hash-link" aria-label="Direct link to Decision Accuracy" title="Direct link to Decision Accuracy">​</a></h3>
+<table><thead><tr><th>Round</th><th>Type</th><th>Episodic Agent</th><th>Baseline Agent</th></tr></thead><tbody><tr><td>1</td><td>LEARN</td><td>✗</td><td>✓</td></tr><tr><td>2</td><td>LEARN</td><td>✓</td><td>✓</td></tr><tr><td>3</td><td>RED HERRING</td><td>✗</td><td>✗</td></tr><tr><td>4</td><td>LEARN</td><td>✓</td><td>✓</td></tr><tr><td>5</td><td>TEST</td><td><strong>✓</strong></td><td>✗</td></tr><tr><td>6</td><td>TEST</td><td><strong>✓</strong></td><td>✗</td></tr><tr><td>7</td><td>SUBTLE</td><td><strong>✓</strong></td><td>✗</td></tr><tr><td>8</td><td>CORRECTION</td><td>✓</td><td>✓</td></tr><tr><td>9</td><td>CORRECTION</td><td>✓</td><td>✓</td></tr><tr><td><strong>Total</strong></td><td></td><td><strong>7/9 (78%)</strong></td><td><strong>5/9 (56%)</strong></td></tr></tbody></table>
+<p>The episodic agent won 7-5. A 40% relative improvement in decision accuracy using the exact same LLM.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="where-the-gap-opened">Where the Gap Opened<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#where-the-gap-opened" class="hash-link" aria-label="Direct link to Where the Gap Opened" title="Direct link to Where the Gap Opened">​</a></h3>
+<p>The episodic agent's advantage concentrated in exactly the rounds designed to test memory quality:</p>
+<p><strong>Rounds 5-6 (pattern application):</strong> The episodic agent cited 4 past failure episodes with connection pool exhaustion as root cause, complete with correction annotations. It correctly identified pool exhaustion in new services. The baseline retrieved disconnected chunks and suggested checking timeout configurations — a pattern it picked up from the Round 3 red herring.</p>
+<p><strong>Round 7 (subtle symptoms — latency increase, no errors):</strong> Both agents had the same evidence available. The episodic agent's retrieval surfaced a diverse set of episodes (thanks to MMR diversity filtering) including the Redis pool exhaustion from Round 6, which primed it to recognize that latency without errors can still be pool contention. The baseline defaulted to "check recent config changes."</p>
+<p><strong>Round 9 (adaptation after correction):</strong> This is the result we're most proud of. Look at the episodic agent's reasoning:</p>
+<blockquote>
+<p><em>"Episode 1 directly parallels this situation — errors spiking immediately after a deployment (v2.4.1 then, v3.1.0 now) with no traffic change. In that case, the root cause was a database migration that dropped an index. The generalized fact confirms that deployment-related issues with immediate onset after version changes are more likely caused by configuration errors or missing dependencies than by connection pool problems."</em></p>
+</blockquote>
+<p>It cited a specific past episode by analogy, quoted a generalized fact, and explained <em>why</em> this situation matches the deployment pattern rather than the connection pool pattern. The baseline gave a vaguer assessment.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="retrieval-quality">Retrieval Quality<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#retrieval-quality" class="hash-link" aria-label="Direct link to Retrieval Quality" title="Direct link to Retrieval Quality">​</a></h3>
+<p>This is where the structural difference is most visible:</p>
+<table><thead><tr><th>Metric</th><th>Episodic Agent</th><th>Baseline Agent</th></tr></thead><tbody><tr><td>Retrieved items with explicit outcome labels</td><td><strong>100%</strong></td><td>25%</td></tr><tr><td>Correct pattern applications (Rounds 4-7)</td><td><strong>4/4</strong></td><td>1/4</td></tr><tr><td>False positives (Rounds 8-9)</td><td><strong>0</strong></td><td>0</td></tr></tbody></table>
+<p>Every item the episodic agent retrieved carried a structured outcome label (SUCCESS or FAILURE) with correction details. Only 25% of the baseline's chunks contained any outcome information — and those were incidental text mentions, not structured labels.</p>
+<p>The episodic agent correctly applied the connection pool pattern in all four rounds where it was the root cause, and correctly avoided it in both rounds where it wasn't. The baseline applied it correctly once.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="what-didnt-work">What Didn't Work<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#what-didnt-work" class="hash-link" aria-label="Direct link to What Didn't Work" title="Direct link to What Didn't Work">​</a></h2>
+<p>Two things didn't work as anticipated:</p>
+<p><strong>Round 3 (red herring):</strong> Both agents failed. The symptoms looked like connection pool issues, but the root cause was a deployment config change. At this point, the episodic agent had only seen connection pool episodes — it had no counter-evidence for deployment-correlated errors. You can't distinguish patterns you've only seen one side of. After Round 8 introduced a correction, the agent successfully avoided this mistake in Round 9.</p>
+<p><strong>Fact quality variance.</strong> Some extracted facts were specific and actionable ("Deployment-related issues with immediate onset are more likely configuration errors"). Others were vague ("Initial symptom-based diagnosis often leads to misidentifying the root cause"). A production system needs a usefulness filter, not just a confidence score.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="what-this-means">What This Means<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#what-this-means" class="hash-link" aria-label="Direct link to What This Means" title="Direct link to What This Means">​</a></h2>
+<p>The most important finding isn't the accuracy improvement. It's that the reinforcement loop closes without retraining.</p>
+<p>In the POC, we observed:</p>
+<ul>
+<li>Rounds 1-4: Agent encounters failures, episodes recorded with outcomes and corrections</li>
+<li>After Round 4: Fact extracted — "Connection pool exhaustion is a common root cause under load"</li>
+<li>Rounds 5-7: Agent applies the pattern with increasing confidence (fact support count grows)</li>
+<li>Round 8: Agent encounters a deployment error, correctly identifies it as config, gets corrected</li>
+<li>After Round 8: New fact — "Deployment-related issues with immediate onset are more likely configuration errors"</li>
+<li>Round 9: Agent receives near-identical scenario, correctly avoids connection pool pattern, cites the Round 8 correction</li>
+</ul>
+<p>The model didn't change. The memory evolved. That's the whole point.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="how-it-compares-to-existing-solutions">How It Compares to Existing Solutions<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#how-it-compares-to-existing-solutions" class="hash-link" aria-label="Direct link to How It Compares to Existing Solutions" title="Direct link to How It Compares to Existing Solutions">​</a></h2>
+<p>Agent memory is a fast-moving space with several strong systems, each solving a different slice of the problem:</p>
+<p><strong>Mem0</strong> excels at persistent personalization — extracting user preferences, managing session context, and reducing token costs through intelligent compression. It's the most production-ready memory layer available and integrates with nearly every agent framework. Its focus is on remembering about users and conversations rather than learning from task-level outcomes, which is a different problem than the one we're exploring here.</p>
+<p><strong>Zep/Graphiti</strong> is doing some of the most interesting work in temporal knowledge graphs. Their bi-temporal model — tracking both when an event occurred and when it was ingested — addresses a real structural gap in how agent memory handles changing facts over time. Their episode and entity subgraphs share some philosophical DNA with our approach. Where our work diverges is in outcome tracking and reinforcement: we're specifically focused on whether a decision worked, and using that signal to update memory structure.</p>
+<p><strong>Letta (formerly MemGPT)</strong> pioneered self-editing memory — giving the LLM tools to manage its own memory blocks. This is a powerful paradigm, and their recent work on "Context Repositories" and sleep-time compute suggests they're actively pushing toward agents that learn over time. Their team has been transparent that experiential learning is an unsolved problem, which is part of what motivated our exploration.</p>
+<p><strong>MemRL (Jan 2026 paper)</strong> is the closest to our work academically. It shares the core insight of decoupling stable LLM reasoning from plastic, evolving memory. Their approach uses reinforcement learning to assign utility Q-values to memories, which is elegant but requires training a value function. Our approach is purely structural — no training step, no Q-values, just graph evolution and LLM-based reasoning over outcomes.</p>
+<p>The common thread: most existing systems focus on knowledge persistence — remembering facts, preferences, and conversation history across sessions. The problem we're exploring is experiential learning — tracking whether past decisions worked, forming causal chains between episodes, and extracting reasoning heuristics that improve over time. These are complementary capabilities that would be needed by an ideal production system.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="try-it-yourself">Try It Yourself<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#try-it-yourself" class="hash-link" aria-label="Direct link to Try It Yourself" title="Direct link to Try It Yourself">​</a></h2>
+<p>The prototype is available in our experiments directory:</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#F8F8F2;--prism-background-color:#282A36"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#F8F8F2;background-color:#282A36"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#F8F8F2"><span class="token plain">experiments/episodic-memory-prototype/</span><br></span><span class="token-line" style="color:#F8F8F2"><span class="token plain">├── memory/          # Timeline, encoder, episodes, graph, facts, retriever, reinforcer</span><br></span><span class="token-line" style="color:#F8F8F2"><span class="token plain">├── agent/           # Episodic memory agent</span><br></span><span class="token-line" style="color:#F8F8F2"><span class="token plain">├── baseline/        # Flat vector RAG agent (comparison)</span><br></span><span class="token-line" style="color:#F8F8F2"><span class="token plain">├── simulator/       # 9-round debugging scenario</span><br></span><span class="token-line" style="color:#F8F8F2"><span class="token plain">├── eval/            # Head-to-head comparison + scoring</span><br></span><span class="token-line" style="color:#F8F8F2"><span class="token plain">└── tests/</span><br></span></code></pre></div></div>
+<p>To run the comparison:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#F8F8F2;--prism-background-color:#282A36"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#F8F8F2;background-color:#282A36"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#F8F8F2"><span class="token plain">cd experiments/episodic-memory-prototype</span><br></span><span class="token-line" style="color:#F8F8F2"><span class="token plain">python -m venv .venv &amp;&amp; source .venv/bin/activate</span><br></span><span class="token-line" style="color:#F8F8F2"><span class="token plain">pip install -r requirements.txt</span><br></span><span class="token-line" style="color:#F8F8F2"><span class="token plain">export ANTHROPIC_API_KEY=sk-ant-...</span><br></span><span class="token-line" style="color:#F8F8F2"><span class="token plain">python -m eval.compare</span><br></span></code></pre></div></div>
+<p>Without an API key, it runs in heuristic mode (keyword-based decisions). With a key, both agents use Claude Sonnet for reasoning — that's where the quality gap becomes visible.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="conclusion">Conclusion<a href="https://meesho.github.io/BharatMLStack/blog/episodic-memory-for-agents#conclusion" class="hash-link" aria-label="Direct link to Conclusion" title="Direct link to Conclusion">​</a></h2>
+<p>This is a 9-round synthetic scenario we designed. It demonstrates the poc architecture works end-to-end and shows where episodic memory provides qualitatively different reasoning. It is not a peer-reviewed benchmark and should not be interpreted as a statistically rigorous claim. We're publishing the prototype so others can reproduce and extend the evaluation.
+If this sparks interest do trigger github discussion.</p>
+<hr>
+<p><em>The episodic memory prototype is available in <code>BharatMLStack</code> repo at <code>/experiments/episodic-memory-prototype</code></em></p>]]></content>
+        <author>
+            <name>Adarsha Das</name>
+            <uri>https://github.com/a0d00kc</uri>
+        </author>
+        <category label="ai-agents" term="ai-agents"/>
+        <category label="memory" term="memory"/>
+        <category label="architecture" term="architecture"/>
+        <category label="llm" term="llm"/>
+        <category label="episodic-memory" term="episodic-memory"/>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[LLM Inference Optimization Techniques: Engineering Sub-Second Latency at Scale]]></title>
+        <id>https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency</id>
+        <link href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency"/>
+        <updated>2025-06-02T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[A practical guide to the optimization techniques behind sub-second LLM inference—covering paged KV caching, INT4 AWQ and FP8 quantization, kernel fusion, inflight batching, parallelism strategies, and speculative decoding, with production benchmarks on L4 and A100 GPUs.]]></summary>
+        <content type="html"><![CDATA[<p><img decoding="async" loading="lazy" alt="BharatMLStack" src="https://meesho.github.io/BharatMLStack/assets/images/bms-7399e8796d2cd24617c432518ce3f312.png" width="1396" height="460" class="img_ev3q">
+Raw execution of Large Language Models is inherently expensive and memory-intensive. To achieve sub-second latency and high throughput, we implement a multi-layered optimization strategy that targets the entire inference stack—from memory management to kernel execution.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="1-advanced-memory-management-paged--prefix-kv-caching">1. Advanced Memory Management: Paged &amp; Prefix KV Caching<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#1-advanced-memory-management-paged--prefix-kv-caching" class="hash-link" aria-label="Direct link to 1. Advanced Memory Management: Paged &amp; Prefix KV Caching" title="Direct link to 1. Advanced Memory Management: Paged &amp; Prefix KV Caching">​</a></h2>
+<p>The most significant bottleneck in LLM inference is not always compute, but memory bandwidth—specifically managing the Key-Value (KV) cache.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="paged-kv-caching">Paged KV caching<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#paged-kv-caching" class="hash-link" aria-label="Direct link to Paged KV caching" title="Direct link to Paged KV caching">​</a></h3>
+<p>Standard caching suffers from fragmentation. We use <strong>Paged KV caching</strong>, which operates similarly to an operating system's virtual memory: the KV cache is divided into non-contiguous blocks. This lets us serve larger batch sizes without running out of memory.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="kv-cache-quantization">KV cache quantization<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#kv-cache-quantization" class="hash-link" aria-label="Direct link to KV cache quantization" title="Direct link to KV cache quantization">​</a></h3>
+<p>To further maximize available memory, we implement <strong>KV cache quantization</strong> (e.g., FP8). By compressing stored attention keys and values from 16-bit to 8-bit, we nearly double the effective context window capacity of the GPU, allowing longer conversations or larger batches without materially degrading quality.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="prefix-caching-the-voice-bot-optimizer">Prefix caching (the "voice bot" optimizer)<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#prefix-caching-the-voice-bot-optimizer" class="hash-link" aria-label="Direct link to Prefix caching (the &quot;voice bot&quot; optimizer)" title="Direct link to Prefix caching (the &quot;voice bot&quot; optimizer)">​</a></h3>
+<p>For use cases like GenAI voice bots where the system prompt (e.g., "You are a helpful assistant...") is static across thousands of requests, we enable <strong>prefix caching</strong>.</p>
+<ul>
+<li><strong>Impact</strong>: By reusing pre-computed KV states for common prefixes, we achieve a cache hit rate of ~90%. This reduces <strong>Time To First Token (TTFT)</strong> by skipping redundant computation of the system prompt.</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="2-aggressive-quantization-int4-awq--fp8">2. Aggressive Quantization (INT4 AWQ &amp; FP8)<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#2-aggressive-quantization-int4-awq--fp8" class="hash-link" aria-label="Direct link to 2. Aggressive Quantization (INT4 AWQ &amp; FP8)" title="Direct link to 2. Aggressive Quantization (INT4 AWQ &amp; FP8)">​</a></h2>
+<p>Running models in their native 16-bit precision (BF16) restricts maximum batch size and throughput. We use quantization to shrink model weights without sacrificing accuracy.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="int4-awq-activation-aware-weight-quantization">INT4 AWQ (Activation-aware Weight Quantization)<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#int4-awq-activation-aware-weight-quantization" class="hash-link" aria-label="Direct link to INT4 AWQ (Activation-aware Weight Quantization)" title="Direct link to INT4 AWQ (Activation-aware Weight Quantization)">​</a></h3>
+<p>For the Llama 3 family, we use <strong>AWQ</strong> to compress weights to 4 bits. This reduces model size by ~75%, allowing larger models to fit into L4 GPU memory and significantly improving token generation speed.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="fp8-precision">FP8 precision<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#fp8-precision" class="hash-link" aria-label="Direct link to FP8 precision" title="Direct link to FP8 precision">​</a></h3>
+<p>For NVIDIA Hopper (H100) architectures, we are exploring <strong>FP8 quantization</strong>, leveraging native FP8 tensor cores to accelerate matrix multiplications while maintaining a higher dynamic range than integer quantization.</p>
+<ul>
+<li><strong>Verification</strong>: We validate quantized models by comparing dot-product similarity of embeddings against the FP16 baseline, consistently achieving <strong>&gt;99% similarity</strong>.</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="3-kernel-fusion--custom-plugins">3. Kernel Fusion &amp; Custom Plugins<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#3-kernel-fusion--custom-plugins" class="hash-link" aria-label="Direct link to 3. Kernel Fusion &amp; Custom Plugins" title="Direct link to 3. Kernel Fusion &amp; Custom Plugins">​</a></h2>
+<p>To minimize overhead from launching thousands of small GPU operations, we fuse them into monolithic kernels using NVIDIA TensorRT plugins.</p>
+<ul>
+<li><strong>Flash attention &amp; FMHA</strong>: We enable <strong>Fused Multi-Head Attention (FMHA)</strong> combined with flash attention to reduce memory reads/writes.</li>
+<li><strong>GEMM plugins</strong>: We use specialized <strong>GEMM</strong> plugins to accelerate transformer linear layers.</li>
+<li><strong>Removing input padding</strong>: Instead of padding short sequences to match the longest, we remove input padding so the GPU processes only valid tokens.</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="4-inflight-continuous-batching">4. Inflight (Continuous) Batching<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#4-inflight-continuous-batching" class="hash-link" aria-label="Direct link to 4. Inflight (Continuous) Batching" title="Direct link to 4. Inflight (Continuous) Batching">​</a></h2>
+<p>Traditional static batching waits for all requests in a batch to finish before returning results—so one long response delays everyone else.</p>
+<p>We implement <strong>inflight batching</strong>: as soon as one request completes, its slot is freed and filled by a new request from the queue. This keeps GPUs saturated and decouples latency of short queries from long ones.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="5-parallelism-strategies-scaling-beyond-one-gpu">5. Parallelism Strategies: Scaling Beyond One GPU<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#5-parallelism-strategies-scaling-beyond-one-gpu" class="hash-link" aria-label="Direct link to 5. Parallelism Strategies: Scaling Beyond One GPU" title="Direct link to 5. Parallelism Strategies: Scaling Beyond One GPU">​</a></h2>
+<p>For large models (e.g., 70B+ parameters) that cannot fit into the VRAM of a single GPU, we use parallelism strategies.</p>
+<ul>
+<li><strong>Tensor parallelism (TP)</strong>: Split weight matrices across multiple GPUs (e.g., 4× L4 or 8× A100). Each GPU computes a shard and outputs are reduced at every layer.</li>
+<li><strong>Pipeline parallelism (PP)</strong>: Split model layers across GPUs to pipeline compute (e.g., while one GPU computes later layers for Request A, another starts early layers for Request B).</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="6-speculative-decoding">6. Speculative Decoding<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#6-speculative-decoding" class="hash-link" aria-label="Direct link to 6. Speculative Decoding" title="Direct link to 6. Speculative Decoding">​</a></h2>
+<p>To reduce inter-token latency (ITL), we explore <strong>speculative decoding</strong>.</p>
+<ul>
+<li><strong>Mechanism</strong>: A smaller, faster "draft" model speculatively generates a short token sequence (e.g., 5 tokens).</li>
+<li><strong>Verification</strong>: The larger target model verifies those tokens in one parallel forward pass. If correct, we effectively generate multiple tokens per large-model step; if not, we discard and regenerate. This is effective for predictable text, improving perceived generation speed.</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="few-benchmarks">Few Benchmarks<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#few-benchmarks" class="hash-link" aria-label="Direct link to Few Benchmarks" title="Direct link to Few Benchmarks">​</a></h2>
+<p>Below are a couple of representative use cases and performance numbers.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="search-query-rewriting">Search query rewriting<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#search-query-rewriting" class="hash-link" aria-label="Direct link to Search query rewriting" title="Direct link to Search query rewriting">​</a></h3>
+<ul>
+<li><strong>LLM</strong>: Fine-tuned llama-3.2-1B</li>
+<li><strong>Input &amp; output token length</strong>: ~10–20</li>
+<li><strong>Response type</strong>: Non-streaming</li>
+</ul>
+<table><thead><tr><th>Inference runtime</th><th>Hardware</th><th style="text-align:right">Max requests/sec</th><th style="text-align:right">Max p99 latency</th></tr></thead><tbody><tr><td>TensorRT-LLM</td><td>4 × L4 GPUs (multi-GPU)</td><td style="text-align:right">1000</td><td style="text-align:right">95 ms</td></tr><tr><td>TensorRT-LLM</td><td>1 × A100 40 GB GPU</td><td style="text-align:right">1000</td><td style="text-align:right">69 ms</td></tr></tbody></table>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="voice-bot-query">Voice bot query<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#voice-bot-query" class="hash-link" aria-label="Direct link to Voice bot query" title="Direct link to Voice bot query">​</a></h3>
+<ul>
+<li><strong>LLM</strong>: Llama-3.1-8B</li>
+<li><strong>Input token length</strong>: ~1900–2000</li>
+<li><strong>Output token length</strong>: ~200</li>
+<li><strong>Response type</strong>: Streaming</li>
+</ul>
+<table><thead><tr><th>Inference runtime</th><th style="text-align:right">Concurrency</th><th style="text-align:right">p99 TTFT (ms)</th><th style="text-align:right">p99 ITL (ms)</th><th style="text-align:right">Token throughput (tokens/sec)</th><th style="text-align:right">Request throughput (req/sec)</th><th>Hardware</th></tr></thead><tbody><tr><td>TensorRT-LLM</td><td style="text-align:right">1</td><td style="text-align:right">36.27</td><td style="text-align:right">22.78</td><td style="text-align:right">45.66</td><td style="text-align:right">0.23</td><td>L4</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">2</td><td style="text-align:right">49.81</td><td style="text-align:right">23.21</td><td style="text-align:right">89.37</td><td style="text-align:right">0.45</td><td>L4</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">4</td><td style="text-align:right">55.33</td><td style="text-align:right">36.62</td><td style="text-align:right">153.39</td><td style="text-align:right">0.78</td><td>L4</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">8</td><td style="text-align:right">66.5</td><td style="text-align:right">39.11</td><td style="text-align:right">279.88</td><td style="text-align:right">1.47</td><td>L4</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">16</td><td style="text-align:right">131.8</td><td style="text-align:right">30.39</td><td style="text-align:right">547.8</td><td style="text-align:right">2.77</td><td>L4</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">32</td><td style="text-align:right">277.22</td><td style="text-align:right">48.02</td><td style="text-align:right">925.7</td><td style="text-align:right">4.78</td><td>L4</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">64</td><td style="text-align:right">498.52</td><td style="text-align:right">71.62</td><td style="text-align:right">1,164.40</td><td style="text-align:right">6.2</td><td>L4</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">128</td><td style="text-align:right">677.31</td><td style="text-align:right">120.37</td><td style="text-align:right">1,445.18</td><td style="text-align:right">7.69</td><td>L4</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">256</td><td style="text-align:right">1,926.31</td><td style="text-align:right">216.88</td><td style="text-align:right">1,600.81</td><td style="text-align:right">8.52</td><td>L4</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">1</td><td style="text-align:right">21.17</td><td style="text-align:right">9.24</td><td style="text-align:right">130.05</td><td style="text-align:right">0.68</td><td>A100</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">2</td><td style="text-align:right">25.78</td><td style="text-align:right">9.21</td><td style="text-align:right">264.5</td><td style="text-align:right">1.35</td><td>A100</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">4</td><td style="text-align:right">28.52</td><td style="text-align:right">10.99</td><td style="text-align:right">437.69</td><td style="text-align:right">2.27</td><td>A100</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">8</td><td style="text-align:right">34.4</td><td style="text-align:right">12.61</td><td style="text-align:right">760.49</td><td style="text-align:right">3.96</td><td>A100</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">16</td><td style="text-align:right">68.03</td><td style="text-align:right">14.32</td><td style="text-align:right">1,343.80</td><td style="text-align:right">7.01</td><td>A100</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">32</td><td style="text-align:right">185.96</td><td style="text-align:right">16.82</td><td style="text-align:right">2,287.30</td><td style="text-align:right">11.92</td><td>A100</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">64</td><td style="text-align:right">136.87</td><td style="text-align:right">21.17</td><td style="text-align:right">3,625.22</td><td style="text-align:right">18.89</td><td>A100</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">128</td><td style="text-align:right">463.78</td><td style="text-align:right">34.15</td><td style="text-align:right">4,456.51</td><td style="text-align:right">23.24</td><td>A100</td></tr><tr><td>TensorRT-LLM</td><td style="text-align:right">256</td><td style="text-align:right">890.12</td><td style="text-align:right">59.18</td><td style="text-align:right">5,188.24</td><td style="text-align:right">27.05</td><td>A100</td></tr></tbody></table>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="conclusion">Conclusion<a href="https://meesho.github.io/BharatMLStack/blog/llm-inference-optimization-sub-sec-latency#conclusion" class="hash-link" aria-label="Direct link to Conclusion" title="Direct link to Conclusion">​</a></h2>
+<p>High-performance LLM inference is fundamentally a systems engineering problem: memory efficiency, kernel execution, batching strategy, and parallelism determine real-world latency and throughput. Techniques such as paged KV caching, aggressive quantization, kernel fusion, and inflight batching improve GPU utilization while reducing latency and memory pressure.</p>
+<p>These optimizations enable the platform to deliver sub-second responses, sustain high concurrency, and efficiently serve both lightweight and long-context workloads. By continuously optimizing across the full inference stack, we keep LLM serving scalable, cost-efficient, and production-ready for real-time AI applications.</p>]]></content>
+        <author>
+            <name>Jaya Kumar</name>
+            <uri>https://github.com/jayakommuru</uri>
+        </author>
+        <category label="llm" term="llm"/>
+        <category label="vllm" term="vllm"/>
+        <category label="tensorrt-llm" term="tensorrt-llm"/>
+        <category label="mlplatform" term="mlplatform"/>
+        <category label="meesho" term="meesho"/>
+        <category label="bharatmlstack" term="bharatmlstack"/>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Designing a Production-Grade LLM Inference Platform: From Model Weights to Scalable GPU Serving]]></title>
+        <id>https://meesho.github.io/BharatMLStack/blog/multi-engine-llm-inferencing-platform</id>
+        <link href="https://meesho.github.io/BharatMLStack/blog/multi-engine-llm-inferencing-platform"/>
+        <updated>2025-03-29T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[A deep dive into building a production-grade LLM inference platform—covering the full LLMOps lifecycle from model onboarding and automated compilation to multi-engine serving with TensorRT-LLM, vLLM, and Dynamo, along with cold-start mitigation and LLM-specific observability.]]></summary>
+        <content type="html"><![CDATA[<p><img decoding="async" loading="lazy" alt="BharatMLStack" src="https://meesho.github.io/BharatMLStack/assets/images/bms-7399e8796d2cd24617c432518ce3f312.png" width="1396" height="460" class="img_ev3q">
+Serving large language models in production introduces new challenges across infrastructure, performance optimization, and operational lifecycle management. The LLM Inference Platform addresses these challenges by providing a unified system for deploying and managing open-source and fine-tuned LLMs at scale.</p>
+<p>The platform implements a complete LLMOps lifecycle — from model registration and automated compilation to deployment, runtime optimization, and monitoring. Designed as a self-service environment, users can onboard models directly from open repositories such as Hugging Face or upload custom fine-tuned models, and deploy them using a single-click workflow with no manual infrastructure or configuration steps required.</p>
+<p>In addition to fully automated deployment, the platform allows users to select and apply custom inference optimization techniques — such as quantization strategies, batching configurations, and runtime-specific performance enhancements — enabling teams to balance latency, throughput, and cost based on their use case. The goal is to reduce operational friction while enabling high-performance, production-grade LLM inference.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="why-llm-inference-is-not-just-bigger-ml-model-serving">Why LLM Inference Is not just bigger ML model serving<a href="https://meesho.github.io/BharatMLStack/blog/multi-engine-llm-inferencing-platform#why-llm-inference-is-not-just-bigger-ml-model-serving" class="hash-link" aria-label="Direct link to Why LLM Inference Is not just bigger ML model serving" title="Direct link to Why LLM Inference Is not just bigger ML model serving">​</a></h2>
+<p>Large language model (LLM) inference introduces a fundamentally different set of challenges compared to traditional machine learning inference. While classical ML models typically perform a single forward pass to produce a fixed prediction, LLMs operate as autoregressive systems, generating outputs token by token based on previously generated context. This difference dramatically changes how inference systems must be designed, optimized, and scaled.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="autoregressive-generation-and-sequential-computation">Autoregressive Generation and Sequential Computation:<a href="https://meesho.github.io/BharatMLStack/blog/multi-engine-llm-inferencing-platform#autoregressive-generation-and-sequential-computation" class="hash-link" aria-label="Direct link to Autoregressive Generation and Sequential Computation:" title="Direct link to Autoregressive Generation and Sequential Computation:">​</a></h3>
+<p>Unlike traditional models such as classifiers or recommenders — where inference cost is relatively constant — LLMs generate responses incrementally. Each new token depends on all previously generated tokens, making inference inherently sequential and dynamic. This means latency and compute requirements vary significantly depending on prompt length and output size, introducing complexity in scheduling and resource allocation.
+Because tokens cannot be generated fully in parallel during decoding, GPUs may become underutilized without specialized batching and scheduling strategies. This has led to the development of dedicated LLM inference engines optimized for token-level execution.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="prefill-and-decode-phases">Prefill and Decode Phases:<a href="https://meesho.github.io/BharatMLStack/blog/multi-engine-llm-inferencing-platform#prefill-and-decode-phases" class="hash-link" aria-label="Direct link to Prefill and Decode Phases:" title="Direct link to Prefill and Decode Phases:">​</a></h3>
+<p>LLM inference typically consists of two distinct stages:</p>
+<ul>
+<li>Prefill phase — the model processes the input prompt and builds internal representations. This stage is compute-heavy and highly parallelizable.</li>
+<li>Decode phase — the model generates tokens sequentially, predicting one token at a time using previously generated context.</li>
+</ul>
+<p>The decode stage often becomes memory-bound rather than compute-bound, which creates new performance bottlenecks compared to traditional ML workloads.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="context-management-and-kv-caching">Context Management and KV Caching:<a href="https://meesho.github.io/BharatMLStack/blog/multi-engine-llm-inferencing-platform#context-management-and-kv-caching" class="hash-link" aria-label="Direct link to Context Management and KV Caching:" title="Direct link to Context Management and KV Caching:">​</a></h3>
+<p>Another fundamental difference lies in how LLMs maintain context. Transformer-based models rely on attention mechanisms that require access to past token representations. To avoid recomputing these representations repeatedly, inference engines use key-value (KV) caching, which stores intermediate activations from previous tokens.
+KV caching significantly improves performance by eliminating redundant computation, but it introduces new challenges:</p>
+<ul>
+<li>Memory consumption grows with sequence length and batch size</li>
+<li>GPU memory becomes a critical bottleneck</li>
+<li>Efficient memory management becomes essential for scaling concurrent requests</li>
+</ul>
+<p>This tradeoff between compute efficiency and memory usage is unique to LLM inference workloads.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="dynamic-and-irregular-workloads">Dynamic and Irregular Workloads:<a href="https://meesho.github.io/BharatMLStack/blog/multi-engine-llm-inferencing-platform#dynamic-and-irregular-workloads" class="hash-link" aria-label="Direct link to Dynamic and Irregular Workloads:" title="Direct link to Dynamic and Irregular Workloads:">​</a></h3>
+<p>Traditional ML inference typically operates on fixed-size inputs with predictable latency. In contrast, LLM requests vary widely in prompt length, output length, and runtime behavior. As a result:</p>
+<ul>
+<li>Batch sizes must be dynamic rather than static</li>
+<li>Requests may enter and leave batches asynchronously</li>
+<li>Scheduling systems must continuously rebalance workloads to maximize GPU utilization</li>
+</ul>
+<p>These characteristics require specialized serving architectures that differ significantly from standard ML serving pipelines.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="streaming-and-user-experience-constraints">Streaming and User Experience Constraints:<a href="https://meesho.github.io/BharatMLStack/blog/multi-engine-llm-inferencing-platform#streaming-and-user-experience-constraints" class="hash-link" aria-label="Direct link to Streaming and User Experience Constraints:" title="Direct link to Streaming and User Experience Constraints:">​</a></h3>
+<p>Another distinguishing factor is the expectation of real-time streaming responses. Instead of returning a single output, LLM systems often stream tokens to users as they are generated.
+Because of these differences — sequential generation, growing memory requirements, dynamic workloads, and streaming constraints — LLM inference cannot be treated as a simple extension of existing ML serving systems. Production platforms must incorporate specialized runtime engines, advanced optimization techniques, and observability tailored specifically to LLM workloads.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="llmops-high-level-architecture">LLMOps: High-Level Architecture<a href="https://meesho.github.io/BharatMLStack/blog/multi-engine-llm-inferencing-platform#llmops-high-level-architecture" class="hash-link" aria-label="Direct link to LLMOps: High-Level Architecture" title="Direct link to LLMOps: High-Level Architecture">​</a></h2>
+<p><img decoding="async" loading="lazy" alt="LLM Architecture" src="https://meesho.github.io/BharatMLStack/assets/images/llm-plat-9ac69c0ffd8c387d177e582611b8c775.png" width="1302" height="830" class="img_ev3q"></p>
+<p>The LLM Inference Framework is designed as a fully automated, end-to-end system for deploying and operating open-source and fine-tuned large language models at scale. The architecture abstracts the complexity of model optimization, hardware selection, deployment, and runtime management into a unified workflow that enables users to move from raw model weights to production-ready inference endpoints with minimal manual intervention.</p>
+<p>Our LLM Inference Framework is architected not just as a serving engine, but as a complete lifecycle management system. As illustrated in the high-level design below, the platform automates the journey of a model through seven distinct stages, ensuring reproducibility, performance, and scalability.</p>
+<ol>
+<li>
+<p>Onboarding &amp; Registration (The Source of Truth)</p>
+<p>The lifecycle begins with the Data Scientist or engineer.</p>
+<ul>
+<li>Model Ingestion: Users onboard models—whether open-source (Hugging Face, NeMo) or internally fine-tuned—via the Truffle Box SDK/UI.</li>
+<li>LLM + Prompt Registry: Unlike traditional systems that only track model weights, our registry is a unified control plane. It stores both the Model Artifacts and the Prompt Templates. This allows Data Scientists to register and version-control prompts (e.g., "customer_support_v2") independently of the application code.</li>
+</ul>
+</li>
+<li>
+<p>The "Black Box" Build Engine</p>
+<p>Once a model is registered, the Automated LLM Compiler + Quantizer Module kicks off a background job on ephemeral GPU resources.</p>
+<ul>
+<li>Transformation: The raw model is converted into a TRT-LLM Checkpoint.</li>
+<li>Quantization: The system automatically applies quantization algorithms (like INT4 AWQ or FP8) to reduce memory footprint.</li>
+<li>Engine Building: Finally, it compiles a highly optimized TRT Engine specifically tuned for the target hardware.</li>
+</ul>
+</li>
+<li>
+<p>Intelligent Profiling &amp; Validation</p>
+<p>Before deployment, the new engine passes through the Hardware &amp; Inference Runtime Profiler.</p>
+<ul>
+<li>Benchmarking: This module empirically tests the engine against various hardware configurations (L4 vs. A100) and runtimes (TRT-LLM vs. vLLM).</li>
+<li>Optimization: It recommends the optimal configuration that meets latency SLAs (Time-To-First-Token) while minimizing cost.</li>
+</ul>
+</li>
+<li>
+<p>Smart Artifact Generation &amp; Distribution</p>
+<p>To solve the Kubernetes "Cold Start" problem, the LLM Serving Artifacts Generation module packages the model using a bifurcated strategy:</p>
+<ul>
+<li>Standard Models: Artifacts are uploaded to Cloud Storage (GCS) and downloaded by pods at startup.</li>
+<li>Very Large Models: For massive models (&gt;8GB) where network downloads are too slow, the system pre-caches the model onto Secondary Boot Disks. These disks are attached directly to new GPU nodes during autoscaling, eliminating download wait times.</li>
+</ul>
+</li>
+<li>
+<p>Image Streaming &amp; Deployment</p>
+<p>Simultaneously, the inference runtime container images are pulled from the Artifact Registry.</p>
+<ul>
+<li>Image Streaming: We utilize container image streaming to allow pods to start initializing while the massive Triton/Dynamo container layers are still downloading, further shaving seconds off the startup time. link</li>
+</ul>
+</li>
+<li>
+<p>The Inference Runtime (Kubernetes)</p>
+<p>The workload lands on Kubernetes with Autoscaling.</p>
+<ul>
+<li>Dynamic Backends: Depending on the profile generated in Stage 3, the pod initializes either TensorRT-LLM (for throughput) or vLLM (for flexibility), or spins up a Dynamo worker for distributed inference.</li>
+<li>Data Loading: The pod either downloads the model from Cloud Storage or mounts the pre-warmed Secondary Boot Disk ("Pull from Disk").</li>
+</ul>
+</li>
+<li>
+<p>Client Interaction &amp; Observability</p>
+<p>Finally, the LLM Inference Client executes the request.</p>
+<ul>
+<li>Prompt Injection: The client pulls the specific prompt template ID from the Registry, ensuring the exact versioned instructions are used.</li>
+<li>Streaming Response: The request is sent via gRPC, and tokens are streamed back to the user in real-time.</li>
+</ul>
+</li>
+<li>
+<p>Observability: Monitoring the Pulse of GenAI</p>
+<p>In traditional microservices, success is measured by CPU utilization and request latency (p99). For Large Language Models, these metrics are insufficient. A user doesn't care if the GPU is at 80% utilization; they care about how fast the first word appears and how smoothly the rest of the sentence follows.</p>
+<p>To capture the true user experience, our platform instrumentation focuses on three critical LLM-specific metrics:</p>
+<ol>
+<li>
+<p>Time to First Token (TTFT)</p>
+<ul>
+<li>Definition: TTFT measures the time elapsed from the moment a request is received until the very first token is generated and streamed back to the user.</li>
+<li>Why it matters: This represents the "Prefill Phase" latency—the time the model takes to process the input prompt and load weights. A high TTFT makes the application feel unresponsive or "hung."</li>
+<li>Optimization: We closely monitor TTFT to ensure our Prefix Caching is effective (aiming for high cache hitrates), which drastically lowers this metric by skipping redundant prompt processing.</li>
+</ul>
+</li>
+<li>
+<p>Inter-Token Latency (ITL)</p>
+<ul>
+<li>Definition: ITL measures the average time interval between the generation of consecutive tokens during the "Decode Phase".</li>
+<li>Why it matters: This defines the "perceived speed" of reading. Even if the first token is fast (low TTFT), high ITL makes the text generation look "jerky" or slow to the user.</li>
+<li>Benchmarks: In our testing with Llama 3.1, we track p99 ITL to ensure it stays below human reading speeds to maintain a natural conversational flow.</li>
+</ul>
+</li>
+<li>
+<p>Token Throughput vs. Request Throughput</p>
+<ul>
+<li>We distinguish between two types of throughput to balance system efficiency with user load:</li>
+<li>Token Throughput (tokens/sec): The total number of tokens generated across all concurrent requests. This measures the raw compute efficiency of the GPU and the effectiveness of batching.</li>
+<li>Request Throughput (req/sec): The number of distinct user queries served per second. We use this to determine autoscaling thresholds, ensuring we scale out before the queue depth impacts ITL.</li>
+</ul>
+</li>
+<li>
+<p>The Monitoring Stack</p>
+<ul>
+<li>Real-time Dashboards: We utilize Grafana to visualize these streaming metrics in real-time, allowing on-call engineers to spot "slow generation" incidents that generic "500 error" alerts would miss.</li>
+<li>Request Tracing: Since Triton Inference Server does not log request payloads by default, we integrate a Helix Client to asynchronously publish request logs to Log Tables. This allows us to trace a specific "slow" request back to its prompt to understand if a complex input caused the latency spike.</li>
+</ul>
+</li>
+</ol>
+</li>
+</ol>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="supported-inference-backends-tensorrt-llm--dynamo--vllm">Supported Inference backends (TensorRT LLM,  Dynamo &amp; vLLM)<a href="https://meesho.github.io/BharatMLStack/blog/multi-engine-llm-inferencing-platform#supported-inference-backends-tensorrt-llm--dynamo--vllm" class="hash-link" aria-label="Direct link to Supported Inference backends (TensorRT LLM,  Dynamo &amp; vLLM)" title="Direct link to Supported Inference backends (TensorRT LLM,  Dynamo &amp; vLLM)">​</a></h2>
+<p>Tailored for the Use Case: We do not believe in a "one-size-fits-all" approach to inference. Different use cases—whether a real-time voice bot requiring ultra-lowsub-second latency or a massive reasoning task requiring huge context windows—demand different runtime characteristics. Our platform is designed to be runtime-agnostic, allowing us to automatically select and tailor the best engine based on the specific requirements of the application:</p>
+<ol>
+<li>
+<p>TensorRT-LLM: The High-Performance Standard</p>
+<p>Suitable for: High-throughput production workloads where latency is critical (e.g., customer support chat, real-time voice bots).</p>
+<p>TensorRT-LLM serves as our default backend for these scenarios. Our internal benchmarks on Llama 3.1 and 3.2 models demonstrated that a tuned TensorRT-LLM engine significantly outperforms standard runtimes, especially when utilizing INT4 AWQ and FP8 quantization .</p>
+<p>Key optimizations we tailor for these high-load cases include:</p>
+<ul>
+<li>Optimized execution via TensorRT engine compilation</li>
+<li>Quantization-aware execution for reduced memory usage and improved throughput</li>
+<li>Inflight Batching: Allowing requests to be processed continuously without waiting for the entire batch to finish, drastically improving GPU utilization .</li>
+<li>Custom Plugins: Enabling specific NVIDIA plugins like the GEMM plugin and GPT Attention plugin to accelerate matrix multiplications and attention mechanisms .</li>
+</ul>
+</li>
+<li>
+<p>Dynamo: Distributed Inference for Reasoning Models</p>
+<p>Suitable for: Very large "reasoning" models (70B+) or scenarios requiring massive context windows where a single GPU's memory is insufficient.</p>
+<p>For these memory-bound tasks, we utilize Dynamo, a low-latency distributed inference framework . Unlike monolithic servers, Dynamo disaggregates the inference process to scale resources horizontally:</p>
+<ul>
+<li>KV Aware Routing: A specialized router directs requests to workers that already hold the relevant Key-Value (KV) cache, minimizing redundant computation .</li>
+<li>Prefill vs. Decode Split: The workload is divided into Prefill Workers (processing the prompt) and Decode Workers (generating tokens), allowing us to scale the compute-heavy "reading" phase independently from the memory-heavy "writing" phase .</li>
+<li>Distributed execution across multiple GPU resources</li>
+</ul>
+</li>
+<li>
+<p>vLLM: The Flexible Baseline</p>
+<p>Suitable for: Rapid prototyping, testing new model architectures, or low-traffic internal tools where ease of deployment outweighs raw throughput.</p>
+<p>While TensorRT-LLM is optimized for maximum speed, vLLM provides a robust and flexible baseline .</p>
+<ul>
+<li>High throughput through dynamic batching and efficient memory utilization</li>
+<li>Paged KV cache management for handling long contexts and concurrent requests</li>
+<li>Strong support for open-source model ecosystems</li>
+<li>Rapid Adoption: It allows us to onboard new model architectures immediately without waiting for a custom TensorRT build.</li>
+<li>Benchmarking Insight: In our internal tests, vLLM provided a strong baseline but often lacked the specific max-token optimizations present in our custom TRT engines . We use it strategically for initial testing before committing to a full TensorRT optimization pipeline.</li>
+</ul>
+</li>
+</ol>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="conclusion">Conclusion<a href="https://meesho.github.io/BharatMLStack/blog/multi-engine-llm-inferencing-platform#conclusion" class="hash-link" aria-label="Direct link to Conclusion" title="Direct link to Conclusion">​</a></h2>
+<p>Large language model inference introduces a fundamentally new class of infrastructure challenges—where performance is governed not just by raw compute, but by memory efficiency, intelligent scheduling, runtime specialization, and lifecycle automation. Unlike traditional ML serving, LLM inference requires systems that understand token-level execution, manage rapidly growing context state, and continuously balance latency, throughput, and cost under highly dynamic workloads.</p>
+<p>The LLM Inference Framework addresses these challenges by transforming inference into a fully automated, reproducible lifecycle—from model onboarding and compilation to deployment, optimization, and observability. By integrating automated quantization and engine compilation, intelligent runtime selection, cold-start mitigation strategies, and LLM-specific observability metrics such as Time-to-First-Token and Inter-Token Latency, the platform ensures both high performance and operational simplicity.</p>
+<p>Equally important, the framework is designed with flexibility and future evolution in mind. Its runtime-agnostic architecture enables seamless adoption of emerging inference engines, hardware accelerators, and optimization techniques without requiring platform redesign. This ensures that teams can continuously leverage advancements in the rapidly evolving LLM ecosystem while maintaining consistent operational workflows.</p>
+<p>Ultimately, the goal of the platform is to make production-scale LLM deployment as seamless and reliable as traditional software deployment—allowing teams to focus on building intelligent applications rather than managing infrastructure complexity. By combining lifecycle automation, runtime optimization, and deep observability, the LLM Inference Framework provides a scalable foundation for delivering fast, cost-efficient, and production-ready LLM experiences.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="future-explorations">Future Explorations<a href="https://meesho.github.io/BharatMLStack/blog/multi-engine-llm-inferencing-platform#future-explorations" class="hash-link" aria-label="Direct link to Future Explorations" title="Direct link to Future Explorations">​</a></h2>
+<p>While we have achieved significant milestones in latency and throughput, the landscape of GenAI is evolving rapidly. Our roadmap focuses on increasing flexibility, reducing costs, and enhancing reliability for enterprise-grade workloads. Here is what we are building next:</p>
+<ul>
+<li>TPU Support: To diversify our hardware supply chain and further optimize cost-per-token, we are evaluating Google Cloud TPUs to bake it into our platform. By leveraging the JAX and PyTorch/XLA ecosystems, we aim to unlock the massive throughput potential of TPU v5e chips, particularly for our open-source Llama models. This will allow the hardware profiler to dynamically choose between NVIDIA GPUs and Google TPUs based on real-time availability and price-performance metrics.</li>
+<li>Multi-LoRA Serving (Serverless Experience): Currently, deploying a fine-tuned model requires a dedicated GPU. We are building support for Multi-LoRA serving, which will allow us to serve hundreds of unique, fine-tuned adapters on top of a single frozen base model. This will drastically reduce costs for multi-tenant applications, enabling a "serverless" experience where specific fine-tunes are hot-swapped instantly per request.</li>
+<li>Spot Instance Orchestration: To further optimize cloud costs, we are developing fault-tolerant mechanisms to run inference workloads on Spot Instances. By implementing aggressive checkpointing and seamless request draining, we aim to leverage cheaper, preemptible compute capacity without interrupting the user's streaming experience.</li>
+<li>Semantic Caching Layer: We plan to move beyond standard Prefix Caching to implement Semantic Caching. By using a vector database to fetch responses for semantically similar queries (e.g., "How do I reset my password?" vs. "Password reset steps"), we can bypass the GPU entirely for repetitive queries, reducing latency to near-zero.</li>
+<li>Context-Aware Autoscaling: Standard CPU/GPU utilization metrics are often insufficient signals for scaling LLMs. We are working on KV-cache pressure metrics for autoscaling. This ensures that we scale out before the memory fills up, preventing eviction-based slowdowns during traffic spikes.</li>
+<li>Online Evaluation &amp; Guardrails: We are integrating a lightweight "Trust Layer" into the proxy. This will allow for low-latency input/output filtering (Guardrails) and asynchronous "LLM-as-a-Judge" evaluation pipelines to monitor response quality in production, not just system health.</li>
+</ul>]]></content>
+        <author>
+            <name>Jaya Kumar</name>
+            <uri>https://github.com/jayakommuru</uri>
+        </author>
+        <category label="llm" term="llm"/>
+        <category label="vllm" term="vllm"/>
+        <category label="tensorrt-llm" term="tensorrt-llm"/>
+        <category label="mlplatform" term="mlplatform"/>
+        <category label="meesho" term="meesho"/>
+        <category label="bharatmlstack" term="bharatmlstack"/>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Cracking the Code: Scaling Model Inference & Real-Time Embedding Search]]></title>
+        <id>https://meesho.github.io/BharatMLStack/blog/scaling-model-inference-and-embedding-search</id>
+        <link href="https://meesho.github.io/BharatMLStack/blog/scaling-model-inference-and-embedding-search"/>
+        <updated>2024-05-21T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[How Meesho scaled model inference with self-hosted Triton on GKE—slashing latency and costs by 65%—and built a real-time embedding search system on Qdrant to power personalized recommendations at scale.]]></summary>
+        <content type="html"><![CDATA[<p><img decoding="async" loading="lazy" alt="BharatMLStack" src="https://meesho.github.io/BharatMLStack/assets/images/bms-7399e8796d2cd24617c432518ce3f312.png" width="1396" height="460" class="img_ev3q">
+By mid-2023, we had transformed our ML stack—building a real-time feature store, optimizing model retrieval, and fine-tuning ranking. But two critical gaps remained:</p>
+<ul>
+<li>🔹 Scaling model inference without hitting infrastructure roadblocks</li>
+<li>🔹 Moving embedding search from batch to real-time for candidate generation</li>
+</ul>
+<p>Here’s how we tackled these last-mile challenges, broke free from infrastructure constraints, and built a cost-efficient, high-performance system.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="breaking-free-from-the-scalability-ceiling">Breaking Free from the Scalability Ceiling<a href="https://meesho.github.io/BharatMLStack/blog/scaling-model-inference-and-embedding-search#breaking-free-from-the-scalability-ceiling" class="hash-link" aria-label="Direct link to Breaking Free from the Scalability Ceiling" title="Direct link to Breaking Free from the Scalability Ceiling">​</a></h2>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="the-model-serving-bottlenecka-wake-up-call">The Model Serving Bottleneck—A Wake-Up Call<a href="https://meesho.github.io/BharatMLStack/blog/scaling-model-inference-and-embedding-search#the-model-serving-bottlenecka-wake-up-call" class="hash-link" aria-label="Direct link to The Model Serving Bottleneck—A Wake-Up Call" title="Direct link to The Model Serving Bottleneck—A Wake-Up Call">​</a></h3>
+<p>July 2023. With just months left for the Mega Blockbuster Sale (MBS), we noticed a serious issue—scaling our model-serving infrastructure was taking 10–15 minutes. In real-time ML, that’s an eternity.
+In one of our war rooms, we ran a quick experiment:</p>
+<ul>
+<li>🚀 We deployed an XGBoost model on a self-hosted Triton Inference Server running on a 16-core machine.</li>
+<li>🚀 Fired requests and compared the outputs with our existing cloud-hosted setup.</li>
+<li>🚀 The results matched—perfectly.</li>
+</ul>
+<p>That moment changed everything. We prepped a backup Triton setup on EKS, just in case our cloud provider couldn't allocate enough compute resources in time. Luckily, they did—but the seed was planted.
+Then in October, just two weeks before MBS, we got an alarming response from our infrastructure team:
+"Node availability may be an issue."
+With no time to waste, we moved 30% of real-time ML traffic to our self-hosted Triton cluster. The results?</p>
+<ul>
+<li>✅ p99 latency dropped from 90–100ms to 30–40ms</li>
+<li>✅ Triton handled significantly higher throughput on fewer resources</li>
+<li>✅ No model changes were needed</li>
+</ul>
+<p>MBS ran without a hitch, proving that self-hosted inference was the way forward.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="scaling-triton-on-gke">Scaling Triton on GKE<a href="https://meesho.github.io/BharatMLStack/blog/scaling-model-inference-and-embedding-search#scaling-triton-on-gke" class="hash-link" aria-label="Direct link to Scaling Triton on GKE" title="Direct link to Scaling Triton on GKE">​</a></h3>
+<p>This left us with two choices:</p>
+<ul>
+<li>1️⃣ Port models to a managed cloud inference service, investing time in learning a new deployment stack</li>
+<li>2️⃣ Scale our existing Triton setup on GKE, optimizing for cost and performance</li>
+</ul>
+<p>We went with Option 2—and it slashed inference costs to 35% of what we previously paid, while giving us full control over scaling and optimizations.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="fixing-the-cold-start-problem">Fixing the Cold Start Problem<a href="https://meesho.github.io/BharatMLStack/blog/scaling-model-inference-and-embedding-search#fixing-the-cold-start-problem" class="hash-link" aria-label="Direct link to Fixing the Cold Start Problem" title="Direct link to Fixing the Cold Start Problem">​</a></h3>
+<p>As we onboarded more deep learning (DL) models, we hit a new bottleneck, new inference pods took 7–9 minutes to spin up.</p>
+<p>After profiling, we found the culprits:</p>
+<ul>
+<li>Triton’s base image—a massive 5GB</li>
+<li>Model binaries—often 1GB+</li>
+<li>Startup delay—mostly due to downloading and initializing these assets</li>
+</ul>
+<p>To fix this, we built a lightweight Triton image, stripping unused components and shrinking the size to 900MB. This cut cold start times drastically, making auto-scaling faster and smoother.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="embedding-search-the-last-piece-of-the-puzzle">Embedding Search: The Last Piece of the Puzzle<a href="https://meesho.github.io/BharatMLStack/blog/scaling-model-inference-and-embedding-search#embedding-search-the-last-piece-of-the-puzzle" class="hash-link" aria-label="Direct link to Embedding Search: The Last Piece of the Puzzle" title="Direct link to Embedding Search: The Last Piece of the Puzzle">​</a></h2>
+<p>By mid-2023, most of our ML stack had gone real-time—except for Candidate Generation (CG), which still ran in batch mode. To truly power real-time recommendations, we needed an online embedding search system.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="choosing-the-right-vector-database">Choosing the Right Vector Database<a href="https://meesho.github.io/BharatMLStack/blog/scaling-model-inference-and-embedding-search#choosing-the-right-vector-database" class="hash-link" aria-label="Direct link to Choosing the Right Vector Database" title="Direct link to Choosing the Right Vector Database">​</a></h3>
+<p>We benchmarked three production-ready vector DBs across key parameters:</p>
+<ul>
+<li>Milvus</li>
+<li>Qdrant</li>
+<li>Weaviate</li>
+</ul>
+<p>After extensive POCs, Qdrant stood out for its:</p>
+<ul>
+<li>✅ Blazing-fast search latency on high-dimensional vectors</li>
+<li>✅ Efficient memory usage, crucial for in-memory workloads</li>
+<li>✅ Support for upserts and soft deletes, vital for Ads use cases</li>
+<li>✅ gRPC + REST APIs, making integration seamless</li>
+<li>✅ Powerful filtering, allowing fine-tuned retrieval (e.g., filtering Ads by category, active status, etc.)</li>
+</ul>
+<p>At its core, Qdrant uses HNSW indexing, delivering both high recall and low-latency nearest-neighbor search—a perfect fit for our needs.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="embedding-freshness--real-time-updates">Embedding Freshness &amp; Real-Time Updates<a href="https://meesho.github.io/BharatMLStack/blog/scaling-model-inference-and-embedding-search#embedding-freshness--real-time-updates" class="hash-link" aria-label="Direct link to Embedding Freshness &amp; Real-Time Updates" title="Direct link to Embedding Freshness &amp; Real-Time Updates">​</a></h3>
+<p>To ensure embeddings stayed up to date, we built a dual ingestion pipeline:</p>
+<ul>
+<li>📌 Daily Refresh: A bulk pipeline updated embeddings overnight</li>
+<li>📌 Real-Time Updates: Ads events triggered immediate upserts/deletes</li>
+</ul>
+<p>This setup powered real-time "Similar Products" recommendations on the product page and became the foundation for Ads Candidate Generation, ensuring the right ads surfaced in milliseconds.</p>
+<p><img decoding="async" loading="lazy" alt="Skye" src="https://meesho.github.io/BharatMLStack/assets/images/vss-c482f6eac4c68b3219e4c562a6b717ec.png" width="1260" height="644" class="img_ev3q"></p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="final-takeaways-scaling-smartly-for-real-time-ml">Final Takeaways: Scaling Smartly for Real-Time ML<a href="https://meesho.github.io/BharatMLStack/blog/scaling-model-inference-and-embedding-search#final-takeaways-scaling-smartly-for-real-time-ml" class="hash-link" aria-label="Direct link to Final Takeaways: Scaling Smartly for Real-Time ML" title="Direct link to Final Takeaways: Scaling Smartly for Real-Time ML">​</a></h2>
+<ul>
+<li>🚀 Self-hosted inference on Triton gave us lower cost, faster scaling, and better performance than managed services</li>
+<li>🚀 Building a custom Triton image reduced cold starts, improving responsiveness</li>
+<li>🚀 Qdrant-based embedding search enabled real-time personalization at scale</li>
+<li>🚀 Real-time updates for embeddings unlocked dynamic, up-to-date recommendations</li>
+</ul>
+<p>By early 2024, Meesho’s ML stack had evolved into a fully real-time, scalable, and cost-efficient system, setting the foundation for even bigger leaps ahead.</p>]]></content>
+        <author>
+            <name>Aditya Kumar</name>
+            <uri>https://github.com/Adit2607</uri>
+        </author>
+        <author>
+            <name>Jaya Kumar</name>
+            <uri>https://github.com/jayakommuru</uri>
+        </author>
+        <author>
+            <name>Adarsha Das</name>
+            <uri>https://github.com/a0d00kc</uri>
+        </author>
+        <category label="model-inference" term="model-inference"/>
+        <category label="embedding-search" term="embedding-search"/>
+        <category label="mlplatform" term="mlplatform"/>
+        <category label="meesho" term="meesho"/>
+        <category label="bharatmlstack" term="bharatmlstack"/>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Building Meesho’s ML Platform: Lessons from the First-Gen System (Part 2)]]></title>
+        <id>https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform-lessons-from-first-gen</id>
+        <link href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform-lessons-from-first-gen"/>
+        <updated>2023-04-10T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[Lessons from scaling Meesho's first-gen ML platform—building Inferflow for no-code feature retrieval, migrating from Cassandra to ScyllaDB, optimizing the Interaction Store with tiered storage, and cutting infra costs by 60% while hitting 1M QPS.]]></summary>
+        <content type="html"><![CDATA[<p><img decoding="async" loading="lazy" alt="BharatMLStack" src="https://meesho.github.io/BharatMLStack/assets/images/bms-7399e8796d2cd24617c432518ce3f312.png" width="1396" height="460" class="img_ev3q">
+By late 2022, we had built something we were truly proud of—a real-time ML serving system with a DAG-based executor, a feature store, and an interaction store powering key ranking and personalization models. It was a major milestone, the culmination of months of effort from data scientists, ML engineers, and backend teams. Our system was live, and we were ready to push the boundaries of experimentation.
+And it worked. Mostly.
+But soon, cracks appeared. Every new model needed custom feature retrieval logic, DAGs became dense and unmanageable, and scaling turned into a constant firefight. Costs surged, and infra bottlenecks slowed experimentation. Our system worked, but it wasn’t built for scale.
+This is the story of how we tackled these challenges—building Inferflow for seamless feature retrieval, optimizing real-time infra, and cutting costs while scaling to millions of QPS.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="the-cost-of-success">The Cost of Success<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform-lessons-from-first-gen#the-cost-of-success" class="hash-link" aria-label="Direct link to The Cost of Success" title="Direct link to The Cost of Success">​</a></h3>
+<p>Every new Ranker model required its own feature set, often pulling from different entities. Each addition meant:</p>
+<ul>
+<li>Adding new DAG nodes in IOP</li>
+<li>Writing custom logic to fetch features from multiple sources (e.g., user, product, user × category)</li>
+<li>Inferring intermediate features (e.g., extracting category from a product to fetch user × category data)</li>
+<li>Optimizing I/O and dealing with the inevitable bugs</li>
+</ul>
+<p>What began as clean DAGs soon turned into a tangled web of cross-dependent graphs. Every experimentation cycle meant new nodes, new dependencies, and slower iterations.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="scaling-pains-and-cassandras-limits">Scaling Pains (and Cassandra’s Limits)<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform-lessons-from-first-gen#scaling-pains-and-cassandras-limits" class="hash-link" aria-label="Direct link to Scaling Pains (and Cassandra’s Limits)" title="Direct link to Scaling Pains (and Cassandra’s Limits)">​</a></h3>
+<p>At some point, we were hitting:</p>
+<ul>
+<li>250–300K reads/sec</li>
+<li>1M writes/sec (during lean hours)</li>
+</ul>
+<p>All of this ran on Cassandra. While its distributed architecture had been proven in production, operating large-scale clusters came with considerable infrastructure overhead. Our proof-of-concept (POC) demonstrated throughput of around 100K ops/sec, but as we scaled further, the challenges grew. Ensuring node health, optimizing compaction, and maintaining storage balance became increasingly demanding. We also observed latency spikes under heavy load, alongside a sharp increase in total cost of ownership.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="interaction-store-woes">Interaction Store Woes<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform-lessons-from-first-gen#interaction-store-woes" class="hash-link" aria-label="Direct link to Interaction Store Woes" title="Direct link to Interaction Store Woes">​</a></h3>
+<p>Our interaction store was another ticking time bomb:</p>
+<ul>
+<li>🚨 Clusters kept growing in size and cost</li>
+<li>🚨 Latency spikes became increasingly frequent</li>
+<li>🚨 The DMC proxy occasionally lost locality of nodes against shards, causing cross-node communication and degraded performance</li>
+</ul>
+<p>Each time this happened, we had to manually rebalance shards just to restore stable latency, making operations unsustainable at scale.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="silver-linings">Silver Linings<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform-lessons-from-first-gen#silver-linings" class="hash-link" aria-label="Direct link to Silver Linings" title="Direct link to Silver Linings">​</a></h3>
+<p>Despite the chaos, the system was live and delivering value:</p>
+<ul>
+<li>Real-time infrastructure was in production</li>
+<li>Costs dropped by 60–70% compared to offline personalization</li>
+<li>New experiments rolled out faster and more successfully</li>
+<li>User engagement metrics improved</li>
+</ul>
+<p>It wasn’t perfect. It was far from easy. But it worked—and that counted for a lot.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="round-two-solving-the-top-2-bottlenecks">Round Two: Solving the Top 2 Bottlenecks<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform-lessons-from-first-gen#round-two-solving-the-top-2-bottlenecks" class="hash-link" aria-label="Direct link to Round Two: Solving the Top 2 Bottlenecks" title="Direct link to Round Two: Solving the Top 2 Bottlenecks">​</a></h3>
+<p>With the first-gen system stretched to its limits, we stepped back. Conversations with data scientists and backend engineers revealed three recurring pain points:</p>
+<ol>
+<li>Coding feature retrieval logic for every new model was becoming unsustainable</li>
+<li>ML scale was exploding—bringing rising infra costs with it</li>
+<li>Real-time embedding search was the next big unlock</li>
+</ol>
+<p>We tackled them one by one—starting with the biggest pain point.</p>
+<h4 class="anchor anchorWithStickyNavbar_LWe7" id="problem-1-no-code-feature-retrieval-for-model-inference">Problem 1: No-Code Feature Retrieval for Model Inference<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform-lessons-from-first-gen#problem-1-no-code-feature-retrieval-for-model-inference" class="hash-link" aria-label="Direct link to Problem 1: No-Code Feature Retrieval for Model Inference" title="Direct link to Problem 1: No-Code Feature Retrieval for Model Inference">​</a></h4>
+<p>We noticed a pattern: for personalized ranking, models needed features from:</p>
+<ul>
+<li>✅ Product</li>
+<li>✅ User</li>
+<li>✅ User × Category</li>
+<li>✅ Region, cohort, sub-category, etc.</li>
+</ul>
+<p>A key insight emerged: Entities that contribute features for a model always map back to the context entities.</p>
+<p><img decoding="async" loading="lazy" alt="MP Dag" src="https://meesho.github.io/BharatMLStack/assets/images/mp-dag-976ff51caf25f09d977ccc10e70918f3.png" width="1272" height="512" class="img_ev3q"></p>
+<p>With this, we designed Inferflow, a graph-driven feature retrieval and model orchestration system:</p>
+<ul>
+<li>1️⃣ Inferflow takes a modelId and context IDs (e.g., userId, productIds)</li>
+<li>2️⃣ Loads a pre-defined feature retrieval graph from ZooKeeper</li>
+<li>3️⃣ Executes the graph to resolve entity relationships dynamically</li>
+<li>4️⃣ Outputs a 2D matrix of feature vectors</li>
+</ul>
+<p>💡 The impact?</p>
+<ul>
+<li>🚀 No more custom feature retrieval code—just graph updates in config</li>
+<li>🚀 Feature consistency across experiments</li>
+<li>🚀 Faster iteration cycles for ranking, fraud detection, and beyond</li>
+</ul>
+<p>Here’s a visual example that shows how this graph plays out during execution. We further extended the graph to call multiple models as needed:
+<img decoding="async" loading="lazy" alt="MP matrix" src="https://meesho.github.io/BharatMLStack/assets/images/mp-matrix-43994f433f78905ccbd10cfe284f3c9f.png" width="1262" height="768" class="img_ev3q">
+We built Inferflow in GoLang, using gRPC and Proto3 serialization for efficiency.</p>
+<h4 class="anchor anchorWithStickyNavbar_LWe7" id="problem-2-scaling-without-breaking-the-bank">Problem 2: Scaling Without Breaking the Bank<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform-lessons-from-first-gen#problem-2-scaling-without-breaking-the-bank" class="hash-link" aria-label="Direct link to Problem 2: Scaling Without Breaking the Bank" title="Direct link to Problem 2: Scaling Without Breaking the Bank">​</a></h4>
+<p>With more ML use cases coming online, we needed to cut costs without compromising performance. We focused on:</p>
+<ul>
+<li>🔹 Online Feature Store</li>
+<li>🔹 Interaction Store</li>
+</ul>
+<h4 class="anchor anchorWithStickyNavbar_LWe7" id="optimizing-the-online-feature-store">Optimizing the Online Feature Store<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform-lessons-from-first-gen#optimizing-the-online-feature-store" class="hash-link" aria-label="Direct link to Optimizing the Online Feature Store" title="Direct link to Optimizing the Online Feature Store">​</a></h4>
+<p>Our costs were concentrated in:</p>
+<ul>
+<li>📌 Database (Cassandra)</li>
+<li>📌 Cache (Redis)</li>
+<li>📌 Running Pods (Java services)</li>
+</ul>
+<p>1️⃣ Replacing Cassandra with ScyllaDB
+As we hit the operational limits of large Cassandra clusters, we transitioned to ScyllaDB, which offered a seamless drop-in replacement without major code changes. The switch brought significant benefits:</p>
+<ul>
+<li>Throughput: Matched or exceeded Cassandra's performance under identical workloads, even under high concurrency.</li>
+<li>Latency: Achieved consistently lower P99 latencies due to ScyllaDB's shard-per-core architecture and better I/O utilization.</li>
+<li>Cost Efficiency: Reduced infra footprint by ~70% through better CPU and memory efficiency, eliminating the need for over-provisioned nodes.</li>
+</ul>
+<p>2️⃣ Finding the Right Cache
+To reduce backend load and improve response times, we benchmarked multiple caching solutions—Memcached, KeyDB, and Dragonfly—under real production traffic patterns. Dragonfly stood out due to its robust architecture and operational simplicity:</p>
+<ul>
+<li>Data Skew Handling: Efficiently managed extreme key hotness and uneven access patterns without performance degradation.</li>
+<li>Throughput: Delivered consistently high throughput, even with large object sizes and concurrent access.</li>
+<li>Ease of Adoption: Acted as a drop-in Redis replacement with full protocol compatibility—no changes needed in application code or client libraries.</li>
+</ul>
+<p>3️⃣ Moving to GoLang for Cost-Efficient Serving
+Java services were memory-heavy—so we rewrote core services in GoLang. The results?</p>
+<p>✅ Memory usage dropped by ~80%
+✅ CPU utilization was significantly lower
+✅ Faster, more efficient deployments</p>
+<h4 class="anchor anchorWithStickyNavbar_LWe7" id="optimizing-the-interaction-store">Optimizing the Interaction Store<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform-lessons-from-first-gen#optimizing-the-interaction-store" class="hash-link" aria-label="Direct link to Optimizing the Interaction Store" title="Direct link to Optimizing the Interaction Store">​</a></h4>
+<p>We realized that we only need a user’s interaction data in Redis when they open the app. So, we implemented a tiered storage approach:</p>
+<ul>
+<li>📌 Cold Tier (ScyllaDB)—Stores click, order, wishlist events</li>
+<li>📌 Hot Tier (Redis)—Loads a user’s past interactions only when they open the app</li>
+</ul>
+<p>Smart Offloading: We introduced an inactivity tracker to detect when a user session ends. At that point, Redis data was flushed back to Scylla, reducing unnecessary writes.</p>
+<p><img decoding="async" loading="lazy" alt="InteractionStore" src="https://meesho.github.io/BharatMLStack/assets/images/interaction-str-d9e7aefea121aefb4e94c6c9f060d016.png" width="1242" height="572" class="img_ev3q"></p>
+<h4 class="anchor anchorWithStickyNavbar_LWe7" id="results">Results<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform-lessons-from-first-gen#results" class="hash-link" aria-label="Direct link to Results" title="Direct link to Results">​</a></h4>
+<ul>
+<li>Online Feature Store hit 1M QPS for the first time during the 2023 Mega Blockbuster Sale—without breaking a sweat</li>
+<li>Infra costs for Online Feature Store and Interaction Store dropped by ~60%</li>
+</ul>
+<h4 class="anchor anchorWithStickyNavbar_LWe7" id="the-catch-our-ml-hosting-hit-a-hard-limit">The Catch: Our ML Hosting Hit a Hard Limit<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform-lessons-from-first-gen#the-catch-our-ml-hosting-hit-a-hard-limit" class="hash-link" aria-label="Direct link to The Catch: Our ML Hosting Hit a Hard Limit" title="Direct link to The Catch: Our ML Hosting Hit a Hard Limit">​</a></h4>
+<p>While planning for 2023 MBS, we ran into a critical scalability bottleneck:</p>
+<ul>
+<li>❌ Insufficient compute availability in our region for ML instances</li>
+<li>❌ Couldn’t provision enough nodes to handle real-time inference at scale</li>
+</ul>
+<p>This forced us to rethink where and how we hosted our models. The existing setup was great for prototyping—but it wasn’t built to handle the bursty, high-QPS demands of real-world production workloads.</p>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="conclusion-from-firefighting-to-future-proofing">Conclusion: From Firefighting to Future-Proofing<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform-lessons-from-first-gen#conclusion-from-firefighting-to-future-proofing" class="hash-link" aria-label="Direct link to Conclusion: From Firefighting to Future-Proofing" title="Direct link to Conclusion: From Firefighting to Future-Proofing">​</a></h3>
+<p>What started as an ambitious experiment turned into a real-time ML infrastructure that powered millions of requests per second. We battled scaling pains, rethought feature retrieval with Inferflow, and rebuilt our infra stack for efficiency—driving down costs while improving experimentation velocity.
+But new challenges emerged. Our infrastructure could now handle scale, but our ML model hosting setup hit a hard limit. With compute availability bottlenecks threatening real-time inference, we faced a critical decision: how do we make model serving as scalable and cost-efficient as the rest of our stack? That’s the next piece of the puzzle—and the story of Part 3.</p>]]></content>
+        <author>
+            <name>Bhawani Singh</name>
+            <uri>https://github.com/singh-bhawani</uri>
+        </author>
+        <author>
+            <name>Jigar Dave</name>
+            <uri>https://github.com/jigarpatel26</uri>
+        </author>
+        <author>
+            <name>Adarsha Das</name>
+            <uri>https://github.com/a0d00kc</uri>
+        </author>
+        <category label="inferflow" term="inferflow"/>
+        <category label="interaction-store" term="interaction-store"/>
+        <category label="mlplatform" term="mlplatform"/>
+        <category label="meesho" term="meesho"/>
+        <category label="bharatmlstack" term="bharatmlstack"/>
+    </entry>
+    <entry>
         <title type="html"><![CDATA[Building Meesho’s ML Platform: From Chaos to Cutting-Edge (Part 1)]]></title>
-        <id>https://meesho.github.io/BharatMLStack/blog/post-one</id>
-        <link href="https://meesho.github.io/BharatMLStack/blog/post-one"/>
+        <id>https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform</id>
+        <link href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform"/>
         <updated>2022-11-15T00:00:00.000Z</updated>
-        <summary type="html"><![CDATA[BharatMLStack]]></summary>
-        <content type="html"><![CDATA[<p><img decoding="async" loading="lazy" alt="BharatMLStack" src="https://meesho.github.io/BharatMLStack/assets/images/bharatmlstack-72e1796337bfa224dee2a0f59ec4e2da.png" width="1472" height="892" class="img_ev3q"></p>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-genesis-how-a-friday-night-roast-sparked-meeshos-ml-platform">The Genesis: How a Friday Night Roast Sparked Meesho’s ML Platform<a href="https://meesho.github.io/BharatMLStack/blog/post-one#the-genesis-how-a-friday-night-roast-sparked-meeshos-ml-platform" class="hash-link" aria-label="Direct link to The Genesis: How a Friday Night Roast Sparked Meesho’s ML Platform" title="Direct link to The Genesis: How a Friday Night Roast Sparked Meesho’s ML Platform">​</a></h2>
-<p>It all started in early 2022, over a casual Friday evening catch-up. Like many great origin stories, this one began with friendly banter between a group of backend engineers and data scientists. As the conversations unfolded, so did the roasting—until one remark hit a little too close to home:</p>
+        <summary type="html"><![CDATA[How Meesho transitioned from batch-based recommendations to a real-time ML platform—building an Online Feature Store, Interaction Store, and DAG execution framework that became BharatMLStack.]]></summary>
+        <content type="html"><![CDATA[<p><img decoding="async" loading="lazy" alt="BharatMLStack" src="https://meesho.github.io/BharatMLStack/assets/images/bms-7399e8796d2cd24617c432518ce3f312.png" width="1396" height="460" class="img_ev3q">
+It all started in early 2022, over a casual Friday evening catch-up. Like many great origin stories, this one began with friendly banter between a group of backend engineers and data scientists. As the conversations unfolded, so did the roasting—until one remark hit a little too close to home:</p>
 <p><em>"Why are we still crunching data for Monthly Active Users (MAU) when the next day it’s all about Daily Active Users (DAU)?"</em></p>
 <p>The laughter died down, and the question lingered. When we regrouped on Monday—clear-headed and slightly reflective—we decided to dig into the numbers. What they discovered was quite revealing: a large portion of compute resources wasn’t being put to good use.
 Much of the system’s effort was spent supporting users who weren’t actively engaging, and even for new users, the experience wasn’t optimized to make a meaningful impact.</p>
@@ -30,7 +682,7 @@ Much of the system’s effort was spent supporting users who weren’t actively 
 <li><strong>Serving</strong>: A microservice retrieved ranked recommendations from an in-memory data store via exposed APIs, delivering personalized listings across key surfaces such as "For You" and Category Landing Pages (CLP).</li>
 </ul>
 <p>This approach held up well—until Meesho started seeing a significant surge in traffic.</p>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-turning-point-from-batch-to-real-time">The Turning Point: From Batch to Real-Time<a href="https://meesho.github.io/BharatMLStack/blog/post-one#the-turning-point-from-batch-to-real-time" class="hash-link" aria-label="Direct link to The Turning Point: From Batch to Real-Time" title="Direct link to The Turning Point: From Batch to Real-Time">​</a></h2>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-turning-point-from-batch-to-real-time">The Turning Point: From Batch to Real-Time<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#the-turning-point-from-batch-to-real-time" class="hash-link" aria-label="Direct link to The Turning Point: From Batch to Real-Time" title="Direct link to The Turning Point: From Batch to Real-Time">​</a></h2>
 <p>At this time, the team was iterating on new <strong>Ranker models</strong>, and real-time inference seemed like the next logical step. But Rankers needed <strong>real-time feature retrieval</strong>, which meant an <strong>online feature store</strong> had to be built first.</p>
 <p>Exploring open-source options led to <strong>cost vs. performance trade-offs</strong>, but Meesho’s surging traffic meant that <strong>latency and stability were non-negotiable</strong>. After multiple debates and stakeholder discussions, a bold decision was made:</p>
 <p><em>We would build our own feature store.</em></p>
@@ -40,11 +692,11 @@ Much of the system’s effort was spent supporting users who weren’t actively 
 <p>That’s when the idea struck:<br>
 <!-- -->We needed a <strong>framework for real-time DAG execution</strong>—one that preserved the same flexibility as Airflow but worked for <strong>streaming data</strong>.</p>
 <p>This moment shaped the <strong>next phase of our journey</strong>.</p>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="first-generation-design">First Generation Design<a href="https://meesho.github.io/BharatMLStack/blog/post-one#first-generation-design" class="hash-link" aria-label="Direct link to First Generation Design" title="Direct link to First Generation Design">​</a></h2>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="first-generation-design">First Generation Design<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#first-generation-design" class="hash-link" aria-label="Direct link to First Generation Design" title="Direct link to First Generation Design">​</a></h2>
 <p><img decoding="async" loading="lazy" alt="Alt Text" src="https://meesho.github.io/BharatMLStack/assets/images/first-gen-arch-7c0b286810aecb7eff42b48f51caee1f.png" width="1600" height="1006" class="img_ev3q"></p>
 <h1>Laying the Groundwork: The First-Gen ML Platform</h1>
 <p>To solve these challenges, the team built three foundational components:</p>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="1-iop-framework-a-real-time-dag-executor">1. IOP Framework: A Real-Time DAG Executor<a href="https://meesho.github.io/BharatMLStack/blog/post-one#1-iop-framework-a-real-time-dag-executor" class="hash-link" aria-label="Direct link to 1. IOP Framework: A Real-Time DAG Executor" title="Direct link to 1. IOP Framework: A Real-Time DAG Executor">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="1-iop-framework-a-real-time-dag-executor">1. IOP Framework: A Real-Time DAG Executor<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#1-iop-framework-a-real-time-dag-executor" class="hash-link" aria-label="Direct link to 1. IOP Framework: A Real-Time DAG Executor" title="Direct link to 1. IOP Framework: A Real-Time DAG Executor">​</a></h3>
 <ul>
 <li><strong>Reusable Nodes</strong>: Each DAG node (e.g., an invocation to a CG service, a ranker, or a filter) had to be implemented only once. After that, it could be reused across any workflow by referencing it in config.</li>
 <li><strong>Config-driven Dynamic Graphs</strong>: Execution graphs were defined as adjacency lists stored in <strong>ZooKeeper</strong>, allowing teams to modify the sequence or structure of operations without touching application code.</li>
@@ -52,13 +704,13 @@ Much of the system’s effort was spent supporting users who weren’t actively 
 <li><strong>Production-Grade DAGs</strong>: DAGs were designed to execute in <strong>low-latency real-time environments</strong>, with support for <strong>parallel execution, retries, and branching</strong>.</li>
 </ul>
 <u><a href="https://www.meesho.io/blog/rebuilding-meeshos-ranking-platform" target="_blank" rel="noopener noreferrer">More about IOP DAG</a></u>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="2-online-feature-store---0th-version">2. Online Feature Store - 0th Version<a href="https://meesho.github.io/BharatMLStack/blog/post-one#2-online-feature-store---0th-version" class="hash-link" aria-label="Direct link to 2. Online Feature Store - 0th Version" title="Direct link to 2. Online Feature Store - 0th Version">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="2-online-feature-store---0th-version">2. Online Feature Store - 0th Version<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#2-online-feature-store---0th-version" class="hash-link" aria-label="Direct link to 2. Online Feature Store - 0th Version" title="Direct link to 2. Online Feature Store - 0th Version">​</a></h3>
 <ul>
 <li>Used <strong>Cassandra</strong> and <strong>Redis</strong> for low-latency feature serving.</li>
 <li>Maintained feature consistency using <strong>Feature Groups</strong> with TTL-based expiry.</li>
 <li>A hybrid schema was used: feature keys stored in <strong>ZooKeeper</strong>, data stored in <strong>compact arrays</strong>.</li>
 </ul>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="3-interaction-store---0th-version">3. Interaction Store - 0th Version<a href="https://meesho.github.io/BharatMLStack/blog/post-one#3-interaction-store---0th-version" class="hash-link" aria-label="Direct link to 3. Interaction Store - 0th Version" title="Direct link to 3. Interaction Store - 0th Version">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="3-interaction-store---0th-version">3. Interaction Store - 0th Version<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#3-interaction-store---0th-version" class="hash-link" aria-label="Direct link to 3. Interaction Store - 0th Version" title="Direct link to 3. Interaction Store - 0th Version">​</a></h3>
 <ul>
 <li>Captured real-time user interactions like clicks, orders, and add-to-cart events.</li>
 <li>Stored event data in <strong>Redis ZSETs (sorted sets)</strong> to enable fast lookups for recommendation engines.</li>
@@ -66,15 +718,15 @@ Much of the system’s effort was spent supporting users who weren’t actively 
 </ul>
 <p>With these components in place, <strong>real-time ML at Meesho became a reality</strong>.</p>
 <p>This was just the beginning.</p>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="building-the-online-feature-store---0th-version">Building the Online Feature Store - 0th Version<a href="https://meesho.github.io/BharatMLStack/blog/post-one#building-the-online-feature-store---0th-version" class="hash-link" aria-label="Direct link to Building the Online Feature Store - 0th Version" title="Direct link to Building the Online Feature Store - 0th Version">​</a></h2>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="building-the-online-feature-store---0th-version">Building the Online Feature Store - 0th Version<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#building-the-online-feature-store---0th-version" class="hash-link" aria-label="Direct link to Building the Online Feature Store - 0th Version" title="Direct link to Building the Online Feature Store - 0th Version">​</a></h2>
 <p><img decoding="async" loading="lazy" alt="Alt text" src="https://meesho.github.io/BharatMLStack/assets/images/online-feature-store-v0-86ec0010947ae24621f39ebd0d1729ca.png" width="1574" height="562" class="img_ev3q"></p>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="choosing-the-right-tech-stack">Choosing the Right Tech Stack<a href="https://meesho.github.io/BharatMLStack/blog/post-one#choosing-the-right-tech-stack" class="hash-link" aria-label="Direct link to Choosing the Right Tech Stack" title="Direct link to Choosing the Right Tech Stack">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="choosing-the-right-tech-stack">Choosing the Right Tech Stack<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#choosing-the-right-tech-stack" class="hash-link" aria-label="Direct link to Choosing the Right Tech Stack" title="Direct link to Choosing the Right Tech Stack">​</a></h3>
 <p>We spent considerable time evaluating various databases, caches, and communication protocols for our <strong>online feature store</strong>. After carefully weighing <strong>cost, latency, throughput</strong>, and <strong>operational stability</strong>, we settled on a combination of:</p>
 <ul>
 <li><strong>Cassandra</strong> and <strong>Redis</strong> for storage</li>
 <li><strong>gRPC + Proto3</strong> as our communication layer</li>
 </ul>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="streamlining-the-data-flow">Streamlining the Data Flow<a href="https://meesho.github.io/BharatMLStack/blog/post-one#streamlining-the-data-flow" class="hash-link" aria-label="Direct link to Streamlining the Data Flow" title="Direct link to Streamlining the Data Flow">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="streamlining-the-data-flow">Streamlining the Data Flow<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#streamlining-the-data-flow" class="hash-link" aria-label="Direct link to Streamlining the Data Flow" title="Direct link to Streamlining the Data Flow">​</a></h3>
 <p>To keep things simple in the initial version:</p>
 <ul>
 <li><strong>Feature engineering jobs</strong> wrote raw outputs to an <strong>S3 bucket</strong></li>
@@ -91,27 +743,27 @@ Much of the system’s effort was spent supporting users who weren’t actively 
 <li><strong>Ad-hoc jobs</strong> computed features in higher frequency</li>
 <li>These jobs pushed to both <strong>Kafka</strong> and <strong>S3</strong>  (S3 preserved historical data for future model training)</li>
 </ul>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-challenges-data-format-and-storage">The Challenges: Data Format and Storage<a href="https://meesho.github.io/BharatMLStack/blog/post-one#the-challenges-data-format-and-storage" class="hash-link" aria-label="Direct link to The Challenges: Data Format and Storage" title="Direct link to The Challenges: Data Format and Storage">​</a></h2>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-challenges-data-format-and-storage">The Challenges: Data Format and Storage<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#the-challenges-data-format-and-storage" class="hash-link" aria-label="Direct link to The Challenges: Data Format and Storage" title="Direct link to The Challenges: Data Format and Storage">​</a></h2>
 <p>One of the most critical design challenges was how to store feature data <strong>efficiently and consistently</strong>, especially in databases like <strong>Cassandra</strong> and <strong>Redis</strong>, which come with unique storage constraints.</p>
 <p>We had to solve for three key requirements:</p>
 <ul>
 <li>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="feature-consistency">Feature Consistency<a href="https://meesho.github.io/BharatMLStack/blog/post-one#feature-consistency" class="hash-link" aria-label="Direct link to Feature Consistency" title="Direct link to Feature Consistency">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="feature-consistency">Feature Consistency<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#feature-consistency" class="hash-link" aria-label="Direct link to Feature Consistency" title="Direct link to Feature Consistency">​</a></h3>
 <p>When a feature group contains features like <code>order_count_1h</code> and <code>click_count_1h</code>, both must reflect the <strong>same time window</strong>. Inconsistent updates would lead to <strong>unreliable model predictions</strong>.</p>
 </li>
 <li>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="ttl-granularity">TTL Granularity<a href="https://meesho.github.io/BharatMLStack/blog/post-one#ttl-granularity" class="hash-link" aria-label="Direct link to TTL Granularity" title="Direct link to TTL Granularity">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="ttl-granularity">TTL Granularity<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#ttl-granularity" class="hash-link" aria-label="Direct link to TTL Granularity" title="Direct link to TTL Granularity">​</a></h3>
 <p>Each feature group required an <strong>expiry timestamp</strong>, so that <strong>all features within it expired together</strong>—preserving consistency during reads.</p>
 </li>
 <li>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="extensibility-across-databases">Extensibility Across Databases<a href="https://meesho.github.io/BharatMLStack/blog/post-one#extensibility-across-databases" class="hash-link" aria-label="Direct link to Extensibility Across Databases" title="Direct link to Extensibility Across Databases">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="extensibility-across-databases">Extensibility Across Databases<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#extensibility-across-databases" class="hash-link" aria-label="Direct link to Extensibility Across Databases" title="Direct link to Extensibility Across Databases">​</a></h3>
 <p>We anticipated that infra needs would evolve. To future-proof our system, the data format was designed to be <strong>decoupled from DB-specific layouts</strong>, enabling portability to systems like <strong>ScyllaDB</strong>, <strong>DynamoDB</strong>, <strong>HBase</strong>, or <strong>BigTable</strong>.</p>
 </li>
 </ul>
 <hr>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="overcoming-technical-constraints">Overcoming Technical Constraints<a href="https://meesho.github.io/BharatMLStack/blog/post-one#overcoming-technical-constraints" class="hash-link" aria-label="Direct link to Overcoming Technical Constraints" title="Direct link to Overcoming Technical Constraints">​</a></h2>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="overcoming-technical-constraints">Overcoming Technical Constraints<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#overcoming-technical-constraints" class="hash-link" aria-label="Direct link to Overcoming Technical Constraints" title="Direct link to Overcoming Technical Constraints">​</a></h2>
 <p>At the time, we were using Cassandra, which not only imposed a soft limit of 75 columns per row, but also exhibited significant performance degradation as the number of columns increased further, particularly in memory constrained machines. Wide rows caused high memory usage during reads, unpredictable latencies due to heavy deserialization overhead, and inefficiencies during compactions and repairs. This ruled out the naive "one column per feature" approach. We needed a format that was compact, minimized the number of columns, and remained efficient and portable across different storage systems.</p>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-solution-schema-separation">The Solution: Schema Separation<a href="https://meesho.github.io/BharatMLStack/blog/post-one#the-solution-schema-separation" class="hash-link" aria-label="Direct link to The Solution: Schema Separation" title="Direct link to The Solution: Schema Separation">​</a></h2>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-solution-schema-separation">The Solution: Schema Separation<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#the-solution-schema-separation" class="hash-link" aria-label="Direct link to The Solution: Schema Separation" title="Direct link to The Solution: Schema Separation">​</a></h2>
 <p>We introduced the concept of Feature Groups—logical groupings of features that must remain consistent with one another.
 To represent these groups efficiently, we adopted a layered storage approach:</p>
 <ul>
@@ -120,7 +772,7 @@ To represent these groups efficiently, we adopted a layered storage approach:</p
 <li><strong>Expiry Timestamp and Schema Version</strong> were appended using a semi-colon delimiter at the end of the string.</li>
 </ul>
 <p>Example:</p>
-<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">feature_1_value,feature_2_value,feature_3_value;expiry_ts</span><br></span></code></pre></div></div>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#F8F8F2;--prism-background-color:#282A36"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#F8F8F2;background-color:#282A36"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#F8F8F2"><span class="token plain">feature_1_value,feature_2_value,feature_3_value;expiry_ts</span><br></span></code></pre></div></div>
 <p>This format allowed:</p>
 <ul>
 <li>Consistent writes and reads at the group level</li>
@@ -128,34 +780,34 @@ To represent these groups efficiently, we adopted a layered storage approach:</p
 <li>Efficient storage with minimal DB column usage</li>
 <li>Support for per-group TTLs and schema evolution</li>
 </ul>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="tracking-changes-in-feature-groups">Tracking Changes in Feature Groups<a href="https://meesho.github.io/BharatMLStack/blog/post-one#tracking-changes-in-feature-groups" class="hash-link" aria-label="Direct link to Tracking Changes in Feature Groups" title="Direct link to Tracking Changes in Feature Groups">​</a></h2>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="tracking-changes-in-feature-groups">Tracking Changes in Feature Groups<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#tracking-changes-in-feature-groups" class="hash-link" aria-label="Direct link to Tracking Changes in Feature Groups" title="Direct link to Tracking Changes in Feature Groups">​</a></h2>
 <p>Feature groups don’t stay static. As models evolve, features get added, renamed, or removed. But schema changes often go live before the data is ready—and stopping ingestion just to wait for everything to align isn't feasible.</p>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="common-real-world-scenarios">Common Real-World Scenarios:<a href="https://meesho.github.io/BharatMLStack/blog/post-one#common-real-world-scenarios" class="hash-link" aria-label="Direct link to Common Real-World Scenarios:" title="Direct link to Common Real-World Scenarios:">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="common-real-world-scenarios">Common Real-World Scenarios:<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#common-real-world-scenarios" class="hash-link" aria-label="Direct link to Common Real-World Scenarios:" title="Direct link to Common Real-World Scenarios:">​</a></h3>
 <ul>
 <li>A new feature is added to the schema, but ingestion jobs still use the older schema version.</li>
 <li>Ongoing writes don’t include the newly added feature, and stopping ingestion would break freshness for existing features.</li>
 <li>During serving, models request a mix of old and new features, depending on rollout stages.</li>
 </ul>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-solution-schema-versioning">The Solution: Schema Versioning<a href="https://meesho.github.io/BharatMLStack/blog/post-one#the-solution-schema-versioning" class="hash-link" aria-label="Direct link to The Solution: Schema Versioning" title="Direct link to The Solution: Schema Versioning">​</a></h2>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="the-solution-schema-versioning">The Solution: Schema Versioning<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#the-solution-schema-versioning" class="hash-link" aria-label="Direct link to The Solution: Schema Versioning" title="Direct link to The Solution: Schema Versioning">​</a></h2>
 <p>We solved this with versioned feature group schemas, which unlocked several capabilities:</p>
 <ul>
 <li>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="backward-compatibility">Backward Compatibility<a href="https://meesho.github.io/BharatMLStack/blog/post-one#backward-compatibility" class="hash-link" aria-label="Direct link to Backward Compatibility" title="Direct link to Backward Compatibility">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="backward-compatibility">Backward Compatibility<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#backward-compatibility" class="hash-link" aria-label="Direct link to Backward Compatibility" title="Direct link to Backward Compatibility">​</a></h3>
 <!-- -->Older ingestion jobs can continue writing using older schema versions. During reads, the system uses the schema version embedded in the value to interpret the data correctly.</li>
 <li>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="partial-availability-handling">Partial Availability Handling<a href="https://meesho.github.io/BharatMLStack/blog/post-one#partial-availability-handling" class="hash-link" aria-label="Direct link to Partial Availability Handling" title="Direct link to Partial Availability Handling">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="partial-availability-handling">Partial Availability Handling<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#partial-availability-handling" class="hash-link" aria-label="Direct link to Partial Availability Handling" title="Direct link to Partial Availability Handling">​</a></h3>
 <!-- -->During inference, if some features in the request aren’t available (due to rollout delays or missing data), the system serves default values, ensuring the inference call doesn’t fail.</li>
 <li>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="safe-writes-without-pipeline-pauses">Safe Writes Without Pipeline Pauses<a href="https://meesho.github.io/BharatMLStack/blog/post-one#safe-writes-without-pipeline-pauses" class="hash-link" aria-label="Direct link to Safe Writes Without Pipeline Pauses" title="Direct link to Safe Writes Without Pipeline Pauses">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="safe-writes-without-pipeline-pauses">Safe Writes Without Pipeline Pauses<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#safe-writes-without-pipeline-pauses" class="hash-link" aria-label="Direct link to Safe Writes Without Pipeline Pauses" title="Direct link to Safe Writes Without Pipeline Pauses">​</a></h3>
 <!-- -->With schema versioning, we no longer had to stop ingestion pipelines for schema updates. Writes using previous versions can continue safely, and downstream consumers evolve independently.
 This design gave us the flexibility to move fast without breaking things—preserving data quality, enabling experimentation, and ensuring reliability at scale.</li>
 </ul>
 <p><img decoding="async" loading="lazy" alt="Alt Text" src="https://meesho.github.io/BharatMLStack/assets/images/schema-d699efc400ed0f83bba421c1f55ab211.png" width="1600" height="599" class="img_ev3q"></p>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="interaction-store---0th-version">Interaction Store - 0th Version<a href="https://meesho.github.io/BharatMLStack/blog/post-one#interaction-store---0th-version" class="hash-link" aria-label="Direct link to Interaction Store - 0th Version" title="Direct link to Interaction Store - 0th Version">​</a></h2>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="interaction-store---0th-version">Interaction Store - 0th Version<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#interaction-store---0th-version" class="hash-link" aria-label="Direct link to Interaction Store - 0th Version" title="Direct link to Interaction Store - 0th Version">​</a></h2>
 <p><img decoding="async" loading="lazy" alt="Alt Text" src="https://meesho.github.io/BharatMLStack/assets/images/interaction-store-v0-68167b64c6e462ef2f177f0f86d55bda.png" width="1600" height="518" class="img_ev3q"></p>
 <p>To power real-time Candidate Generators (CGs), we needed fast access to user behavior signals—like what a user recently clicked, ordered, or added to their cart. These interactions form the basis for many real-time recommendations, such as <strong>Similar Products</strong>, <strong>People Also Viewed</strong>, or <strong>Recently Ordered Again</strong>.
 For the <strong>0th version</strong> of the Interaction Store, we focused on a design that was <strong>simple, fast, and reliable</strong> — optimized for high-throughput ingestion and low-latency lookups.</p>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="event-ingestion">Event Ingestion<a href="https://meesho.github.io/BharatMLStack/blog/post-one#event-ingestion" class="hash-link" aria-label="Direct link to Event Ingestion" title="Direct link to Event Ingestion">​</a></h2>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="event-ingestion">Event Ingestion<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#event-ingestion" class="hash-link" aria-label="Direct link to Event Ingestion" title="Direct link to Event Ingestion">​</a></h2>
 <p>We instrumented our backend services to emit key user interaction events to Kafka in real time. These included:</p>
 <ul>
 <li>Click</li>
@@ -171,9 +823,9 @@ For the <strong>0th version</strong> of the Interaction Store, we focused on a d
 <li>timestamp — the moment the interaction occurred</li>
 </ul>
 <p>This decoupled the interaction logging from storage, allowing ingestion and consumption to scale independently.</p>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="storage-design">Storage Design<a href="https://meesho.github.io/BharatMLStack/blog/post-one#storage-design" class="hash-link" aria-label="Direct link to Storage Design" title="Direct link to Storage Design">​</a></h2>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="storage-design">Storage Design<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#storage-design" class="hash-link" aria-label="Direct link to Storage Design" title="Direct link to Storage Design">​</a></h2>
 <p>To store these events, we built Kafka consumers that processed the incoming streams and wrote the data into Redis, using sorted sets (ZSETs) as the primary data structure.</p>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="why-redis">Why Redis?<a href="https://meesho.github.io/BharatMLStack/blog/post-one#why-redis" class="hash-link" aria-label="Direct link to Why Redis?" title="Direct link to Why Redis?">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="why-redis">Why Redis?<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#why-redis" class="hash-link" aria-label="Direct link to Why Redis?" title="Direct link to Why Redis?">​</a></h3>
 <p>Redis gave us:</p>
 <ul>
 <li><strong>Low-latency</strong> reads and writes</li>
@@ -181,9 +833,9 @@ For the <strong>0th version</strong> of the Interaction Store, we focused on a d
 <li><strong>Native TTL support</strong>, if needed in later versions</li>
 <li><strong>In-memory performance</strong> —ideal for real-time CGs</li>
 </ul>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="storage-structure">Storage Structure<a href="https://meesho.github.io/BharatMLStack/blog/post-one#storage-structure" class="hash-link" aria-label="Direct link to Storage Structure" title="Direct link to Storage Structure">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="storage-structure">Storage Structure<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#storage-structure" class="hash-link" aria-label="Direct link to Storage Structure" title="Direct link to Storage Structure">​</a></h3>
 <p>Each user’s interactions were stored using a composite key format, uniquely identifying the user and interaction type. This structure allowed efficient organization and quick retrieval of recent activity for recommendation generation:</p>
-<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">userId_eventType → ZSET[...(pid, ts)...]</span><br></span></code></pre></div></div>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#F8F8F2;--prism-background-color:#282A36"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#F8F8F2;background-color:#282A36"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#F8F8F2"><span class="token plain">userId_eventType → ZSET[...(pid, ts)...]</span><br></span></code></pre></div></div>
 <p>Within each ZSET:</p>
 <ul>
 <li>The <strong>timestamp</strong> served as the score, maintaining temporal order</li>
@@ -194,9 +846,9 @@ For the <strong>0th version</strong> of the Interaction Store, we focused on a d
 <li>Fetch the <strong>last k interactions</strong> of a specific type for a given user with  <code>ZREVRANGE(userId_eventType, count)</code></li>
 <li>Retrieve <strong>all interactions within a time range</strong> (e.g., last 24 hours) with <code>ZREVRANGEBYSCORE(userId_eventType, timeRange)</code></li>
 </ul>
-<h3 class="anchor anchorWithStickyNavbar_LWe7" id="built-in-guardrails">Built-in Guardrails<a href="https://meesho.github.io/BharatMLStack/blog/post-one#built-in-guardrails" class="hash-link" aria-label="Direct link to Built-in Guardrails" title="Direct link to Built-in Guardrails">​</a></h3>
+<h3 class="anchor anchorWithStickyNavbar_LWe7" id="built-in-guardrails">Built-in Guardrails<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#built-in-guardrails" class="hash-link" aria-label="Direct link to Built-in Guardrails" title="Direct link to Built-in Guardrails">​</a></h3>
 <p>Since Redis was the sole store, we implemented High Availability (HA) to prevent data loss. To optimize memory usage, we also enforced size limits per event type—only storing the last k interactions per user, with older entries getting truncated.</p>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="conclusion-laying-the-foundation-for-real-time-ml">Conclusion: Laying the Foundation for Real-Time ML<a href="https://meesho.github.io/BharatMLStack/blog/post-one#conclusion-laying-the-foundation-for-real-time-ml" class="hash-link" aria-label="Direct link to Conclusion: Laying the Foundation for Real-Time ML" title="Direct link to Conclusion: Laying the Foundation for Real-Time ML">​</a></h2>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="conclusion-laying-the-foundation-for-real-time-ml">Conclusion: Laying the Foundation for Real-Time ML<a href="https://meesho.github.io/BharatMLStack/blog/building-meeshos-mlplatform#conclusion-laying-the-foundation-for-real-time-ml" class="hash-link" aria-label="Direct link to Conclusion: Laying the Foundation for Real-Time ML" title="Direct link to Conclusion: Laying the Foundation for Real-Time ML">​</a></h2>
 <p>In this first phase, we tackled the <strong>fundamentals</strong>—shifting from batch-based recommendations to a <strong>real-time Recommendation</strong> using ML platform that could keep up with Meesho’s growth.</p>
 <p>With the <strong>IOP Framework</strong>, <strong>Online Feature Store</strong>, and <strong>Interaction Store</strong>, we built the core infrastructure to support real-time personalization at scale. These wins have already unlocked:</p>
 <ul>

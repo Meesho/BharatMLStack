@@ -1,0 +1,8 @@
+{
+    "label": "Skye",
+    "position": 6,
+    "link": {
+        "type": "generated-index",
+        "description": "Skye is a high-performance vector similarity search platform that enables fast semantic retrieval by representing data as vectors and querying nearest matches in high-dimensional space. It supports pluggable vector databases, tenant-level index isolation, intelligent caching, and centralized cluster management."
+    }
+}
