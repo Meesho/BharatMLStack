@@ -25,10 +25,13 @@ static constexpr size_t   kValSize       = 256;
 static constexpr double   kEvictionThreshold = 0.95;  // start evicting when usage >= this
 static constexpr double   kClearThreshold    = 0.65; // stop evicting when usage <= this
 
+static constexpr int kMaxWorkers = 256;
+
 static std::string g_bench_path = "/tmp/flashring_longrun.dat";
 static double g_duration_sec = kDurationSec;
 static double g_report_interval_sec = kReportIntervalSec;
 static uint64_t g_num_keys = kNumKeys;
+static int g_num_workers = 1;
 
 static void cleanup() {
     for (uint32_t i = 0; i < 256; ++i)
@@ -61,6 +64,10 @@ int main(int argc, char* argv[]) {
         long long v = atoll(argv[4]);
         g_num_keys = (v > 0) ? static_cast<uint64_t>(v) : 1;
     }
+    if (argc >= 6) {
+        int w = atoi(argv[5]);
+        g_num_workers = (w > 0) ? std::min(w, kMaxWorkers) : 1;
+    }
 
     cleanup();
 
@@ -86,8 +93,8 @@ int main(int argc, char* argv[]) {
         .clear_threshold    = kClearThreshold,
     };
 
-    printf("bench_long_run: get-batch, put-if-miss, fixed set of %lu keys, %.0fs, report every %.0fs\n",
-           (unsigned long)g_num_keys, g_duration_sec, g_report_interval_sec);
+    printf("bench_long_run: get-batch, put-if-miss, fixed set of %lu keys, %.0fs, report every %.0fs, workers=%d\n",
+           (unsigned long)g_num_keys, g_duration_sec, g_report_interval_sec, g_num_workers);
     printf("  batch_size=%zu, val_size=%zu, path=%s\n\n",
            kBatchSize, kValSize, g_bench_path.c_str());
 
@@ -161,46 +168,55 @@ int main(int argc, char* argv[]) {
 
     // Worker: repeatedly do batch get, then batch put for misses.
     // Keys drawn uniformly from [0, g_num_keys) — fixed working set.
-    std::mt19937 rng(12345);
-    std::uniform_int_distribution<uint64_t> key_dist(0, g_num_keys - 1);
+    // Each worker has its own RNG and buffers; shared state is cache, deadline, val, atomics, lat_mu/window_latencies.
+    auto worker_loop = [&](int thread_index) {
+        std::mt19937 rng(12345 + static_cast<unsigned>(thread_index));
+        std::uniform_int_distribution<uint64_t> key_dist(0, g_num_keys - 1);
+        std::vector<std::string> key_storage(kBatchSize);
+        std::vector<std::string_view> keys(kBatchSize);
+        std::vector<KVPair> put_pairs;
+        put_pairs.reserve(kBatchSize);
 
-    std::vector<std::string> key_storage(kBatchSize);
-    std::vector<std::string_view> keys(kBatchSize);
-    std::vector<KVPair> put_pairs;
-    put_pairs.reserve(kBatchSize);
+        while (Clock::now() < deadline) {
+            for (size_t i = 0; i < kBatchSize; ++i) {
+                uint64_t k = key_dist(rng);
+                key_storage[i] = "lk_" + std::to_string(k);
+                keys[i] = key_storage[i];
+            }
 
-    while (Clock::now() < deadline) {
-        for (size_t i = 0; i < kBatchSize; ++i) {
-            uint64_t k = key_dist(rng);
-            key_storage[i] = "lk_" + std::to_string(k);
-            keys[i] = key_storage[i];
+            auto t0 = Clock::now();
+            std::vector<Result> results = cache.batch_get(keys);
+            uint64_t hits_this_batch = 0;
+            put_pairs.clear();
+            for (size_t i = 0; i < results.size(); ++i) {
+                if (results[i].status == Status::Ok)
+                    ++hits_this_batch;
+                else if (results[i].status == Status::NotFound)
+                    put_pairs.push_back(KVPair{keys[i], std::string_view(val)});
+            }
+            if (!put_pairs.empty())
+                cache.batch_put(put_pairs);
+            auto t1 = Clock::now();
+
+            double us = std::chrono::duration<double, std::micro>(t1 - t0).count();
+            {
+                std::lock_guard<std::mutex> lock(lat_mu);
+                window_latencies.push_back(us);
+            }
+
+            total_gets.fetch_add(static_cast<uint64_t>(kBatchSize), std::memory_order_relaxed);
+            total_puts.fetch_add(static_cast<uint64_t>(put_pairs.size()), std::memory_order_relaxed);
+            total_hits.fetch_add(hits_this_batch, std::memory_order_relaxed);
+            total_batch_ops.fetch_add(1, std::memory_order_relaxed);
         }
+    };
 
-        auto t0 = Clock::now();
-        std::vector<Result> results = cache.batch_get(keys);
-        uint64_t hits_this_batch = 0;
-        put_pairs.clear();
-        for (size_t i = 0; i < results.size(); ++i) {
-            if (results[i].status == Status::Ok)
-                ++hits_this_batch;
-            else if (results[i].status == Status::NotFound)
-                put_pairs.push_back(KVPair{keys[i], std::string_view(val)});
-        }
-        if (!put_pairs.empty())
-            cache.batch_put(put_pairs);
-        auto t1 = Clock::now();
-
-        double us = std::chrono::duration<double, std::micro>(t1 - t0).count();
-        {
-            std::lock_guard<std::mutex> lock(lat_mu);
-            window_latencies.push_back(us);
-        }
-
-        total_gets.fetch_add(static_cast<uint64_t>(kBatchSize), std::memory_order_relaxed);
-        total_puts.fetch_add(static_cast<uint64_t>(put_pairs.size()), std::memory_order_relaxed);
-        total_hits.fetch_add(hits_this_batch, std::memory_order_relaxed);
-        total_batch_ops.fetch_add(1, std::memory_order_relaxed);
-    }
+    std::vector<std::thread> workers;
+    workers.reserve(static_cast<size_t>(g_num_workers));
+    for (int i = 0; i < g_num_workers; ++i)
+        workers.emplace_back(worker_loop, i);
+    for (std::thread& t : workers)
+        t.join();
 
     stop.store(true, std::memory_order_release);
     reporter.join();
