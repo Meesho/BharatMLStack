@@ -102,9 +102,9 @@ int main(int argc, char* argv[]) {
     std::atomic<bool> stop{false};
     auto deadline = Clock::now() + std::chrono::duration<double>(g_duration_sec);
 
-    // Reporter thread: every Ns print stats
+    // Reporter thread: every Ns print stats (all metrics are for the last window).
     std::thread reporter([&]() {
-        uint64_t prev_gets = 0, prev_puts = 0, prev_batch_ops = 0;
+        uint64_t prev_gets = 0, prev_puts = 0, prev_batch_ops = 0, prev_hits = 0;
         uint64_t prev_wrap = 0;
         int interval_num = 0;
 
@@ -123,9 +123,11 @@ int main(int argc, char* argv[]) {
             uint64_t d_gets = gets - prev_gets;
             uint64_t d_puts = puts - prev_puts;
             uint64_t d_batch = batch_ops - prev_batch_ops;
+            uint64_t d_hits = hits - prev_hits;
             uint64_t d_wrap = wrap - prev_wrap;
 
-            double hit_rate = gets > 0 ? 100.0 * static_cast<double>(hits) / static_cast<double>(gets) : 0.0;
+            double window_hit_rate = (d_gets > 0)
+                ? 100.0 * static_cast<double>(d_hits) / static_cast<double>(d_gets) : 0.0;
 
             double avg_us = 0, p90_us = 0, p99_us = 0;
             {
@@ -139,15 +141,16 @@ int main(int argc, char* argv[]) {
 
             printf("[%3.0fs] gets=%lu puts=%lu batch_ops=%lu | "
                    "lat_avg=%.1fus p90=%.1fus p99=%.1fus | "
-                   "hit_rate=%.1f%% wrap_count=%lu (+%lu)\n",
+                   "hit_rate=%.1f%% wrap_count=%lu\n",
                    elapsed,
-                   (unsigned long)gets, (unsigned long)puts, (unsigned long)batch_ops,
+                   (unsigned long)d_gets, (unsigned long)d_puts, (unsigned long)d_batch,
                    avg_us, p90_us, p99_us,
-                   hit_rate, (unsigned long)wrap, (unsigned long)d_wrap);
+                   window_hit_rate, (unsigned long)d_wrap);
 
             prev_gets = gets;
             prev_puts = puts;
             prev_batch_ops = batch_ops;
+            prev_hits = hits;
             prev_wrap = wrap;
         }
     });
@@ -198,7 +201,7 @@ int main(int argc, char* argv[]) {
     stop.store(true, std::memory_order_release);
     reporter.join();
 
-    // Final totals
+    // Final block: cumulative totals for the whole run (periodic lines above are per-window).
     uint64_t gets = total_gets.load();
     uint64_t puts = total_puts.load();
     uint64_t batch_ops = total_batch_ops.load();
