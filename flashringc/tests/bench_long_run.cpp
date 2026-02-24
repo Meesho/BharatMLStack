@@ -21,7 +21,7 @@ static constexpr uint64_t kNumKeys       = 1'000'000;
 static constexpr double   kDurationSec   = 300.0;   // 5 min
 static constexpr double   kReportIntervalSec = 15.0;
 static constexpr size_t   kBatchSize     = 100;
-static constexpr size_t   kValSize       = 256;
+static constexpr size_t   kValSize       = 4096;
 static constexpr double   kEvictionThreshold = 0.95;  // start evicting when usage >= this
 static constexpr double   kClearThreshold    = 0.65; // stop evicting when usage <= this
 
