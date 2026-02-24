@@ -64,7 +64,7 @@ target_include_directories(flashring
 )
 
 target_link_libraries(flashring
-    PUBLIC  absl::flat_hash_map
+    PUBLIC  absl::flat_hash_map absl::crc32c
     PRIVATE pthread
 )
 
@@ -91,6 +91,9 @@ target_link_libraries(bench_cache PRIVATE flashring)
 
 add_executable(bench_heavy tests/bench_heavy.cpp)
 target_link_libraries(bench_heavy PRIVATE flashring)
+
+add_executable(bench_long_run tests/bench_long_run.cpp)
+target_link_libraries(bench_long_run PRIVATE flashring)
 
 add_executable(test_eviction tests/test_eviction.cpp)
 target_link_libraries(test_eviction PRIVATE flashring)

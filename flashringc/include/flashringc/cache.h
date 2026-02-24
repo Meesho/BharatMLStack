@@ -51,6 +51,7 @@ public:
 
     uint32_t key_count() const;
     uint64_t ring_usage() const;
+    uint64_t ring_wrap_count() const;
     uint32_t num_shards() const { return num_shards_; }
 
 private:

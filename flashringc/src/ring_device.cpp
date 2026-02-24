@@ -70,7 +70,7 @@ RingDevice::~RingDevice() {
 RingDevice::RingDevice(RingDevice&& o) noexcept
     : write_fd_(o.write_fd_), read_fd_(o.read_fd_),
       capacity_(o.capacity_), base_offset_(o.base_offset_),
-      write_offset_(o.write_offset_),
+      write_offset_(o.write_offset_), wrap_count_(o.wrap_count_),
       wrapped_(o.wrapped_), is_blk_(o.is_blk_) {
     o.write_fd_ = -1;
     o.read_fd_  = -1;
@@ -85,6 +85,7 @@ RingDevice& RingDevice::operator=(RingDevice&& o) noexcept {
         capacity_     = o.capacity_;
         base_offset_  = o.base_offset_;
         write_offset_ = o.write_offset_;
+        wrap_count_   = o.wrap_count_;
         wrapped_      = o.wrapped_;
         is_blk_       = o.is_blk_;
         o.write_fd_ = -1;
@@ -198,6 +199,7 @@ int64_t RingDevice::write(const void* buf, size_t len) {
     // If remaining tail can't fit this write, wrap to 0.
     if (write_offset_ + len > capacity_) {
         write_offset_ = 0;
+        ++wrap_count_;
         wrapped_ = true;
     }
 
@@ -210,6 +212,7 @@ int64_t RingDevice::write(const void* buf, size_t len) {
 
     if (write_offset_ >= capacity_) {
         write_offset_ = 0;
+        ++wrap_count_;
         wrapped_ = true;
     }
 

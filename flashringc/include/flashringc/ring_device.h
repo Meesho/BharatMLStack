@@ -35,6 +35,7 @@ public:
 
     uint64_t capacity()        const { return capacity_; }
     uint64_t write_offset()    const { return write_offset_; }
+    uint64_t wrap_count()      const { return wrap_count_; }
     bool     wrapped()         const { return wrapped_; }
     bool     is_block_device() const { return is_blk_; }
     int      read_fd()         const { return read_fd_; }
@@ -49,6 +50,7 @@ private:
     uint64_t capacity_     = 0;
     uint64_t base_offset_  = 0;
     uint64_t write_offset_ = 0;
+    uint64_t wrap_count_   = 0;
     bool     wrapped_      = false;
     bool     is_blk_       = false;
 };

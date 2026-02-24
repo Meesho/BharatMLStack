@@ -284,3 +284,10 @@ uint64_t Cache::ring_usage() const {
         total += s->ring_usage();
     return total;
 }
+
+uint64_t Cache::ring_wrap_count() const {
+    uint64_t total = 0;
+    for (auto& s : shards_)
+        total += s->ring_wrap_count();
+    return total;
+}

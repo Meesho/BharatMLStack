@@ -160,7 +160,8 @@ void ShardReactor::handle_get(Request& req) {
     if (memtables_.try_read_from_memory(buf.data(), lr.length,
                                          lr.mem_id, lr.offset)) {
         DecodedRecord dr = decode_record(buf.data());
-        if (kRecordHeaderSize + dr.key_len + dr.val_len > lr.length ||
+        if (kRecordHeaderSize + dr.key_len + dr.val_len + kRecordCrcSize > lr.length ||
+            !verify_record_crc(buf.data(), lr.length) ||
             dr.key_len != req.key.size() ||
             std::memcmp(dr.key, req.key.data(), dr.key_len) != 0) {
             complete_request(req, {Status::NotFound, {}});
@@ -237,7 +238,8 @@ void ShardReactor::handle_get(Request& req) {
     }
 
     DecodedRecord dr = decode_record(abuf.bytes());
-    if (kRecordHeaderSize + dr.key_len + dr.val_len > lr.length ||
+    if (kRecordHeaderSize + dr.key_len + dr.val_len + kRecordCrcSize > lr.length ||
+        !verify_record_crc(abuf.bytes(), lr.length) ||
         dr.key_len != req.key.size() ||
         std::memcmp(dr.key, req.key.data(), dr.key_len) != 0) {
         complete_request(req, {Status::NotFound, {}});
@@ -325,7 +327,8 @@ void ShardReactor::reap_completions() {
                 res = {Status::Error, {}};
             } else {
                 DecodedRecord dr = decode_record(pop.buf.bytes());
-                if (kRecordHeaderSize + dr.key_len + dr.val_len > pop.length ||
+                if (kRecordHeaderSize + dr.key_len + dr.val_len + kRecordCrcSize > pop.length ||
+                    !verify_record_crc(pop.buf.bytes(), pop.length) ||
                     dr.key_len != req.key.size() ||
                     std::memcmp(dr.key, req.key.data(), dr.key_len) != 0) {
                     res = {Status::NotFound, {}};

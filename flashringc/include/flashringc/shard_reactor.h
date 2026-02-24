@@ -42,6 +42,7 @@ public:
 
     uint32_t key_count() const { return index_.size(); }
     uint64_t ring_usage() const { return ring_.write_offset(); }
+    uint64_t ring_wrap_count() const { return ring_.wrap_count(); }
 
 private:
     void process_inbox(int max_batch);
