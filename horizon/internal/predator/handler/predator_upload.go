@@ -716,10 +716,7 @@ func hasPythonLoggerOrPrintStatements(content []byte) (found bool, details []str
 
 		codePortion := stripInlineComment(line)
 
-		if loggerPattern.MatchString(codePortion) {
-			details = append(details, fmt.Sprintf("line %d: %s", lineNum+1, strippedLine))
-			found = true
-		} else if printPattern.MatchString(codePortion) {
+		if loggerPattern.MatchString(codePortion) || printPattern.MatchString(codePortion) {
 			details = append(details, fmt.Sprintf("line %d: %s", lineNum+1, strippedLine))
 			found = true
 		}
