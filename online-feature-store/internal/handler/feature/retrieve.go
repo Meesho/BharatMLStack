@@ -832,7 +832,7 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			}
 			// Handle missing features (seq = -1)
 			if seq == -1 {
-				log.Warn().Msgf("Feature %s not found in version %d, switching to active version for default value", featureLabel, version)
+				log.Error().Msgf("Feature %s not found in version %d, switching to active version for default value", featureLabel, version)
 
 				// Get active version
 				version, err = h.config.GetActiveVersion(data.EntityLabel, fgId)
