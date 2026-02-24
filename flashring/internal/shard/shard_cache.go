@@ -87,7 +87,7 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 	i := fs.BLOCK_SIZE
 	iMax := (1 << 16)
 	for i < iMax {
-		sizeClasses = append(sizeClasses, allocators.SizeClass{Size: i, MinCount: 1000})
+		sizeClasses = append(sizeClasses, allocators.SizeClass{Size: i, MinCount: 20})
 		i *= 2
 	}
 	readPageAllocator, err := allocators.NewSlabAlignedPageAllocator(allocators.SlabAlignedPageAllocatorConfig{SizeClasses: sizeClasses})
