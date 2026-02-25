@@ -187,15 +187,17 @@ void ShardReactor::handle_get(Request& req) {
     }
 
     uint64_t ring_offset = static_cast<uint64_t>(file_off) + lr.offset;
-    size_t aligned_len = AlignedBuffer::align_up(lr.length);
-    if (ring_offset + aligned_len > ring_.capacity()) {
+    uint64_t block_start = ring_offset & ~(static_cast<uint64_t>(kBlockSize) - 1);
+    uint64_t intra = ring_offset - block_start;
+    size_t read_len = AlignedBuffer::align_up(static_cast<size_t>(intra + lr.length));
+    if (block_start + read_len > ring_.capacity()) {
         complete_request(req, {Status::Error, {}});
         return;
     }
 
 #if defined(__linux__) && defined(HAVE_IO_URING)
     if (uring_ok_) {
-        auto abuf = AlignedBuffer::allocate(aligned_len);
+        auto abuf = AlignedBuffer::allocate(read_len);
         if (!abuf.valid()) {
             complete_request(req, {Status::Error, {}});
             return;
@@ -214,16 +216,17 @@ void ShardReactor::handle_get(Request& req) {
         }
 
         io_uring_prep_read(sqe, ring_.read_fd(), abuf.data(),
-                           static_cast<unsigned>(aligned_len),
-                           ring_.base_offset() + ring_offset);
+                           static_cast<unsigned>(read_len),
+                           ring_.base_offset() + block_start);
         io_uring_sqe_set_data64(sqe, tag);
 
         PendingOp pop{};
-        pop.type      = PendingOpType::GetRead;
-        pop.buf       = std::move(abuf);
-        pop.mem_id    = lr.mem_id;
-        pop.offset    = lr.offset;
-        pop.length    = lr.length;
+        pop.type         = PendingOpType::GetRead;
+        pop.buf          = std::move(abuf);
+        pop.mem_id       = lr.mem_id;
+        pop.offset       = lr.offset;
+        pop.length       = lr.length;
+        pop.intra_offset = static_cast<uint32_t>(intra);
 
         inflight_.emplace(tag, std::move(pop));
         pending_requests_.emplace(tag, std::move(req));
@@ -232,21 +235,22 @@ void ShardReactor::handle_get(Request& req) {
 #endif
 
     // Fallback: synchronous pread.
-    auto abuf = AlignedBuffer::allocate(aligned_len);
+    auto abuf = AlignedBuffer::allocate(read_len);
     if (!abuf.valid()) {
         complete_request(req, {Status::Error, {}});
         return;
     }
 
-    ssize_t n = ring_.read(abuf.data(), aligned_len, ring_offset);
-    if (n != static_cast<ssize_t>(aligned_len)) {
+    ssize_t n = ring_.read(abuf.data(), read_len, block_start);
+    if (n != static_cast<ssize_t>(read_len)) {
         complete_request(req, {Status::Error, {}});
         return;
     }
 
-    DecodedRecord dr = decode_record(abuf.bytes());
+    const uint8_t* rec_ptr = abuf.bytes() + static_cast<size_t>(intra);
+    DecodedRecord dr = decode_record(rec_ptr);
     if (kRecordHeaderSize + dr.key_len + dr.val_len + kRecordCrcSize > lr.length ||
-        !verify_record_crc(abuf.bytes(), lr.length) ||
+        !verify_record_crc(rec_ptr, lr.length) ||
         dr.key_len != req.key.size() ||
         std::memcmp(dr.key, req.key.data(), dr.key_len) != 0) {
         complete_request(req, {Status::NotFound, {}});
@@ -335,9 +339,10 @@ void ShardReactor::reap_completions() {
             } else if (delete_mgr_.is_discarded(pop.mem_id)) {
                 res = {Status::NotFound, {}};
             } else {
-                DecodedRecord dr = decode_record(pop.buf.bytes());
+                const uint8_t* rec_ptr = pop.buf.bytes() + pop.intra_offset;
+                DecodedRecord dr = decode_record(rec_ptr);
                 if (kRecordHeaderSize + dr.key_len + dr.val_len + kRecordCrcSize > pop.length ||
-                    !verify_record_crc(pop.buf.bytes(), pop.length) ||
+                    !verify_record_crc(rec_ptr, pop.length) ||
                     dr.key_len != req.key.size() ||
                     std::memcmp(dr.key, req.key.data(), dr.key_len) != 0) {
                     res = {Status::NotFound, {}};

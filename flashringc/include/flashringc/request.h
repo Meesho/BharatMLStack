@@ -64,6 +64,7 @@ struct PendingOp {
     uint32_t        mem_id;      // memtable generation (GetRead: source; Flush: flushed)
     uint32_t        offset;      // record offset within memtable (GetRead)
     uint32_t        length;      // record length (GetRead)
+    uint32_t        intra_offset; // offset of record start within buf (GetRead disk path)
     int             flushed_idx; // which memtable slot was flushed (Flush)
     int64_t         write_off;   // ring offset where flush was written (Flush)
 

@@ -14,14 +14,52 @@ Memtable::Memtable(size_t capacity)
 }
 
 int32_t Memtable::append(const void* data, size_t len) {
-    size_t aligned_len = AlignedBuffer::align_up(len);
-    if (used_ + aligned_len > buf_.size()) return -1;
-    std::memcpy(buf_.bytes() + used_, data, len);
-    if (aligned_len > len)
-        std::memset(buf_.bytes() + used_ + len, 0, aligned_len - len);
-    auto off = static_cast<int32_t>(used_);
-    used_ += aligned_len;
-    return off;
+    if (len <= kBlockSize) {
+        // Small record: pack within current block, never cross boundary
+        size_t block_used = used_ % kBlockSize;
+        size_t block_remaining =
+            (block_used == 0) ? kBlockSize : kBlockSize - block_used;
+        if (len > block_remaining) {
+            // Pad to next block boundary
+            size_t pad = block_remaining;
+            if (used_ + pad + len > buf_.size()) return -1;
+            std::memset(buf_.bytes() + used_, 0, pad);
+            used_ += pad;
+        } else {
+            if (used_ + len > buf_.size()) return -1;
+        }
+        auto off = static_cast<int32_t>(used_);
+        std::memcpy(buf_.bytes() + used_, data, len);
+        used_ += len;
+        return off;
+    } else {
+        // Large record: align start to 4KB boundary
+        size_t aligned_start = AlignedBuffer::align_up(used_);
+        size_t aligned_len = AlignedBuffer::align_up(len);
+        if (aligned_start + aligned_len > buf_.size()) return -1;
+        if (aligned_start > used_)
+            std::memset(buf_.bytes() + used_, 0, aligned_start - used_);
+        std::memcpy(buf_.bytes() + aligned_start, data, len);
+        if (aligned_len > len)
+            std::memset(buf_.bytes() + aligned_start + len, 0,
+                        aligned_len - len);
+        used_ = aligned_start + aligned_len;
+        return static_cast<int32_t>(aligned_start);
+    }
+}
+
+bool Memtable::can_fit(size_t len) const {
+    if (len <= kBlockSize) {
+        size_t block_used = used_ % kBlockSize;
+        size_t block_remaining =
+            (block_used == 0) ? kBlockSize : kBlockSize - block_used;
+        size_t space_needed = (len > block_remaining) ? (block_remaining + len) : len;
+        return used_ + space_needed <= buf_.size();
+    } else {
+        size_t aligned_start = AlignedBuffer::align_up(used_);
+        size_t aligned_len = AlignedBuffer::align_up(len);
+        return aligned_start + aligned_len <= buf_.size();
+    }
 }
 
 bool Memtable::read(void* buf, size_t len, uint32_t offset) const {
@@ -77,7 +115,7 @@ WriteResult MemtableManager::put(const void* data, size_t len) {
 // ---------------------------------------------------------------------------
 
 bool MemtableManager::needs_flush(size_t next_record_len) const {
-    return mt_[active_idx_].remaining() < AlignedBuffer::align_up(next_record_len);
+    return !mt_[active_idx_].can_fit(next_record_len);
 }
 
 // ---------------------------------------------------------------------------

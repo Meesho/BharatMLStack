@@ -36,6 +36,9 @@ public:
     size_t   used()      const { return used_; }
     size_t   remaining() const { return buf_.size() - used_; }
 
+    // True if one more record of size len can fit with block-aligned packing.
+    bool can_fit(size_t len) const;
+
     const void* data()   const { return buf_.data(); }
 
 private:
