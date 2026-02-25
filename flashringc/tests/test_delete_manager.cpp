@@ -52,7 +52,7 @@ static void fill_index_for_memid(KeyIndex& index, uint32_t mem_id, int count) {
     for (int i = 0; i < count; i++) {
         Hash128 h = {static_cast<uint64_t>(mem_id) * 10000ULL + i + 1,
                      0xDEADBEEFULL ^ static_cast<uint64_t>(i)};
-        index.put(h, mem_id, static_cast<uint32_t>(i * 64), 64);
+        index.put(h, mem_id, static_cast<uint32_t>(i * 64), 64, 0, 0);
     }
 }
 

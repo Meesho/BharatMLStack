@@ -11,14 +11,16 @@
 
 // Per-key metadata stored in the entry ring.
 // 32-byte aligned so two entries never share a cache line.
+// TTL: ttl_seconds in seconds (16-bit); 0 means no expiry. Max ~18h due to internal clock wrap.
 struct alignas(32) Entry {
     uint64_t                 hash_lo;
     uint64_t                 hash_hi;
     uint32_t                 mem_id;
     uint32_t                 offset;
     uint32_t                 length;
-    std::atomic<uint16_t>    last_access;
+    std::atomic<uint16_t>    last_access;  // insert time (seconds delta) when TTL is used
     std::atomic<uint8_t>     freq;
+    uint16_t                 ttl_seconds;   // 0 = no TTL
     uint8_t                  flags;
 
     static constexpr uint8_t kEmpty    = 0;
@@ -26,7 +28,7 @@ struct alignas(32) Entry {
     static constexpr uint8_t kDeleted  = 2;
 };
 
-static_assert(sizeof(Entry) == 32, "Entry must be 32 bytes");
+static_assert(sizeof(Entry) >= 34 && sizeof(Entry) <= 64, "Entry layout (with optional padding)");
 
 struct LookupResult {
     uint32_t mem_id;
@@ -42,7 +44,8 @@ class KeyIndex {
 public:
     explicit KeyIndex(uint32_t capacity);
 
-    uint32_t put(Hash128 h, uint32_t mem_id, uint32_t offset, uint32_t length);
+    uint32_t put(Hash128 h, uint32_t mem_id, uint32_t offset, uint32_t length,
+                 uint16_t now_delta, uint16_t ttl_seconds);
     bool get(Hash128 h, uint16_t now_delta, LookupResult& out);
     bool remove(Hash128 h);
     uint32_t evict_oldest(uint32_t count, uint64_t* evicted_bytes = nullptr);

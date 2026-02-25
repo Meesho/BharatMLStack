@@ -36,7 +36,7 @@ public:
     Cache& operator=(const Cache&) = delete;
 
     Result get(std::string_view key);
-    Result put(std::string_view key, std::string_view value);
+    Result put(std::string_view key, std::string_view value, uint32_t ttl_seconds = 0);
     Result del(std::string_view key);
 
     std::vector<Result> batch_get(const std::vector<std::string_view>& keys);

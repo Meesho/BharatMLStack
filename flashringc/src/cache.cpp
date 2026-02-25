@@ -152,7 +152,7 @@ Result Cache::get(std::string_view key) {
     return result;
 }
 
-Result Cache::put(std::string_view key, std::string_view value) {
+Result Cache::put(std::string_view key, std::string_view value, uint32_t ttl_seconds) {
     Hash128 h = hash_key(key.data(), key.size());
     uint32_t slot = sem_pool_->acquire();
     Result result;
@@ -161,6 +161,7 @@ Result Cache::put(std::string_view key, std::string_view value) {
     req.hash = h;
     req.key = key;
     req.value = value;
+    req.ttl_seconds = static_cast<uint16_t>(std::min(ttl_seconds, 0xFFFEu));
     req.result = &result;
     req.sem_slot = slot;
     req.batch_remaining = nullptr;
@@ -223,6 +224,7 @@ std::vector<Result> Cache::batch_put(const std::vector<KVPair>& pairs) {
         req.hash = h;
         req.key = pairs[i].key;
         req.value = pairs[i].value;
+        req.ttl_seconds = pairs[i].ttl_seconds;
         req.result = &results[i];
         req.sem_slot = slot;
         req.batch_remaining = &remaining;

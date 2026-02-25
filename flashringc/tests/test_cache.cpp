@@ -250,6 +250,23 @@ static void test_batch_api() {
     }
 }
 
+static void test_ttl_expiry_via_cache() {
+    auto cache = Cache::open(test_cfg());
+
+    std::string key = "ttl_key";
+    std::string val = "ttl_val";
+    Result pr = cache.put(key, val, 1);  // TTL 1 second
+    assert(pr.status == Status::Ok);
+
+    Result gr = cache.get(key);
+    assert(gr.status == Status::Ok);
+    assert(gr.value == to_bytes(val));
+
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    Result gr2 = cache.get(key);
+    assert(gr2.status == Status::NotFound);
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -268,6 +285,7 @@ int main() {
     RUN(test_truncated_read);
     RUN(test_async_api);
     RUN(test_batch_api);
+    RUN(test_ttl_expiry_via_cache);
 
     printf("\n%d / %d tests passed.\n", tests_passed, tests_run);
     return (tests_passed == tests_run) ? 0 : 1;

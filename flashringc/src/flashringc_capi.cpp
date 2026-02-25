@@ -51,11 +51,13 @@ int flashringc_get(FlashRingC* c,
 
 int flashringc_put(FlashRingC* c,
                    const char* key, int key_len,
-                   const char* val, int val_len) {
+                   const char* val, int val_len,
+                   uint16_t ttl_seconds) {
     if (!c) return FLASHRINGC_ERROR;
     Result result = c->cache.put(
         std::string_view(key, static_cast<size_t>(key_len)),
-        std::string_view(val, static_cast<size_t>(val_len)));
+        std::string_view(val, static_cast<size_t>(val_len)),
+        static_cast<uint32_t>(ttl_seconds));
     return (result.status == Status::Ok) ? FLASHRINGC_OK : FLASHRINGC_ERROR;
 }
 

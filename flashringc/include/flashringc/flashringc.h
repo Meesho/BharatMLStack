@@ -24,7 +24,8 @@ int flashringc_get(FlashRingC* c,
 
 int flashringc_put(FlashRingC* c,
                    const char* key, int key_len,
-                   const char* val, int val_len);
+                   const char* val, int val_len,
+                   uint16_t ttl_seconds);
 
 int flashringc_delete(FlashRingC* c,
                       const char* key, int key_len);

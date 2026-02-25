@@ -4,8 +4,10 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <unistd.h>
 #include <vector>
+#include <chrono>
 
 static const char* TEST_PATH = "/tmp/flashring_capi_test.dat";
 static int tests_run = 0;
@@ -35,7 +37,7 @@ static void test_capi_put_get() {
 
     const char* key = "hello";
     const char* val = "world";
-    int r = flashringc_put(c, key, static_cast<int>(strlen(key)), val, static_cast<int>(strlen(val)));
+    int r = flashringc_put(c, key, static_cast<int>(strlen(key)), val, static_cast<int>(strlen(val)), 0);
     assert(r == FLASHRINGC_OK);
 
     char out[64];
@@ -72,7 +74,7 @@ static void test_capi_batch_get() {
         keys[i] = "bk_" + std::to_string(i);
         vals[i] = "bv_" + std::to_string(i);
         flashringc_put(c, keys[i].data(), static_cast<int>(keys[i].size()),
-                       vals[i].data(), static_cast<int>(vals[i].size()));
+                       vals[i].data(), static_cast<int>(vals[i].size()), 0);
     }
 
     std::vector<const char*> key_ptrs(100);
@@ -107,8 +109,8 @@ static void test_capi_batch_mixed() {
     FlashRingC* c = flashringc_open(TEST_PATH, 32 * 1024 * 1024, 4);
     assert(c != nullptr);
 
-    flashringc_put(c, "a", 1, "va", 2);
-    flashringc_put(c, "b", 1, "vb", 2);
+    flashringc_put(c, "a", 1, "va", 2, 0);
+    flashringc_put(c, "b", 1, "vb", 2, 0);
 
     const char* keys[] = {"a", "b", "missing"};
     int key_lens[] = {1, 1, 7};
@@ -128,12 +130,52 @@ static void test_capi_batch_mixed() {
     flashringc_close(c);
 }
 
+static void test_capi_put_get_with_ttl() {
+    FlashRingC* c = flashringc_open(TEST_PATH, 16 * 1024 * 1024, 4);
+    assert(c != nullptr);
+
+    int r = flashringc_put(c, "k", 1, "v", 1, 0);  // ttl_seconds=0 = no TTL
+    assert(r == FLASHRINGC_OK);
+
+    char out[8];
+    int out_len = 0;
+    r = flashringc_get(c, "k", 1, out, sizeof(out), &out_len);
+    assert(r == FLASHRINGC_OK);
+    assert(out_len == 1);
+    assert(out[0] == 'v');
+
+    flashringc_close(c);
+}
+
+static void test_capi_ttl_expiry() {
+    FlashRingC* c = flashringc_open(TEST_PATH, 16 * 1024 * 1024, 4);
+    assert(c != nullptr);
+
+    int r = flashringc_put(c, "ttl_k", 5, "ttl_v", 5, 1);  // TTL 1 second
+    assert(r == FLASHRINGC_OK);
+
+    char out[8];
+    int out_len = 0;
+    r = flashringc_get(c, "ttl_k", 5, out, sizeof(out), &out_len);
+    assert(r == FLASHRINGC_OK);
+
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    out_len = 0;
+    r = flashringc_get(c, "ttl_k", 5, out, sizeof(out), &out_len);
+    assert(r == FLASHRINGC_NOT_FOUND);
+    assert(out_len == 0);
+
+    flashringc_close(c);
+}
+
 int main() {
     printf("test_capi\n");
     RUN(test_capi_put_get);
     RUN(test_capi_not_found);
     RUN(test_capi_batch_get);
     RUN(test_capi_batch_mixed);
+    RUN(test_capi_put_get_with_ttl);
+    RUN(test_capi_ttl_expiry);
     printf("\n%d / %d tests passed.\n", tests_passed, tests_run);
     return (tests_passed == tests_run) ? 0 : 1;
 }

@@ -289,7 +289,7 @@ void ShardReactor::handle_put(Request& req) {
                   req.value.data(), static_cast<uint32_t>(req.value.size()));
 
     WriteResult wr = memtables_.put(rec.data(), rec_len);
-    index_.put(req.hash, wr.mem_id, wr.offset, wr.length);
+    index_.put(req.hash, wr.mem_id, wr.offset, wr.length, now_delta(), req.ttl_seconds);
     delete_mgr_.on_put();
 
     complete_request(req, {Status::Ok, {}});

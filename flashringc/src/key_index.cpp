@@ -32,7 +32,8 @@ KeyIndex::KeyIndex(uint32_t capacity)
 // ---------------------------------------------------------------------------
 
 uint32_t KeyIndex::put(Hash128 h, uint32_t mem_id,
-                       uint32_t offset, uint32_t length) {
+                       uint32_t offset, uint32_t length,
+                       uint16_t now_delta, uint16_t ttl_seconds) {
     auto it = map_.find(h.lo);
     if (it != map_.end()) {
         uint32_t idx = it->second;
@@ -41,8 +42,9 @@ uint32_t KeyIndex::put(Hash128 h, uint32_t mem_id,
             e.mem_id = mem_id;
             e.offset = offset;
             e.length = length;
-            e.last_access.store(0, std::memory_order_relaxed);
+            e.last_access.store(now_delta, std::memory_order_relaxed);
             e.freq.store(0, std::memory_order_relaxed);
+            e.ttl_seconds = ttl_seconds;
             return idx;
         }
     }
@@ -59,8 +61,9 @@ uint32_t KeyIndex::put(Hash128 h, uint32_t mem_id,
     e.mem_id  = mem_id;
     e.offset  = offset;
     e.length  = length;
-    e.last_access.store(0, std::memory_order_relaxed);
+    e.last_access.store(now_delta, std::memory_order_relaxed);
     e.freq.store(0, std::memory_order_relaxed);
+    e.ttl_seconds = ttl_seconds;
     e.flags   = Entry::kOccupied;
 
     map_[h.lo] = idx;
@@ -78,9 +81,20 @@ bool KeyIndex::get(Hash128 h, uint16_t now_delta, LookupResult& out) {
     auto it = map_.find(h.lo);
     if (it == map_.end()) return false;
 
-    Entry& e = ring_[it->second];
+    uint32_t idx = it->second;
+    Entry& e = ring_[idx];
     if (e.flags != Entry::kOccupied || e.hash_hi != h.hi)
         return false;
+
+    // TTL: 0 = no expiry. Otherwise expire when age >= ttl_seconds (wrap-safe 16-bit).
+    if (e.ttl_seconds != 0) {
+        uint16_t insert_time = e.last_access.load(std::memory_order_relaxed);
+        uint16_t age = static_cast<uint16_t>(now_delta - insert_time);
+        if (age >= e.ttl_seconds) {
+            remove_entry(idx);
+            return false;
+        }
+    }
 
     out.mem_id      = e.mem_id;
     out.offset      = e.offset;

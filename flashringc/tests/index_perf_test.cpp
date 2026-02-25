@@ -77,7 +77,7 @@ static void bench_put(uint32_t n) {
     std::vector<double> lat(m);
     for (uint32_t i = 0; i < m; ++i) {
         auto t0 = Clock::now();
-        idx.put(hashes[i], i, i, static_cast<uint16_t>(i & 0xFFFF));
+        idx.put(hashes[i], i, i, static_cast<uint32_t>(i & 0xFFFF), 0, 0);
         auto t1 = Clock::now();
         lat[i] = std::chrono::duration_cast<ns_d>(t1 - t0).count();
     }
@@ -89,7 +89,7 @@ static void bench_get_hit(uint32_t n) {
     auto hashes = gen_hashes(n);
     KeyIndex idx(n);
     for (uint32_t i = 0; i < n; ++i)
-        idx.put(hashes[i], i, i, static_cast<uint16_t>(i & 0xFFFF));
+        idx.put(hashes[i], i, i, static_cast<uint32_t>(i & 0xFFFF), 0, 0);
 
     uint32_t m = measure_count(n);
     std::vector<uint32_t> order(m);
@@ -113,7 +113,7 @@ static void bench_get_miss(uint32_t n) {
     auto hashes = gen_hashes(n);
     KeyIndex idx(n);
     for (uint32_t i = 0; i < n; ++i)
-        idx.put(hashes[i], i, i, static_cast<uint16_t>(i & 0xFFFF));
+        idx.put(hashes[i], i, i, static_cast<uint32_t>(i & 0xFFFF), 0, 0);
 
     uint32_t m = measure_count(n);
     std::vector<Hash128> miss_hashes(m);
@@ -138,7 +138,7 @@ static void bench_remove(uint32_t n) {
     auto hashes = gen_hashes(n);
     KeyIndex idx(n);
     for (uint32_t i = 0; i < n; ++i)
-        idx.put(hashes[i], i, i, static_cast<uint16_t>(i & 0xFFFF));
+        idx.put(hashes[i], i, i, static_cast<uint32_t>(i & 0xFFFF), 0, 0);
 
     uint32_t m = measure_count(n);
     std::vector<uint32_t> order(m);
@@ -161,7 +161,7 @@ static void bench_evict(uint32_t n) {
     auto hashes = gen_hashes(n);
     KeyIndex idx(n);
     for (uint32_t i = 0; i < n; ++i)
-        idx.put(hashes[i], i, i, static_cast<uint16_t>(i & 0xFFFF));
+        idx.put(hashes[i], i, i, static_cast<uint32_t>(i & 0xFFFF), 0, 0);
 
     constexpr uint32_t kBatch = 1000;
     uint32_t batches = n / kBatch;
@@ -186,7 +186,7 @@ static void bench_put_update(uint32_t n) {
     auto hashes = gen_hashes(n);
     KeyIndex idx(n);
     for (uint32_t i = 0; i < n; ++i)
-        idx.put(hashes[i], i, i, static_cast<uint16_t>(i & 0xFFFF));
+        idx.put(hashes[i], i, i, static_cast<uint32_t>(i & 0xFFFF), 0, 0);
 
     uint32_t m = measure_count(n);
     std::mt19937 rng(77);
@@ -196,7 +196,7 @@ static void bench_put_update(uint32_t n) {
     for (uint32_t i = 0; i < m; ++i) {
         uint32_t k = dist(rng);
         auto t0 = Clock::now();
-        idx.put(hashes[k], i + n, i, static_cast<uint16_t>(i & 0xFFFF));
+        idx.put(hashes[k], i + n, i, static_cast<uint32_t>(i & 0xFFFF), 0, 0);
         auto t1 = Clock::now();
         lat[i] = std::chrono::duration_cast<ns_d>(t1 - t0).count();
     }
@@ -209,7 +209,7 @@ static void bench_concurrent_get(uint32_t n, int num_threads) {
     auto hashes = gen_hashes(n);
     KeyIndex idx(n);
     for (uint32_t i = 0; i < n; ++i)
-        idx.put(hashes[i], i, i, static_cast<uint16_t>(i & 0xFFFF));
+        idx.put(hashes[i], i, i, static_cast<uint32_t>(i & 0xFFFF), 0, 0);
 
     std::shared_mutex mu;
     const uint32_t ops_per_thread = measure_count(n);
@@ -254,7 +254,7 @@ static void bench_mixed_rw(uint32_t n, int num_threads) {
     auto hashes = gen_hashes(n);
     KeyIndex idx(n);
     for (uint32_t i = 0; i < n; ++i)
-        idx.put(hashes[i], i, i, static_cast<uint16_t>(i & 0xFFFF));
+        idx.put(hashes[i], i, i, static_cast<uint32_t>(i & 0xFFFF), 0, 0);
 
     std::shared_mutex mu;
     const uint32_t ops_per_thread = measure_count(n);
@@ -277,7 +277,7 @@ static void bench_mixed_rw(uint32_t n, int num_threads) {
                 auto t0 = Clock::now();
                 if (is_write) {
                     std::unique_lock lk(mu);
-                    idx.put(hashes[k], i, i, static_cast<uint16_t>(i & 0xFFFF));
+                    idx.put(hashes[k], i, i, static_cast<uint32_t>(i & 0xFFFF), 0, 0);
                 } else {
                     std::shared_lock lk(mu);
                     idx.get(hashes[k], static_cast<uint16_t>(i), lr);

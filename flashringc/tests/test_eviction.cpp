@@ -591,8 +591,8 @@ int main(int argc, char* argv[]) {
     if (tests_passed == tests_run) {
         printf("\nNotes:\n"
                "  - Eviction is FIFO (oldest-first via KeyIndex ring).\n"
-               "  - TTL (time-to-live) is NOT implemented.\n"
-               "  - last_access / freq fields are tracked but unused.\n"
+               "  - TTL (time-to-live): per-key, 16-bit seconds; 0 = no expiry; expiry on get (lazy).\n"
+               "  - last_access = insert time when TTL is set; freq used for eviction policy.\n"
                "  - Watermark eviction runs until usage <= clear threshold;\n"
                "    discard is batched (64MB) so index is not drained.\n");
     }

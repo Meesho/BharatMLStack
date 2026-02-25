@@ -26,6 +26,7 @@ struct Result {
 struct KVPair {
     std::string_view key;
     std::string_view value;
+    uint16_t        ttl_seconds = 0;  // 0 = no TTL
 };
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,7 @@ struct Request {
     Hash128                 hash;    // pre-computed by Cache layer
     std::string_view        key;
     std::string_view        value;   // populated for Put
+    uint16_t                ttl_seconds = 0;  // 0 = no TTL (Put only)
     Result*                 result          = nullptr;
     uint32_t                sem_slot        = 0;
     std::atomic<int>*       batch_remaining = nullptr;
