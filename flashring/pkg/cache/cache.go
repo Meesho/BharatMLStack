@@ -56,15 +56,6 @@ type WrapCacheConfig struct {
 	GridSearchEpsilon     float64
 	SampleDuration        time.Duration
 
-	// Batching reads
-	EnableBatching    bool
-	BatchWindowMicros int // in microseconds
-	MaxBatchSize      int
-
-	//lockless mode for PutLL/GetLL
-	EnableLockless bool
-
-	//Badger
 	MountPoint string
 }
 
@@ -174,10 +165,6 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error)
 		writeRing = nil
 	}
 
-	batchWindow := time.Duration(0)
-	if config.EnableBatching && config.BatchWindowMicros > 0 {
-		batchWindow = time.Duration(config.BatchWindowMicros) * time.Microsecond
-	}
 	shardLocks := make([]sync.RWMutex, config.NumShards)
 	shards := make([]*filecache.ShardCache, config.NumShards)
 	for i := 0; i < config.NumShards; i++ {
@@ -191,17 +178,8 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error)
 			BlockSize:           BLOCK_SIZE,
 			Directory:           mountPoint,
 			Predictor:           predictor,
-
-			//batching reads
-			EnableBatching: config.EnableBatching,
-			BatchWindow:    batchWindow,
-			MaxBatchSize:   config.MaxBatchSize,
-
-			//lockless mode for PutLL/GetLL
-			EnableLockless: config.EnableLockless,
-
-			BatchIoUringReader: batchReader,
-			WriteRing:          writeRing,
+			BatchIoUringReader:  batchReader,
+			WriteRing:           writeRing,
 		}, &shardLocks[i])
 	}
 
@@ -213,80 +191,6 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error)
 	}
 
 	return wc, nil
-}
-
-func (wc *WrapCache) PutLL(key string, value []byte, exptimeInMinutes uint16) error {
-
-	h32 := wc.Hash(key)
-	shardIdx := h32 % uint32(len(wc.shards))
-	start := time.Now()
-
-	result := filecache.ErrorPool.Get().(chan error)
-
-	wc.shards[shardIdx].WriteCh <- &filecache.WriteRequestV2{
-		Key:              key,
-		Value:            value,
-		ExptimeInMinutes: exptimeInMinutes,
-		Result:           result,
-	}
-
-	if metrics.Enabled() && h32%100 < 10 {
-		metrics.Incr(metrics.KEY_RINGBUFFER_ACTIVE_ENTRIES, metrics.GetShardTag(shardIdx))
-	}
-
-	op := <-result
-	filecache.ErrorPool.Put(result)
-	if metrics.Enabled() {
-		metrics.Incr(metrics.KEY_PUTS, metrics.GetShardTag(shardIdx))
-		metrics.Timing(metrics.KEY_PUT_LATENCY, time.Since(start), metrics.GetShardTag(shardIdx))
-	}
-	return op
-}
-
-func (wc *WrapCache) GetLL(key string) ([]byte, bool, bool) {
-	h32 := wc.Hash(key)
-	shardIdx := h32 % uint32(len(wc.shards))
-
-	start := time.Now()
-
-	// found, value, _, expired, needsSlowPath := wc.shards[shardIdx].GetFastPath(key)
-
-	// if !needsSlowPath {
-	// 	if found && !expired {
-	// 		wc.stats[shardIdx].Hits.Add(1)
-	// 	} else if expired {
-	// 		wc.stats[shardIdx].Expired.Add(1)
-	// 	}
-
-	// 	wc.stats[shardIdx].TotalGets.Add(1)
-	// 	wc.stats[shardIdx].LatencyTracker.RecordGet(time.Since(start))
-	// 	return value, found, expired
-	// }
-
-	result := filecache.ReadResultPool.Get().(chan filecache.ReadResultV2)
-
-	req := filecache.ReadRequestPool.Get().(*filecache.ReadRequestV2)
-	req.Key = key
-	req.Result = result
-
-	wc.shards[shardIdx].ReadCh <- req
-	op := <-result
-
-	filecache.ReadResultPool.Put(result)
-	filecache.ReadRequestPool.Put(req)
-
-	if metrics.Enabled() {
-		if op.Found && !op.Expired {
-			metrics.Incr(metrics.KEY_HITS, metrics.GetShardTag(shardIdx))
-		}
-		if op.Expired {
-			metrics.Incr(metrics.KEY_EXPIRED_ENTRIES, metrics.GetShardTag(shardIdx))
-		}
-		metrics.Timing(metrics.KEY_GET_LATENCY, time.Since(start), metrics.GetShardTag(shardIdx))
-		metrics.Incr(metrics.KEY_GETS, metrics.GetShardTag(shardIdx))
-	}
-
-	return op.Data, op.Found, op.Expired
 }
 
 func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) error {
@@ -344,34 +248,19 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	var remainingTTL uint16
 	var expired bool
 	var shouldReWrite bool
-	if wc.shards[shardIdx].BatchReader != nil {
-		reqChan := make(chan filecache.ReadResultV2, 1)
-		wc.shards[shardIdx].BatchReader.Requests <- &filecache.ReadRequestV2{
-			Key:    key,
-			Result: reqChan,
-		}
-		result := <-reqChan
-		keyFound, val, remainingTTL, expired, shouldReWrite = result.Found, result.Data, result.TTL, result.Expired, result.ShouldRewrite
+
+	func(key string, shardIdx uint32) {
+
+		keyFound, val, remainingTTL, expired, shouldReWrite = wc.shards[shardIdx].Get(key)
+
 		if shouldReWrite {
+			//copy val into a safe variable because we are unlocking the shard
+			// at the end of anon function execution
 			valCopy = make([]byte, len(val))
 			copy(valCopy, val)
+			val = valCopy
 		}
-	} else {
-
-		func(key string, shardIdx uint32) {
-
-			keyFound, val, remainingTTL, expired, shouldReWrite = wc.shards[shardIdx].Get(key)
-
-			if shouldReWrite {
-				//copy val into a safe variable because we are unlocking the shard
-				// at the end of anon function execution
-				valCopy = make([]byte, len(val))
-				copy(valCopy, val)
-				val = valCopy
-			}
-		}(key, shardIdx)
-
-	}
+	}(key, shardIdx)
 
 	if metrics.Enabled() {
 		if keyFound && !expired {

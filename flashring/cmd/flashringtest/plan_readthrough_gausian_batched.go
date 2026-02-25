@@ -103,11 +103,6 @@ func planReadthroughGaussianBatched() {
 		ReWriteScoreThreshold: 0.8,
 		GridSearchEpsilon:     0.0001,
 		SampleDuration:        time.Duration(sampleSecs) * time.Second,
-
-		//batching reads
-		EnableBatching:    enableBatching,
-		BatchWindowMicros: batchWindowMicros,
-		MaxBatchSize:      maxBatchSize,
 	}
 
 	pc, err := cachepkg.NewWrapCache(cfg, mountPoint)

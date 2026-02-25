@@ -25,15 +25,7 @@ type ShardCache struct {
 	dm                *indices.DeleteManager
 	predictor         *maths.Predictor
 	startAt           int64
-
-	//batching reads
-	BatchReader *BatchReaderV2
-
-	//Lockless read and write
-	ReadCh  chan *ReadRequestV2
-	WriteCh chan *WriteRequestV2
-
-	ShardIdx uint32
+	ShardIdx          uint32
 }
 
 type ShardCacheConfig struct {
@@ -48,14 +40,6 @@ type ShardCacheConfig struct {
 	AsyncReadWorkers    int
 	AsyncQueueDepth     int
 	Predictor           *maths.Predictor
-
-	//batching reads
-	EnableBatching bool
-	BatchWindow    time.Duration
-	MaxBatchSize   int
-
-	//lockless
-	EnableLockless bool
 
 	// Global batched io_uring reader (shared across all shards).
 	// When set, disk reads go through this instead of the per-shard IOUringFile.
@@ -115,47 +99,10 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 		// Use the global batched io_uring reader (shared across all shards).
 		sc.batchReader = config.BatchIoUringReader
 	} else {
-		// Fallback: per-shard io_uring ring for backward compatibility.
-		ioFile, err := fs.NewIOUringFile(file, 256, 0)
-		if err != nil {
-			log.Panic().Err(err).Msg("Failed to create io_uring file")
-		}
-		sc.ioFile = ioFile
-	}
-
-	// Initialize batch reader if enabled
-	if config.EnableBatching {
-		sc.BatchReader = NewBatchReaderV2(BatchReaderV2Config{
-			BatchWindow:  config.BatchWindow,
-			MaxBatchSize: config.MaxBatchSize,
-		}, sc, sl)
-	}
-
-	if config.EnableLockless {
-
-		sc.ReadCh = make(chan *ReadRequestV2, 500)
-		sc.WriteCh = make(chan *WriteRequestV2, 500)
-
-		go sc.startReadWriteRoutines()
+		log.Panic().Msg("BatchIoUringReader is required")
 	}
 
 	return sc
-}
-
-// function that starts go routine to process the read and write requests
-func (fc *ShardCache) startReadWriteRoutines() {
-	go func() {
-		for {
-			select {
-			case writeReq := <-fc.WriteCh: // Writes get priority
-				err := fc.Put(writeReq.Key, writeReq.Value, writeReq.ExptimeInMinutes)
-				writeReq.Result <- err
-			case readReq := <-fc.ReadCh:
-				found, data, ttl, expired, shouldRewrite := fc.GetSlowPath(readReq.Key)
-				readReq.Result <- ReadResultV2{Found: found, Data: data, TTL: ttl, Expired: expired, ShouldRewrite: shouldRewrite, Error: nil}
-			}
-		}
-	}()
 }
 
 func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
@@ -251,130 +198,6 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	return true, buf[4+len(key) : 4+len(key)+valLen], remainingTTL, false, shouldReWrite
 }
 
-// GetFastPath attempts to read from memtable only (no disk I/O).
-// Returns: (found, data, ttl, expired, needsSlowPath)
-// If needsSlowPath is true, caller should use GetSlowPath for disk read.
-func (fc *ShardCache) GetFastPath(key string) (bool, []byte, uint16, bool, bool) {
-	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
-	if status == indices.StatusNotFound {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_KEY_NOT_FOUND_COUNT, metrics.GetShardTag(fc.ShardIdx))
-		}
-		return false, nil, 0, false, false // needsSlowPath = false (not found)
-	}
-
-	if status == indices.StatusExpired {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_KEY_EXPIRED_COUNT, metrics.GetShardTag(fc.ShardIdx))
-		}
-		return false, nil, 0, true, false // needsSlowPath = false (expired)
-	}
-
-	// Check if data is in memtable
-	mt := fc.mm.GetMemtableById(memId)
-	if mt == nil {
-		// Data not in memtable, needs disk read - signal slow path needed
-		return false, nil, remainingTTL, false, true // needsSlowPath = true
-	}
-
-	// Fast path: read from memtable
-	buf, exists := mt.GetBufForRead(int(offset), length)
-	if !exists {
-		panic("memtable exists but buf not found")
-	}
-
-	// Validate CRC and key
-	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
-	computedCR32 := crc32.ChecksumIEEE(buf[4:])
-	if gotCR32 != computedCR32 {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_BAD_CR32_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
-		}
-		_, currMemId, _ := fc.mm.GetMemtable()
-		shouldReWrite := fc.predictor.Predict(uint64(freq), uint64(lastAccess), memId, currMemId)
-		_ = shouldReWrite
-		return false, nil, 0, false, false
-	}
-
-	gotKey := string(buf[4 : 4+len(key)])
-	if gotKey != key {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_BAD_KEY_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
-		}
-		return false, nil, 0, false, false
-	}
-
-	valLen := int(length) - 4 - len(key)
-	return true, buf[4+len(key) : 4+len(key)+valLen], remainingTTL, false, false // needsSlowPath = false
-}
-
-// GetSlowPath reads data from disk. Used when GetFastPath indicates needsSlowPath.
-// Returns: (found, data, ttl, expired, shouldRewrite)
-func (fc *ShardCache) GetSlowPath(key string) (bool, []byte, uint16, bool, bool) {
-	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
-	if status == indices.StatusNotFound {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_KEY_NOT_FOUND_COUNT, metrics.GetShardTag(fc.ShardIdx))
-		}
-		return false, nil, 0, false, false
-	}
-
-	if status == indices.StatusExpired {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_KEY_EXPIRED_COUNT, metrics.GetShardTag(fc.ShardIdx))
-		}
-		return false, nil, 0, true, false
-	}
-
-	_, currMemId, _ := fc.mm.GetMemtable()
-	shouldReWrite := fc.predictor.Predict(uint64(freq), uint64(lastAccess), memId, currMemId)
-
-	// Check memtable again (might have changed since fast path check)
-	mt := fc.mm.GetMemtableById(memId)
-	if mt != nil {
-		buf, exists := mt.GetBufForRead(int(offset), length)
-		if !exists {
-			panic("memtable exists but buf not found")
-		}
-		return fc.validateAndReturnBuffer(key, buf, length, memId, remainingTTL, shouldReWrite)
-	}
-
-	buf := make([]byte, length)
-	fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
-	n := fc.readFromDisk(int64(fileOffset), length, buf)
-	if n != int(length) {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_BAD_LENGTH_COUNT, metrics.GetShardTag(fc.ShardIdx))
-		}
-		return false, nil, 0, false, shouldReWrite
-	}
-
-	return fc.validateAndReturnBuffer(key, buf, length, memId, remainingTTL, shouldReWrite)
-}
-
-// validateAndReturnBuffer validates CRC and key, then returns the value
-func (fc *ShardCache) validateAndReturnBuffer(key string, buf []byte, length uint16, memId uint32, remainingTTL uint16, shouldReWrite bool) (bool, []byte, uint16, bool, bool) {
-	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
-	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
-	if gotCR32 != computedCR32 {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_BAD_CR32_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
-		}
-		return false, nil, 0, false, shouldReWrite
-	}
-
-	gotKey := string(buf[4 : 4+len(key)])
-	if gotKey != key {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_BAD_KEY_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
-		}
-		return false, nil, 0, false, shouldReWrite
-	}
-
-	valLen := int(length) - 4 - len(key)
-	return true, buf[4+len(key) : 4+len(key)+valLen], remainingTTL, false, shouldReWrite
-}
-
 func (fc *ShardCache) readFromDisk(fileOffset int64, length uint16, buf []byte) int {
 
 	alignedStartOffset := (fileOffset / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
@@ -405,22 +228,16 @@ func (fc *ShardCache) readFromDiskAsync(fileOffset int64, length uint16, buf []b
 
 	var n int
 	var err error
-
-	if fc.batchReader != nil {
-		// Batched path: validate offset locally, then submit to the global
-		// io_uring batch reader which accumulates requests across all shards.
-		var validOffset int64
-		validOffset, err = fc.file.ValidateReadOffset(alignedStartOffset, alignedReadSize)
-		if err == nil {
-			n, err = fc.batchReader.Submit(fc.file.ReadFd, readBuf, uint64(validOffset))
-		}
-	} else {
-		// Per-shard io_uring fallback
-		n, err = fc.ioFile.PreadAsync(alignedStartOffset, readBuf)
+	// Batched path: validate offset locally, then submit to the global
+	// io_uring batch reader which accumulates requests across all shards.
+	var validOffset int64
+	validOffset, err = fc.file.ValidateReadOffset(alignedStartOffset, alignedReadSize)
+	if err == nil {
+		n, err = fc.batchReader.Submit(fc.file.ReadFd, readBuf, uint64(validOffset))
 	}
 
 	if err != nil || n != alignedReadSize {
-		// ErrFileOffsetOutOfRange is expected for stale index entries -- don't log.
+		// ErrFileOffsetOutOfRange is expected for stale index entries.
 		if err != nil && err != fs.ErrFileOffsetOutOfRange {
 			log.Warn().Err(err).
 				Int64("offset", alignedStartOffset).
@@ -440,33 +257,4 @@ func (fc *ShardCache) readFromDiskAsync(fileOffset int64, length uint16, buf []b
 
 func (fc *ShardCache) GetRingBufferActiveEntries() int {
 	return fc.keyIndex.GetRB().ActiveEntries()
-}
-
-// batching reads
-func (fc *ShardCache) processBuffer(key string, buf []byte, length uint16) ReadResult {
-	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
-	computedCR32 := crc32.ChecksumIEEE(buf[4:])
-	gotKey := string(buf[4 : 4+len(key)])
-
-	if gotCR32 != computedCR32 {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_BAD_CR32_COUNT, metrics.GetShardTag(fc.ShardIdx))
-		}
-		return ReadResult{Found: false, Error: fmt.Errorf("crc mismatch")}
-	}
-	if gotKey != key {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_BAD_KEY_COUNT, metrics.GetShardTag(fc.ShardIdx))
-		}
-		return ReadResult{Found: false, Error: fmt.Errorf("key mismatch")}
-	}
-
-	valLen := int(length) - 4 - len(key)
-	value := make([]byte, valLen)
-	copy(value, buf[4+len(key):4+len(key)+valLen])
-
-	return ReadResult{
-		Found: true,
-		Data:  value,
-	}
 }
