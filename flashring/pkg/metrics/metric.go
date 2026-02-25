@@ -197,8 +197,7 @@ func Enabled() bool {
 }
 
 func GetShardTag(shardIdx uint32) []string {
-	idx := shardIdx * 2
-	return shardTags[idx : idx+2]
+	return shardTags[shardIdx : shardIdx+1]
 }
 
 func GetMemtableTag(memtableId uint32) []string {
