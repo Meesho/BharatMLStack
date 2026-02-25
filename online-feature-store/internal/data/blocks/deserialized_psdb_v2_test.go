@@ -119,7 +119,7 @@ func TestDeserializePSDBV2(t *testing.T) {
 			name: "invalid layout version",
 			buildFunc: func() (*PermStorageDataBlock, error) {
 				return NewPermStorageDataBlockBuilder().
-					SetID(2). // invalid layout version
+					SetID(3). // unsupported layout version (only 1 and 2 are valid)
 					SetVersion(1).
 					SetTTL(3600).
 					SetDataType(types.DataTypeInt32).
@@ -421,7 +421,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 				expectedValues := [][]int32{{1, 2}, {3, 4, 5}}
 
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					values, err := HelperVectorFeatureToTypeInt32(feature)
 					require.NoError(t, err)
@@ -445,7 +445,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 			validate: func(t *testing.T, d *DeserializedPSDB) {
 				expectedValues := []string{"abc", "def", "ghi"}
 				for pos := 0; pos < 3; pos++ {
-					feature, err := d.GetStringScalarFeature(pos, 3)
+					feature, err := d.GetStringScalarFeature(pos, 3, nil)
 					require.NoError(t, err)
 
 					value, err := HelperScalarFeatureToTypeString(feature)
@@ -475,7 +475,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 				expectedValues := [][]string{{"abc", "def"}, {"ghi", "jkl", "mno"}}
 
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetStringVectorFeature(pos, 2, vectorLengths)
+					feature, err := d.GetStringVectorFeature(pos, 2, vectorLengths, nil)
 					require.NoError(t, err)
 
 					result, err := HelperVectorFeatureStringToConcatenatedString(feature, int(vectorLengths[pos]))
@@ -530,7 +530,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 				expectedValues := [][]bool{{true, false, true}, {false, true, true, true}}
 				fmt.Printf("d.OriginalData %v\n", d.OriginalData)
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetBoolVectorFeature(pos, vectorLengths)
+					feature, err := d.GetBoolVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					fmt.Printf("feature %v\n", feature)
 					result, err := HelperVectorFeatureBoolToConcatenatedString(feature)
@@ -688,7 +688,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 				expectedValues := [][]float32{{1.1, 2.2}, {3.3, 4.4, 5.5}}
 
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureFp32ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -722,7 +722,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 				expectedValues := [][]float64{{1.1, 2.2}, {3.3, 4.4, 5.5}}
 
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureFp64ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -756,7 +756,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 				expectedValues := [][]int8{{1, 2}, {3, 4, 5}}
 
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt8ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -789,7 +789,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 				expectedValues := [][]int16{{1, 2}, {3, 4, 5}}
 
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt16ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -822,7 +822,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 				expectedValues := [][]int64{{1, 2}, {3, 4, 5}}
 
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt64ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -1025,7 +1025,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 			validate: func(t *testing.T, d *DeserializedPSDB) {
 				// Test random positions
 				for _, pos := range []int{0, 50, 500, 4999} {
-					feature, err := d.GetStringScalarFeature(pos, 5000)
+					feature, err := d.GetStringScalarFeature(pos, 5000, nil)
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeString(feature)
 					require.NoError(t, err)
@@ -1063,7 +1063,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 
 				// Test random positions
 				for _, pos := range []int{0, 50, 500, 999} {
-					feature, err := d.GetBoolVectorFeature(pos, vectorLengths)
+					feature, err := d.GetBoolVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureBoolToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -1247,7 +1247,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 
 				// Test random positions
 				for _, pos := range []int{0, 50, 500, 999} {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureFp32ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -1294,7 +1294,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 
 				// Test random positions
 				for _, pos := range []int{0, 50, 500, 999} {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureFp64ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -1341,7 +1341,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 
 				// Test random positions
 				for _, pos := range []int{0, 50, 500, 999} {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt8ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -1388,7 +1388,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 
 				// Test random positions
 				for _, pos := range []int{0, 50, 500, 999} {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt16ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -1435,7 +1435,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 
 				// Test random positions
 				for _, pos := range []int{0, 50, 500, 999} {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt64ToConcatenatedString(feature)
 					require.NoError(t, err)

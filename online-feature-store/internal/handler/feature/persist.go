@@ -395,6 +395,9 @@ func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataT
 	}
 	switch dataType.String() {
 	case "DataTypeString":
+		if fgConf.LayoutVersion == 2 && len(featureBitmap) > 0 {
+			builder = builder.SetupBitmapMeta(numOfFeatures)
+		}
 		psdb, err := builder.
 			SetStringValue(stringLengths).
 			SetScalarValues(featureData, numOfFeatures).
@@ -404,6 +407,9 @@ func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataT
 		}
 		return psdb
 	case "DataTypeStringVector":
+		if fgConf.LayoutVersion == 2 && len(featureBitmap) > 0 {
+			builder = builder.SetupBitmapMeta(numOfFeatures)
+		}
 		psdb, err := builder.
 			SetStringValue(stringLengths).
 			SetVectorValues(featureData, numOfFeatures, vectorLengths).
@@ -414,6 +420,9 @@ func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataT
 		return psdb
 	default:
 		if dataType.IsVector() {
+			if fgConf.LayoutVersion == 2 && len(featureBitmap) > 0 {
+				builder = builder.SetupBitmapMeta(numOfFeatures)
+			}
 			psdb, err := builder.
 				SetVectorValues(featureData, numOfFeatures, vectorLengths).
 				Build()
@@ -421,6 +430,10 @@ func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataT
 				log.Error().Err(err).Msgf("Failed to build PSDB block for feature group %v", fgConf.Id)
 			}
 			return psdb
+		}
+		// Layout-2 scalar numeric: set bitmap meta so header has bitmapLastBitIndex and bitmapPresent
+		if fgConf.LayoutVersion == 2 && len(featureBitmap) > 0 {
+			builder = builder.SetupBitmapMeta(numOfFeatures)
 		}
 		psdb, err := builder.
 			SetScalarValues(featureData, numOfFeatures).
