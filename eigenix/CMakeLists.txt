@@ -18,19 +18,32 @@ find_package(OpenMP REQUIRED)
 set(BLA_VENDOR OpenBLAS)
 find_package(BLAS REQUIRED)
 
-# FAISS — try cmake config first, then pkg-config
+# FAISS — the setup.sh installs cmake config to /usr/local/share/faiss
+list(APPEND CMAKE_PREFIX_PATH "/usr/local")
 find_package(faiss QUIET CONFIG)
 if(NOT faiss_FOUND)
-    find_library(FAISS_LIBRARY NAMES faiss PATHS /usr/local/lib)
-    find_path(FAISS_INCLUDE_DIR NAMES faiss/Clustering.h PATHS /usr/local/include)
+    # Manual fallback: locate the static lib and headers directly
+    find_library(FAISS_LIBRARY NAMES faiss
+                 PATHS /usr/local/lib /usr/lib /usr/lib/x86_64-linux-gnu)
+    find_path(FAISS_INCLUDE_DIR NAMES faiss/Clustering.h
+              PATHS /usr/local/include /usr/include)
     if(FAISS_LIBRARY AND FAISS_INCLUDE_DIR)
-        add_library(faiss::faiss UNKNOWN IMPORTED)
-        set_target_properties(faiss::faiss PROPERTIES
+        add_library(faiss STATIC IMPORTED)
+        set_target_properties(faiss PROPERTIES
             IMPORTED_LOCATION "${FAISS_LIBRARY}"
             INTERFACE_INCLUDE_DIRECTORIES "${FAISS_INCLUDE_DIR}")
-        set(faiss_FOUND TRUE)
+        # FAISS with AVX2 build also produces libfaiss_avx2.a
+        find_library(FAISS_AVX2_LIBRARY NAMES faiss_avx2
+                     PATHS /usr/local/lib /usr/lib)
+        if(FAISS_AVX2_LIBRARY)
+            set_property(TARGET faiss APPEND PROPERTY
+                INTERFACE_LINK_LIBRARIES "${FAISS_AVX2_LIBRARY}")
+        endif()
+        set_property(TARGET faiss APPEND PROPERTY
+            INTERFACE_LINK_LIBRARIES ${BLAS_LIBRARIES} OpenMP::OpenMP_CXX)
     else()
-        message(FATAL_ERROR "FAISS not found. Run setup.sh or install FAISS manually.")
+        message(FATAL_ERROR
+            "FAISS not found. Run setup.sh or install FAISS manually.")
     endif()
 endif()
 
@@ -50,7 +63,7 @@ target_include_directories(eigenix_kmeans PUBLIC include)
 target_link_libraries(eigenix_kmeans PUBLIC
     OpenMP::OpenMP_CXX
     ${BLAS_LIBRARIES}
-    faiss::faiss
+    faiss
 )
 
 # ---------- Benchmark executable ----------

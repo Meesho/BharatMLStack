@@ -7,6 +7,13 @@
 #include <random>
 #include <stdexcept>
 
+// Older OpenBLAS headers may not define CBLAS_INT (added in newer versions).
+#ifndef CBLAS_INT
+using cblas_int = int;
+#else
+using cblas_int = CBLAS_INT;
+#endif
+
 namespace eigenix {
 
 namespace {
@@ -104,14 +111,14 @@ void BlasKMeans::train(const float* data, size_t n, int dim, int k,
     for (size_t iter = 0; iter < cfg.max_iter; ++iter) {
         // dist_buf[i,c] = -2 * x_i . c_c  (via SGEMM)
         cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
-                    static_cast<CBLAS_INT>(n),
-                    static_cast<CBLAS_INT>(k),
-                    static_cast<CBLAS_INT>(dim),
+                    static_cast<cblas_int>(n),
+                    static_cast<cblas_int>(k),
+                    static_cast<cblas_int>(dim),
                     -2.0f,
-                    data, static_cast<CBLAS_INT>(dim),
-                    centroids_.data(), static_cast<CBLAS_INT>(dim),
+                    data, static_cast<cblas_int>(dim),
+                    centroids_.data(), static_cast<cblas_int>(dim),
                     0.0f,
-                    dist_buf_.data(), static_cast<CBLAS_INT>(k));
+                    dist_buf_.data(), static_cast<cblas_int>(k));
 
         // Complete ||x-c||^2 = ||x||^2 - 2 x.c + ||c||^2  and find argmin.
         #pragma omp parallel for schedule(static)
@@ -202,14 +209,14 @@ void BlasKMeans::assign(const float* data, size_t n, int dim,
         qnorms[i] = sqnorm(data + i * dim, dim);
 
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
-                static_cast<CBLAS_INT>(n),
-                static_cast<CBLAS_INT>(k_),
-                static_cast<CBLAS_INT>(dim),
+                static_cast<cblas_int>(n),
+                static_cast<cblas_int>(k_),
+                static_cast<cblas_int>(dim),
                 -2.0f,
-                data, static_cast<CBLAS_INT>(dim),
-                centroids_.data(), static_cast<CBLAS_INT>(dim),
+                data, static_cast<cblas_int>(dim),
+                centroids_.data(), static_cast<cblas_int>(dim),
                 0.0f,
-                dist_buf_.data(), static_cast<CBLAS_INT>(k_));
+                dist_buf_.data(), static_cast<cblas_int>(k_));
 
     #pragma omp parallel for schedule(static)
     for (size_t i = 0; i < n; ++i) {
