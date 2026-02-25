@@ -81,7 +81,6 @@ var (
 	statsDClient    = getDefaultClient()
 	samplingRate    = 0.1
 	telegrafAddress = "localhost:8125"
-	appName         = ""
 	initialized     = false
 	once            sync.Once
 
@@ -110,7 +109,6 @@ func Init() {
 	once.Do(func() {
 		var err error
 		samplingRate = viper.GetFloat64("APP_METRIC_SAMPLING_RATE")
-		appName = viper.GetString("APP_NAME")
 		globalTags := getGlobalTags()
 
 		statsDClient, err = statsd.New(
@@ -152,7 +150,6 @@ func Timing(name string, value time.Duration, tags []string) {
 	if !metricsEnabled {
 		return
 	}
-	tags = append(tags, TagAsString(TagService, appName))
 	err := statsDClient.Timing(name, value, tags, samplingRate)
 	if err != nil {
 		log.Warn().AnErr("Error occurred while doing statsd timing", err)
@@ -164,7 +161,6 @@ func Count(name string, value int64, tags []string) {
 	if !metricsEnabled {
 		return
 	}
-	tags = append(tags, TagAsString(TagService, appName))
 	err := statsDClient.Count(name, value, tags, samplingRate)
 	if err != nil {
 		log.Warn().AnErr("Error occurred while doing statsd count", err)
@@ -184,7 +180,6 @@ func Gauge(name string, value float64, tags []string) {
 	if !metricsEnabled {
 		return
 	}
-	tags = append(tags, TagAsString(TagService, appName))
 	err := statsDClient.Gauge(name, value, tags, samplingRate)
 	if err != nil {
 		log.Warn().AnErr("Error occurred while doing statsd gauge", err)
