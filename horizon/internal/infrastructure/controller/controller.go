@@ -1,11 +1,15 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	infrastructurehandler "github.com/Meesho/BharatMLStack/horizon/internal/infrastructure/handler"
 	workflowHandler "github.com/Meesho/BharatMLStack/horizon/internal/workflow/handler"
+	"github.com/Meesho/BharatMLStack/horizon/pkg/argocd"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,17 +22,22 @@ func getWorkingEnv(ctx *gin.Context) string {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "workingEnv not found in context"})
 		return ""
 	}
-	return workingEnv.(string)
+	workingEnvStr, ok := workingEnv.(string)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "workingEnv has invalid type"})
+		return ""
+	}
+	return workingEnvStr
 }
 
 type InfrastructureController struct {
-	handler       infrastructurehandler.InfrastructureHandler
+	handler         infrastructurehandler.InfrastructureHandler
 	workflowHandler workflowHandler.Handler
 }
 
 func NewController() *InfrastructureController {
 	return &InfrastructureController{
-		handler:        infrastructurehandler.InitInfrastructureHandler(),
+		handler:         infrastructurehandler.InitInfrastructureHandler(),
 		workflowHandler: workflowHandler.GetWorkflowHandler(),
 	}
 }
@@ -59,6 +68,17 @@ type UpdatePodAnnotationsRequest struct {
 
 type UpdateAutoscalingTriggersRequest struct {
 	Triggers []interface{} `json:"triggers" binding:"required"` // Array of trigger objects (CPU, cron, prometheus, etc.)
+}
+
+// ApplicationLogsQuery holds query params for GET /applications/:appName/logs
+type ApplicationLogsQuery struct {
+	PodName      string `form:"podName"`
+	Container    string `form:"container"`
+	Follow       bool   `form:"follow"`
+	Previous     bool   `form:"previous"`
+	SinceSeconds string `form:"sinceSeconds"` // string int64, default "0"
+	TailLines    string `form:"tailLines"`    // string int64, default "1000"
+	Filter       string `form:"filter"`
 }
 
 func (c *InfrastructureController) GetHPAConfig(ctx *gin.Context) {
@@ -101,6 +121,96 @@ func (c *InfrastructureController) GetResourceDetail(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, resourceDetail)
+}
+
+func (c *InfrastructureController) GetApplicationLogs(ctx *gin.Context) {
+	appName := strings.TrimSpace(ctx.Param("appName"))
+	workingEnv := getWorkingEnv(ctx)
+	if workingEnv == "" {
+		return
+	}
+	if appName == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": gin.H{
+			"message": "appName is required",
+		}})
+		return
+	}
+
+	var q ApplicationLogsQuery
+	if err := ctx.ShouldBindQuery(&q); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": gin.H{
+			"message": "invalid query parameters",
+		}})
+		return
+	}
+
+	container := strings.TrimSpace(q.Container)
+	if container == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"message": "container is required",
+			},
+		})
+		return
+	}
+
+	if q.Follow {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"message": "streaming (follow=true) is not supported",
+			},
+		})
+		return
+	}
+
+	sinceSeconds := int64(0)
+	if q.SinceSeconds != "" {
+		var err error
+		sinceSeconds, err = strconv.ParseInt(q.SinceSeconds, 10, 64)
+		if err != nil || sinceSeconds < 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": gin.H{
+				"message": "sinceSeconds must be a non-negative integer",
+			}})
+			return
+		}
+	}
+	tailLines := int64(1000)
+	if q.TailLines != "" {
+		var err error
+		tailLines, err = strconv.ParseInt(q.TailLines, 10, 64)
+		if err != nil || tailLines < 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": gin.H{
+				"message": "tailLines must be a non-negative integer",
+			}})
+			return
+		}
+	}
+
+	opts := &argocd.ApplicationLogsOptions{
+		PodName:      q.PodName,
+		Container:    container,
+		Previous:     q.Previous,
+		SinceSeconds: sinceSeconds,
+		TailLines:    tailLines,
+		Filter:       q.Filter,
+	}
+
+	entries, err := c.handler.GetApplicationLogs(appName, workingEnv, opts)
+	if err != nil {
+		status := http.StatusInternalServerError
+		var apiErr *argocd.ArgoCDAPIError
+		if errors.As(err, &apiErr) {
+			status = apiErr.StatusCode
+		}
+		ctx.JSON(status, gin.H{
+			"error": gin.H{
+				"message": err.Error(),
+			},
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, entries)
 }
 
 func (c *InfrastructureController) RestartDeployment(ctx *gin.Context) {

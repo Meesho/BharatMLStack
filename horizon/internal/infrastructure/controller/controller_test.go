@@ -3,13 +3,16 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	infrastructurehandler "github.com/Meesho/BharatMLStack/horizon/internal/infrastructure/handler"
 	inframiddleware "github.com/Meesho/BharatMLStack/horizon/internal/infrastructure/middleware"
 	workflowPkg "github.com/Meesho/BharatMLStack/horizon/internal/workflow"
+	"github.com/Meesho/BharatMLStack/horizon/pkg/argocd"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/etcd"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -40,6 +43,14 @@ func (m *MockInfrastructureHandler) GetResourceDetail(appName, workingEnv string
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*infrastructurehandler.ResourceDetail), args.Error(1)
+}
+
+func (m *MockInfrastructureHandler) GetApplicationLogs(appName, workingEnv string, opts *argocd.ApplicationLogsOptions) ([]argocd.ApplicationLogEntry, error) {
+	args := m.Called(appName, workingEnv, opts)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]argocd.ApplicationLogEntry), args.Error(1)
 }
 
 func (m *MockInfrastructureHandler) RestartDeployment(appName, workingEnv string, isCanary bool) error {
@@ -828,6 +839,390 @@ func TestInfrastructureController_UpdateCPUThreshold(t *testing.T) {
 			if tt.expectedStatus == http.StatusOK || tt.expectedStatus == http.StatusInternalServerError {
 				mockWorkflowHandler.AssertExpectations(t)
 			}
+		})
+	}
+}
+
+func TestInfrastructureController_GetApplicationLogs(t *testing.T) {
+	ts := "2026-02-24T11:53:35Z"
+
+	tests := []struct {
+		name           string
+		appName        string
+		queryParams    string
+		mockSetup      func(*MockInfrastructureHandler)
+		expectedStatus int
+		validateBody   func(t *testing.T, body map[string]interface{})
+		description    string
+	}{
+		{
+			name:    "success with valid params",
+			appName: "test-app",
+			queryParams: "container=main&tailLines=100",
+			mockSetup: func(m *MockInfrastructureHandler) {
+				m.On("GetApplicationLogs", "test-app", mock.AnythingOfType("string"), mock.AnythingOfType("*argocd.ApplicationLogsOptions")).
+					Return([]argocd.ApplicationLogEntry{
+						{Result: argocd.ApplicationLogResult{Content: "log line 1", TimeStamp: &ts, PodName: "pod-1"}},
+					}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			description:    "Valid request should return log entries",
+		},
+		{
+			name:    "success with all optional params",
+			appName: "test-app",
+			queryParams: "container=sidecar&podName=pod-xyz&previous=true&sinceSeconds=600&tailLines=50&filter=ERROR",
+			mockSetup: func(m *MockInfrastructureHandler) {
+				m.On("GetApplicationLogs", "test-app", mock.AnythingOfType("string"),
+					mock.MatchedBy(func(opts *argocd.ApplicationLogsOptions) bool {
+					return opts.Container == "sidecar" &&
+						opts.PodName == "pod-xyz" &&
+						opts.Previous == true &&
+						opts.SinceSeconds == 600 &&
+						opts.TailLines == 50 &&
+						opts.Filter == "ERROR"
+					})).
+					Return([]argocd.ApplicationLogEntry{}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			description:    "All optional params should be forwarded to handler",
+		},
+		{
+			name:    "success returns empty entries",
+			appName: "test-app",
+			queryParams: "container=main",
+			mockSetup: func(m *MockInfrastructureHandler) {
+				m.On("GetApplicationLogs", "test-app", mock.AnythingOfType("string"), mock.AnythingOfType("*argocd.ApplicationLogsOptions")).
+					Return([]argocd.ApplicationLogEntry{}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			description:    "Empty log result should return 200 with empty array",
+		},
+		{
+			name:        "missing workingEnv",
+			appName:     "test-app",
+			queryParams: "container=main&_skipWorkingEnv=true",
+			mockSetup:   func(m *MockInfrastructureHandler) {},
+			expectedStatus: http.StatusBadRequest,
+			description:    "Missing workingEnv should be rejected by middleware",
+		},
+		{
+			name:        "whitespace-only appName",
+			appName:     "%20%20",
+			queryParams: "container=main",
+			mockSetup:   func(m *MockInfrastructureHandler) {},
+			expectedStatus: http.StatusBadRequest,
+			validateBody: func(t *testing.T, body map[string]interface{}) {
+				errObj, ok := body["error"].(map[string]interface{})
+				if !ok {
+					t.Fatal("expected error object in response")
+				}
+				assert.Equal(t, "appName is required", errObj["message"])
+			},
+			description: "Whitespace-only appName should return 400",
+		},
+		{
+			name:        "missing container",
+			appName:     "test-app",
+			queryParams: "",
+			mockSetup:   func(m *MockInfrastructureHandler) {},
+			expectedStatus: http.StatusBadRequest,
+			validateBody: func(t *testing.T, body map[string]interface{}) {
+				errObj, ok := body["error"].(map[string]interface{})
+				if !ok {
+					t.Fatal("expected error object in response")
+				}
+				assert.Equal(t, "container is required", errObj["message"])
+			},
+			description: "Missing container should return 400",
+		},
+		{
+			name:        "whitespace-only container",
+			appName:     "test-app",
+			queryParams: "container=%20%20",
+			mockSetup:   func(m *MockInfrastructureHandler) {},
+			expectedStatus: http.StatusBadRequest,
+			validateBody: func(t *testing.T, body map[string]interface{}) {
+				errObj, ok := body["error"].(map[string]interface{})
+				if !ok {
+					t.Fatal("expected error object in response")
+				}
+				assert.Equal(t, "container is required", errObj["message"])
+			},
+			description: "Whitespace-only container should return 400",
+		},
+		{
+			name:        "follow true rejected",
+			appName:     "test-app",
+			queryParams: "container=main&follow=true",
+			mockSetup:   func(m *MockInfrastructureHandler) {},
+			expectedStatus: http.StatusBadRequest,
+			validateBody: func(t *testing.T, body map[string]interface{}) {
+				errObj, ok := body["error"].(map[string]interface{})
+				if !ok {
+					t.Fatal("expected error object in response")
+				}
+				assert.Equal(t, "streaming (follow=true) is not supported", errObj["message"])
+			},
+			description: "follow=true should be rejected",
+		},
+		{
+			name:        "sinceSeconds non-numeric",
+			appName:     "test-app",
+			queryParams: "container=main&sinceSeconds=abc",
+			mockSetup:   func(m *MockInfrastructureHandler) {},
+			expectedStatus: http.StatusBadRequest,
+			validateBody: func(t *testing.T, body map[string]interface{}) {
+				errObj, ok := body["error"].(map[string]interface{})
+				if !ok {
+					t.Fatal("expected error object in response")
+				}
+				assert.Equal(t, "sinceSeconds must be a non-negative integer", errObj["message"])
+			},
+			description: "Non-numeric sinceSeconds should return 400",
+		},
+		{
+			name:        "sinceSeconds negative",
+			appName:     "test-app",
+			queryParams: "container=main&sinceSeconds=-10",
+			mockSetup:   func(m *MockInfrastructureHandler) {},
+			expectedStatus: http.StatusBadRequest,
+			validateBody: func(t *testing.T, body map[string]interface{}) {
+				errObj, ok := body["error"].(map[string]interface{})
+				if !ok {
+					t.Fatal("expected error object in response")
+				}
+				assert.Equal(t, "sinceSeconds must be a non-negative integer", errObj["message"])
+			},
+			description: "Negative sinceSeconds should return 400",
+		},
+		{
+			name:        "tailLines non-numeric",
+			appName:     "test-app",
+			queryParams: "container=main&tailLines=xyz",
+			mockSetup:   func(m *MockInfrastructureHandler) {},
+			expectedStatus: http.StatusBadRequest,
+			validateBody: func(t *testing.T, body map[string]interface{}) {
+				errObj, ok := body["error"].(map[string]interface{})
+				if !ok {
+					t.Fatal("expected error object in response")
+				}
+				assert.Equal(t, "tailLines must be a non-negative integer", errObj["message"])
+			},
+			description: "Non-numeric tailLines should return 400",
+		},
+		{
+			name:        "tailLines negative",
+			appName:     "test-app",
+			queryParams: "container=main&tailLines=-5",
+			mockSetup:   func(m *MockInfrastructureHandler) {},
+			expectedStatus: http.StatusBadRequest,
+			validateBody: func(t *testing.T, body map[string]interface{}) {
+				errObj, ok := body["error"].(map[string]interface{})
+				if !ok {
+					t.Fatal("expected error object in response")
+				}
+				assert.Equal(t, "tailLines must be a non-negative integer", errObj["message"])
+			},
+			description: "Negative tailLines should return 400",
+		},
+		{
+			name:    "large tailLines is accepted",
+			appName: "test-app",
+			queryParams: "container=main&tailLines=20000",
+			mockSetup: func(m *MockInfrastructureHandler) {
+				m.On("GetApplicationLogs", "test-app", mock.AnythingOfType("string"),
+					mock.MatchedBy(func(opts *argocd.ApplicationLogsOptions) bool {
+						return opts.TailLines == 20000
+					})).
+					Return([]argocd.ApplicationLogEntry{}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			description:    "Large tailLines value should be passed through to handler",
+		},
+		{
+			name:    "default tailLines when omitted",
+			appName: "test-app",
+			queryParams: "container=main",
+			mockSetup: func(m *MockInfrastructureHandler) {
+				m.On("GetApplicationLogs", "test-app", mock.AnythingOfType("string"),
+					mock.MatchedBy(func(opts *argocd.ApplicationLogsOptions) bool {
+						return opts.TailLines == 1000
+					})).
+					Return([]argocd.ApplicationLogEntry{}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			description:    "Omitted tailLines should default to 1000",
+		},
+		{
+			name:    "default sinceSeconds when omitted",
+			appName: "test-app",
+			queryParams: "container=main",
+			mockSetup: func(m *MockInfrastructureHandler) {
+				m.On("GetApplicationLogs", "test-app", mock.AnythingOfType("string"),
+					mock.MatchedBy(func(opts *argocd.ApplicationLogsOptions) bool {
+						return opts.SinceSeconds == 0
+					})).
+					Return([]argocd.ApplicationLogEntry{}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			description:    "Omitted sinceSeconds should default to 0",
+		},
+		{
+			name:    "handler returns error",
+			appName: "test-app",
+			queryParams: "container=main",
+			mockSetup: func(m *MockInfrastructureHandler) {
+				m.On("GetApplicationLogs", "test-app", mock.AnythingOfType("string"), mock.AnythingOfType("*argocd.ApplicationLogsOptions")).
+					Return(nil, assert.AnError)
+			},
+			expectedStatus: http.StatusInternalServerError,
+			validateBody: func(t *testing.T, body map[string]interface{}) {
+				errObj, ok := body["error"].(map[string]interface{})
+				if !ok {
+					t.Fatal("expected error object in response")
+				}
+				assert.NotEmpty(t, errObj["message"])
+			},
+			description: "Handler error should return 500 with error message",
+		},
+		{
+			name:    "handler returns ArgoCD 404 error",
+			appName: "test-app",
+			queryParams: "container=main",
+			mockSetup: func(m *MockInfrastructureHandler) {
+				m.On("GetApplicationLogs", "test-app", mock.AnythingOfType("string"), mock.AnythingOfType("*argocd.ApplicationLogsOptions")).
+					Return(nil, fmt.Errorf("failed to get application logs: %w", &argocd.ArgoCDAPIError{
+						StatusCode: http.StatusNotFound,
+						HTTPStatus: "Not Found",
+						Message:    "application not found",
+					}))
+			},
+			expectedStatus: http.StatusNotFound,
+			validateBody: func(t *testing.T, body map[string]interface{}) {
+				errObj, ok := body["error"].(map[string]interface{})
+				if !ok {
+					t.Fatal("expected error object in response")
+				}
+				msg, _ := errObj["message"].(string)
+				assert.Contains(t, msg, "application not found")
+			},
+			description: "ArgoCD 404 should be forwarded as HTTP 404",
+		},
+		{
+			name:    "handler returns ArgoCD 403 error",
+			appName: "test-app",
+			queryParams: "container=main",
+			mockSetup: func(m *MockInfrastructureHandler) {
+				m.On("GetApplicationLogs", "test-app", mock.AnythingOfType("string"), mock.AnythingOfType("*argocd.ApplicationLogsOptions")).
+					Return(nil, fmt.Errorf("failed to get application logs: %w", &argocd.ArgoCDAPIError{
+						StatusCode: http.StatusForbidden,
+						HTTPStatus: "Forbidden",
+						Message:    "permission denied",
+					}))
+			},
+			expectedStatus: http.StatusForbidden,
+			validateBody: func(t *testing.T, body map[string]interface{}) {
+				errObj, ok := body["error"].(map[string]interface{})
+				if !ok {
+					t.Fatal("expected error object in response")
+				}
+				msg, _ := errObj["message"].(string)
+				assert.Contains(t, msg, "permission denied")
+			},
+			description: "ArgoCD 403 should be forwarded as HTTP 403",
+		},
+		{
+			name:    "sinceSeconds zero string is valid",
+			appName: "test-app",
+			queryParams: "container=main&sinceSeconds=0",
+			mockSetup: func(m *MockInfrastructureHandler) {
+				m.On("GetApplicationLogs", "test-app", mock.AnythingOfType("string"),
+					mock.MatchedBy(func(opts *argocd.ApplicationLogsOptions) bool {
+						return opts.SinceSeconds == 0
+					})).
+					Return([]argocd.ApplicationLogEntry{}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			description:    "sinceSeconds=0 is valid and should pass through",
+		},
+		{
+			name:    "tailLines zero is valid",
+			appName: "test-app",
+			queryParams: "container=main&tailLines=0",
+			mockSetup: func(m *MockInfrastructureHandler) {
+				m.On("GetApplicationLogs", "test-app", mock.AnythingOfType("string"),
+					mock.MatchedBy(func(opts *argocd.ApplicationLogsOptions) bool {
+						return opts.TailLines == 0
+					})).
+					Return([]argocd.ApplicationLogEntry{}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			description:    "tailLines=0 is valid and should pass through",
+		},
+		{
+			name:    "follow false is accepted",
+			appName: "test-app",
+			queryParams: "container=main&follow=false",
+			mockSetup: func(m *MockInfrastructureHandler) {
+				m.On("GetApplicationLogs", "test-app", mock.AnythingOfType("string"),
+					mock.AnythingOfType("*argocd.ApplicationLogsOptions")).
+					Return([]argocd.ApplicationLogEntry{}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			description:    "follow=false should be accepted",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockHandler := new(MockInfrastructureHandler)
+			if tt.mockSetup != nil {
+				tt.mockSetup(mockHandler)
+			}
+
+			controller := &InfrastructureController{
+				handler: mockHandler,
+			}
+
+			router := setupTestRouter()
+			router.GET("/api/v1/infrastructure/applications/:appName/logs", controller.GetApplicationLogs)
+
+			urlPath := "/api/v1/infrastructure/applications/" + tt.appName + "/logs"
+
+			skipWorkingEnv := false
+			qp := tt.queryParams
+			if strings.Contains(qp, "_skipWorkingEnv=true") {
+				skipWorkingEnv = true
+				qp = strings.ReplaceAll(qp, "_skipWorkingEnv=true", "")
+				qp = strings.TrimRight(qp, "&")
+			}
+
+			if !skipWorkingEnv {
+				if qp != "" {
+					qp = "workingEnv=gcp_prd&" + qp
+				} else {
+					qp = "workingEnv=gcp_prd"
+				}
+			}
+			if qp != "" {
+				urlPath += "?" + qp
+			}
+
+			req := httptest.NewRequest(http.MethodGet, urlPath, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.expectedStatus, w.Code, tt.description)
+
+			if tt.validateBody != nil {
+				var body map[string]interface{}
+				err := json.Unmarshal(w.Body.Bytes(), &body)
+				assert.NoError(t, err, "response body should be valid JSON")
+				tt.validateBody(t, body)
+			}
+
+			mockHandler.AssertExpectations(t)
 		})
 	}
 }

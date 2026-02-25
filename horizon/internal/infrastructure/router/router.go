@@ -22,6 +22,7 @@ func Init() {
 		{
 			// Application resource operations
 			infrastructureAPI.GET("/applications/:appName/hpa", controller.NewController().GetHPAConfig)
+			infrastructureAPI.GET("/applications/:appName/logs", controller.NewController().GetApplicationLogs)
 			infrastructureAPI.GET("/applications/resources", controller.NewController().GetResourceDetail)
 			infrastructureAPI.POST("/applications/:appName/restart", controller.NewController().RestartDeployment)
 			infrastructureAPI.PUT("/applications/:appName/hpa/cpu", controller.NewController().UpdateCPUThreshold)

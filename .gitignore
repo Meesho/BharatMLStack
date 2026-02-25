@@ -20,3 +20,4 @@ horizon/pem/*.key
 horizon/configs/*.pem
 go.work
 go.work.sum
+horizon/pkg/argocd/manual_test.go
