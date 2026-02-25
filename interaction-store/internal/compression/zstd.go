@@ -6,12 +6,23 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
+const (
+	// decodeBufPoolCap: initial pooled buffer size (256KB). Grown buffers are put back for reuse.
+	decodeBufPoolCap = 256 * 1024
+)
+
 var (
 	encoder *ZStdEncoder
-
 	decoder *ZStdDecoder
+	mut     sync.Mutex
 
-	mut sync.Mutex
+	// decodeBufPool reuses buffers for Zstd DecodeAll to reduce allocations and GC.
+	decodeBufPool = sync.Pool{
+		New: func() interface{} {
+			b := make([]byte, 0, decodeBufPoolCap)
+			return &b
+		},
+	}
 )
 
 type ZStdEncoder struct {
@@ -72,9 +83,32 @@ func NewZStdDecoder() (*ZStdDecoder, error) {
 }
 
 func (d *ZStdDecoder) Decode(cdata []byte) (data []byte, err error) {
-	data, err = d.decoder.DecodeAll(cdata, make([]byte, 0, len(cdata)*3))
-	if err != nil {
-		return
+	bufPtr := decodeBufPool.Get()
+	var buf []byte
+	if p, ok := bufPtr.(*[]byte); ok {
+		buf = *p
 	}
-	return
+	decoded, err := d.decoder.DecodeAll(cdata, buf[:0])
+	if err != nil {
+		if p, ok := bufPtr.(*[]byte); ok {
+			*p = (*p)[:0]
+			decodeBufPool.Put(bufPtr)
+		}
+		return nil, err
+	}
+	// Caller keeps the returned slice; copy so we can reuse the pool buffer.
+	result := make([]byte, len(decoded))
+	copy(result, decoded)
+	if p, ok := bufPtr.(*[]byte); ok {
+		if cap(decoded) <= decodeBufPoolCap {
+			*p = (*p)[:0]
+			decodeBufPool.Put(bufPtr)
+		} else {
+			// Put back the grown buffer so the pool accumulates larger buffers for reuse.
+			ptr := new([]byte)
+			*ptr = decoded[:0]
+			decodeBufPool.Put(ptr)
+		}
+	}
+	return result, nil
 }

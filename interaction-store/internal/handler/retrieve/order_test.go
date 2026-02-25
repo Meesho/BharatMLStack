@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -59,7 +60,7 @@ func TestOrderRetrieveHandler_buildTableToFieldsMapping_NormalRange(t *testing.T
 	startTime := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC).UnixMilli()
 	endTime := time.Date(2024, 1, 15, 23, 59, 59, 0, time.UTC).UnixMilli()
 
-	result := handler.buildTableToFieldsMapping(startTime, endTime, getOrderTableName)
+	result := handler.buildTableToFieldsMapping(handler.buildOrderedWeeks(startTime, endTime))
 
 	assert.NotEmpty(t, result)
 }
@@ -71,7 +72,7 @@ func TestOrderRetrieveHandler_buildTableToFieldsMapping_MultipleWeeks(t *testing
 	startTime := time.Date(2024, 1, 8, 0, 0, 0, 0, time.UTC).UnixMilli()
 	endTime := time.Date(2024, 1, 22, 23, 59, 59, 0, time.UTC).UnixMilli()
 
-	result := handler.buildTableToFieldsMapping(startTime, endTime, getOrderTableName)
+	result := handler.buildTableToFieldsMapping(handler.buildOrderedWeeks(startTime, endTime))
 
 	assert.NotEmpty(t, result)
 
@@ -268,7 +269,7 @@ func TestOrderRetrieveHandler_fetchDataInParallel_WrongDataType(t *testing.T) {
 	mockDb.AssertExpectations(t)
 }
 
-// Verifies that zero limit is handled gracefully and returns empty result.
+// Verifies that zero limit returns empty result without calling the DB.
 func TestOrderRetrieveHandler_Retrieve_LimitZero(t *testing.T) {
 	mockDb := new(MockDatabase)
 	handler := newTestOrderRetrieveHandler(mockDb)
@@ -276,13 +277,25 @@ func TestOrderRetrieveHandler_Retrieve_LimitZero(t *testing.T) {
 	startTime := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC).UnixMilli()
 	endTime := time.Date(2024, 1, 15, 23, 59, 59, 0, time.UTC).UnixMilli()
 
-	mockDb.On("RetrieveInteractions", mock.AnythingOfType("string"), "user1", mock.AnythingOfType("[]string")).
-		Return(map[string]interface{}{}, nil)
-
 	events, err := handler.Retrieve("user1", startTime, endTime, 0)
 
-	assert.NoError(t, err)
-	assert.Empty(t, events)
+	assert.ErrorIs(t, err, ErrInvalidLimit)
+	assert.Nil(t, events)
+	mockDb.AssertExpectations(t)
+}
+
+// Verifies that negative limit returns ErrInvalidLimit without calling the DB.
+func TestOrderRetrieveHandler_Retrieve_NegativeLimit(t *testing.T) {
+	mockDb := new(MockDatabase)
+	handler := newTestOrderRetrieveHandler(mockDb)
+
+	startTime := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC).UnixMilli()
+	endTime := time.Date(2024, 1, 15, 23, 59, 59, 0, time.UTC).UnixMilli()
+
+	events, err := handler.Retrieve("user1", startTime, endTime, -1)
+
+	assert.ErrorIs(t, err, ErrInvalidLimit)
+	assert.Nil(t, events)
 	mockDb.AssertExpectations(t)
 }
 
@@ -357,18 +370,213 @@ func TestOrderRetrieveHandler_Retrieve_SingleWeekSingleTable(t *testing.T) {
 func TestOrderRetrieveHandler_buildTableToFieldsMapping_CrossBucketRange(t *testing.T) {
 	handler := &OrderRetrieveHandler{}
 
-	// Query spanning from bucket 0 to bucket 1
-	// Week 5 is in bucket 0, Week 10 is in bucket 1
-	startTime := time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC).UnixMilli()   // Around week 5
-	endTime := time.Date(2024, 3, 15, 23, 59, 59, 0, time.UTC).UnixMilli() // Around week 11
+	startTime := time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC).UnixMilli()
+	endTime := time.Date(2024, 3, 15, 23, 59, 59, 0, time.UTC).UnixMilli()
 
-	result := handler.buildTableToFieldsMapping(startTime, endTime, getOrderTableName)
+	result := handler.buildTableToFieldsMapping(handler.buildOrderedWeeks(startTime, endTime))
 
 	assert.NotEmpty(t, result)
+	assert.GreaterOrEqual(t, len(result), 1)
+}
 
-	// Should have mappings for multiple tables
-	tableCount := len(result)
-	assert.GreaterOrEqual(t, tableCount, 1)
+func TestOrderRetrieveHandler_Retrieve_TimeRangeExceeded(t *testing.T) {
+	handler := &OrderRetrieveHandler{}
+
+	// Use a relative past window (>24 weeks) so we always get ErrTimeRangeExceeded, not ErrEndTimeInFuture
+	startTime := time.Now().Add(-26 * 7 * 24 * time.Hour).UnixMilli()
+	endTime := time.Now().Add(-1 * time.Hour).UnixMilli()
+
+	events, err := handler.Retrieve("user1", startTime, endTime, 100)
+
+	assert.ErrorIs(t, err, ErrTimeRangeExceeded)
+	assert.Nil(t, events)
+}
+
+func TestOrderRetrieveHandler_Retrieve_EndTimeInFuture(t *testing.T) {
+	handler := &OrderRetrieveHandler{}
+
+	startTime := time.Now().Add(-1 * time.Hour).UnixMilli()
+	endTime := time.Now().Add(24 * time.Hour).UnixMilli()
+
+	events, err := handler.Retrieve("user1", startTime, endTime, 100)
+
+	assert.ErrorIs(t, err, ErrEndTimeInFuture)
+	assert.Nil(t, events)
+}
+
+func TestOrderRetrieveHandler_buildOrderedWeeks_NormalRange(t *testing.T) {
+	handler := &OrderRetrieveHandler{}
+
+	startTime := time.Date(2024, 1, 8, 0, 0, 0, 0, time.UTC).UnixMilli()
+	endTime := time.Date(2024, 1, 22, 0, 0, 0, 0, time.UTC).UnixMilli()
+
+	weeks := handler.buildOrderedWeeks(startTime, endTime)
+
+	assert.NotEmpty(t, weeks)
+	for i := 1; i < len(weeks); i++ {
+		assert.Greater(t, weeks[i-1], weeks[i])
+	}
+}
+
+func TestOrderRetrieveHandler_buildOrderedWeeks_SingleWeek(t *testing.T) {
+	handler := &OrderRetrieveHandler{}
+
+	startTime := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC).UnixMilli()
+	endTime := time.Date(2024, 1, 15, 23, 59, 59, 0, time.UTC).UnixMilli()
+
+	weeks := handler.buildOrderedWeeks(startTime, endTime)
+
+	assert.Len(t, weeks, 1)
+}
+
+// TestOrderRetrieveHandler_buildOrderedWeeks_WrapAround covers the branch when
+// lowerBound > upperBound (range crosses week-24 boundary).
+func TestOrderRetrieveHandler_buildOrderedWeeks_WrapAround(t *testing.T) {
+	handler := &OrderRetrieveHandler{}
+
+	startTime := time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC).UnixMilli()
+	endTime := time.Date(2024, 6, 10, 0, 0, 0, 0, time.UTC).UnixMilli()
+
+	weeks := handler.buildOrderedWeeks(startTime, endTime)
+
+	assert.NotEmpty(t, weeks)
+	for _, w := range weeks {
+		assert.GreaterOrEqual(t, w, 0)
+		assert.Less(t, w, 24)
+	}
+}
+
+func TestOrderRetrieveHandler_mergeFilterAndLimit_FiltersAndLimits(t *testing.T) {
+	handler := &OrderRetrieveHandler{}
+
+	start := int64(100)
+	end := int64(500)
+
+	weekToEvents := map[string][]model.FlattenedOrderEvent{
+		"week_3": {
+			{OrderedAt: 450, CatalogID: 1},
+			{OrderedAt: 300, CatalogID: 2},
+			{OrderedAt: 200, CatalogID: 3},
+			{OrderedAt: 50, CatalogID: 4},
+		},
+	}
+
+	result := handler.mergeFilterAndLimit([]int{3}, weekToEvents, start, end, 10)
+
+	assert.Len(t, result, 3)
+	assert.Equal(t, int32(1), result[0].CatalogID)
+	assert.Equal(t, int32(2), result[1].CatalogID)
+	assert.Equal(t, int32(3), result[2].CatalogID)
+}
+
+func TestOrderRetrieveHandler_mergeFilterAndLimit_RespectsLimit(t *testing.T) {
+	handler := &OrderRetrieveHandler{}
+
+	weekToEvents := map[string][]model.FlattenedOrderEvent{
+		"week_3": {
+			{OrderedAt: 400},
+			{OrderedAt: 300},
+			{OrderedAt: 200},
+		},
+	}
+
+	result := handler.mergeFilterAndLimit([]int{3}, weekToEvents, 100, 500, 2)
+
+	assert.Len(t, result, 2)
+}
+
+func TestOrderRetrieveHandler_mergeFilterAndLimit_MultipleWeeks(t *testing.T) {
+	handler := &OrderRetrieveHandler{}
+
+	weekToEvents := map[string][]model.FlattenedOrderEvent{
+		"week_4": {
+			{OrderedAt: 900, CatalogID: 1},
+			{OrderedAt: 800, CatalogID: 2},
+		},
+		"week_3": {
+			{OrderedAt: 500, CatalogID: 3},
+			{OrderedAt: 400, CatalogID: 4},
+		},
+	}
+
+	result := handler.mergeFilterAndLimit([]int{4, 3}, weekToEvents, 100, 1000, 10)
+
+	assert.Len(t, result, 4)
+	assert.Equal(t, int64(900), result[0].OrderedAt)
+	assert.Equal(t, int64(800), result[1].OrderedAt)
+	assert.Equal(t, int64(500), result[2].OrderedAt)
+	assert.Equal(t, int64(400), result[3].OrderedAt)
+}
+
+func TestOrderRetrieveHandler_mergeFilterAndLimit_EmptyWeeks(t *testing.T) {
+	handler := &OrderRetrieveHandler{}
+
+	weekToEvents := map[string][]model.FlattenedOrderEvent{}
+
+	result := handler.mergeFilterAndLimit([]int{3, 4}, weekToEvents, 100, 500, 10)
+
+	assert.Empty(t, result)
+}
+
+func TestOrderRetrieveHandler_mergeFilterAndLimit_AllEventsOutOfRange(t *testing.T) {
+	handler := &OrderRetrieveHandler{}
+
+	weekToEvents := map[string][]model.FlattenedOrderEvent{
+		"week_3": {
+			{OrderedAt: 900},
+			{OrderedAt: 800},
+		},
+	}
+
+	result := handler.mergeFilterAndLimit([]int{3}, weekToEvents, 100, 500, 10)
+
+	assert.Empty(t, result)
+}
+
+func TestOrderRetrieveHandler_mergeFilterAndLimit_SkipsEventsAboveEnd(t *testing.T) {
+	handler := &OrderRetrieveHandler{}
+
+	weekToEvents := map[string][]model.FlattenedOrderEvent{
+		"week_3": {
+			{OrderedAt: 600},
+			{OrderedAt: 400},
+			{OrderedAt: 200},
+		},
+	}
+
+	result := handler.mergeFilterAndLimit([]int{3}, weekToEvents, 100, 500, 10)
+
+	assert.Len(t, result, 2)
+	assert.Equal(t, int64(400), result[0].OrderedAt)
+	assert.Equal(t, int64(200), result[1].OrderedAt)
+}
+
+func TestOrderRetrieveHandler_deserializeWeeks_EmptyData(t *testing.T) {
+	handler := &OrderRetrieveHandler{}
+
+	weekToData := map[string][]byte{
+		"week_0": nil,
+		"week_1": {},
+	}
+
+	result, err := handler.deserializeWeeks(weekToData, "user1")
+
+	assert.NoError(t, err)
+	assert.Empty(t, result)
+}
+
+func TestOrderRetrieveHandler_deserializeWeeks_InvalidData(t *testing.T) {
+	handler := &OrderRetrieveHandler{}
+
+	weekToData := map[string][]byte{
+		"week_0": []byte("corrupt"),
+	}
+
+	result, err := handler.deserializeWeeks(weekToData, "user1")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to deserialize")
 }
 
 // Verifies that multi-week query within same bucket retrieves data correctly.

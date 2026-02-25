@@ -45,7 +45,7 @@ func NewClientV1(config *Config, timing func(name string, value time.Duration, t
 
 	return &ClientV1{
 		grpcClient: conn,
-		client:     pb.NewInteractionStoreTimeSeriesServiceClient(conn.Conn),
+		client:     pb.NewInteractionStoreTimeSeriesServiceClient(conn),
 		adapter:    Adapter{},
 		callerId:   config.CallerId,
 	}
