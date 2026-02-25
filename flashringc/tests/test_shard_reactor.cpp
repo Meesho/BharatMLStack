@@ -14,6 +14,10 @@ static const char* TEST_PATH = "/tmp/flashring_reactor_test.dat";
 static int tests_run = 0;
 static int tests_passed = 0;
 
+static std::vector<uint8_t> to_bytes(const std::string& s) {
+    return {s.begin(), s.end()};
+}
+
 static void cleanup() {
     std::string path = std::string(TEST_PATH) + ".0";
     ::unlink(path.c_str());
@@ -110,7 +114,7 @@ static void test_put_get_memtable_hit() {
 
     Result gr = submit_get(reactor, pool, "hello");
     assert(gr.status == Status::Ok);
-    assert(gr.value == "world");
+    assert(gr.value == to_bytes("world"));
 
     reactor.stop();
     t.join();
@@ -138,7 +142,7 @@ static void test_put_overwrite() {
 
     Result r = submit_get(reactor, pool, "key1");
     assert(r.status == Status::Ok);
-    assert(r.value == "val2_updated");
+    assert(r.value == to_bytes("val2_updated"));
 
     reactor.stop();
     t.join();
@@ -181,7 +185,7 @@ static void test_many_keys() {
         std::string expected = "v_" + std::to_string(i) + "_payload";
         Result r = submit_get(reactor, pool, key);
         assert(r.status == Status::Ok);
-        assert(r.value == expected);
+        assert(r.value == to_bytes(expected));
     }
 
     reactor.stop();
@@ -203,7 +207,7 @@ static void test_eviction() {
 
     Result r = submit_get(reactor, pool, "ev_127");
     assert(r.status == Status::Ok);
-    assert(r.value == "val_127");
+    assert(r.value == to_bytes("val_127"));
 
     reactor.stop();
     t.join();
@@ -236,7 +240,7 @@ static void test_multi_producer_stress() {
         std::string expected = "v_" + std::to_string(p * ITEMS);
         Result r = submit_get(reactor, pool, key);
         assert(r.status == Status::Ok);
-        assert(r.value == expected);
+        assert(r.value == to_bytes(expected));
     }
 
     reactor.stop();

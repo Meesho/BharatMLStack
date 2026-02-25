@@ -13,6 +13,10 @@ static constexpr uint32_t TEST_SHARDS = 4;
 static int tests_run = 0;
 static int tests_passed = 0;
 
+static std::vector<uint8_t> to_bytes(const std::string& s) {
+    return {s.begin(), s.end()};
+}
+
 static void cleanup_shard_files() {
     for (uint32_t i = 0; i < 256; ++i) {
         std::string path = std::string(TEST_PATH) + "." + std::to_string(i);
@@ -210,7 +214,7 @@ static void test_async_api() {
 
     Result gr = cache.get("async_key");
     assert(gr.status == Status::Ok);
-    assert(gr.value == "async_value");
+    assert(gr.value == to_bytes("async_value"));
 
     Result dr = cache.del("async_key");
     assert(dr.status == Status::Ok);
@@ -242,7 +246,7 @@ static void test_batch_api() {
     for (int i = 0; i < BATCH; ++i) {
         assert(results[i].status == Status::Ok);
         std::string expected = "bv_" + std::to_string(i * 10) + "_payload";
-        assert(results[i].value == expected);
+        assert(results[i].value == to_bytes(expected));
     }
 }
 

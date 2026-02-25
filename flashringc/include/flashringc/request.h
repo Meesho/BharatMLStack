@@ -4,8 +4,8 @@
 
 #include <atomic>
 #include <cstdint>
-#include <string>
 #include <string_view>
+#include <vector>
 
 // Forward declarations to avoid circular includes.
 struct LookupResult;
@@ -15,8 +15,8 @@ struct LookupResult;
 // ---------------------------------------------------------------------------
 
 struct Result {
-    Status      status = Status::Error;
-    std::string value;
+    Status                 status = Status::Error;
+    std::vector<uint8_t>   value;
 };
 
 // ---------------------------------------------------------------------------

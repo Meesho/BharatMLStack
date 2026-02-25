@@ -175,7 +175,7 @@ void ShardReactor::handle_get(Request& req) {
             return;
         }
         complete_request(req, {Status::Ok,
-            std::string(reinterpret_cast<const char*>(dr.val), dr.val_len)});
+            std::vector<uint8_t>(dr.val, dr.val + dr.val_len)});
         return;
     }
 
@@ -253,7 +253,7 @@ void ShardReactor::handle_get(Request& req) {
         return;
     }
     complete_request(req, {Status::Ok,
-        std::string(reinterpret_cast<const char*>(dr.val), dr.val_len)});
+        std::vector<uint8_t>(dr.val, dr.val + dr.val_len)});
 }
 
 // ---------------------------------------------------------------------------
@@ -343,8 +343,7 @@ void ShardReactor::reap_completions() {
                     res = {Status::NotFound, {}};
                 } else {
                     res = {Status::Ok,
-                           std::string(reinterpret_cast<const char*>(dr.val),
-                                       dr.val_len)};
+                           std::vector<uint8_t>(dr.val, dr.val + dr.val_len)};
                 }
             }
             complete_request(req, std::move(res));
