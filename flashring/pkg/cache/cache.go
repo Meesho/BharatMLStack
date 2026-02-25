@@ -55,8 +55,6 @@ type WrapCacheConfig struct {
 	ReWriteScoreThreshold float32
 	GridSearchEpsilon     float64
 	SampleDuration        time.Duration
-
-	MountPoint string
 }
 
 func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error) {
