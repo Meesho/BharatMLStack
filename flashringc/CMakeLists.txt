@@ -98,6 +98,9 @@ target_link_libraries(bench_long_run PRIVATE flashring)
 add_executable(test_eviction tests/test_eviction.cpp)
 target_link_libraries(test_eviction PRIVATE flashring)
 
+add_executable(test_delete_manager tests/test_delete_manager.cpp)
+target_link_libraries(test_delete_manager PRIVATE flashring)
+
 add_executable(test_capi tests/test_capi.cpp)
 target_link_libraries(test_capi PRIVATE flashring)
 

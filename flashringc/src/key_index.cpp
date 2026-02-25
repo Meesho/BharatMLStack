@@ -134,6 +134,44 @@ uint32_t KeyIndex::evict_oldest(uint32_t count, uint64_t* evicted_bytes) {
 }
 
 // ---------------------------------------------------------------------------
+// entry_at
+// ---------------------------------------------------------------------------
+
+Entry* KeyIndex::entry_at(uint32_t ring_index) {
+    if (ring_index >= capacity_) return nullptr;
+    Entry& e = ring_[ring_index];
+    if (e.flags != Entry::kOccupied) return nullptr;
+    return &e;
+}
+
+const Entry* KeyIndex::entry_at(uint32_t ring_index) const {
+    if (ring_index >= capacity_) return nullptr;
+    const Entry& e = ring_[ring_index];
+    if (e.flags != Entry::kOccupied) return nullptr;
+    return &e;
+}
+
+// ---------------------------------------------------------------------------
+// remove_entry — remove by ring index, compact head if possible
+// ---------------------------------------------------------------------------
+
+void KeyIndex::remove_entry(uint32_t ring_index) {
+    if (ring_index >= capacity_) return;
+    Entry& e = ring_[ring_index];
+    if (e.flags != Entry::kOccupied) return;
+
+    e.flags = Entry::kDeleted;
+    map_.erase(e.hash_lo);
+    --size_;
+
+    // Compact head: advance past contiguous deleted/empty slots
+    while (ring_used_ > 0 && ring_[head_].flags != Entry::kOccupied) {
+        head_ = next(head_);
+        --ring_used_;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Morris log counter increment (member xorshift RNG — single-threaded)
 // ---------------------------------------------------------------------------
 

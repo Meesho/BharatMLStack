@@ -26,8 +26,7 @@ public:
                  SemaphorePool* sem_pool,
                  uint32_t queue_capacity = kDefaultQueueDepth,
                  uint32_t uring_depth = 256,
-                 double eviction_threshold = 0.75,
-                 double clear_threshold = 0.65);
+                 DeleteManager::Config dm_cfg = {});
     ~ShardReactor();
 
     ShardReactor(const ShardReactor&) = delete;

@@ -42,15 +42,25 @@ public:
     int      write_fd()        const { return write_fd_; }
     uint64_t base_offset()     const { return base_offset_; }
 
+    uint64_t memtable_size()      const { return memtable_size_; }
+    void     set_memtable_size(uint64_t sz) { memtable_size_ = sz; }
+
+    uint64_t discard_cursor()     const { return discard_cursor_; }
+    void     advance_discard_cursor(uint64_t bytes);
+
+    double   utilization() const;
+
 private:
     RingDevice() = default;
 
-    int      write_fd_     = -1;
-    int      read_fd_      = -1;
-    uint64_t capacity_     = 0;
-    uint64_t base_offset_  = 0;
-    uint64_t write_offset_ = 0;
-    uint64_t wrap_count_   = 0;
-    bool     wrapped_      = false;
-    bool     is_blk_       = false;
+    int      write_fd_       = -1;
+    int      read_fd_        = -1;
+    uint64_t capacity_       = 0;
+    uint64_t base_offset_    = 0;
+    uint64_t write_offset_   = 0;
+    uint64_t wrap_count_     = 0;
+    uint64_t discard_cursor_ = 0;
+    uint64_t memtable_size_  = 0;
+    bool     wrapped_        = false;
+    bool     is_blk_         = false;
 };

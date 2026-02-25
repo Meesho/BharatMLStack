@@ -71,6 +71,7 @@ RingDevice::RingDevice(RingDevice&& o) noexcept
     : write_fd_(o.write_fd_), read_fd_(o.read_fd_),
       capacity_(o.capacity_), base_offset_(o.base_offset_),
       write_offset_(o.write_offset_), wrap_count_(o.wrap_count_),
+      discard_cursor_(o.discard_cursor_), memtable_size_(o.memtable_size_),
       wrapped_(o.wrapped_), is_blk_(o.is_blk_) {
     o.write_fd_ = -1;
     o.read_fd_  = -1;
@@ -80,14 +81,16 @@ RingDevice& RingDevice::operator=(RingDevice&& o) noexcept {
     if (this != &o) {
         if (write_fd_ >= 0) ::close(write_fd_);
         if (read_fd_  >= 0) ::close(read_fd_);
-        write_fd_     = o.write_fd_;
-        read_fd_      = o.read_fd_;
-        capacity_     = o.capacity_;
-        base_offset_  = o.base_offset_;
-        write_offset_ = o.write_offset_;
-        wrap_count_   = o.wrap_count_;
-        wrapped_      = o.wrapped_;
-        is_blk_       = o.is_blk_;
+        write_fd_       = o.write_fd_;
+        read_fd_        = o.read_fd_;
+        capacity_       = o.capacity_;
+        base_offset_    = o.base_offset_;
+        write_offset_   = o.write_offset_;
+        wrap_count_     = o.wrap_count_;
+        discard_cursor_ = o.discard_cursor_;
+        memtable_size_  = o.memtable_size_;
+        wrapped_        = o.wrapped_;
+        is_blk_         = o.is_blk_;
         o.write_fd_ = -1;
         o.read_fd_  = -1;
     }
@@ -269,4 +272,26 @@ int RingDevice::discard(uint64_t offset, uint64_t length) {
     (void)offset; (void)length;
     return 0;
 #endif
+}
+
+// ---------------------------------------------------------------------------
+// utilization — fraction of ring capacity currently in use
+// ---------------------------------------------------------------------------
+
+double RingDevice::utilization() const {
+    if (capacity_ == 0) return 0.0;
+    uint64_t used;
+    if (write_offset_ >= discard_cursor_)
+        used = write_offset_ - discard_cursor_;
+    else
+        used = capacity_ - discard_cursor_ + write_offset_;
+    return static_cast<double>(used) / static_cast<double>(capacity_);
+}
+
+// ---------------------------------------------------------------------------
+// advance_discard_cursor — called after blocks are TRIMmed
+// ---------------------------------------------------------------------------
+
+void RingDevice::advance_discard_cursor(uint64_t bytes) {
+    discard_cursor_ = (discard_cursor_ + bytes) % capacity_;
 }

@@ -47,8 +47,21 @@ public:
     bool remove(Hash128 h);
     uint32_t evict_oldest(uint32_t count, uint64_t* evicted_bytes = nullptr);
 
-    uint32_t capacity() const { return capacity_; }
-    uint32_t size()     const { return size_; }
+    uint32_t capacity()  const { return capacity_; }
+    uint32_t size()      const { return size_; }
+    uint32_t ring_used() const { return ring_used_; }
+
+    double   utilization() const {
+        return static_cast<double>(ring_used_) / capacity_;
+    }
+
+    uint32_t ring_head() const { return head_; }
+    uint32_t ring_tail() const { return tail_; }
+
+    Entry*       entry_at(uint32_t ring_index);
+    const Entry* entry_at(uint32_t ring_index) const;
+
+    void remove_entry(uint32_t ring_index);
 
 private:
     uint32_t next(uint32_t idx) const { return (idx + 1) % capacity_; }

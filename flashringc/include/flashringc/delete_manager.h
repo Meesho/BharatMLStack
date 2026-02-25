@@ -1,33 +1,50 @@
 #pragma once
 
-#include "flashringc/key_index.h"
-#include "flashringc/ring_device.h"
-
 #include <cstdint>
+
+class KeyIndex;
+class RingDevice;
 
 class DeleteManager {
 public:
-    // high_watermark: start evicting when ring usage >= this ratio.
-    // low_watermark: stop evicting when ring usage <= this ratio (clear target).
-    DeleteManager(RingDevice& ring, KeyIndex& index,
-                  double high_watermark = 0.75,
-                  double low_watermark = 0.65,
-                  uint32_t n_delete = 10,
-                  uint64_t discard_batch = 64 * 1024 * 1024);
+    struct Config {
+        double eviction_threshold = 0.95;
+        double clear_threshold = 0.85;
+        int base_k = 4;
+        int max_discards_per_put = 2;
+    };
 
-    uint32_t maybe_evict();
-    void flush_discards();
+    DeleteManager(const Config& cfg, KeyIndex& index, RingDevice& device);
+
+    void on_put();
+    void on_tick();
+
+    bool has_backlog() const;
+    bool is_discarded(uint32_t mem_id) const;
+    uint32_t discarded_through_mem_id() const;
+    bool is_evicting() const;
+
+    void reset();
 
 private:
-    uint64_t ring_usage() const;
-    void flush_discards_remainder();
+    void maybe_discard_blocks();
+    void discard_oldest_block();
+    void amortize_index_cleanup(int effective_k);
+    void advance_to_next_memid();
+    bool needs_discard() const;
+    uint64_t memid_to_block_offset(uint32_t mem_id) const;
 
-    RingDevice& ring_;
+    Config cfg_;
+
+    bool     evicting_                = false;
+    uint32_t oldest_mem_id_           = 0;
+    uint32_t discarded_through_mem_id_ = 0;
+    bool     has_discarded_           = false;
+
+    uint32_t cleaning_mem_id_         = 0;
+    uint32_t cleaning_cursor_         = 0;
+    bool     cleaning_in_progress_    = false;
+
     KeyIndex&   index_;
-    double      high_watermark_;
-    double      low_watermark_;
-    uint32_t    n_delete_;
-    uint64_t    discard_batch_;
-    uint64_t    pending_discard_bytes_ = 0;
-    uint64_t    discard_cursor_        = 0;
+    RingDevice& device_;
 };

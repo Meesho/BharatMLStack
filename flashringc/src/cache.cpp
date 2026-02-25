@@ -1,4 +1,5 @@
 #include "flashringc/cache.h"
+#include "flashringc/delete_manager.h"
 #include "flashringc/record.h"
 
 #include <algorithm>
@@ -55,11 +56,15 @@ Cache Cache::open(const CacheConfig& cfg) {
                                       per_shard_capacity)
             : RingDevice::open(cfg.device_path + "." + std::to_string(i),
                                per_shard_capacity);
+        DeleteManager::Config dm_cfg{
+            .eviction_threshold = cfg.eviction_threshold,
+            .clear_threshold    = cfg.clear_threshold,
+        };
         c.shards_.push_back(std::make_unique<ShardReactor>(
             std::move(ring), per_shard_mt, per_shard_keys,
             c.sem_pool_.get(),
             cfg.queue_capacity, cfg.uring_queue_depth,
-            cfg.eviction_threshold, cfg.clear_threshold));
+            dm_cfg));
     }
 
     // Spawn reactor threads.

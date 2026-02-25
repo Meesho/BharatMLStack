@@ -13,15 +13,16 @@
 ShardReactor::ShardReactor(RingDevice ring, size_t mt_size, uint32_t index_cap,
                            SemaphorePool* sem_pool,
                            uint32_t queue_capacity, uint32_t uring_depth,
-                           double eviction_threshold, double clear_threshold)
+                           DeleteManager::Config dm_cfg)
     : ring_(std::move(ring)),
       memtables_(ring_, mt_size),
       index_(index_cap),
-      delete_mgr_(ring_, index_, eviction_threshold, clear_threshold),
+      delete_mgr_(dm_cfg, index_, ring_),
       sem_pool_(sem_pool),
       inbox_(queue_capacity),
       uring_depth_(uring_depth)
 {
+    ring_.set_memtable_size(mt_size);
 #if defined(__linux__) && defined(HAVE_IO_URING)
     std::memset(&uring_, 0, sizeof(uring_));
     if (io_uring_queue_init(uring_depth_, &uring_, 0) == 0)
@@ -156,6 +157,11 @@ void ShardReactor::handle_get(Request& req) {
         return;
     }
 
+    if (delete_mgr_.is_discarded(lr.mem_id)) {
+        complete_request(req, {Status::NotFound, {}});
+        return;
+    }
+
     // Try memtable first.
     std::vector<uint8_t> buf(lr.length);
     if (memtables_.try_read_from_memory(buf.data(), lr.length,
@@ -280,7 +286,7 @@ void ShardReactor::handle_put(Request& req) {
 
     WriteResult wr = memtables_.put(rec.data(), rec_len);
     index_.put(req.hash, wr.mem_id, wr.offset, wr.length);
-    delete_mgr_.maybe_evict();
+    delete_mgr_.on_put();
 
     complete_request(req, {Status::Ok, {}});
 }
@@ -326,6 +332,8 @@ void ShardReactor::reap_completions() {
             Result res;
             if (cqe->res < 0) {
                 res = {Status::Error, {}};
+            } else if (delete_mgr_.is_discarded(pop.mem_id)) {
+                res = {Status::NotFound, {}};
             } else {
                 DecodedRecord dr = decode_record(pop.buf.bytes());
                 if (kRecordHeaderSize + dr.key_len + dr.val_len + kRecordCrcSize > pop.length ||
@@ -400,7 +408,7 @@ void ShardReactor::maybe_flush_memtable() {
 // ---------------------------------------------------------------------------
 
 void ShardReactor::maybe_run_eviction() {
-    delete_mgr_.flush_discards();
+    delete_mgr_.on_tick();
 }
 
 // ---------------------------------------------------------------------------
