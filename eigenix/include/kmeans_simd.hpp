@@ -1,17 +1,21 @@
-#ifndef EIGENIX_KMEANS_BLAS_HPP
-#define EIGENIX_KMEANS_BLAS_HPP
+#ifndef EIGENIX_KMEANS_SIMD_HPP
+#define EIGENIX_KMEANS_SIMD_HPP
 
 #include "kmeans_base.hpp"
 #include <random>
+#include <string>
 #include <vector>
 
 namespace eigenix {
 
-// BLAS-backed K-Means: cblas_sgemm for the distance cross-term,
-// KMeans++ initialisation, OpenMP-parallel assignment and centroid update.
-class BlasKMeans : public KMeansBase {
+enum class SimdISA { SSE42, AVX2, AVX512 };
+
+// Runtime-dispatched SIMD K-Means: AVX-512 → AVX2 → SSE4.2 fallback.
+// FMA-fused L2 squared distance kernels with cache-line prefetch.
+// OpenMP parallel outer loop for assignment and centroid update.
+class SimdKMeans : public KMeansBase {
 public:
-    BlasKMeans() = default;
+    SimdKMeans();
 
     void train(const float* data, size_t n, int dim, int k,
                const TrainConfig& cfg = {}) override;
@@ -24,15 +28,18 @@ public:
         const float* data, size_t n, int dim) const override;
     std::string name() const override;
 
+    SimdISA detected_isa() const { return isa_; }
+
 private:
-    std::vector<float> centroid_norms_;
-    mutable std::vector<float> dist_buf_;
+    SimdISA isa_;
 
     void kmeanspp_init(const float* data, size_t n, int dim, int k,
                        std::mt19937& rng);
-    void compute_centroid_norms();
+
+    // Distance from a single vector to a single centroid (squared L2).
+    float l2sq(const float* a, const float* b, int dim) const;
 };
 
 }  // namespace eigenix
 
-#endif  // EIGENIX_KMEANS_BLAS_HPP
+#endif  // EIGENIX_KMEANS_SIMD_HPP

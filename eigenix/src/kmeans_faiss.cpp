@@ -1,89 +1,78 @@
 #include "kmeans_faiss.hpp"
+#include "metrics.hpp"
 #include <faiss/Clustering.h>
 #include <faiss/IndexFlat.h>
 #include <cstring>
-#include <omp.h>
 #include <stdexcept>
+#include <vector>
 
 namespace eigenix {
 
-namespace {
-
-// Squared L2 distance from one vector to all centroids; return index of nearest.
-inline int assign_one(const float* x, size_t dim,
-                     const float* centroids, size_t k) {
-    int best = 0;
-    float best_d2 = 0.0f;
-    for (size_t j = 0; j < dim; ++j) {
-        float d = x[j] - centroids[j];
-        best_d2 += d * d;
-    }
-    for (size_t c = 1; c < k; ++c) {
-        const float* cen = centroids + c * dim;
-        float d2 = 0.0f;
-        for (size_t j = 0; j < dim; ++j) {
-            float d = x[j] - cen[j];
-            d2 += d * d;
-        }
-        if (d2 < best_d2) {
-            best_d2 = d2;
-            best = static_cast<int>(c);
-        }
-    }
-    return best;
-}
-
-}  // namespace
-
-FaissKMeans::FaissKMeans(size_t k, size_t max_iter)
-    : k_(k), max_iter_(max_iter) {
-    if (k == 0)
-        throw std::invalid_argument("FaissKMeans: k must be > 0");
-}
-
-void FaissKMeans::train(const float* data, size_t n, size_t dim) {
-    if (data == nullptr || n == 0 || dim == 0)
-        throw std::invalid_argument("FaissKMeans::train: invalid data or dimensions");
-    if (n < k_)
+void FaissKMeans::train(const float* data, size_t n, int dim, int k,
+                        const TrainConfig& cfg) {
+    if (!data || n == 0 || dim <= 0 || k <= 0)
+        throw std::invalid_argument("FaissKMeans::train: invalid arguments");
+    if (n < static_cast<size_t>(k))
         throw std::invalid_argument("FaissKMeans::train: n must be >= k");
 
+    k_ = k;
     dim_ = dim;
-    centroids_.resize(k_ * dim_);
+    iterations_ = 0;
 
     faiss::ClusteringParameters cp;
-    cp.niter = static_cast<int>(max_iter_);
+    cp.niter = static_cast<int>(cfg.max_iter);
     cp.verbose = false;
-    cp.spherical = false;
-    cp.frozen_centroids = false;
-    cp.update_index = false;
+    cp.seed = static_cast<int>(cfg.seed);
     cp.nredo = 1;
 
-    faiss::Clustering clus(static_cast<int>(dim_), static_cast<int>(k_), cp);
-
-    faiss::IndexFlatL2 index(static_cast<int>(dim_));
+    faiss::Clustering clus(dim, k, cp);
+    faiss::IndexFlatL2 index(dim);
     clus.train(static_cast<faiss::idx_t>(n), data, index);
 
-    const float* faiss_c = clus.centroids.data();
-    std::memcpy(centroids_.data(), faiss_c, k_ * dim_ * sizeof(float));
+    centroids_.resize(static_cast<size_t>(k) * dim);
+    std::memcpy(centroids_.data(), clus.centroids.data(),
+                centroids_.size() * sizeof(float));
+
+    iterations_ = static_cast<int>(clus.iteration_stats.size());
+
+    // Compute inertia on training data.
+    std::vector<int> labels;
+    assign(data, n, dim, labels);
+    inertia_ = compute_inertia(data, n, dim, labels.data(),
+                               centroids_.data(), k);
 }
 
-void FaissKMeans::assign(const float* data, size_t n, int* labels) const {
-    if (data == nullptr || labels == nullptr)
-        throw std::invalid_argument("FaissKMeans::assign: null data or labels");
-    if (dim_ == 0)
-        throw std::runtime_error("FaissKMeans::assign: not trained");
+void FaissKMeans::assign(const float* data, size_t n, int dim,
+                         std::vector<int>& labels) const {
+    if (!data || dim != dim_ || k_ == 0)
+        throw std::runtime_error("FaissKMeans::assign: not trained or dim mismatch");
 
-    #pragma omp parallel for schedule(static)
+    labels.resize(n);
+    if (n == 0) return;
+
+    faiss::IndexFlatL2 index(dim);
+    index.add(static_cast<faiss::idx_t>(k_), centroids_.data());
+
+    std::vector<float> distances(n);
+    std::vector<faiss::idx_t> idx(n);
+    index.search(static_cast<faiss::idx_t>(n), data, 1,
+                 distances.data(), idx.data());
+
     for (size_t i = 0; i < n; ++i)
-        labels[i] = assign_one(data + i * dim_, dim_, centroids_.data(), k_);
+        labels[i] = static_cast<int>(idx[i]);
 }
 
-const float* FaissKMeans::centroids() const {
-    return centroids_.data();
-}
+const float* FaissKMeans::centroids() const { return centroids_.data(); }
+float FaissKMeans::inertia() const { return inertia_; }
+int FaissKMeans::iterations() const { return iterations_; }
+std::string FaissKMeans::name() const { return "FAISS"; }
 
-size_t FaissKMeans::k() const {
-    return k_;
+std::vector<ClusterStats> FaissKMeans::cluster_stats(
+    const float* data, size_t n, int dim) const {
+    std::vector<int> labels;
+    assign(data, n, dim, labels);
+    return compute_cluster_stats(data, n, dim, labels.data(),
+                                 centroids_.data(), k_);
 }
 
 }  // namespace eigenix

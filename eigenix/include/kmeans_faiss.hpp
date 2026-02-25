@@ -1,31 +1,27 @@
 #ifndef EIGENIX_KMEANS_FAISS_HPP
 #define EIGENIX_KMEANS_FAISS_HPP
 
-#include "ikmeans.hpp"
-#include <cstddef>
+#include "kmeans_base.hpp"
 #include <vector>
 
 namespace eigenix {
 
-/**
- * FAISS-backed KMeans: faiss::Clustering + IndexFlatL2.
- * Centroids extracted after training; assign() implemented manually for fair comparison.
- */
-class FaissKMeans : public IKMeans {
+// FAISS-backed K-Means: faiss::Clustering for training,
+// faiss::IndexFlatL2 for assignment.
+class FaissKMeans : public KMeansBase {
 public:
-    explicit FaissKMeans(size_t k, size_t max_iter = 300);
+    FaissKMeans() = default;
 
-    void train(const float* data, size_t n, size_t dim) override;
-    void assign(const float* data, size_t n, int* labels) const override;
+    void train(const float* data, size_t n, int dim, int k,
+               const TrainConfig& cfg = {}) override;
+    void assign(const float* data, size_t n, int dim,
+                std::vector<int>& labels) const override;
     const float* centroids() const override;
-    size_t k() const override;
-
-private:
-    size_t k_;
-    size_t dim_{0};
-    size_t max_iter_;
-
-    std::vector<float> centroids_;
+    float inertia() const override;
+    int iterations() const override;
+    std::vector<ClusterStats> cluster_stats(
+        const float* data, size_t n, int dim) const override;
+    std::string name() const override;
 };
 
 }  // namespace eigenix
