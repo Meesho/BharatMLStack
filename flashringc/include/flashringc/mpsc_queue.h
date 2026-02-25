@@ -54,7 +54,7 @@ public:
                 {
                     slot.data = std::move(item);
                     slot.seq.store(pos + 1, std::memory_order_release);
-                    {
+                    if (waiting_.load(std::memory_order_acquire)) {
                         std::lock_guard<std::mutex> lk(mu_);
                         cv_.notify_one();
                     }
@@ -102,7 +102,9 @@ public:
         if (try_pop(item))
             return true;
         std::unique_lock<std::mutex> lk(mu_);
+        waiting_.store(true, std::memory_order_release);
         cv_.wait(lk, [&] { return try_pop(item); });
+        waiting_.store(false, std::memory_order_relaxed);
         return true;
     }
 
@@ -128,6 +130,7 @@ private:
 
     alignas(kCacheLine) std::atomic<uint32_t> head_{0};
     alignas(kCacheLine) uint32_t              tail_{0};
+    alignas(kCacheLine) std::atomic<bool>     waiting_{false};
 
     std::mutex              mu_;
     std::condition_variable cv_;
