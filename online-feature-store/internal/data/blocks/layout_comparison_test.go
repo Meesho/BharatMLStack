@@ -103,15 +103,41 @@ func TestLayout1VsLayout2Compression(t *testing.T) {
 		expectedImprovement string
 	}
 	for _, fg := range catalogFeatureGroups {
-		for _, defaultRatio := range defaultRatiosForCatalog {
-			if fg.dataType == types.DataTypeBool {
-				continue // Bool scalar has layout-1 only
+		if fg.dataType == types.DataTypeBool {
+			continue // Bool scalar has layout-1 only
+		}
+
+		// Determine meaningful ratios for this feature group:
+		// For numFeatures=1, only 0% (no default) and 100% (all default) are valid.
+		// For numFeatures>1, derive ratios that produce distinct integer default counts
+		// to avoid duplicates or misleading names caused by int truncation.
+		type ratioCase struct {
+			numDefaults int
+			ratio       float64 // actual ratio = numDefaults / numFeatures
+		}
+		seen := make(map[int]bool)
+		var ratios []ratioCase
+		if fg.numFeatures == 1 {
+			// Only two meaningful scenarios for a single feature
+			ratios = []ratioCase{{0, 0.0}, {1, 1.0}}
+		} else {
+			for _, desiredRatio := range defaultRatiosForCatalog {
+				nd := int(float64(fg.numFeatures) * desiredRatio)
+				if seen[nd] {
+					continue // skip duplicates caused by truncation
+				}
+				seen[nd] = true
+				actualRatio := float64(nd) / float64(fg.numFeatures)
+				ratios = append(ratios, ratioCase{nd, actualRatio})
 			}
-			name := fmt.Sprintf("catalog/%s %.0f%% defaults", fg.name, defaultRatio*100)
+		}
+
+		for _, rc := range ratios {
 			expectedImprovement := "Layout2 should be better or equal with defaults"
-			if defaultRatio == 0 {
+			if rc.numDefaults == 0 {
 				expectedImprovement = "Layout2 may have small bitmap overhead"
 			}
+			name := fmt.Sprintf("catalog/%s %d/%d defaults (%.0f%%)", fg.name, rc.numDefaults, fg.numFeatures, rc.ratio*100)
 			testCases = append(testCases, struct {
 				name                string
 				numFeatures         int
@@ -122,7 +148,7 @@ func TestLayout1VsLayout2Compression(t *testing.T) {
 			}{
 				name:                name,
 				numFeatures:         fg.numFeatures,
-				defaultRatio:        defaultRatio,
+				defaultRatio:        rc.ratio,
 				dataType:            fg.dataType,
 				compressionType:     compressionType,
 				expectedImprovement: expectedImprovement,
