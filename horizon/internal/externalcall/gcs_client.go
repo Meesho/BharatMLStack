@@ -9,14 +9,15 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/Meesho/BharatMLStack/horizon/internal/predator/proto/protogen"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/api/iterator"
+	"google.golang.org/protobuf/encoding/prototext"
 )
 
 type GCSClientInterface interface {
@@ -269,7 +270,10 @@ func (g *GCSClient) transferSingleConfigFile(objAttrs storage.ObjectAttrs, srcBu
 
 	// Replace model name
 	log.Info().Msgf("Processing config.pbtxt file: %s -> %s", objAttrs.Name, destObjectPath)
-	modified := replaceModelNameInConfig(content, destModelName)
+	modified, err := ReplaceModelNameInConfig(content, destModelName)
+	if err != nil {
+		return fmt.Errorf("failed to replace model name: %w", err)
+	}
 
 	// Upload modified content
 	destWriter := g.client.Bucket(destBucket).Object(destObjectPath).NewWriter(g.ctx)
@@ -465,49 +469,36 @@ func (g *GCSClient) TransferAndDeleteFolder(srcBucket, srcPath, srcModelName, de
 
 // replaceModelNameInConfig modifies only the top-level `name:` field in config.pbtxt content
 // It replaces only the first occurrence to avoid modifying nested names in inputs/outputs/instance_groups
-func replaceModelNameInConfig(data []byte, destModelName string) []byte {
-	content := string(data)
-	lines := strings.Split(content, "\n")
-
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		// Match top-level "name:" field - should be at the start of line (or minimal indentation)
-		// Skip nested names which are typically indented with 2+ spaces
-		if strings.HasPrefix(trimmed, "name:") {
-			// Check indentation: top-level fields have minimal/no indentation
-			leadingWhitespace := len(line) - len(strings.TrimLeft(line, " \t"))
-			// Skip if heavily indented (nested field)
-			if leadingWhitespace >= 2 {
-				continue
-			}
-
-			// Match the first occurrence of name: "value" pattern
-			namePattern := regexp.MustCompile(`name\s*:\s*"([^"]+)"`)
-			matches := namePattern.FindStringSubmatch(line)
-			if len(matches) > 1 {
-				oldModelName := matches[1]
-				// Replace only the FIRST occurrence to avoid replacing nested names
-				loc := namePattern.FindStringIndex(line)
-				if loc != nil {
-					// Replace only the matched portion (first occurrence)
-					before := line[:loc[0]]
-					matched := line[loc[0]:loc[1]]
-					after := line[loc[1]:]
-					// Replace the value inside quotes while preserving the "name:" format
-					valuePattern := regexp.MustCompile(`"([^"]+)"`)
-					valueReplaced := valuePattern.ReplaceAllString(matched, fmt.Sprintf(`"%s"`, destModelName))
-					lines[i] = before + valueReplaced + after
-				} else {
-					// Fallback: replace all (shouldn't happen with valid input)
-					lines[i] = namePattern.ReplaceAllString(line, fmt.Sprintf(`name: "%s"`, destModelName))
-				}
-				log.Info().Msgf("Replacing top-level model name in config.pbtxt: '%s' -> '%s'", oldModelName, destModelName)
-				break
-			}
-		}
+func ReplaceModelNameInConfig(data []byte, destModelName string) ([]byte, error) {
+	if destModelName == "" {
+		return nil, fmt.Errorf("destination model name cannot be empty")
 	}
 
-	return []byte(strings.Join(lines, "\n"))
+	var modelConfig protogen.ModelConfig
+
+	if err := prototext.Unmarshal(data, &modelConfig); err != nil {
+		return nil, fmt.Errorf("failed to parse config.pbtxt: %w", err)
+	}
+
+	oldModelName := modelConfig.Name
+	modelConfig.Name = destModelName
+
+	opts := prototext.MarshalOptions{
+		Multiline: true,
+		Indent:    "  ",
+	}
+
+	out, err := opts.Marshal(&modelConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal updated config.pbtxt: %w", err)
+	}
+
+	log.Info().
+		Str("old_model_name", oldModelName).
+		Str("new_model_name", destModelName).
+		Msg("replaced top-level model name in config.pbtxt")
+
+	return out, nil
 }
 
 func (g *GCSClient) ListFolders(bucket, prefix string) ([]string, error) {
