@@ -11,7 +11,7 @@ type Badger struct {
 }
 
 func NewBadger(config WrapCacheConfig, logStats bool) (*Badger, error) {
-	options := badger.DefaultOptions(config.MountPoint)
+	options := badger.DefaultOptions("/mnt/disks/nvme")
 	options.MetricsEnabled = false
 
 	// 1. PRIMARY CACHE (1GB)
