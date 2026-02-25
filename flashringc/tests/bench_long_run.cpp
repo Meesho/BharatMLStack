@@ -236,16 +236,19 @@ int main(int argc, char* argv[]) {
     std::string iostat_dev = is_block_device ? extract_device_name(args.device_path) : "";
     std::thread iostat_thread;
     if (!iostat_dev.empty()) {
-        iostat_thread = std::thread([&]() {
-            while (!stop.load(std::memory_order_relaxed)) {
-                std::this_thread::sleep_for(
-                    std::chrono::milliseconds(static_cast<int>(args.report_interval * 1000)));
-                if (stop.load(std::memory_order_relaxed)) break;
+        std::string hdr_cmd = "iostat -xd 1 1 2>/dev/null | head -3 | tail -1";
+        printf("[iostat header] %s\n", run_command(hdr_cmd.c_str()).c_str());
 
-                std::string cmd = "iostat -x -d " + iostat_dev + " 1 2 2>/dev/null | tail -1";
+        int interval_secs = std::max(1, static_cast<int>(args.report_interval));
+        iostat_thread = std::thread([&, interval_secs]() {
+            while (!stop.load(std::memory_order_relaxed)) {
+                std::string cmd = "iostat -xd " + std::to_string(interval_secs)
+                    + " 2 2>/dev/null | grep " + iostat_dev + " | tail -1";
                 std::string out = run_command(cmd.c_str());
+                if (stop.load(std::memory_order_relaxed)) break;
                 double elapsed = std::chrono::duration<double>(Clock::now() - t_start).count();
-                printf("[iostat %3.0fs] %s\n", elapsed, out.c_str());
+                if (!out.empty())
+                    printf("[iostat %3.0fs] %s\n", elapsed, out.c_str());
             }
         });
     }
