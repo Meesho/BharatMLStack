@@ -514,10 +514,7 @@ func (r *IoUring) SubmitWriteBatch(fd int, bufs [][]byte, offsets []uint64) ([]i
 		return nil, fmt.Errorf("io_uring_enter: %w", err)
 	}
 
-	var startTime time.Time
-	if metrics.Enabled() {
-		startTime = time.Now()
-	}
+	var startTime = time.Now()
 
 	// Drain all CQEs (order may differ from submission)
 	results := make([]int, n)
@@ -538,9 +535,7 @@ func (r *IoUring) SubmitWriteBatch(fd int, bufs [][]byte, offsets []uint64) ([]i
 			results[idx] = int(res)
 		}
 
-		if metrics.Enabled() {
-			metrics.Timing(metrics.KEY_PWRITE_LATENCY, time.Since(startTime), []string{})
-		}
+		metrics.Timing(metrics.KEY_PWRITE_LATENCY, time.Since(startTime), []string{})
 	}
 
 	return results, nil

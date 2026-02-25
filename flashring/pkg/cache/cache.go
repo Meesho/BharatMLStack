@@ -165,6 +165,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error)
 		writeRing = nil
 	}
 
+	metrics.BuildShardTags(config.NumShards)
 	shardLocks := make([]sync.RWMutex, config.NumShards)
 	shards := make([]*filecache.ShardCache, config.NumShards)
 	for i := 0; i < config.NumShards; i++ {
@@ -198,21 +199,13 @@ func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) erro
 	h32 := wc.Hash(key)
 	shardIdx := h32 % uint32(len(wc.shards))
 
-	var start time.Time
-	if metrics.Enabled() {
-		start = time.Now()
-		defer func() {
-			metrics.Timing(metrics.KEY_PUT_LATENCY, time.Since(start), metrics.GetShardTag(shardIdx))
-		}()
-	}
+	var start = time.Now()
+	defer func() {
+		metrics.Timing(metrics.KEY_PUT_LATENCY, time.Since(start), metrics.GetShardTag(shardIdx))
+	}()
 
-	if metrics.Enabled() {
-		start = time.Now()
-	}
 	wc.shardLocks[shardIdx].Lock()
-	if metrics.Enabled() {
-		metrics.Timing(metrics.LATENCY_WLOCK, time.Since(start), []string{})
-	}
+	metrics.Timing(metrics.LATENCY_WLOCK, time.Since(start), []string{})
 	defer wc.shardLocks[shardIdx].Unlock()
 
 	err := wc.shards[shardIdx].Put(key, value, exptimeInMinutes)
@@ -220,11 +213,9 @@ func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) erro
 		log.Error().Err(err).Msgf("Put failed for key: %s", key)
 		return fmt.Errorf("put failed for key: %s", key)
 	}
-	if metrics.Enabled() {
-		metrics.Incr(metrics.KEY_PUTS, metrics.GetShardTag(shardIdx))
-		if h32%100 < 10 {
-			metrics.Incr(metrics.KEY_RINGBUFFER_ACTIVE_ENTRIES, metrics.GetShardTag(shardIdx))
-		}
+	metrics.Incr(metrics.KEY_PUTS, metrics.GetShardTag(shardIdx))
+	if h32%100 < 10 {
+		metrics.Incr(metrics.KEY_RINGBUFFER_ACTIVE_ENTRIES, metrics.GetShardTag(shardIdx))
 	}
 
 	return nil
@@ -234,13 +225,10 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	h32 := wc.Hash(key)
 	shardIdx := h32 % uint32(len(wc.shards))
 
-	var start time.Time
-	if metrics.Enabled() {
-		start = time.Now()
-		defer func() {
-			metrics.Timing(metrics.KEY_GET_LATENCY, time.Since(start), metrics.GetShardTag(shardIdx))
-		}()
-	}
+	var start = time.Now()
+	defer func() {
+		metrics.Timing(metrics.KEY_GET_LATENCY, time.Since(start), metrics.GetShardTag(shardIdx))
+	}()
 
 	var keyFound bool
 	var val []byte
@@ -262,17 +250,15 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 		}
 	}(key, shardIdx)
 
-	if metrics.Enabled() {
-		if keyFound && !expired {
-			metrics.Incr(metrics.KEY_HITS, metrics.GetShardTag(shardIdx))
-		}
-		if expired {
-			metrics.Incr(metrics.KEY_EXPIRED_ENTRIES, metrics.GetShardTag(shardIdx))
-		}
-		metrics.Incr(metrics.KEY_GETS, metrics.GetShardTag(shardIdx))
-		if shouldReWrite {
-			metrics.Incr(metrics.KEY_REWRITES, metrics.GetShardTag(shardIdx))
-		}
+	if keyFound && !expired {
+		metrics.Incr(metrics.KEY_HITS, metrics.GetShardTag(shardIdx))
+	}
+	if expired {
+		metrics.Incr(metrics.KEY_EXPIRED_ENTRIES, metrics.GetShardTag(shardIdx))
+	}
+	metrics.Incr(metrics.KEY_GETS, metrics.GetShardTag(shardIdx))
+	if shouldReWrite {
+		metrics.Incr(metrics.KEY_REWRITES, metrics.GetShardTag(shardIdx))
 	}
 	if shouldReWrite {
 		wc.Put(key, valCopy, remainingTTL)

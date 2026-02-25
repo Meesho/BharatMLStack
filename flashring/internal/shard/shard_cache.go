@@ -69,10 +69,12 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 	ki := indices.NewIndex(0, config.RbInitial, config.RbMax, config.DeleteAmortizedStep, sl)
 	sizeClasses := make([]allocators.SizeClass, 0)
 	i := fs.BLOCK_SIZE
+	minCount := 24
 	iMax := (1 << 16)
 	for i < iMax {
-		sizeClasses = append(sizeClasses, allocators.SizeClass{Size: i, MinCount: 20})
+		sizeClasses = append(sizeClasses, allocators.SizeClass{Size: i, MinCount: minCount})
 		i *= 2
+		minCount = minCount / 2
 	}
 	readPageAllocator, err := allocators.NewSlabAlignedPageAllocator(allocators.SlabAlignedPageAllocatorConfig{SizeClasses: sizeClasses})
 	if err != nil {
@@ -130,20 +132,14 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 	if status == indices.StatusNotFound {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_KEY_NOT_FOUND_COUNT, metrics.GetShardTag(fc.ShardIdx))
-		}
+		metrics.Incr(metrics.KEY_KEY_NOT_FOUND_COUNT, []string{})
 		return false, nil, 0, false, false
 	}
 
-	if metrics.Enabled() {
-		metrics.Timing(metrics.KEY_DATA_LENGTH, time.Duration(length), metrics.GetShardTag(fc.ShardIdx))
-	}
+	metrics.Timing(metrics.KEY_DATA_LENGTH, time.Duration(length), []string{})
 
 	if status == indices.StatusExpired {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_KEY_EXPIRED_COUNT, metrics.GetShardTag(fc.ShardIdx))
-		}
+		metrics.Incr(metrics.KEY_KEY_EXPIRED_COUNT, []string{})
 		return false, nil, 0, true, false
 	}
 
@@ -158,22 +154,16 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		memtableExists = false
 	}
 	if !memtableExists {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_MEMTABLE_MISS, metrics.GetShardTag(fc.ShardIdx))
-		}
+		metrics.Incr(metrics.KEY_MEMTABLE_MISS, []string{})
 		buf = make([]byte, length)
 		fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
 		n := fc.readFromDiskAsync(int64(fileOffset), length, buf)
 		if n != int(length) {
-			if metrics.Enabled() {
-				metrics.Incr(metrics.KEY_BAD_LENGTH_COUNT, metrics.GetShardTag(fc.ShardIdx))
-			}
+			metrics.Incr(metrics.KEY_BAD_LENGTH_COUNT, []string{})
 			return false, nil, 0, false, shouldReWrite
 		}
 	} else {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_MEMTABLE_HIT, metrics.GetShardTag(fc.ShardIdx))
-		}
+		metrics.Incr(metrics.KEY_MEMTABLE_HIT, []string{})
 		buf, exists = mt.GetBufForRead(int(offset), length)
 		if !exists {
 			panic("memtable exists but buf not found")
@@ -183,21 +173,18 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotCR32 != computedCR32 {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_BAD_CR32_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
-		}
+		metrics.Incr(metrics.KEY_BAD_CR32_COUNT, []string{})
 		return false, nil, 0, false, shouldReWrite
 	}
 	if gotKey != key {
-		if metrics.Enabled() {
-			metrics.Incr(metrics.KEY_BAD_KEY_COUNT, append(metrics.GetShardTag(fc.ShardIdx), metrics.GetMemtableTag(memId)...))
-		}
+		metrics.Incr(metrics.KEY_BAD_KEY_COUNT, []string{})
 		return false, nil, 0, false, shouldReWrite
 	}
 	valLen := int(length) - 4 - len(key)
 	return true, buf[4+len(key) : 4+len(key)+valLen], remainingTTL, false, shouldReWrite
 }
 
+// keep this for now. if io_uring doen't work out, we can use this.
 func (fc *ShardCache) readFromDisk(fileOffset int64, length uint16, buf []byte) int {
 
 	alignedStartOffset := (fileOffset / fs.BLOCK_SIZE) * fs.BLOCK_SIZE

@@ -89,6 +89,8 @@ var (
 	// Controlled by FLASHRING_METRICS_ENABLED env var ("true"/"1" to enable).
 	// Defaults to true for backward compatibility.
 	metricsEnabled = loadMetricsEnabled()
+
+	shardTags []string
 )
 
 func loadMetricsEnabled() bool {
@@ -190,15 +192,22 @@ func Gauge(name string, value float64, tags []string) {
 }
 
 // Enabled returns whether flashring metrics are enabled.
-// Call sites should check this before allocating tags to avoid heap allocations.
 func Enabled() bool {
 	return metricsEnabled
 }
 
 func GetShardTag(shardIdx uint32) []string {
-	return BuildTag(NewTag(TAG_SHARD_IDX, strconv.Itoa(int(shardIdx))))
+	return shardTags[shardIdx : shardIdx+2]
 }
 
 func GetMemtableTag(memtableId uint32) []string {
 	return BuildTag(NewTag(TAG_MEMTABLE_ID, strconv.Itoa(int(memtableId))))
+}
+
+func BuildShardTags(shardCount int) {
+	tags := make([]string, 0, shardCount)
+	for i := 0; i < shardCount; i++ {
+		tags = append(tags, BuildTag(NewTag(TAG_SHARD_IDX, strconv.Itoa(int(i))))...)
+	}
+	shardTags = tags
 }
