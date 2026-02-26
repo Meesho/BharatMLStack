@@ -1,0 +1,222 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "online-feature-store.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "online-feature-store.labels" . | nindent 4 }}
+  {{- with .Values.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "online-feature-store.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "online-feature-store.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "online-feature-store.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.initContainers }}
+      initContainers:
+        {{- toYaml .Values.initContainers | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: online-feature-store
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.registry | default .Values.global.imageRegistry }}/{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.config.app.port }}
+              protocol: TCP
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+          {{- if .Values.probes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.httpGet.path }}
+              port: {{ .Values.probes.liveness.httpGet.port }}
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.probes.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.httpGet.path }}
+              port: {{ .Values.probes.readiness.httpGet.port }}
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          {{- end }}
+          env:
+            # Application configuration
+            - name: APP_ENV
+              value: {{ .Values.config.app.env | quote }}
+            - name: APP_LOG_LEVEL
+              value: {{ .Values.config.app.logLevel | quote }}
+            - name: APP_METRIC_SAMPLING_RATE
+              value: {{ .Values.config.app.metricSamplingRate | quote }}
+            - name: APP_NAME
+              value: {{ .Values.config.app.name | quote }}
+            - name: APP_PORT
+              value: {{ .Values.config.app.port | quote }}
+            {{- if .Values.secrets.authToken.secretName }}
+            - name: AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.authToken.secretName }}
+                  key: {{ .Values.secrets.authToken.key }}
+            {{- end }}
+            
+            # Pod identification
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            
+            # etcd configuration
+            - name: ETCD_SERVER
+              value: {{ .Values.config.etcd.server | quote }}
+            - name: ETCD_WATCHER_ENABLED
+              value: {{ .Values.config.etcd.watcherEnabled | quote }}
+            
+            # ScyllaDB configuration
+            - name: STORAGE_SCYLLA_1_CONTACT_POINTS
+              value: {{ .Values.config.storage.scylla.contactPoints | quote }}
+            - name: STORAGE_SCYLLA_1_KEYSPACE
+              value: {{ .Values.config.storage.scylla.keyspace | quote }}
+            - name: STORAGE_SCYLLA_1_PORT
+              value: {{ .Values.config.storage.scylla.port | quote }}
+            - name: STORAGE_SCYLLA_1_NUM_CONNS
+              value: {{ .Values.config.storage.scylla.numConns | quote }}
+            - name: STORAGE_SCYLLA_1_TIMEOUT_IN_MS
+              value: {{ .Values.config.storage.scylla.timeoutMs | quote }}
+            {{- if .Values.secrets.database.secretName }}
+            - name: STORAGE_SCYLLA_1_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.database.secretName }}
+                  key: {{ .Values.secrets.database.scyllaUsernameKey }}
+            - name: STORAGE_SCYLLA_1_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.database.secretName }}
+                  key: {{ .Values.secrets.database.scyllaPasswordKey }}
+            {{- end }}
+            - name: STORAGE_SCYLLA_ACTIVE_CONFIG_IDS
+              value: {{ .Values.config.storage.scylla.activeConfigIds | quote }}
+            
+            # Redis configuration
+            - name: STORAGE_REDIS_STANDALONE_2_ADDR
+              value: {{ .Values.config.storage.redis.addr | quote }}
+            - name: STORAGE_REDIS_STANDALONE_2_DB
+              value: {{ .Values.config.storage.redis.db | quote }}
+            - name: STORAGE_REDIS_STANDALONE_2_MAX_IDLE_CONN
+              value: {{ .Values.config.storage.redis.maxIdleConn | quote }}
+            - name: STORAGE_REDIS_STANDALONE_2_MIN_IDLE_CONN
+              value: {{ .Values.config.storage.redis.minIdleConn | quote }}
+            - name: STORAGE_REDIS_STANDALONE_2_MAX_ACTIVE_CONN
+              value: {{ .Values.config.storage.redis.maxActiveConn | quote }}
+            - name: STORAGE_REDIS_STANDALONE_2_POOL_TIMEOUT_IN_MS
+              value: {{ .Values.config.storage.redis.poolTimeout | quote }}
+            - name: STORAGE_REDIS_STANDALONE_2_READ_TIMEOUT_IN_MS
+              value: {{ .Values.config.storage.redis.readTimeout | quote }}
+            - name: STORAGE_REDIS_STANDALONE_2_WRITE_TIMEOUT_IN_MS
+              value: {{ .Values.config.storage.redis.writeTimeout | quote }}
+            - name: STORAGE_REDIS_STANDALONE_ACTIVE_CONFIG_IDS
+              value: {{ .Values.config.storage.redis.activeConfigIds | quote }}
+            
+            # Cache configuration
+            - name: IN_MEM_CACHE_3_ENABLED
+              value: {{ .Values.config.cache.inMemory.enabled | quote }}
+            - name: IN_MEM_CACHE_3_NAME
+              value: {{ .Values.config.cache.inMemory.name | quote }}
+            - name: IN_MEM_CACHE_3_SIZE_IN_BYTES
+              value: {{ .Values.config.cache.inMemory.sizeInBytes | quote }}
+            - name: IN_MEM_CACHE_ACTIVE_CONFIG_IDS
+              value: {{ .Values.config.cache.inMemory.activeConfigIds | quote }}
+            - name: DISTRIBUTED_CACHE_CONF_IDS
+              value: {{ .Values.config.cache.distributed.confIds | quote }}
+            
+            # P2P Cache configuration
+            - name: P2P_CACHE_5_ENABLED
+              value: {{ .Values.config.cache.p2p.enabled | quote }}
+            - name: P2P_CACHE_5_NAME
+              value: {{ .Values.config.cache.p2p.name | quote }}
+            - name: P2P_CACHE_5_OWN_PARTITION_SIZE_IN_BYTES
+              value: {{ .Values.config.cache.p2p.ownPartitionSizeInBytes | quote }}
+            - name: P2P_CACHE_5_GLOBAL_SIZE_IN_BYTES
+              value: {{ .Values.config.cache.p2p.globalSizeInBytes | quote }}
+            - name: P2P_CACHE_ACTIVE_CONFIG_IDS
+              value: {{ .Values.config.cache.p2p.activeConfigIds | quote }}
+            
+            {{- with .Values.extraEnvVars }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if .Values.extraEnvVarsFrom }}
+          envFrom:
+            {{- toYaml .Values.extraEnvVarsFrom | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- toYaml .Values.volumeMounts | nindent 12 }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- if .Values.sidecars }}
+        {{- toYaml .Values.sidecars | nindent 8 }}
+        {{- end }}
+      volumes:
+        {{- toYaml .Values.volumes | nindent 8 }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

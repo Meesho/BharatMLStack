@@ -1,0 +1,336 @@
+# Default values for online-feature-store
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global settings
+global:
+  imageRegistry: "ghcr.io/meesho"
+  imagePullSecrets: []
+  storageClass: ""
+  
+# Container image settings
+image:
+  registry: ""
+  repository: "onfs-api-server"
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Service account settings
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+# Pod Security Context
+podSecurityContext:
+  fsGroup: 65532
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+
+# Container Security Context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+
+# Deployment settings
+replicaCount: 3
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Vertical Pod Autoscaler
+verticalPodAutoscaler:
+  enabled: false
+  updateMode: "Auto" # Off, Auto, Recreation, Initial
+  minAllowed:
+    cpu: 100m
+    memory: 256Mi
+  maxAllowed:
+    cpu: 2
+    memory: 4Gi
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Service settings
+service:
+  type: ClusterIP
+  port: 8089
+  targetPort: 8089
+  annotations: {}
+
+# Ingress settings (NGINX default)
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: onfs.bharatmlstack.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: onfs-tls
+      hosts:
+        - onfs.bharatmlstack.local
+
+# Gateway API support (production-ready routing)
+gateway:
+  enabled: false
+  className: "istio"
+  gatewayName: "bharatmlstack-gateway"
+  namespace: "bharatml-system"
+  hosts:
+    - "onfs.bharatml.prod.com"
+  tls:
+    enabled: true
+    certificateRefs:
+      - name: "bharatml-tls"
+        namespace: "bharatml-system"
+
+# HTTP Route for Gateway API
+httpRoute:
+  enabled: false
+  parentRefs:
+    - name: "bharatmlstack-gateway"
+      namespace: "bharatml-system"
+  hostnames:
+    - "onfs.bharatml.prod.com"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: "online-feature-store"
+          port: 8089
+
+# Network Policies
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: bharatml-system
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: horizon
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: trufflebox-ui
+      ports:
+        - protocol: TCP
+          port: 8089
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: bharatml-infra
+      ports:
+        - protocol: TCP
+          port: 9042  # ScyllaDB
+        - protocol: TCP
+          port: 6379  # Redis
+        - protocol: TCP
+          port: 2379  # etcd
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+
+# Service Monitor for Prometheus
+serviceMonitor:
+  enabled: true
+  namespace: ""
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+  annotations: {}
+  path: /metrics
+  honorLabels: false
+
+# Liveness and readiness probes
+probes:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+    httpGet:
+      path: /health/self
+      port: http
+  readiness:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+    httpGet:
+      path: /health/self
+      port: http
+
+# Application configuration
+config:
+  # Application settings
+  app:
+    env: "production"
+    logLevel: "INFO"
+    metricSamplingRate: 1
+    name: "onfs"
+    port: 8089
+    authToken: ""  # Set via secret
+  
+  # etcd configuration
+  etcd:
+    server: "etcd.bharatml-infra.svc.cluster.local:2379"
+    watcherEnabled: true
+  
+  # Storage configuration
+  storage:
+    scylla:
+      contactPoints: "scylla.bharatml-infra.svc.cluster.local"
+      keyspace: "onfs"
+      port: 9042
+      numConns: 10
+      timeoutMs: 30000
+      username: ""
+      password: ""
+      activeConfigIds: "1"
+    
+    redis:
+      addr: "redis.bharatml-infra.svc.cluster.local:6379"
+      db: 0
+      maxIdleConn: 32
+      minIdleConn: 20
+      maxActiveConn: 32
+      poolTimeout: 300
+      readTimeout: 300
+      writeTimeout: 300
+      activeConfigIds: "2"
+  
+  # Caching configuration
+  cache:
+    inMemory:
+      enabled: true
+      name: "onfs"
+      sizeInBytes: 1000000
+      activeConfigIds: "3"
+    
+    distributed:
+      confIds: "2"
+    
+    p2p:
+      enabled: true
+      name: "p2p-onfs"
+      ownPartitionSizeInBytes: 1000000
+      globalSizeInBytes: 10000
+      activeConfigIds: "5"
+
+# Secrets (externally managed)
+secrets:
+  # Auth token secret name
+  authToken:
+    secretName: "onfs-auth"
+    key: "token"
+  
+  # Database credentials
+  database:
+    secretName: "onfs-db-credentials"
+    scyllaUsernameKey: "scylla-username"
+    scyllaPasswordKey: "scylla-password"
+    redisPasswordKey: "redis-password"
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity and anti-affinity
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - online-feature-store
+          topologyKey: kubernetes.io/hostname
+
+# Additional labels
+labels: {}
+
+# Additional annotations
+annotations: {}
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod labels
+podLabels: {}
+
+# Volume mounts for temporary storage
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+  - name: var-run
+    mountPath: /var/run
+
+# Volumes
+volumes:
+  - name: tmp
+    emptyDir: {}
+  - name: var-run
+    emptyDir: {}
+
+# Extra environment variables
+extraEnvVars: []
+
+# Extra environment variables from ConfigMaps/Secrets
+extraEnvVarsFrom: []
+
+# Init containers
+initContainers: []
+
+# Sidecar containers
+sidecars: []
+
+# Additional volumes
+extraVolumes: []
+
+# Additional volume mounts
+extraVolumeMounts: []
