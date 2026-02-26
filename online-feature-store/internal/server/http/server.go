@@ -23,7 +23,6 @@ func Init() {
 		router = gin.New()
 
 		router.Use(gin.Recovery())
-		router.Use(gin.Logger())
 		router.Use(AuthMiddleware())
 
 		router.GET("/health/self", func(c *gin.Context) {

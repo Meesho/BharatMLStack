@@ -93,6 +93,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 	}
 	err := preProcessRequest(retrieveData, h.config)
 	if err != nil {
+		log.Error().Err(err).Msgf("Error while pre-processing request for query: %v", query)
 		return nil, err
 	}
 	fgDataChan := make(chan *FGData)
@@ -575,7 +576,7 @@ func preProcessEntity(retrieveData *RetrieveData, configManager config.Manager) 
 		// Parse and store data type
 		dataType, err := types.ParseDataType(fg.DataType.String())
 		if err != nil {
-			return fmt.Errorf("invalid data type for feature group %s: %w", fgLabel, err)
+			return fmt.Errorf("invalid data type for feature group %s, in entity %s: %w", fgLabel, entityLabel, err)
 		}
 		retrieveData.AllFGIdToDataType[fg.Id] = dataType
 
@@ -667,18 +668,18 @@ func preProcessForKeys(retrieveData *RetrieveData, configManager config.Manager)
 			// Get active schema version
 			fgConfig, err := configManager.GetFeatureGroup(retrieveData.EntityLabel, fg.FeatureGroupLabel)
 			if err != nil {
-				return fmt.Errorf("failed to get active schema: %w", err)
+				return fmt.Errorf("failed to get active schema for feature group %s, in entity %s: %w", fg.FeatureGroupLabel, retrieveData.EntityLabel, err)
 			}
 			version, err := strconv.Atoi(fgConfig.ActiveVersion)
 			if err != nil {
-				return fmt.Errorf("invalid version number: %w", err)
+				return fmt.Errorf("invalid version number for feature group %s, in entity %s: %w", fg.FeatureGroupLabel, retrieveData.EntityLabel, err)
 			}
 
 			// Get default values for each feature
 			for _, f := range fg.Features {
 				defaultValue, err := configManager.GetDefaultValueByte(retrieveData.EntityLabel, fgProp.id, version, f.Label)
 				if err != nil {
-					return fmt.Errorf("failed to get default value for feature %s: %w", f.Label, err)
+					return fmt.Errorf("failed to get default value for feature %s, in feature group %s, in entity %s: %w", f.Label, fg.FeatureGroupLabel, retrieveData.EntityLabel, err)
 				}
 				rows[i].Columns[f.ColumnIdx] = defaultValue
 			}
@@ -715,19 +716,19 @@ func preProcessFGs(retrieveData *RetrieveData, configManager config.Manager) err
 		// Get active schema first to validate features
 		activeSchema, err := configManager.GetActiveFeatureSchema(entityLabel, fg.Label)
 		if err != nil {
-			return fmt.Errorf("failed to get active schema for feature group %s: %w", fg.Label, err)
+			return fmt.Errorf("failed to get active schema for feature group %s, in entity %s: %w", fg.Label, entityLabel, err)
 		}
 
 		// Get feature group properties
 		fgProp, err := configManager.GetFeatureGroup(entityLabel, fg.Label)
 		if err != nil {
-			return fmt.Errorf("failed to get feature group %s: %w", fg.Label, err)
+			return fmt.Errorf("failed to get feature group %s, in entity %s: %w", fg.Label, entityLabel, err)
 		}
 
 		// Get feature group data type
 		dataType, err := types.ParseDataType(fgProp.DataType.String())
 		if err != nil {
-			return fmt.Errorf("invalid data type for feature group %s: %w", fg.Label, err)
+			return fmt.Errorf("invalid data type for feature group %s, in entity %s: %w", fg.Label, entityLabel, err)
 		}
 
 		// Create feature set with known capacity
@@ -740,11 +741,11 @@ func preProcessFGs(retrieveData *RetrieveData, configManager config.Manager) err
 			// Parse feature label to handle quantization
 			baseFeatureLabel, quantType, err := ParseFeatureLabel(featureLabel, dataType)
 			if err != nil {
-				return fmt.Errorf("failed to parse feature label %s: %w", featureLabel, err)
+				return fmt.Errorf("failed to parse feature label %s, in feature group %s, in entity %s: %w", featureLabel, fg.Label, entityLabel, err)
 			}
 			if _, ok := activeSchema.FeatureMeta[baseFeatureLabel]; !ok {
-				return fmt.Errorf("feature %s not found in active schema of feature group %s",
-					baseFeatureLabel, fg.Label)
+				return fmt.Errorf("feature %s not found in active schema of feature group %s, in entity %s",
+					baseFeatureLabel, fg.Label, entityLabel)
 			}
 
 			// If quantization is requested, validate it's supported
@@ -818,7 +819,7 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			if ddb.NegativeCache || ddb.Expired {
 				version, err = h.config.GetActiveVersion(data.EntityLabel, fgId)
 				if err != nil {
-					log.Error().Err(err).Msgf("Error while getting active version for feature %s", featureLabel)
+					log.Error().Err(err).Msgf("Error while getting active version for feature %s in entity %s, fg %d", featureLabel, data.EntityLabel, fgId)
 					return
 				}
 			} else {
@@ -826,7 +827,7 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			}
 			seq, err := h.config.GetSequenceNo(data.EntityLabel, fgId, int(version), featureLabel)
 			if err != nil {
-				log.Error().Err(err).Msgf("Error while getting sequence no for feature %s", featureLabel)
+				log.Error().Err(err).Msgf("Error while getting sequence no for feature %s in entity %s, fg %d", featureLabel, data.EntityLabel, fgId)
 				return
 			}
 			// Handle missing features (seq = -1)
@@ -836,18 +837,18 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 				// Get active version
 				version, err = h.config.GetActiveVersion(data.EntityLabel, fgId)
 				if err != nil {
-					log.Error().Err(err).Msgf("Error while getting active version for missing feature %s", featureLabel)
+					log.Error().Err(err).Msgf("Error while getting active version for missing feature %s in entity %s, fg %d", featureLabel, data.EntityLabel, fgId)
 					return
 				}
 				// Try to get sequence from active version
 				activeSeq, err := h.config.GetSequenceNo(data.EntityLabel, fgId, version, featureLabel)
 				if err != nil {
-					log.Error().Err(err).Msgf("Error while getting sequence no from active version for feature %s", featureLabel)
+					log.Error().Err(err).Msgf("Error while getting sequence no from active version for feature %s in entity %s, fg %d", featureLabel, data.EntityLabel, fgId)
 					return
 				}
 				// if feature is not present in active version just return
 				if activeSeq == -1 {
-					log.Warn().Msgf("Feature %s is not available in active version", featureLabel)
+					log.Error().Msgf("Feature %s is not available in active version for entity %s, fg %d", featureLabel, data.EntityLabel, fgId)
 					return
 				}
 				// Feature exists in active version

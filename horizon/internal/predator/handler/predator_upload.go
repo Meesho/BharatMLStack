@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path"
@@ -144,7 +145,11 @@ func (p *Predator) validateUploadPrerequisites(bucket, destPath string, isPartia
 	return nil
 }
 
-// validateSourceModel validates the source model structure and configuration
+// validateSourceModel validates the source model structure and configuration.
+// For full uploads it also validates:
+//   - Model configuration (config.pbtxt is valid and parseable) and warmup configuration is present for non-ensemble models
+//   - Complete model structure (version 1/ folder exists with files)
+//   - Python backend models do not contain logger/print statements outside initialize()/finalize()
 func (p *Predator) validateSourceModel(gcsPath string, isPartial bool) error {
 	srcBucket, srcPath := extractGCSPath(gcsPath)
 	if srcBucket == "" || srcPath == "" {
@@ -158,6 +163,10 @@ func (p *Predator) validateSourceModel(gcsPath string, isPartial bool) error {
 	if !isPartial {
 		if err := p.validateCompleteModelStructure(srcBucket, srcPath); err != nil {
 			return fmt.Errorf("complete model structure validation failed: %w", err)
+		}
+
+		if err := p.validateNoLoggerOrPrintStatements(gcsPath); err != nil {
+			return fmt.Errorf("logger/print statement validation failed: %w", err)
 		}
 	}
 
@@ -422,7 +431,9 @@ func (p *Predator) syncPartialFiles(gcsPath, destBucket, destPath, modelName str
 	return nil
 }
 
-// validateModelConfiguration validates the model configuration
+// validateModelConfiguration validates the model configuration, including:
+// 1. Parsing config.pbtxt as a valid protobuf ModelConfig
+// 2. Checking that non-ensemble models have a warmup configuration defined
 func (p *Predator) validateModelConfiguration(gcsPath string) error {
 	log.Info().Msgf("Validating model configuration for GCS path: %s", gcsPath)
 
@@ -443,6 +454,16 @@ func (p *Predator) validateModelConfiguration(gcsPath string) error {
 	}
 
 	log.Info().Msgf("Parsed model config - Name: %s, Backend: %s", modelConfig.Name, modelConfig.Backend)
+
+	if !isEnsembleModel(&modelConfig) {
+		if len(modelConfig.GetModelWarmup()) == 0 {
+			return errors.New(errWarmupConfigMissing)
+		}
+		log.Info().Msg("Warmup configuration validation passed for non-ensemble model")
+	} else {
+		log.Info().Msg("Skipping warmup validation for ensemble model")
+	}
+
 	return nil
 }
 
@@ -527,4 +548,244 @@ func (p *Predator) replaceModelNameInConfigPreservingFormat(data []byte, destMod
 	}
 
 	return []byte(strings.Join(lines, "\n"))
+}
+
+// validateNoLoggerOrPrintStatements checks that Python backend models do not contain
+// uncommented logger.info, logger.debug, or print statements outside of initialize()
+// and finalize() functions.
+func (p *Predator) validateNoLoggerOrPrintStatements(gcsPath string) error {
+	srcBucket, srcPath := extractGCSPath(gcsPath)
+	if srcBucket == "" || srcPath == "" {
+		return fmt.Errorf("invalid GCS path format: %s", gcsPath)
+	}
+
+	// Read and parse config.pbtxt to determine backend type.
+	configPath := path.Join(srcPath, configFile)
+	configData, err := p.GcsClient.ReadFile(srcBucket, configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config.pbtxt for logger/print check: %w", err)
+	}
+
+	var modelConfig ModelConfig
+	if err := prototext.Unmarshal(configData, &modelConfig); err != nil {
+		return fmt.Errorf("failed to parse config.pbtxt for logger/print check: %w", err)
+	}
+
+	if !isPythonBackendModel(&modelConfig) {
+		log.Info().Msg("Skipping logger/print statement check for non-Python backend model")
+		return nil
+	}
+
+	log.Info().Msg("Python backend model detected, scanning .py files for logger/print statements")
+
+	// Enumerate all .py files in the model source directory.
+	pyFiles, err := p.GcsClient.ListFilesWithSuffix(srcBucket, srcPath, pyFileSuffix)
+	if err != nil {
+		return fmt.Errorf("failed to list Python files for logger/print check: %w", err)
+	}
+
+	if len(pyFiles) == 0 {
+		log.Info().Msg("No Python files found in model directory, skipping logger/print check")
+		return nil
+	}
+
+	var perFileViolations []fileViolationInfo
+	totalViolations := 0
+
+	for _, pyFile := range pyFiles {
+		content, err := p.GcsClient.ReadFile(srcBucket, pyFile)
+		if err != nil {
+			return fmt.Errorf("failed to read Python file %s for logger/print check: %w", pyFile, err)
+		}
+
+		found, details := hasPythonLoggerOrPrintStatements(content)
+		if found {
+			perFileViolations = append(perFileViolations, fileViolationInfo{
+				fileName: path.Base(pyFile),
+				details:  details,
+			})
+			totalViolations += len(details)
+		}
+	}
+
+	if totalViolations == 0 {
+		log.Info().Msg("Logger/print statement validation passed for Python backend model")
+		return nil
+	}
+
+	log.Warn().Msgf("Found %d logger/print statement violation(s) across %d Python model file(s)",
+		totalViolations, len(perFileViolations))
+
+	return fmt.Errorf("%s; %s",
+		errLoggerOrPrintStatementsFound,
+		buildBalancedViolationSummary(perFileViolations, totalViolations))
+}
+
+// buildBalancedViolationSummary produces a human-readable error string that shows
+// at most maxDisplayedViolations individual violation details, distributed fairly
+// across all files using round-robin allocation. Each file entry includes its
+// total violation count.
+func buildBalancedViolationSummary(perFileViolations []fileViolationInfo, totalViolations int) string {
+	const maxDisplayedViolations = maxDisplayedViolationsForPythonModel
+
+	numFiles := len(perFileViolations)
+
+	slots := make([]int, numFiles)
+	remaining := maxDisplayedViolations
+	if totalViolations < remaining {
+		remaining = totalViolations
+	}
+
+	for remaining > 0 {
+		advanced := false
+		for i := range perFileViolations {
+			if remaining <= 0 {
+				break
+			}
+			if slots[i] < len(perFileViolations[i].details) {
+				slots[i]++
+				remaining--
+				advanced = true
+			}
+		}
+		if !advanced {
+			break
+		}
+	}
+
+	// Build a per-file summary: shown violations + "...and N more" if truncated.
+	var summaries []string
+	for i, fv := range perFileViolations {
+		var parts []string
+		for j := 0; j < slots[i]; j++ {
+			parts = append(parts, fv.details[j])
+		}
+		extra := len(fv.details) - slots[i]
+		if extra > 0 {
+			parts = append(parts, fmt.Sprintf("...and %d more", extra))
+		}
+
+		label := "violations"
+		if len(fv.details) == 1 {
+			label = "violation"
+		}
+		summaries = append(summaries, fmt.Sprintf("%s (%d %s): %s",
+			fv.fileName, len(fv.details), label, strings.Join(parts, ", ")))
+	}
+
+	return strings.Join(summaries, "; ")
+}
+
+// hasPythonLoggerOrPrintStatements scans Python source code for uncommented
+// logger.info, logger.debug, or print() statements that are NOT inside
+// initialize() or finalize() functions.
+func hasPythonLoggerOrPrintStatements(content []byte) (found bool, details []string) {
+	lines := strings.Split(string(content), "\n")
+
+	funcDefPattern := regexp.MustCompile(`^def\s+(\w+)\s*\(`)
+	loggerPattern := regexp.MustCompile(`(?i)logger\.(info|debug)\s*\(`)
+	printPattern := regexp.MustCompile(`\bprint\s*\(`)
+
+	var functionStack []funcScopeEntry
+
+	for lineNum, line := range lines {
+		strippedLine := strings.TrimSpace(line)
+
+		if strippedLine == "" {
+			continue
+		}
+
+		if strings.HasPrefix(strippedLine, "#") {
+			continue
+		}
+
+		lineIndent := len(line) - len(strings.TrimLeft(line, " \t"))
+
+		for len(functionStack) > 0 && functionStack[len(functionStack)-1].indent >= lineIndent {
+			functionStack = functionStack[:len(functionStack)-1]
+		}
+
+		if funcMatch := funcDefPattern.FindStringSubmatch(strippedLine); len(funcMatch) > 1 {
+			functionStack = append(functionStack, funcScopeEntry{name: funcMatch[1], indent: lineIndent})
+			continue
+		}
+
+		if isInsideAllowedFunction(functionStack) {
+			continue
+		}
+
+		codePortion := stripInlineComment(line)
+
+		if loggerPattern.MatchString(codePortion) || printPattern.MatchString(codePortion) {
+			details = append(details, fmt.Sprintf("line %d: %s", lineNum+1, strippedLine))
+			found = true
+		}
+	}
+
+	return found, details
+}
+
+// isInsideAllowedFunction returns true if any entry on the function scope stack
+// is initialize() or finalize().
+func isInsideAllowedFunction(stack []funcScopeEntry) bool {
+	for _, entry := range stack {
+		if entry.name == allowedFuncInitialize || entry.name == allowedFuncFinalize {
+			return true
+		}
+	}
+	return false
+}
+
+// stripInlineComment removes a trailing Python inline comment (# ...) from a
+// line while preserving '#' characters that appear inside string literals.
+func stripInlineComment(line string) string {
+	inSingle := false
+	inDouble := false
+	escaped := false
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+		switch ch {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		case '#':
+			if !inSingle && !inDouble {
+				return line[:i]
+			}
+		}
+	}
+	return line
+}
+
+// isEnsembleModel checks if the model configuration represents a Triton ensemble model.
+func isEnsembleModel(config *ModelConfig) bool {
+	if config.GetBackend() == ensembleBackend {
+		return true
+	}
+	if config.GetPlatform() == ensemblePlatform {
+		return true
+	}
+
+	if config.GetEnsembleScheduling() != nil {
+		return true
+	}
+	return false
+}
+
+// isPythonBackendModel checks if the model config specifies "python" as its backend.
+func isPythonBackendModel(config *ModelConfig) bool {
+	return config.GetBackend() == pythonBackend
 }
