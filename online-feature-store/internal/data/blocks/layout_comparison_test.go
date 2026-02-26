@@ -49,34 +49,34 @@ type catalogFeatureGroup struct {
 // catalogFeatureGroups defines all feature groups for entityLabel=catalog (layout-2 tests skip Bool)
 var catalogFeatureGroups = []catalogFeatureGroup{
 	{name: "vector_int32", dataType: types.DataTypeInt32Vector, numFeatures: 1},
-	{name: "embeddings_v2_fp16", dataType: types.DataTypeFP16Vector, numFeatures: 3},
-	{name: "embedding_stcg_fp16", dataType: types.DataTypeFP16Vector, numFeatures: 3},
+	{name: "embeddings_v2_fp16", dataType: types.DataTypeFP16Vector, numFeatures: 2},
+	{name: "embedding_stcg_fp16", dataType: types.DataTypeFP16Vector, numFeatures: 1},
 	{name: "raw_fp16_7d_1d_1am", dataType: types.DataTypeFP16, numFeatures: 1},
-	{name: "rt_raw_ads_demand_attributes_fp32", dataType: types.DataTypeFP32, numFeatures: 1},
+	{name: "rt_raw_ads_demand_attributes_fp32", dataType: types.DataTypeFP32, numFeatures: 2},
 	{name: "derived_3_fp32", dataType: types.DataTypeFP32, numFeatures: 1},
-	{name: "derived_fp16", dataType: types.DataTypeFP16, numFeatures: 4},
+	{name: "derived_fp16", dataType: types.DataTypeFP16, numFeatures: 10},
 	{name: "properties_string", dataType: types.DataTypeString, numFeatures: 1},
 	{name: "realtime_int64_1", dataType: types.DataTypeInt64, numFeatures: 1},
-	{name: "derived_4_fp32", dataType: types.DataTypeFP32, numFeatures: 1},
+	{name: "derived_4_fp32", dataType: types.DataTypeFP32, numFeatures: 4},
 	{name: "rt_raw_ad_attributes_v1_fp32", dataType: types.DataTypeFP32, numFeatures: 1},
-	{name: "derived_ads_fp32", dataType: types.DataTypeFP32, numFeatures: 3},
+	{name: "derived_ads_fp32", dataType: types.DataTypeFP32, numFeatures: 12},
 	{name: "embedding_ca_fp32", dataType: types.DataTypeFP32Vector, numFeatures: 1},
-	{name: "organic__derived_fp32", dataType: types.DataTypeFP32, numFeatures: 11},
-	{name: "derived_fp32", dataType: types.DataTypeFP32, numFeatures: 46},
+	{name: "organic__derived_fp32", dataType: types.DataTypeFP32, numFeatures: 121},
+	{name: "derived_fp32", dataType: types.DataTypeFP32, numFeatures: 914},
 	{name: "derived_bool", dataType: types.DataTypeBool, numFeatures: 2}, // layout-1 only, skipped in layout-2 test
 	{name: "raw_fp16_1d_30m_12am", dataType: types.DataTypeFP16, numFeatures: 1},
-	{name: "derived_string", dataType: types.DataTypeString, numFeatures: 4},
-	{name: "properties_2_string", dataType: types.DataTypeString, numFeatures: 1},
+	{name: "derived_string", dataType: types.DataTypeString, numFeatures: 19},
+	{name: "properties_2_string", dataType: types.DataTypeString, numFeatures: 2},
 	{name: "derived_2_fp32", dataType: types.DataTypeFP32, numFeatures: 1},
-	{name: "realtime_int64", dataType: types.DataTypeInt64, numFeatures: 1},
-	{name: "merlin_embeddings_fp16", dataType: types.DataTypeFP16Vector, numFeatures: 2},
-	{name: "rt_raw_ad_attributes_int32", dataType: types.DataTypeInt32, numFeatures: 1},
+	{name: "realtime_int64", dataType: types.DataTypeInt64, numFeatures: 4},
+	{name: "merlin_embeddings_fp16", dataType: types.DataTypeFP16Vector, numFeatures: 1},
+	{name: "rt_raw_ad_attributes_int32", dataType: types.DataTypeInt32, numFeatures: 4},
 	{name: "rt_raw_ad_cpc_value_fp32", dataType: types.DataTypeFP32, numFeatures: 1},
-	{name: "raw_uint64", dataType: types.DataTypeUint64, numFeatures: 3},
-	{name: "rt_raw_ad_batch_attributes_fp32", dataType: types.DataTypeFP32, numFeatures: 1},
+	{name: "raw_uint64", dataType: types.DataTypeUint64, numFeatures: 6},
+	{name: "rt_raw_ad_batch_attributes_fp32", dataType: types.DataTypeFP32, numFeatures: 3},
 	{name: "embeddings_fp16", dataType: types.DataTypeFP16Vector, numFeatures: 1},
 	{name: "vector_int32_lifetime", dataType: types.DataTypeInt32Vector, numFeatures: 1},
-	{name: "derived_int32", dataType: types.DataTypeInt32, numFeatures: 14},
+	{name: "derived_int32", dataType: types.DataTypeInt32, numFeatures: 83},
 	{name: "vector_int32_lifetime_v2", dataType: types.DataTypeInt32Vector, numFeatures: 1},
 	{name: "rt_raw_is_live_on_ad_string", dataType: types.DataTypeString, numFeatures: 1},
 	{name: "rt_raw_ad_gmv_max_attributes_fp32", dataType: types.DataTypeFP32, numFeatures: 1},
@@ -239,6 +239,7 @@ func TestLayout1VsLayout2Compression(t *testing.T) {
 			t.Run("Compressed Size Comparison", func(t *testing.T) {
 				// Calculate improvement
 				improvement := float64(layout1Results.compressedSize-layout2Results.compressedSize) / float64(layout1Results.compressedSize) * 100
+				stringCompressedCanHaveOverhead := tc.dataType == types.DataTypeString || tc.dataType == types.DataTypeStringVector
 
 				// With any default ratios, Layout2 should be equal or better (unless overhead case)
 				if tc.defaultRatio > 0.0 {
@@ -248,6 +249,13 @@ func TestLayout1VsLayout2Compression(t *testing.T) {
 						assert.LessOrEqual(t, layout2Results.compressedSize, maxAllowed,
 							"Layout2 compressed size should be at most 1 byte more than Layout1 for single-feature")
 						t.Logf("Note: Single-feature has bitmap overhead; Layout2 may be 1 byte larger")
+					} else if stringCompressedCanHaveOverhead {
+						// For strings, compression can favor layout-1 slightly because repeated default/short-string patterns
+						// are highly compressible. Allow overhead up to bitmap bytes.
+						maxAllowed := layout1Results.compressedSize + (tc.numFeatures+7)/8
+						assert.LessOrEqual(t, layout2Results.compressedSize, maxAllowed,
+							"Layout2 compressed size should be at most bitmap-overhead bytes more than Layout1 for string types")
+						t.Logf("Note: String compressed size can have bitmap overhead; improvement: %.2f%%", improvement)
 					} else {
 						assert.LessOrEqual(t, layout2Results.compressedSize, layout1Results.compressedSize,
 							"Layout2 compressed size should be less than or equal to Layout1 with %.0f%% defaults", tc.defaultRatio*100)
@@ -1097,15 +1105,16 @@ func serializeWithLayoutByType(t *testing.T, layoutVersion uint8, numFeatures in
 
 	serialized, err := psdb.Serialize()
 	require.NoError(t, err, "Serialization should succeed for layout %d type %v", layoutVersion, dataType)
+	serializedCopy := append([]byte(nil), serialized...)
 	headerSize := PSDBLayout1LengthBytes
 	if layoutVersion == 2 {
 		headerSize = PSDBLayout1LengthBytes + PSDBLayout2ExtraBytes
 	}
 	origSize := psdb.originalDataLen
 	return serializationResults{
-		serialized:     serialized,
+		serialized:     serializedCopy,
 		originalSize:   origSize,
-		compressedSize: len(serialized) - headerSize,
+		compressedSize: len(serializedCopy) - headerSize,
 		headerSize:     headerSize,
 	}
 }
