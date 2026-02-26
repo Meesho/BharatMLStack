@@ -70,9 +70,7 @@ func (i *Index) Put(key string, length, ttlInMinutes uint16, memId, offset uint3
 func (i *Index) Get(key string) (length, lastAccess, remainingTTL uint16, freq uint64, memId, offset uint32, status Status) {
 	hhi, hlo := hash128(key)
 
-	i.mu.RLock()
 	idx, ok := i.rm[hlo]
-	i.mu.RUnlock()
 
 	if ok {
 		for {
