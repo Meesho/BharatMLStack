@@ -7,6 +7,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/Meesho/go-core/metric"
 	logger "github.com/rs/zerolog/log"
 )
 
@@ -105,10 +106,12 @@ func NewLogger(config Config) (*Logger, error) {
 
 // LogBytes writes raw byte data to the logger (zero-allocation path)
 func (l *Logger) LogBytes(data []byte) {
+
 	// Count every log attempt (successful or dropped)
 	l.stats.TotalLogs.Add(1)
 
 	if l.closed.Load() {
+		metric.Incr(MetricLogBytesDropped, []string{})
 		l.stats.DroppedLogs.Add(1)
 		return
 	}
@@ -119,6 +122,7 @@ func (l *Logger) LogBytes(data []byte) {
 	if n > 0 {
 		// Success! Shard is already enqueued to flush channel if needsFlush=true
 		// Flush worker will accumulate and flush when threshold reached
+		metric.Incr(MetricLogBytesSuccess, []string{})
 		l.stats.BytesWritten.Add(int64(n))
 		return
 	}
@@ -127,6 +131,7 @@ func (l *Logger) LogBytes(data []byte) {
 	// Use non-blocking select with timeout to avoid blocking hot path
 	shard := l.shardCollection.GetShard(shardID)
 	if shard == nil {
+		metric.Incr(MetricLogBytesDropped, []string{})
 		l.stats.DroppedLogs.Add(1)
 		return
 	}
@@ -144,12 +149,14 @@ func (l *Logger) LogBytes(data []byte) {
 		n, needsFlush = shard.Write(data)
 		if n > 0 {
 			// Success after re-check! Shard is already enqueued if needsFlush=true
+			metric.Incr(MetricLogBytesSuccess, []string{})
 			l.stats.BytesWritten.Add(int64(n))
 			return
 		}
 
 		// Still full - trigger swap (only one thread will succeed per shard)
 		if needsFlush {
+
 			shard.trySwap()
 			// After swap, readyForFlush is still true (inactive buffer needs flush)
 			// But the new active buffer is empty and should accept writes
@@ -162,9 +169,11 @@ func (l *Logger) LogBytes(data []byte) {
 		if n == 0 {
 			// Still failed after swap - this means both buffers are truly full
 			// (very rare, but possible under extreme load)
+			metric.Incr(MetricLogBytesDropped, []string{})
 			l.stats.DroppedLogs.Add(1)
 		} else {
 			// Success after swap! Shard is already enqueued if needsFlush=true
+			metric.Incr(MetricLogBytesSuccess, []string{})
 			l.stats.BytesWritten.Add(int64(n))
 		}
 
@@ -235,8 +244,12 @@ func (l *Logger) flushWorker() {
 // flushBuffers writes all data from buffers to disk using batch flush
 // Much simpler: each buffer knows how to get its data and reset itself
 func (l *Logger) flushBuffers(buffers []*Buffer) {
+	metric.Incr(MetricLogBytesFlush, []string{})
 	// Track flush operation timing
 	flushStart := time.Now()
+	defer func() {
+		metric.TimingWithStart(MetricLogBytesFlushDuration, flushStart, []string{})
+	}()
 
 	// Increment queue depth (for monitoring)
 	l.stats.FlushQueueDepth.Add(1)

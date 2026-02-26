@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Meesho/go-core/metric"
 )
 
 // LoggerManager manages multiple Logger instances, one per event name
@@ -31,6 +33,7 @@ type LoggerManager struct {
 func NewLoggerManager(config Config) (*LoggerManager, error) {
 	// Validate configuration
 	if err := config.Validate(); err != nil {
+		metric.Incr(MetricLoggerInitializationFailed, []string{})
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
@@ -84,6 +87,7 @@ func NewLoggerManager(config Config) (*LoggerManager, error) {
 		lm.ownUploader = false
 	}
 
+	metric.Incr(MetricLoggerInitialized, []string{})
 	return lm, nil
 }
 
@@ -156,6 +160,7 @@ func (lm *LoggerManager) getOrCreateLogger(eventName string) (*Logger, error) {
 
 // LogBytesWithEvent writes raw byte data to the event-specific logger
 func (lm *LoggerManager) LogBytesWithEvent(eventName string, data []byte) {
+	metric.Incr(MetricLogBytes, GetEventNameTags(eventName))
 	logger, err := lm.getOrCreateLogger(eventName)
 	if err != nil {
 		// Drop log on error

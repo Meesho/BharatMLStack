@@ -12,6 +12,8 @@ import (
 	"cloud.google.com/go/storage"
 	logger "github.com/rs/zerolog/log"
 	"google.golang.org/api/option"
+
+	"github.com/Meesho/go-core/metric"
 )
 
 // Note: GCSUploadConfig is now defined in config.go
@@ -150,6 +152,7 @@ func (u *Uploader) uploadWorker() {
 // uploadFileWithRetry uploads a file with retry logic
 func (u *Uploader) uploadFileWithRetry(filePath string) error {
 	// Get file size BEFORE upload (file will be deleted after successful upload)
+	metric.Incr(MetricUploadFile, []string{})
 	fileInfo, statErr := os.Stat(filePath)
 	var fileSize int64
 	if statErr == nil {
@@ -168,6 +171,9 @@ func (u *Uploader) uploadFileWithRetry(filePath string) error {
 		}
 
 		start := time.Now()
+		defer func() {
+			metric.TimingWithStart(MetricUploadFileDuration, start, []string{})
+		}()
 		err := u.uploadFile(filePath)
 		duration := time.Since(start)
 

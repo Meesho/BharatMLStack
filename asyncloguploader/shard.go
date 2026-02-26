@@ -8,6 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Meesho/go-core/metric"
 )
 
 // headerOffset is the number of bytes reserved at the start of each buffer for the shard header
@@ -293,6 +295,7 @@ func (s *Shard) Write(p []byte) (n int, needsFlush bool) {
 // trySwap attempts to swap the active buffer (CAS-protected)
 // Pushes the now-inactive buffer to the flush channel
 func (s *Shard) trySwap() {
+	metric.Incr(MetricLogBytesSwap, []string{})
 	// Check if already swapping
 	if !s.swapping.CompareAndSwap(false, true) {
 		return // Another goroutine is swapping
