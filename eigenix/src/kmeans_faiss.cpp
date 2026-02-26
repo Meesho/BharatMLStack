@@ -21,7 +21,7 @@ void FaissKMeans::train(const float* data, size_t n, int dim, int k,
 
     faiss::ClusteringParameters cp;
     cp.niter = static_cast<int>(cfg.max_iter);
-    cp.verbose = false;
+    cp.verbose = cfg.verbose;
     cp.seed = static_cast<int>(cfg.seed);
     cp.nredo = 1;
 

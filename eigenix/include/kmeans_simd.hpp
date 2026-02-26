@@ -8,7 +8,7 @@
 
 namespace eigenix {
 
-enum class SimdISA { SSE42, AVX2, AVX512 };
+enum class SimdISA { SSE42, AVX2, AVX512, NEON };
 
 // Runtime-dispatched SIMD K-Means: AVX-512 → AVX2 → SSE4.2 fallback.
 // FMA-fused L2 squared distance kernels with cache-line prefetch.

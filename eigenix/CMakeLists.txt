@@ -11,30 +11,64 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
     add_compile_options(-march=native)
 endif()
 
-# ---------- Dependencies ----------
+# ---------- Homebrew prefix (macOS) ----------
+if(APPLE)
+    execute_process(COMMAND brew --prefix
+                    OUTPUT_VARIABLE HOMEBREW_PREFIX
+                    OUTPUT_STRIP_TRAILING_WHITESPACE
+                    ERROR_QUIET)
+    if(HOMEBREW_PREFIX)
+        list(APPEND CMAKE_PREFIX_PATH
+            "${HOMEBREW_PREFIX}"
+            "${HOMEBREW_PREFIX}/opt/openblas"
+            "${HOMEBREW_PREFIX}/opt/libomp")
+    endif()
+endif()
+
+# ---------- OpenMP ----------
+if(APPLE)
+    # Apple Clang does not ship OpenMP; use Homebrew libomp.
+    if(HOMEBREW_PREFIX)
+        set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp -I${HOMEBREW_PREFIX}/opt/libomp/include")
+        set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${HOMEBREW_PREFIX}/opt/libomp/include")
+        set(OpenMP_C_LIB_NAMES "omp")
+        set(OpenMP_CXX_LIB_NAMES "omp")
+        set(OpenMP_omp_LIBRARY "${HOMEBREW_PREFIX}/opt/libomp/lib/libomp.dylib")
+    endif()
+endif()
 find_package(OpenMP REQUIRED)
 
-# BLAS (OpenBLAS preferred, MKL also works)
-set(BLA_VENDOR OpenBLAS)
-find_package(BLAS REQUIRED)
+# ---------- BLAS ----------
+if(APPLE)
+    find_package(BLAS REQUIRED)
+    # Homebrew OpenBLAS is keg-only; add its include path explicitly.
+    if(HOMEBREW_PREFIX AND EXISTS "${HOMEBREW_PREFIX}/opt/openblas/include")
+        set(BLAS_INCLUDE_DIR "${HOMEBREW_PREFIX}/opt/openblas/include")
+    endif()
+else()
+    set(BLA_VENDOR OpenBLAS)
+    find_package(BLAS REQUIRED)
+endif()
 
-# FAISS — the setup.sh installs cmake config to /usr/local/share/faiss
+# ---------- FAISS ----------
 list(APPEND CMAKE_PREFIX_PATH "/usr/local")
 find_package(faiss QUIET CONFIG)
 if(NOT faiss_FOUND)
-    # Manual fallback: locate the static lib and headers directly
     find_library(FAISS_LIBRARY NAMES faiss
-                 PATHS /usr/local/lib /usr/lib /usr/lib/x86_64-linux-gnu)
+                 PATHS /usr/local/lib
+                       /usr/lib /usr/lib/x86_64-linux-gnu
+                       ${HOMEBREW_PREFIX}/lib)
     find_path(FAISS_INCLUDE_DIR NAMES faiss/Clustering.h
-              PATHS /usr/local/include /usr/include)
+              PATHS /usr/local/include /usr/include
+                    ${HOMEBREW_PREFIX}/include)
     if(FAISS_LIBRARY AND FAISS_INCLUDE_DIR)
         add_library(faiss STATIC IMPORTED)
         set_target_properties(faiss PROPERTIES
             IMPORTED_LOCATION "${FAISS_LIBRARY}"
             INTERFACE_INCLUDE_DIRECTORIES "${FAISS_INCLUDE_DIR}")
-        # FAISS with AVX2 build also produces libfaiss_avx2.a
+        # FAISS AVX2 companion lib (x86 builds only)
         find_library(FAISS_AVX2_LIBRARY NAMES faiss_avx2
-                     PATHS /usr/local/lib /usr/lib)
+                     PATHS /usr/local/lib ${HOMEBREW_PREFIX}/lib)
         if(FAISS_AVX2_LIBRARY)
             set_property(TARGET faiss APPEND PROPERTY
                 INTERFACE_LINK_LIBRARIES "${FAISS_AVX2_LIBRARY}")
@@ -47,7 +81,7 @@ if(NOT faiss_FOUND)
     endif()
 endif()
 
-# GTest (for tests)
+# ---------- GTest ----------
 find_package(GTest QUIET)
 
 # ---------- Library: eigenix_kmeans ----------
@@ -60,6 +94,9 @@ add_library(eigenix_kmeans STATIC
     src/kmeans_streaming.cpp
 )
 target_include_directories(eigenix_kmeans PUBLIC include)
+if(BLAS_INCLUDE_DIR)
+    target_include_directories(eigenix_kmeans PUBLIC ${BLAS_INCLUDE_DIR})
+endif()
 target_link_libraries(eigenix_kmeans PUBLIC
     OpenMP::OpenMP_CXX
     ${BLAS_LIBRARIES}

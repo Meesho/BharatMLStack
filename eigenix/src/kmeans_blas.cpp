@@ -1,7 +1,9 @@
 #include "kmeans_blas.hpp"
 #include "metrics.hpp"
 #include <cblas.h>
+#include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <omp.h>
 #include <random>
@@ -108,6 +110,8 @@ void BlasKMeans::train(const float* data, size_t n, int dim, int k,
     std::vector<size_t> centroid_counts(static_cast<size_t>(k));
     std::vector<int> labels(n);
 
+    auto train_start = std::chrono::steady_clock::now();
+
     for (size_t iter = 0; iter < cfg.max_iter; ++iter) {
         // dist_buf[i,c] = -2 * x_i . c_c  (via SGEMM)
         cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
@@ -185,6 +189,14 @@ void BlasKMeans::train(const float* data, size_t n, int dim, int k,
 
         compute_centroid_norms();
         iterations_ = static_cast<int>(iter + 1);
+
+        if (cfg.verbose && (iter == 0 || (iter + 1) % 5 == 0
+                            || max_shift <= cfg.tol || iter + 1 == cfg.max_iter)) {
+            auto now = std::chrono::steady_clock::now();
+            double elapsed = std::chrono::duration<double, std::milli>(now - train_start).count();
+            std::fprintf(stderr, "[BLAS] iter %zu/%zu  max_shift=%.4f  elapsed=%.0fms\n",
+                         iter + 1, cfg.max_iter, max_shift, elapsed);
+        }
 
         if (max_shift <= cfg.tol) break;
     }

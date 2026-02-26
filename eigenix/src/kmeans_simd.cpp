@@ -1,12 +1,15 @@
 #include "kmeans_simd.hpp"
 #include "metrics.hpp"
+#include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <limits>
 #include <omp.h>
 #include <random>
 #include <stdexcept>
 
+// Platform-specific SIMD headers
 #if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
 #ifdef _MSC_VER
@@ -14,11 +17,13 @@
 #else
 #include <cpuid.h>
 #endif
+#elif defined(__aarch64__) || defined(_M_ARM64)
+#include <arm_neon.h>
 #endif
 
 namespace eigenix {
 
-// ============== CPUID ISA detection ==============
+// ============== ISA detection ==============
 
 namespace {
 
@@ -50,6 +55,10 @@ SimdISA detect_isa() {
     return SimdISA::SSE42;
 }
 
+#elif defined(__aarch64__) || defined(_M_ARM64)
+
+SimdISA detect_isa() { return SimdISA::NEON; }
+
 #else
 
 SimdISA detect_isa() { return SimdISA::SSE42; }
@@ -60,6 +69,7 @@ SimdISA detect_isa() { return SimdISA::SSE42; }
 
 // ============== L2 squared distance kernels ==============
 
+// ---- x86 kernels ----
 #if defined(__x86_64__) || defined(_M_X64)
 
 static float l2sq_sse42(const float* a, const float* b, int dim) {
@@ -71,7 +81,6 @@ static float l2sq_sse42(const float* a, const float* b, int dim) {
         __m128 d  = _mm_sub_ps(va, vb);
         sum = _mm_add_ps(sum, _mm_mul_ps(d, d));
     }
-    // Horizontal sum
     __m128 shuf = _mm_movehdup_ps(sum);
     sum = _mm_add_ps(sum, shuf);
     shuf = _mm_movehl_ps(shuf, sum);
@@ -97,7 +106,6 @@ static float l2sq_avx2(const float* a, const float* b, int dim) {
         __m256 d  = _mm256_sub_ps(va, vb);
         sum = _mm256_fmadd_ps(d, d, sum);
     }
-    // Horizontal sum 256→scalar
     __m128 lo = _mm256_castps256_ps128(sum);
     __m128 hi = _mm256_extractf128_ps(sum, 1);
     __m128 s  = _mm_add_ps(lo, hi);
@@ -136,7 +144,28 @@ static float l2sq_avx512(const float* a, const float* b, int dim) {
 }
 #endif
 
-#else  // Non-x86
+// ---- ARM NEON kernel ----
+#elif defined(__aarch64__) || defined(_M_ARM64)
+
+static float l2sq_neon(const float* a, const float* b, int dim) {
+    float32x4_t sum = vdupq_n_f32(0.0f);
+    int i = 0;
+    for (; i + 4 <= dim; i += 4) {
+        float32x4_t va = vld1q_f32(a + i);
+        float32x4_t vb = vld1q_f32(b + i);
+        float32x4_t d  = vsubq_f32(va, vb);
+        sum = vfmaq_f32(sum, d, d);
+    }
+    float result = vaddvq_f32(sum);
+    for (; i < dim; ++i) {
+        float d = a[i] - b[i];
+        result += d * d;
+    }
+    return result;
+}
+
+// ---- Scalar fallback ----
+#else
 
 static float l2sq_scalar(const float* a, const float* b, int dim) {
     float s = 0.0f;
@@ -147,7 +176,7 @@ static float l2sq_scalar(const float* a, const float* b, int dim) {
     return s;
 }
 
-#endif  // x86_64
+#endif
 
 // ============== SimdKMeans implementation ==============
 
@@ -164,7 +193,11 @@ float SimdKMeans::l2sq(const float* a, const float* b, int dim) const {
 #endif
         default:              return l2sq_sse42(a, b, dim);
     }
+#elif defined(__aarch64__) || defined(_M_ARM64)
+    (void)isa_;
+    return l2sq_neon(a, b, dim);
 #else
+    (void)isa_;
     return l2sq_scalar(a, b, dim);
 #endif
 }
@@ -227,8 +260,9 @@ void SimdKMeans::train(const float* data, size_t n, int dim, int k,
     std::vector<float> centroid_sums(static_cast<size_t>(k) * dim);
     std::vector<size_t> centroid_counts(static_cast<size_t>(k));
 
+    auto train_start = std::chrono::steady_clock::now();
+
     for (size_t iter = 0; iter < cfg.max_iter; ++iter) {
-        // Assignment: find nearest centroid for each point.
         #pragma omp parallel for schedule(static)
         for (size_t i = 0; i < n; ++i) {
             const float* x = data + i * dim;
@@ -241,7 +275,6 @@ void SimdKMeans::train(const float* data, size_t n, int dim, int k,
             labels[i] = best;
         }
 
-        // Centroid update with thread-local accumulators.
         std::memset(centroid_sums.data(), 0,
                     static_cast<size_t>(k) * dim * sizeof(float));
         std::memset(centroid_counts.data(), 0,
@@ -289,6 +322,15 @@ void SimdKMeans::train(const float* data, size_t n, int dim, int k,
         }
 
         iterations_ = static_cast<int>(iter + 1);
+
+        if (cfg.verbose && (iter == 0 || (iter + 1) % 5 == 0
+                            || max_shift <= cfg.tol || iter + 1 == cfg.max_iter)) {
+            auto now = std::chrono::steady_clock::now();
+            double elapsed = std::chrono::duration<double, std::milli>(now - train_start).count();
+            std::fprintf(stderr, "[%s] iter %zu/%zu  max_shift=%.4f  elapsed=%.0fms\n",
+                         name().c_str(), iter + 1, cfg.max_iter, max_shift, elapsed);
+        }
+
         if (max_shift <= cfg.tol) break;
     }
 
@@ -325,6 +367,7 @@ std::string SimdKMeans::name() const {
     switch (isa_) {
         case SimdISA::AVX512: return "SIMD-AVX512";
         case SimdISA::AVX2:   return "SIMD-AVX2";
+        case SimdISA::NEON:   return "SIMD-NEON";
         default:              return "SIMD-SSE42";
     }
 }

@@ -1,7 +1,9 @@
 #include "kmeans_streaming.hpp"
 #include "metrics.hpp"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <random>
 #include <stdexcept>
@@ -91,12 +93,14 @@ void StreamingKMeans::train(const float* data, size_t n, int dim, int k,
     std::vector<int> batch_labels;
 
     size_t total_batches = (n + bs - 1) / bs;
-    int epoch = 0;
+    auto train_start = std::chrono::steady_clock::now();
 
     for (size_t iter = 0; iter < cfg.max_iter; ++iter) {
         float max_shift = 0.0f;
+        size_t batch_idx = 0;
 
         for (size_t start = 0; start < n; start += bs) {
+            ++batch_idx;
             size_t batch_n = std::min(bs, n - start);
             const float* batch = data + start * dim;
 
@@ -142,7 +146,14 @@ void StreamingKMeans::train(const float* data, size_t n, int dim, int k,
         }
 
         iterations_ = static_cast<int>(iter + 1);
-        epoch++;
+
+        if (cfg.verbose && (iter == 0 || (iter + 1) % 5 == 0
+                            || std::sqrt(max_shift) <= cfg.tol || iter + 1 == cfg.max_iter)) {
+            auto now = std::chrono::steady_clock::now();
+            double elapsed = std::chrono::duration<double, std::milli>(now - train_start).count();
+            std::fprintf(stderr, "[Streaming] epoch %zu/%zu  batches=%zu  max_shift=%.4f  elapsed=%.0fms\n",
+                         iter + 1, cfg.max_iter, total_batches, std::sqrt(max_shift), elapsed);
+        }
 
         if (std::sqrt(max_shift) <= cfg.tol) break;
     }

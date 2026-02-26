@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/eigenix_bench.dir/bench/main_bench.cpp.o -o eigenix_bench  libeigenix_kmeans.a /opt/homebrew/lib/libfaiss.a /opt/homebrew/opt/libomp/lib/libomp.dylib /opt/homebrew/opt/openblas/lib/libopenblas.dylib -lm -ldl

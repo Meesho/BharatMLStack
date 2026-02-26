@@ -20,6 +20,7 @@ struct TrainConfig {
     size_t max_iter = 100;
     float tol = 1e-4f;
     unsigned seed = 42;
+    bool verbose = false;
 };
 
 class KMeansBase {

@@ -1,0 +1,2 @@
+/usr/bin/ar qc libeigenix_kmeans.a CMakeFiles/eigenix_kmeans.dir/src/data_generator.cpp.o CMakeFiles/eigenix_kmeans.dir/src/metrics.cpp.o CMakeFiles/eigenix_kmeans.dir/src/kmeans_blas.cpp.o CMakeFiles/eigenix_kmeans.dir/src/kmeans_faiss.cpp.o CMakeFiles/eigenix_kmeans.dir/src/kmeans_simd.cpp.o CMakeFiles/eigenix_kmeans.dir/src/kmeans_streaming.cpp.o
+/usr/bin/ranlib libeigenix_kmeans.a
