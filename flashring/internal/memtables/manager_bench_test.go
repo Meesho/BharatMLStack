@@ -48,7 +48,7 @@ func Benchmark_Puts(b *testing.B) {
 		}
 	}
 
-	b.ReportMetric(float64(manager.stats.Flushes), "flushes")
+	// b.ReportMetric(float64(manager.stats.Flushes), "flushes")
 	b.ReportMetric(float64(b.N*16*1024)/1024/1024, "MB/s")
 	b.ReportAllocs()
 

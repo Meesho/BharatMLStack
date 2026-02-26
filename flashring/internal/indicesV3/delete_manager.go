@@ -1,6 +1,7 @@
 package indicesv2
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
@@ -62,6 +63,9 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 	if trimNeeded || nextAddNeedsDelete {
 		dm.deleteInProgress = true
 		dm.deleteCount = int(dm.memtableData[dm.toBeDeletedMemId] / dm.deleteAmortizedStep)
+		if dm.deleteCount == 0 {
+			dm.deleteCount = int(dm.memtableData[dm.toBeDeletedMemId] % dm.deleteAmortizedStep)
+		}
 		memIdAtHead, err := dm.keyIndex.PeekMemIdAtHead()
 		if err != nil {
 			return err
@@ -69,8 +73,9 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 		if memIdAtHead != dm.toBeDeletedMemId {
 			return fmt.Errorf("memIdAtHead: %d, toBeDeletedMemId: %d", memIdAtHead, dm.toBeDeletedMemId)
 		}
+
 		dm.wrapFile.TrimHead()
-		return nil
+		return errors.New("trim needed retry this write")
 	}
 	return nil
 }

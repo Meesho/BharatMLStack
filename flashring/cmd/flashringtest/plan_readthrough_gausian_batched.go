@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	cachepkg "github.com/Meesho/BharatMLStack/flashring/internal/cache"
+	cachepkg "github.com/Meesho/BharatMLStack/flashring/pkg/cache"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -93,7 +93,7 @@ func planReadthroughGaussianBatched() {
 	}
 
 	memtableSizeInBytes := int32(memtableMB) * 1024 * 1024
-	fileSizeInBytes := int64(fileSizeMultiplier) * int64(memtableSizeInBytes)
+	fileSizeInBytes := int64(fileSizeMultiplier) * 1024 * 1024 * 1024 // fileSizeMultiplier in GiB
 
 	cfg := cachepkg.WrapCacheConfig{
 		NumShards:             numShards,
@@ -103,27 +103,9 @@ func planReadthroughGaussianBatched() {
 		ReWriteScoreThreshold: 0.8,
 		GridSearchEpsilon:     0.0001,
 		SampleDuration:        time.Duration(sampleSecs) * time.Second,
-
-		//batching reads
-		EnableBatching:    enableBatching,
-		BatchWindowMicros: batchWindowMicros,
-		MaxBatchSize:      maxBatchSize,
-
-		// Pass the metrics collector to record cache metrics
-		MetricsRecorder: InitMetricsCollector(),
 	}
 
-	// Set additional input parameters that the cache doesn't know about
-	metricsCollector.SetShards(numShards)
-	metricsCollector.SetKeysPerShard(keysPerShard)
-	metricsCollector.SetReadWorkers(readWorkers)
-	metricsCollector.SetWriteWorkers(writeWorkers)
-	metricsCollector.SetPlan("readthrough-batched")
-
-	// Start background goroutine to wait for shutdown signal and export CSV
-	go RunmetricsWaitForShutdown()
-
-	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, logStats)
+	pc, err := cachepkg.NewWrapCache(cfg, mountPoint)
 	if err != nil {
 		panic(err)
 	}
