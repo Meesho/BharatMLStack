@@ -10,11 +10,17 @@ import (
 
 const ServiceDeployableTableName = "service_deployable_config"
 
+const (
+	DeployableTypeTest   = "test"
+	DeployableTypeTarget = "target"
+)
+
 type ServiceDeployableConfig struct {
 	ID      int `gorm:"primaryKey,autoIncrement"`
 	Name    string
 	Host    string `gorm:"unique;not null"`
 	Service string `gorm:"type:ENUM('inferflow', 'predator', 'numerix')"`
+	DeployableType string `gorm:"column:deployable_type;type:ENUM('test', 'target');default:'target';not null"`
 	Active  bool   `gorm:"default:false"`
 	// Port                    int    `gorm:"default:8080"` // Port field for the deployable
 	CreatedBy               string

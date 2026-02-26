@@ -359,6 +359,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     test_results json,
+    source_config_id varchar(255) NULL,
     PRIMARY KEY (id),
     UNIQUE KEY config_id (config_id)
   );
@@ -439,6 +440,7 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     test_results json,
     has_nil_data boolean DEFAULT false,
+    source_model_name varchar(255) NULL,
     PRIMARY KEY (id)
   );
   
@@ -601,7 +603,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   # VALUES (1, 1, NOW(), NOW());
 
   INSERT IGNORE INTO service_deployable_config (
-    id, name, host, service, active, created_by, updated_by,
+    id, name, host, service, deployable_type, active, created_by, updated_by,
     created_at, updated_at, config, monitoring_url, deployable_running_status,
     deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
   ) VALUES (
@@ -609,6 +611,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
       'numerix',
       'numerix:8083',
       'numerix',
+      'target',
       1,
       'admin@admin.com',
       NULL,
@@ -624,7 +627,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   );
 
   INSERT IGNORE INTO service_deployable_config (
-    id, name, host, service, active, created_by, updated_by,
+    id, name, host, service, deployable_type, active, created_by, updated_by,
     created_at, updated_at, config, monitoring_url, deployable_running_status,
     deployable_work_flow_id, deployment_run_id, deployable_health, work_flow_status
   ) VALUES (
@@ -632,6 +635,7 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
       'inferflow',
       'inferflow:8085',
       'inferflow',
+      'target',
       1,
       'admin@admin.com',
       NULL,

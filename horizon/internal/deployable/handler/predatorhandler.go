@@ -519,6 +519,7 @@ func (h *Handler) CreateDeployable(request *DeployableRequest, workingEnv string
 	deployableConfig := &servicedeployableconfig.ServiceDeployableConfig{
 		Name:                    request.AppName,
 		Service:                 request.ServiceName,
+		DeployableType:          servicedeployableconfig.DeployableTypeTarget,
 		Host:                    host, // Use environment-prefixed host for database uniqueness
 		Active:                  true,
 		CreatedBy:               request.CreatedBy,
