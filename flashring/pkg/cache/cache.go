@@ -236,9 +236,9 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	var shouldReWrite bool
 
 	func(key string, shardIdx uint32) {
-		wc.shardLocks[shardIdx].RLock()
-		metrics.Timing(metrics.LATENCY_WLOCK, time.Since(start), []string{})
-		defer wc.shardLocks[shardIdx].RUnlock()
+		// wc.shardLocks[shardIdx].RLock()
+		// metrics.Timing(metrics.LATENCY_RLOCK, time.Since(start), []string{})
+		// defer wc.shardLocks[shardIdx].RUnlock()
 
 		keyFound, val, remainingTTL, expired, shouldReWrite = wc.shards[shardIdx].Get(key)
 
