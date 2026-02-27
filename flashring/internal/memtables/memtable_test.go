@@ -2,6 +2,7 @@ package memtables
 
 import (
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
@@ -65,11 +66,11 @@ func TestNewMemtable_Success(t *testing.T) {
 	if memtable.capacity != capacity {
 		t.Errorf("Expected capacity %d, got %d", capacity, memtable.capacity)
 	}
-	if memtable.currentOffset != 0 {
-		t.Errorf("Expected currentOffset 0, got %d", memtable.currentOffset)
+	if atomic.LoadInt64(&memtable.currentOffset) != 0 {
+		t.Errorf("Expected currentOffset 0, got %d", atomic.LoadInt64(&memtable.currentOffset))
 	}
-	if memtable.readyForFlush != false {
-		t.Errorf("Expected readyForFlush false, got %v", memtable.readyForFlush)
+	if atomic.LoadUint32(&memtable.flushStarted) != 0 {
+		t.Errorf("Expected flushStarted 0, got %d", atomic.LoadUint32(&memtable.flushStarted))
 	}
 }
 
@@ -256,8 +257,8 @@ func TestMemtable_Put_Success(t *testing.T) {
 	if readyForFlush {
 		t.Errorf("Expected readyForFlush false, got %v", readyForFlush)
 	}
-	if memtable.currentOffset != len(testData) {
-		t.Errorf("Expected currentOffset %d, got %d", len(testData), memtable.currentOffset)
+	if atomic.LoadInt64(&memtable.currentOffset) != int64(len(testData)) {
+		t.Errorf("Expected currentOffset %d, got %d", len(testData), atomic.LoadInt64(&memtable.currentOffset))
 	}
 
 	// Verify data was written to buffer
@@ -305,8 +306,8 @@ func TestMemtable_Put_ExceedsCapacity(t *testing.T) {
 	if !readyForFlush {
 		t.Errorf("Expected readyForFlush true, got %v", readyForFlush)
 	}
-	if !memtable.readyForFlush {
-		t.Errorf("Expected memtable.readyForFlush true, got %v", memtable.readyForFlush)
+	if atomic.LoadUint32(&memtable.flushStarted) != 1 {
+		t.Errorf("Expected memtable.flushStarted 1, got %d", atomic.LoadUint32(&memtable.flushStarted))
 	}
 }
 
@@ -389,7 +390,7 @@ func TestMemtable_Flush_Success(t *testing.T) {
 	// Put data that exceeds capacity to trigger ready for flush
 	memtable.Put(make([]byte, 200))
 
-	if !memtable.readyForFlush {
+	if atomic.LoadUint32(&memtable.flushStarted) != 1 {
 		t.Fatalf("Expected memtable to be ready for flush")
 	}
 
@@ -404,8 +405,8 @@ func TestMemtable_Flush_Success(t *testing.T) {
 	if fileOffset < 0 {
 		t.Errorf("Expected positive fileOffset, got %d", fileOffset)
 	}
-	if memtable.readyForFlush {
-		t.Errorf("Expected readyForFlush to be false after flush, got %v", memtable.readyForFlush)
+	if atomic.LoadUint32(&memtable.flushStarted) != 0 {
+		t.Errorf("Expected flushStarted to be 0 after flush, got %d", atomic.LoadUint32(&memtable.flushStarted))
 	}
 }
 
@@ -513,7 +514,7 @@ func TestMemtable_Integration(t *testing.T) {
 	}
 
 	// Fill up the memtable to trigger ready for flush
-	for !memtable.readyForFlush {
+	for atomic.LoadUint32(&memtable.flushStarted) == 0 {
 		memtable.Put([]byte("filler"))
 	}
 
