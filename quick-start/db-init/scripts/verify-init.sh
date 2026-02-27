@@ -13,15 +13,11 @@ else
   exit 1
 fi
 
-# Verify MySQL: require admin user when present, or at least schema (users table) so empty/dummy runs still pass
-echo -n "  🗂️ MySQL..."
-if mysql -hmysql -uroot -proot --skip-ssl testdb -sN -e "SELECT 1 FROM information_schema.tables WHERE table_schema='testdb' AND table_name='users' LIMIT 1;" > /dev/null 2>&1; then
-  ADMIN_COUNT=$(mysql -hmysql -uroot -proot --skip-ssl testdb -sN -e "SELECT COUNT(*) FROM users WHERE email='admin@admin.com';" 2>/dev/null || echo "0")
-  if [ "$ADMIN_COUNT" -eq 1 ]; then
-    echo " admin user ✅"
-  else
-    echo " schema ready (no admin user) ✅"
-  fi
+# Verify MySQL
+echo -n "  🗂️ MySQL admin user... "
+ADMIN_COUNT=$(mysql -hmysql -uroot -proot --skip-ssl testdb -sN -e "SELECT COUNT(*) FROM users WHERE email='admin@admin.com';" 2>/dev/null || echo "0")
+if [ "$ADMIN_COUNT" -eq 1 ]; then
+  echo "✅"
 else
   echo "❌"
   exit 1
