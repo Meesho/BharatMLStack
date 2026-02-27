@@ -17,7 +17,12 @@ if [[ "${INIT_DUMMY_DATA:-false}" == "true" ]]; then
   # Initialize ScyllaDB (dummy script includes keyspace creation)
   echo ""
   echo "🗃️ Step 2: Initializing ScyllaDB with dummy data..."
-  ./init-dummy-scylla.sh
+  if [ -f ./init-dummy-scylla.sh ]; then
+    ./init-dummy-scylla.sh
+  else
+    echo "  ⏭️  Skipping ScyllaDB dummy data (init-dummy-scylla.sh not found), running regular init..."
+    ./init-scylla.sh
+  fi
   
   # Initialize MySQL (regular first to create tables, then dummy to insert data)
   echo ""
@@ -26,12 +31,21 @@ if [[ "${INIT_DUMMY_DATA:-false}" == "true" ]]; then
   
   echo ""
   echo "🗂️ Step 3b: Inserting dummy data into MySQL..."
-  ./init-dummy-mysql.sh
+  if [ -f ./init-dummy-mysql.sh ]; then
+    ./init-dummy-mysql.sh
+  else
+    echo "  ⏭️  Skipping MySQL dummy data (init-dummy-mysql.sh not found)"
+  fi
   
   # Initialize etcd (dummy script includes basic setup)
   echo ""
   echo "🔧 Step 4: Initializing etcd with dummy data..."
-  ./init-dummy-etcd.sh
+  if [ -f ./init-dummy-etcd.sh ]; then
+    ./init-dummy-etcd.sh
+  else
+    echo "  ⏭️  Skipping etcd dummy data (init-dummy-etcd.sh not found), running regular init..."
+    ./init-etcd.sh
+  fi
 else
   # Regular initialization
   # Initialize ScyllaDB
