@@ -142,9 +142,9 @@ func planReadthroughGaussian() {
 	)
 
 	flag.StringVar(&mountPoint, "mount", "/mnt/disks/nvme/", "data directory for shard files")
-	flag.IntVar(&numShards, "shards", 50, "number of shards")
+	flag.IntVar(&numShards, "shards", 10, "number of shards")
 	flag.IntVar(&keysPerShard, "keys-per-shard", 6_00_000, "keys per shard")
-	flag.IntVar(&memtableMB, "memtable-mb", 2, "memtable size in MiB")
+	flag.IntVar(&memtableMB, "memtable-mb", 8, "memtable size in MiB")
 	flag.Float64Var(&fileSizeMultiplier, "file-size-multiplier", 0.25, "file size in GiB per shard")
 	flag.IntVar(&readWorkers, "readers", 16, "number of read workers")
 	flag.IntVar(&writeWorkers, "writers", 16, "number of write workers")
@@ -214,7 +214,7 @@ func planReadthroughGaussian() {
 		missedKeyChanList[i] = make(chan int)
 	}
 
-	totalKeys := 30_000_000
+	totalKeys := 10_000_000
 	str1kb := strings.Repeat("a", 1024)
 	str1kb = "%d" + str1kb
 

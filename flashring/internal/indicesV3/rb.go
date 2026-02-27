@@ -1,5 +1,7 @@
 package indicesv2
 
+import "sync/atomic"
+
 // Entry represents a 32-byte value. Adjust fields as needed.
 type Entry [16]byte
 type HashNextPrev [3]uint64
@@ -8,14 +10,14 @@ type HashNextPrev [3]uint64
 // It maintains a sliding window of the most recent entries. Add returns an
 // absolute index which can be used with Get.
 type RingBuffer struct {
+	nextIndex int64  // atomic; must be first for 64-bit alignment on 32-bit platforms
+	wrapped   uint32 // atomic; 0 = false, 1 = true (one-time transition)
 	buf       []Entry
 	hashTable []HashNextPrev
 	head      int
 	tail      int
 	size      int
-	nextIndex int
-	capacity  int // Fixed capacity (initial = max)
-	wrapped   bool
+	capacity  int
 }
 
 // NewRingBuffer creates a ring buffer with the given initial and maximum
@@ -30,37 +32,36 @@ func NewRingBuffer(initial, max int) *RingBuffer {
 		buf:       make([]Entry, capacity),
 		hashTable: make([]HashNextPrev, capacity),
 		capacity:  capacity,
-		wrapped:   false,
 	}
 }
 
 // Add inserts e into the buffer and returns its absolute index. When the buffer
 // is full it wraps around and overwrites the oldest entry.
 func (rb *RingBuffer) Add(e *Entry) int {
-	// Store the entry at current tail position
-	rb.buf[rb.nextIndex] = *e
-	idx := rb.nextIndex
-	rb.nextIndex = (rb.nextIndex + 1) % rb.capacity
-	if rb.nextIndex == rb.head {
+	raw := atomic.AddInt64(&rb.nextIndex, 1) - 1
+	idx := int(raw) % rb.capacity
+	rb.buf[idx] = *e
+	nextIdx := int(raw+1) % rb.capacity
+	if nextIdx == rb.head {
 		rb.head = (rb.head + 1) % rb.capacity
 	}
-
 	return idx
 }
 
 func (rb *RingBuffer) NextAddNeedsDelete() bool {
-	return rb.nextIndex == rb.head && rb.wrapped
+	nextIdx := int(atomic.LoadInt64(&rb.nextIndex)) % rb.capacity
+	return nextIdx == rb.head && atomic.LoadUint32(&rb.wrapped) == 1
 }
 
 func (rb *RingBuffer) GetNextFreeSlot() (*Entry, *HashNextPrev, int, bool) {
-	idx := rb.nextIndex
-	rb.nextIndex = (rb.nextIndex + 1) % rb.capacity
-	shouldDelete := false
-	if rb.nextIndex == rb.head {
-		// rb.head = (rb.head + 1) % rb.capacity
-		rb.wrapped = true
-		shouldDelete = true
+	raw := atomic.AddInt64(&rb.nextIndex, 1) - 1
+	idx := int(raw) % rb.capacity
 
+	shouldDelete := false
+	nextIdx := int(raw+1) % rb.capacity
+	if nextIdx == rb.head {
+		atomic.StoreUint32(&rb.wrapped, 1)
+		shouldDelete = true
 	}
 	return &rb.buf[idx], &rb.hashTable[idx], idx, shouldDelete
 }
@@ -85,10 +86,12 @@ func (rb *RingBuffer) Delete() (*Entry, *HashNextPrev, int, *Entry) {
 	return &deleted, &deletedHashNextPrev, deletedIdx, &rb.buf[rb.head]
 }
 
-// TailIndex returns the absolute index that will be assigned to the next Add.
+// TailIndex returns the slot index that will be assigned to the next Add.
 func (rb *RingBuffer) TailIndex() int {
-	return rb.nextIndex
+	return int(atomic.LoadInt64(&rb.nextIndex)) % rb.capacity
 }
+
 func (rb *RingBuffer) ActiveEntries() int {
-	return (rb.nextIndex - rb.head + rb.capacity) % rb.capacity
+	next := int(atomic.LoadInt64(&rb.nextIndex)) % rb.capacity
+	return (next - rb.head + rb.capacity) % rb.capacity
 }

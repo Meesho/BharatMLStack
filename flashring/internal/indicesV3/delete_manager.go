@@ -1,15 +1,15 @@
 package indicesv2
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/rs/zerolog/log"
 )
 
 type DeleteManager struct {
-	memtableData        map[uint32]int
+	memtableData        *xsync.Map[uint32, int]
 	toBeDeletedMemId    uint32
 	keyIndex            *Index
 	wrapFile            *fs.WrapAppendFile
@@ -20,7 +20,7 @@ type DeleteManager struct {
 
 func NewDeleteManager(keyIndex *Index, wrapFile *fs.WrapAppendFile, deleteAmortizedStep int) *DeleteManager {
 	return &DeleteManager{
-		memtableData:        make(map[uint32]int),
+		memtableData:        xsync.NewMap[uint32, int](),
 		toBeDeletedMemId:    0,
 		keyIndex:            keyIndex,
 		wrapFile:            wrapFile,
@@ -30,7 +30,9 @@ func NewDeleteManager(keyIndex *Index, wrapFile *fs.WrapAppendFile, deleteAmorti
 }
 
 func (dm *DeleteManager) IncMemtableKeyCount(memId uint32) {
-	dm.memtableData[memId]++
+	dm.memtableData.Compute(memId, func(oldValue int, loaded bool) (int, xsync.ComputeOp) {
+		return oldValue + 1, xsync.UpdateOp
+	})
 }
 
 func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
@@ -40,19 +42,22 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 			return fmt.Errorf("delete failed")
 		}
 		if memtableId != dm.toBeDeletedMemId {
-			dm.memtableData[dm.toBeDeletedMemId] = dm.memtableData[dm.toBeDeletedMemId] - count
+			newVal, _ := dm.memtableData.Compute(dm.toBeDeletedMemId, func(oldValue int, loaded bool) (int, xsync.ComputeOp) {
+				return oldValue - count, xsync.UpdateOp
+			})
 			log.Debug().Msgf("memtableId: %d, toBeDeletedMemId: %d", memtableId, dm.toBeDeletedMemId)
-			if dm.memtableData[dm.toBeDeletedMemId] != 0 {
+			if newVal != 0 {
 				return fmt.Errorf("memtableData[dm.toBeDeletedMemId] != 0")
 			}
-			delete(dm.memtableData, dm.toBeDeletedMemId)
+			dm.memtableData.Delete(dm.toBeDeletedMemId)
 			dm.toBeDeletedMemId = memtableId
 			dm.deleteInProgress = false
 			dm.deleteCount = 0
 			return nil
 		} else {
-			dm.memtableData[memtableId] -= count
-			//log.Debug().Msgf("memtableData[%d] = %d", memtableId, dm.memtableData[memtableId])
+			dm.memtableData.Compute(memtableId, func(oldValue int, loaded bool) (int, xsync.ComputeOp) {
+				return oldValue - count, xsync.UpdateOp
+			})
 		}
 		return nil
 	}
@@ -62,9 +67,10 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 
 	if trimNeeded || nextAddNeedsDelete {
 		dm.deleteInProgress = true
-		dm.deleteCount = int(dm.memtableData[dm.toBeDeletedMemId] / dm.deleteAmortizedStep)
+		val, _ := dm.memtableData.Load(dm.toBeDeletedMemId)
+		dm.deleteCount = val / dm.deleteAmortizedStep
 		if dm.deleteCount == 0 {
-			dm.deleteCount = int(dm.memtableData[dm.toBeDeletedMemId] % dm.deleteAmortizedStep)
+			dm.deleteCount = val % dm.deleteAmortizedStep
 		}
 		memIdAtHead, err := dm.keyIndex.PeekMemIdAtHead()
 		if err != nil {
