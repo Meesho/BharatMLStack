@@ -262,7 +262,7 @@ func (p *Predator) startHealthCheckingProcess(job *validationjob.Table) {
 		if isHealthy {
 			log.Info().Msgf("Deployment is healthy for job %d, validation successful", job.ID)
 			p.completeValidationJob(job.ID, true, "Deployment is healthy and running successfully")
-			p.updateRequestValidationStatus(job.GroupID, true)
+			p.updateRequestValidationStatus(job.GroupID, true, "")
 			return
 		}
 
@@ -271,8 +271,9 @@ func (p *Predator) startHealthCheckingProcess(job *validationjob.Table) {
 
 	// If we reach here, max health checks exceeded
 	log.Warn().Msgf("Max health checks exceeded for job %d, marking as failed", job.ID)
+	gcsLogPath := p.captureAndUploadFailureLogs(job)
 	p.completeValidationJob(job.ID, false, fmt.Sprintf("Deployment failed to become healthy after %d checks", job.MaxHealthChecks))
-	p.updateRequestValidationStatus(job.GroupID, false)
+	p.updateRequestValidationStatus(job.GroupID, false, gcsLogPath)
 }
 
 // checkDeploymentHealth checks if the deployment is healthy using infrastructure handler
@@ -321,8 +322,9 @@ func (p *Predator) completeValidationJob(jobID uint, success bool, message strin
 	}
 }
 
-// updateRequestValidationStatus updates the request table with validation results
-func (p *Predator) updateRequestValidationStatus(groupID string, success bool) {
+// updateRequestValidationStatus updates the request table with validation results.
+// gcsLogPath is the GCS URI of the uploaded failure logs (empty on success).
+func (p *Predator) updateRequestValidationStatus(groupID string, success bool, gcsLogPath string) {
 	id, err := strconv.ParseUint(groupID, 10, 32)
 	if err != nil {
 		log.Error().Err(err).Msgf("Failed to parse group ID %s for status update", groupID)
@@ -340,7 +342,11 @@ func (p *Predator) updateRequestValidationStatus(groupID string, success bool) {
 		request.UpdatedAt = time.Now()
 		request.IsValid = success
 		if !success {
-			request.RejectReason = "Validation Failed"
+			if gcsLogPath != "" {
+				request.RejectReason = fmt.Sprintf("Validation Failed. Logs: %s", gcsLogPath)
+			} else {
+				request.RejectReason = "Validation Failed"
+			}
 			request.Status = statusRejected
 			request.UpdatedBy = "Validation Job"
 			request.UpdatedAt = time.Now()

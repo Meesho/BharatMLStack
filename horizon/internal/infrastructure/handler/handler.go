@@ -21,6 +21,7 @@ type InfrastructureHandler interface {
 	GetHPAProperties(appName, workingEnv string) (*HPAConfig, error)
 	GetConfig(serviceName, workingEnv string) Config
 	GetResourceDetail(appName, workingEnv string) (*ResourceDetail, error)
+	GetApplicationLogs(appName, workingEnv string, opts *argocd.ApplicationLogsOptions) ([]argocd.ApplicationLogEntry, error)
 	RestartDeployment(appName, workingEnv string, isCanary bool) error
 	UpdateCPUThreshold(appName, threshold, email, workingEnv string) error
 	UpdateGPUThreshold(appName, threshold, email, workingEnv string) error
@@ -210,6 +211,30 @@ func (h *infrastructureHandler) GetResourceDetail(appName, workingEnv string) (*
 	}
 
 	return &ResourceDetail{Nodes: nodes}, nil
+}
+
+func (h *infrastructureHandler) GetApplicationLogs(appName, workingEnv string, opts *argocd.ApplicationLogsOptions) ([]argocd.ApplicationLogEntry, error) {
+	log.Info().
+		Str("appName", appName).
+		Str("workingEnv", workingEnv).
+		Msg("GetApplicationLogs: Starting ArgoCD application logs lookup")
+
+	argocdAppName := getArgoCDApplicationName(appName, workingEnv)
+	entries, err := argocd.GetApplicationLogs(argocdAppName, workingEnv, opts)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("appName", appName).
+			Str("workingEnv", workingEnv).
+			Msg("GetApplicationLogs: Failed to get logs from ArgoCD")
+		return nil, fmt.Errorf("failed to get application logs: %w", err)
+	}
+	log.Info().
+		Str("appName", appName).
+		Str("workingEnv", workingEnv).
+		Int("entryCount", len(entries)).
+		Msg("GetApplicationLogs: Successfully retrieved logs from ArgoCD")
+	return entries, nil
 }
 
 func (h *infrastructureHandler) RestartDeployment(appName, workingEnv string, isCanary bool) error {
