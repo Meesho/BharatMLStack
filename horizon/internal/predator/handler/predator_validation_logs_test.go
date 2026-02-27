@@ -350,7 +350,7 @@ func TestFetchDegradedPodLogs_NilEntries_ReturnsEmptyString(t *testing.T) {
 	assert.Empty(t, logs)
 }
 
-func TestFetchDegradedPodLogs_EntryWithEmptyTimestamp_UsesCurrentTime(t *testing.T) {
+func TestFetchDegradedPodLogs_EntryWithEmptyTimestamp_ReturnsEmptyTimestamp(t *testing.T) {
 	infra := &mockInfrastructureHandler{
 		getApplicationLogsFn: func(_, _ string, _ *argocd.ApplicationLogsOptions) ([]argocd.ApplicationLogEntry, error) {
 			return []argocd.ApplicationLogEntry{
@@ -363,8 +363,7 @@ func TestFetchDegradedPodLogs_EntryWithEmptyTimestamp_UsesCurrentTime(t *testing
 	logs, err := p.fetchDegradedPodLogs("svc", "pod-1")
 
 	require.NoError(t, err)
-	assert.Contains(t, logs, "IST")
-	assert.Contains(t, logs, "panic: nil pointer")
+	assert.Contains(t, logs, "[] panic: nil pointer")
 }
 
 func TestFetchDegradedPodLogs_EntryWithEmptyContent_FormatsCorrectly(t *testing.T) {
@@ -397,16 +396,9 @@ func TestConvertToIST_RFC3339Nano(t *testing.T) {
 	assert.Equal(t, "2024-01-15 16:00:00 IST", result)
 }
 
-func TestConvertToIST_Empty_UsesCurrentTime(t *testing.T) {
-	before := time.Now().In(istLocation)
+func TestConvertToIST_Empty_ReturnsEmpty(t *testing.T) {
 	result := convertToIST("")
-	after := time.Now().In(istLocation)
-
-	assert.Contains(t, result, "IST")
-	parsed, err := time.ParseInLocation(istTimeFmt, result, istLocation)
-	require.NoError(t, err, "result should be parseable as IST time")
-	assert.False(t, parsed.Before(before.Truncate(time.Second)))
-	assert.False(t, parsed.After(after.Add(time.Second)))
+	assert.Empty(t, result, "empty input should return empty string")
 }
 
 func TestConvertToIST_InvalidFormat_ReturnsRaw(t *testing.T) {
