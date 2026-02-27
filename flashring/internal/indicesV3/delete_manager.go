@@ -81,7 +81,7 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 		}
 
 		dm.wrapFile.TrimHead()
-		return errors.New("trim needed retry this write")
+		return fmt.Errorf("trim needed or next add needs delete")
 	}
 	return nil
 }
