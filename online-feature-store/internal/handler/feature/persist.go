@@ -206,7 +206,7 @@ func (p *PersistHandler) preparePersistData(persistData *PersistData) error {
 			if err != nil {
 				return fmt.Errorf("failed to get feature group %s: %w", fgSchema.GetLabel(), err)
 			}
-			featureData, err := system.ParseFeatureValue(fgSchema.GetFeatureLabels(), data.GetFeatureValues()[fgIndex], persistData.AllFGIdToFgConf[fgId].DataType, persistData.AllFGIdToFgConf[fgId].FeatureMeta)
+			featureData, featureBitmap, err := system.ParseFeatureValue(fgSchema.GetFeatureLabels(), data.GetFeatureValues()[fgIndex], persistData.AllFGIdToFgConf[fgId].DataType, persistData.AllFGIdToFgConf[fgId].FeatureMeta)
 			if err != nil {
 				return NewInvalidEventError(fmt.Sprintf("failed to parse feature value for entity %s and feature group %s: %v", persistData.EntityLabel, fgSchema.GetLabel(), err))
 			}
@@ -214,7 +214,7 @@ func (p *PersistHandler) preparePersistData(persistData *PersistData) error {
 			if err != nil {
 				return fmt.Errorf("failed to get active version for feature group %s: %w", fgSchema.GetLabel(), err)
 			}
-			psDbBlock := p.BuildPSDBBlock(persistData.EntityLabel, persistData.AllFGIdToFgConf[fgId].DataType, featureData, fgConf, uint32(activeVersion))
+			psDbBlock := p.BuildPSDBBlock(persistData.EntityLabel, persistData.AllFGIdToFgConf[fgId].DataType, featureData, featureBitmap, fgConf, uint32(activeVersion))
 			if persistData.StoreIdToRows[fgConf.StoreId] == nil {
 				persistData.StoreIdToRows[fgConf.StoreId] = make([]Row, len(persistData.Query.Data))
 			}
@@ -372,14 +372,15 @@ func (p *PersistHandler) RemoveFromDistributedCache(persistData *PersistData) er
 	return nil
 }
 
-func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataType, featureData interface{}, fgConf *config.FeatureGroup, activeVersion uint32) *blocks.PermStorageDataBlock {
+func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataType, featureData interface{}, featureBitmap []byte, fgConf *config.FeatureGroup, activeVersion uint32) *blocks.PermStorageDataBlock {
 	psDbPool := blocks.GetPSDBPool()
 	builder := psDbPool.Get().Builder.
 		SetID(uint(fgConf.LayoutVersion)).
 		SetDataType(dataType).
 		SetCompressionB(compression.TypeZSTD).
 		SetTTL(fgConf.TtlInSeconds).
-		SetVersion(activeVersion)
+		SetVersion(activeVersion).
+		SetBitmap(featureBitmap)
 	numOfFeatures, err := p.config.GetNumOfFeatures(entityLabel, fgConf.Id, int(activeVersion))
 	if err != nil {
 		log.Error().Err(err).Msgf("Failed to get number of features for feature group %v", fgConf.Id)
@@ -394,6 +395,9 @@ func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataT
 	}
 	switch dataType.String() {
 	case "DataTypeString":
+		if fgConf.LayoutVersion == 2 && len(featureBitmap) > 0 {
+			builder = builder.SetupBitmapMeta(numOfFeatures)
+		}
 		psdb, err := builder.
 			SetStringValue(stringLengths).
 			SetScalarValues(featureData, numOfFeatures).
@@ -403,6 +407,9 @@ func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataT
 		}
 		return psdb
 	case "DataTypeStringVector":
+		if fgConf.LayoutVersion == 2 && len(featureBitmap) > 0 {
+			builder = builder.SetupBitmapMeta(numOfFeatures)
+		}
 		psdb, err := builder.
 			SetStringValue(stringLengths).
 			SetVectorValues(featureData, numOfFeatures, vectorLengths).
@@ -413,6 +420,9 @@ func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataT
 		return psdb
 	default:
 		if dataType.IsVector() {
+			if fgConf.LayoutVersion == 2 && len(featureBitmap) > 0 {
+				builder = builder.SetupBitmapMeta(numOfFeatures)
+			}
 			psdb, err := builder.
 				SetVectorValues(featureData, numOfFeatures, vectorLengths).
 				Build()
@@ -420,6 +430,10 @@ func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataT
 				log.Error().Err(err).Msgf("Failed to build PSDB block for feature group %v", fgConf.Id)
 			}
 			return psdb
+		}
+		// Layout-2 scalar numeric: set bitmap meta so header has bitmapLastBitIndex and bitmapPresent
+		if fgConf.LayoutVersion == 2 && len(featureBitmap) > 0 {
+			builder = builder.SetupBitmapMeta(numOfFeatures)
 		}
 		psdb, err := builder.
 			SetScalarValues(featureData, numOfFeatures).

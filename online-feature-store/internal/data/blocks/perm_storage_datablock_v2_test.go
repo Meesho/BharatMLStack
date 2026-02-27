@@ -1065,8 +1065,8 @@ func TestSerializeBoolV2(t *testing.T) {
 			assert.NoError(t, err)
 			assert.NotNil(t, result)
 
-			// Check last bit index is correctly set
-			lastIdx := result[8] & 0x0F // Extract lower 4 bits of byte 8
+			// Check last bit index is correctly set (lower 4 bits of byte 8)
+			lastIdx := result[8] & 0x0F
 			assert.Equal(t, tt.wantLastIdx, lastIdx)
 
 			if tt.checkComp {

@@ -64,7 +64,7 @@ func TestSerializeForInMemoryInt32(t *testing.T) {
 
 				// Verify all values
 				for i, expected := range []int32{1, 2, 3} {
-					feature, err := ddb.GetNumericScalarFeature(i)
+					feature, err := ddb.GetNumericScalarFeature(i, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt32(feature)
 					require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestSerializeForInMemoryInt32(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 1000, 5000, 9999}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetNumericScalarFeature(pos)
+					feature, err := ddb.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt32(feature)
 					require.NoError(t, err)
@@ -192,7 +192,7 @@ func TestSerializeForInMemoryInt32(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 123, 456, 789, 999}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := ddb.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt32ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -276,7 +276,7 @@ func TestSerializeForInMemoryInt8(t *testing.T) {
 
 				// Verify all values
 				for i, expected := range []int8{1, 2, 3} {
-					feature, err := ddb.GetNumericScalarFeature(i)
+					feature, err := ddb.GetNumericScalarFeature(i, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt8(feature)
 					require.NoError(t, err)
@@ -333,7 +333,7 @@ func TestSerializeForInMemoryInt8(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetNumericScalarFeature(pos)
+					feature, err := ddb.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt8(feature)
 					require.NoError(t, err)
@@ -404,7 +404,7 @@ func TestSerializeForInMemoryInt8(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 123, 456, 789, 999}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := ddb.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt8ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -489,7 +489,7 @@ func TestSerializeForInMemoryInt16(t *testing.T) {
 
 				// Verify all values
 				for i, expected := range []int16{1000, 2000, 3000} {
-					feature, err := ddb.GetNumericScalarFeature(i)
+					feature, err := ddb.GetNumericScalarFeature(i, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt16(feature)
 					require.NoError(t, err)
@@ -546,7 +546,7 @@ func TestSerializeForInMemoryInt16(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetNumericScalarFeature(pos)
+					feature, err := ddb.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt16(feature)
 					require.NoError(t, err)
@@ -617,7 +617,7 @@ func TestSerializeForInMemoryInt16(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 123, 456, 789, 999}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := ddb.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt16ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -702,7 +702,7 @@ func TestSerializeForInMemoryInt64(t *testing.T) {
 
 				// Verify all values
 				for i, expected := range []int64{1000000000000, 2000000000000, 3000000000000} {
-					feature, err := ddb.GetNumericScalarFeature(i)
+					feature, err := ddb.GetNumericScalarFeature(i, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt64(feature)
 					require.NoError(t, err)
@@ -759,7 +759,7 @@ func TestSerializeForInMemoryInt64(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetNumericScalarFeature(pos)
+					feature, err := ddb.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt64(feature)
 					require.NoError(t, err)
@@ -830,7 +830,7 @@ func TestSerializeForInMemoryInt64(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 123, 456, 499}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := ddb.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt64ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -914,7 +914,7 @@ func TestSerializeForInMemoryFP8(t *testing.T) {
 
 				// Verify all values
 				for i, expected := range []float32{1.0, 2.0, 4.0} {
-					feature, err := ddb.GetNumericScalarFeature(i)
+					feature, err := ddb.GetNumericScalarFeature(i, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeFP8E4M3(feature)
 					require.NoError(t, err)
@@ -975,7 +975,7 @@ func TestSerializeForInMemoryFP8(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetNumericScalarFeature(pos)
+					feature, err := ddb.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeFP8E4M3(feature)
 					require.NoError(t, err)
@@ -1054,7 +1054,7 @@ func TestSerializeForInMemoryFP8(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 123, 456, 789, 999}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := ddb.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureFp8E4M3ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -1143,7 +1143,7 @@ func TestSerializeForInMemoryFP32(t *testing.T) {
 
 				// Verify all values
 				for i, expected := range []float32{1.234, 2.345, 3.456} {
-					feature, err := ddb.GetNumericScalarFeature(i)
+					feature, err := ddb.GetNumericScalarFeature(i, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeFloat32(feature)
 					require.NoError(t, err)
@@ -1200,7 +1200,7 @@ func TestSerializeForInMemoryFP32(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetNumericScalarFeature(pos)
+					feature, err := ddb.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeFloat32(feature)
 					require.NoError(t, err)
@@ -1271,7 +1271,7 @@ func TestSerializeForInMemoryFP32(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 123, 456, 789, 999}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := ddb.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureFp32ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -1356,7 +1356,7 @@ func TestSerializeForInMemoryFP64(t *testing.T) {
 
 				// Verify all values
 				for i, expected := range []float64{1.23456789, 2.34567890, 3.45678901} {
-					feature, err := ddb.GetNumericScalarFeature(i)
+					feature, err := ddb.GetNumericScalarFeature(i, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeFloat64(feature)
 					require.NoError(t, err)
@@ -1413,7 +1413,7 @@ func TestSerializeForInMemoryFP64(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetNumericScalarFeature(pos)
+					feature, err := ddb.GetNumericScalarFeature(pos, 3, []byte{0, 0, 0})
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeFloat64(feature)
 					require.NoError(t, err)
@@ -1484,7 +1484,7 @@ func TestSerializeForInMemoryFP64(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 123, 399}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := ddb.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureFp64ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -1569,7 +1569,7 @@ func TestSerializeForInMemoryString(t *testing.T) {
 
 				// Verify all values
 				for i, expected := range []string{"hello", "world", "test"} {
-					feature, err := ddb.GetStringScalarFeature(i, 3)
+					feature, err := ddb.GetStringScalarFeature(i, 3, nil)
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeString(feature)
 					require.NoError(t, err)
@@ -1628,7 +1628,7 @@ func TestSerializeForInMemoryString(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetStringScalarFeature(pos, 1000)
+					feature, err := ddb.GetStringScalarFeature(pos, 1000, nil)
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeString(feature)
 					require.NoError(t, err)
@@ -1700,7 +1700,7 @@ func TestSerializeForInMemoryString(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 123, 399}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetStringVectorFeature(pos, 400, vectorLengths)
+					feature, err := ddb.GetStringVectorFeature(pos, 400, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureStringToConcatenatedString(feature, int(vectorLengths[pos]))
 					require.NoError(t, err)
@@ -1912,7 +1912,7 @@ func TestSerializeForInMemoryBool(t *testing.T) {
 				// Test random positions
 				testPositions := []int{0, 42, 123, 456, 789, 999}
 				for _, pos := range testPositions {
-					feature, err := ddb.GetBoolVectorFeature(pos, vectorLengths)
+					feature, err := ddb.GetBoolVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureBoolToConcatenatedString(feature)
 					require.NoError(t, err)
