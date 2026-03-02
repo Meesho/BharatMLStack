@@ -146,9 +146,9 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error)
 	batchReader, err := fs.NewParallelBatchIoUringReader(fs.BatchIoUringConfig{
 		RingDepth: 256,
 		MaxBatch:  256,
-		Window:    time.Millisecond * 4,
+		Window:    time.Microsecond * 500,
 		QueueSize: 1024,
-	}, 2)
+	}, 1)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to create batched io_uring reader, falling back to per-shard rings")
 		batchReader = nil
