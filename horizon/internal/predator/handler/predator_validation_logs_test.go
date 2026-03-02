@@ -4,7 +4,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
 	infrastructurehandler "github.com/Meesho/BharatMLStack/horizon/internal/infrastructure/handler"
@@ -92,37 +91,6 @@ func (m *mockValidationGCSClient) FindFileWithSuffix(_, _, _ string) (bool, stri
 func (m *mockValidationGCSClient) ListFilesWithSuffix(_, _, _ string) ([]string, error) {
 	return nil, nil
 }
-
-// --- Mock: ValidationJobRepository ---
-
-type mockValidationJobRepo struct {
-	getByIDFn              func(id uint) (*validationjob.Table, error)
-	updateValidationResult func(id uint, result bool, errorMessage string) error
-}
-
-func (m *mockValidationJobRepo) Create(_ *validationjob.Table) error { return nil }
-func (m *mockValidationJobRepo) GetByID(id uint) (*validationjob.Table, error) {
-	if m.getByIDFn != nil {
-		return m.getByIDFn(id)
-	}
-	return nil, errors.New("not implemented")
-}
-func (m *mockValidationJobRepo) GetByGroupID(_ string) (*validationjob.Table, error) {
-	return nil, nil
-}
-func (m *mockValidationJobRepo) GetPendingJobs() ([]validationjob.Table, error) { return nil, nil }
-func (m *mockValidationJobRepo) UpdateStatus(_ uint, _, _ string) error         { return nil }
-func (m *mockValidationJobRepo) UpdateValidationResult(id uint, result bool, errorMessage string) error {
-	if m.updateValidationResult != nil {
-		return m.updateValidationResult(id, result, errorMessage)
-	}
-	return nil
-}
-func (m *mockValidationJobRepo) IncrementHealthCheck(_ uint) error { return nil }
-func (m *mockValidationJobRepo) GetJobsToCleanup(_ time.Duration) ([]validationjob.Table, error) {
-	return nil, nil
-}
-func (m *mockValidationJobRepo) Delete(_ uint) error { return nil }
 
 // --- helper to save/restore package-level predator vars ---
 
