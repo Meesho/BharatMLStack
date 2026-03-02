@@ -89,6 +89,9 @@ func (m *mockValidationGCSClient) ListFoldersWithTimestamp(_, _ string) ([]exter
 func (m *mockValidationGCSClient) FindFileWithSuffix(_, _, _ string) (bool, string, error) {
 	return false, "", nil
 }
+func (m *mockValidationGCSClient) ListFilesWithSuffix(_, _, _ string) ([]string, error) {
+	return nil, nil
+}
 
 // --- Mock: ValidationJobRepository ---
 
