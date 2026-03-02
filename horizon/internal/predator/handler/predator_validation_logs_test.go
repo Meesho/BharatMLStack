@@ -59,34 +59,34 @@ func (m *mockInfrastructureHandler) UpdateAutoscalingTriggers(_ string, _ []inte
 
 // --- Mock: GCSClientInterface ---
 
-type mockGCSClient struct {
+type mockValidationGCSClient struct {
 	uploadFileFn func(bucket, objectPath string, data []byte) error
 }
 
-func (m *mockGCSClient) ReadFile(_, _ string) ([]byte, error)                  { return nil, nil }
-func (m *mockGCSClient) TransferFolder(_, _, _, _, _, _ string) error          { return nil }
-func (m *mockGCSClient) TransferAndDeleteFolder(_, _, _, _, _, _ string) error { return nil }
-func (m *mockGCSClient) TransferFolderWithSplitSources(_, _, _, _, _, _, _, _ string) error {
+func (m *mockValidationGCSClient) ReadFile(_, _ string) ([]byte, error)                  { return nil, nil }
+func (m *mockValidationGCSClient) TransferFolder(_, _, _, _, _, _ string) error          { return nil }
+func (m *mockValidationGCSClient) TransferAndDeleteFolder(_, _, _, _, _, _ string) error { return nil }
+func (m *mockValidationGCSClient) TransferFolderWithSplitSources(_, _, _, _, _, _, _, _ string) error {
 	return nil
 }
-func (m *mockGCSClient) DeleteFolder(_, _, _ string) error         { return nil }
-func (m *mockGCSClient) ListFolders(_, _ string) ([]string, error) { return nil, nil }
-func (m *mockGCSClient) UploadFile(bucket, objectPath string, data []byte) error {
+func (m *mockValidationGCSClient) DeleteFolder(_, _, _ string) error         { return nil }
+func (m *mockValidationGCSClient) ListFolders(_, _ string) ([]string, error) { return nil, nil }
+func (m *mockValidationGCSClient) UploadFile(bucket, objectPath string, data []byte) error {
 	if m.uploadFileFn != nil {
 		return m.uploadFileFn(bucket, objectPath, data)
 	}
 	return nil
 }
-func (m *mockGCSClient) CheckFileExists(_, _ string) (bool, error)   { return false, nil }
-func (m *mockGCSClient) CheckFolderExists(_, _ string) (bool, error) { return false, nil }
-func (m *mockGCSClient) UploadFolderFromLocal(_, _, _ string) error  { return nil }
-func (m *mockGCSClient) GetFolderInfo(_, _ string) (*externalcall.GCSFolderInfo, error) {
+func (m *mockValidationGCSClient) CheckFileExists(_, _ string) (bool, error)   { return false, nil }
+func (m *mockValidationGCSClient) CheckFolderExists(_, _ string) (bool, error) { return false, nil }
+func (m *mockValidationGCSClient) UploadFolderFromLocal(_, _, _ string) error  { return nil }
+func (m *mockValidationGCSClient) GetFolderInfo(_, _ string) (*externalcall.GCSFolderInfo, error) {
 	return nil, nil
 }
-func (m *mockGCSClient) ListFoldersWithTimestamp(_, _ string) ([]externalcall.GCSFolderInfo, error) {
+func (m *mockValidationGCSClient) ListFoldersWithTimestamp(_, _ string) ([]externalcall.GCSFolderInfo, error) {
 	return nil, nil
 }
-func (m *mockGCSClient) FindFileWithSuffix(_, _, _ string) (bool, string, error) {
+func (m *mockValidationGCSClient) FindFileWithSuffix(_, _, _ string) (bool, string, error) {
 	return false, "", nil
 }
 
@@ -627,7 +627,7 @@ func TestCapture_EndToEnd_HappyPath(t *testing.T) {
 			}, nil
 		},
 	}
-	gcs := &mockGCSClient{
+	gcs := &mockValidationGCSClient{
 		uploadFileFn: func(bucket, objectPath string, data []byte) error {
 			capturedBucket = bucket
 			capturedPath = objectPath
@@ -684,7 +684,7 @@ func TestCapture_GCSUploadFails_ReturnsEmpty(t *testing.T) {
 			}, nil
 		},
 	}
-	gcs := &mockGCSClient{
+	gcs := &mockValidationGCSClient{
 		uploadFileFn: func(_, _ string, _ []byte) error {
 			return errors.New("GCS unavailable")
 		},
@@ -709,7 +709,7 @@ func TestCapture_NoDegradedPods_ReturnsEmpty_NoUpload(t *testing.T) {
 		},
 	}
 	uploaded := false
-	gcs := &mockGCSClient{
+	gcs := &mockValidationGCSClient{
 		uploadFileFn: func(_, _ string, _ []byte) error {
 			uploaded = true
 			return nil
@@ -732,7 +732,7 @@ func TestCapture_GetResourceDetailFails_ReturnsEmpty_NoUpload(t *testing.T) {
 		},
 	}
 	uploaded := false
-	gcs := &mockGCSClient{
+	gcs := &mockValidationGCSClient{
 		uploadFileFn: func(_, _ string, _ []byte) error {
 			uploaded = true
 			return nil
@@ -768,7 +768,7 @@ func TestCapture_AllPodsFailLogFetch_StillUploadsWithErrors(t *testing.T) {
 		},
 	}
 	var capturedData []byte
-	gcs := &mockGCSClient{
+	gcs := &mockValidationGCSClient{
 		uploadFileFn: func(_, _ string, data []byte) error {
 			capturedData = data
 			return nil
@@ -814,7 +814,7 @@ func TestCapture_MixedLogFetch_SomeSucceedSomeFail(t *testing.T) {
 		},
 	}
 	var capturedData []byte
-	gcs := &mockGCSClient{
+	gcs := &mockValidationGCSClient{
 		uploadFileFn: func(_, _ string, data []byte) error {
 			capturedData = data
 			return nil
@@ -857,7 +857,7 @@ func TestCapture_EmptyBucket_ReturnsEmpty_NoUpload(t *testing.T) {
 		},
 	}
 	uploaded := false
-	gcs := &mockGCSClient{
+	gcs := &mockValidationGCSClient{
 		uploadFileFn: func(_, _ string, _ []byte) error {
 			uploaded = true
 			return nil
@@ -899,7 +899,7 @@ func TestCapture_MultipleDegradedPods_AllLogsInReport(t *testing.T) {
 		},
 	}
 	var capturedData []byte
-	gcs := &mockGCSClient{
+	gcs := &mockValidationGCSClient{
 		uploadFileFn: func(_, _ string, data []byte) error {
 			capturedData = data
 			return nil
@@ -937,7 +937,7 @@ func TestCapture_GCSURIFormat(t *testing.T) {
 			return nil, nil
 		},
 	}
-	gcs := &mockGCSClient{}
+	gcs := &mockValidationGCSClient{}
 
 	p := &Predator{infrastructureHandler: infra, GcsClient: gcs, workingEnv: "int"}
 	job := &validationjob.Table{ID: 1, GroupID: "55", ServiceName: "my-svc"}
@@ -955,7 +955,7 @@ func TestCapture_NilResourceDetail_ReturnsEmpty(t *testing.T) {
 		},
 	}
 	uploaded := false
-	gcs := &mockGCSClient{
+	gcs := &mockValidationGCSClient{
 		uploadFileFn: func(_, _ string, _ []byte) error {
 			uploaded = true
 			return nil
@@ -978,7 +978,7 @@ func TestCapture_EmptyNodesSlice_ReturnsEmpty(t *testing.T) {
 		},
 	}
 
-	p := &Predator{infrastructureHandler: infra, GcsClient: &mockGCSClient{}, workingEnv: "int"}
+	p := &Predator{infrastructureHandler: infra, GcsClient: &mockValidationGCSClient{}, workingEnv: "int"}
 	job := &validationjob.Table{ID: 1, GroupID: "1", ServiceName: "svc"}
 
 	result := p.captureAndUploadFailureLogs(job)
