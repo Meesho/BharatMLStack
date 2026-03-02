@@ -144,8 +144,8 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error)
 	// All disk reads funnel into one channel; the background goroutine collects
 	// them for up to 1ms and submits them in a single io_uring_enter call.
 	batchReader, err := fs.NewParallelBatchIoUringReader(fs.BatchIoUringConfig{
-		RingDepth: 256,
-		MaxBatch:  256,
+		RingDepth: 512,
+		MaxBatch:  512,
 		Window:    time.Millisecond * 2,
 		QueueSize: 1024,
 	}, 1)
