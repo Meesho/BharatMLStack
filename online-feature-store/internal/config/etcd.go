@@ -262,17 +262,17 @@ func (e *Etcd) GetSequenceNo(entityLabel string, fgId int, version int, featureL
 
 	fg, ok := entity.FGs[fgId]
 	if !ok {
-		return 0, fmt.Errorf("feature group %d not found", fgId)
+		return 0, fmt.Errorf("feature group %d not found for entity %s", fgId, entityLabel)
 	}
 
 	sequences, ok := fg.Sequences[_version(version)]
 	if !ok {
-		return 0, fmt.Errorf("version %d not found", version)
+		return 0, fmt.Errorf("version %d not found for entity %s, fg %d", version, entityLabel, fgId)
 	}
 
 	sequence, ok := sequences[featureLabel]
 	if !ok {
-		log.Error().Msgf("feature %s not found", featureLabel)
+		log.Warn().Msgf("feature %s not found for entity %s, fg %d, version %d", featureLabel, entityLabel, fgId, version)
 		return -1, nil
 	}
 

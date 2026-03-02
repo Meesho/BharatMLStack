@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/constants"
 	blocks "github.com/Meesho/BharatMLStack/interaction-store/internal/data/block"
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/model"
 	"github.com/rs/zerolog"
@@ -336,16 +337,16 @@ func TestClickPersistHandler_mergeAndTrimEvents_TrimsToMaxEvents(t *testing.T) {
 	baseTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC).UnixMilli()
 
 	// Create maxClickEventsPerWeek existing events
-	existing := make([]model.ClickEvent, maxClickEventsPerWeek)
-	for i := 0; i < maxClickEventsPerWeek; i++ {
+	existing := make([]model.ClickEvent, constants.MaxClickEventsPerWeek)
+	for i := 0; i < constants.MaxClickEventsPerWeek; i++ {
 		existing[i] = createTestClickEvent("user1", baseTime+int64(i*1000), int32(100+i), int32(200+i))
 	}
 
-	newEvent := createTestClickEvent("user1", baseTime+int64(maxClickEventsPerWeek*1000), 999, 999)
+	newEvent := createTestClickEvent("user1", baseTime+int64(constants.MaxClickEventsPerWeek*1000), 999, 999)
 
 	result := handler.mergeAndTrimEvents(existing, newEvent)
 
-	assert.Len(t, result, maxClickEventsPerWeek)
+	assert.Len(t, result, constants.MaxClickEventsPerWeek)
 	// The newest event should be first
 	assert.Equal(t, int32(999), result[0].ClickEventData.Payload.ProductId)
 }

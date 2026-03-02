@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
@@ -73,4 +74,43 @@ func TestZStdDecoder_Decode(t *testing.T) {
 	if len(ddata) == 0 || len(data) != len(ddata) {
 		t.Errorf("Invalid decoded data length: %d", len(ddata))
 	}
+}
+
+func TestGetEncoder_ZSTD(t *testing.T) {
+	enc, err := GetEncoder(TypeZSTD)
+	assert.NoError(t, err)
+	assert.NotNil(t, enc)
+	var out []byte
+	enc.Encode([]byte("test"), &out)
+	assert.NotEmpty(t, out)
+}
+
+func TestGetEncoder_Unsupported(t *testing.T) {
+	enc, err := GetEncoder(TypeNone)
+	assert.Error(t, err)
+	assert.Nil(t, enc)
+	assert.Contains(t, err.Error(), "unsupported compression type")
+
+	enc, err = GetEncoder(Type(99))
+	assert.Error(t, err)
+	assert.Nil(t, enc)
+}
+
+func TestGetDecoder_ZSTD(t *testing.T) {
+	dec, err := GetDecoder(TypeZSTD)
+	assert.NoError(t, err)
+	assert.NotNil(t, dec)
+	enc, _ := NewZStdEncoder()
+	var compressed []byte
+	enc.Encode([]byte("test"), &compressed)
+	out, err := dec.Decode(compressed)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("test"), out)
+}
+
+func TestGetDecoder_Unsupported(t *testing.T) {
+	dec, err := GetDecoder(TypeNone)
+	assert.Error(t, err)
+	assert.Nil(t, dec)
+	assert.Contains(t, err.Error(), "unsupported compression type")
 }
