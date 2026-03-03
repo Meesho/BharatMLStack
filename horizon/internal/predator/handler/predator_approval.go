@@ -182,6 +182,10 @@ func (p *Predator) processEditGCSCopyStage(requestIdPayloadMap map[uint]*Payload
 		// Extract model folder name from source path and copy to target with the same model name
 		pathSegments := strings.Split(strings.TrimSuffix(sourcePath, "/"), "/")
 		sourceModelName := pathSegments[len(pathSegments)-1]
+		if sourceModelName == "" {
+			log.Error().Msgf("Source model name is empty for request ID %d (path: %s)", requestModel.RequestID, normalizedModelSource)
+			return transferredGcsModelData, fmt.Errorf("source model name is empty for request ID %d", requestModel.RequestID)
+		}
 		sourceBasePath := strings.TrimSuffix(sourcePath, "/"+sourceModelName)
 
 		if isNotProd {
@@ -195,8 +199,8 @@ func (p *Predator) processEditGCSCopyStage(requestIdPayloadMap map[uint]*Payload
 			configBucket := pred.GcsConfigBucket
 			configPath := pred.GcsConfigBasePath
 			if configBucket != "" && configPath != "" && payload.MetaData.InstanceCount > 0 {
-				if err := p.updateInstanceCountInConfigSource(configBucket, configPath, modelName, payload.MetaData.InstanceCount); err != nil {
-					log.Error().Err(err).Msgf("Failed to update instance count in config-source for model %s", modelName)
+				if err := p.updateInstanceCountInConfigSource(configBucket, configPath, sourceModelName, payload.MetaData.InstanceCount); err != nil {
+					log.Error().Err(err).Msgf("Failed to update instance count in config-source for model %s", sourceModelName)
 					return transferredGcsModelData, err
 				}
 			}
@@ -554,6 +558,19 @@ func (p *Predator) processGCSCloneStage(requestIdPayloadMap map[uint]*Payload, p
 					return transferredGcsModelData, err
 				}
 			} else {
+				payload := requestIdPayloadMap[requestModel.RequestID]
+				if payload == nil {
+					log.Error().Msgf("Payload not found for request ID %d", requestModel.RequestID)
+					return transferredGcsModelData, fmt.Errorf("payload not found for request ID %d", requestModel.RequestID)
+				}
+				if requestModel.RequestType == PromoteRequestType &&
+					pred.GcsConfigBucket != "" && pred.GcsConfigBasePath != "" &&
+					payload.MetaData.InstanceCount > 0 {
+					if err := p.updateInstanceCountInConfigSource(pred.GcsConfigBucket, pred.GcsConfigBasePath, srcModelName, payload.MetaData.InstanceCount); err != nil {
+						log.Error().Err(err).Msgf("Failed to update instance count in config-source for model %s", srcModelName)
+						return transferredGcsModelData, err
+					}
+				}
 				if err := p.GcsClient.TransferFolderWithSplitSources(
 					srcBucket, srcPath, pred.GcsConfigBucket, pred.GcsConfigBasePath,
 					srcModelName, destBucket, destPath, destModelName,

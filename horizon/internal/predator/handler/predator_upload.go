@@ -571,7 +571,7 @@ func (p *Predator) validateNoLoggerOrPrintStatements(gcsPath string) error {
 		return fmt.Errorf("failed to read config.pbtxt for logger/print check: %w", err)
 	}
 
-	var modelConfig ModelConfig
+	var modelConfig protogen.ModelConfig
 	if err := prototext.Unmarshal(configData, &modelConfig); err != nil {
 		return fmt.Errorf("failed to parse config.pbtxt for logger/print check: %w", err)
 	}
@@ -776,7 +776,7 @@ func stripInlineComment(line string) string {
 }
 
 // isEnsembleModel checks if the model configuration represents a Triton ensemble model.
-func isEnsembleModel(config *ModelConfig) bool {
+func isEnsembleModel(config *protogen.ModelConfig) bool {
 	if config.GetBackend() == ensembleBackend {
 		return true
 	}
@@ -791,6 +791,6 @@ func isEnsembleModel(config *ModelConfig) bool {
 }
 
 // isPythonBackendModel checks if the model config specifies "python" as its backend.
-func isPythonBackendModel(config *ModelConfig) bool {
+func isPythonBackendModel(config *protogen.ModelConfig) bool {
 	return config.GetBackend() == pythonBackend
 }

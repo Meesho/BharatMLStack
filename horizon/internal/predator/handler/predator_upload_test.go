@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
+	"github.com/Meesho/BharatMLStack/horizon/internal/predator/proto/protogen"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,42 +58,42 @@ func (m *mockGCSClient) FindFileWithSuffix(_, _, _ string) (bool, string, error)
 func TestIsEnsembleModel(t *testing.T) {
 	tests := []struct {
 		name   string
-		config *ModelConfig
+		config *protogen.ModelConfig
 		want   bool
 	}{
 		{
 			name:   "backend is ensemble",
-			config: &ModelConfig{Backend: "ensemble"},
+			config: &protogen.ModelConfig{Backend: "ensemble"},
 			want:   true,
 		},
 		{
 			name:   "platform is ensemble",
-			config: &ModelConfig{Platform: "ensemble"},
+			config: &protogen.ModelConfig{Platform: "ensemble"},
 			want:   true,
 		},
 		{
 			name: "ensemble_scheduling is set",
-			config: &ModelConfig{
+			config: &protogen.ModelConfig{
 				Backend: "python",
-				SchedulingChoice: &ModelConfig_EnsembleScheduling{
-					EnsembleScheduling: &ModelEnsembling{},
+				SchedulingChoice: &protogen.ModelConfig_EnsembleScheduling{
+					EnsembleScheduling: &protogen.ModelEnsembling{},
 				},
 			},
 			want: true,
 		},
 		{
 			name:   "python backend - not ensemble",
-			config: &ModelConfig{Backend: "python"},
+			config: &protogen.ModelConfig{Backend: "python"},
 			want:   false,
 		},
 		{
 			name:   "onnxruntime backend - not ensemble",
-			config: &ModelConfig{Backend: "onnxruntime"},
+			config: &protogen.ModelConfig{Backend: "onnxruntime"},
 			want:   false,
 		},
 		{
 			name:   "empty config - not ensemble",
-			config: &ModelConfig{},
+			config: &protogen.ModelConfig{},
 			want:   false,
 		},
 	}
@@ -109,32 +110,32 @@ func TestIsEnsembleModel(t *testing.T) {
 func TestIsPythonBackendModel(t *testing.T) {
 	tests := []struct {
 		name   string
-		config *ModelConfig
+		config *protogen.ModelConfig
 		want   bool
 	}{
 		{
 			name:   "python backend",
-			config: &ModelConfig{Backend: "python"},
+			config: &protogen.ModelConfig{Backend: "python"},
 			want:   true,
 		},
 		{
 			name:   "onnxruntime backend",
-			config: &ModelConfig{Backend: "onnxruntime"},
+			config: &protogen.ModelConfig{Backend: "onnxruntime"},
 			want:   false,
 		},
 		{
 			name:   "tensorrt_llm backend",
-			config: &ModelConfig{Backend: "tensorrt_llm"},
+			config: &protogen.ModelConfig{Backend: "tensorrt_llm"},
 			want:   false,
 		},
 		{
 			name:   "ensemble backend",
-			config: &ModelConfig{Backend: "ensemble"},
+			config: &protogen.ModelConfig{Backend: "ensemble"},
 			want:   false,
 		},
 		{
 			name:   "empty backend",
-			config: &ModelConfig{},
+			config: &protogen.ModelConfig{},
 			want:   false,
 		},
 	}
