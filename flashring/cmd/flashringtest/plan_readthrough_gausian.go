@@ -214,7 +214,7 @@ func planReadthroughGaussian() {
 		missedKeyChanList[i] = make(chan int)
 	}
 
-	totalKeys := 30_000_000
+	totalKeys := 10_000_000
 	str1kb := strings.Repeat("a", 1024)
 	str1kb = "%d" + str1kb
 

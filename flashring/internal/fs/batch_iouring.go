@@ -35,37 +35,45 @@ var batchReqPool = sync.Pool{
 	},
 }
 
-// BatchIoUringReader collects pread requests from multiple goroutines into a
-// single channel and submits them as one io_uring batch. This amortizes the
-// syscall overhead (1 io_uring_enter instead of N) and lets NVMe process
-// multiple commands in parallel (queue depth > 1).
+// sentinelUserData is stored in the NOP SQE submitted during Close to unblock
+// the completion goroutine.
+const sentinelUserData = ^uint64(0)
+
+// BatchIoUringReader collects pread requests and submits them as io_uring
+// batches. Submission and completion run in separate goroutines so the submit
+// path is never blocked by CQE draining:
 //
-// Collection uses non-blocking channel drain: after receiving the first
-// request, it drains whatever else is already queued (no timer). Under load
-// this provides natural batching; under low load single requests go out
-// with zero added latency.
+//	submitLoop:    reqCh → collect batch → prep SQEs → io_uring_enter → loop
+//	completeLoop:  waitCqe → dispatch result to caller → loop
 //
-// CQEs are dispatched individually as they complete (no head-of-line blocking).
+// This eliminates the head-of-batch queueing delay where new requests had to
+// wait for the entire previous batch's CQE drain before being submitted.
 type BatchIoUringReader struct {
 	ring     *IoUring
 	reqCh    chan *batchReadRequest
 	maxBatch int
-	window   time.Duration // wait up to this for more requests before submit (0 = drain only)
 	closeCh  chan struct{}
 	wg       sync.WaitGroup
+
+	// In-flight tracking: each SQE gets a slot index as its UserData.
+	// The submit goroutine stores the request; the completion goroutine
+	// reads it back when the CQE arrives.
+	inflight  []atomic.Pointer[batchReadRequest]
+	freeSlots chan uint32  // pool of available slot indices
+	pending   atomic.Int32 // number of SQEs currently in-flight
 }
 
 // BatchIoUringConfig configures the batch reader.
 type BatchIoUringConfig struct {
 	RingDepth uint32        // io_uring SQ/CQ size (default 256)
 	MaxBatch  int           // max requests per batch (capped to RingDepth)
-	Window    time.Duration // wait up to this for requests to accumulate before submit (e.g. 500*time.Microsecond); 0 = drain only, no wait
+	Window    time.Duration // unused in decoupled mode; kept for API compatibility
 	QueueSize int           // channel buffer size (default 1024)
 	SQPoll    bool          // use IORING_SETUP_SQPOLL; kernel polls SQ, eliminating submit syscalls under load
 }
 
 // NewBatchIoUringReader creates a batch reader with its own io_uring ring
-// and starts the background collection goroutine.
+// and starts the submit + completion goroutines.
 func NewBatchIoUringReader(cfg BatchIoUringConfig) (*BatchIoUringReader, error) {
 	if cfg.RingDepth == 0 {
 		cfg.RingDepth = 256
@@ -91,15 +99,23 @@ func NewBatchIoUringReader(cfg BatchIoUringConfig) (*BatchIoUringReader, error) 
 		return nil, fmt.Errorf("batch io_uring init: %w", err)
 	}
 
-	b := &BatchIoUringReader{
-		ring:     ring,
-		reqCh:    make(chan *batchReadRequest, cfg.QueueSize),
-		maxBatch: cfg.MaxBatch,
-		window:   cfg.Window,
-		closeCh:  make(chan struct{}),
+	ringDepth := int(cfg.RingDepth)
+	freeSlots := make(chan uint32, ringDepth)
+	for i := 0; i < ringDepth; i++ {
+		freeSlots <- uint32(i)
 	}
-	b.wg.Add(1)
-	go b.loop()
+
+	b := &BatchIoUringReader{
+		ring:      ring,
+		reqCh:     make(chan *batchReadRequest, cfg.QueueSize),
+		maxBatch:  cfg.MaxBatch,
+		closeCh:   make(chan struct{}),
+		inflight:  make([]atomic.Pointer[batchReadRequest], ringDepth),
+		freeSlots: freeSlots,
+	}
+	b.wg.Add(2)
+	go b.submitLoop()
+	go b.completeLoop()
 	return b, nil
 }
 
@@ -132,25 +148,36 @@ func (b *BatchIoUringReader) Submit(fd int, buf []byte, offset uint64) (int, err
 	return n, err
 }
 
-// Close shuts down the collection goroutine and releases the io_uring ring.
+// Close shuts down both goroutines and releases the io_uring ring.
 func (b *BatchIoUringReader) Close() {
 	close(b.closeCh)
+
+	// Submit a NOP with sentinel UserData to unblock the completion
+	// goroutine if it is blocked in waitCqe with no pending I/O.
+	b.ring.mu.Lock()
+	sqe := b.ring.getSqe()
+	if sqe != nil {
+		sqe.Opcode = iouringOpNop
+		sqe.UserData = sentinelUserData
+		b.ring.submit(0)
+	}
+	b.ring.mu.Unlock()
+
 	b.wg.Wait()
 	b.ring.Close()
 }
 
-// loop is the single background goroutine that collects and submits batches.
-//
-// Phase 1: block on first request (no timer ticking when idle).
-// Phase 2: non-blocking drain of whatever else is already queued.
-// Phase 3: submit the batch and dispatch CQEs as they complete.
-func (b *BatchIoUringReader) loop() {
+// submitLoop collects requests from reqCh and submits them as io_uring SQEs.
+// It never waits for completions — that happens in completeLoop. The ring
+// mutex is held only during SQE preparation + io_uring_enter (~1-5μs).
+func (b *BatchIoUringReader) submitLoop() {
 	defer b.wg.Done()
 
 	batch := make([]*batchReadRequest, 0, b.maxBatch)
+	slots := make([]uint32, 0, b.maxBatch)
 
 	for {
-		// Phase 1: block until the first request arrives
+		// Block until the first request arrives.
 		select {
 		case req := <-b.reqCh:
 			batch = append(batch, req)
@@ -158,141 +185,140 @@ func (b *BatchIoUringReader) loop() {
 			return
 		}
 
-		// Phase 2: drain with optional wait — if window > 0, wait up to window
-		// for more requests; otherwise non-blocking drain only.
-		var timer *time.Timer
-		if b.window > 0 {
-			timer = time.NewTimer(b.window)
-		}
-	drain:
+		// Non-blocking drain of whatever else is already queued.
 		for len(batch) < b.maxBatch {
-			if b.window > 0 {
-				select {
-				case req := <-b.reqCh:
-					batch = append(batch, req)
-				case <-timer.C:
-					break drain
-				case <-b.closeCh:
-					if timer != nil {
-						timer.Stop()
-					}
-					return
+			select {
+			case req := <-b.reqCh:
+				batch = append(batch, req)
+			default:
+				goto submit
+			}
+		}
+
+	submit:
+		// Acquire a free slot for each request. Under normal load (~30
+		// in-flight out of 256 slots) this never blocks.
+		for i, req := range batch {
+			select {
+			case slot := <-b.freeSlots:
+				slots = append(slots, slot)
+				b.inflight[slot].Store(req)
+			case <-b.closeCh:
+				for j := i; j < len(batch); j++ {
+					batch[j].done <- batchReadResult{Err: fmt.Errorf("io_uring: shutting down")}
 				}
-			} else {
-				select {
-				case req := <-b.reqCh:
-					batch = append(batch, req)
-				default:
-					break drain
+				return
+			}
+		}
+
+		metrics.Timing(metrics.KEY_IOURING_SIZE, time.Duration(len(batch))*time.Millisecond, []string{})
+
+		b.ring.mu.Lock()
+
+		prepared := 0
+		for i, slot := range slots {
+			sqe := b.ring.getSqe()
+			if sqe == nil {
+				for j := i; j < len(slots); j++ {
+					req := b.inflight[slots[j]].Swap(nil)
+					b.freeSlots <- slots[j]
+					if req != nil {
+						req.done <- batchReadResult{
+							Err: fmt.Errorf("io_uring: SQ full, batch=%d depth=%d", len(batch), b.ring.sqEntries),
+						}
+					}
+				}
+				break
+			}
+			prepRead(sqe, batch[i].fd, batch[i].buf, batch[i].offset)
+			sqe.UserData = uint64(slot)
+			prepared++
+		}
+
+		if prepared > 0 {
+			b.pending.Add(int32(prepared))
+			_, err := b.ring.submit(0)
+			if err != nil {
+				b.pending.Add(-int32(prepared))
+				for i := 0; i < prepared; i++ {
+					req := b.inflight[slots[i]].Swap(nil)
+					b.freeSlots <- slots[i]
+					if req != nil {
+						req.done <- batchReadResult{Err: fmt.Errorf("io_uring_enter: %w", err)}
+					}
 				}
 			}
 		}
-		if timer != nil {
-			timer.Stop()
-		}
 
-		// Phase 3: submit and dispatch
-		b.submitBatch(batch)
+		b.ring.mu.Unlock()
+
 		batch = batch[:0]
+		slots = slots[:0]
 	}
 }
 
-// submitBatch prepares N SQEs, submits them (fire-and-forget), then dispatches
-// each CQE individually as it completes. Fast reads are dispatched immediately
-// without waiting for slow reads in the same batch (no head-of-line blocking).
-func (b *BatchIoUringReader) submitBatch(batch []*batchReadRequest) {
-	metrics.Timing(metrics.KEY_IOURING_SIZE, time.Duration(len(batch))*time.Millisecond, []string{})
-	n := len(batch)
-	if n == 0 {
-		return
-	}
+// completeLoop continuously drains CQEs and dispatches results to callers.
+// It runs independently of submitLoop — the ring's SQ and CQ are separate
+// data structures, so no mutex is needed for CQ access (single consumer).
+func (b *BatchIoUringReader) completeLoop() {
+	defer b.wg.Done()
 
-	b.ring.mu.Lock()
-
-	// Prepare SQEs
-	prepared := 0
-	for i, req := range batch {
-		sqe := b.ring.getSqe()
-		if sqe == nil {
-			// SQ full -- error the rest
-			for j := i; j < n; j++ {
-				batch[j].done <- batchReadResult{
-					Err: fmt.Errorf("io_uring: SQ full, batch=%d depth=%d", n, b.ring.sqEntries),
-				}
-			}
-			break
-		}
-		prepRead(sqe, req.fd, req.buf, req.offset)
-		sqe.UserData = uint64(i) // index for CQE matching
-		prepared++
-	}
-
-	if prepared == 0 {
-		b.ring.mu.Unlock()
-		return
-	}
-
-	// Submit SQEs but do NOT wait for completions (waitNr=0).
-	// The kernel starts processing I/O immediately; we dispatch each CQE
-	// as it arrives below, so fast reads aren't blocked by slow ones.
-	_, err := b.ring.submit(0)
-	if err != nil {
-		b.ring.mu.Unlock()
-		for i := 0; i < prepared; i++ {
-			batch[i].done <- batchReadResult{Err: fmt.Errorf("io_uring_enter: %w", err)}
-		}
-		return
-	}
-
-	// Dispatch CQEs one-by-one as they complete.
-	completed := 0
-	for completed < prepared {
+	for {
 		cqe, err := b.ring.waitCqe()
 		if err != nil {
-			// Catastrophic ring error -- unblock all unsatisfied callers.
-			b.ring.mu.Unlock()
-			for i := 0; i < n; i++ {
-				select {
-				case batch[i].done <- batchReadResult{Err: fmt.Errorf("io_uring waitCqe: %w", err)}:
-				default: // already sent
+			select {
+			case <-b.closeCh:
+				if b.pending.Load() <= 0 {
+					return
 				}
+			default:
 			}
-			return
+			continue
 		}
 
-		idx := int(cqe.UserData)
+		userData := cqe.UserData
 		res := cqe.Res
 		b.ring.seenCqe()
-		completed++
 
-		if idx < 0 || idx >= prepared {
-			continue // unexpected UserData; skip
+		// Shutdown NOP — exit once all real I/O has been drained.
+		if userData == sentinelUserData {
+			if b.pending.Load() <= 0 {
+				return
+			}
+			continue
+		}
+
+		slot := uint32(userData)
+		b.pending.Add(-1)
+
+		req := b.inflight[slot].Swap(nil)
+		b.freeSlots <- slot
+
+		if req == nil {
+			continue
 		}
 
 		if res < 0 {
-			batch[idx].done <- batchReadResult{
+			req.done <- batchReadResult{
 				Err: fmt.Errorf("io_uring pread errno %d (%s), fd=%d off=%d len=%d",
-					-res, syscall.Errno(-res), batch[idx].fd, batch[idx].offset, len(batch[idx].buf)),
+					-res, syscall.Errno(-res), req.fd, req.offset, len(req.buf)),
 			}
 		} else {
-			batch[idx].done <- batchReadResult{N: int(res)}
+			req.done <- batchReadResult{N: int(res)}
 		}
 	}
-
-	b.ring.mu.Unlock()
 }
 
 // ParallelBatchIoUringReader distributes pread requests across N independent
-// BatchIoUringReader instances (each with its own io_uring ring and goroutine)
-// using round-robin. This removes the single-ring serialization bottleneck and
-// lets NVMe service requests across multiple hardware queues in parallel.
+// BatchIoUringReader instances (each with its own io_uring ring and goroutines)
+// using round-robin.
 type ParallelBatchIoUringReader struct {
 	readers []*BatchIoUringReader
 	next    atomic.Uint64
 }
 
 // NewParallelBatchIoUringReader creates numRings independent batch readers.
-// Each ring gets its own io_uring instance and background goroutine.
+// Each ring gets its own io_uring instance and background goroutines.
 func NewParallelBatchIoUringReader(cfg BatchIoUringConfig, numRings int) (*ParallelBatchIoUringReader, error) {
 	if numRings <= 0 {
 		numRings = 1
