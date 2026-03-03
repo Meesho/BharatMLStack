@@ -52,6 +52,8 @@ func (i *Index) Put(key string, length, ttlInMinutes uint16, memId, offset uint3
 	delta := uint16(expiryAt - (i.startAt / 60))
 	encode(key, length, delta, lastAccess, freq, memId, offset, entry)
 
+	i.mu.Lock()
+	defer i.mu.Unlock()
 	if headIdx, ok := i.rm[hlo]; !ok {
 		encodeHashNextPrev(hhi, hlo, -1, -1, hashNextPrev)
 		i.rm[hlo] = idx
