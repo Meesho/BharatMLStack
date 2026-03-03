@@ -20,3 +20,5 @@ horizon/pem/*.key
 horizon/configs/*.pem
 go.work
 go.work.sum
+mwal/build/
+mwal/build_tsan/

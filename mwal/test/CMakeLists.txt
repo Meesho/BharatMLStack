@@ -1,0 +1,27 @@
+function(mwal_add_test name)
+  add_executable(${name} ${name}.cc)
+  target_link_libraries(${name} PRIVATE mwal GTest::gtest GTest::gtest_main)
+  target_include_directories(${name} PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/include
+  )
+  add_test(NAME ${name} COMMAND ${name})
+endfunction()
+
+mwal_add_test(log_test)
+mwal_add_test(wal_edit_test)
+mwal_add_test(write_batch_test)
+mwal_add_test(wal_manager_test)
+mwal_add_test(write_thread_test)
+mwal_add_test(wal_compressor_test)
+mwal_add_test(db_wal_test)
+mwal_add_test(crash_recovery_test)
+mwal_add_test(wal_iterator_test)
+mwal_add_test(concurrency_race_test)
+mwal_add_test(sequence_number_test)
+mwal_add_test(bit_flip_corruption_test)
+mwal_add_test(env_error_injection_test)
+mwal_add_test(back_pressure_test)
+mwal_add_test(operational_test)
+mwal_add_test(write_coalescer_test)
+mwal_add_test(recover_empty_log_test)

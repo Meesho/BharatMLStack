@@ -1,0 +1,43 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/mwal.dir/src/env/env_posix.cc.o"
+  "CMakeFiles/mwal.dir/src/env/env_posix.cc.o.d"
+  "CMakeFiles/mwal.dir/src/file/sequential_file_reader.cc.o"
+  "CMakeFiles/mwal.dir/src/file/sequential_file_reader.cc.o.d"
+  "CMakeFiles/mwal.dir/src/file/writable_file_writer.cc.o"
+  "CMakeFiles/mwal.dir/src/file/writable_file_writer.cc.o.d"
+  "CMakeFiles/mwal.dir/src/log/log_reader.cc.o"
+  "CMakeFiles/mwal.dir/src/log/log_reader.cc.o.d"
+  "CMakeFiles/mwal.dir/src/log/log_writer.cc.o"
+  "CMakeFiles/mwal.dir/src/log/log_writer.cc.o.d"
+  "CMakeFiles/mwal.dir/src/slice.cc.o"
+  "CMakeFiles/mwal.dir/src/slice.cc.o.d"
+  "CMakeFiles/mwal.dir/src/status.cc.o"
+  "CMakeFiles/mwal.dir/src/status.cc.o.d"
+  "CMakeFiles/mwal.dir/src/util/coding.cc.o"
+  "CMakeFiles/mwal.dir/src/util/coding.cc.o.d"
+  "CMakeFiles/mwal.dir/src/util/crc32c.cc.o"
+  "CMakeFiles/mwal.dir/src/util/crc32c.cc.o.d"
+  "CMakeFiles/mwal.dir/src/wal/db_wal.cc.o"
+  "CMakeFiles/mwal.dir/src/wal/db_wal.cc.o.d"
+  "CMakeFiles/mwal.dir/src/wal/wal_compressor.cc.o"
+  "CMakeFiles/mwal.dir/src/wal/wal_compressor.cc.o.d"
+  "CMakeFiles/mwal.dir/src/wal/wal_edit.cc.o"
+  "CMakeFiles/mwal.dir/src/wal/wal_edit.cc.o.d"
+  "CMakeFiles/mwal.dir/src/wal/wal_iterator.cc.o"
+  "CMakeFiles/mwal.dir/src/wal/wal_iterator.cc.o.d"
+  "CMakeFiles/mwal.dir/src/wal/wal_manager.cc.o"
+  "CMakeFiles/mwal.dir/src/wal/wal_manager.cc.o.d"
+  "CMakeFiles/mwal.dir/src/wal/write_batch.cc.o"
+  "CMakeFiles/mwal.dir/src/wal/write_batch.cc.o.d"
+  "CMakeFiles/mwal.dir/src/wal/write_coalescer.cc.o"
+  "CMakeFiles/mwal.dir/src/wal/write_coalescer.cc.o.d"
+  "CMakeFiles/mwal.dir/src/wal/write_thread.cc.o"
+  "CMakeFiles/mwal.dir/src/wal/write_thread.cc.o.d"
+  "libmwal.a"
+  "libmwal.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/mwal.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

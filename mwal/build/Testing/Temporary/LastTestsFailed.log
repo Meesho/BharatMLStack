@@ -1,0 +1,3 @@
+8:crash_recovery_test
+9:wal_iterator_test
+10:concurrency_race_test
