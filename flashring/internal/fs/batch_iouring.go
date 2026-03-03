@@ -61,6 +61,7 @@ type BatchIoUringConfig struct {
 	MaxBatch  int           // max requests per batch (capped to RingDepth)
 	Window    time.Duration // wait up to this for requests to accumulate before submit (e.g. 500*time.Microsecond); 0 = drain only, no wait
 	QueueSize int           // channel buffer size (default 1024)
+	SQPoll    bool          // use IORING_SETUP_SQPOLL; kernel polls SQ, eliminating submit syscalls under load
 }
 
 // NewBatchIoUringReader creates a batch reader with its own io_uring ring
@@ -76,7 +77,16 @@ func NewBatchIoUringReader(cfg BatchIoUringConfig) (*BatchIoUringReader, error) 
 		cfg.QueueSize = 1024
 	}
 
-	ring, err := NewIoUring(cfg.RingDepth, 0)
+	var flags uint32
+	if cfg.SQPoll {
+		flags = iouringSetupSQPoll
+	}
+
+	ring, err := NewIoUring(cfg.RingDepth, flags)
+	if err != nil && cfg.SQPoll {
+		// SQPOLL may fail without CAP_SYS_NICE on kernels < 5.13; fall back.
+		ring, err = NewIoUring(cfg.RingDepth, 0)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("batch io_uring init: %w", err)
 	}

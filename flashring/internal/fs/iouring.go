@@ -169,6 +169,9 @@ type IoUring struct {
 func NewIoUring(entries uint32, flags uint32) (*IoUring, error) {
 	var params ioUringParams
 	params.Flags = flags
+	if flags&iouringSetupSQPoll != 0 {
+		params.SqThreadIdle = 2000 // kernel poll thread sleeps after 2s idle
+	}
 
 	fd, _, errno := syscall.Syscall(sysIOUringSetup, uintptr(entries), uintptr(unsafe.Pointer(&params)), 0)
 	if errno != 0 {
