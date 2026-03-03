@@ -3,6 +3,7 @@ export const SERVICES = {
   PREDATOR: 'predator',
   InferFlow: 'inferflow',
   NUMERIX: 'numerix',
+  FEATURE_REVIEW: 'feature_review',
 };
 
 export const SCREEN_TYPES = {
@@ -23,6 +24,11 @@ export const SCREEN_TYPES = {
   NUMERIX: {
     CONFIG: 'numerix-config',
     CONFIG_APPROVAL: 'numerix-config-approval'
+  },
+  FEATURE_REVIEW: {
+    REVIEWS: 'feature-reviews',
+    REVIEW_DETAIL: 'feature-review-detail',
+    REVIEW_HISTORY: 'feature-review-history',
   },
 };
 
@@ -71,6 +77,7 @@ export const SERVICE_SCREEN_MAP = {
   [SERVICES.PREDATOR]: Object.values(SCREEN_TYPES.PREDATOR),
   [SERVICES.InferFlow]: Object.values(SCREEN_TYPES.InferFlow),
   [SERVICES.NUMERIX]: Object.values(SCREEN_TYPES.NUMERIX),
+  [SERVICES.FEATURE_REVIEW]: Object.values(SCREEN_TYPES.FEATURE_REVIEW),
 };
 
 export const ACTION_GROUPS = {
@@ -130,6 +137,7 @@ export const getServiceDisplayName = (service) => {
     [SERVICES.PREDATOR]: 'Predator',
     [SERVICES.InferFlow]: 'InferFlow',
     [SERVICES.NUMERIX]: 'Numerix',
+    [SERVICES.FEATURE_REVIEW]: 'Feature Reviews',
   };
   return names[service] || service;
 };

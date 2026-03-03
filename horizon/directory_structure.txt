@@ -1,0 +1,522 @@
+.
+├── README.md
+├── VERSION
+├── cmd
+│   └── horizon
+│       ├── Dockerfile
+│       └── main.go
+├── configs
+│   ├── models
+│   │   └── dummy_model
+│   │       ├── 1
+│   │       │   └── model.txt
+│   │       └── config.pbtxt
+│   └── services
+│       └── predator
+│           ├── int
+│           │   └── config.yaml
+│           ├── prd
+│           │   └── config.yaml
+│           └── stg
+│               └── config.yaml
+├── directory_structure.txt
+├── env.example
+├── go.mod
+├── go.sum
+├── horizon
+├── internal
+│   ├── application
+│   │   ├── controller
+│   │   │   └── controller.go
+│   │   ├── handler
+│   │   │   ├── application.go
+│   │   │   ├── config.go
+│   │   │   ├── init.go
+│   │   │   └── models.go
+│   │   └── route
+│   │       └── router.go
+│   ├── auth
+│   │   ├── controller
+│   │   │   └── controller.go
+│   │   ├── handler
+│   │   │   ├── auth.go
+│   │   │   ├── handler.go
+│   │   │   ├── init.go
+│   │   │   └── models.go
+│   │   └── router
+│   │       └── router.go
+│   ├── configs
+│   │   ├── app_config.go
+│   │   ├── config_init_stub.go
+│   │   └── service_config.go
+│   ├── connectionconfig
+│   │   ├── controller
+│   │   │   └── controller.go
+│   │   ├── handler
+│   │   │   ├── config.go
+│   │   │   ├── connection_config.go
+│   │   │   ├── init.go
+│   │   │   └── models.go
+│   │   └── route
+│   │       └── router.go
+│   ├── constant
+│   │   ├── api.go
+│   │   └── repository.go
+│   ├── deployable
+│   │   ├── controller
+│   │   │   └── controller.go
+│   │   ├── handler
+│   │   │   ├── config.go
+│   │   │   ├── deployable.go
+│   │   │   ├── environment_validation.go
+│   │   │   ├── init.go
+│   │   │   ├── modelhandler.go
+│   │   │   ├── models.go
+│   │   │   └── predatorhandler.go
+│   │   ├── init.go
+│   │   └── router
+│   │       └── router.go
+│   ├── dns
+│   │   ├── client
+│   │   │   └── client_stub.go
+│   │   ├── controller
+│   │   │   └── controller_stub.go
+│   │   ├── handler
+│   │   │   └── handler_stub.go
+│   │   └── router_stub.go
+│   ├── externalcall
+│   │   ├── airflow_client.go
+│   │   ├── branch_config.go
+│   │   ├── config.go
+│   │   ├── feature_validation_client.go
+│   │   ├── gcs_client.go
+│   │   ├── gcs_client_test.go
+│   │   ├── github_client.go
+│   │   ├── github_client_test.go
+│   │   ├── init.go
+│   │   ├── pricing_client_stub.go
+│   │   ├── prism_client.go
+│   │   ├── prometheus_client.go
+│   │   ├── skye_trigger_client.go
+│   │   ├── slack_client.go
+│   │   └── working_env.go
+│   ├── inferflow
+│   │   ├── README.md
+│   │   ├── controller
+│   │   │   └── controller.go
+│   │   ├── etcd
+│   │   │   ├── config.go
+│   │   │   ├── etcd.go
+│   │   │   └── models.go
+│   │   ├── handler
+│   │   │   ├── adaptor.go
+│   │   │   ├── component_builder_internal_stub.go
+│   │   │   ├── config.go
+│   │   │   ├── config_builder.go
+│   │   │   ├── config_builder_test.go
+│   │   │   ├── inferflow.go
+│   │   │   ├── inferflow_constants.go
+│   │   │   ├── inferflow_fetch.go
+│   │   │   ├── inferflow_functional_testing.go
+│   │   │   ├── inferflow_helpers.go
+│   │   │   ├── inferflow_review.go
+│   │   │   ├── inferflow_test.go
+│   │   │   ├── inferflow_validation.go
+│   │   │   ├── init.go
+│   │   │   ├── internal_components.go
+│   │   │   ├── models.go
+│   │   │   ├── proto
+│   │   │   │   ├── inferflow.proto
+│   │   │   │   └── protogen
+│   │   │   │       ├── inferflow.pb.go
+│   │   │   │       └── inferflow_grpc.pb.go
+│   │   │   └── schema_adapter.go
+│   │   ├── init.go
+│   │   └── route
+│   │       └── router.go
+│   ├── infrastructure
+│   │   ├── controller
+│   │   │   ├── controller.go
+│   │   │   └── controller_test.go
+│   │   ├── handler
+│   │   │   ├── handler.go
+│   │   │   ├── handler_test.go
+│   │   │   └── init.go
+│   │   ├── middleware
+│   │   │   ├── working_env.go
+│   │   │   └── working_env_test.go
+│   │   └── router
+│   │       └── router.go
+│   ├── init.go
+│   ├── jobs
+│   │   ├── bulk_delete.go
+│   │   └── bulkdeletestrategy
+│   │       ├── config.go
+│   │       ├── inferflow_service.go
+│   │       ├── numerix_service.go
+│   │       ├── predator_service.go
+│   │       └── strategy_selector.go
+│   ├── middleware
+│   │   ├── middleware.go
+│   │   └── resolver
+│   │       ├── application_resolver.go
+│   │       ├── config.go
+│   │       ├── deployable_resolver.go
+│   │       ├── inferflow_resolver.go
+│   │       ├── numerix_resolver.go
+│   │       ├── predator_resolver.go
+│   │       ├── resolver_registry.go
+│   │       └── skye_resolver.go
+│   ├── numerix
+│   │   ├── controller
+│   │   │   └── controller.go
+│   │   ├── etcd
+│   │   │   ├── config.go
+│   │   │   ├── etcd.go
+│   │   │   └── models.go
+│   │   ├── handler
+│   │   │   ├── config.go
+│   │   │   ├── init.go
+│   │   │   ├── models.go
+│   │   │   └── numerix.go
+│   │   ├── init.go
+│   │   ├── proto
+│   │   │   ├── numerix.proto
+│   │   │   └── protogen
+│   │   │       ├── numerix.pb.go
+│   │   │       └── numerix_grpc.pb.go
+│   │   ├── route
+│   │   │   └── router.go
+│   │   └── util
+│   │       ├── expression_parser.go
+│   │       ├── expression_parser_test.go
+│   │       ├── expression_validator.go
+│   │       └── expression_validator_test.go
+│   ├── online-feature-store
+│   │   ├── config
+│   │   │   ├── config.go
+│   │   │   ├── enums
+│   │   │   │   ├── cache_type.go
+│   │   │   │   └── data_type.go
+│   │   │   ├── etcd.go
+│   │   │   ├── etcd_test.go
+│   │   │   ├── init.go
+│   │   │   ├── mock.go
+│   │   │   ├── models.go
+│   │   │   ├── serializer.go
+│   │   │   └── system.go
+│   │   ├── controller
+│   │   │   └── config.go
+│   │   ├── handler
+│   │   │   ├── config.go
+│   │   │   ├── init.go
+│   │   │   ├── mocks
+│   │   │   │   └── mocks.go
+│   │   │   ├── models.go
+│   │   │   ├── online_feature_store.go
+│   │   │   └── online_feature_store_test.go
+│   │   ├── init.go
+│   │   └── router
+│   │       └── router.go
+│   ├── predator
+│   │   ├── README.md
+│   │   ├── controller
+│   │   │   └── controller.go
+│   │   ├── handler
+│   │   │   ├── config.go
+│   │   │   ├── init.go
+│   │   │   ├── model.go
+│   │   │   ├── model_config.pb.go
+│   │   │   ├── models.go
+│   │   │   ├── predator.go
+│   │   │   ├── predator_approval.go
+│   │   │   ├── predator_constants.go
+│   │   │   ├── predator_fetch.go
+│   │   │   ├── predator_functional_testing.go
+│   │   │   ├── predator_helpers.go
+│   │   │   ├── predator_test.go
+│   │   │   ├── predator_upload.go
+│   │   │   ├── predator_upload_test.go
+│   │   │   └── predator_validation.go
+│   │   ├── init.go
+│   │   ├── proto
+│   │   │   ├── model_config.proto
+│   │   │   └── tritonproto
+│   │   │       ├── gpmc_service.proto
+│   │   │       ├── health.proto
+│   │   │       ├── model_config.proto
+│   │   │       └── protogen
+│   │   │           ├── gpmc_service.pb.go
+│   │   │           ├── gpmc_service_grpc.pb.go
+│   │   │           └── model_config.pb.go
+│   │   └── route
+│   │       └── router.go
+│   ├── repositories
+│   │   ├── scylla
+│   │   │   ├── repository.go
+│   │   │   ├── scylla.go
+│   │   │   └── skye_scylla.go
+│   │   └── sql
+│   │       ├── apiresolver
+│   │       │   ├── sql.go
+│   │       │   └── table.go
+│   │       ├── application
+│   │       │   ├── repository.go
+│   │       │   └── table.go
+│   │       ├── auth
+│   │       │   ├── repository.go
+│   │       │   └── table.go
+│   │       ├── circuitbreaker
+│   │       │   ├── sql.go
+│   │       │   └── table.go
+│   │       ├── connectionconfig
+│   │       │   ├── repository.go
+│   │       │   └── table.go
+│   │       ├── counter
+│   │       │   ├── sql.go
+│   │       │   └── table.go
+│   │       ├── deployablemetadata
+│   │       │   ├── sql.go
+│   │       │   └── table.go
+│   │       ├── discoveryconfig
+│   │       │   ├── sql.go
+│   │       │   └── table.go
+│   │       ├── embedding
+│   │       │   ├── entity_requests
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   ├── filter_requests
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   ├── job_frequency_requests
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   ├── job_locks
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   ├── model_requests
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   ├── qdrant_cluster_requests
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   ├── store_requests
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   ├── variant_onboarding_tasks
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   ├── variant_promotion_requests
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   ├── variant_requests
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   ├── variant_scaleup_requests
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   └── variant_scaleup_tasks
+│   │       │       ├── repository.go
+│   │       │       └── table.go
+│   │       ├── entity
+│   │       │   ├── repository.go
+│   │       │   └── table.go
+│   │       ├── featuregroup
+│   │       │   ├── repository.go
+│   │       │   └── table.go
+│   │       ├── features
+│   │       │   ├── repository.go
+│   │       │   └── table.go
+│   │       ├── inferflow
+│   │       │   ├── config
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   ├── models.go
+│   │       │   └── request
+│   │       │       ├── repository.go
+│   │       │       └── table.go
+│   │       ├── job
+│   │       │   ├── repository.go
+│   │       │   └── table.go
+│   │       ├── numerix
+│   │       │   ├── binaryops
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   ├── config
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   ├── request
+│   │       │   │   ├── repository.go
+│   │       │   │   └── table.go
+│   │       │   └── unaryops
+│   │       │       ├── repository.go
+│   │       │       └── table.go
+│   │       ├── predatorconfig
+│   │       │   ├── sql.go
+│   │       │   └── table.go
+│   │       ├── predatorrequest
+│   │       │   ├── sql.go
+│   │       │   └── table.go
+│   │       ├── rolepermission
+│   │       │   ├── sql.go
+│   │       │   └── table.go
+│   │       ├── schedule
+│   │       │   ├── sql.go
+│   │       │   └── table.go
+│   │       ├── serviceconfig
+│   │       │   ├── sql.go
+│   │       │   └── table.go
+│   │       ├── servicedeployableconfig
+│   │       │   ├── sql.go
+│   │       │   └── table.go
+│   │       ├── store
+│   │       │   ├── repository.go
+│   │       │   └── table.go
+│   │       ├── token
+│   │       │   ├── repository.go
+│   │       │   └── table.go
+│   │       ├── validationjob
+│   │       │   ├── repository.go
+│   │       │   └── table.go
+│   │       └── validationlock
+│   │           ├── repository.go
+│   │           └── table.go
+│   ├── skye
+│   │   ├── controller
+│   │   │   ├── controller.go
+│   │   │   └── helpers.go
+│   │   ├── etcd
+│   │   │   ├── config.go
+│   │   │   ├── enums
+│   │   │   │   ├── filter_condition.go
+│   │   │   │   ├── model_type.go
+│   │   │   │   ├── variant_state.go
+│   │   │   │   ├── variant_type.go
+│   │   │   │   └── vectordb_type.go
+│   │   │   ├── etcd.go
+│   │   │   └── models.go
+│   │   ├── handler
+│   │   │   ├── config.go
+│   │   │   ├── helpers.go
+│   │   │   ├── init.go
+│   │   │   ├── models.go
+│   │   │   └── skye.go
+│   │   ├── jobs
+│   │   │   ├── variant_onboarding_job.go
+│   │   │   └── variant_scaleup_job.go
+│   │   └── route
+│   │       └── router.go
+│   └── workflow
+│       ├── activities
+│       │   ├── activities.go
+│       │   ├── config.go
+│       │   ├── dns_activities_stub.go
+│       │   ├── infrastructure.go
+│       │   ├── update_thresholds.go
+│       │   └── utils.go
+│       ├── controller
+│       │   └── controller.go
+│       ├── etcd
+│       │   ├── etcd.go
+│       │   ├── etcd_test.go
+│       │   └── models.go
+│       ├── handler
+│       │   ├── config.go
+│       │   ├── init.go
+│       │   └── workflow.go
+│       ├── init.go
+│       ├── orchestrator.go
+│       ├── router
+│       │   └── router.go
+│       └── worker.go
+├── pkg
+│   ├── api
+│   │   ├── error.go
+│   │   └── http
+│   │       ├── header.go
+│   │       └── helper.go
+│   ├── argocd
+│   │   ├── applications.go
+│   │   ├── client.go
+│   │   ├── config.go
+│   │   ├── env_helper.go
+│   │   ├── hpa.go
+│   │   ├── resource.go
+│   │   ├── sync.go
+│   │   ├── utils.go
+│   │   └── validation.go
+│   ├── config
+│   │   └── env.go
+│   ├── configschemaclient
+│   │   ├── client.go
+│   │   ├── internal_processor.go
+│   │   ├── internal_processor_stub.go
+│   │   └── types.go
+│   ├── etcd
+│   │   ├── etcd.go
+│   │   ├── init.go
+│   │   └── v1.go
+│   ├── float8
+│   │   ├── float8_e4m3.go
+│   │   ├── float8_e4m3_bench_test.go
+│   │   ├── float8_e4m3_test.go
+│   │   ├── float8_e5m2.go
+│   │   ├── float8_e5m2_bench_test.go
+│   │   └── float8_e5m2_test.go
+│   ├── gcp
+│   │   ├── config.go
+│   │   └── iam.go
+│   ├── github
+│   │   ├── client.go
+│   │   ├── client_test.go
+│   │   ├── config.go
+│   │   ├── config_test.go
+│   │   ├── helmchart_test.go
+│   │   ├── models.go
+│   │   ├── models_test.go
+│   │   ├── paths.go
+│   │   ├── trigger_updater.go
+│   │   ├── trigger_updater_test.go
+│   │   ├── update_autoscaling_triggers.go
+│   │   ├── update_scaling.go
+│   │   └── update_scaling_test.go
+│   ├── grpc
+│   │   └── grpc.go
+│   ├── httpframework
+│   │   └── httpframework.go
+│   ├── infra
+│   │   ├── connection.go
+│   │   ├── init.go
+│   │   ├── scylla.go
+│   │   ├── scylla_conf_builder.go
+│   │   ├── sql.go
+│   │   └── sql_conf_builder.go
+│   ├── kubernetes
+│   │   └── hpa.go
+│   ├── logger
+│   │   └── logger.go
+│   ├── metric
+│   │   ├── metric.go
+│   │   └── tag.go
+│   ├── middleware
+│   │   ├── httplogger.go
+│   │   └── httprecovery.go
+│   ├── random
+│   │   └── random_generator.go
+│   ├── scheduler
+│   │   └── init.go
+│   ├── serializer
+│   │   └── serializer.go
+│   ├── templates
+│   │   ├── argoapp.tmpl
+│   │   ├── common-values.tmpl
+│   │   ├── deployment.tmpl
+│   │   ├── embed.go
+│   │   ├── render.go
+│   │   ├── triton-values.tmpl
+│   │   └── values_properties.tmpl
+│   └── workflow
+│       └── workflow.go
+└── release.sh
+
+155 directories, 365 files

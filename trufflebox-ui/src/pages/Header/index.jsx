@@ -24,12 +24,15 @@ import PropTypes from 'prop-types';
 import './Header.css';
 import { useAuth } from '../Auth/AuthContext';
 import { requiresPermissionCheck, getPermissionInfo } from '../../constants/serviceMapping';
+import RateReviewIcon from '@mui/icons-material/RateReview';
+import HistoryIcon from '@mui/icons-material/History';
 import { 
   isOnlineFeatureStoreEnabled, 
   isInferFlowEnabled, 
   isNumerixEnabled, 
   isPredatorEnabled, 
-  isEmbeddingPlatformEnabled 
+  isEmbeddingPlatformEnabled,
+  isFeatureReviewEnabled 
 } from '../../config';
 
 function Header({ onMenuItemClick }) {
@@ -83,6 +86,9 @@ function Header({ onMenuItemClick }) {
       'EmbeddingFilterApproval': <FilterAltIcon />,
       'EmbeddingJobFrequencyApproval': <ScheduleIcon />,
       'DeploymentOperations': <CloudUploadIcon />,
+      'FeatureReviews': <RateReviewIcon />,
+      'FeatureReviewList': <RateReviewIcon />,
+      'FeatureReviewHistory': <HistoryIcon />,
     };
     return iconMap[key] || <StorageIcon />;
   };
@@ -253,6 +259,15 @@ function Header({ onMenuItemClick }) {
       ]
     },
     {
+      key: 'FeatureReviews',
+      label: 'Feature Reviews',
+      roles: ['admin'],
+      subItems: [
+        { key: 'FeatureReviewList', label: 'Pending Reviews', path: '/feature-reviews', screenType: 'feature-reviews' },
+        { key: 'FeatureReviewHistory', label: 'History', path: '/feature-reviews/history', screenType: 'feature-review-history' },
+      ],
+    },
+    {
       key: 'UserManagement',
       label: 'User Management',
       path: '/user-management',
@@ -276,6 +291,9 @@ function Header({ onMenuItemClick }) {
       return false;
     }
     if (item.key === 'EmbeddingPlatform' && !isEmbeddingPlatformEnabled()) {
+      return false;
+    }
+    if (item.key === 'FeatureReviews' && !isFeatureReviewEnabled()) {
       return false;
     }
     return true;

@@ -35,8 +35,12 @@ import {
   isInferFlowEnabled, 
   isNumerixEnabled, 
   isPredatorEnabled, 
-  isEmbeddingPlatformEnabled 
+  isEmbeddingPlatformEnabled,
+  isFeatureReviewEnabled 
 } from './config';
+import ReviewList from './pages/FeatureReview/ReviewList';
+import ReviewDetail from './pages/FeatureReview/ReviewDetail';
+import ReviewHistory from './pages/FeatureReview/ReviewHistory';
 
 // Embedding Platform Components
 import DeploymentOperations from './pages/EmbeddingPlatform/components/DeploymentOperations';
@@ -422,6 +426,36 @@ function App() {
         />
         </>
         )}
+            {/* Feature Review Routes */}
+            {isFeatureReviewEnabled() && (
+              <>
+                <Route
+                  path="/feature-reviews"
+                  element={
+                    <ProtectedRoute service="feature_review" screenType="feature-reviews">
+                      <ReviewList />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/feature-reviews/history"
+                  element={
+                    <ProtectedRoute service="feature_review" screenType="feature-review-history">
+                      <ReviewHistory />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/feature-reviews/:id"
+                  element={
+                    <ProtectedRoute service="feature_review" screenType="feature-review-detail">
+                      <ReviewDetail />
+                    </ProtectedRoute>
+                  }
+                />
+              </>
+            )}
+
             {/* Redirect to Homepage(Feature Discovery) */}
             <Route path="*" element={<Navigate to="/feature-discovery" replace/>} />
             <Route path="/health" element={<HealthCheck />} />

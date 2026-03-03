@@ -39,6 +39,10 @@ export const MENU_PERMISSION_MAP = {
   'EmbeddingFilterApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'filter-approval' },
   'EmbeddingJobFrequencyApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'job-frequency-approval' },
   'DeploymentOperations': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'deployment-operations' },
+
+  'FeatureReviewList': { service: SERVICES.FEATURE_REVIEW, screenType: 'feature-reviews' },
+  'FeatureReviewDetail': { service: SERVICES.FEATURE_REVIEW, screenType: 'feature-review-detail' },
+  'FeatureReviewHistory': { service: SERVICES.FEATURE_REVIEW, screenType: 'feature-review-history' },
 };
 
 export const requiresPermissionCheck = (menuKey, parentKey = null) => {
@@ -84,4 +88,5 @@ export const PERMISSION_CONTROLLED_SERVICES = [
   SERVICES.InferFlow, 
   SERVICES.NUMERIX,
   SERVICES.EMBEDDING_PLATFORM,
+  SERVICES.FEATURE_REVIEW,
 ]; 

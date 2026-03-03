@@ -11,6 +11,8 @@ import (
 	deployableRouter "github.com/Meesho/BharatMLStack/horizon/internal/deployable/router"
 	dnsRouter "github.com/Meesho/BharatMLStack/horizon/internal/dns"
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
+	fceRouter "github.com/Meesho/BharatMLStack/horizon/internal/featurecomputeengine/route"
+	featureReviewRouter "github.com/Meesho/BharatMLStack/horizon/internal/featurereview/route"
 	inferflowConfig "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/etcd"
 	inferflowRouter "github.com/Meesho/BharatMLStack/horizon/internal/inferflow/route"
 	infrastructureRouter "github.com/Meesho/BharatMLStack/horizon/internal/infrastructure/router"
@@ -78,6 +80,8 @@ func main() {
 	dnsRouter.Init()
 	workflowRouter.Init()
 	skyeRouter.Init(appConfig.Configs)
+	fceRouter.Init()
+	featureReviewRouter.Init()
 	scheduler.Init(appConfig.Configs)
 	scheduler.InitVariantScaleUpScheduler(appConfig.Configs)
 	scheduler.InitVariantOnboardingScheduler(appConfig.Configs)

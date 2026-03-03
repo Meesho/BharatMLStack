@@ -1,0 +1,113 @@
+# BharatMLStack — Feature Computation Platform
+
+## Project Overview
+We are building an asset-based, trigger-driven feature computation platform.
+The system transforms notebook-based feature engineering from cron-chained jobs
+into a content-addressed, trigger-driven execution engine.
+
+## Architecture (Three Systems)
+
+### 1. Horizon (Go) — Control Plane (`horizon/`)
+- Asset Registry: stores AssetSpecs, builds DAG from declared inputs
+- Necessity Resolver: marks assets as ACTIVE/TRANSIENT/SKIPPED
+- Compute Key Resolver: content-addressed caching (hash of code + inputs + env)
+- Trigger Evaluator: upstream readiness → fires downstream
+- Plan Stage: diff proposed changes, estimate recomputation impact
+
+### 2. Python SDK (`py-sdk/`) — Authoring + Execution
+- `@asset` decorator: data scientists define features
+- `NotebookRuntime`: executes matched assets per trigger invocation
+- Horizon Client: calls horizon APIs
+- One notebook per entity, multiple assets per notebook
+
+### 3. Airflow — Scheduling + Job Management
+- Custom `AssetExecutionOperator`: bridges horizon and Databricks
+- Schedule triggers (3h, 6h, 24h) via Airflow DAGs
+- Upstream triggers via Airflow REST API (called by horizon)
+- Concurrency via Airflow pools
+
+## Domain Model
+
+```
+Entity (source: user, product | derived: region, category)
+  └── Notebook (one per entity)
+        └── Asset (= Feature Group)
+              ├── schedule="3h" | "6h" | "24h" (time trigger)
+              ├── trigger="upstream" (upstream readiness trigger)
+              ├── inputs=[Input("silver.orders"), Input("fg.user_spend")]
+              ├── serving=True|False
+              └── features are COLUMNS in output DataFrame
+```
+
+- 1 Notebook → N Assets (different schedules/triggers, same Spark session)
+- Assets across notebooks can depend on each other (cross-entity DAG)
+- 1 trigger invocation → executes SUBSET of assets in notebook (those matching the trigger)
+
+## Key Concepts
+
+### Compute Key (Content Addressing)
+```
+compute_key = hash(asset_version + sorted(input_versions) + params + env_fingerprint)
+```
+If compute_key exists in artifact store → skip execution (cache hit).
+
+### Necessity States
+- ACTIVE: serving=true → compute + publish to serving table
+- TRANSIENT: serving=false but downstream active needs it → compute + artifact only
+- SKIPPED: not needed → don't compute at all
+
+### Storage
+- Artifact Store: `/_artifacts/{asset}/{partition}/{compute_key}/` (all computed outputs)
+- Serving Tables: `/serving/{asset}/{partition}/` (ACTIVE only, published)
+- Online Store: synced from serving tables (existing system, not part of this build)
+
+## Existing Codebase Patterns
+
+### Horizon (Go) — Follow These EXACTLY
+```
+internal/{module}/
+  handler/
+    {module}.go    — business logic
+    models.go      — types, request/response
+    config.go      — configuration
+    init.go        — constructor, dependency injection
+  controller/
+    controller.go  — wires handler to routes
+  route/
+    router.go      — HTTP route registration
+
+internal/repositories/sql/{entity}/
+  table.go         — table name, column constants, DDL string
+  repository.go    — CRUD operations with *sql.DB
+```
+
+### Python SDK — Existing Packages
+```
+py-sdk/
+  bharatml_commons/
+  grpc_feature_client/
+  inference_logging_client/
+  spark_feature_push_client/
+```
+New packages go alongside these.
+
+## CI/CD & GitOps Model
+
+CI (external, no horizon access):
+1. DS pushes notebooks → CI imports modules → @asset decorators register metadata
+2. `bharatml manifest` writes .bharatml/manifest.json (pure JSON, no API calls)
+3. Manifest committed to PR branch, summary posted as PR comment
+
+Trufflebox (internal):
+4. GitHub webhook → Trufflebox creates pending review
+5. Admin clicks "Show Plan" → Trufflebox reads manifest from PR → calls horizon plan API
+6. Admin approves → Trufflebox approves PR on GitHub
+7. DS merges → webhook fires → Trufflebox calls horizon apply + generates Airflow DAGs
+
+Key rule: CI NEVER calls horizon. Manifest is the bridge between external and internal.
+
+## Conventions
+- Go: standard library + existing dependencies in go.mod only
+- Python: type hints everywhere, dataclasses for models, pytest for tests
+- Column naming: `feature_group:feature_name` (e.g., `user_spend:total_spend`)
+- Entity key column in every asset output (e.g., `user_id`)

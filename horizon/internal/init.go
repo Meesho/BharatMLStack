@@ -4,6 +4,8 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	deployableHandler "github.com/Meesho/BharatMLStack/horizon/internal/deployable/handler"
 	"github.com/Meesho/BharatMLStack/horizon/internal/externalcall"
+	featurecomputeengine "github.com/Meesho/BharatMLStack/horizon/internal/featurecomputeengine"
+	featurereview "github.com/Meesho/BharatMLStack/horizon/internal/featurereview"
 	inferflow "github.com/Meesho/BharatMLStack/horizon/internal/inferflow"
 	"github.com/Meesho/BharatMLStack/horizon/internal/numerix"
 	onlinefeaturestore "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store"
@@ -19,4 +21,6 @@ func InitAll(config configs.Configs) {
 	deployableHandler.Init(config)
 	inferflow.Init(config)
 	workflow.Init(config)
+	featurecomputeengine.Init(config)
+	featurereview.Init(config)
 }

@@ -23,6 +23,7 @@ export const REACT_APP_INFERFLOW_ENABLED = getBooleanEnv('REACT_APP_INFERFLOW_EN
 export const REACT_APP_NUMERIX_ENABLED = getBooleanEnv('REACT_APP_NUMERIX_ENABLED', true);
 export const REACT_APP_PREDATOR_ENABLED = getBooleanEnv('REACT_APP_PREDATOR_ENABLED', true);
 export const REACT_APP_EMBEDDING_PLATFORM_ENABLED = getBooleanEnv('REACT_APP_EMBEDDING_PLATFORM_ENABLED', true);
+export const REACT_APP_FEATURE_REVIEW_ENABLED = getBooleanEnv('REACT_APP_FEATURE_REVIEW_ENABLED', true);
 
 // Feature flag helper functions
 export const isOnlineFeatureStoreEnabled = () => REACT_APP_ONLINE_FEATURE_STORE_ENABLED;
@@ -30,3 +31,4 @@ export const isInferFlowEnabled = () => REACT_APP_INFERFLOW_ENABLED;
 export const isNumerixEnabled = () => REACT_APP_NUMERIX_ENABLED;
 export const isPredatorEnabled = () => REACT_APP_PREDATOR_ENABLED;
 export const isEmbeddingPlatformEnabled = () => REACT_APP_EMBEDDING_PLATFORM_ENABLED;
+export const isFeatureReviewEnabled = () => REACT_APP_FEATURE_REVIEW_ENABLED;
