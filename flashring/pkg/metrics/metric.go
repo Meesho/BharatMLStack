@@ -114,6 +114,8 @@ func Init() {
 		statsDClient, err = statsd.New(
 			telegrafAddress,
 			statsd.WithTags(globalTags),
+			statsd.WithChannelMode(),
+			statsd.WithChannelModeBufferSize(4096),
 		)
 
 		if err != nil {

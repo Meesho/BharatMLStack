@@ -2,6 +2,7 @@ package memtables
 
 import (
 	"errors"
+	"sync/atomic"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
 )
@@ -16,12 +17,12 @@ var (
 )
 
 type Memtable struct {
+	currentOffset int64  // atomic; must be first for 64-bit alignment on 32-bit platforms
+	flushStarted  uint32 // atomic; 0 = not started, 1 = flush triggered
 	Id            uint32
 	capacity      int
-	currentOffset int
 	file          *fs.WrapAppendFile
 	page          *fs.AlignedPage
-	readyForFlush bool
 	next          *Memtable
 	prev          *Memtable
 	ShardIdx      uint32
@@ -49,13 +50,11 @@ func NewMemtable(config MemtableConfig) (*Memtable, error) {
 		return nil, ErrPageBufferCapacityMismatch
 	}
 	return &Memtable{
-		Id:            config.id,
-		ShardIdx:      config.shardIdx,
-		capacity:      config.capacity,
-		currentOffset: 0,
-		file:          config.file,
-		page:          config.page,
-		readyForFlush: false,
+		Id:       config.id,
+		ShardIdx: config.shardIdx,
+		capacity: config.capacity,
+		file:     config.file,
+		page:     config.page,
 	}, nil
 }
 
@@ -67,26 +66,32 @@ func (m *Memtable) Get(offset int, length uint16) ([]byte, error) {
 }
 
 func (m *Memtable) Put(buf []byte) (offset int, length uint16, readyForFlush bool) {
-	offset = m.currentOffset
-	if offset+len(buf) > m.capacity {
-		m.readyForFlush = true
-		return -1, 0, true
+	sz := int64(len(buf))
+	newOffset := atomic.AddInt64(&m.currentOffset, sz)
+	start := newOffset - sz
+
+	if newOffset > int64(m.capacity) {
+		if atomic.CompareAndSwapUint32(&m.flushStarted, 0, 1) {
+			return -1, 0, true
+		}
+		return -1, 0, false
 	}
-	copy(m.page.Buf[offset:], buf)
-	m.currentOffset += len(buf)
-	return offset, uint16(len(buf)), false
+	copy(m.page.Buf[start:start+sz], buf)
+	return int(start), uint16(len(buf)), false
 }
 
-// Efforts to make zero copy
 func (m *Memtable) GetBufForAppend(size uint16) (bbuf []byte, offset int, length uint16, readyForFlush bool) {
-	offset = m.currentOffset
-	if offset+int(size) > m.capacity {
-		m.readyForFlush = true
-		return nil, -1, 0, true
+	sz := int64(size)
+	newOffset := atomic.AddInt64(&m.currentOffset, sz)
+	start := newOffset - sz
+
+	if newOffset > int64(m.capacity) {
+		if atomic.CompareAndSwapUint32(&m.flushStarted, 0, 1) {
+			return nil, -1, 0, true
+		}
+		return nil, -1, 0, false
 	}
-	bbuf = m.page.Buf[offset : offset+int(size)]
-	m.currentOffset += int(size)
-	return bbuf, offset, size, false
+	return m.page.Buf[start:newOffset], int(start), size, false
 }
 
 func (m *Memtable) GetBufForRead(offset int, length uint16) (bbuf []byte, exists bool) {
@@ -97,7 +102,7 @@ func (m *Memtable) GetBufForRead(offset int, length uint16) (bbuf []byte, exists
 }
 
 func (m *Memtable) Flush() (n int, fileOffset int64, err error) {
-	if !m.readyForFlush {
+	if atomic.LoadUint32(&m.flushStarted) == 0 {
 		return 0, 0, ErrMemtableNotReadyForFlush
 	}
 
@@ -114,8 +119,8 @@ func (m *Memtable) Flush() (n int, fileOffset int64, err error) {
 		return 0, 0, err
 	}
 
-	m.currentOffset = 0
-	m.readyForFlush = false
+	atomic.StoreInt64(&m.currentOffset, 0)
+	atomic.StoreUint32(&m.flushStarted, 0)
 	return totalWritten, fileOffset, nil
 }
 

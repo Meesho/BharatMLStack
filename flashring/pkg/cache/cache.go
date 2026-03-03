@@ -148,7 +148,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error)
 		MaxBatch:  256,
 		Window:    time.Microsecond * 500,
 		QueueSize: 1024,
-	}, 2)
+	}, 1)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to create batched io_uring reader, falling back to per-shard rings")
 		batchReader = nil
@@ -202,9 +202,9 @@ func (wc *WrapCache) Put(key string, value []byte, exptimeInMinutes uint16) erro
 		metrics.Timing(metrics.KEY_PUT_LATENCY, time.Since(start), metrics.GetShardTag(shardIdx))
 	}()
 
-	wc.shardLocks[shardIdx].Lock()
-	metrics.Timing(metrics.LATENCY_WLOCK, time.Since(start), []string{})
-	defer wc.shardLocks[shardIdx].Unlock()
+	// wc.shardLocks[shardIdx].Lock()
+	// metrics.Timing(metrics.LATENCY_WLOCK, time.Since(start), []string{})
+	// defer wc.shardLocks[shardIdx].Unlock()
 
 	err := wc.shards[shardIdx].Put(key, value, exptimeInMinutes)
 	if err != nil {

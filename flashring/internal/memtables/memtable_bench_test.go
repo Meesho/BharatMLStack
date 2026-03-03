@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
@@ -87,18 +88,16 @@ func BenchmarkMemtable_Put_Small(b *testing.B) {
 	b.SetBytes(SMALL_DATA_SIZE)
 
 	for i := 0; i < b.N; i++ {
-		if memtable.readyForFlush {
-			// Reset memtable for continued benchmarking
-			memtable.currentOffset = 0
-			memtable.readyForFlush = false
+		if atomic.LoadUint32(&memtable.flushStarted) != 0 {
+			atomic.StoreInt64(&memtable.currentOffset, 0)
+			atomic.StoreUint32(&memtable.flushStarted, 0)
 		}
 
 		_, _, readyForFlush := memtable.Put(data)
 		if readyForFlush {
-			// Don't count flush operations in this benchmark
 			b.StopTimer()
-			memtable.currentOffset = 0
-			memtable.readyForFlush = false
+			atomic.StoreInt64(&memtable.currentOffset, 0)
+			atomic.StoreUint32(&memtable.flushStarted, 0)
 			b.StartTimer()
 		}
 	}
@@ -115,16 +114,16 @@ func BenchmarkMemtable_Put_Medium(b *testing.B) {
 	b.SetBytes(MEDIUM_DATA_SIZE)
 
 	for i := 0; i < b.N; i++ {
-		if memtable.readyForFlush {
-			memtable.currentOffset = 0
-			memtable.readyForFlush = false
+		if atomic.LoadUint32(&memtable.flushStarted) != 0 {
+			atomic.StoreInt64(&memtable.currentOffset, 0)
+			atomic.StoreUint32(&memtable.flushStarted, 0)
 		}
 
 		_, _, readyForFlush := memtable.Put(data)
 		if readyForFlush {
 			b.StopTimer()
-			memtable.currentOffset = 0
-			memtable.readyForFlush = false
+			atomic.StoreInt64(&memtable.currentOffset, 0)
+			atomic.StoreUint32(&memtable.flushStarted, 0)
 			b.StartTimer()
 		}
 	}
@@ -141,16 +140,16 @@ func BenchmarkMemtable_Put_Large(b *testing.B) {
 	b.SetBytes(LARGE_DATA_SIZE)
 
 	for i := 0; i < b.N; i++ {
-		if memtable.readyForFlush {
-			memtable.currentOffset = 0
-			memtable.readyForFlush = false
+		if atomic.LoadUint32(&memtable.flushStarted) != 0 {
+			atomic.StoreInt64(&memtable.currentOffset, 0)
+			atomic.StoreUint32(&memtable.flushStarted, 0)
 		}
 
 		_, _, readyForFlush := memtable.Put(data)
 		if readyForFlush {
 			b.StopTimer()
-			memtable.currentOffset = 0
-			memtable.readyForFlush = false
+			atomic.StoreInt64(&memtable.currentOffset, 0)
+			atomic.StoreUint32(&memtable.flushStarted, 0)
 			b.StartTimer()
 		}
 	}
@@ -167,16 +166,16 @@ func BenchmarkMemtable_Put_VeryLarge(b *testing.B) {
 	b.SetBytes(VERY_LARGE_DATA_SIZE)
 
 	for i := 0; i < b.N; i++ {
-		if memtable.readyForFlush {
-			memtable.currentOffset = 0
-			memtable.readyForFlush = false
+		if atomic.LoadUint32(&memtable.flushStarted) != 0 {
+			atomic.StoreInt64(&memtable.currentOffset, 0)
+			atomic.StoreUint32(&memtable.flushStarted, 0)
 		}
 
 		_, _, readyForFlush := memtable.Put(data)
 		if readyForFlush {
 			b.StopTimer()
-			memtable.currentOffset = 0
-			memtable.readyForFlush = false
+			atomic.StoreInt64(&memtable.currentOffset, 0)
+			atomic.StoreUint32(&memtable.flushStarted, 0)
 			b.StartTimer()
 		}
 	}
@@ -310,8 +309,7 @@ func BenchmarkMemtable_Flush(b *testing.B) {
 		if err != nil {
 			b.Fatalf("Flush failed: %v", err)
 		}
-		// Force re-flush same data in each iteration
-		memtable.readyForFlush = true
+		atomic.StoreUint32(&memtable.flushStarted, 1)
 	}
 	fs.Unmap(page)
 }
@@ -354,10 +352,9 @@ func BenchmarkMemtable_MixedOperations(b *testing.B) {
 			}
 		} else {
 			// Put operation
-			if memtable.readyForFlush {
-				// Reset for continued benchmarking
-				memtable.currentOffset = 0
-				memtable.readyForFlush = false
+			if atomic.LoadUint32(&memtable.flushStarted) != 0 {
+				atomic.StoreInt64(&memtable.currentOffset, 0)
+				atomic.StoreUint32(&memtable.flushStarted, 0)
 			}
 			memtable.Put(putData)
 		}
@@ -376,16 +373,16 @@ func BenchmarkMemtable_SequentialWrites(b *testing.B) {
 	b.SetBytes(MEDIUM_DATA_SIZE)
 
 	for i := 0; i < b.N; i++ {
-		if memtable.readyForFlush {
-			memtable.currentOffset = 0
-			memtable.readyForFlush = false
+		if atomic.LoadUint32(&memtable.flushStarted) != 0 {
+			atomic.StoreInt64(&memtable.currentOffset, 0)
+			atomic.StoreUint32(&memtable.flushStarted, 0)
 		}
 
 		_, _, readyForFlush := memtable.Put(data)
 		if readyForFlush {
 			b.StopTimer()
-			memtable.currentOffset = 0
-			memtable.readyForFlush = false
+			atomic.StoreInt64(&memtable.currentOffset, 0)
+			atomic.StoreUint32(&memtable.flushStarted, 0)
 			b.StartTimer()
 		}
 	}
@@ -439,16 +436,16 @@ func BenchmarkMemtable_MemoryCopy(b *testing.B) {
 			b.SetBytes(int64(size))
 
 			for i := 0; i < b.N; i++ {
-				if memtable.readyForFlush {
-					memtable.currentOffset = 0
-					memtable.readyForFlush = false
+				if atomic.LoadUint32(&memtable.flushStarted) != 0 {
+					atomic.StoreInt64(&memtable.currentOffset, 0)
+					atomic.StoreUint32(&memtable.flushStarted, 0)
 				}
 
 				_, _, readyForFlush := memtable.Put(data)
 				if readyForFlush {
 					b.StopTimer()
-					memtable.currentOffset = 0
-					memtable.readyForFlush = false
+					atomic.StoreInt64(&memtable.currentOffset, 0)
+					atomic.StoreUint32(&memtable.flushStarted, 0)
 					b.StartTimer()
 				}
 			}
@@ -490,8 +487,11 @@ func BenchmarkMemtable_FullLifecycle(b *testing.B) {
 		// Add data that will exceed capacity to trigger flush
 		overflowData := generateRandomData(2000)
 		_, _, readyForFlush := memtable.Put(overflowData)
-		if !readyForFlush {
+		if !readyForFlush && atomic.LoadUint32(&memtable.flushStarted) == 0 {
 			b.Fatalf("Failed to trigger flush in lifecycle test")
+		}
+		if atomic.LoadUint32(&memtable.flushStarted) == 0 {
+			atomic.StoreUint32(&memtable.flushStarted, 1)
 		}
 
 		// Flush
@@ -541,7 +541,7 @@ func BenchmarkMemtable_SingleThreadedWorkload(b *testing.B) {
 			}
 		} else {
 			// Write operation (20%) - only if space available
-			if !memtable.readyForFlush {
+			if atomic.LoadUint32(&memtable.flushStarted) == 0 {
 				memtable.Put(data)
 			}
 		}
@@ -561,10 +561,9 @@ func BenchmarkMemtable_CPUIntensive(b *testing.B) {
 	b.SetBytes(MEDIUM_DATA_SIZE)
 
 	for i := 0; i < b.N; i++ {
-		if memtable.readyForFlush {
-			// Reset for continued benchmarking
-			memtable.currentOffset = 0
-			memtable.readyForFlush = false
+		if atomic.LoadUint32(&memtable.flushStarted) != 0 {
+			atomic.StoreInt64(&memtable.currentOffset, 0)
+			atomic.StoreUint32(&memtable.flushStarted, 0)
 		}
 
 		// Perform put operation

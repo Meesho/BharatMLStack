@@ -3,6 +3,7 @@ package filecache
 import (
 	"fmt"
 	"hash/crc32"
+	"runtime"
 	"sync"
 	"time"
 
@@ -109,17 +110,31 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 
 func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	size := 4 + len(key) + len(value)
-	mt, mtId, _ := fc.mm.GetMemtable()
 	err := fc.dm.ExecuteDeleteIfNeeded()
 	if err != nil {
 		return err
 	}
-	buf, offset, length, readyForFlush := mt.GetBufForAppend(uint16(size))
-	if readyForFlush {
-		fc.mm.Flush()
+
+	var buf []byte
+	var offset int
+	var length uint16
+	var mtId uint32
+
+	for {
+		var mt *memtables.Memtable
 		mt, mtId, _ = fc.mm.GetMemtable()
-		buf, offset, length, _ = mt.GetBufForAppend(uint16(size))
+		var readyForFlush bool
+		buf, offset, length, readyForFlush = mt.GetBufForAppend(uint16(size))
+		if buf != nil {
+			break
+		}
+		if readyForFlush {
+			fc.mm.Flush()
+		} else {
+			runtime.Gosched()
+		}
 	}
+
 	copy(buf[4:], key)
 	copy(buf[4+len(key):], value)
 	crc := crc32.ChecksumIEEE(buf[4:])
