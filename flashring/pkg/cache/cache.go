@@ -149,7 +149,7 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error)
 		MaxBatch:    16,
 		MaxInflight: 16,
 		QueueSize:   1024,
-	}, 2)
+	}, 1)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to create batched io_uring reader, falling back to per-shard rings")
 		batchReader = nil
