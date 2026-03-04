@@ -146,8 +146,8 @@ func NewWrapCache(config WrapCacheConfig, mountPoint string) (*WrapCache, error)
 	// batch's CQE drain.
 	batchReader, err := fs.NewParallelBatchIoUringReader(fs.BatchIoUringConfig{
 		RingDepth:   256,
-		MaxBatch:    16,
-		MaxInflight: 16,
+		MaxBatch:    24,
+		MaxInflight: 24,
 		QueueSize:   1024,
 	}, 1)
 	if err != nil {
