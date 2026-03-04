@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	cachepkg "github.com/Meesho/BharatMLStack/flashring/internal/cache"
+	cachepkg "github.com/Meesho/BharatMLStack/flashring/pkg/cache"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -50,9 +50,7 @@ func planBadger() {
 
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
-	cfg := cachepkg.WrapCacheConfig{
-		MountPoint: mountPoint,
-	}
+	cfg := cachepkg.WrapCacheConfig{}
 
 	cache, err := cachepkg.NewBadger(cfg, logStats)
 	if err != nil {

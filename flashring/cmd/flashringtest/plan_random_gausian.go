@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	cachepkg "github.com/Meesho/BharatMLStack/flashring/internal/cache"
+	cachepkg "github.com/Meesho/BharatMLStack/flashring/pkg/cache"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -83,7 +83,7 @@ func planRandomGaussian() {
 	}
 
 	memtableSizeInBytes := int32(memtableMB) * 1024 * 1024
-	fileSizeInBytes := int64(fileSizeMultiplier) * int64(memtableSizeInBytes)
+	fileSizeInBytes := int64(fileSizeMultiplier) * 1024 * 1024 * 1024 // fileSizeMultiplier in GiB
 
 	cfg := cachepkg.WrapCacheConfig{
 		NumShards:             numShards,
@@ -95,7 +95,7 @@ func planRandomGaussian() {
 		SampleDuration:        time.Duration(sampleSecs) * time.Second,
 	}
 
-	pc, err := cachepkg.NewWrapCache(cfg, mountPoint, logStats)
+	pc, err := cachepkg.NewWrapCache(cfg, mountPoint)
 	if err != nil {
 		panic(err)
 	}

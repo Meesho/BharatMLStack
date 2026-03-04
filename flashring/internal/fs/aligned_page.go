@@ -4,8 +4,6 @@
 package fs
 
 import (
-	"runtime/pprof"
-
 	"golang.org/x/sys/unix"
 )
 
@@ -16,7 +14,7 @@ const (
 	MAP_ANON    = unix.MAP_ANON
 )
 
-var mmapProf = pprof.NewProfile("mmap") // will show up in /debug/pprof/
+// var mmapProf = pprof.NewProfile("mmap") // will show up in /debug/pprof/
 
 type AlignedPage struct {
 	Buf  []byte
@@ -28,9 +26,9 @@ func NewAlignedPage(pageSize int) *AlignedPage {
 	if err != nil {
 		panic(err)
 	}
-	if pageSize > 0 {
-		mmapProf.Add(&b[0], pageSize) // attribute sz bytes to this callsite
-	}
+	// if pageSize > 0 {
+	// 	mmapProf.Add(&b[0], pageSize) // attribute sz bytes to this callsite
+	// }
 	return &AlignedPage{
 		Buf:  b,
 		mmap: b,
@@ -38,9 +36,9 @@ func NewAlignedPage(pageSize int) *AlignedPage {
 }
 
 func Unmap(p *AlignedPage) error {
-	if len(p.mmap) > 0 {
-		mmapProf.Remove(&p.mmap[0]) // release from custom profile
-	}
+	// if len(p.mmap) > 0 {
+	// 	mmapProf.Remove(&p.mmap[0]) // release from custom profile
+	// }
 	if p.mmap != nil {
 		err := unix.Munmap(p.mmap)
 		if err != nil {

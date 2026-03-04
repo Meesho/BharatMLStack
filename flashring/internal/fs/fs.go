@@ -32,6 +32,7 @@ var (
 	ErrFileSizeExceeded     = errors.New("file size exceeded. Please punch hole")
 	ErrFileOffsetOutOfRange = errors.New("file offset is out of range")
 	ErrOffsetNotAligned     = errors.New("offset is not aligned to block size")
+	ErrReadTimeout          = errors.New("read timeout")
 )
 
 type Stat struct {
