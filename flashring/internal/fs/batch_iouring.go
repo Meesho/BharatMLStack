@@ -65,11 +65,12 @@ type BatchIoUringReader struct {
 
 // BatchIoUringConfig configures the batch reader.
 type BatchIoUringConfig struct {
-	RingDepth uint32        // io_uring SQ/CQ size (default 256)
-	MaxBatch  int           // max requests per batch (capped to RingDepth)
-	Window    time.Duration // unused in decoupled mode; kept for API compatibility
-	QueueSize int           // channel buffer size (default 1024)
-	SQPoll    bool          // use IORING_SETUP_SQPOLL; kernel polls SQ, eliminating submit syscalls under load
+	RingDepth   uint32        // io_uring SQ/CQ size (default 256)
+	MaxBatch    int           // max requests per batch (auto-capped to MaxInflight)
+	MaxInflight int           // max SQEs in-flight across all batches; controls NVMe queue depth (default RingDepth)
+	Window      time.Duration // unused in decoupled mode; kept for API compatibility
+	QueueSize   int           // channel buffer size (default 1024)
+	SQPoll      bool          // use IORING_SETUP_SQPOLL; kernel polls SQ, eliminating submit syscalls under load
 }
 
 // NewBatchIoUringReader creates a batch reader with its own io_uring ring
@@ -78,8 +79,14 @@ func NewBatchIoUringReader(cfg BatchIoUringConfig) (*BatchIoUringReader, error) 
 	if cfg.RingDepth == 0 {
 		cfg.RingDepth = 256
 	}
-	if cfg.MaxBatch == 0 || cfg.MaxBatch > int(cfg.RingDepth) {
-		cfg.MaxBatch = int(cfg.RingDepth)
+	ringDepth := int(cfg.RingDepth)
+
+	maxInflight := cfg.MaxInflight
+	if maxInflight <= 0 || maxInflight > ringDepth {
+		maxInflight = ringDepth
+	}
+	if cfg.MaxBatch <= 0 || cfg.MaxBatch > maxInflight {
+		cfg.MaxBatch = maxInflight
 	}
 	if cfg.QueueSize == 0 {
 		cfg.QueueSize = 1024
@@ -99,9 +106,8 @@ func NewBatchIoUringReader(cfg BatchIoUringConfig) (*BatchIoUringReader, error) 
 		return nil, fmt.Errorf("batch io_uring init: %w", err)
 	}
 
-	ringDepth := int(cfg.RingDepth)
-	freeSlots := make(chan uint32, ringDepth)
-	for i := 0; i < ringDepth; i++ {
+	freeSlots := make(chan uint32, maxInflight)
+	for i := 0; i < maxInflight; i++ {
 		freeSlots <- uint32(i)
 	}
 
