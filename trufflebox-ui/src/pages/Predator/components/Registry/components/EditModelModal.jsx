@@ -9,8 +9,7 @@ import {
   CircularProgress,
   Typography,
   Alert,
-  Switch,
-  FormControlLabel,
+  TextField,
 } from '@mui/material';
 import { Edit as EditIcon } from '@mui/icons-material';
 import { useAuth } from '../../../../Auth/AuthContext';
@@ -31,11 +30,22 @@ const EditModelModal = ({
   const [currentModelData, setCurrentModelData] = useState(null);
   const [sourceModels, setSourceModels] = useState([]);
   const [serviceDeployableId, setServiceDeployableId] = useState(null);
+  const [instanceCount, setInstanceCount] = useState('');
+
+  const instanceCountTrimmed = instanceCount.trim();
+  const instanceCountValid =
+    instanceCountTrimmed === '' ||
+    (/^\d+$/.test(instanceCountTrimmed) && parseInt(instanceCountTrimmed, 10) >= 0);
+  const instanceCountError = !instanceCountValid && instanceCountTrimmed !== ''
+    ? 'Instance count must be a whole number (0 or greater).'
+    : '';
 
   useEffect(() => {
     if (open && model) {
       // Set current model data
       setCurrentModelData(model);
+      const initialInstanceCount = model?.metaData?.instance_count;
+      setInstanceCount(initialInstanceCount !== undefined && initialInstanceCount !== null ? String(initialInstanceCount) : '');
       console.log('currentModelData', model);
       
       // Fetch deployables first, then source models, then model params
@@ -184,6 +194,10 @@ const EditModelModal = ({
       }
 
       setModelParamsData(result);
+      // Pre-fill instance_count from suggested model params when available
+      if (result?.instance_count !== undefined && result?.instance_count !== null) {
+        setInstanceCount(String(result.instance_count));
+      }
       console.log('modelParamsData', result);
 
     } catch (error) {
@@ -195,6 +209,9 @@ const EditModelModal = ({
   };
 
   const handleSubmitEditRequest = async () => {
+    if (!instanceCountValid) {
+      return;
+    }
     setIsSubmitting(true);
     setError('');
 
@@ -202,12 +219,19 @@ const EditModelModal = ({
       const sourceModel = sourceModels.find(folder => folder.name === model.modelName);
       
       const { model_name, ...metaDataWithoutModelName } = modelParamsData || {};
-      
+      const instanceCountValue = instanceCount.trim() !== ''
+        ? parseInt(instanceCount, 10)
+        : (modelParamsData?.instance_count ?? 0);
+      const metaDataWithInstanceCount = {
+        ...metaDataWithoutModelName,
+        instance_count: Number.isNaN(instanceCountValue) ? 0 : instanceCountValue,
+      };
+
       const payload = {
         payload: [{
             model_name: model.modelName,
             model_source_path: sourceModel.path,
-            meta_data: metaDataWithoutModelName,
+            meta_data: metaDataWithInstanceCount,
             config_mapping: {
               service_deployable_id: serviceDeployableId
             }
@@ -255,6 +279,7 @@ const EditModelModal = ({
     setModelParamsData(null);
     setCurrentModelData(null);
     setServiceDeployableId(null);
+    setInstanceCount('');
     onClose();
   };
 
@@ -383,6 +408,30 @@ const EditModelModal = ({
             </Box>
           </Box>
 
+          {/* Instance Count (included in edit request) */}
+          {!isLoading && (
+            <Box>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                Instance Count
+              </Typography>
+              <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+                This value will be sent with the edit request. Leave empty to use the value from the model parameters API.
+              </Typography>
+              <TextField
+                label="Instance Count"
+                value={instanceCount}
+                onChange={(e) => setInstanceCount(e.target.value)}
+                type="number"
+                inputProps={{ min: 0, step: 1 }}
+                fullWidth
+                size="small"
+                sx={{ maxWidth: 200 }}
+                error={!!instanceCountError}
+                helperText={instanceCountError}
+              />
+            </Box>
+          )}
+
           {/* Error Display */}
           {error && (
             <Alert severity="error">
@@ -460,7 +509,7 @@ const EditModelModal = ({
         <Button
           onClick={handleSubmitEditRequest}
           variant="contained"
-          disabled={isSubmitting || isLoading || !modelParamsData || !serviceDeployableId || error}
+          disabled={isSubmitting || isLoading || !modelParamsData || !serviceDeployableId || error || !!instanceCountError}
           startIcon={isSubmitting ? <CircularProgress size={20} /> : <EditIcon />}
           sx={{
             backgroundColor: '#450839',
