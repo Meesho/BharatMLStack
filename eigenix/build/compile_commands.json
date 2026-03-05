@@ -1,50 +1,37 @@
 [
 {
-  "directory": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/build",
-  "command": "/usr/bin/c++  -I/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/include -I/opt/homebrew/opt/openblas/include -isystem /opt/homebrew/include -O3 -DNDEBUG -std=gnu++17 -arch arm64 -O3 -ffast-math -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -o CMakeFiles/eigenix_kmeans.dir/src/data_generator.cpp.o -c /Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/src/data_generator.cpp",
-  "file": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/src/data_generator.cpp",
-  "output": "CMakeFiles/eigenix_kmeans.dir/src/data_generator.cpp.o"
+  "directory": "/home/adityakumargarg/BharatMLStack/eigenix/build",
+  "command": "/usr/bin/c++  -I/home/adityakumargarg/BharatMLStack/eigenix/include -O3 -DNDEBUG -O3 -ffast-math -march=native -fopenmp -std=gnu++17 -o CMakeFiles/eigenix_kmeans.dir/src/data_generator.cpp.o -c /home/adityakumargarg/BharatMLStack/eigenix/src/data_generator.cpp",
+  "file": "/home/adityakumargarg/BharatMLStack/eigenix/src/data_generator.cpp"
 },
 {
-  "directory": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/build",
-  "command": "/usr/bin/c++  -I/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/include -I/opt/homebrew/opt/openblas/include -isystem /opt/homebrew/include -O3 -DNDEBUG -std=gnu++17 -arch arm64 -O3 -ffast-math -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -o CMakeFiles/eigenix_kmeans.dir/src/metrics.cpp.o -c /Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/src/metrics.cpp",
-  "file": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/src/metrics.cpp",
-  "output": "CMakeFiles/eigenix_kmeans.dir/src/metrics.cpp.o"
+  "directory": "/home/adityakumargarg/BharatMLStack/eigenix/build",
+  "command": "/usr/bin/c++  -I/home/adityakumargarg/BharatMLStack/eigenix/include -O3 -DNDEBUG -O3 -ffast-math -march=native -fopenmp -std=gnu++17 -o CMakeFiles/eigenix_kmeans.dir/src/metrics.cpp.o -c /home/adityakumargarg/BharatMLStack/eigenix/src/metrics.cpp",
+  "file": "/home/adityakumargarg/BharatMLStack/eigenix/src/metrics.cpp"
 },
 {
-  "directory": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/build",
-  "command": "/usr/bin/c++  -I/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/include -I/opt/homebrew/opt/openblas/include -isystem /opt/homebrew/include -O3 -DNDEBUG -std=gnu++17 -arch arm64 -O3 -ffast-math -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -o CMakeFiles/eigenix_kmeans.dir/src/kmeans_blas.cpp.o -c /Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/src/kmeans_blas.cpp",
-  "file": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/src/kmeans_blas.cpp",
-  "output": "CMakeFiles/eigenix_kmeans.dir/src/kmeans_blas.cpp.o"
+  "directory": "/home/adityakumargarg/BharatMLStack/eigenix/build",
+  "command": "/usr/bin/c++  -I/home/adityakumargarg/BharatMLStack/eigenix/include -O3 -DNDEBUG -O3 -ffast-math -march=native -fopenmp -std=gnu++17 -o CMakeFiles/eigenix_kmeans.dir/src/kmeans_blas.cpp.o -c /home/adityakumargarg/BharatMLStack/eigenix/src/kmeans_blas.cpp",
+  "file": "/home/adityakumargarg/BharatMLStack/eigenix/src/kmeans_blas.cpp"
 },
 {
-  "directory": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/build",
-  "command": "/usr/bin/c++  -I/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/include -I/opt/homebrew/opt/openblas/include -isystem /opt/homebrew/include -O3 -DNDEBUG -std=gnu++17 -arch arm64 -O3 -ffast-math -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -o CMakeFiles/eigenix_kmeans.dir/src/kmeans_faiss.cpp.o -c /Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/src/kmeans_faiss.cpp",
-  "file": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/src/kmeans_faiss.cpp",
-  "output": "CMakeFiles/eigenix_kmeans.dir/src/kmeans_faiss.cpp.o"
+  "directory": "/home/adityakumargarg/BharatMLStack/eigenix/build",
+  "command": "/usr/bin/c++  -I/home/adityakumargarg/BharatMLStack/eigenix/include -O3 -DNDEBUG -O3 -ffast-math -march=native -fopenmp -std=gnu++17 -o CMakeFiles/eigenix_kmeans.dir/src/kmeans_faiss.cpp.o -c /home/adityakumargarg/BharatMLStack/eigenix/src/kmeans_faiss.cpp",
+  "file": "/home/adityakumargarg/BharatMLStack/eigenix/src/kmeans_faiss.cpp"
 },
 {
-  "directory": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/build",
-  "command": "/usr/bin/c++  -I/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/include -I/opt/homebrew/opt/openblas/include -isystem /opt/homebrew/include -O3 -DNDEBUG -std=gnu++17 -arch arm64 -O3 -ffast-math -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -o CMakeFiles/eigenix_kmeans.dir/src/kmeans_simd.cpp.o -c /Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/src/kmeans_simd.cpp",
-  "file": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/src/kmeans_simd.cpp",
-  "output": "CMakeFiles/eigenix_kmeans.dir/src/kmeans_simd.cpp.o"
+  "directory": "/home/adityakumargarg/BharatMLStack/eigenix/build",
+  "command": "/usr/bin/c++  -I/home/adityakumargarg/BharatMLStack/eigenix/include -O3 -DNDEBUG -O3 -ffast-math -march=native -fopenmp -std=gnu++17 -o CMakeFiles/eigenix_kmeans.dir/src/kmeans_simd.cpp.o -c /home/adityakumargarg/BharatMLStack/eigenix/src/kmeans_simd.cpp",
+  "file": "/home/adityakumargarg/BharatMLStack/eigenix/src/kmeans_simd.cpp"
 },
 {
-  "directory": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/build",
-  "command": "/usr/bin/c++  -I/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/include -I/opt/homebrew/opt/openblas/include -isystem /opt/homebrew/include -O3 -DNDEBUG -std=gnu++17 -arch arm64 -O3 -ffast-math -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -o CMakeFiles/eigenix_kmeans.dir/src/kmeans_streaming.cpp.o -c /Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/src/kmeans_streaming.cpp",
-  "file": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/src/kmeans_streaming.cpp",
-  "output": "CMakeFiles/eigenix_kmeans.dir/src/kmeans_streaming.cpp.o"
+  "directory": "/home/adityakumargarg/BharatMLStack/eigenix/build",
+  "command": "/usr/bin/c++  -I/home/adityakumargarg/BharatMLStack/eigenix/include -O3 -DNDEBUG -O3 -ffast-math -march=native -fopenmp -std=gnu++17 -o CMakeFiles/eigenix_bench.dir/bench/main_bench.cpp.o -c /home/adityakumargarg/BharatMLStack/eigenix/bench/main_bench.cpp",
+  "file": "/home/adityakumargarg/BharatMLStack/eigenix/bench/main_bench.cpp"
 },
 {
-  "directory": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/build",
-  "command": "/usr/bin/c++  -I/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/include -I/opt/homebrew/opt/openblas/include -isystem /opt/homebrew/include -O3 -DNDEBUG -std=gnu++17 -arch arm64 -O3 -ffast-math -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -o CMakeFiles/eigenix_bench.dir/bench/main_bench.cpp.o -c /Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/bench/main_bench.cpp",
-  "file": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/bench/main_bench.cpp",
-  "output": "CMakeFiles/eigenix_bench.dir/bench/main_bench.cpp.o"
-},
-{
-  "directory": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/build",
-  "command": "/usr/bin/c++  -I/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/include -I/opt/homebrew/opt/openblas/include -isystem /opt/homebrew/include -O3 -DNDEBUG -std=gnu++17 -arch arm64 -O3 -ffast-math -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include -o CMakeFiles/eigenix_tests.dir/tests/test_correctness.cpp.o -c /Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/tests/test_correctness.cpp",
-  "file": "/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/tests/test_correctness.cpp",
-  "output": "CMakeFiles/eigenix_tests.dir/tests/test_correctness.cpp.o"
+  "directory": "/home/adityakumargarg/BharatMLStack/eigenix/build",
+  "command": "/usr/bin/c++  -I/home/adityakumargarg/BharatMLStack/eigenix/include -O3 -DNDEBUG -O3 -ffast-math -march=native -fopenmp -DGTEST_HAS_PTHREAD=1 -std=gnu++17 -o CMakeFiles/eigenix_tests.dir/tests/test_correctness.cpp.o -c /home/adityakumargarg/BharatMLStack/eigenix/tests/test_correctness.cpp",
+  "file": "/home/adityakumargarg/BharatMLStack/eigenix/tests/test_correctness.cpp"
 }
 ]

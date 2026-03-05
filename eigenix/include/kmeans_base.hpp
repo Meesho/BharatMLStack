@@ -21,6 +21,7 @@ struct TrainConfig {
     float tol = 1e-4f;
     unsigned seed = 42;
     bool verbose = false;
+    int nredo = 1;   // run this many times with different seeds, keep best inertia
 };
 
 class KMeansBase {

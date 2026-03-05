@@ -91,7 +91,6 @@ add_library(eigenix_kmeans STATIC
     src/kmeans_blas.cpp
     src/kmeans_faiss.cpp
     src/kmeans_simd.cpp
-    src/kmeans_streaming.cpp
 )
 target_include_directories(eigenix_kmeans PUBLIC include)
 if(BLAS_INCLUDE_DIR)

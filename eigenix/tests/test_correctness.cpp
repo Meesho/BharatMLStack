@@ -4,7 +4,6 @@
 #include "kmeans_blas.hpp"
 #include "kmeans_faiss.hpp"
 #include "kmeans_simd.hpp"
-#include "kmeans_streaming.hpp"
 #include "metrics.hpp"
 #include "bench_utils.hpp"
 
@@ -153,31 +152,6 @@ TEST(KMeansCorrectness, FaissSimdAssignmentConsistency) {
         << "BLAS and SIMD (same seed) should mostly agree, got " << agreement;
 }
 
-// 5. Streaming vs Batch delta: streaming inertia within 5% of batch
-TEST(KMeansCorrectness, StreamingVsBatchDelta) {
-    const int dim = 32;
-    const size_t n = 20000;
-    const int k = 10;
-    auto data = generate_gaussian_mixture(n, dim, 5, 88);
-
-    TrainConfig cfg;
-    cfg.max_iter = 50;
-    cfg.seed = 42;
-
-    BlasKMeans batch;
-    batch.train(data.data(), n, dim, k, cfg);
-
-    StreamingKMeans streaming(nullptr, 5000);
-    streaming.train(data.data(), n, dim, k, cfg);
-
-    float batch_inertia = batch.inertia();
-    float stream_inertia = streaming.inertia();
-    float ratio = std::abs(stream_inertia - batch_inertia) / batch_inertia;
-
-    EXPECT_LT(ratio, 0.15f)
-        << "Streaming inertia should be within 15% of batch "
-        << "(batch=" << batch_inertia << ", stream=" << stream_inertia << ")";
-}
 
 // 6. Throughput regression: assignment must exceed 500M float ops/sec
 TEST(KMeansCorrectness, ThroughputRegression) {

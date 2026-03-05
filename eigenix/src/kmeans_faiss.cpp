@@ -24,6 +24,9 @@ void FaissKMeans::train(const float* data, size_t n, int dim, int k,
     cp.verbose = cfg.verbose;
     cp.seed = static_cast<int>(cfg.seed);
     cp.nredo = 1;
+    cp.max_points_per_centroid = static_cast<int>(
+        (n + static_cast<size_t>(k) - 1) / static_cast<size_t>(k));
+    if (cp.max_points_per_centroid < 1) cp.max_points_per_centroid = 1;
 
     faiss::Clustering clus(dim, k, cp);
     faiss::IndexFlatL2 index(dim);
@@ -35,7 +38,6 @@ void FaissKMeans::train(const float* data, size_t n, int dim, int k,
 
     iterations_ = static_cast<int>(clus.iteration_stats.size());
 
-    // Compute inertia on training data.
     std::vector<int> labels;
     assign(data, n, dim, labels);
     inertia_ = compute_inertia(data, n, dim, labels.data(),

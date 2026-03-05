@@ -24,13 +24,21 @@ public:
         const float* data, size_t n, int dim) const override;
     std::string name() const override;
 
+    static constexpr size_t BATCH_SIZE = 100000;
+
 private:
     std::vector<float> centroid_norms_;
     mutable std::vector<float> dist_buf_;
 
+    void train_once(const float* data, size_t n, int dim, int k,
+                    const TrainConfig& cfg);
+    void random_init(const float* data, size_t n, int dim, int k,
+                     std::mt19937& rng);
     void kmeanspp_init(const float* data, size_t n, int dim, int k,
                        std::mt19937& rng);
     void compute_centroid_norms();
+    void assign_batch(const float* data, const float* data_norms,
+                      size_t n, int* labels) const;
 };
 
 }  // namespace eigenix

@@ -4,7 +4,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <algorithm>
 #include <limits>
+#include <numeric>
 #include <omp.h>
 #include <random>
 #include <stdexcept>
@@ -202,6 +204,18 @@ float SimdKMeans::l2sq(const float* a, const float* b, int dim) const {
 #endif
 }
 
+void SimdKMeans::random_init(const float* data, size_t n, int dim, int k,
+                             std::mt19937& rng) {
+    centroids_.resize(static_cast<size_t>(k) * dim);
+    std::vector<size_t> indices(n);
+    std::iota(indices.begin(), indices.end(), size_t(0));
+    std::shuffle(indices.begin(), indices.end(), rng);
+    for (int c = 0; c < k; ++c)
+        std::memcpy(centroids_.data() + static_cast<size_t>(c) * dim,
+                     data + indices[c] * dim,
+                     static_cast<size_t>(dim) * sizeof(float));
+}
+
 void SimdKMeans::kmeanspp_init(const float* data, size_t n, int dim, int k,
                                std::mt19937& rng) {
     centroids_.resize(static_cast<size_t>(k) * dim);
@@ -217,14 +231,15 @@ void SimdKMeans::kmeanspp_init(const float* data, size_t n, int dim, int k,
         min_dist[i] = l2sq(data + i * dim, centroids_.data(), dim);
 
     for (int cc = 1; cc < k; ++cc) {
-        float total = 0.0f;
+        double total = 0.0;
+        #pragma omp parallel for schedule(static) reduction(+:total)
         for (size_t i = 0; i < n; ++i) total += min_dist[i];
-        if (total <= 0.0f) total = 1.0f;
+        if (total <= 0.0) total = 1.0;
 
-        std::uniform_real_distribution<float> u(0.0f, total);
-        float r = u(rng);
+        std::uniform_real_distribution<double> u(0.0, total);
+        double r = u(rng);
         size_t chosen = 0;
-        for (; chosen < n && r >= 0.0f; ++chosen) r -= min_dist[chosen];
+        for (; chosen < n && r >= 0.0; ++chosen) r -= min_dist[chosen];
         if (chosen > 0) chosen--;
         chosen = std::min(chosen, n - 1);
 
@@ -241,20 +256,15 @@ void SimdKMeans::kmeanspp_init(const float* data, size_t n, int dim, int k,
     }
 }
 
-void SimdKMeans::train(const float* data, size_t n, int dim, int k,
-                       const TrainConfig& cfg) {
-    if (!data || n == 0 || dim <= 0 || k <= 0)
-        throw std::invalid_argument("SimdKMeans::train: invalid arguments");
-    if (n < static_cast<size_t>(k))
-        throw std::invalid_argument("SimdKMeans::train: n must be >= k");
-
+void SimdKMeans::train_once(const float* data, size_t n, int dim, int k,
+                            const TrainConfig& cfg) {
     k_ = k;
     dim_ = dim;
     iterations_ = 0;
     inertia_ = 0.0f;
 
     std::mt19937 rng(cfg.seed);
-    kmeanspp_init(data, n, dim, k, rng);
+    random_init(data, n, dim, k, rng);
 
     std::vector<int> labels(n);
     std::vector<float> centroid_sums(static_cast<size_t>(k) * dim);
@@ -280,26 +290,35 @@ void SimdKMeans::train(const float* data, size_t n, int dim, int k,
         std::memset(centroid_counts.data(), 0,
                     static_cast<size_t>(k) * sizeof(size_t));
 
+        int nthreads = 1;
+        #pragma omp parallel
+        { nthreads = omp_get_num_threads(); }
+
+        std::vector<float> all_sums(static_cast<size_t>(nthreads) * k * dim, 0.0f);
+        std::vector<size_t> all_counts(static_cast<size_t>(nthreads) * k, 0);
+
         #pragma omp parallel
         {
-            std::vector<float> lsums(static_cast<size_t>(k) * dim, 0.0f);
-            std::vector<size_t> lcounts(static_cast<size_t>(k), 0);
+            int tid = omp_get_thread_num();
+            float* lsums = all_sums.data() + static_cast<size_t>(tid) * k * dim;
+            size_t* lcounts = all_counts.data() + static_cast<size_t>(tid) * k;
             #pragma omp for schedule(static)
             for (size_t i = 0; i < n; ++i) {
                 int l = labels[i];
                 const float* x = data + i * dim;
-                float* s = lsums.data() + static_cast<size_t>(l) * dim;
+                float* s = lsums + static_cast<size_t>(l) * dim;
                 for (int j = 0; j < dim; ++j) s[j] += x[j];
                 lcounts[l]++;
             }
-            #pragma omp critical
-            {
-                for (int c = 0; c < k; ++c) {
-                    centroid_counts[c] += lcounts[c];
-                    const float* src = lsums.data() + static_cast<size_t>(c) * dim;
-                    float* dst = centroid_sums.data() + static_cast<size_t>(c) * dim;
-                    for (int j = 0; j < dim; ++j) dst[j] += src[j];
-                }
+        }
+
+        #pragma omp parallel for schedule(static)
+        for (int c = 0; c < k; ++c) {
+            for (int t = 0; t < nthreads; ++t) {
+                centroid_counts[c] += all_counts[static_cast<size_t>(t) * k + c];
+                const float* src = all_sums.data() + (static_cast<size_t>(t) * k + c) * dim;
+                float* dst = centroid_sums.data() + static_cast<size_t>(c) * dim;
+                for (int j = 0; j < dim; ++j) dst[j] += src[j];
             }
         }
 
@@ -323,6 +342,50 @@ void SimdKMeans::train(const float* data, size_t n, int dim, int k,
 
         iterations_ = static_cast<int>(iter + 1);
 
+        constexpr float SPLIT_EPS = 1.0f / 1024.0f;
+
+        for (int c = 0; c < k; ++c) {
+            if (centroid_counts[c] != 0) continue;
+            int donor = 0;
+            for (int j = 1; j < k; ++j)
+                if (centroid_counts[j] > centroid_counts[donor]) donor = j;
+            if (centroid_counts[donor] <= 1) continue;
+
+            float* dst = centroids_.data() + static_cast<size_t>(c) * dim;
+            float* src = centroids_.data() + static_cast<size_t>(donor) * dim;
+            std::memcpy(dst, src, static_cast<size_t>(dim) * sizeof(float));
+            for (int j = 0; j < dim; ++j) {
+                float sign = (j % 2 == 0) ? 1.0f : -1.0f;
+                dst[j] *= (1.0f + sign * SPLIT_EPS);
+                src[j] *= (1.0f - sign * SPLIT_EPS);
+            }
+            centroid_counts[c] = centroid_counts[donor] / 2;
+            centroid_counts[donor] -= centroid_counts[c];
+        }
+
+        size_t mean_sz = n / static_cast<size_t>(k);
+        constexpr size_t IMBALANCE_FACTOR = 3;
+        size_t threshold = mean_sz * IMBALANCE_FACTOR;
+        for (int pass = 0; pass < k; ++pass) {
+            int largest = 0, smallest = 0;
+            for (int c = 1; c < k; ++c) {
+                if (centroid_counts[c] > centroid_counts[largest]) largest = c;
+                if (centroid_counts[c] < centroid_counts[smallest]) smallest = c;
+            }
+            if (centroid_counts[largest] <= threshold) break;
+            if (largest == smallest) break;
+
+            float* dst = centroids_.data() + static_cast<size_t>(smallest) * dim;
+            float* src = centroids_.data() + static_cast<size_t>(largest) * dim;
+            std::memcpy(dst, src, static_cast<size_t>(dim) * sizeof(float));
+            for (int j = 0; j < dim; ++j) {
+                float sign = (j % 2 == 0) ? 1.0f : -1.0f;
+                dst[j] *= (1.0f + sign * SPLIT_EPS);
+                src[j] *= (1.0f - sign * SPLIT_EPS);
+            }
+            centroid_counts[smallest] = centroid_counts[largest] / 2;
+            centroid_counts[largest] -= centroid_counts[smallest];
+        }
         if (cfg.verbose && (iter == 0 || (iter + 1) % 5 == 0
                             || max_shift <= cfg.tol || iter + 1 == cfg.max_iter)) {
             auto now = std::chrono::steady_clock::now();
@@ -334,8 +397,39 @@ void SimdKMeans::train(const float* data, size_t n, int dim, int k,
         if (max_shift <= cfg.tol) break;
     }
 
-    inertia_ = compute_inertia(data, n, dim, labels.data(),
-                               centroids_.data(), k);
+    inertia_ = compute_inertia(data, n, dim, labels.data(), centroids_.data(), k);
+}
+
+void SimdKMeans::train(const float* data, size_t n, int dim, int k,
+                       const TrainConfig& cfg) {
+    if (!data || n == 0 || dim <= 0 || k <= 0)
+        throw std::invalid_argument("SimdKMeans::train: invalid arguments");
+    if (n < static_cast<size_t>(k))
+        throw std::invalid_argument("SimdKMeans::train: n must be >= k");
+
+    int nredo = std::max(1, cfg.nredo);
+    float best_inertia = std::numeric_limits<float>::max();
+    std::vector<float> best_centroids;
+    int best_iters = 0;
+
+    for (int r = 0; r < nredo; ++r) {
+        TrainConfig run_cfg = cfg;
+        run_cfg.seed = cfg.seed + static_cast<unsigned>(r);
+        run_cfg.nredo = 1;
+        if (cfg.verbose && nredo > 1)
+            std::fprintf(stderr, "[%s] nredo %d/%d (seed=%u)\n",
+                         name().c_str(), r + 1, nredo, run_cfg.seed);
+        train_once(data, n, dim, k, run_cfg);
+        if (inertia_ < best_inertia) {
+            best_inertia = inertia_;
+            best_centroids = centroids_;
+            best_iters = iterations_;
+        }
+    }
+
+    centroids_ = std::move(best_centroids);
+    inertia_ = best_inertia;
+    iterations_ = best_iters;
 }
 
 void SimdKMeans::assign(const float* data, size_t n, int dim,

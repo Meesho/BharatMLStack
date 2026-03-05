@@ -104,10 +104,21 @@ Or directly:
 
 - Synthetic float32 vectors generated from a mixture of 50 Gaussians
 - Dimensionality: **D = 128**
-- Benchmark sizes: **1M, 2M, 5M, 10M vectors**
-- Number of centroids: **K = 1000**
+- Default benchmark size: **10M vectors** (overridable via `EIGENIX_BENCH_N`)
+- Number of centroids: **K = 1000** (overridable via `EIGENIX_BENCH_K`)
 - Seeded RNG for reproducibility (seed = 42)
 - All data in-memory, no disk I/O during benchmarks
+
+**Environment variables** (for `eigenix_bench` / `run_bench.sh`):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EIGENIX_BENCH_N` | `10000000` | Comma-separated dataset sizes (e.g. `10000000` or `50000000,10000000`) |
+| `EIGENIX_BENCH_K` | `1000` | Number of clusters |
+| `EIGENIX_BENCH_RUNS` | `1` | Runs per backend per N (use 3 for averaged timings) |
+| `EIGENIX_BENCH_WARMUP` | `10000` | Warmup set size |
+
+FAISS training uses the **full** N (no internal subsampling); other backends train on all N as well.
 
 ## Metrics Collected
 

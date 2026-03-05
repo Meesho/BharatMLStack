@@ -33,6 +33,10 @@ public:
 private:
     SimdISA isa_;
 
+    void train_once(const float* data, size_t n, int dim, int k,
+                    const TrainConfig& cfg);
+    void random_init(const float* data, size_t n, int dim, int k,
+                     std::mt19937& rng);
     void kmeanspp_init(const float* data, size_t n, int dim, int k,
                        std::mt19937& rng);
 
