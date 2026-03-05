@@ -1,260 +1,217 @@
 [
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/slice.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/slice.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/slice.cc",
-  "output": "CMakeFiles/mwal.dir/src/slice.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/slice.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/slice.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/slice.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/status.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/status.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/status.cc",
-  "output": "CMakeFiles/mwal.dir/src/status.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/status.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/status.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/status.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/util/coding.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/util/coding.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/util/coding.cc",
-  "output": "CMakeFiles/mwal.dir/src/util/coding.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/util/coding.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/util/coding.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/util/coding.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/util/crc32c.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/util/crc32c.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/util/crc32c.cc",
-  "output": "CMakeFiles/mwal.dir/src/util/crc32c.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/util/crc32c.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/util/crc32c.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/util/crc32c.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/env/env_posix.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/env/env_posix.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/env/env_posix.cc",
-  "output": "CMakeFiles/mwal.dir/src/env/env_posix.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/env/env_posix.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/env/env_posix.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/env/env_posix.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/file/writable_file_writer.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/file/writable_file_writer.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/file/writable_file_writer.cc",
-  "output": "CMakeFiles/mwal.dir/src/file/writable_file_writer.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/file/writable_file_writer.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/file/writable_file_writer.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/file/writable_file_writer.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/file/sequential_file_reader.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/file/sequential_file_reader.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/file/sequential_file_reader.cc",
-  "output": "CMakeFiles/mwal.dir/src/file/sequential_file_reader.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/file/sequential_file_reader.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/file/sequential_file_reader.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/file/sequential_file_reader.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/log/log_writer.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/log/log_writer.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/log/log_writer.cc",
-  "output": "CMakeFiles/mwal.dir/src/log/log_writer.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/log/log_writer.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/log/log_writer.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/log/log_writer.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/log/log_reader.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/log/log_reader.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/log/log_reader.cc",
-  "output": "CMakeFiles/mwal.dir/src/log/log_reader.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/log/log_reader.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/log/log_reader.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/log/log_reader.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/wal/write_batch.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/wal/write_batch.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/wal/write_batch.cc",
-  "output": "CMakeFiles/mwal.dir/src/wal/write_batch.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/wal/write_batch.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/wal/write_batch.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/wal/write_batch.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/wal/wal_edit.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/wal/wal_edit.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/wal/wal_edit.cc",
-  "output": "CMakeFiles/mwal.dir/src/wal/wal_edit.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/wal/wal_edit.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/wal/wal_edit.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/wal/wal_edit.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/wal/wal_manager.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/wal/wal_manager.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/wal/wal_manager.cc",
-  "output": "CMakeFiles/mwal.dir/src/wal/wal_manager.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/wal/wal_manager.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/wal/wal_manager.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/wal/wal_manager.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/wal/write_thread.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/wal/write_thread.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/wal/write_thread.cc",
-  "output": "CMakeFiles/mwal.dir/src/wal/write_thread.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/wal/write_thread.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/wal/write_thread.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/wal/write_thread.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/wal/write_coalescer.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/wal/write_coalescer.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/wal/write_coalescer.cc",
-  "output": "CMakeFiles/mwal.dir/src/wal/write_coalescer.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/wal/write_coalescer.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/wal/write_coalescer.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/wal/write_coalescer.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/wal/wal_compressor.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/wal/wal_compressor.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/wal/wal_compressor.cc",
-  "output": "CMakeFiles/mwal.dir/src/wal/wal_compressor.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/wal/wal_compressor.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/wal/wal_compressor.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/wal/wal_compressor.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/wal/db_wal.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/wal/db_wal.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/wal/db_wal.cc",
-  "output": "CMakeFiles/mwal.dir/src/wal/db_wal.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/wal/db_wal.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/wal/db_wal.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/wal/db_wal.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/mwal.dir/src/wal/wal_iterator.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/src/wal/wal_iterator.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/src/wal/wal_iterator.cc",
-  "output": "CMakeFiles/mwal.dir/src/wal/wal_iterator.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/src  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/mwal.dir/src/wal/wal_iterator.cc.o -c /home/anshagrawal/BharatMLStack/mwal/src/wal/wal_iterator.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/src/wal/wal_iterator.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-build/googlemock",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++  -I/Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googlemock/include -I/Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googlemock -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1  -DGTEST_HAS_PTHREAD=1   -o CMakeFiles/gmock.dir/src/gmock-all.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googlemock/src/gmock-all.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googlemock/src/gmock-all.cc",
-  "output": "_deps/googletest-build/googlemock/CMakeFiles/gmock.dir/src/gmock-all.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-build/googlemock",
+  "command": "/usr/bin/c++  -I/home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googlemock/include -I/home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googlemock -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -Wall -Wshadow -Wundef -Wno-error=dangling-else -DGTEST_HAS_PTHREAD=1 -fexceptions -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -std=c++20 -o CMakeFiles/gmock.dir/src/gmock-all.cc.o -c /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googlemock/src/gmock-all.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googlemock/src/gmock-all.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-build/googlemock",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++  -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googlemock/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googlemock -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1  -DGTEST_HAS_PTHREAD=1   -o CMakeFiles/gmock_main.dir/src/gmock_main.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googlemock/src/gmock_main.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googlemock/src/gmock_main.cc",
-  "output": "_deps/googletest-build/googlemock/CMakeFiles/gmock_main.dir/src/gmock_main.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-build/googlemock",
+  "command": "/usr/bin/c++  -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googlemock/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googlemock -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -Wall -Wshadow -Wundef -Wno-error=dangling-else -DGTEST_HAS_PTHREAD=1 -fexceptions -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -std=c++20 -o CMakeFiles/gmock_main.dir/src/gmock_main.cc.o -c /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googlemock/src/gmock_main.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googlemock/src/gmock_main.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-build/googletest",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++  -I/Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -I/Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1  -DGTEST_HAS_PTHREAD=1   -o CMakeFiles/gtest.dir/src/gtest-all.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/src/gtest-all.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/src/gtest-all.cc",
-  "output": "_deps/googletest-build/googletest/CMakeFiles/gtest.dir/src/gtest-all.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-build/googletest",
+  "command": "/usr/bin/c++  -I/home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -I/home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -Wall -Wshadow -Wundef -Wno-error=dangling-else -DGTEST_HAS_PTHREAD=1 -fexceptions -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -std=c++20 -o CMakeFiles/gtest.dir/src/gtest-all.cc.o -c /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/src/gtest-all.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/src/gtest-all.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-build/googletest",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++  -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1  -DGTEST_HAS_PTHREAD=1   -o CMakeFiles/gtest_main.dir/src/gtest_main.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/src/gtest_main.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/src/gtest_main.cc",
-  "output": "_deps/googletest-build/googletest/CMakeFiles/gtest_main.dir/src/gtest_main.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-build/googletest",
+  "command": "/usr/bin/c++  -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -Wall -Wshadow -Wundef -Wno-error=dangling-else -DGTEST_HAS_PTHREAD=1 -fexceptions -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -std=c++20 -o CMakeFiles/gtest_main.dir/src/gtest_main.cc.o -c /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/src/gtest_main.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/src/gtest_main.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/log_test.dir/log_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/log_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/log_test.cc",
-  "output": "test/CMakeFiles/log_test.dir/log_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/log_test.dir/log_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/log_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/log_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/wal_edit_test.dir/wal_edit_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/wal_edit_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/wal_edit_test.cc",
-  "output": "test/CMakeFiles/wal_edit_test.dir/wal_edit_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/wal_edit_test.dir/wal_edit_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/wal_edit_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/wal_edit_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/write_batch_test.dir/write_batch_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/write_batch_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/write_batch_test.cc",
-  "output": "test/CMakeFiles/write_batch_test.dir/write_batch_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/write_batch_test.dir/write_batch_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/write_batch_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/write_batch_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/wal_manager_test.dir/wal_manager_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/wal_manager_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/wal_manager_test.cc",
-  "output": "test/CMakeFiles/wal_manager_test.dir/wal_manager_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/wal_manager_test.dir/wal_manager_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/wal_manager_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/wal_manager_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/write_thread_test.dir/write_thread_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/write_thread_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/write_thread_test.cc",
-  "output": "test/CMakeFiles/write_thread_test.dir/write_thread_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/write_thread_test.dir/write_thread_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/write_thread_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/write_thread_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/wal_compressor_test.dir/wal_compressor_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/wal_compressor_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/wal_compressor_test.cc",
-  "output": "test/CMakeFiles/wal_compressor_test.dir/wal_compressor_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/wal_compressor_test.dir/wal_compressor_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/wal_compressor_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/wal_compressor_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/db_wal_test.dir/db_wal_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/db_wal_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/db_wal_test.cc",
-  "output": "test/CMakeFiles/db_wal_test.dir/db_wal_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/db_wal_test.dir/db_wal_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/db_wal_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/db_wal_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/crash_recovery_test.dir/crash_recovery_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/crash_recovery_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/crash_recovery_test.cc",
-  "output": "test/CMakeFiles/crash_recovery_test.dir/crash_recovery_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/crash_recovery_test.dir/crash_recovery_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/crash_recovery_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/crash_recovery_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/wal_iterator_test.dir/wal_iterator_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/wal_iterator_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/wal_iterator_test.cc",
-  "output": "test/CMakeFiles/wal_iterator_test.dir/wal_iterator_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/wal_iterator_test.dir/wal_iterator_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/wal_iterator_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/wal_iterator_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/concurrency_race_test.dir/concurrency_race_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/concurrency_race_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/concurrency_race_test.cc",
-  "output": "test/CMakeFiles/concurrency_race_test.dir/concurrency_race_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/concurrency_race_test.dir/concurrency_race_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/concurrency_race_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/concurrency_race_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/sequence_number_test.dir/sequence_number_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/sequence_number_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/sequence_number_test.cc",
-  "output": "test/CMakeFiles/sequence_number_test.dir/sequence_number_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/sequence_number_test.dir/sequence_number_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/sequence_number_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/sequence_number_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/bit_flip_corruption_test.dir/bit_flip_corruption_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/bit_flip_corruption_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/bit_flip_corruption_test.cc",
-  "output": "test/CMakeFiles/bit_flip_corruption_test.dir/bit_flip_corruption_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/bit_flip_corruption_test.dir/bit_flip_corruption_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/bit_flip_corruption_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/bit_flip_corruption_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/env_error_injection_test.dir/env_error_injection_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/env_error_injection_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/env_error_injection_test.cc",
-  "output": "test/CMakeFiles/env_error_injection_test.dir/env_error_injection_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/env_error_injection_test.dir/env_error_injection_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/env_error_injection_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/env_error_injection_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/back_pressure_test.dir/back_pressure_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/back_pressure_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/back_pressure_test.cc",
-  "output": "test/CMakeFiles/back_pressure_test.dir/back_pressure_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/back_pressure_test.dir/back_pressure_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/back_pressure_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/back_pressure_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/operational_test.dir/operational_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/operational_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/operational_test.cc",
-  "output": "test/CMakeFiles/operational_test.dir/operational_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/operational_test.dir/operational_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/operational_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/operational_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/write_coalescer_test.dir/write_coalescer_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/write_coalescer_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/write_coalescer_test.cc",
-  "output": "test/CMakeFiles/write_coalescer_test.dir/write_coalescer_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/write_coalescer_test.dir/write_coalescer_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/write_coalescer_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/write_coalescer_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/test",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest/include -isystem /Users/anshagrawal/Meesho/testwal/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/recover_empty_log_test.dir/recover_empty_log_test.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/test/recover_empty_log_test.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/test/recover_empty_log_test.cc",
-  "output": "test/CMakeFiles/recover_empty_log_test.dir/recover_empty_log_test.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/test",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest/include -isystem /home/anshagrawal/BharatMLStack/mwal/build/_deps/googletest-src/googletest  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/recover_empty_log_test.dir/recover_empty_log_test.cc.o -c /home/anshagrawal/BharatMLStack/mwal/test/recover_empty_log_test.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/test/recover_empty_log_test.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/bench",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DBENCHMARK_STATIC_DEFINE -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/bench -isystem /opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/wal_write_bench.dir/wal_write_bench.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/bench/wal_write_bench.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/bench/wal_write_bench.cc",
-  "output": "bench/CMakeFiles/wal_write_bench.dir/wal_write_bench.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/bench",
+  "command": "/usr/bin/c++ -DBENCHMARK_STATIC_DEFINE -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/bench  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/wal_write_bench.dir/wal_write_bench.cc.o -c /home/anshagrawal/BharatMLStack/mwal/bench/wal_write_bench.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/bench/wal_write_bench.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/bench",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DBENCHMARK_STATIC_DEFINE -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/bench -isystem /opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/wal_read_bench.dir/wal_read_bench.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/bench/wal_read_bench.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/bench/wal_read_bench.cc",
-  "output": "bench/CMakeFiles/wal_read_bench.dir/wal_read_bench.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/bench",
+  "command": "/usr/bin/c++ -DBENCHMARK_STATIC_DEFINE -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/bench  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/wal_read_bench.dir/wal_read_bench.cc.o -c /home/anshagrawal/BharatMLStack/mwal/bench/wal_read_bench.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/bench/wal_read_bench.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/bench",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DBENCHMARK_STATIC_DEFINE -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/bench -isystem /opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/wal_sync_bench.dir/wal_sync_bench.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/bench/wal_sync_bench.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/bench/wal_sync_bench.cc",
-  "output": "bench/CMakeFiles/wal_sync_bench.dir/wal_sync_bench.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/bench",
+  "command": "/usr/bin/c++ -DBENCHMARK_STATIC_DEFINE -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/bench  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/wal_sync_bench.dir/wal_sync_bench.cc.o -c /home/anshagrawal/BharatMLStack/mwal/bench/wal_sync_bench.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/bench/wal_sync_bench.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/bench",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DBENCHMARK_STATIC_DEFINE -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include -I/Users/anshagrawal/Meesho/testwal/mwal/bench -isystem /opt/homebrew/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/db_wal_bench.dir/db_wal_bench.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/bench/db_wal_bench.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/bench/db_wal_bench.cc",
-  "output": "bench/CMakeFiles/db_wal_bench.dir/db_wal_bench.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/bench",
+  "command": "/usr/bin/c++ -DBENCHMARK_STATIC_DEFINE -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include -I/home/anshagrawal/BharatMLStack/mwal/bench  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/db_wal_bench.dir/db_wal_bench.cc.o -c /home/anshagrawal/BharatMLStack/mwal/bench/db_wal_bench.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/bench/db_wal_bench.cc"
 },
 {
-  "directory": "/Users/anshagrawal/Meesho/testwal/mwal/build/examples",
-  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/Users/anshagrawal/Meesho/testwal/mwal/src -I/Users/anshagrawal/Meesho/testwal/mwal/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk -mmacosx-version-min=26.1 -o CMakeFiles/wal_client.dir/wal_client.cc.o -c /Users/anshagrawal/Meesho/testwal/mwal/examples/wal_client.cc",
-  "file": "/Users/anshagrawal/Meesho/testwal/mwal/examples/wal_client.cc",
-  "output": "examples/CMakeFiles/wal_client.dir/wal_client.cc.o"
+  "directory": "/home/anshagrawal/BharatMLStack/mwal/build/examples",
+  "command": "/usr/bin/c++ -DMWAL_HAVE_ZSTD=1 -I/home/anshagrawal/BharatMLStack/mwal/src -I/home/anshagrawal/BharatMLStack/mwal/include  -Wall -Wextra -Wshadow -Woverloaded-virtual -Wnon-virtual-dtor -pthread -O3 -DNDEBUG -O2 -fno-omit-frame-pointer -std=c++20 -o CMakeFiles/wal_client.dir/wal_client.cc.o -c /home/anshagrawal/BharatMLStack/mwal/examples/wal_client.cc",
+  "file": "/home/anshagrawal/BharatMLStack/mwal/examples/wal_client.cc"
 }
 ]

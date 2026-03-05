@@ -367,6 +367,7 @@ Benchmarks live under `mwal/bench/`. They use a temporary directory (e.g. `/tmp/
 | `BM_MergedGroupCommit` | num_threads: 1,2,4,8,16 | Throughput with many threads (merged group commit). |
 | `BM_CompressionPrefixOverhead` | — | Write throughput with no compression (prefix overhead only). |
 | `BM_DBWalCompression` | compress: 0, 1 | Write throughput with compression off vs on (Zstd; if `MWAL_HAVE_ZSTD`). |
+| `BM_MixedReadWrite_VectorDB` | read_pct: 10, 20, …, 90 | Mixed read/write: 20k inserts/s (1 per batch), readers do 5k-record reads; dim 128 fp32; 5 s phase. Run: `--benchmark_filter='BM_MixedReadWrite_VectorDB'`. |
 
 ### 2. `wal_write_bench` — Log writer and WriteBatch encoding
 

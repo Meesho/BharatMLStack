@@ -2,6 +2,21 @@
 
 This document records benchmark results for mwal with vector-DB payloads: catalog_id (key) + embedding (value) for add/update; catalog_id only for delete. Results may vary by hardware, OS, and load.
 
+## Benchmark system (this run)
+
+| Field | Value |
+|-------|-------|
+| Date | 2026-03-03 (Tue Mar 3) |
+| Host | MacBook Pro (Apple M3 Pro), darwin 25.1.0 arm64 |
+| CPUs | 12 cores (6 performance + 6 efficiency), Apple M3 Pro |
+| Memory | 18 GB |
+| L1 Data | 64 KiB (per core) |
+| L1 Instruction | 128 KiB (per core) |
+| L2 Unified | 4 MiB (per cluster) |
+| L3 / System cache | Apple Silicon unified memory architecture |
+
+---
+
 ## Data Format Summary
 
 | Operation   | Key                | Value                                |
@@ -45,6 +60,9 @@ mkdir -p build && cd build && cmake .. && make -j4
 # Time-based flush benchmarks only
 ./bench/db_wal_bench --benchmark_filter='BM_TimeBasedFlush.*_VectorDB' \
   --benchmark_out=time_flush_results.json --benchmark_out_format=json
+
+# Mixed read/write (20k writes/s, 5k records per read; read_pct 10–90)
+./bench/db_wal_bench --benchmark_filter='BM_MixedReadWrite_VectorDB'
 ```
 
 ## Baseline Environment
@@ -55,7 +73,6 @@ mkdir -p build && cd build && cmake .. && make -j4
 | OS | macOS (darwin 25.1.0) |
 | CPU | Apple Silicon, 12 cores @ 24 MHz (reported) |
 | Disk | Default (SSD typical for development) |
-
 ---
 
 ## db_wal_bench Results
@@ -305,6 +322,10 @@ Write throughput with compression off vs on (Zstd). 1000 writes.
 | 1,000,000 | 768 | fp64 | 17,844,000,000 | 57.1k/s | 335 |
 
 **Observation:** Items/sec drops with larger embeddings; MB/s stays roughly 335–400 for 768-dim.
+
+### BM_MixedReadWrite_VectorDB
+
+Mixed read/write workload: writers throttled to ~20k inserts/s (1 insert per batch), readers each do 5k-record chunk reads from the WAL. Fixed at dim 128 fp32. Parameter `read_pct` (10, 20, …, 90) sets thread mix: 10 threads total with read_pct/10 reader threads and the rest writer threads. Phase duration 5 seconds. Counters: `write_ops_per_sec`, `read_5k_ops_per_sec`, `records_read_per_sec`, `write_p50_ns`/`write_p95_ns`/`write_p99_ns`, `read_p50_ns`/`read_p95_ns`/`read_p99_ns`, `records_per_read_mean`, `read_MB_per_sec`. Run: `./bench/db_wal_bench --benchmark_filter='BM_MixedReadWrite_VectorDB'`.
 
 ### BM_RecoveryWithCompression_VectorDB
 

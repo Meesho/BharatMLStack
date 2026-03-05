@@ -2125,6 +2125,255 @@ static void BM_WalIteratorScanSpeed_VectorDB(benchmark::State& state) {
 BENCHMARK(BM_WalIteratorScanSpeed_VectorDB)
     ->ArgsProduct({{10000, 100000, 1000000}, {32, 128, 512, 768}, {0, 1}});
 
+// Mixed read/write: realistic load — 20k inserts/s (1 per batch), readers do
+// 5k-record reads; read_pct 10–90 (thread mix); dim 128 fp32; 5 s phase.
+// Reports write/read throughput, write and read latency (p50/p95/p99), and
+// optional records_per_read_mean, read_MB_per_sec.
+static void BM_MixedReadWrite_VectorDB(benchmark::State& state) {
+  const int read_pct = static_cast<int>(state.range(0));
+  const int num_readers = read_pct / 10;
+  const int num_writers = 10 - num_readers;
+  constexpr double kPhaseSec = 5.0;
+  constexpr int kTargetWriteRate = 20000;
+  constexpr int kRecordsPerRead = 5000;
+  constexpr int kPrePopulateBatches = 1000;
+  constexpr int kDim = 128;
+  constexpr bool kUseFp64 = false;
+
+  auto percentile = [](const std::vector<int64_t>& sorted, double p) -> double {
+    if (sorted.empty()) return 0.0;
+    double rank = (p / 100.0) * static_cast<double>(sorted.size() - 1);
+    size_t lo = static_cast<size_t>(rank);
+    size_t hi = std::min(lo + 1, sorted.size() - 1);
+    double frac = rank - static_cast<double>(lo);
+    return (1.0 - frac) * static_cast<double>(sorted[lo]) +
+           frac * static_cast<double>(sorted[hi]);
+  };
+
+  for (auto _ : state) {
+    state.PauseTiming();
+    BenchTmpDir dir;
+    WALOptions opts;
+    opts.wal_dir = dir.path();
+    std::unique_ptr<DBWal> wal;
+    Status s = DBWal::Open(opts, Env::Default(), &wal);
+    if (!s.ok()) {
+      state.SkipWithError(s.ToString().c_str());
+      return;
+    }
+    for (int i = 0; i < kPrePopulateBatches; i++) {
+      WriteBatch batch;
+      MakeVectorPutBatch(static_cast<uint64_t>(i), kDim, kUseFp64, &batch);
+      s = wal->Write(WriteOptions(), &batch);
+      if (!s.ok()) {
+        state.SkipWithError(s.ToString().c_str());
+        return;
+      }
+    }
+    state.ResumeTiming();
+
+    std::atomic<uint64_t> write_count{0};
+    std::atomic<uint64_t> next_id{static_cast<uint64_t>(kPrePopulateBatches)};
+    std::atomic<uint64_t> phase_start_ns{0};
+    std::barrier sync_barrier(10);
+
+    std::vector<std::vector<int64_t>> write_latencies_per_thread(
+        static_cast<size_t>(num_writers));
+    std::vector<std::vector<int64_t>> read_latencies_per_thread(
+        static_cast<size_t>(num_readers));
+    std::vector<std::atomic<uint64_t>> read_5k_ops(
+        static_cast<size_t>(num_readers));
+    std::vector<std::atomic<uint64_t>> records_read(
+        static_cast<size_t>(num_readers));
+    for (int r = 0; r < num_readers; r++) {
+      read_5k_ops[static_cast<size_t>(r)].store(0);
+      records_read[static_cast<size_t>(r)].store(0);
+    }
+
+    std::vector<std::thread> threads;
+
+    for (int t = 0; t < num_writers; t++) {
+      const size_t tid = static_cast<size_t>(t);
+      threads.emplace_back(
+          [&wal, &write_count, &next_id, &phase_start_ns, &sync_barrier,
+           &write_latencies_per_thread, tid]() {
+            auto& lat = write_latencies_per_thread[tid];
+            sync_barrier.arrive_and_wait();
+            if (tid == 0) {
+              phase_start_ns.store(
+                  std::chrono::steady_clock::now().time_since_epoch().count());
+            }
+            while (phase_start_ns.load() == 0) {
+              std::this_thread::yield();
+            }
+            uint64_t start_ns = phase_start_ns.load();
+            const int64_t phase_ns = static_cast<int64_t>(kPhaseSec * 1e9);
+            WriteOptions wo;
+            wo.sync = false;
+            while (true) {
+              int64_t now_ns =
+                  static_cast<int64_t>(std::chrono::steady_clock::now()
+                                           .time_since_epoch()
+                                           .count());
+              if (now_ns - static_cast<int64_t>(start_ns) >= phase_ns) break;
+              double elapsed_sec =
+                  (now_ns - static_cast<int64_t>(start_ns)) / 1e9;
+              uint64_t target =
+                  static_cast<uint64_t>(kTargetWriteRate * elapsed_sec);
+              if (write_count.load() >= target) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+              }
+              uint64_t id = next_id.fetch_add(1);
+              WriteBatch batch;
+              MakeVectorPutBatch(id, kDim, kUseFp64, &batch);
+              auto t0 = std::chrono::high_resolution_clock::now();
+              Status ws = wal->Write(wo, &batch);
+              auto t1 = std::chrono::high_resolution_clock::now();
+              if (!ws.ok()) return;
+              write_count++;
+              lat.push_back(static_cast<int64_t>(
+                  std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
+                      .count()));
+            }
+          });
+    }
+
+    for (int t = 0; t < num_readers; t++) {
+      const size_t rid = static_cast<size_t>(t);
+      threads.emplace_back(
+          [&wal, &phase_start_ns, &sync_barrier,
+           &read_latencies_per_thread, &read_5k_ops, &records_read, rid,
+           num_writers]() {
+            auto& lat = read_latencies_per_thread[rid];
+            sync_barrier.arrive_and_wait();
+            if (num_writers == 0 && rid == 0) {
+              phase_start_ns.store(
+                  std::chrono::steady_clock::now().time_since_epoch().count());
+            }
+            while (phase_start_ns.load() == 0) {
+              std::this_thread::yield();
+            }
+            uint64_t start_ns = phase_start_ns.load();
+            const int64_t phase_ns = static_cast<int64_t>(kPhaseSec * 1e9);
+            SequenceNumber start_seq = 0;
+            while (true) {
+              int64_t now_ns =
+                  static_cast<int64_t>(std::chrono::steady_clock::now()
+                                           .time_since_epoch()
+                                           .count());
+              if (now_ns - static_cast<int64_t>(start_ns) >= phase_ns) break;
+              auto t0 = std::chrono::high_resolution_clock::now();
+              std::unique_ptr<WalIterator> iter;
+              Status rs = wal->NewWalIterator(start_seq, &iter);
+              if (!rs.ok()) break;
+              int count = 0;
+              SequenceNumber last_seq = start_seq;
+              while (count < kRecordsPerRead && iter->Valid()) {
+                iter->GetBatch();
+                last_seq = iter->GetSequenceNumber();
+                iter->Next();
+                count++;
+              }
+              auto t1 = std::chrono::high_resolution_clock::now();
+              lat.push_back(static_cast<int64_t>(
+                  std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
+                      .count()));
+              read_5k_ops[rid]++;
+              records_read[rid] += static_cast<uint64_t>(count);
+              if (count > 0) {
+                start_seq = last_seq + 1;
+              }
+              if (count < kRecordsPerRead) {
+                start_seq = 0;
+              }
+            }
+          });
+    }
+
+    for (auto& t : threads) t.join();
+
+    state.PauseTiming();
+    Status cs = wal->Close();
+    if (!cs.ok()) {
+      state.SkipWithError(cs.ToString().c_str());
+      return;
+    }
+
+    uint64_t total_writes = write_count.load();
+    uint64_t total_5k_reads = 0;
+    uint64_t total_records_read = 0;
+    for (int r = 0; r < num_readers; r++) {
+      total_5k_reads += read_5k_ops[static_cast<size_t>(r)].load();
+      total_records_read += records_read[static_cast<size_t>(r)].load();
+    }
+
+    if (kPhaseSec > 0) {
+      state.counters["write_ops_per_sec"] = benchmark::Counter(
+          static_cast<double>(total_writes) / kPhaseSec);
+      state.counters["read_5k_ops_per_sec"] = benchmark::Counter(
+          static_cast<double>(total_5k_reads) / kPhaseSec);
+      state.counters["records_read_per_sec"] = benchmark::Counter(
+          static_cast<double>(total_records_read) / kPhaseSec);
+    }
+
+    std::vector<int64_t> all_write_lat;
+    for (const auto& l : write_latencies_per_thread) {
+      all_write_lat.insert(all_write_lat.end(), l.begin(), l.end());
+    }
+    if (!all_write_lat.empty()) {
+      std::sort(all_write_lat.begin(), all_write_lat.end());
+      state.counters["write_p50_ns"] =
+          benchmark::Counter(percentile(all_write_lat, 50.0));
+      state.counters["write_p95_ns"] =
+          benchmark::Counter(percentile(all_write_lat, 95.0));
+      state.counters["write_p99_ns"] =
+          benchmark::Counter(percentile(all_write_lat, 99.0));
+    }
+
+    std::vector<int64_t> all_read_lat;
+    for (const auto& l : read_latencies_per_thread) {
+      all_read_lat.insert(all_read_lat.end(), l.begin(), l.end());
+    }
+    if (!all_read_lat.empty()) {
+      std::sort(all_read_lat.begin(), all_read_lat.end());
+      state.counters["read_p50_ns"] =
+          benchmark::Counter(percentile(all_read_lat, 50.0));
+      state.counters["read_p95_ns"] =
+          benchmark::Counter(percentile(all_read_lat, 95.0));
+      state.counters["read_p99_ns"] =
+          benchmark::Counter(percentile(all_read_lat, 99.0));
+    }
+
+    if (total_5k_reads > 0) {
+      state.counters["records_per_read_mean"] = benchmark::Counter(
+          static_cast<double>(total_records_read) /
+          static_cast<double>(total_5k_reads));
+      int64_t record_bytes =
+          static_cast<int64_t>(8 + GetVectorPayloadSize(kDim, kUseFp64));
+      state.counters["read_MB_per_sec"] = benchmark::Counter(
+          static_cast<double>(total_records_read) * record_bytes / kPhaseSec /
+          1e6);
+    }
+
+    state.SetItemsProcessed(state.iterations() *
+                            (static_cast<int64_t>(total_writes) +
+                             static_cast<int64_t>(total_5k_reads)));
+    state.ResumeTiming();
+  }
+}
+BENCHMARK(BM_MixedReadWrite_VectorDB)
+    ->Iterations(1)
+    ->Arg(10)
+    ->Arg(20)
+    ->Arg(30)
+    ->Arg(40)
+    ->Arg(50)
+    ->Arg(60)
+    ->Arg(70)
+    ->Arg(80)
+    ->Arg(90);
+
 // Write throughput and latency with vs without concurrent PurgeObsoleteFiles.
 // Each phase uses a separate directory and a warmup pass to normalize
 // filesystem cache state. Only the purge thread differs between phases.
