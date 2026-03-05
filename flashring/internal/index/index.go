@@ -1,4 +1,4 @@
-package indicesv2
+package index
 
 import (
 	"errors"
@@ -30,9 +30,6 @@ type Index struct {
 }
 
 func NewIndex(hashBits int, rbInitial, rbMax, deleteAmortizedStep int, mu *sync.RWMutex) *Index {
-	if ByteOrder == nil {
-		loadByteOrder()
-	}
 	return &Index{
 		mu:       mu,
 		rm:       make(map[uint64]int),
@@ -55,15 +52,12 @@ func (i *Index) Put(key string, length, ttlInMinutes uint16, memId, offset uint3
 	if headIdx, ok := i.rm[hlo]; !ok {
 		encodeHashNextPrev(hhi, hlo, -1, -1, hashNextPrev)
 		i.rm[hlo] = idx
-		return
 	} else {
 		_, headHashNextPrev, _ := i.rb.Get(int(headIdx))
 		encodeUpdatePrev(int32(idx), headHashNextPrev)
 		encodeHashNextPrev(hhi, hlo, -1, int32(headIdx), hashNextPrev)
 		i.rm[hlo] = idx
-		return
 	}
-
 }
 
 func (i *Index) Get(key string) (length, lastAccess, remainingTTL uint16, freq uint64, memId, offset uint32, status Status) {
@@ -73,31 +67,31 @@ func (i *Index) Get(key string) (length, lastAccess, remainingTTL uint16, freq u
 	idx, ok := i.rm[hlo]
 	i.mu.RUnlock()
 
-	if ok {
-		for {
-			entry, hashNextPrev, _ := i.rb.Get(int(idx))
-			if isHashMatch(hhi, hlo, hashNextPrev) {
-				length, deltaExptime, lastAccess, freq, memId, offset := decode(entry)
-				exptime := int(deltaExptime) + int(i.startAt/60)
-				currentTime := int(time.Now().Unix() / 60)
-				remainingTTL := exptime - currentTime
-				if remainingTTL <= 0 {
-					return 0, 0, 0, 0, 0, 0, StatusExpired
-				}
-				lastAccess = i.generateLastAccess()
-				freq = i.incrFreq(freq)
-				encodeLastAccessNFreq(lastAccess, freq, entry)
-				return length, lastAccess, uint16(remainingTTL), i.mc.Value(uint32(freq)), memId, offset, StatusOK
-			}
-			if hasNext(hashNextPrev) {
-				idx = int(decodeNext(hashNextPrev))
-			} else {
-				return 0, 0, 0, 0, 0, 0, StatusNotFound
-			}
-		}
-
+	if !ok {
+		return 0, 0, 0, 0, 0, 0, StatusNotFound
 	}
-	return 0, 0, 0, 0, 0, 0, StatusNotFound
+
+	for {
+		entry, hashNextPrev, _ := i.rb.Get(int(idx))
+		if isHashMatch(hhi, hlo, hashNextPrev) {
+			length, deltaExptime, lastAccess, freq, memId, offset := decode(entry)
+			exptime := int(deltaExptime) + int(i.startAt/60)
+			currentTime := int(time.Now().Unix() / 60)
+			remainingTTL := exptime - currentTime
+			if remainingTTL <= 0 {
+				return 0, 0, 0, 0, 0, 0, StatusExpired
+			}
+			lastAccess = i.generateLastAccess()
+			freq = i.incrFreq(freq)
+			encodeLastAccessNFreq(lastAccess, freq, entry)
+			return length, lastAccess, uint16(remainingTTL), i.mc.Value(uint32(freq)), memId, offset, StatusOK
+		}
+		if hasNext(hashNextPrev) {
+			idx = int(decodeNext(hashNextPrev))
+		} else {
+			return 0, 0, 0, 0, 0, 0, StatusNotFound
+		}
+	}
 }
 
 func (ix *Index) Delete(count int) (uint32, int) {
@@ -109,7 +103,7 @@ func (ix *Index) Delete(count int) (uint32, int) {
 		if deleted == nil {
 			return 0, -1
 		}
-		delMemId, _ := decodeMemIdOffset(deleted)
+		delMemId, _ := DecodeMemIdOffset(deleted)
 		deletedHlo := decodeHashLo(deletedHashNextPrev)
 		mapIdx, ok := ix.rm[deletedHlo]
 		if ok && mapIdx == deletedIdx {
@@ -118,11 +112,9 @@ func (ix *Index) Delete(count int) (uint32, int) {
 			prevIdx := decodePrev(deletedHashNextPrev)
 			_, hashNextPrev, _ := ix.rb.Get(int(prevIdx))
 			encodeUpdateNext(-1, hashNextPrev)
-		} else {
-			//log.Warn().Msgf("broken link. Entry in RB but cannot be linked to map. deletedIdx: %d", deletedIdx)
 		}
 
-		nextMemId, _ := decodeMemIdOffset(next)
+		nextMemId, _ := DecodeMemIdOffset(next)
 		if nextMemId == delMemId+1 {
 			return nextMemId, i + 1
 		} else if nextMemId == delMemId && i == count-1 {
@@ -145,7 +137,7 @@ func (ki *Index) PeekMemIdAtHead() (uint32, error) {
 	if !ok {
 		return 0, ErrGettingHeadEntry
 	}
-	memId, _ := decodeMemIdOffset(entry)
+	memId, _ := DecodeMemIdOffset(entry)
 	return memId, nil
 }
 

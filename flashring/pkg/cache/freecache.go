@@ -1,7 +1,8 @@
-package internal
+package cache
 
 import (
 	"runtime/debug"
+	"time"
 
 	"github.com/coocood/freecache"
 )
@@ -10,31 +11,25 @@ type Freecache struct {
 	cache *freecache.Cache
 }
 
-func NewFreecache(config WrapCacheConfig, logStats bool) (*Freecache, error) {
-
-	cache := freecache.NewCache(int(config.FileSize))
+func NewFreecache(sizeBytes int) (*Freecache, error) {
+	cache := freecache.NewCache(sizeBytes)
 	debug.SetGCPercent(20)
-
-	fc := &Freecache{
-		cache: cache,
-	}
-
-	return fc, nil
-
+	return &Freecache{cache: cache}, nil
 }
 
-func (c *Freecache) Put(key string, value []byte, exptimeInMinutes uint16) error {
-
-	c.cache.Set([]byte(key), value, int(exptimeInMinutes)*60)
+func (c *Freecache) Put(key string, value []byte, ttl time.Duration) error {
+	c.cache.Set([]byte(key), value, int(ttl.Seconds()))
 	return nil
 }
 
 func (c *Freecache) Get(key string) ([]byte, bool, bool) {
-
 	val, err := c.cache.Get([]byte(key))
 	if err != nil {
 		return nil, false, false
 	}
-
 	return val, true, false
+}
+
+func (c *Freecache) Close() error {
+	return nil
 }

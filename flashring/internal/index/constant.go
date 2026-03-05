@@ -1,8 +1,6 @@
-package indicesv2
+package index
 
 const (
-
-	//[0]uint64
 	LENGTH_MASK        = (1 << 16) - 1
 	DELTA_EXPTIME_MASK = (1 << 16) - 1
 	LAST_ACCESS_MASK   = (1 << 16) - 1
@@ -10,7 +8,6 @@ const (
 	PREV_MASK          = (1 << 32) - 1
 	NEXT_MASK          = (1 << 32) - 1
 
-	//[1]uint64
 	MEM_ID_MASK = (1 << 32) - 1
 	OFFSET_MASK = (1 << 32) - 1
 

@@ -119,8 +119,8 @@ func TestPwrite_Success(t *testing.T) {
 		t.Errorf("Expected CurrentPhysicalOffset %d, got %d", len(data), raf.CurrentPhysicalOffset)
 	}
 
-	if raf.Stat.WriteCount != 1 {
-		t.Errorf("Expected WriteCount 1, got %d", raf.Stat.WriteCount)
+	if raf.Stat.WriteCount.Load() != 1 {
+		t.Errorf("Expected WriteCount 1, got %d", raf.Stat.WriteCount.Load())
 	}
 }
 
@@ -225,8 +225,8 @@ func TestPread_Success(t *testing.T) {
 		}
 	}
 
-	if raf.Stat.ReadCount != 1 {
-		t.Errorf("Expected ReadCount 1, got %d", raf.Stat.ReadCount)
+	if raf.Stat.ReadCount.Load() != 1 {
+		t.Errorf("Expected ReadCount 1, got %d", raf.Stat.ReadCount.Load())
 	}
 }
 
@@ -338,8 +338,8 @@ func TestTrimHead_Success(t *testing.T) {
 		t.Errorf("Expected LogicalStartOffset %d, got %d", config.FilePunchHoleSize, raf.LogicalStartOffset)
 	}
 
-	if raf.Stat.PunchHoleCount != 1 {
-		t.Errorf("Expected PunchHoleCount 1, got %d", raf.Stat.PunchHoleCount)
+	if raf.Stat.PunchHoleCount.Load() != 1 {
+		t.Errorf("Expected PunchHoleCount 1, got %d", raf.Stat.PunchHoleCount.Load())
 	}
 }
 
@@ -421,11 +421,11 @@ func TestMultipleOperations(t *testing.T) {
 	}
 
 	// Verify statistics
-	if raf.Stat.WriteCount != 5 {
-		t.Errorf("Expected WriteCount 5, got %d", raf.Stat.WriteCount)
+	if raf.Stat.WriteCount.Load() != 5 {
+		t.Errorf("Expected WriteCount 5, got %d", raf.Stat.WriteCount.Load())
 	}
-	if raf.Stat.ReadCount != 5 {
-		t.Errorf("Expected ReadCount 5, got %d", raf.Stat.ReadCount)
+	if raf.Stat.ReadCount.Load() != 5 {
+		t.Errorf("Expected ReadCount 5, got %d", raf.Stat.ReadCount.Load())
 	}
 }
 
@@ -447,14 +447,14 @@ func TestStatistics(t *testing.T) {
 	defer cleanup(raf)
 
 	// Initial state
-	if raf.Stat.WriteCount != 0 {
-		t.Errorf("Expected initial WriteCount 0, got %d", raf.Stat.WriteCount)
+	if raf.Stat.WriteCount.Load() != 0 {
+		t.Errorf("Expected initial WriteCount 0, got %d", raf.Stat.WriteCount.Load())
 	}
-	if raf.Stat.ReadCount != 0 {
-		t.Errorf("Expected initial ReadCount 0, got %d", raf.Stat.ReadCount)
+	if raf.Stat.ReadCount.Load() != 0 {
+		t.Errorf("Expected initial ReadCount 0, got %d", raf.Stat.ReadCount.Load())
 	}
-	if raf.Stat.PunchHoleCount != 0 {
-		t.Errorf("Expected initial PunchHoleCount 0, got %d", raf.Stat.PunchHoleCount)
+	if raf.Stat.PunchHoleCount.Load() != 0 {
+		t.Errorf("Expected initial PunchHoleCount 0, got %d", raf.Stat.PunchHoleCount.Load())
 	}
 
 	// Perform operations and verify statistics
@@ -465,8 +465,8 @@ func TestStatistics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Pwrite failed: %v", err)
 	}
-	if raf.Stat.WriteCount != 1 {
-		t.Errorf("Expected WriteCount 1, got %d", raf.Stat.WriteCount)
+	if raf.Stat.WriteCount.Load() != 1 {
+		t.Errorf("Expected WriteCount 1, got %d", raf.Stat.WriteCount.Load())
 	}
 
 	// Read operation
@@ -474,8 +474,8 @@ func TestStatistics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Pread failed: %v", err)
 	}
-	if raf.Stat.ReadCount != 1 {
-		t.Errorf("Expected ReadCount 1, got %d", raf.Stat.ReadCount)
+	if raf.Stat.ReadCount.Load() != 1 {
+		t.Errorf("Expected ReadCount 1, got %d", raf.Stat.ReadCount.Load())
 	}
 
 	// Trim operation
@@ -483,8 +483,8 @@ func TestStatistics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TrimHead failed: %v", err)
 	}
-	if raf.Stat.PunchHoleCount != 1 {
-		t.Errorf("Expected PunchHoleCount 1, got %d", raf.Stat.PunchHoleCount)
+	if raf.Stat.PunchHoleCount.Load() != 1 {
+		t.Errorf("Expected PunchHoleCount 1, got %d", raf.Stat.PunchHoleCount.Load())
 	}
 }
 

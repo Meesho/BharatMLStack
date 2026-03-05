@@ -8,7 +8,8 @@ import (
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/allocators"
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
-	indices "github.com/Meesho/BharatMLStack/flashring/internal/indicesV3"
+	"github.com/Meesho/BharatMLStack/flashring/internal/index"
+	"github.com/Meesho/BharatMLStack/flashring/internal/iouring"
 	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
 	"github.com/Meesho/BharatMLStack/flashring/internal/memtables"
 	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
@@ -16,13 +17,12 @@ import (
 )
 
 type ShardCache struct {
-	keyIndex          *indices.Index
+	keyIndex          *index.Index
 	file              *fs.WrapAppendFile
-	ioFile            *fs.IOUringFile
-	batchReader       *fs.ParallelBatchIoUringReader // global batched io_uring reader (shared across shards)
+	iouringReader     *iouring.ParallelBatchIoUringReader
 	mm                *memtables.MemtableManager
 	readPageAllocator *allocators.SlabAlignedPageAllocator
-	dm                *indices.DeleteManager
+	dm                *index.DeleteManager
 	predictor         *maths.Predictor
 	startAt           int64
 	ShardIdx          uint32
@@ -37,19 +37,16 @@ type ShardCacheConfig struct {
 	MaxFileSize         int64
 	BlockSize           int
 	Directory           string
-	AsyncReadWorkers    int
-	AsyncQueueDepth     int
 	Predictor           *maths.Predictor
 
 	// Global batched io_uring reader (shared across all shards).
-	// When set, disk reads go through this instead of the per-shard IOUringFile.
-	BatchIoUringReader *fs.ParallelBatchIoUringReader
+	IoUringReader *iouring.ParallelBatchIoUringReader
 
-	// Dedicated io_uring ring for batched writes (shared across all shards).
-	WriteRing *fs.IoUring
+	// Dedicated io_uring writer for batched writes (shared across all shards).
+	IoUringWriter *iouring.IoUringWriter
 }
 
-func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
+func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) (*ShardCache, error) {
 	filename := fmt.Sprintf("%s/%d.bin", config.Directory, time.Now().UnixNano())
 	punchHoleSize := config.MemtableSize
 	fsConf := fs.FileConfig{
@@ -60,13 +57,15 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 	}
 	file, err := fs.NewWrapAppendFile(fsConf)
 	if err != nil {
-		log.Panic().Err(err).Msg("Failed to create file")
+		return nil, fmt.Errorf("create shard file: %w", err)
 	}
 	memtableManager, err := memtables.NewMemtableManager(file, config.MemtableSize)
 	if err != nil {
-		log.Panic().Err(err).Msg("Failed to create memtable manager")
+		file.Close()
+		return nil, fmt.Errorf("create memtable manager: %w", err)
 	}
-	ki := indices.NewIndex(0, config.RbInitial, config.RbMax, config.DeleteAmortizedStep, sl)
+	ki := index.NewIndex(0, config.RbInitial, config.RbMax, config.DeleteAmortizedStep, sl)
+
 	sizeClasses := make([]allocators.SizeClass, 0)
 	i := fs.BLOCK_SIZE
 	minCount := 24
@@ -74,18 +73,16 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 	for i < iMax {
 		sizeClasses = append(sizeClasses, allocators.SizeClass{Size: i, MinCount: minCount})
 		i *= 2
-		minCount = minCount / 2
+		minCount /= 2
 	}
 	readPageAllocator, err := allocators.NewSlabAlignedPageAllocator(allocators.SlabAlignedPageAllocatorConfig{SizeClasses: sizeClasses})
 	if err != nil {
-		log.Panic().Err(err).Msg("Failed to create read page allocator")
+		file.Close()
+		return nil, fmt.Errorf("create read page allocator: %w", err)
 	}
-	dm := indices.NewDeleteManager(ki, file, config.DeleteAmortizedStep)
+	dm := index.NewDeleteManager(ki, file, config.DeleteAmortizedStep)
 
-	// Attach the dedicated write ring so memtable flushes use batched io_uring.
-	if config.WriteRing != nil {
-		file.WriteRing = config.WriteRing
-	}
+	file.WriteRing = config.IoUringWriter
 
 	sc := &ShardCache{
 		keyIndex:          ki,
@@ -97,21 +94,19 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) *ShardCache {
 		startAt:           time.Now().Unix(),
 	}
 
-	if config.BatchIoUringReader != nil {
-		// Use the global batched io_uring reader (shared across all shards).
-		sc.batchReader = config.BatchIoUringReader
-	} else {
-		log.Panic().Msg("BatchIoUringReader is required")
+	if config.IoUringReader == nil {
+		file.Close()
+		return nil, fmt.Errorf("BatchIoUringReader is required")
 	}
+	sc.iouringReader = config.IoUringReader
 
-	return sc
+	return sc, nil
 }
 
 func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	size := 4 + len(key) + len(value)
 	mt, mtId, _ := fc.mm.GetMemtable()
-	err := fc.dm.ExecuteDeleteIfNeeded()
-	if err != nil {
+	if err := fc.dm.ExecuteDeleteIfNeeded(); err != nil {
 		return err
 	}
 	buf, offset, length, readyForFlush := mt.GetBufForAppend(uint16(size))
@@ -123,7 +118,7 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	copy(buf[4:], key)
 	copy(buf[4+len(key):], value)
 	crc := crc32.ChecksumIEEE(buf[4:])
-	indices.ByteOrder.PutUint32(buf[0:4], crc)
+	index.ByteOrder.PutUint32(buf[0:4], crc)
 	fc.keyIndex.Put(key, length, ttlMinutes, mtId, uint32(offset))
 	fc.dm.IncMemtableKeyCount(mtId)
 	return nil
@@ -131,14 +126,14 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 
 func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
-	if status == indices.StatusNotFound {
+	if status == index.StatusNotFound {
 		metrics.Incr(metrics.KEY_KEY_NOT_FOUND_COUNT, []string{})
 		return false, nil, 0, false, false
 	}
 
 	metrics.Timing(metrics.KEY_DATA_LENGTH, time.Duration(length), []string{})
 
-	if status == indices.StatusExpired {
+	if status == index.StatusExpired {
 		metrics.Incr(metrics.KEY_KEY_EXPIRED_COUNT, []string{})
 		return false, nil, 0, true, false
 	}
@@ -146,14 +141,9 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	_, currMemId, _ := fc.mm.GetMemtable()
 	shouldReWrite := fc.predictor.Predict(uint64(freq), uint64(lastAccess), memId, currMemId)
 
-	exists := true
 	var buf []byte
-	memtableExists := true
 	mt := fc.mm.GetMemtableById(memId)
 	if mt == nil {
-		memtableExists = false
-	}
-	if !memtableExists {
 		metrics.Incr(metrics.KEY_MEMTABLE_MISS, []string{})
 		buf = make([]byte, length)
 		fileOffset := uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset)
@@ -164,12 +154,13 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		}
 	} else {
 		metrics.Incr(metrics.KEY_MEMTABLE_HIT, []string{})
+		var exists bool
 		buf, exists = mt.GetBufForRead(int(offset), length)
 		if !exists {
-			panic("memtable exists but buf not found")
+			return false, nil, 0, false, shouldReWrite
 		}
 	}
-	gotCR32 := indices.ByteOrder.Uint32(buf[0:4])
+	gotCR32 := index.ByteOrder.Uint32(buf[0:4])
 	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotCR32 != computedCR32 {
@@ -184,51 +175,25 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	return true, buf[4+len(key) : 4+len(key)+valLen], remainingTTL, false, shouldReWrite
 }
 
-// keep this for now. if io_uring doen't work out, we can use this.
-func (fc *ShardCache) readFromDisk(fileOffset int64, length uint16, buf []byte) int {
-
-	alignedStartOffset := (fileOffset / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
-	endndOffset := fileOffset + int64(length)
-	endAlignedOffset := ((endndOffset + fs.BLOCK_SIZE - 1) / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
-	alignedReadSize := endAlignedOffset - alignedStartOffset
-
-	page := fc.readPageAllocator.Get(int(alignedReadSize))
-
-	fc.file.Pread(alignedStartOffset, page.Buf)
-
-	start := int(fileOffset - alignedStartOffset)
-	n := copy(buf, page.Buf[start:start+int(length)])
-	fc.readPageAllocator.Put(page)
-	return n
-}
-
 func (fc *ShardCache) readFromDiskAsync(fileOffset int64, length uint16, buf []byte) int {
-	alignedStartOffset := (fileOffset / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
-	endndOffset := fileOffset + int64(length)
-	endAlignedOffset := ((endndOffset + fs.BLOCK_SIZE - 1) / fs.BLOCK_SIZE) * fs.BLOCK_SIZE
-	alignedReadSize := int(endAlignedOffset - alignedStartOffset)
-	page := fc.readPageAllocator.Get(alignedReadSize)
+	alignedStart, alignedSize := fs.AlignRange(fileOffset, int(length), fs.BLOCK_SIZE)
+	page := fc.readPageAllocator.Get(int(alignedSize))
 
-	// Use exactly alignedReadSize bytes, not the full page.Buf which may be
-	// larger due to slab allocator rounding to the next size class.
-	readBuf := page.Buf[:alignedReadSize]
+	readBuf := page.Buf[:alignedSize]
 
 	var n int
 	var err error
-	// Batched path: validate offset locally, then submit to the global
-	// io_uring batch reader which accumulates requests across all shards.
 	var validOffset int64
-	validOffset, err = fc.file.ValidateReadOffset(alignedStartOffset, alignedReadSize)
+	validOffset, err = fc.file.ValidateReadOffset(alignedStart, int(alignedSize))
 	if err == nil {
-		n, err = fc.batchReader.Submit(fc.file.ReadFd, readBuf, uint64(validOffset))
+		n, err = fc.iouringReader.Submit(fc.file.ReadFd, readBuf, uint64(validOffset))
 	}
 
-	if err != nil || n != alignedReadSize {
-		// ErrFileOffsetOutOfRange is expected for stale index entries.
+	if err != nil || n != int(alignedSize) {
 		if err != nil && err != fs.ErrFileOffsetOutOfRange {
 			log.Warn().Err(err).
-				Int64("offset", alignedStartOffset).
-				Int("alignedReadSize", alignedReadSize).
+				Int64("offset", alignedStart).
+				Int64("alignedReadSize", alignedSize).
 				Int("n", n).
 				Msg("io_uring pread failed")
 		}
@@ -236,10 +201,18 @@ func (fc *ShardCache) readFromDiskAsync(fileOffset int64, length uint16, buf []b
 		return 0
 	}
 
-	start := int(fileOffset - alignedStartOffset)
+	start := int(fileOffset - alignedStart)
 	copied := copy(buf, page.Buf[start:start+int(length)])
 	fc.readPageAllocator.Put(page)
 	return copied
+}
+
+func (fc *ShardCache) Flush() {
+	fc.mm.Flush()
+}
+
+func (fc *ShardCache) Close() {
+	fc.file.Close()
 }
 
 func (fc *ShardCache) GetRingBufferActiveEntries() int {

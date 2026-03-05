@@ -1,10 +1,10 @@
 //go:build linux
 // +build linux
 
-// Package fs provides a minimal io_uring implementation using raw syscalls.
+// Package iouring provides a minimal io_uring implementation using raw syscalls.
 // No external dependencies beyond golang.org/x/sys/unix are needed.
 // Compatible with Go 1.24+ (no go:linkname usage).
-package fs
+package iouring
 
 import (
 	"fmt"

@@ -56,12 +56,7 @@ func NewRollingAppendFile(config FileConfig) (*RollingAppendFile, error) {
 		LogicalStartOffset:    0,
 		CurrentLogicalOffset:  0,
 		CurrentPhysicalOffset: 0,
-		Stat: &Stat{
-			WriteCount:         0,
-			ReadCount:          0,
-			PunchHoleCount:     0,
-			CurrentLogicalSize: 0,
-		},
+		Stat:                  &Stat{},
 	}, nil
 }
 
@@ -79,7 +74,7 @@ func (r *RollingAppendFile) Pwrite(buf []byte) (currentPhysicalOffset int64, err
 		return 0, err
 	}
 	r.CurrentPhysicalOffset += int64(n)
-	r.Stat.WriteCount++
+	r.Stat.WriteCount.Add(1)
 	return r.CurrentPhysicalOffset, nil
 }
 
@@ -96,7 +91,7 @@ func (r *RollingAppendFile) Pread(fileOffset int64, buf []byte) (n int32, err er
 		}
 	}
 	syscall.Pread(r.ReadFd, buf, fileOffset)
-	r.Stat.ReadCount++
+	r.Stat.ReadCount.Add(1)
 	return int32(len(buf)), nil
 }
 
@@ -112,7 +107,7 @@ func (r *RollingAppendFile) TrimHead() (err error) {
 	}
 	r.LogicalStartOffset += int64(r.FilePunchHoleSize)
 	r.CurrentLogicalOffset -= int64(r.FilePunchHoleSize)
-	r.Stat.PunchHoleCount++
+	r.Stat.PunchHoleCount.Add(1)
 	return nil
 }
 

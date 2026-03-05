@@ -1,4 +1,4 @@
-package indices
+package index
 
 import (
 	"encoding/binary"
@@ -6,6 +6,10 @@ import (
 )
 
 var ByteOrder *CustomByteOrder
+
+func init() {
+	loadByteOrder()
+}
 
 type CustomByteOrder struct {
 	binary.ByteOrder
