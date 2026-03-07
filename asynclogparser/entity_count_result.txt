@@ -1,0 +1,15 @@
+Total entity IDs (including duplicates): 3,514
+Unique entity IDs: 126
+Duplicate entity IDs: 3,388
+
+Top 10 most frequent entity IDs:
+  148142013: 39 occurrences
+  77027609: 39 occurrences
+  70996279: 39 occurrences
+  124736121: 39 occurrences
+  131506130: 39 occurrences
+  100178642: 39 occurrences
+  102541959: 39 occurrences
+  148617572: 39 occurrences
+  111304984: 39 occurrences
+  76682766: 39 occurrences
