@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/eigenix_bench.dir/bench/main_bench.cpp.o -o eigenix_bench  libeigenix_kmeans.a /usr/local/lib/libfaiss.a /usr/lib/gcc/x86_64-linux-gnu/12/libgomp.so /usr/lib/x86_64-linux-gnu/libpthread.a /usr/lib/x86_64-linux-gnu/libopenblas.so 

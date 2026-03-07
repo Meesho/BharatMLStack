@@ -25,10 +25,10 @@
 
 using namespace eigenix;
 
-static constexpr int DIM = 128;
+static constexpr int DIM = 2000;
 static constexpr int DEFAULT_K = 1000;
 static constexpr int NUM_GAUSSIANS = 50;
-static constexpr unsigned DATA_SEED = 42;
+static constexpr unsigned DEFAULT_DATA_SEED = 42;
 static constexpr int NUM_RUNS = 1;       // overridden by EIGENIX_BENCH_RUNS
 static constexpr size_t DEFAULT_WARMUP_N = 10000;
 static constexpr double DEFAULT_TRAIN_RATIO = 0.3;  // overridden by EIGENIX_BENCH_TRAIN_RATIO
@@ -185,14 +185,32 @@ int main() {
         dataset_sizes = {10'000'000};  // 10M points; use EIGENIX_BENCH_N=50e6,10e6 for 50M gen + 10M run
     }
 
+    // Data seed: EIGENIX_BENCH_DATA_SEED unset = 42 (reproducible). Set to "random"/"rand" for random each run; or set to a number for that seed.
+    unsigned data_seed;
+    const char* env_data_seed = std::getenv("EIGENIX_BENCH_DATA_SEED");
+    if (env_data_seed && env_data_seed[0] != '\0' &&
+        (std::strcmp(env_data_seed, "random") == 0 || std::strcmp(env_data_seed, "rand") == 0)) {
+        data_seed = static_cast<unsigned>(std::random_device{}());
+        log_progress("Data seed: random (%u)", data_seed);
+    } else if (env_data_seed && env_data_seed[0] != '\0') {
+        try {
+            data_seed = static_cast<unsigned>(std::stoul(env_data_seed));
+        } catch (...) {
+            data_seed = DEFAULT_DATA_SEED;
+            log_progress("EIGENIX_BENCH_DATA_SEED invalid, using %u", data_seed);
+        }
+    } else {
+        data_seed = DEFAULT_DATA_SEED;
+    }
+
     // Log resolved config so it's visible immediately.
     std::string sizes_str;
     for (size_t i = 0; i < dataset_sizes.size(); ++i) {
         if (i > 0) sizes_str += ",";
         sizes_str += std::to_string(dataset_sizes[i]);
     }
-    log_progress("Config: N=[%s] K=%d train_ratio=%.2f warmup=%zu runs=%d nredo=%d threads=%d dim=%d",
-                 sizes_str.c_str(), K, train_ratio, WARMUP_N, num_runs, bench_nredo, nthreads, DIM);
+    log_progress("Config: N=[%s] K=%d train_ratio=%.2f warmup=%zu runs=%d nredo=%d threads=%d dim=%d data_seed=%u",
+                 sizes_str.c_str(), K, train_ratio, WARMUP_N, num_runs, bench_nredo, nthreads, DIM, data_seed);
 
     std::printf("Eigenix KMeans Benchmark Suite\n");
     std::printf("Threads: %d, D=%d, K=%d, train_ratio=%.0f%%\n\n",
@@ -204,10 +222,10 @@ int main() {
     size_t max_n = *std::max_element(dataset_sizes.begin(), dataset_sizes.end());
     double expected_mb = static_cast<double>(max_n) * DIM * sizeof(float) / (1024.0 * 1024.0);
     log_progress("Generating %zu vectors (D=%d, %d Gaussians, seed=%u, ~%.0f MB)...",
-                 max_n, DIM, NUM_GAUSSIANS, DATA_SEED, expected_mb);
+                 max_n, DIM, NUM_GAUSSIANS, data_seed, expected_mb);
 
     ScopedTimer gen_timer;
-    auto all_data = generate_gaussian_mixture(max_n, DIM, NUM_GAUSSIANS, DATA_SEED);
+    auto all_data = generate_gaussian_mixture(max_n, DIM, NUM_GAUSSIANS, data_seed);
     double gen_elapsed = gen_timer.elapsed_ms();
 
     double actual_mb = static_cast<double>(all_data.size() * sizeof(float)) / (1024.0 * 1024.0);
@@ -215,7 +233,7 @@ int main() {
                  actual_mb, gen_elapsed / 1000.0);
 
     std::printf("Generating %zu vectors (D=%d, %d Gaussians, seed=%u)...\n",
-        max_n, DIM, NUM_GAUSSIANS, DATA_SEED);
+        max_n, DIM, NUM_GAUSSIANS, data_seed);
     std::printf("Data generation complete (%.1f MB)\n\n", actual_mb);
     std::fflush(stdout);
 
@@ -275,7 +293,7 @@ int main() {
         // Build a random subsample (without replacement) by shuffling indices.
         std::vector<size_t> indices(n_total);
         std::iota(indices.begin(), indices.end(), size_t(0));
-        std::mt19937 shuffle_rng(DATA_SEED);
+        std::mt19937 shuffle_rng(data_seed);
         std::shuffle(indices.begin(), indices.end(), shuffle_rng);
 
         std::vector<float> train_data(n_train * DIM);

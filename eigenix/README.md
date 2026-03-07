@@ -1,6 +1,6 @@
 # Eigenix K-Means Benchmarking Suite
 
-Production-level C++ benchmarking suite comparing K-Means clustering across four backends on CPU. Part of the [BharatMLStack](https://github.com/BharatMLStack) project.
+Production-level C++ benchmarking suite comparing K-Means clustering across three backends on CPU. Part of the [BharatMLStack](https://github.com/BharatMLStack) project.
 
 ## Backends
 
@@ -9,9 +9,8 @@ Production-level C++ benchmarking suite comparing K-Means clustering across four
 | **FAISS** | `faiss::Clustering` + `IndexFlatL2` for assignment |
 | **BLAS** | `cblas_sgemm` for the distance cross-term (`\|\|x-c\|\|^2 = \|\|x\|\|^2 - 2x^Tc + \|\|c\|\|^2`), OpenMP argmin |
 | **SIMD** | Hand-rolled AVX-512 / AVX2 / SSE4.2 L2 kernels with FMA and cache prefetch, runtime ISA detection via CPUID |
-| **Streaming** | Mini-batch K-Means (Sculley 2010) with per-centroid learning-rate decay, pluggable assignment backend |
 
-All backends share a common abstract interface (`KMeansBase`) and use KMeans++ initialisation.
+All backends share a common abstract interface (`KMeansBase`). BLAS and SIMD use random initialization (with optional KMeans++); FAISS uses its internal random init. See [KMEANS_IMPLEMENTATION.md](KMEANS_IMPLEMENTATION.md) for a full implementation summary and comparison with FAISS.
 
 ## Project Structure
 
@@ -25,7 +24,6 @@ eigenix/
 │   ├── kmeans_blas.hpp         # BLAS backend
 │   ├── kmeans_faiss.hpp        # FAISS backend
 │   ├── kmeans_simd.hpp         # SIMD backend (AVX-512 / AVX2 / SSE4.2)
-│   ├── kmeans_streaming.hpp    # Streaming mini-batch backend
 │   ├── data_generator.hpp      # Mixture-of-Gaussians synthetic data
 │   ├── metrics.hpp             # Inertia, cluster stats, purity, balance metrics
 │   └── bench_utils.hpp         # Timer, peak RSS, CSV writer, governor check
@@ -33,13 +31,12 @@ eigenix/
 │   ├── kmeans_blas.cpp
 │   ├── kmeans_faiss.cpp
 │   ├── kmeans_simd.cpp
-│   ├── kmeans_streaming.cpp
 │   ├── data_generator.cpp
 │   └── metrics.cpp
 ├── bench/
 │   └── main_bench.cpp          # Full benchmark harness
 ├── tests/
-│   └── test_correctness.cpp    # GTest suite (10 test cases)
+│   └── test_correctness.cpp    # GTest suite (9 test cases)
 └── results/
     └── .gitkeep
 ```
@@ -117,6 +114,7 @@ Or directly:
 | `EIGENIX_BENCH_K` | `1000` | Number of clusters |
 | `EIGENIX_BENCH_RUNS` | `1` | Runs per backend per N (use 3 for averaged timings) |
 | `EIGENIX_BENCH_WARMUP` | `10000` | Warmup set size |
+| `EIGENIX_BENCH_DATA_SEED` | `42` (unset) | Data generation seed. Unset = 42 (reproducible). Set to `random` or `rand` for a random seed each run; or set to a number (e.g. `123`) for that seed. |
 
 FAISS training uses the **full** N (no internal subsampling); other backends train on all N as well.
 
@@ -156,7 +154,6 @@ Backend            |        N |  Train(ms) |  Assign(ms) |      Inertia | Iters 
 FAISS              |  1000000 |     1234.0 |      210.0  |   4.3200e+07 |    87 |   4761.0 |    512.0
 BLAS               |  1000000 |     1456.0 |      198.0  |   4.3100e+07 |    92 |   5050.0 |    490.0
 SIMD-AVX512        |  1000000 |      987.0 |      145.0  |   4.3300e+07 |    91 |   6896.0 |    480.0
-Streaming-Brute    |  1000000 |     1100.0 |      145.0  |   4.5100e+07 |    10 |   6896.0 |    160.0
 ```
 
 ```
@@ -169,7 +166,7 @@ Cluster Health Report (SIMD-AVX512, N=5000000):
 
 ## Test Suite
 
-10 correctness tests (Google Test):
+9 correctness tests (Google Test):
 
 | # | Test | Assertion |
 |---|------|-----------|
@@ -177,12 +174,11 @@ Cluster Health Report (SIMD-AVX512, N=5000000):
 | 2 | Convergence | Inertia decreases monotonically across iterations |
 | 3 | Determinism | Same seed produces identical centroids |
 | 4 | FAISS vs SIMD consistency | Reasonable assignment agreement on same data |
-| 5 | Streaming vs batch delta | Streaming inertia within 15% of batch |
-| 6 | Throughput regression | Assignment exceeds 500M float ops/sec |
-| 7 | No empty clusters | Zero empty clusters on balanced data |
-| 8 | Radius sanity | `max_dist >= min_dist` for every cluster |
-| 9 | Size balance | `stddev / mean < 0.5` on uniform data |
-| 10 | Outlier detection | Injected outliers are the max-dist points in their clusters |
+| 5 | Throughput regression | Assignment exceeds 500M float ops/sec |
+| 6 | No empty clusters | Zero empty clusters on balanced data |
+| 7 | Radius sanity | `max_dist >= min_dist` for every cluster |
+| 8 | Size balance | `stddev / mean < 0.5` on uniform data |
+| 9 | Outlier detection | Injected outliers are the max-dist points in their clusters |
 
 ## Abstract Interface
 
@@ -234,33 +230,13 @@ Runtime ISA detection via CPUID with three kernel tiers:
 
 All kernels use `_mm_prefetch` for the next cache line during distance loops. The outer (per-vector) loop is parallelised with OpenMP.
 
-## Streaming K-Means Details
-
-Implements the Sculley (2010) mini-batch update rule:
-
-```
-for each point x assigned to centroid c:
-    v[c] += 1
-    c += (1 / v[c]) * (x - c)
-```
-
-- Default batch size: 50,000 vectors
-- Per-centroid lifetime count `v[c]` provides natural learning-rate decay
-- Centroids seeded via KMeans++ on the first batch
-- Supports pluggable assignment backend (any `KMeansBase*`)
-
 ## Expected Performance Characteristics
 
 | Backend | Training | Assignment | Memory |
 |---------|----------|------------|--------|
-| **BLAS** | Fastest at large N (SGEMM is cache-oblivious, heavily optimized) | Fast | High (N x K distance matrix) |
-| **FAISS** | Competitive with BLAS | Fast (optimized internal routines) | High |
+| **BLAS** | Fastest at large N (batched SGEMM, cache-friendly) | Fast | Moderate (batched) |
+| **FAISS** | Slower (index overhead per iteration) | Fast (IndexFlatL2) | High |
 | **SIMD-AVX512** | Good | Fastest (widest registers, FMA, prefetch) | Moderate |
-| **Streaming** | Moderate | Same as underlying backend | Lowest (one batch at a time) |
-
-- Streaming produces 2-5% higher inertia than batch methods because it never sees the full dataset simultaneously.
-- Batch methods produce tighter clusters; streaming may show higher radius ratios.
-- Cluster size balance is slightly worse with streaming due to online update convergence.
 
 ## Thread Control
 

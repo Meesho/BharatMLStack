@@ -2,6 +2,7 @@
 #include "metrics.hpp"
 #include <faiss/Clustering.h>
 #include <faiss/IndexFlat.h>
+#include <algorithm>
 #include <cstring>
 #include <stdexcept>
 #include <vector>
@@ -23,7 +24,7 @@ void FaissKMeans::train(const float* data, size_t n, int dim, int k,
     cp.niter = static_cast<int>(cfg.max_iter);
     cp.verbose = cfg.verbose;
     cp.seed = static_cast<int>(cfg.seed);
-    cp.nredo = 1;
+    cp.nredo = std::max(1, cfg.nredo);
     cp.max_points_per_centroid = static_cast<int>(
         (n + static_cast<size_t>(k) - 1) / static_cast<size_t>(k));
     if (cp.max_points_per_centroid < 1) cp.max_points_per_centroid = 1;

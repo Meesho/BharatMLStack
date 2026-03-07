@@ -1,6 +1,0 @@
-/home/adityakumargarg/BharatMLStack/eigenix/build/CMakeFiles/eigenix_kmeans.dir
-/home/adityakumargarg/BharatMLStack/eigenix/build/CMakeFiles/eigenix_bench.dir
-/home/adityakumargarg/BharatMLStack/eigenix/build/CMakeFiles/eigenix_tests.dir
-/home/adityakumargarg/BharatMLStack/eigenix/build/CMakeFiles/test.dir
-/home/adityakumargarg/BharatMLStack/eigenix/build/CMakeFiles/edit_cache.dir
-/home/adityakumargarg/BharatMLStack/eigenix/build/CMakeFiles/rebuild_cache.dir
