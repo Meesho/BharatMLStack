@@ -420,10 +420,8 @@ def deframe_log_file(log_path):
                 offset += 4
                 
                 # Skip 0-length records (padding), but continue processing
+                # asyncloguploader format has NO alignment padding between records
                 if record_length == 0:
-                    # Skip padding until next 4-byte boundary
-                    while offset < valid_data_bytes and offset % 4 != 0:
-                        offset += 1
                     continue
                 
                 # Check if record fits in remaining data
@@ -436,10 +434,7 @@ def deframe_log_file(log_path):
                 records.append(record)
                 records_in_frame += 1
                 offset += record_length
-                
-                # Skip padding (zeros) until next 4-byte boundary or end
-                while offset < valid_data_bytes and offset % 4 != 0:
-                    offset += 1
+                # asyncloguploader format: records are packed back-to-back with NO alignment padding
             
             if records_in_frame > 0:
                 if frame_count <= 5 or frame_count % 1000 == 0:
