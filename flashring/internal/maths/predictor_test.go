@@ -315,44 +315,42 @@ func TestGridSearchRefinement(t *testing.T) {
 	}
 
 	estimator := &Estimator{WFreq: 0.2, WLA: 0.2}
-	gridSearch := NewGridSearchEstimator(
-		10*time.Millisecond,
-		initialTuples,
-		estimator,
-		0.01, // Larger epsilon
-	)
 
-	// Test grid refinement with delta larger than epsilon
-	base := WeightTuple{WFreq: 0.2, WLA: 0.2}
-	_, ok := gridSearch.GenerateRefinedGrid(base, 1, 0.1)
+	t.Run("delta > epsilon: refinement possible", func(t *testing.T) {
+		gs := NewGridSearchEstimator(10*time.Millisecond, initialTuples, estimator, 0.01)
+		base := WeightTuple{WFreq: 0.2, WLA: 0.2}
+		refined, ok := gs.GenerateRefinedGrid(base, 1, 0.1)
+		if !ok {
+			t.Error("Expected ok=true when delta > epsilon (refinement still useful)")
+		}
+		// 3x3 grid minus the center = 8 points; all have positive wf and la
+		// (base 0.2 ± 0.1 yields 0.1..0.3)
+		if len(refined) != 8 {
+			t.Errorf("Expected 8 refined tuples, got %d", len(refined))
+		}
+	})
 
-	// The function returns false when it encounters the center point (i=0, j=0)
-	// where both differences are 0 (which is < epsilon), so it will return false
-	// This is actually the expected behavior - it means the grid is too fine
-	if ok {
-		t.Error("Grid refinement should return false due to center point having zero difference")
-	}
+	t.Run("delta < epsilon: convergence detected", func(t *testing.T) {
+		gs := NewGridSearchEstimator(10*time.Millisecond, initialTuples, estimator, 0.1)
+		base := WeightTuple{WFreq: 0.2, WLA: 0.2}
+		_, ok := gs.GenerateRefinedGrid(base, 1, 0.01)
+		if ok {
+			t.Error("Expected ok=false when delta < epsilon (converged)")
+		}
+	})
 
-	// Test with a different approach - use larger delta relative to epsilon
-	gridSearch2 := NewGridSearchEstimator(
-		10*time.Millisecond,
-		initialTuples,
-		estimator,
-		0.001, // Smaller epsilon
-	)
-
-	// Test with delta much larger than epsilon and non-zero base that avoids zero differences
-	base2 := WeightTuple{WFreq: 0.5, WLA: 0.5}
-	_, ok2 := gridSearch2.GenerateRefinedGrid(base2, 2, 0.1)
-
-	// This should also return false due to the center point issue
-	if ok2 {
-		t.Error("Grid refinement should return false due to center point check")
-	}
-
-	// The function logic checks if differences are small at any point during iteration
-	// and returns false when it finds the center point where difference is 0
-	// This seems to be the intended behavior to detect when refinement should stop
+	t.Run("larger grid with delta > epsilon", func(t *testing.T) {
+		gs := NewGridSearchEstimator(10*time.Millisecond, initialTuples, estimator, 0.001)
+		base := WeightTuple{WFreq: 0.5, WLA: 0.5}
+		refined, ok := gs.GenerateRefinedGrid(base, 2, 0.1)
+		if !ok {
+			t.Error("Expected ok=true when delta >> epsilon")
+		}
+		// 5x5 grid minus center = 24 points; all positive (0.3..0.7)
+		if len(refined) != 24 {
+			t.Errorf("Expected 24 refined tuples, got %d", len(refined))
+		}
+	})
 }
 
 func TestGridSearchConvergence(t *testing.T) {

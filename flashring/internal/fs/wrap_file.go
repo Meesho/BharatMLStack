@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/flashring/internal/iouring"
 	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 	"golang.org/x/sys/unix"
 )
@@ -17,17 +18,17 @@ type WrapAppendFile struct {
 	ReadDirectIO         bool
 	wrapped              bool
 	blockSize            int
-	WriteFd              int      // write file descriptor
-	ReadFd               int      // read file descriptor
-	MaxFileSize          int64    // max file size in bytes
-	FilePunchHoleSize    int64    // file punch hole size in bytes
-	PhysicalStartOffset  int64    // physical start offset in bytes
-	LogicalCurrentOffset int64    // file current size in bytes
-	PhysicalWriteOffset  int64    // file current physical offset in bytes
-	WriteFile            *os.File // write file
-	ReadFile             *os.File // read file
-	Stat                 *Stat    // file statistics
-	WriteRing            *IoUring // optional io_uring ring for batched writes
+	WriteFd              int                    // write file descriptor
+	ReadFd               int                    // read file descriptor
+	MaxFileSize          int64                  // max file size in bytes
+	FilePunchHoleSize    int64                  // file punch hole size in bytes
+	PhysicalStartOffset  int64                  // physical start offset in bytes
+	LogicalCurrentOffset int64                  // file current size in bytes
+	PhysicalWriteOffset  int64                  // file current physical offset in bytes
+	WriteFile            *os.File               // write file
+	ReadFile             *os.File               // read file
+	Stat                 *Stat                  // file statistics
+	WriteRing            *iouring.IoUringWriter // io_uring writer for batched writes
 }
 
 func NewWrapAppendFile(config FileConfig) (*WrapAppendFile, error) {
@@ -60,12 +61,7 @@ func NewWrapAppendFile(config FileConfig) (*WrapAppendFile, error) {
 		PhysicalStartOffset:  0,
 		LogicalCurrentOffset: 0,
 		PhysicalWriteOffset:  0,
-		Stat: &Stat{
-			WriteCount:         0,
-			ReadCount:          0,
-			PunchHoleCount:     0,
-			CurrentLogicalSize: 0,
-		},
+		Stat:                 &Stat{},
 	}, nil
 }
 
@@ -88,6 +84,7 @@ func (r *WrapAppendFile) Pwrite(buf []byte) (currentPhysicalOffset int64, err er
 		r.PhysicalWriteOffset = r.PhysicalStartOffset
 	}
 	r.LogicalCurrentOffset += int64(n)
+	r.Stat.WriteCount.Add(1)
 
 	return r.PhysicalWriteOffset, nil
 }
@@ -96,24 +93,7 @@ func (r *WrapAppendFile) Pwrite(buf []byte) (currentPhysicalOffset int64, err er
 // Chunks are submitted in sub-batches that fit within the ring's SQ depth,
 // so arbitrarily large buffers work regardless of ring size.
 // Returns total bytes written and the final PhysicalWriteOffset.
-// Requires WriteRing to be set; falls back to sequential Pwrite if nil.
 func (r *WrapAppendFile) PwriteBatch(buf []byte, chunkSize int) (totalWritten int, fileOffset int64, err error) {
-	if r.WriteRing == nil {
-		// Fallback: sequential pwrite
-		for written := 0; written < len(buf); written += chunkSize {
-			end := written + chunkSize
-			if end > len(buf) {
-				end = len(buf)
-			}
-			fileOffset, err = r.Pwrite(buf[written:end])
-			if err != nil {
-				return written, fileOffset, err
-			}
-			totalWritten += end - written
-		}
-		return totalWritten, fileOffset, nil
-	}
-
 	if r.WriteDirectIO {
 		if !isAlignedBuffer(buf, r.blockSize) {
 			return 0, 0, ErrBufNoAlign
@@ -121,7 +101,7 @@ func (r *WrapAppendFile) PwriteBatch(buf []byte, chunkSize int) (totalWritten in
 	}
 
 	// Maximum SQEs per submission -- capped to ring depth.
-	maxPerBatch := int(r.WriteRing.sqEntries)
+	maxPerBatch := r.WriteRing.MaxBatchSize()
 
 	for written := 0; written < len(buf); {
 		// Build a sub-batch that fits within the ring
@@ -153,7 +133,7 @@ func (r *WrapAppendFile) PwriteBatch(buf []byte, chunkSize int) (totalWritten in
 		for _, n := range results {
 			totalWritten += n
 			r.LogicalCurrentOffset += int64(n)
-			r.Stat.WriteCount++
+			r.Stat.WriteCount.Add(1)
 		}
 	}
 
@@ -208,14 +188,14 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 	if err != nil {
 		return 0, err
 	}
-	r.Stat.ReadCount++
+	r.Stat.ReadCount.Add(1)
 	return int32(n), nil
 }
 
 // ValidateReadOffset checks the read window and wraps the offset for ring-buffer
 // files. Returns the physical file offset to use, or an error.
-// Mirrors the validation logic in PreadAsync / Pread so callers that bypass
-// PreadAsync (e.g. the batched io_uring path) get identical safety checks.
+// Mirrors the validation logic in Pread so callers that use the batched
+// io_uring path get identical safety checks.
 func (r *WrapAppendFile) ValidateReadOffset(fileOffset int64, bufLen int) (int64, error) {
 	if r.ReadDirectIO {
 		if !isAlignedOffset(fileOffset, r.blockSize) {
@@ -244,54 +224,6 @@ func (r *WrapAppendFile) ValidateReadOffset(fileOffset int64, bufLen int) (int64
 	return fileOffset, nil
 }
 
-// PreadAsync submits a pread via io_uring and waits for completion.
-// Thread-safe: multiple goroutines can call this concurrently on the same IOUringFile.
-// Applies the same read-window validation and offset wrapping as Pread so that
-// stale index entries (pointing past MaxFileSize) are rejected cheaply without
-// hitting the kernel.
-func (f *IOUringFile) PreadAsync(fileOffset int64, buf []byte) (int, error) {
-	if f.ReadDirectIO {
-		if !isAlignedOffset(fileOffset, f.blockSize) {
-			return 0, ErrOffsetNotAligned
-		}
-		if !isAlignedBuffer(buf, f.blockSize) {
-			return 0, ErrBufNoAlign
-		}
-	}
-
-	// Validate read window and wrap offset (mirrors Pread logic exactly)
-	readEnd := fileOffset + int64(len(buf))
-	valid := false
-
-	if !f.wrapped {
-		// Single valid region: [PhysicalStartOffset, PhysicalWriteOffset)
-		valid = fileOffset >= f.PhysicalStartOffset && readEnd <= f.PhysicalWriteOffset
-	} else {
-		// Ring buffer has wrapped -- map the logical offset back into [0, MaxFileSize)
-		fileOffset = fileOffset % f.MaxFileSize
-		readEnd = readEnd % f.MaxFileSize
-		if fileOffset >= f.PhysicalStartOffset {
-			valid = readEnd <= f.MaxFileSize
-		} else {
-			valid = readEnd <= f.PhysicalWriteOffset
-		}
-	}
-	if !valid {
-		return 0, ErrFileOffsetOutOfRange
-	}
-
-	var startTime = time.Now()
-	n, err := f.ring.SubmitRead(f.ReadFd, buf, uint64(fileOffset))
-	metrics.Incr(metrics.KEY_PREAD_COUNT, []string{})
-	metrics.Timing(metrics.KEY_PREAD_LATENCY, time.Since(startTime), []string{})
-	if err != nil {
-		return 0, err
-	}
-
-	f.Stat.ReadCount++
-	return n, nil
-}
-
 func (r *WrapAppendFile) TrimHead() (err error) {
 
 	var startTime = time.Now()
@@ -308,6 +240,7 @@ func (r *WrapAppendFile) TrimHead() (err error) {
 	if r.PhysicalStartOffset >= r.MaxFileSize {
 		r.PhysicalStartOffset = 0
 	}
+	r.Stat.PunchHoleCount.Add(1)
 	metrics.Incr(metrics.KEY_PUNCH_HOLE_COUNT, []string{})
 	metrics.Timing(metrics.KEY_TRIM_HEAD_LATENCY, time.Since(startTime), []string{})
 	return nil

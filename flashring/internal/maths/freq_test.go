@@ -139,11 +139,10 @@ func TestIncBasicBehavior(t *testing.T) {
 
 	// Test mantissa increment when increment succeeds
 	// We'll force hits by setting a predictable RNG state
-	originalRng := rng
-	defer func() { rng = originalRng }()
+	originalRng := counter.rng
+	defer func() { counter.rng = originalRng }()
 
-	// Set RNG to always return 0 (guaranteed hit)
-	rng = 0
+	counter.rng = 0
 
 	v := uint32(5) // m=5, e=0
 	newV, hit := counter.Inc(v)
@@ -164,10 +163,9 @@ func TestIncBasicBehavior(t *testing.T) {
 func TestIncMantissaOverflow(t *testing.T) {
 	counter := New(5)
 
-	// Force hits by setting RNG to 0
-	originalRng := rng
-	defer func() { rng = originalRng }()
-	rng = 0
+	originalRng := counter.rng
+	defer func() { counter.rng = originalRng }()
+	counter.rng = 0
 
 	// Test mantissa overflow: m=9 -> m=0, e++
 	v := uint32(9) // m=9, e=0
@@ -189,10 +187,9 @@ func TestIncMantissaOverflow(t *testing.T) {
 func TestIncExponentSaturation(t *testing.T) {
 	counter := New(2) // expClamp = 2
 
-	// Force hits by setting RNG to 0
-	originalRng := rng
-	defer func() { rng = originalRng }()
-	rng = 0
+	originalRng := counter.rng
+	defer func() { counter.rng = originalRng }()
+	counter.rng = 0
 
 	// Test saturation at expClamp: m=9, e=expClamp
 	v := (uint32(2) << eShift) | 9 // m=9, e=2 (at expClamp)
@@ -215,22 +212,18 @@ func TestIncExponentSaturation(t *testing.T) {
 func TestIncMissBehavior(t *testing.T) {
 	counter := New(5)
 
-	originalRng := rng
-	defer func() { rng = originalRng }()
+	originalRng := counter.rng
+	defer func() { counter.rng = originalRng }()
 
 	// Use a higher exponent where th[e] is smaller and easier to exceed
-	// th[3] = 4294967 (from debug output)
 	v := uint32((3 << eShift) | 5) // m=5, e=3
 
-	// Find an RNG value that will cause rand32() to return >= th[3]
-	// We'll try a few seeds until we find one that causes a miss
 	missFound := false
 	for seed := uint32(0xFFFFFF00); seed != 0; seed++ {
-		rng = seed
+		counter.rng = seed
 		testRand := counter.rand32()
 		if testRand >= counter.th[3] {
-			// Reset and use this seed
-			rng = seed
+			counter.rng = seed
 			newV, hit := counter.Inc(v)
 
 			if !hit && newV == v {
@@ -252,10 +245,9 @@ func TestIncStatisticalBehavior(t *testing.T) {
 
 	counter := New(10)
 
-	// Reset RNG to ensure reproducible but varied sequence
-	originalRng := rng
-	defer func() { rng = originalRng }()
-	rng = 12345
+	originalRng := counter.rng
+	defer func() { counter.rng = originalRng }()
+	counter.rng = 12345
 
 	// Test with e=0 (should hit approximately 100% of the time)
 	v := uint32(5) // m=5, e=0
@@ -300,10 +292,9 @@ func TestIntegrationCountingApproximation(t *testing.T) {
 
 	counter := New(10)
 
-	// Reset RNG to ensure reproducible results
-	originalRng := rng
-	defer func() { rng = originalRng }()
-	rng = 98765
+	originalRng := counter.rng
+	defer func() { counter.rng = originalRng }()
+	counter.rng = 98765
 
 	// Simulate counting events - start with higher initial state
 	v := uint32(5) // start with m=5, e=0 to avoid edge cases

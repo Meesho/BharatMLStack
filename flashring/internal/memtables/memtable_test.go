@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
+	"github.com/Meesho/BharatMLStack/flashring/internal/iouring"
 )
 
 // Helper function to create a mock file for testing
@@ -23,6 +24,12 @@ func createTestFile(t *testing.T) *fs.WrapAppendFile {
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
+
+	writeRing, err := iouring.NewIoUringWriter(32, 0)
+	if err != nil {
+		t.Fatalf("Failed to create io_uring write ring: %v", err)
+	}
+	file.WriteRing = writeRing
 	return file
 }
 
@@ -34,6 +41,9 @@ func createTestPage(size int) *fs.AlignedPage {
 // Helper function to cleanup resources
 func cleanup(file *fs.WrapAppendFile, page *fs.AlignedPage) {
 	if file != nil {
+		if file.WriteRing != nil {
+			file.WriteRing.Close()
+		}
 		file.Close()
 	}
 	if page != nil {

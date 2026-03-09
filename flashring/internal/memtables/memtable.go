@@ -107,8 +107,7 @@ func (m *Memtable) Flush() (n int, fileOffset int64, err error) {
 		numChunks++
 	}
 
-	// PwriteBatch submits all chunks in one io_uring_enter when WriteRing is
-	// set, otherwise falls back to sequential pwrite internally.
+	// PwriteBatch submits all chunks via io_uring.
 	totalWritten, fileOffset, err := m.file.PwriteBatch(m.page.Buf, chunkSize)
 	if err != nil {
 		return 0, 0, err

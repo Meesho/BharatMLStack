@@ -1,7 +1,7 @@
 //go:build linux
 // +build linux
 
-package fs
+package iouring
 
 import (
 	"os"
@@ -45,7 +45,7 @@ func TestIoUringBasicRead(t *testing.T) {
 	defer ring.Close()
 
 	// 4. Allocate aligned buffer
-	buf := AlignedBlock(4096, 4096)
+	buf := alignedBlock(4096, 4096)
 
 	// 5. Submit read via io_uring
 	n, err := ring.SubmitRead(fd, buf, 0)
@@ -65,7 +65,7 @@ func TestIoUringBasicRead(t *testing.T) {
 	t.Logf("io_uring read of 4096 bytes succeeded and data matches")
 
 	// 7. Test a second read (to verify ring reuse works)
-	buf2 := AlignedBlock(4096, 4096)
+	buf2 := alignedBlock(4096, 4096)
 	n2, err := ring.SubmitRead(fd, buf2, 0)
 	if err != nil {
 		t.Fatalf("SubmitRead #2: %v", err)
@@ -82,7 +82,7 @@ func TestIoUringBasicRead(t *testing.T) {
 
 	// 8. Test multiple sequential reads to exercise ring cycling
 	for iter := 0; iter < 100; iter++ {
-		buf3 := AlignedBlock(4096, 4096)
+		buf3 := alignedBlock(4096, 4096)
 		n3, err := ring.SubmitRead(fd, buf3, 0)
 		if err != nil {
 			t.Fatalf("SubmitRead iter %d: %v", iter, err)
@@ -94,8 +94,8 @@ func TestIoUringBasicRead(t *testing.T) {
 	t.Logf("100 sequential io_uring reads succeeded")
 }
 
-// AlignedBlock returns a 4096-byte-aligned buffer.
-func AlignedBlock(size, alignment int) []byte {
+// alignedBlock returns a block-aligned buffer.
+func alignedBlock(size, alignment int) []byte {
 	raw := make([]byte, size+alignment)
 	addr := uintptr(unsafe.Pointer(&raw[0]))
 	off := (alignment - int(addr%uintptr(alignment))) % alignment

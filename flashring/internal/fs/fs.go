@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 
@@ -36,9 +37,9 @@ var (
 )
 
 type Stat struct {
-	WriteCount         int64
-	ReadCount          int64
-	PunchHoleCount     int64
+	WriteCount         atomic.Int64
+	ReadCount          atomic.Int64
+	PunchHoleCount     atomic.Int64
 	CurrentLogicalSize int64
 }
 
@@ -60,54 +61,58 @@ type Page interface {
 	Unmap() error
 }
 
-func createAppendOnlyWriteFileDescriptor(filename string) (int, *os.File, bool, error) {
-
-	// Open file with DIRECT_IO, WRITE_ONLY, CREAT flags
-	flags := O_DIRECT | O_WRONLY | O_CREAT | O_DSYNC
-	fd, err := syscall.Open(filename, flags, FILE_MODE)
-	if err != nil {
-		// If DIRECT_IO is not supported, fall back to regular flags
-		log.Warn().Msgf("DIRECT_IO not supported, falling back to regular flags: %v", err)
-		flags = O_WRONLY | O_CREAT | O_DSYNC
-		fd, err = syscall.Open(filename, flags, FILE_MODE)
-		if err != nil {
-			return 0, nil, false, err
-		}
+// openWithDirectIO attempts to open a file with O_DIRECT, falling back to
+// regular flags if the filesystem doesn't support it.
+func openWithDirectIO(filename string, baseFlags int) (int, bool, error) {
+	fd, err := syscall.Open(filename, baseFlags|O_DIRECT, FILE_MODE)
+	if err == nil {
+		return fd, true, nil
 	}
+	log.Warn().Msgf("DIRECT_IO not supported, falling back to regular flags: %v", err)
+	fd, err = syscall.Open(filename, baseFlags, FILE_MODE)
+	if err != nil {
+		return 0, false, err
+	}
+	return fd, false, nil
+}
+
+func fdToFile(fd int, filename string) (*os.File, error) {
 	file := os.NewFile(uintptr(fd), filename)
 	if file == nil {
-		return 0, nil, false, fmt.Errorf("failed to create file from fd")
+		return nil, fmt.Errorf("failed to create file from fd")
 	}
+	return file, nil
+}
 
-	return fd, file, true, nil
+func createAppendOnlyWriteFileDescriptor(filename string) (int, *os.File, bool, error) {
+	fd, directIO, err := openWithDirectIO(filename, O_WRONLY|O_CREAT|O_DSYNC)
+	if err != nil {
+		return 0, nil, false, err
+	}
+	file, err := fdToFile(fd, filename)
+	if err != nil {
+		return 0, nil, false, err
+	}
+	return fd, file, directIO, nil
 }
 
 func createPreAllocatedWriteFileDescriptor(filename string, maxFileSize int64) (int, *os.File, bool, error) {
-	flags := O_DIRECT | O_WRONLY | O_CREAT | O_DSYNC
-	fd, err := syscall.Open(filename, flags, FILE_MODE)
+	fd, directIO, err := openWithDirectIO(filename, O_WRONLY|O_CREAT|O_DSYNC)
 	if err != nil {
-		log.Warn().Msgf("DIRECT_IO not supported, falling back to regular flags: %v", err)
-		flags = O_WRONLY | O_CREAT | O_DSYNC
-		fd, err = syscall.Open(filename, flags, FILE_MODE)
-		if err != nil {
-			return 0, nil, false, err
-		}
+		return 0, nil, false, err
 	}
 
-	// Preallocate file space
-	err = unix.Fallocate(fd, 0, 0, maxFileSize)
-	if err != nil {
+	if err = unix.Fallocate(fd, 0, 0, maxFileSize); err != nil {
 		log.Error().Err(err).Msg("Failed to fallocate file")
 		syscall.Close(fd)
 		return 0, nil, false, err
 	}
 
-	file := os.NewFile(uintptr(fd), filename)
-	if file == nil {
-		return 0, nil, false, fmt.Errorf("failed to create file from fd")
+	file, err := fdToFile(fd, filename)
+	if err != nil {
+		return 0, nil, false, err
 	}
-
-	return fd, file, true, nil
+	return fd, file, directIO, nil
 }
 
 func createReadFileDescriptor(filename string) (int, *os.File, bool, error) {
@@ -116,15 +121,13 @@ func createReadFileDescriptor(filename string) (int, *os.File, bool, error) {
 	if err != nil {
 		return 0, nil, false, err
 	}
-	file := os.NewFile(uintptr(fd), filename)
-	if file == nil {
-		return 0, nil, false, fmt.Errorf("failed to create file from fd")
+	file, err := fdToFile(fd, filename)
+	if err != nil {
+		return 0, nil, false, err
 	}
-
 	return fd, file, true, nil
 }
 
-// isAligned checks if the buffer is aligned to the block size
 func isAlignedBuffer(buf []byte, alignment int) bool {
 	pt := uintptr(alignment)
 	if len(buf) == 0 {
@@ -136,4 +139,14 @@ func isAlignedBuffer(buf []byte, alignment int) bool {
 
 func isAlignedOffset(offset int64, alignment int) bool {
 	return offset%int64(alignment) == 0
+}
+
+// AlignRange computes the block-aligned start offset and total aligned size
+// for a read spanning [offset, offset+length). Useful for O_DIRECT reads
+// where both offset and buffer size must be block-aligned.
+func AlignRange(offset int64, length int, blockSize int64) (alignedStart, alignedSize int64) {
+	alignedStart = (offset / blockSize) * blockSize
+	end := offset + int64(length)
+	alignedEnd := ((end + blockSize - 1) / blockSize) * blockSize
+	return alignedStart, alignedEnd - alignedStart
 }
