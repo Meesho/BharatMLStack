@@ -120,9 +120,11 @@ func NewWrapCache(config Config, mountPoint string) (*WrapCache, error) {
 
 	readRing, err := iouring.NewParallelBatchIoUringReader(iouring.BatchIoUringConfig{
 		RingDepth:   256,
-		MaxBatch:    24,
-		MaxInflight: 24,
+		MaxBatch:    12,
+		MaxInflight: 12,
 		QueueSize:   1024,
+		Window:      0,
+		SQPoll:      true,
 	}, 1)
 	if err != nil {
 		log.Panic().Err(err).Msg("Failed to create batched io_uring reader")
