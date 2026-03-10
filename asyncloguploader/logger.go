@@ -35,6 +35,9 @@ type Logger struct {
 	// Event name for metric tag propagation
 	eventName string
 
+	// Cached metric tags (merged once in NewLogger, reused on hot path)
+	metricTags []string
+
 	// Closed flag
 	closed atomic.Bool
 }
@@ -75,6 +78,7 @@ func NewLogger(config Config, eventName string) (*Logger, error) {
 		semaphore:       make(chan struct{}, 1),
 		config:          config,
 		eventName:       eventName,
+		metricTags:      metricTags,
 	}
 
 	// Start background worker
@@ -87,7 +91,7 @@ func NewLogger(config Config, eventName string) (*Logger, error) {
 
 // LogBytes writes raw byte data to the logger (zero-allocation path)
 func (l *Logger) LogBytes(data []byte) {
-	tags := MergeMetricTags(l.config.MetricTags, l.eventName)
+	tags := l.metricTags
 
 	if l.closed.Load() {
 		metric.Incr(MetricLogBytesDropped, tags)
@@ -204,7 +208,7 @@ func (l *Logger) flushWorker() {
 // flushBuffers writes all data from buffers to disk using batch flush
 // Much simpler: each buffer knows how to get its data and reset itself
 func (l *Logger) flushBuffers(buffers []*Buffer) {
-	tags := MergeMetricTags(l.config.MetricTags, l.eventName)
+	tags := l.metricTags
 	metric.Incr(MetricLogBytesFlushAttempts, tags)
 	flushStart := time.Now()
 	defer func() {

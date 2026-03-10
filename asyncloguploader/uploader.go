@@ -107,18 +107,21 @@ func (u *Uploader) uploadWorker() {
 	for {
 		select {
 		case <-u.ctx.Done():
-			// Final scan before exiting
-			u.scanAndUpload()
+			// Final scan before exiting - use fresh context so uploadFile/uploadParallel
+			// do not see canceled u.ctx and fail
+			ctxShutdown, cancelShutdown := context.WithTimeout(context.Background(), 1*time.Minute)
+			defer cancelShutdown()
+			u.scanAndUploadWithContext(ctxShutdown)
 			logger.Debug().Msg("Upload worker exiting (context cancelled)")
 			return
 		case <-ticker.C:
-			u.scanAndUpload()
+			u.scanAndUploadWithContext(u.ctx)
 		}
 	}
 }
 
-// scanAndUpload lists .log files in scanDir and uploads each
-func (u *Uploader) scanAndUpload() {
+// scanAndUploadWithContext lists .log files in scanDir and uploads each using the given context.
+func (u *Uploader) scanAndUploadWithContext(ctx context.Context) {
 	entries, err := os.ReadDir(u.scanDir)
 	if err != nil {
 		logger.Debug().Err(err).Msgf("Failed to read scan dir %s", u.scanDir)
@@ -133,7 +136,7 @@ func (u *Uploader) scanAndUpload() {
 
 		logger.Debug().Msgf("Processing file for upload: %s", path)
 
-		if err := u.uploadFileWithRetry(path); err != nil {
+		if err := u.uploadFileWithRetry(ctx, path); err != nil {
 			logger.Error().Err(err).Msgf("Failed to upload %s after %d retries", path, u.config.MaxRetries)
 			metric.Incr(MetricUploadFileFailed, u.metricTags)
 		} else {
@@ -142,8 +145,8 @@ func (u *Uploader) scanAndUpload() {
 	}
 }
 
-// uploadFileWithRetry uploads a file with retry logic
-func (u *Uploader) uploadFileWithRetry(filePath string) error {
+// uploadFileWithRetry uploads a file with retry logic using the given context.
+func (u *Uploader) uploadFileWithRetry(ctx context.Context, filePath string) error {
 	// Get file size BEFORE upload (file will be deleted after successful upload)
 	metric.Incr(MetricUploadFile, u.metricTags)
 	fileInfo, statErr := os.Stat(filePath)
@@ -157,14 +160,14 @@ func (u *Uploader) uploadFileWithRetry(filePath string) error {
 		if attempt > 0 {
 			// Wait before retry
 			select {
-			case <-u.ctx.Done():
+			case <-ctx.Done():
 				return fmt.Errorf("uploader stopped")
 			case <-time.After(u.config.RetryDelay):
 			}
 		}
 
 		start := time.Now()
-		err := u.uploadFile(filePath)
+		err := u.uploadFile(ctx, filePath)
 		metric.TimingWithStart(MetricUploadFileDuration, start, u.metricTags)
 
 		if err == nil {
@@ -190,7 +193,7 @@ func (u *Uploader) uploadFileWithRetry(filePath string) error {
 }
 
 // uploadFile uploads a single file to GCS using parallel chunk upload
-func (u *Uploader) uploadFile(filePath string) error {
+func (u *Uploader) uploadFile(ctx context.Context, filePath string) error {
 	// Open file for reading
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -216,7 +219,7 @@ func (u *Uploader) uploadFile(filePath string) error {
 	objectName := u.generateObjectName(filePath)
 
 	// Upload using parallel chunk upload with chunk manager
-	if err := u.uploadParallel(u.ctx, u.client, u.config.Bucket, objectName, buf, u.config.ChunkSize); err != nil {
+	if err := u.uploadParallel(ctx, u.client, u.config.Bucket, objectName, buf, u.config.ChunkSize); err != nil {
 		return fmt.Errorf("parallel upload failed: %w", err)
 	}
 
