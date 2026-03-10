@@ -1123,7 +1123,7 @@ show_access_info() {
     echo "     inferflow / predator  → no headers required"
     echo ""
     echo "   📋 Helper page with per-service headers + sample request bodies:"
-    echo "      http://localhost:8095"
+    echo "      http://localhost:8097"
     echo "   Sample JSON files also at: workspace/grpc-samples/<service>/<Method>.json"
   fi
 

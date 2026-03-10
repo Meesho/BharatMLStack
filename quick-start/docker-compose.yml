@@ -963,7 +963,7 @@ services:
       - ./nginx/index.html:/usr/share/nginx/grpcui-helper/index.html:ro
     ports:
       - "9000:9000"
-      - "8095:80"
+      - "8097:80"
     networks:
       onfs-network:
         ipv4_address: 172.18.0.33
