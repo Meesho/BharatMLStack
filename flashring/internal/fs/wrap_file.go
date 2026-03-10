@@ -165,16 +165,16 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 		// Single valid region: [PhysicalStartOffset, PhysicalWriteOffset)
 		valid = fileOffset >= r.PhysicalStartOffset && readEnd <= r.PhysicalWriteOffset
 	} else {
-		// Two valid regions:
-		// 1. [PhysicalStartOffset, MaxFileSize)
-		// 2. [0, PhysicalWriteOffset)
+		// Only allow reads from the tail that has not been overwritten or punched.
+		// Safe region: [readStart, MaxFileSize) where readStart = max(PhysicalStartOffset, PhysicalWriteOffset).
+		// This excludes both the punched region and the overwritten head (avoids bad CR32).
 		fileOffset = fileOffset % r.MaxFileSize
 		readEnd = readEnd % r.MaxFileSize
-		if fileOffset >= r.PhysicalStartOffset {
-			valid = readEnd <= r.MaxFileSize
-		} else {
-			valid = readEnd <= r.PhysicalWriteOffset
+		readStart := r.PhysicalStartOffset
+		if r.PhysicalWriteOffset > readStart {
+			readStart = r.PhysicalWriteOffset
 		}
+		valid = fileOffset >= readStart && readEnd <= r.MaxFileSize
 	}
 	if !valid {
 		return 0, ErrFileOffsetOutOfRange
@@ -209,13 +209,14 @@ func (r *WrapAppendFile) ValidateReadOffset(fileOffset int64, bufLen int) (int64
 	if !r.wrapped {
 		valid = fileOffset >= r.PhysicalStartOffset && readEnd <= r.PhysicalWriteOffset
 	} else {
+		// Only allow reads from the tail [readStart, MaxFileSize), readStart = max(PhysicalStartOffset, PhysicalWriteOffset).
 		fileOffset = fileOffset % r.MaxFileSize
 		readEnd = readEnd % r.MaxFileSize
-		if fileOffset >= r.PhysicalStartOffset {
-			valid = readEnd <= r.MaxFileSize
-		} else {
-			valid = readEnd <= r.PhysicalWriteOffset
+		readStart := r.PhysicalStartOffset
+		if r.PhysicalWriteOffset > readStart {
+			readStart = r.PhysicalWriteOffset
 		}
+		valid = fileOffset >= readStart && readEnd <= r.MaxFileSize
 	}
 	if !valid {
 		return 0, ErrFileOffsetOutOfRange

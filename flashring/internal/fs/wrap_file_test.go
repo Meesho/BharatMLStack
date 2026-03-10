@@ -312,32 +312,28 @@ func TestPread_Success_WithWrap(t *testing.T) {
 		t.Errorf("Expected wrapped to be true")
 	}
 
-	// Read from valid regions after wrap
-	// Region 1: [PhysicalStartOffset, MaxFileSize) - should contain data2
+	// When wrapped, only the tail [PhysicalWriteOffset, MaxFileSize) is valid for reads.
+	// Tail [4096, 8192) - should contain data2 (not overwritten yet).
 	readData := createAlignedBuffer(4096, 4096)
 	n, err := waf.Pread(4096, readData)
 	if err != nil {
-		t.Fatalf("Pread from high region failed: %v", err)
+		t.Fatalf("Pread from tail region failed: %v", err)
 	}
 	if n != 4096 {
 		t.Errorf("Expected read length 4096, got %d", n)
 	}
-
-	// Region 2: [0, PhysicalWriteOffset) - should contain data3
-	readData2 := createAlignedBuffer(4096, 4096)
-	n, err = waf.Pread(0, readData2)
-	if err != nil {
-		t.Fatalf("Pread from low region failed: %v", err)
-	}
-	if n != 4096 {
-		t.Errorf("Expected read length 4096, got %d", n)
-	}
-
-	// Verify data3 in wrapped position
-	for i := range readData2 {
-		if readData2[i] != byte(3) {
-			t.Errorf("Data mismatch in wrapped region at index %d: expected %d, got %d", i, 3, readData2[i])
+	for i := range readData {
+		if readData[i] != byte(2) {
+			t.Errorf("Data mismatch in tail at index %d: expected 2, got %d", i, readData[i])
 		}
+	}
+
+	// Head [0, PhysicalWriteOffset) = [0, 4096) has been overwritten by data3.
+	// Reading from it must fail to avoid returning stale/wrong data (bad CR32 in cache).
+	readData2 := createAlignedBuffer(4096, 4096)
+	_, err = waf.Pread(0, readData2)
+	if err != ErrFileOffsetOutOfRange {
+		t.Errorf("Pread from overwritten head should return ErrFileOffsetOutOfRange, got %v", err)
 	}
 }
 
