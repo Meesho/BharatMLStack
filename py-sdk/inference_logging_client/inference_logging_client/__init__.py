@@ -202,7 +202,7 @@ def decode_mplog(
     rows = []
     for entity_id, row_data in zip(entity_ids, decoded_rows):
         row = {"entity_id": entity_id}
-        row.update(row_data)
+        row.update({k: v for k, v in row_data.items() if k != "entity_id"})
         rows.append(row)
 
     # Create Spark DataFrame from list of dicts
@@ -362,6 +362,11 @@ def decode_mplog_dataframe(
         "hour",
     ]
 
+    # Column names reserved for entity_id and metadata pass-through.
+    # Feature names that collide with these are dropped to prevent
+    # duplicate/ambiguous columns in the output DataFrame.
+    _reserved_columns = {"entity_id"} | {c for c in row_metadata_columns if c in df_columns}
+
     for idx, row in enumerate(rows):
         # Extract features data
         features_data = row[features_column]
@@ -487,7 +492,9 @@ def decode_mplog_dataframe(
                     decoded_features = decode_proto_features(working_data, feature_schema)
 
                 result_row = {"entity_id": entity_id}
-                result_row.update(decoded_features)
+                result_row.update(
+                    {k: v for k, v in decoded_features.items() if k not in _reserved_columns}
+                )
 
                 # Add metadata columns
                 for col in row_metadata_columns:
