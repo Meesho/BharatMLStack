@@ -10,12 +10,18 @@ import (
 
 type OperationService struct {
 	publisher ports.QueuePublisher
+	partition ports.QueuePartitioner
 	kube      ports.KubernetesExecutor
 	ops       ports.OperationStore
 }
 
-func NewOperationService(publisher ports.QueuePublisher, kube ports.KubernetesExecutor, ops ports.OperationStore) *OperationService {
-	return &OperationService{publisher: publisher, kube: kube, ops: ops}
+func NewOperationService(
+	publisher ports.QueuePublisher,
+	partition ports.QueuePartitioner,
+	kube ports.KubernetesExecutor,
+	ops ports.OperationStore,
+) *OperationService {
+	return &OperationService{publisher: publisher, partition: partition, kube: kube, ops: ops}
 }
 
 func (s *OperationService) CreateDeployable(ctx context.Context, env string, spec models.DeployableSpec) error {
@@ -53,11 +59,17 @@ func (s *OperationService) SubmitAsyncOperation(
 		Workflow:         workflow,
 		CreatedAt:        time.Now().UTC(),
 	}
+	if s.partition != nil {
+		intent.QueueID = s.partition.Partition(intent)
+	}
+	if intent.QueueID <= 0 {
+		intent.QueueID = 1
+	}
 
 	if s.ops != nil {
 		if err := s.ops.SaveWatchIntent(ctx, intent); err != nil {
 			return models.PublishResult{}, err
 		}
 	}
-	return s.publisher.PublishWatchIntent(ctx, intent)
+	return s.publisher.PublishWatchIntent(ctx, intent.QueueID, intent)
 }

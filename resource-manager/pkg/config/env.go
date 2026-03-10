@@ -19,6 +19,14 @@ type Env struct {
 	AppEnv                 string
 	APIAuthToken           string
 	IdempotencyTTLSeconds  int64
+	QueuePartitionCount    int
+	ConsumerID             string
+	ConsumerGroupID        string
+	ConsumerMembershipTTL  int64
+	QueueLeaseTTL          int64
+	QueueLeaseRenew        time.Duration
+	RebalanceDrainTimeout  time.Duration
+	QueuePollInterval      time.Duration
 	EtcdEndpoints          []string
 	EtcdUsername           string
 	EtcdPassword           string
@@ -100,6 +108,62 @@ func Load() (Env, error) {
 		}
 		idempotencyTTLSeconds = ttl
 	}
+	queuePartitionCount := 8
+	if raw := strings.TrimSpace(os.Getenv("QUEUE_PARTITION_COUNT")); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil || v <= 0 {
+			return Env{}, fmt.Errorf("invalid QUEUE_PARTITION_COUNT: %q", raw)
+		}
+		queuePartitionCount = v
+	}
+	consumerID := strings.TrimSpace(os.Getenv("CONSUMER_ID"))
+	if consumerID == "" {
+		consumerID = "consumer-local"
+	}
+	consumerGroupID := strings.TrimSpace(os.Getenv("CONSUMER_GROUP_ID"))
+	if consumerGroupID == "" {
+		consumerGroupID = "resource-manager-watchers"
+	}
+	consumerMembershipTTL := int64(15)
+	if raw := strings.TrimSpace(os.Getenv("CONSUMER_MEMBERSHIP_TTL_SECONDS")); raw != "" {
+		v, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || v <= 0 {
+			return Env{}, fmt.Errorf("invalid CONSUMER_MEMBERSHIP_TTL_SECONDS: %q", raw)
+		}
+		consumerMembershipTTL = v
+	}
+	queueLeaseTTL := int64(15)
+	if raw := strings.TrimSpace(os.Getenv("QUEUE_LEASE_TTL_SECONDS")); raw != "" {
+		v, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || v <= 0 {
+			return Env{}, fmt.Errorf("invalid QUEUE_LEASE_TTL_SECONDS: %q", raw)
+		}
+		queueLeaseTTL = v
+	}
+	queueLeaseRenew := 5 * time.Second
+	if raw := strings.TrimSpace(os.Getenv("QUEUE_LEASE_RENEW_INTERVAL_SECONDS")); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil || v <= 0 {
+			return Env{}, fmt.Errorf("invalid QUEUE_LEASE_RENEW_INTERVAL_SECONDS: %q", raw)
+		}
+		queueLeaseRenew = time.Duration(v) * time.Second
+	}
+	rebalanceDrainTimeout := 5 * time.Second
+	if raw := strings.TrimSpace(os.Getenv("REBALANCE_DRAIN_TIMEOUT_SECONDS")); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil || v <= 0 {
+			return Env{}, fmt.Errorf("invalid REBALANCE_DRAIN_TIMEOUT_SECONDS: %q", raw)
+		}
+		rebalanceDrainTimeout = time.Duration(v) * time.Second
+	}
+	queuePollInterval := 500 * time.Millisecond
+	if raw := strings.TrimSpace(os.Getenv("QUEUE_POLL_INTERVAL_MS")); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil || v <= 0 {
+			return Env{}, fmt.Errorf("invalid QUEUE_POLL_INTERVAL_MS: %q", raw)
+		}
+		queuePollInterval = time.Duration(v) * time.Millisecond
+	}
 
 	return Env{
 		AppPort:                port,
@@ -108,6 +172,14 @@ func Load() (Env, error) {
 		AppEnv:                 strings.TrimSpace(os.Getenv("APP_ENV")),
 		APIAuthToken:           apiAuthToken,
 		IdempotencyTTLSeconds:  idempotencyTTLSeconds,
+		QueuePartitionCount:    queuePartitionCount,
+		ConsumerID:             consumerID,
+		ConsumerGroupID:        consumerGroupID,
+		ConsumerMembershipTTL:  consumerMembershipTTL,
+		QueueLeaseTTL:          queueLeaseTTL,
+		QueueLeaseRenew:        queueLeaseRenew,
+		RebalanceDrainTimeout:  rebalanceDrainTimeout,
+		QueuePollInterval:      queuePollInterval,
 		EtcdEndpoints:          endpoints,
 		EtcdUsername:           strings.TrimSpace(os.Getenv("ETCD_USERNAME")),
 		EtcdPassword:           os.Getenv("ETCD_PASSWORD"),

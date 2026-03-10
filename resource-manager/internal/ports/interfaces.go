@@ -26,7 +26,17 @@ type ShadowCache interface {
 }
 
 type QueuePublisher interface {
-	PublishWatchIntent(ctx context.Context, intent models.WatchIntent) (models.PublishResult, error)
+	PublishWatchIntent(ctx context.Context, queueID int, intent models.WatchIntent) (models.PublishResult, error)
+}
+
+type QueueConsumer interface {
+	ConsumeWatchIntent(ctx context.Context, queueID int) (*models.WatchIntent, string, error)
+	Ack(ctx context.Context, queueID int, messageID string) error
+	Nack(ctx context.Context, queueID int, messageID string) error
+}
+
+type QueuePartitioner interface {
+	Partition(intent models.WatchIntent) int
 }
 
 type OperationStore interface {
@@ -36,4 +46,25 @@ type OperationStore interface {
 type IdempotencyKeyStore interface {
 	Get(ctx context.Context, scope, key string) (*models.IdempotencyRecord, error)
 	Put(ctx context.Context, scope, key string, record models.IdempotencyRecord) error
+}
+
+type QueueLeaseStore interface {
+	Acquire(ctx context.Context, queueID int, owner string) (models.LeaseHandle, bool, error)
+	KeepAlive(ctx context.Context, handle models.LeaseHandle) error
+	Release(ctx context.Context, handle models.LeaseHandle) error
+}
+
+type ConsumerMembershipStore interface {
+	Register(ctx context.Context, groupID, consumerID string) (models.LeaseHandle, error)
+	KeepAlive(ctx context.Context, handle models.LeaseHandle) error
+	ListMembers(ctx context.Context, groupID string) ([]string, error)
+	Revoke(ctx context.Context, handle models.LeaseHandle) error
+}
+
+type WatchManager interface {
+	Watch(ctx context.Context, intent models.WatchIntent) error
+}
+
+type CallbackDispatcher interface {
+	Dispatch(ctx context.Context, intent models.WatchIntent, watchErr error) error
 }

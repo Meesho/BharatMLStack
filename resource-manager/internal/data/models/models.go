@@ -45,12 +45,19 @@ type WatchResource struct {
 type WatchIntent struct {
 	SchemaVersion    string          `json:"schemaVersion"`
 	RequestID        string          `json:"requestId"`
+	QueueID          int             `json:"queueId"`
 	Operation        string          `json:"operation"`
 	Resource         WatchResource   `json:"resource"`
 	DesiredCondition string          `json:"desiredCondition"`
 	Callback         Callback        `json:"callback"`
 	Workflow         WorkflowContext `json:"workflow"`
 	CreatedAt        time.Time       `json:"createdAt"`
+}
+
+type LeaseHandle struct {
+	Key     string
+	LeaseID int64
+	Owner   string
 }
 
 type ShadowFilter struct {

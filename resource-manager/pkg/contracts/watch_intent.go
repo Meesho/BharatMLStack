@@ -22,6 +22,7 @@ type Workflow struct {
 type WatchIntentV1 struct {
 	SchemaVersion    string        `json:"schemaVersion"`
 	RequestID        string        `json:"requestId"`
+	QueueID          int           `json:"queueId"`
 	Operation        string        `json:"operation"`
 	Resource         WatchResource `json:"resource"`
 	DesiredCondition string        `json:"desiredCondition"`

@@ -23,6 +23,8 @@ func BuildHandler() (http.Handler, error) {
 	var idempotencyStore ports.IdempotencyKeyStore
 	var operationStore ports.OperationStore
 	var shadowCache ports.ShadowCache
+	queueAdapter := redisq.NewInMemoryQueueAdapter()
+	queuePartitioner := redisq.NewHashQueuePartitioner(envCfg.QueuePartitionCount)
 
 	if envCfg.UseMockAdapters {
 		log.Warn().Msg("USE_MOCK_ADAPTERS=true, using in-memory stores")
@@ -52,11 +54,10 @@ func BuildHandler() (http.Handler, error) {
 		}
 	}
 
-	publisher := redisq.NewInMemoryPublisher()
 	kubeExecutor := kubernetes.NewMockExecutor()
 
 	shadowService := application.NewShadowService(shadowStore, shadowCache)
-	operationService := application.NewOperationService(publisher, kubeExecutor, operationStore)
+	operationService := application.NewOperationService(queueAdapter, queuePartitioner, kubeExecutor, operationStore)
 	handler := api.NewHandler(shadowService, operationService, idempotencyStore)
 
 	mux := http.NewServeMux()
