@@ -1,0 +1,15 @@
+{
+  "entityLabel": "product",
+  "featureGroups": [
+    {
+      "label": "product_features_v1",
+      "featureLabels": ["price", "rating", "stock_count"]
+    }
+  ],
+  "keysSchema": ["product_id"],
+  "keys": [
+    { "cols": ["product_101"] },
+    { "cols": ["product_202"] },
+    { "cols": ["product_303"] }
+  ]
+}

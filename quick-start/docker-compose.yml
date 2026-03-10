@@ -1,5 +1,3 @@
-version: '3.8'
-
 # BharatML Stack Application Versions
 # To test different versions, set environment variables:
 #   ONFS_VERSION=v1.2.3 HORIZON_VERSION=v2.1.0 NUMERIX_VERSION=v1.0.0 TRUFFLEBOX_VERSION=v1.0.5 INFERFLOW_VERSION=v1.0.0 docker-compose up
@@ -953,6 +951,78 @@ services:
       retries: 5
       start_period: 10s
     restart: "no"
+
+  # gRPC Proxy - nginx routes every RPC to the correct backend service
+  # Uses Docker's embedded DNS resolver (127.0.0.11) so nginx starts even when
+  # individual gRPC services are not running; a 502 is returned for those methods.
+  grpc-proxy:
+    image: nginx:latest
+    container_name: grpc-proxy
+    volumes:
+      - ./nginx/grpc-proxy.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/index.html:/usr/share/nginx/grpcui-helper/index.html:ro
+    ports:
+      - "9000:9000"
+      - "8095:80"
+    networks:
+      onfs-network:
+        ipv4_address: 172.18.0.33
+    restart: unless-stopped
+
+  # Single gRPC UI - connects to grpc-proxy and loads all service proto files.
+  # Pre-filled request metadata: x-auth-token and caller-id headers.
+  # Sample request bodies are mounted at /samples/<service>/<MethodName>.json
+  grpcui:
+    image: fullstorydev/grpcui:latest
+    container_name: grpcui
+    command:
+      - -plaintext
+      - -port
+      - "8080"
+      - -bind
+      - 0.0.0.0
+      - -import-path
+      - /protos/onfs
+      - -import-path
+      - /protos/numerix
+      - -import-path
+      - /protos/inferflow
+      - -import-path
+      - /protos/skye
+      - -import-path
+      - /protos/predator
+      - -proto
+      - retrieve.proto
+      - -proto
+      - persist.proto
+      - -proto
+      - numerix.proto
+      - -proto
+      - inferflow.proto
+      - -proto
+      - predict.proto
+      - -proto
+      - skye.proto
+      - -proto
+      - grpc_service.proto
+      - -proto
+      - health.proto
+      - grpc-proxy:9000
+    volumes:
+      - ./protos/onfs:/protos/onfs:ro
+      - ./protos/numerix:/protos/numerix:ro
+      - ./protos/inferflow:/protos/inferflow:ro
+      - ./protos/skye:/protos/skye:ro
+      - ./protos/predator:/protos/predator:ro
+      - ./grpc-samples:/samples:ro
+    ports:
+      - "8096:8080"
+    networks:
+      onfs-network:
+        ipv4_address: 172.18.0.34
+    depends_on:
+      - grpc-proxy
+    restart: unless-stopped
 
   # Optional: Management Tools
   kafka-ui:

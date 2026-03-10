@@ -23,6 +23,9 @@ PREDATOR_SERVICES="predator predator-healthcheck"
 # Management tools
 MANAGEMENT_SERVICES="etcd-workbench kafka-ui"
 
+# Single gRPC UI stack: nginx proxy (routes by service path) + one grpcui browser client
+GRPCUI_SERVICES="grpc-proxy grpcui"
+
 # Capture version variables from environment (default to latest if not set)
 ONFS_VERSION="${ONFS_VERSION:-latest}"
 ONFS_CONSUMER_VERSION="${ONFS_CONSUMER_VERSION:-latest}"
@@ -44,6 +47,7 @@ START_SKYE=false
 START_PREDATOR=false
 INIT_DUMMY_DATA=false
 ENABLE_LOCAL_BUILD=false
+START_GRPCUI=false
 
 check_go_version() {
   if ! command -v go &> /dev/null; then
@@ -68,6 +72,143 @@ check_python3() {
     echo "👉 Python 3 is required for local build support"
     echo "👉 Please install Python 3 from: https://www.python.org/downloads/"
     exit 1
+  fi
+}
+
+check_docker() {
+  echo ""
+  echo "🐳 Checking Docker..."
+
+  local os_type
+  os_type="$(uname -s)"
+
+  # ── 1. Install Docker if the binary is not present ──────────────────────────
+  if ! command -v docker &> /dev/null; then
+    echo "❌ Docker is not installed."
+    case "$os_type" in
+      Darwin)
+        echo "🍎 macOS detected."
+        if command -v brew &> /dev/null; then
+          echo "   Installing Docker Desktop via Homebrew..."
+          brew install --cask docker
+        else
+          echo "❌ Homebrew is not installed."
+          echo "👉 Option 1: Install Homebrew first:"
+          echo "   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+          echo "👉 Option 2: Download Docker Desktop manually:"
+          echo "   https://docs.docker.com/desktop/install/mac-install/"
+          exit 1
+        fi
+        ;;
+      Linux)
+        echo "🐧 Linux detected."
+        if command -v curl &> /dev/null; then
+          echo "   Installing Docker Engine via official install script..."
+          curl -fsSL https://get.docker.com | sh
+          # Add current user to docker group so future commands don't need sudo
+          sudo usermod -aG docker "$USER" 2>/dev/null || true
+          echo "✅ Docker installed."
+          echo "⚠️  NOTE: Log out and back in for the docker group to take effect."
+        elif command -v apt-get &> /dev/null; then
+          sudo apt-get update -y && sudo apt-get install -y docker.io
+        elif command -v dnf &> /dev/null; then
+          sudo dnf install -y docker
+        elif command -v yum &> /dev/null; then
+          sudo yum install -y docker
+        else
+          echo "❌ Could not detect a supported package manager."
+          echo "👉 Please install Docker manually: https://docs.docker.com/engine/install/"
+          exit 1
+        fi
+        ;;
+      *)
+        echo "❌ Unsupported OS: $os_type"
+        echo "👉 Please install Docker from: https://docs.docker.com/engine/install/"
+        exit 1
+        ;;
+    esac
+  else
+    echo "✅ Docker installed: $(docker --version 2>/dev/null | head -1)"
+  fi
+
+  # ── 2. Start the Docker daemon if it is not running ─────────────────────────
+  if ! docker info &> /dev/null 2>&1; then
+    echo "⚠️  Docker daemon is not running. Starting it now..."
+    case "$os_type" in
+      Darwin)
+        if [ -d "/Applications/Docker.app" ]; then
+          echo "   Launching Docker Desktop from /Applications..."
+          open -a Docker
+        elif [ -d "$HOME/Applications/Docker.app" ]; then
+          echo "   Launching Docker Desktop from ~/Applications..."
+          open "$HOME/Applications/Docker.app"
+        else
+          echo "❌ Docker Desktop application not found."
+          echo "👉 Please install Docker Desktop: https://docs.docker.com/desktop/install/mac-install/"
+          exit 1
+        fi
+        echo "⏳ Waiting for Docker daemon to be ready (up to 90 seconds)..."
+        for i in {1..45}; do
+          if docker info &> /dev/null 2>&1; then
+            echo "✅ Docker daemon is running!"
+            break
+          fi
+          if [ "$i" -eq 45 ]; then
+            echo "❌ Docker daemon did not start within 90 seconds."
+            echo "👉 Please open Docker Desktop manually, wait for it to fully start, then re-run this script."
+            exit 1
+          fi
+          sleep 2
+        done
+        ;;
+      Linux)
+        echo "   Starting Docker daemon via systemctl / service..."
+        if command -v systemctl &> /dev/null; then
+          sudo systemctl start docker
+        elif command -v service &> /dev/null; then
+          sudo service docker start
+        else
+          echo "❌ Could not start Docker daemon automatically."
+          echo "👉 Try: sudo systemctl start docker"
+          exit 1
+        fi
+        echo "⏳ Waiting for Docker daemon to be ready..."
+        for i in {1..15}; do
+          if docker info &> /dev/null 2>&1; then
+            echo "✅ Docker daemon is running!"
+            break
+          fi
+          if [ "$i" -eq 15 ]; then
+            echo "❌ Docker daemon did not start. Check logs: sudo journalctl -u docker"
+            exit 1
+          fi
+          sleep 2
+        done
+        ;;
+      *)
+        echo "❌ Cannot automatically start the Docker daemon on $os_type."
+        echo "👉 Please start Docker manually and re-run this script."
+        exit 1
+        ;;
+    esac
+  else
+    echo "✅ Docker daemon is running"
+  fi
+
+  # ── 3. Ensure docker-compose is available (handles V1 binary vs V2 plugin) ──
+  if ! command -v docker-compose &> /dev/null; then
+    if docker compose version &> /dev/null 2>&1; then
+      echo "   ℹ️  'docker-compose' (V1) not found; using 'docker compose' (V2 plugin) as a transparent wrapper"
+      # Define a function so the rest of this script can call 'docker-compose' transparently
+      docker-compose() { docker compose "$@"; }
+      export -f docker-compose
+    else
+      echo "❌ Neither 'docker-compose' nor the 'docker compose' plugin is available."
+      echo "👉 Install Docker Compose: https://docs.docker.com/compose/install/"
+      exit 1
+    fi
+  else
+    echo "✅ docker-compose available: $(docker-compose --version 2>/dev/null | head -1)"
   fi
 }
 
@@ -117,7 +258,157 @@ setup_workspace() {
     cp -r "$script_dir/skye-config" "$WORKSPACE_DIR"/
     echo "   ✅ Copied skye-config to workspace"
   fi
-  
+
+  # Copy proto files for gRPC UI containers
+  local protos_dir="$WORKSPACE_DIR/protos"
+  mkdir -p "$protos_dir"
+
+  if [ -d "$project_root/online-feature-store/pkg/proto" ]; then
+    mkdir -p "$protos_dir/onfs"
+    cp "$project_root/online-feature-store/pkg/proto"/*.proto "$protos_dir/onfs/"
+    echo "   ✅ Copied ONFS proto files"
+  fi
+
+  if [ -d "$project_root/numerix/src/protos/proto" ]; then
+    mkdir -p "$protos_dir/numerix"
+    cp "$project_root/numerix/src/protos/proto"/*.proto "$protos_dir/numerix/"
+    echo "   ✅ Copied Numerix proto files"
+  fi
+
+  if [ -d "$project_root/inferflow/server/proto" ]; then
+    mkdir -p "$protos_dir/inferflow"
+    cp "$project_root/inferflow/server/proto"/*.proto "$protos_dir/inferflow/"
+    echo "   ✅ Copied Inferflow proto files"
+  fi
+
+  if [ -d "$project_root/go-sdk/pkg/clients/skye/client/proto" ]; then
+    mkdir -p "$protos_dir/skye"
+    cp "$project_root/go-sdk/pkg/clients/skye/client/proto"/*.proto "$protos_dir/skye/"
+    echo "   ✅ Copied Skye proto files"
+  fi
+
+  if [ -d "$project_root/go-sdk/pkg/clients/predator/client/proto" ]; then
+    mkdir -p "$protos_dir/predator"
+    cp "$project_root/go-sdk/pkg/clients/predator/client/proto"/*.proto "$protos_dir/predator/"
+    echo "   ✅ Copied Predator proto files"
+  fi
+
+  # Create nginx gRPC proxy config
+  # Uses Docker's embedded DNS resolver (127.0.0.11) with set $var trick so nginx
+  # starts even when individual gRPC backends are not running yet.
+  mkdir -p "$WORKSPACE_DIR/nginx"
+  cat > "$WORKSPACE_DIR/nginx/grpc-proxy.conf" << 'NGINX_CONF'
+user  nginx;
+worker_processes  auto;
+error_log  /var/log/nginx/error.log notice;
+pid        /var/run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    log_format grpc_log
+        '$remote_addr [$time_local] "$uri" $status '
+        'upstream=$upstream_addr rt=$request_time';
+    access_log /var/log/nginx/access.log grpc_log;
+
+    # Docker embedded DNS — resolves container names at request time,
+    # so nginx does not fail to start when a backend is not yet running.
+    resolver 127.0.0.11 valid=30s ipv6=off;
+
+    server {
+        # http2 directive (nginx 1.25.1+); compatible with older nginx too
+        listen 9000;
+        http2  on;
+        server_name _;
+
+        grpc_read_timeout  300s;
+        grpc_send_timeout  300s;
+
+        # ---------- ONFS Feature Store (port 8089) ----------
+        location /retrieve.FeatureService/ {
+            set $backend onfs-api-server:8089;
+            grpc_pass grpc://$backend;
+        }
+        location /persist.FeatureService/ {
+            set $backend onfs-api-server:8089;
+            grpc_pass grpc://$backend;
+        }
+
+        # ---------- Numerix Matrix Operations (port 8083) ----------
+        location /numerix.Numerix/ {
+            set $backend numerix:8083;
+            grpc_pass grpc://$backend;
+        }
+
+        # ---------- Inferflow Inference Gateway (port 8085) ----------
+        location /Inferflow/ {
+            set $backend inferflow:8085;
+            grpc_pass grpc://$backend;
+        }
+        location /Predict/ {
+            set $backend inferflow:8085;
+            grpc_pass grpc://$backend;
+        }
+
+        # ---------- Skye Vector Search (port 8094) ----------
+        location /SkyeSimilarCandidateService/ {
+            set $backend skye-serving:8094;
+            grpc_pass grpc://$backend;
+        }
+        location /SkyeEmbeddingService/ {
+            set $backend skye-serving:8094;
+            grpc_pass grpc://$backend;
+        }
+
+        # ---------- Predator Inference Server (port 8001) ----------
+        location /inference.GRPCInferenceService/ {
+            set $backend predator:8001;
+            grpc_pass grpc://$backend;
+        }
+        location /grpc.health.v1.Health/ {
+            set $backend predator:8001;
+            grpc_pass grpc://$backend;
+        }
+
+        # Catch-all: return a gRPC UNIMPLEMENTED status
+        location / {
+            return 12 "No gRPC service matched this path";
+        }
+    }
+
+    # ── Helper landing page (HTTP, port 80) ─────────────────────────────────
+    # HTML is served from a mounted file (index.html) to avoid nginx
+    # inline-string quoting issues with single quotes in CSS/JS.
+    server {
+        listen 80;
+        server_name _;
+        root /usr/share/nginx/grpcui-helper;
+        index index.html;
+        location / {
+            try_files $uri /index.html;
+        }
+    }
+}
+NGINX_CONF
+
+  # Copy the helper landing page alongside the nginx config
+  if [ -f "$script_dir/nginx/index.html" ]; then
+    cp "$script_dir/nginx/index.html" "$WORKSPACE_DIR/nginx/index.html"
+    echo "   ✅ Created gRPC UI helper landing page"
+  fi
+  echo "   ✅ Created nginx gRPC proxy config"
+
+  # Copy gRPC sample request bodies
+  if [ -d "$script_dir/grpc-samples" ]; then
+    if [ -d "$WORKSPACE_DIR/grpc-samples" ]; then
+      rm -rf "$WORKSPACE_DIR/grpc-samples"
+    fi
+    cp -r "$script_dir/grpc-samples" "$WORKSPACE_DIR/"
+    echo "   ✅ Copied gRPC sample requests"
+  fi
+
   echo "✅ Workspace setup complete"
 }
 
@@ -365,6 +656,7 @@ get_user_choice() {
         START_INFERFLOW=true
         START_SKYE=true
         START_PREDATOR=true
+        START_GRPCUI=true
         echo ""
         echo "🔧 Optional Infrastructure:"
         ask_dummy_data
@@ -400,6 +692,7 @@ custom_selection() {
   if [[ $include_onfs =~ ^[Yy]$ ]]; then
     SELECTED_SERVICES="$SELECTED_SERVICES $ONFS_SERVICES"
     START_ONFS=true
+    START_GRPCUI=true
     echo "✅ Added: Online Feature Store API"
   fi
   
@@ -421,6 +714,7 @@ custom_selection() {
   if [[ $include_numerix =~ ^[Yy]$ ]]; then
     SELECTED_SERVICES="$SELECTED_SERVICES $NUMERIX_SERVICES"
     START_NUMERIX=true
+    START_GRPCUI=true
     echo "✅ Added: Numerix Matrix Operations"
   fi
   
@@ -440,6 +734,7 @@ custom_selection() {
   if [[ $include_inferflow =~ ^[Yy]$ ]]; then
     SELECTED_SERVICES="$SELECTED_SERVICES $INFERFLOW_SERVICES"
     START_INFERFLOW=true
+    START_GRPCUI=true
     echo "✅ Added: Inferflow"
   fi
   
@@ -447,6 +742,7 @@ custom_selection() {
   if [[ $include_skye =~ ^[Yy]$ ]]; then
     SELECTED_SERVICES="$SELECTED_SERVICES $SKYE_SERVICES"
     START_SKYE=true
+    START_GRPCUI=true
     echo "✅ Added: Skye"
   fi
   
@@ -454,6 +750,7 @@ custom_selection() {
   if [[ $include_predator =~ ^[Yy]$ ]]; then
     SELECTED_SERVICES="$SELECTED_SERVICES $PREDATOR_SERVICES"
     START_PREDATOR=true
+    START_GRPCUI=true
     echo "✅ Added: Predator"
   fi
   
@@ -788,7 +1085,48 @@ show_access_info() {
   if [[ $START_PREDATOR == true ]]; then
     echo "   🦁 Predator gRPC:     localhost:8001"
   fi
-  
+
+  if [[ $START_GRPCUI == true ]]; then
+    echo ""
+    echo "   🖥️  gRPC UI (single browser client for ALL services):"
+    echo "   🖥️  gRPC UI:            http://localhost:8096"
+    echo ""
+    echo "   All service methods are pre-loaded. Active services:"
+    if [[ $START_ONFS == true ]]; then
+      echo "     📦 ONFS         → retrieve.FeatureService  (RetrieveFeatures, RetrieveDecodedResult)"
+      echo "                       persist.FeatureService   (PersistFeatures)"
+    fi
+    if [[ $START_NUMERIX == true ]]; then
+      echo "     🔢 Numerix      → numerix.Numerix           (Compute)"
+    fi
+    if [[ $START_INFERFLOW == true ]]; then
+      echo "     🔮 Inferflow    → Inferflow                 (RetrieveModelScore)"
+      echo "                       Predict                   (InferPointWise, InferPairWise, InferSlateWise)"
+    fi
+    if [[ $START_SKYE == true ]]; then
+      echo "     🔍 Skye         → SkyeSimilarCandidateService (getSimilarCandidates)"
+      echo "                       SkyeEmbeddingService        (getCandidateEmbeddingScores, getEmbeddingsForCandidates)"
+    fi
+    if [[ $START_PREDATOR == true ]]; then
+      echo "     🦁 Predator     → inference.GRPCInferenceService (ModelInfer, ServerLive, ServerReady)"
+      echo "                       grpc.health.v1.Health           (Check)"
+    fi
+    echo ""
+    echo "   ⚠️  Each service needs its own metadata headers — add them in the"
+    echo "   'Request Metadata' panel before invoking. Quick reference:"
+    echo ""
+    echo "     online-feature-store  → online-feature-store-caller-id: test"
+    echo "                             online-feature-store-auth-token: test"
+    echo "     skye                  → skye-caller-id: grpcui"
+    echo "                             skye-auth-token: test"
+    echo "     numerix               → numerix-caller-id: grpcui  (optional, metrics only)"
+    echo "     inferflow / predator  → no headers required"
+    echo ""
+    echo "   📋 Helper page with per-service headers + sample request bodies:"
+    echo "      http://localhost:8095"
+    echo "   Sample JSON files also at: workspace/grpc-samples/<service>/<Method>.json"
+  fi
+
   if [[ $START_TRUFFLEBOX == true ]]; then
     echo ""
     echo "🔑 Default Admin Credentials:"
@@ -853,6 +1191,7 @@ fi
 echo "🚀 Starting BharatML Stack Quick Start..."
 
 check_go_version
+check_docker
 
 # Check Python 3 if any version is set to "local"
 if [[ "${ONFS_VERSION}" == "local" || "${ONFS_CONSUMER_VERSION}" == "local" || \
@@ -877,6 +1216,7 @@ for arg in "$@"; do
       START_INFERFLOW=true
       START_SKYE=true
       START_PREDATOR=true
+      START_GRPCUI=true
       ;;
     --all-local)
       echo "🎯 Non-interactive mode: Starting all services in local mode"
@@ -889,6 +1229,7 @@ for arg in "$@"; do
       START_INFERFLOW=true
       START_SKYE=true
       START_PREDATOR=true
+      START_GRPCUI=true
       ENABLE_LOCAL_BUILD=true
       ;;
     --local)
@@ -917,6 +1258,11 @@ if [[ "$ENABLE_LOCAL_BUILD" = true || \
       "$HORIZON_VERSION" == "local" || "$NUMERIX_VERSION" == "local" || \
       "$TRUFFLEBOX_VERSION" == "local" || "$INFERFLOW_VERSION" == "local" || "$SKYE_VERSION" == "local" ]]; then
   setup_local_builds
+fi
+
+# Add the single gRPC UI stack (nginx proxy + grpcui) whenever any gRPC service is selected
+if [[ "$START_GRPCUI" == true ]]; then
+  SELECTED_SERVICES="$SELECTED_SERVICES $GRPCUI_SERVICES"
 fi
 
 start_selected_services

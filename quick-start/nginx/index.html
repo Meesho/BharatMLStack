@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BharatML gRPC UI Helper</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:system-ui,sans-serif;max-width:960px;margin:40px auto;padding:0 20px;color:#1e293b;background:#f8fafc}
+  h1{font-size:1.4rem;margin-bottom:2px;color:#0f172a}
+  .subtitle{color:#64748b;font-size:.9rem;margin-bottom:16px}
+  a.btn{display:inline-block;background:#4f46e5;color:#fff;padding:9px 22px;border-radius:7px;
+        text-decoration:none;font-size:.92rem;font-weight:600;margin-bottom:20px}
+  a.btn:hover{background:#4338ca}
+
+  /* Service cards */
+  .card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;margin:16px 0;overflow:hidden}
+  .card-header{padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #e2e8f0}
+  .card-header h2{margin:0;font-size:1rem;color:#0f172a}
+  .card-header .badge{font-size:.72rem;padding:2px 8px;border-radius:999px;font-weight:600}
+  .badge-required{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+  .badge-optional{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0}
+  .badge-none{background:#f8fafc;color:#64748b;border:1px solid #e2e8f0}
+
+  .card-body{padding:14px 16px}
+
+  /* Header table */
+  .hdr-table{width:100%;border-collapse:collapse;margin-bottom:12px}
+  .hdr-table th{background:#f1f5f9;padding:6px 10px;font-size:.8rem;text-align:left;
+                 border:1px solid #e2e8f0;color:#475569}
+  .hdr-table td{padding:7px 10px;font-size:.82rem;border:1px solid #e2e8f0}
+  .hdr-table td:first-child{font-family:monospace;color:#7c3aed;font-weight:600}
+  .hdr-table td:nth-child(2){font-family:monospace;color:#0369a1}
+  .hdr-table tr:last-child td{font-weight:normal}
+
+  .step{background:#eff6ff;border-left:3px solid #3b82f6;padding:8px 12px;
+        border-radius:0 6px 6px 0;font-size:.83rem;color:#1e40af;margin-bottom:12px}
+  .step b{color:#1d4ed8}
+
+  /* Samples */
+  details{margin:4px 0}
+  summary{cursor:pointer;font-size:.85rem;font-weight:600;color:#374151;
+          padding:6px 0;user-select:none;list-style:none}
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:"▶ "}
+  details[open] summary::before{content:"▼ "}
+  pre{background:#0f172a;color:#e2e8f0;border-radius:7px;padding:14px 16px;
+      overflow-x:auto;font-size:.78rem;margin:6px 0 8px;white-space:pre;tab-size:2}
+
+  .no-auth{color:#64748b;font-size:.85rem;font-style:italic;padding:4px 0 8px}
+</style>
+</head>
+<body>
+
+<h1>&#128640; BharatML Stack — gRPC UI Helper</h1>
+<p class="subtitle">Add the required metadata headers in the <strong>Request Metadata</strong> panel, then paste a sample body in the <strong>Raw Request</strong> tab.</p>
+<a class="btn" href="http://localhost:8096" target="_blank">Open gRPC UI &rarr;</a>
+
+<!-- ─────────────────────────────────────────────────────── ONFS -->
+<div class="card">
+  <div class="card-header">
+    <span>&#128230;</span>
+    <h2>online-feature-store &nbsp;<span style="color:#64748b;font-weight:400;font-size:.85rem">retrieve.FeatureService &bull; persist.FeatureService</span></h2>
+    <span class="badge badge-required">auth required</span>
+  </div>
+  <div class="card-body">
+    <div class="step"><b>Step 1 — add these in the Request Metadata panel:</b></div>
+    <table class="hdr-table">
+      <tr><th>Header name</th><th>Value</th><th>Notes</th></tr>
+      <tr>
+        <td>online-feature-store-caller-id</td>
+        <td>test</td>
+        <td>Must match a key registered in etcd (seeded as <code>test</code>)</td>
+      </tr>
+      <tr>
+        <td>online-feature-store-auth-token</td>
+        <td>test</td>
+        <td>Token stored in etcd for caller-id <code>test</code></td>
+      </tr>
+    </table>
+    <div class="step"><b>Step 2 — pick a method, click Raw Request, paste a body:</b></div>
+    <details><summary>RetrieveFeatures &amp; RetrieveDecodedResult</summary>
+<pre>{
+  "entityLabel": "product",
+  "featureGroups": [
+    { "label": "product_features_v1", "featureLabels": ["price", "rating", "stock_count"] }
+  ],
+  "keysSchema": ["product_id"],
+  "keys": [
+    { "cols": ["product_101"] },
+    { "cols": ["product_202"] }
+  ]
+}</pre></details>
+    <details><summary>PersistFeatures</summary>
+<pre>{
+  "entityLabel": "product",
+  "keysSchema": ["product_id"],
+  "featureGroupSchema": [
+    { "label": "product_price_features_v1", "featureLabels": ["price", "rating"] },
+    { "label": "product_inventory_features_v1", "featureLabels": ["stock_count"] }
+  ],
+  "data": [
+    {
+      "keyValues": ["product_101"],
+      "featureValues": [
+        { "values": { "fp64Values": [299.99, 4.5] } },
+        { "values": { "int32Values": [120] } }
+      ]
+    },
+    {
+      "keyValues": ["product_202"],
+      "featureValues": [
+        { "values": { "fp64Values": [149.00, 3.8] } },
+        { "values": { "int32Values": [45] } }
+      ]
+    }
+  ]
+}</pre></details>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────── SKYE -->
+<div class="card">
+  <div class="card-header">
+    <span>&#128269;</span>
+    <h2>skye &nbsp;<span style="color:#64748b;font-weight:400;font-size:.85rem">SkyeSimilarCandidateService &bull; SkyeEmbeddingService</span></h2>
+    <span class="badge badge-required">auth required</span>
+  </div>
+  <div class="card-body">
+    <div class="step"><b>Step 1 — add these in the Request Metadata panel:</b></div>
+    <table class="hdr-table">
+      <tr><th>Header name</th><th>Value</th><th>Notes</th></tr>
+      <tr>
+        <td>skye-caller-id</td>
+        <td>grpcui</td>
+        <td>Any non-empty string is accepted</td>
+      </tr>
+      <tr>
+        <td>skye-auth-token</td>
+        <td>test</td>
+        <td>Must be one of the comma-separated <code>AUTH_TOKENS=test</code></td>
+      </tr>
+    </table>
+    <div class="step"><b>Step 2 — pick a method, click Raw Request, paste a body:</b></div>
+    <details><summary>getSimilarCandidates</summary>
+<pre>{
+  "entity": "product",
+  "candidateIds": ["product_101", "product_202", "product_303"],
+  "limit": 10,
+  "modelName": "product_embedding_v1",
+  "variant": "ads_gold",
+  "embeddings": [
+    { "embedding": [0.12, 0.34, 0.56, 0.78, 0.90, 0.11, 0.22, 0.33, 0.44, 0.55] }
+  ]
+}</pre></details>
+    <details><summary>getCandidateEmbeddingScores</summary>
+<pre>{
+  "entity": "product",
+  "candidateIds": ["product_101", "product_202", "product_303"],
+  "embedding": [0.12, 0.34, 0.56, 0.78, 0.90, 0.11, 0.22, 0.33, 0.44, 0.55],
+  "modelName": "product_embedding_v1",
+  "variant": "ads_gold"
+}</pre></details>
+    <details><summary>getEmbeddingsForCandidates</summary>
+<pre>{
+  "entity": "product",
+  "candidateIds": ["product_101", "product_202", "product_303"],
+  "modelName": "product_embedding_v1",
+  "variant": "ads_gold"
+}</pre></details>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────── NUMERIX -->
+<div class="card">
+  <div class="card-header">
+    <span>&#128290;</span>
+    <h2>numerix &nbsp;<span style="color:#64748b;font-weight:400;font-size:.85rem">numerix.Numerix</span></h2>
+    <span class="badge badge-optional">header optional</span>
+  </div>
+  <div class="card-body">
+    <table class="hdr-table">
+      <tr><th>Header name</th><th>Value</th><th>Notes</th></tr>
+      <tr>
+        <td>numerix-caller-id</td>
+        <td>grpcui</td>
+        <td>Optional — used for metrics tagging only, no auth validation</td>
+      </tr>
+    </table>
+    <details><summary>Compute</summary>
+<pre>{
+  "entityScoreData": {
+    "schema": ["user_id", "item_id"],
+    "computeId": "dot_product_v1",
+    "dataType": "fp32",
+    "entityScores": [
+      { "stringData": { "values": ["user_001", "item_101"] } },
+      { "stringData": { "values": ["user_001", "item_202"] } }
+    ]
+  }
+}</pre></details>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────── INFERFLOW -->
+<div class="card">
+  <div class="card-header">
+    <span>&#128302;</span>
+    <h2>inferflow &nbsp;<span style="color:#64748b;font-weight:400;font-size:.85rem">Inferflow &bull; Predict</span></h2>
+    <span class="badge badge-none">no auth</span>
+  </div>
+  <div class="card-body">
+    <p class="no-auth">No metadata headers required — the auth interceptor is a no-op in this build.</p>
+    <details><summary>RetrieveModelScore</summary>
+<pre>{
+  "entities": [
+    {
+      "entity": "product",
+      "ids": ["product_101", "product_202", "product_303"],
+      "features": [
+        { "name": "user_context", "idsFeatureValue": ["user_001"] }
+      ]
+    }
+  ],
+  "modelConfigId": "ranking_model_v1",
+  "trackingId": "tracking_test_001"
+}</pre></details>
+    <details><summary>InferPointWise &mdash; bytes fields = base64 (AAAAAA== = FP32 0.0 &bull; dXNlcl8wMDE= = "user_001")</summary>
+<pre>{
+  "modelConfigId": "pointwise_ranking_v1",
+  "trackingId": "tracking_test_002",
+  "contextFeatures": [
+    { "name": "user_id", "dataType": "DataTypeString", "value": "dXNlcl8wMDE=", "vectorDim": 0 }
+  ],
+  "targetInputSchema": [
+    { "name": "price",  "dataType": "DataTypeFP32", "vectorDim": 0 },
+    { "name": "rating", "dataType": "DataTypeFP32", "vectorDim": 0 }
+  ],
+  "targets": [
+    { "id": "product_101", "featureValues": ["AAAAAA==", "AAAAAA=="] },
+    { "id": "product_202", "featureValues": ["AAAAAA==", "AAAAAA=="] }
+  ],
+  "tenantId": "tenant_test"
+}</pre></details>
+    <details><summary>InferPairWise</summary>
+<pre>{
+  "modelConfigId": "pairwise_ranking_v1",
+  "trackingId": "tracking_test_003",
+  "contextFeatures": [
+    { "name": "user_id", "dataType": "DataTypeString", "value": "dXNlcl8wMDE=", "vectorDim": 0 }
+  ],
+  "targetInputSchema": [
+    { "name": "price",  "dataType": "DataTypeFP32", "vectorDim": 0 },
+    { "name": "rating", "dataType": "DataTypeFP32", "vectorDim": 0 }
+  ],
+  "pairInputSchema": [
+    { "name": "pair_affinity", "dataType": "DataTypeFP32", "vectorDim": 0 }
+  ],
+  "targets": [
+    { "id": "product_101", "featureValues": ["AAAAAA==", "AAAAAA=="] },
+    { "id": "product_202", "featureValues": ["AAAAAA==", "AAAAAA=="] }
+  ],
+  "pairs": [
+    { "firstTargetIndex": 0, "secondTargetIndex": 1, "featureValues": ["AAAAAA=="] }
+  ],
+  "tenantId": "tenant_test"
+}</pre></details>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────── PREDATOR -->
+<div class="card">
+  <div class="card-header">
+    <span>&#129410;</span>
+    <h2>predator &nbsp;<span style="color:#64748b;font-weight:400;font-size:.85rem">inference.GRPCInferenceService</span></h2>
+    <span class="badge badge-none">no auth</span>
+  </div>
+  <div class="card-body">
+    <p class="no-auth">No metadata headers required — the dummy server has no interceptors.</p>
+    <details><summary>ModelInfer</summary>
+<pre>{
+  "modelName": "ranking_model",
+  "modelVersion": "1",
+  "id": "test_request_001",
+  "inputs": [
+    {
+      "name": "input_features",
+      "datatype": "FP32",
+      "shape": [1, 10],
+      "contents": {
+        "fp32Contents": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+      }
+    }
+  ],
+  "outputs": [{ "name": "output" }]
+}</pre></details>
+    <details><summary>ServerLive / ServerReady / ServerMetadata</summary>
+<pre>{}</pre></details>
+  </div>
+</div>
+
+</body>
+</html>
