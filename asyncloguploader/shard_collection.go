@@ -17,7 +17,8 @@ type ShardCollection struct {
 // totalCapacity is divided evenly among numShards
 // Threshold is fixed at 25% of numShards
 // flushChan is required - buffers will be sent to it on swap
-func NewShardCollection(totalCapacity, numShards int, flushChan chan<- *Buffer) (*ShardCollection, error) {
+// metricTags are propagated to shards for metric emissions
+func NewShardCollection(totalCapacity, numShards int, flushChan chan<- *Buffer, metricTags []string) (*ShardCollection, error) {
 	if numShards <= 0 {
 		numShards = 8 // Default
 	}
@@ -34,7 +35,7 @@ func NewShardCollection(totalCapacity, numShards int, flushChan chan<- *Buffer) 
 
 	shards := make([]*Shard, numShards)
 	for i := 0; i < numShards; i++ {
-		shard, err := NewShard(shardCapacity, uint32(i), flushChan)
+		shard, err := NewShard(shardCapacity, uint32(i), flushChan, metricTags)
 		if err != nil {
 			// Cleanup already created shards on error
 			for j := 0; j < i; j++ {

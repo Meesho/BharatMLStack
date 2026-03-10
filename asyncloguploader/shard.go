@@ -115,13 +115,16 @@ type Shard struct {
 	// Flush channel for pushing buffer references
 	flushChan chan<- *Buffer
 
+	// Metric tags for emissions (e.g., from Config.MetricTags + event_name)
+	metricTags []string
+
 	// Cleanup functions for mmap (called on Close)
 	cleanupA func()
 	cleanupB func()
 }
 
 // NewShard creates a new shard with double buffer using anonymous mmap
-func NewShard(capacity int, id uint32, flushChan chan<- *Buffer) (*Shard, error) {
+func NewShard(capacity int, id uint32, flushChan chan<- *Buffer, metricTags []string) (*Shard, error) {
 	alignedCap := alignSize(capacity)
 
 	// Allocate bufferA via anonymous mmap
@@ -138,6 +141,7 @@ func NewShard(capacity int, id uint32, flushChan chan<- *Buffer) (*Shard, error)
 		return nil, err
 	}
 
+	tags := getBaseTags(metricTags)
 	s := &Shard{
 		capacity:      int32(alignedCap),
 		id:            id,
@@ -145,6 +149,7 @@ func NewShard(capacity int, id uint32, flushChan chan<- *Buffer) (*Shard, error)
 		cleanupB:      cleanupB,
 		swapSemaphore: make(chan struct{}, 1), // Per-shard semaphore (buffer size 1)
 		flushChan:     flushChan,
+		metricTags:    tags,
 	}
 
 	// Create Buffer instances
@@ -295,7 +300,7 @@ func (s *Shard) Write(p []byte) (n int, needsFlush bool) {
 // trySwap attempts to swap the active buffer (CAS-protected)
 // Pushes the now-inactive buffer to the flush channel
 func (s *Shard) trySwap() {
-	metric.Incr(MetricLogBytesSwap, []string{})
+	metric.Incr(MetricLogBytesSwap, s.metricTags)
 	// Check if already swapping
 	if !s.swapping.CompareAndSwap(false, true) {
 		return // Another goroutine is swapping

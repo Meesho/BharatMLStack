@@ -1,6 +1,7 @@
 package asyncloguploader
 
 import (
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -18,7 +19,7 @@ func TestLogger_NewLogger(t *testing.T) {
 		config.NumShards = 4
 		config.FlushInterval = 100 * time.Millisecond
 
-		logger, err := NewLogger(config)
+		logger, err := NewLogger(config, "test")
 		require.NoError(t, err)
 		defer logger.Close()
 
@@ -31,7 +32,7 @@ func TestLogger_NewLogger(t *testing.T) {
 	t.Run("ReturnsErrorForInvalidConfig", func(t *testing.T) {
 		config := Config{} // Invalid: missing LogFilePath
 
-		logger, err := NewLogger(config)
+		logger, err := NewLogger(config, "test")
 		assert.Error(t, err)
 		assert.Nil(t, logger)
 	})
@@ -45,20 +46,23 @@ func TestLogger_LogBytes(t *testing.T) {
 		config.NumShards = 4
 		config.FlushInterval = 100 * time.Millisecond
 
-		logger, err := NewLogger(config)
+		logger, err := NewLogger(config, "test")
 		require.NoError(t, err)
 		defer logger.Close()
 
 		data := []byte("test log entry")
 		logger.LogBytes(data)
 
-		// Give time for async operations
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 
-		totalLogs, droppedLogs, bytesWritten, _, _, _ := logger.GetStatsSnapshot()
-		assert.Equal(t, int64(1), totalLogs)
-		assert.Equal(t, int64(0), droppedLogs)
-		assert.Greater(t, bytesWritten, int64(0))
+		// Verify data was written to file
+		err = logger.Close()
+		require.NoError(t, err)
+		matches, _ := filepath.Glob(filepath.Join(tmpDir, "*.log"))
+		require.NotEmpty(t, matches)
+		info, err := os.Stat(matches[0])
+		require.NoError(t, err)
+		assert.Greater(t, info.Size(), int64(0))
 	})
 
 	t.Run("DropsLogWhenClosed", func(t *testing.T) {
@@ -67,15 +71,12 @@ func TestLogger_LogBytes(t *testing.T) {
 		config.BufferSize = 1024 * 1024
 		config.NumShards = 4
 
-		logger, err := NewLogger(config)
+		logger, err := NewLogger(config, "test")
 		require.NoError(t, err)
 
 		logger.Close()
+		// LogBytes after close should not panic (drops silently)
 		logger.LogBytes([]byte("test"))
-
-		totalLogs, droppedLogs, _, _, _, _ := logger.GetStatsSnapshot()
-		assert.Equal(t, int64(1), totalLogs)
-		assert.Equal(t, int64(1), droppedLogs)
 	})
 
 	t.Run("HandlesConcurrentWrites", func(t *testing.T) {
@@ -85,7 +86,7 @@ func TestLogger_LogBytes(t *testing.T) {
 		config.NumShards = 8
 		config.FlushInterval = 100 * time.Millisecond
 
-		logger, err := NewLogger(config)
+		logger, err := NewLogger(config, "test")
 		require.NoError(t, err)
 		defer logger.Close()
 
@@ -105,11 +106,15 @@ func TestLogger_LogBytes(t *testing.T) {
 		}
 
 		wg.Wait()
-		time.Sleep(200 * time.Millisecond) // Wait for flushes
+		time.Sleep(200 * time.Millisecond)
 
-		totalLogs, _, bytesWritten, _, _, _ := logger.GetStatsSnapshot()
-		assert.Equal(t, int64(numGoroutines*writesPerGoroutine), totalLogs)
-		assert.Greater(t, bytesWritten, int64(0))
+		err = logger.Close()
+		require.NoError(t, err)
+		matches, _ := filepath.Glob(filepath.Join(tmpDir, "*.log"))
+		require.NotEmpty(t, matches)
+		info, err := os.Stat(matches[0])
+		require.NoError(t, err)
+		assert.Greater(t, info.Size(), int64(0))
 	})
 }
 
@@ -121,7 +126,7 @@ func TestLogger_SwapCoordination(t *testing.T) {
 		config.NumShards = 1            // Single shard to test swap
 		config.FlushInterval = 100 * time.Millisecond
 
-		logger, err := NewLogger(config)
+		logger, err := NewLogger(config, "test")
 		require.NoError(t, err)
 		defer logger.Close()
 
@@ -133,9 +138,13 @@ func TestLogger_SwapCoordination(t *testing.T) {
 
 		time.Sleep(200 * time.Millisecond)
 
-		// Should have triggered swap and flush
-		totalLogs, _, _, _, _, _ := logger.GetStatsSnapshot()
-		assert.Greater(t, totalLogs, int64(0))
+		err = logger.Close()
+		require.NoError(t, err)
+		matches, _ := filepath.Glob(filepath.Join(tmpDir, "*.log"))
+		require.NotEmpty(t, matches)
+		info, err := os.Stat(matches[0])
+		require.NoError(t, err)
+		assert.Greater(t, info.Size(), int64(0))
 	})
 
 	t.Run("RetriesAfterSwap", func(t *testing.T) {
@@ -145,7 +154,7 @@ func TestLogger_SwapCoordination(t *testing.T) {
 		config.NumShards = 1
 		config.FlushInterval = 100 * time.Millisecond
 
-		logger, err := NewLogger(config)
+		logger, err := NewLogger(config, "test")
 		require.NoError(t, err)
 		defer logger.Close()
 
@@ -155,13 +164,17 @@ func TestLogger_SwapCoordination(t *testing.T) {
 			logger.LogBytes(largeData)
 		}
 
-		// Write after buffer is full (should retry after swap)
 		logger.LogBytes([]byte("after fill"))
 
 		time.Sleep(200 * time.Millisecond)
 
-		totalLogs, _, _, _, _, _ := logger.GetStatsSnapshot()
-		assert.Greater(t, totalLogs, int64(5))
+		err = logger.Close()
+		require.NoError(t, err)
+		matches, _ := filepath.Glob(filepath.Join(tmpDir, "*.log"))
+		require.NotEmpty(t, matches)
+		info, err := os.Stat(matches[0])
+		require.NoError(t, err)
+		assert.Greater(t, info.Size(), int64(0))
 	})
 }
 
@@ -173,7 +186,7 @@ func TestLogger_Flush(t *testing.T) {
 		config.NumShards = 8
 		config.FlushInterval = 100 * time.Millisecond
 
-		logger, err := NewLogger(config)
+		logger, err := NewLogger(config, "test")
 		require.NoError(t, err)
 		defer logger.Close()
 
@@ -186,9 +199,8 @@ func TestLogger_Flush(t *testing.T) {
 
 		time.Sleep(500 * time.Millisecond)
 
-		_, _, _, flushes, _, _ := logger.GetStatsSnapshot()
-		// May or may not flush depending on timing and threshold
-		_ = flushes
+		err = logger.Close()
+		require.NoError(t, err)
 	})
 
 	t.Run("FlushesOnInterval", func(t *testing.T) {
@@ -198,7 +210,7 @@ func TestLogger_Flush(t *testing.T) {
 		config.NumShards = 8
 		config.FlushInterval = 50 * time.Millisecond
 
-		logger, err := NewLogger(config)
+		logger, err := NewLogger(config, "test")
 		require.NoError(t, err)
 		defer logger.Close()
 
@@ -206,9 +218,8 @@ func TestLogger_Flush(t *testing.T) {
 
 		time.Sleep(100 * time.Millisecond)
 
-		_, _, _, flushes, _, _ := logger.GetStatsSnapshot()
-		// May or may not flush depending on threshold
-		_ = flushes
+		err = logger.Close()
+		require.NoError(t, err)
 	})
 }
 
@@ -219,15 +230,18 @@ func TestLogger_Close(t *testing.T) {
 		config.BufferSize = 8 * 1024 * 1024
 		config.NumShards = 8
 
-		logger, err := NewLogger(config)
+		logger, err := NewLogger(config, "test")
 		require.NoError(t, err)
 
 		logger.LogBytes([]byte("test data"))
 		err = logger.Close()
 		assert.NoError(t, err)
 
-		totalLogs, _, _, _, _, _ := logger.GetStatsSnapshot()
-		assert.Greater(t, totalLogs, int64(0))
+		matches, _ := filepath.Glob(filepath.Join(tmpDir, "*.log"))
+		require.NotEmpty(t, matches)
+		info, err := os.Stat(matches[0])
+		require.NoError(t, err)
+		assert.Greater(t, info.Size(), int64(0))
 	})
 
 	t.Run("HandlesDoubleClose", func(t *testing.T) {
@@ -236,7 +250,7 @@ func TestLogger_Close(t *testing.T) {
 		config.BufferSize = 1024 * 1024
 		config.NumShards = 4
 
-		logger, err := NewLogger(config)
+		logger, err := NewLogger(config, "test")
 		require.NoError(t, err)
 
 		err1 := logger.Close()
@@ -247,53 +261,6 @@ func TestLogger_Close(t *testing.T) {
 	})
 }
 
-func TestLogger_GetStatsSnapshot(t *testing.T) {
-	t.Run("ReturnsStatsSnapshot", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		config := DefaultConfig(filepath.Join(tmpDir, "test.log"))
-		config.BufferSize = 1024 * 1024
-		config.NumShards = 4
-
-		logger, err := NewLogger(config)
-		require.NoError(t, err)
-		defer logger.Close()
-
-		logger.LogBytes([]byte("test"))
-		time.Sleep(50 * time.Millisecond)
-
-		totalLogs, droppedLogs, bytesWritten, _, _, _ := logger.GetStatsSnapshot()
-		assert.Equal(t, int64(1), totalLogs)
-		assert.Equal(t, int64(0), droppedLogs)
-		assert.Greater(t, bytesWritten, int64(0))
-	})
-}
-
-func TestLogger_GetFlushMetrics(t *testing.T) {
-	t.Run("ReturnsFlushMetrics", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		config := DefaultConfig(filepath.Join(tmpDir, "test.log"))
-		config.BufferSize = 8 * 1024 * 1024
-		config.NumShards = 8
-		config.FlushInterval = 50 * time.Millisecond
-
-		logger, err := NewLogger(config)
-		require.NoError(t, err)
-		defer logger.Close()
-
-		// Trigger flush
-		largeData := make([]byte, 1024*1024)
-		for i := 0; i < 20; i++ {
-			logger.LogBytes(largeData)
-		}
-
-		time.Sleep(200 * time.Millisecond)
-
-		metrics := logger.GetFlushMetrics()
-		// Metrics may be zero if no flushes occurred yet
-		_ = metrics
-	})
-}
-
 func TestLogger_Log(t *testing.T) {
 	t.Run("ConvertsStringToBytes", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -301,16 +268,19 @@ func TestLogger_Log(t *testing.T) {
 		config.BufferSize = 1024 * 1024
 		config.NumShards = 4
 
-		logger, err := NewLogger(config)
+		logger, err := NewLogger(config, "test")
 		require.NoError(t, err)
 		defer logger.Close()
 
 		logger.Log("test message")
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 
-		totalLogs, droppedLogs, bytesWritten, _, _, _ := logger.GetStatsSnapshot()
-		assert.Equal(t, int64(1), totalLogs)
-		assert.Equal(t, int64(0), droppedLogs)
-		assert.Greater(t, bytesWritten, int64(0))
+		err = logger.Close()
+		require.NoError(t, err)
+		matches, _ := filepath.Glob(filepath.Join(tmpDir, "*.log"))
+		require.NotEmpty(t, matches)
+		info, err := os.Stat(matches[0])
+		require.NoError(t, err)
+		assert.Greater(t, info.Size(), int64(0))
 	})
 }

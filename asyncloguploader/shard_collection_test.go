@@ -12,7 +12,7 @@ func TestShardCollection_NewShardCollection(t *testing.T) {
 	flushChan := make(chan *Buffer, 100)
 	
 	t.Run("CreatesCollectionWithCorrectShardCount", func(t *testing.T) {
-		collection, err := NewShardCollection(8*1024*1024, 8, flushChan) // 8MB total, 8 shards
+		collection, err := NewShardCollection(8*1024*1024, 8, flushChan, nil) // 8MB total, 8 shards
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -21,7 +21,7 @@ func TestShardCollection_NewShardCollection(t *testing.T) {
 	})
 
 	t.Run("Calculates25PercentThreshold", func(t *testing.T) {
-		collection, err := NewShardCollection(8*1024*1024, 8, flushChan)
+		collection, err := NewShardCollection(8*1024*1024, 8, flushChan, nil)
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -30,7 +30,7 @@ func TestShardCollection_NewShardCollection(t *testing.T) {
 	})
 
 	t.Run("SetsMinimumThresholdToOne", func(t *testing.T) {
-		collection, err := NewShardCollection(4*1024*1024, 4, flushChan)
+		collection, err := NewShardCollection(4*1024*1024, 4, flushChan, nil)
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -38,7 +38,7 @@ func TestShardCollection_NewShardCollection(t *testing.T) {
 	})
 
 	t.Run("HandlesSmallShardSize", func(t *testing.T) {
-		collection, err := NewShardCollection(64*1024, 8, flushChan) // Very small total
+		collection, err := NewShardCollection(64*1024, 8, flushChan, nil) // Very small total
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -51,7 +51,7 @@ func TestShardCollection_Write(t *testing.T) {
 	flushChan := make(chan *Buffer, 100)
 	
 	t.Run("WritesToShardUsingRandomSelection", func(t *testing.T) {
-		collection, err := NewShardCollection(8*1024*1024, 4, flushChan)
+		collection, err := NewShardCollection(8*1024*1024, 4, flushChan, nil)
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -64,7 +64,7 @@ func TestShardCollection_Write(t *testing.T) {
 	})
 
 	t.Run("DistributesWritesAcrossShards", func(t *testing.T) {
-		collection, err := NewShardCollection(8*1024*1024, 4, flushChan)
+		collection, err := NewShardCollection(8*1024*1024, 4, flushChan, nil)
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -79,7 +79,7 @@ func TestShardCollection_Write(t *testing.T) {
 	})
 
 	t.Run("ReturnsZeroForEmptyData", func(t *testing.T) {
-		collection, err := NewShardCollection(8*1024*1024, 4, flushChan)
+		collection, err := NewShardCollection(8*1024*1024, 4, flushChan, nil)
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -91,7 +91,7 @@ func TestShardCollection_Write(t *testing.T) {
 	})
 
 	t.Run("EnqueuesBufferWhenFull", func(t *testing.T) {
-		collection, err := NewShardCollection(8*1024*1024, 4, flushChan)
+		collection, err := NewShardCollection(8*1024*1024, 4, flushChan, nil)
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -119,7 +119,7 @@ func TestShardCollection_GetReadyShards(t *testing.T) {
 	flushChan := make(chan *Buffer, 100)
 	
 	t.Run("ReturnsOnlyFullShards", func(t *testing.T) {
-		collection, err := NewShardCollection(8*1024*1024, 4, flushChan)
+		collection, err := NewShardCollection(8*1024*1024, 4, flushChan, nil)
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -136,7 +136,7 @@ func TestShardCollection_GetReadyShards(t *testing.T) {
 	})
 
 	t.Run("ReturnsEmptyWhenNoShardsReady", func(t *testing.T) {
-		collection, err := NewShardCollection(8*1024*1024, 4, flushChan)
+		collection, err := NewShardCollection(8*1024*1024, 4, flushChan, nil)
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -152,7 +152,7 @@ func TestShardCollection_HasData(t *testing.T) {
 	flushChan := make(chan *Buffer, 100)
 	
 	t.Run("ReturnsFalseWhenNoData", func(t *testing.T) {
-		collection, err := NewShardCollection(8*1024*1024, 4, flushChan)
+		collection, err := NewShardCollection(8*1024*1024, 4, flushChan, nil)
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -160,7 +160,7 @@ func TestShardCollection_HasData(t *testing.T) {
 	})
 
 	t.Run("ReturnsTrueWhenHasData", func(t *testing.T) {
-		collection, err := NewShardCollection(8*1024*1024, 4, flushChan)
+		collection, err := NewShardCollection(8*1024*1024, 4, flushChan, nil)
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -180,7 +180,7 @@ func TestShardCollection_GetShard(t *testing.T) {
 	flushChan := make(chan *Buffer, 100)
 	
 	t.Run("ReturnsCorrectShard", func(t *testing.T) {
-		collection, err := NewShardCollection(8*1024*1024, 4, flushChan)
+		collection, err := NewShardCollection(8*1024*1024, 4, flushChan, nil)
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -190,7 +190,7 @@ func TestShardCollection_GetShard(t *testing.T) {
 	})
 
 	t.Run("ReturnsNilForInvalidIndex", func(t *testing.T) {
-		collection, err := NewShardCollection(8*1024*1024, 4, flushChan)
+		collection, err := NewShardCollection(8*1024*1024, 4, flushChan, nil)
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -203,7 +203,7 @@ func TestShardCollection_TotalBytes(t *testing.T) {
 	flushChan := make(chan *Buffer, 100)
 	
 	t.Run("CalculatesTotalBytesCorrectly", func(t *testing.T) {
-		collection, err := NewShardCollection(8*1024*1024, 4, flushChan)
+		collection, err := NewShardCollection(8*1024*1024, 4, flushChan, nil)
 		require.NoError(t, err)
 		defer collection.Close()
 
@@ -217,7 +217,7 @@ func TestShardCollection_TotalBytes(t *testing.T) {
 	})
 
 	t.Run("ExcludesHeaderReservation", func(t *testing.T) {
-		collection, err := NewShardCollection(8*1024*1024, 4, flushChan)
+		collection, err := NewShardCollection(8*1024*1024, 4, flushChan, nil)
 		require.NoError(t, err)
 		defer collection.Close()
 

@@ -14,7 +14,7 @@ func TestShard_NewShard(t *testing.T) {
 	flushChan := make(chan *Buffer, 100)
 	
 	t.Run("CreatesShardWithDoubleBuffer", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan) // 1MB capacity
+		shard, err := NewShard(1024*1024, 1, flushChan, nil) // 1MB capacity
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -26,7 +26,7 @@ func TestShard_NewShard(t *testing.T) {
 	})
 
 	t.Run("InitializesOffsetsToHeaderOffset", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan)
+		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -35,7 +35,7 @@ func TestShard_NewShard(t *testing.T) {
 	})
 
 	t.Run("SetsBufferAAsInitialActive", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan)
+		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -49,7 +49,7 @@ func TestShard_Write(t *testing.T) {
 	flushChan := make(chan *Buffer, 100)
 	
 	t.Run("WritesDataToActiveBuffer", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan)
+		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -62,7 +62,7 @@ func TestShard_Write(t *testing.T) {
 	})
 
 	t.Run("PrependsLengthPrefix", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan)
+		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -83,7 +83,7 @@ func TestShard_Write(t *testing.T) {
 	})
 
 	t.Run("ReturnsNeedsFlushWhenBufferFull", func(t *testing.T) {
-		shard, err := NewShard(1024, 1, flushChan) // Small capacity
+		shard, err := NewShard(1024, 1, flushChan, nil) // Small capacity
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -101,7 +101,7 @@ func TestShard_Write(t *testing.T) {
 	})
 
 	t.Run("HandlesEmptyData", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan)
+		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -115,7 +115,7 @@ func TestShard_TrySwap(t *testing.T) {
 	flushChan := make(chan *Buffer, 100)
 	
 	t.Run("SwapsWhenBufferNearlyFull", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan) // 1MB capacity
+		shard, err := NewShard(1024*1024, 1, flushChan, nil) // 1MB capacity
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -135,7 +135,7 @@ func TestShard_TrySwap(t *testing.T) {
 	})
 
 	t.Run("IsCASProtected", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan)
+		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -183,7 +183,7 @@ func TestShard_BufferGetData(t *testing.T) {
 	flushChan := make(chan *Buffer, 100)
 	
 	t.Run("ReturnsBufferData", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan)
+		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -204,7 +204,7 @@ func TestShard_BufferGetData(t *testing.T) {
 	})
 
 	t.Run("WaitsForWriteCompletion", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan)
+		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -221,7 +221,7 @@ func TestShard_BufferGetData(t *testing.T) {
 	})
 
 	t.Run("ReturnsFalseOnTimeout", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan)
+		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -240,7 +240,7 @@ func TestShard_GetInactiveBuffer(t *testing.T) {
 	flushChan := make(chan *Buffer, 100)
 	
 	t.Run("ReturnsInactiveBuffer", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan)
+		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -256,7 +256,7 @@ func TestShard_GetBuffersWithData(t *testing.T) {
 	flushChan := make(chan *Buffer, 100)
 	
 	t.Run("ReturnsBuffersWithData", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan)
+		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -270,7 +270,7 @@ func TestShard_GetBuffersWithData(t *testing.T) {
 	})
 
 	t.Run("ReturnsEmptyWhenNoData", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan)
+		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -283,7 +283,7 @@ func TestShard_ConcurrentWrites(t *testing.T) {
 	flushChan := make(chan *Buffer, 100)
 	
 	t.Run("HandlesConcurrentWrites", func(t *testing.T) {
-		shard, err := NewShard(10*1024*1024, 1, flushChan) // 10MB capacity
+		shard, err := NewShard(10*1024*1024, 1, flushChan, nil) // 10MB capacity
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -315,7 +315,7 @@ func TestShard_HasData(t *testing.T) {
 	flushChan := make(chan *Buffer, 100)
 	
 	t.Run("ReturnsFalseWhenNoData", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan)
+		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 
@@ -323,7 +323,7 @@ func TestShard_HasData(t *testing.T) {
 	})
 
 	t.Run("ReturnsTrueWhenHasData", func(t *testing.T) {
-		shard, err := NewShard(1024*1024, 1, flushChan)
+		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 

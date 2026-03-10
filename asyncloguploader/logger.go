@@ -11,29 +11,6 @@ import (
 	logger "github.com/rs/zerolog/log"
 )
 
-// Statistics holds operational statistics for the logger
-type Statistics struct {
-	TotalLogs    atomic.Int64 // Total log attempts (successful + dropped)
-	DroppedLogs  atomic.Int64 // Logs dropped (buffer full, logger closed, etc.)
-	BytesWritten atomic.Int64 // Total bytes successfully written to buffers
-	Flushes      atomic.Int64 // Number of flush operations completed
-	FlushErrors  atomic.Int64 // Number of flush operations that failed
-
-	// Flush performance metrics
-	TotalFlushDuration atomic.Int64 // Total time spent in flush operations (nanoseconds)
-	MaxFlushDuration   atomic.Int64 // Maximum flush duration seen (nanoseconds)
-	FlushQueueDepth    atomic.Int64 // Current depth of flush queue
-	BlockedSwaps       atomic.Int64 // Number of swaps that blocked waiting for flush
-
-	// Detailed I/O breakdown
-	TotalWriteDuration atomic.Int64 // Time spent in WriteVectored() including rotation checks (nanoseconds)
-	MaxWriteDuration   atomic.Int64 // Maximum write duration (nanoseconds)
-
-	// Pwritev syscall timing (pure disk I/O, excludes rotation checks)
-	TotalPwritevDuration atomic.Int64 // Time spent in Pwritev syscall only (nanoseconds)
-	MaxPwritevDuration   atomic.Int64 // Maximum Pwritev duration (nanoseconds)
-}
-
 // Logger is an async logger using Sharded Double Buffer CAS with Direct I/O
 // Each shard has its own double buffer and swaps individually
 type Logger struct {
@@ -55,22 +32,28 @@ type Logger struct {
 	// Configuration
 	config Config
 
-	// Statistics
-	stats Statistics
+	// Event name for metric tag propagation
+	eventName string
+
+	// Cached metric tags (merged once in NewLogger, reused on hot path)
+	metricTags []string
 
 	// Closed flag
 	closed atomic.Bool
 }
 
 // NewLogger creates a new async logger
-func NewLogger(config Config) (*Logger, error) {
+// eventName is the sanitized event name for metric tag propagation
+func NewLogger(config Config, eventName string) (*Logger, error) {
 	// Validate configuration
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
+	metricTags := MergeMetricTags(config.MetricTags, eventName)
+
 	// Create file writer
-	fileWriter, err := NewSizeFileWriter(config, config.UploadChannel)
+	fileWriter, err := NewSizeFileWriter(config, metricTags)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file writer: %w", err)
 	}
@@ -80,8 +63,8 @@ func NewLogger(config Config) (*Logger, error) {
 	flushChan := make(chan *Buffer, config.NumShards*2)
 
 	// Create shard collection (each shard has its own double buffer)
-	// Pass flush channel so buffers can enqueue themselves on swap
-	shardCollection, err := NewShardCollection(config.BufferSize, config.NumShards, flushChan)
+	// Pass flush channel and metric tags so buffers can enqueue themselves on swap
+	shardCollection, err := NewShardCollection(config.BufferSize, config.NumShards, flushChan, metricTags)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create shard collection: %w", err)
 	}
@@ -94,6 +77,8 @@ func NewLogger(config Config) (*Logger, error) {
 		done:            make(chan struct{}),
 		semaphore:       make(chan struct{}, 1),
 		config:          config,
+		eventName:       eventName,
+		metricTags:      metricTags,
 	}
 
 	// Start background worker
@@ -106,13 +91,10 @@ func NewLogger(config Config) (*Logger, error) {
 
 // LogBytes writes raw byte data to the logger (zero-allocation path)
 func (l *Logger) LogBytes(data []byte) {
-
-	// Count every log attempt (successful or dropped)
-	l.stats.TotalLogs.Add(1)
+	tags := l.metricTags
 
 	if l.closed.Load() {
-		metric.Incr(MetricLogBytesDropped, []string{})
-		l.stats.DroppedLogs.Add(1)
+		metric.Incr(MetricLogBytesDropped, tags)
 		return
 	}
 
@@ -121,65 +103,47 @@ func (l *Logger) LogBytes(data []byte) {
 
 	if n > 0 {
 		// Success! Shard is already enqueued to flush channel if needsFlush=true
-		// Flush worker will accumulate and flush when threshold reached
-		metric.Incr(MetricLogBytesSuccess, []string{})
-		l.stats.BytesWritten.Add(int64(n))
+		metric.Incr(MetricLogBytesSuccess, tags)
+		metric.Count(MetricLogBytesWritten, int64(n), tags)
 		return
 	}
 
 	// Buffer full - use per-shard semaphore retry mechanism
-	// Use non-blocking select with timeout to avoid blocking hot path
 	shard := l.shardCollection.GetShard(shardID)
 	if shard == nil {
-		metric.Incr(MetricLogBytesDropped, []string{})
-		l.stats.DroppedLogs.Add(1)
+		metric.Incr(MetricLogBytesDropped, tags)
 		return
 	}
 
 	// Increase timeout to 50ms to allow flush operations to complete
-	// Under high load, flushes can take longer, and we want to avoid dropping logs
 	timeout := time.NewTimer(50 * time.Millisecond)
 	defer timeout.Stop()
 
 	select {
-	case shard.swapSemaphore <- struct{}{}: // Acquired permit for this shard
-		defer func() { <-shard.swapSemaphore }() // Release when done
+	case shard.swapSemaphore <- struct{}{}:
+		defer func() { <-shard.swapSemaphore }()
 
-		// Re-check 1: Swap might have happened by another thread
 		n, needsFlush = shard.Write(data)
 		if n > 0 {
-			// Success after re-check! Shard is already enqueued if needsFlush=true
-			metric.Incr(MetricLogBytesSuccess, []string{})
-			l.stats.BytesWritten.Add(int64(n))
+			metric.Incr(MetricLogBytesSuccess, tags)
+			metric.Count(MetricLogBytesWritten, int64(n), tags)
 			return
 		}
 
-		// Still full - trigger swap (only one thread will succeed per shard)
 		if needsFlush {
-
 			shard.trySwap()
-			// After swap, readyForFlush is still true (inactive buffer needs flush)
-			// But the new active buffer is empty and should accept writes
 		}
 
-		// Re-check 2: After swap, try writing again to the new active buffer
-		// The Write() method now checks buffer space before readyForFlush,
-		// so it will succeed if the new buffer has space
 		n, _ = shard.Write(data)
 		if n == 0 {
-			// Still failed after swap - this means both buffers are truly full
-			// (very rare, but possible under extreme load)
-			metric.Incr(MetricLogBytesDropped, []string{})
-			l.stats.DroppedLogs.Add(1)
+			metric.Incr(MetricLogBytesDropped, tags)
 		} else {
-			// Success after swap! Shard is already enqueued if needsFlush=true
-			metric.Incr(MetricLogBytesSuccess, []string{})
-			l.stats.BytesWritten.Add(int64(n))
+			metric.Incr(MetricLogBytesSuccess, tags)
+			metric.Count(MetricLogBytesWritten, int64(n), tags)
 		}
 
 	case <-timeout.C:
-		// Timeout: Couldn't acquire semaphore quickly, drop log
-		l.stats.DroppedLogs.Add(1)
+		metric.Incr(MetricLogBytesDropped, tags)
 	}
 }
 
@@ -244,25 +208,14 @@ func (l *Logger) flushWorker() {
 // flushBuffers writes all data from buffers to disk using batch flush
 // Much simpler: each buffer knows how to get its data and reset itself
 func (l *Logger) flushBuffers(buffers []*Buffer) {
-	metric.Incr(MetricLogBytesFlush, []string{})
-	// Track flush operation timing
+	tags := l.metricTags
+	metric.Incr(MetricLogBytesFlushAttempts, tags)
 	flushStart := time.Now()
 	defer func() {
-		metric.TimingWithStart(MetricLogBytesFlushDuration, flushStart, []string{})
+		metric.TimingWithStart(MetricLogBytesFlushDuration, flushStart, tags)
 	}()
 
-	// Increment queue depth (for monitoring)
-	l.stats.FlushQueueDepth.Add(1)
-	defer l.stats.FlushQueueDepth.Add(-1)
-
-	// Acquire semaphore to prevent concurrent flushes
-	semaphoreAcquireStart := time.Now()
 	l.semaphore <- struct{}{}
-	semaphoreWaitDuration := time.Since(semaphoreAcquireStart)
-	if semaphoreWaitDuration > time.Millisecond {
-		// Track if we blocked waiting for semaphore
-		l.stats.BlockedSwaps.Add(1)
-	}
 	defer func() { <-l.semaphore }()
 
 	// Collect all buffer data for batched write (single Pwritev syscall)
@@ -290,7 +243,7 @@ func (l *Logger) flushBuffers(buffers []*Buffer) {
 			}
 
 			if !allWritesCompleted {
-				fmt.Printf("[WARNING] Shard %d: Not all writes completed before flush timeout, flushing partial data\n", buf.ShardID())
+				logger.Warn().Msgf("Shard %d: Not all writes completed before flush timeout, flushing partial data", buf.ShardID())
 			}
 
 			if len(data) >= int(headerOffset) {
@@ -303,89 +256,26 @@ func (l *Logger) flushBuffers(buffers []*Buffer) {
 		}
 	}
 
-	// Single batched write for all buffers - track timing
 	if len(shardBuffers) > 0 {
-		writeStart := time.Now()
 		_, err := l.fileWriter.WriteVectored(shardBuffers)
-		writeDuration := time.Since(writeStart)
-
-		// Track write duration (includes rotation checks)
-		writeDurationNs := writeDuration.Nanoseconds()
-		l.stats.TotalWriteDuration.Add(writeDurationNs)
-
-		// Update max write duration atomically
-		for {
-			currentMax := l.stats.MaxWriteDuration.Load()
-			if writeDurationNs <= currentMax {
-				break
-			}
-			if l.stats.MaxWriteDuration.CompareAndSwap(currentMax, writeDurationNs) {
-				break
-			}
-		}
-
-		// Track Pwritev syscall duration (pure disk I/O, excludes rotation checks)
-		pwritevDuration := l.fileWriter.GetLastPwritevDuration()
-		if pwritevDuration > 0 {
-			pwritevDurationNs := pwritevDuration.Nanoseconds()
-			l.stats.TotalPwritevDuration.Add(pwritevDurationNs)
-
-			// Update max Pwritev duration atomically
-			for {
-				currentMax := l.stats.MaxPwritevDuration.Load()
-				if pwritevDurationNs <= currentMax {
-					break
-				}
-				if l.stats.MaxPwritevDuration.CompareAndSwap(currentMax, pwritevDurationNs) {
-					break
-				}
-			}
-		}
-
 		if err != nil {
-			l.stats.FlushErrors.Add(1)
-			// Calculate total bytes for error message
 			totalBytes := 0
 			for _, buf := range shardBuffers {
 				totalBytes += len(buf)
 			}
+			metric.Incr(MetricLogBytesFlushFailure, tags)
 			logger.Error().Err(err).Msgf(
-				"flush error: buffers=%d bytes=%d duration=%s",
+				"flush error: buffers=%d bytes=%d",
 				len(shardBuffers),
 				totalBytes,
-				writeDuration,
 			)
-			fmt.Printf("[FLUSH_ERROR] Buffers=%d Bytes=%d Error=%v Duration=%v\n",
-				len(shardBuffers), totalBytes, err, writeDuration)
-			// Continue processing - reset buffers even on error to prevent deadlock
 		} else {
-			// Note: BytesWritten is already counted when data is written to buffers in LogBytes()
-			// We don't count again here to avoid double-counting
-			l.stats.Flushes.Add(1)
+			metric.Incr(MetricLogBytesFlushSuccess, tags)
 		}
 	}
 
-	// Reset all buffers that were flushed (each buffer resets itself)
 	for _, buf := range buffersToReset {
 		buf.Reset()
-	}
-
-	// Note: No need to reset ready shards count - flush worker tracks by buffer list size
-
-	// Track flush duration
-	flushDuration := time.Since(flushStart)
-	flushDurationNs := flushDuration.Nanoseconds()
-	l.stats.TotalFlushDuration.Add(flushDurationNs)
-
-	// Update max flush duration atomically
-	for {
-		currentMax := l.stats.MaxFlushDuration.Load()
-		if flushDurationNs <= currentMax {
-			break
-		}
-		if l.stats.MaxFlushDuration.CompareAndSwap(currentMax, flushDurationNs) {
-			break
-		}
 	}
 }
 
@@ -414,100 +304,6 @@ func (l *Logger) drainFlushChannel() {
 			return
 		}
 	}
-}
-
-// GetStats returns a snapshot of the current statistics
-func (l *Logger) GetStats() Statistics {
-	return Statistics{
-		TotalLogs:            atomic.Int64{},
-		DroppedLogs:          atomic.Int64{},
-		BytesWritten:         atomic.Int64{},
-		Flushes:              atomic.Int64{},
-		FlushErrors:          atomic.Int64{},
-		TotalFlushDuration:   atomic.Int64{},
-		MaxFlushDuration:     atomic.Int64{},
-		FlushQueueDepth:      atomic.Int64{},
-		BlockedSwaps:         atomic.Int64{},
-		TotalWriteDuration:   atomic.Int64{},
-		MaxWriteDuration:     atomic.Int64{},
-		TotalPwritevDuration: atomic.Int64{},
-		MaxPwritevDuration:   atomic.Int64{},
-	}
-}
-
-// GetStatsSnapshot returns a snapshot of current statistics values
-func (l *Logger) GetStatsSnapshot() (totalLogs, droppedLogs, bytesWritten, flushes, flushErrors, setSwaps int64) {
-	return l.stats.TotalLogs.Load(),
-		l.stats.DroppedLogs.Load(),
-		l.stats.BytesWritten.Load(),
-		l.stats.Flushes.Load(),
-		l.stats.FlushErrors.Load(),
-		0 // setSwaps not applicable for per-shard swap
-}
-
-// GetFlushMetrics returns flush performance metrics
-func (l *Logger) GetFlushMetrics() FlushMetrics {
-	flushes := l.stats.Flushes.Load()
-	if flushes == 0 {
-		return FlushMetrics{}
-	}
-
-	avgFlushDuration := time.Duration(l.stats.TotalFlushDuration.Load() / flushes)
-	maxFlushDuration := time.Duration(l.stats.MaxFlushDuration.Load())
-	avgWriteDuration := time.Duration(l.stats.TotalWriteDuration.Load() / flushes)
-	maxWriteDuration := time.Duration(l.stats.MaxWriteDuration.Load())
-	avgPwritevDuration := time.Duration(l.stats.TotalPwritevDuration.Load() / flushes)
-	maxPwritevDuration := time.Duration(l.stats.MaxPwritevDuration.Load())
-
-	writePercent := 0.0
-	if avgFlushDuration > 0 {
-		writePercent = float64(avgWriteDuration) / float64(avgFlushDuration) * 100.0
-	}
-
-	pwritevPercent := 0.0
-	if avgFlushDuration > 0 {
-		pwritevPercent = float64(avgPwritevDuration) / float64(avgFlushDuration) * 100.0
-	}
-
-	return FlushMetrics{
-		AvgFlushDuration:   avgFlushDuration,
-		MaxFlushDuration:   maxFlushDuration,
-		AvgWriteDuration:   avgWriteDuration,
-		MaxWriteDuration:   maxWriteDuration,
-		WritePercent:       writePercent,
-		AvgPwritevDuration: avgPwritevDuration,
-		MaxPwritevDuration: maxPwritevDuration,
-		PwritevPercent:     pwritevPercent,
-	}
-}
-
-// FlushMetrics holds flush performance metrics
-type FlushMetrics struct {
-	AvgFlushDuration   time.Duration
-	MaxFlushDuration   time.Duration
-	AvgWriteDuration   time.Duration
-	MaxWriteDuration   time.Duration
-	WritePercent       float64
-	AvgPwritevDuration time.Duration
-	MaxPwritevDuration time.Duration
-	PwritevPercent     float64
-}
-
-// StatsSnapshot is a snapshot of statistics values (safe to copy)
-type StatsSnapshot struct {
-	TotalLogs            int64
-	DroppedLogs          int64
-	BytesWritten         int64
-	Flushes              int64
-	FlushErrors          int64
-	TotalFlushDuration   int64
-	MaxFlushDuration     int64
-	FlushQueueDepth      int64
-	BlockedSwaps         int64
-	TotalWriteDuration   int64
-	MaxWriteDuration     int64
-	TotalPwritevDuration int64
-	MaxPwritevDuration   int64
 }
 
 // Close gracefully shuts down the logger
