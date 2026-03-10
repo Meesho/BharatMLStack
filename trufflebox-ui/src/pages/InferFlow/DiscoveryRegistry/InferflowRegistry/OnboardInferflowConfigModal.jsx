@@ -37,6 +37,7 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
       batch_size: '',
       deadline: '110',
       entity_id: [],
+      slate_component: false,
       inputs: [{
         name: '',
         features: [],
@@ -434,6 +435,7 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
         batch_size: '',
         deadline: '110',
         entity_id: [],
+        slate_component: false,
         inputs: [{
           name: '',
           features: [],
@@ -472,7 +474,8 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
         score: '',
         data_type: 'DataTypeFP32',
         eq_id: '',
-        entity_id: []
+        entity_id: [],
+        slate_component: false
       }]
     }));
     // Expand the newly added re-ranker

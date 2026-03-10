@@ -508,6 +508,7 @@ const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => 
         batch_size: '',
         deadline: '110',
         entity_id: [],
+        slate_component: false,
         inputs: [{
           name: '',
           features: [],
@@ -544,7 +545,8 @@ const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => 
         score: '',
         data_type: 'DataTypeFP32',
         eq_id: '',
-        entity_id: []
+        entity_id: [],
+        slate_component: false
       }]
     }));
     setExpandedReRankers(prev => [...prev, newIndex]);
