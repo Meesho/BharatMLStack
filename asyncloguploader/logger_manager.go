@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Meesho/go-core/metric"
 )
@@ -13,27 +12,23 @@ import (
 // LoggerManager manages multiple Logger instances, one per event name
 // Each event writes to its own log file (e.g., payment.log, login.log)
 type LoggerManager struct {
-	loggers       sync.Map      // eventName (string) -> *Logger
-	baseDir       string        // Base directory for log files
-	config        Config        // Base config (shared settings)
-	uploadChannel chan<- string // Shared upload channel for all events
-	uploader      *Uploader     // Optional: GCS uploader (created internally if GCSUploadConfig provided)
-	ownUploader   bool          // True if uploader was created internally (needs cleanup)
+	loggers     sync.Map  // eventName (string) -> *Logger
+	baseDir     string    // Base directory for log files
+	config      Config    // Base config (shared settings)
+	uploader    *Uploader // Optional: GCS uploader (created internally if GCSUploadConfig provided)
+	ownUploader bool      // True if uploader was created internally (needs cleanup)
 }
 
 // NewLoggerManager creates a new LoggerManager
 // The base directory is extracted from config.LogFilePath
 //
-// If GCSUploadConfig is provided and UploadChannel is nil, LoggerManager will
-// automatically create and manage an Uploader internally. The uploader will be
-// started automatically and stopped when Close() is called.
-//
-// If UploadChannel is provided, it will be used directly (for custom uploaders
-// or external upload management).
+// If GCSUploadConfig is provided, LoggerManager will automatically create and manage
+// an Uploader internally. The uploader scans baseDir for .log files every ScanInterval
+// and uploads them to GCS. It is started automatically and stopped when Close() is called.
 func NewLoggerManager(config Config) (*LoggerManager, error) {
 	// Validate configuration
 	if err := config.Validate(); err != nil {
-		metric.Incr(MetricLoggerInitializationFailed, []string{})
+		metric.Incr(MetricLoggerInitializationFailed, getBaseTags(config.MetricTags))
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
@@ -65,29 +60,19 @@ func NewLoggerManager(config Config) (*LoggerManager, error) {
 		config:  config,
 	}
 
-	// If GCSUploadConfig is provided and no UploadChannel is set, create uploader internally
-	if config.GCSUploadConfig != nil && config.UploadChannel == nil {
-		uploader, err := NewUploader(*config.GCSUploadConfig)
+	// If GCSUploadConfig is provided, create uploader that scans baseDir for .log files
+	if config.GCSUploadConfig != nil {
+		uploader, err := NewUploader(*config.GCSUploadConfig, baseDir, getBaseTags(config.MetricTags))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create uploader: %w", err)
 		}
 
-		// Get the upload channel from the uploader
-		uploadChan := uploader.GetUploadChannel()
-
-		// Start the uploader
 		uploader.Start()
-
 		lm.uploader = uploader
-		lm.uploadChannel = uploadChan
 		lm.ownUploader = true
-	} else {
-		// Use provided upload channel (or nil if not using uploads)
-		lm.uploadChannel = config.UploadChannel
-		lm.ownUploader = false
 	}
 
-	metric.Incr(MetricLoggerInitialized, []string{})
+	metric.Incr(MetricLoggerInitialized, getBaseTags(config.MetricTags))
 	return lm, nil
 }
 
@@ -139,10 +124,9 @@ func (lm *LoggerManager) getOrCreateLogger(eventName string) (*Logger, error) {
 	// Create config for this event logger (same settings, different file path)
 	eventConfig := lm.config
 	eventConfig.LogFilePath = eventLogPath
-	eventConfig.UploadChannel = lm.uploadChannel // Share upload channel
 
-	// Create new logger
-	logger, err := NewLogger(eventConfig)
+	// Create new logger (pass sanitized event name for tag propagation)
+	logger, err := NewLogger(eventConfig, sanitized)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create logger for event %s: %w", sanitized, err)
 	}
@@ -160,7 +144,7 @@ func (lm *LoggerManager) getOrCreateLogger(eventName string) (*Logger, error) {
 
 // LogBytesWithEvent writes raw byte data to the event-specific logger
 func (lm *LoggerManager) LogBytesWithEvent(eventName string, data []byte) {
-	metric.Incr(MetricLogBytes, GetEventNameTags(eventName))
+	metric.Incr(MetricLogBytes, MergeMetricTags(lm.config.MetricTags, eventName))
 	logger, err := lm.getOrCreateLogger(eventName)
 	if err != nil {
 		// Drop log on error
@@ -254,93 +238,4 @@ func (lm *LoggerManager) Close() error {
 	}
 
 	return firstErr
-}
-
-// GetAggregatedStats returns aggregated statistics across all loggers
-func (lm *LoggerManager) GetAggregatedStats() (totalLogs, droppedLogs, bytesWritten, flushes, flushErrors, setSwaps int64) {
-	lm.loggers.Range(func(key, value interface{}) bool {
-		logger := value.(*Logger)
-		t, d, b, f, fe, s := logger.GetStatsSnapshot()
-		totalLogs += t
-		droppedLogs += d
-		bytesWritten += b
-		flushes += f
-		flushErrors += fe
-		setSwaps += s
-		return true
-	})
-	return
-}
-
-// GetAggregatedFlushMetrics returns aggregated flush metrics across all loggers
-func (lm *LoggerManager) GetAggregatedFlushMetrics() FlushMetrics {
-	var totalFlushDuration, maxFlushDuration int64
-	var totalWriteDuration, maxWriteDuration int64
-	var totalPwritevDuration, maxPwritevDuration int64
-	var totalFlushes int64
-
-	lm.loggers.Range(func(key, value interface{}) bool {
-		logger := value.(*Logger)
-		metrics := logger.GetFlushMetrics()
-		flushes := logger.stats.Flushes.Load()
-
-		if flushes > 0 {
-			totalFlushDuration += metrics.AvgFlushDuration.Nanoseconds() * flushes
-			if metrics.MaxFlushDuration.Nanoseconds() > maxFlushDuration {
-				maxFlushDuration = metrics.MaxFlushDuration.Nanoseconds()
-			}
-
-			totalWriteDuration += metrics.AvgWriteDuration.Nanoseconds() * flushes
-			if metrics.MaxWriteDuration.Nanoseconds() > maxWriteDuration {
-				maxWriteDuration = metrics.MaxWriteDuration.Nanoseconds()
-			}
-
-			totalPwritevDuration += metrics.AvgPwritevDuration.Nanoseconds() * flushes
-			if metrics.MaxPwritevDuration.Nanoseconds() > maxPwritevDuration {
-				maxPwritevDuration = metrics.MaxPwritevDuration.Nanoseconds()
-			}
-
-			totalFlushes += flushes
-		}
-		return true
-	})
-
-	if totalFlushes == 0 {
-		return FlushMetrics{}
-	}
-
-	avgFlushDuration := time.Duration(totalFlushDuration / totalFlushes)
-	avgWriteDuration := time.Duration(totalWriteDuration / totalFlushes)
-	avgPwritevDuration := time.Duration(totalPwritevDuration / totalFlushes)
-
-	writePercent := 0.0
-	if avgFlushDuration > 0 {
-		writePercent = float64(avgWriteDuration) / float64(avgFlushDuration) * 100.0
-	}
-
-	pwritevPercent := 0.0
-	if avgFlushDuration > 0 {
-		pwritevPercent = float64(avgPwritevDuration) / float64(avgFlushDuration) * 100.0
-	}
-
-	return FlushMetrics{
-		AvgFlushDuration:   avgFlushDuration,
-		MaxFlushDuration:   time.Duration(maxFlushDuration),
-		AvgWriteDuration:   avgWriteDuration,
-		MaxWriteDuration:   time.Duration(maxWriteDuration),
-		WritePercent:       writePercent,
-		AvgPwritevDuration: avgPwritevDuration,
-		MaxPwritevDuration: time.Duration(maxPwritevDuration),
-		PwritevPercent:     pwritevPercent,
-	}
-}
-
-// GetUploadStats returns upload statistics if an uploader is configured
-// Returns nil if no uploader is configured
-func (lm *LoggerManager) GetUploadStats() *Stats {
-	if lm.uploader == nil {
-		return nil
-	}
-	stats := lm.uploader.GetStats()
-	return &stats
 }

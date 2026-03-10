@@ -21,8 +21,11 @@ type Config struct {
 	FlushTimeout  time.Duration // Wait for write completion before flush (default: 10ms)
 
 	// Upload configuration
-	UploadChannel   chan<- string    // Optional: channel for completed files
-	GCSUploadConfig *GCSUploadConfig // Optional: GCS upload configuration
+	GCSUploadConfig *GCSUploadConfig // Optional: GCS upload configuration (uploader scans log dir)
+
+	// MetricTags are application-provided tags propagated to all metric emissions
+	// (e.g., from metric.BuildTag(metric.NewTag("service", "x"), ...))
+	MetricTags []string
 }
 
 // GCSUploadConfig holds configuration for GCS uploader
@@ -34,7 +37,7 @@ type GCSUploadConfig struct {
 	MaxRetries          int           // Max retry attempts (default: 3)
 	RetryDelay          time.Duration // Delay between retries (default: 5s)
 	GRPCPoolSize        int           // gRPC connection pool size (default: 64)
-	ChannelBufferSize   int           // Upload channel buffer size (default: 100)
+	ScanInterval        time.Duration // How often to scan log dir for .log files (default: 10s)
 }
 
 // DefaultConfig returns a configuration with baseline defaults
@@ -47,7 +50,6 @@ func DefaultConfig(logPath string) Config {
 		PreallocateFileSize: 0, // Disabled by default
 		FlushInterval:       10 * time.Second,
 		FlushTimeout:        10 * time.Millisecond,
-		UploadChannel:       nil, // Optional
 		GCSUploadConfig:     nil, // Optional
 	}
 }
@@ -62,7 +64,7 @@ func DefaultGCSUploadConfig(bucket string) GCSUploadConfig {
 		MaxRetries:          3,
 		RetryDelay:          5 * time.Second,
 		GRPCPoolSize:        64,
-		ChannelBufferSize:   100,
+		ScanInterval:        10 * time.Second,
 	}
 }
 
@@ -130,8 +132,8 @@ func (g *GCSUploadConfig) Validate() error {
 		g.GRPCPoolSize = 64
 	}
 
-	if g.ChannelBufferSize <= 0 {
-		g.ChannelBufferSize = 100
+	if g.ScanInterval <= 0 {
+		g.ScanInterval = 10 * time.Second
 	}
 
 	return nil

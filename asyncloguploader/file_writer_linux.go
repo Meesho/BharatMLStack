@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Meesho/go-core/metric"
 	logger "github.com/rs/zerolog/log"
 	"golang.org/x/sys/unix"
 )
@@ -46,13 +47,14 @@ type SizeFileWriter struct {
 	// Last Pwritev duration (for metrics tracking)
 	lastPwritevDuration atomic.Int64 // Nanoseconds
 
-	// Channel for completed files (for GCS upload)
-	completedFileChan chan<- string
+	// Metric tags for emissions (e.g., from Config.MetricTags + event_name)
+	metricTags []string
 }
 
-// NewSizeFileWriter creates a new SizeFileWriter with the given configuration
-// completedFileChan is optional - if provided, completed files will be sent to this channel for upload
-func NewSizeFileWriter(config Config, completedFileChan chan<- string) (*SizeFileWriter, error) {
+// NewSizeFileWriter creates a new SizeFileWriter with the given configuration.
+// Files are written with .log.tmp suffix during active write; renamed to .log on rotation/close.
+// metricTags are propagated to metric emissions (e.g., from MergeMetricTags(config.MetricTags, eventName))
+func NewSizeFileWriter(config Config, metricTags []string) (*SizeFileWriter, error) {
 	// Extract base directory and filename
 	baseDir, baseFileName, err := extractBasePathSize(config.LogFilePath)
 	if err != nil {
@@ -60,8 +62,9 @@ func NewSizeFileWriter(config Config, completedFileChan chan<- string) (*SizeFil
 	}
 
 	// Generate timestamped filename for initial file (consistent naming)
+	// Use .log.tmp during active write; rename to .log on rotation/close
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	initialPath := filepath.Join(baseDir, fmt.Sprintf("%s_%s.log", baseFileName, timestamp))
+	initialPath := filepath.Join(baseDir, fmt.Sprintf("%s_%s.log.tmp", baseFileName, timestamp))
 
 	// Open initial file with preallocation (always starts at offset 0 for new files)
 	file, err := openDirectIOSize(initialPath, config.PreallocateFileSize)
@@ -77,7 +80,7 @@ func NewSizeFileWriter(config Config, completedFileChan chan<- string) (*SizeFil
 		baseDir:             baseDir,
 		baseFileName:        baseFileName,
 		preallocateFileSize: config.PreallocateFileSize,
-		completedFileChan:   completedFileChan,
+		metricTags:          getBaseTags(metricTags),
 	}
 
 	// New files always start at offset 0
@@ -108,15 +111,14 @@ func (fw *SizeFileWriter) WriteVectored(buffers [][]byte) (int, error) {
 	n, err := writevAlignedWithOffset(fw.fd, buffers, offset)
 	pwritevDuration := time.Since(pwritevStart)
 
-	// Store write duration for metrics
 	fw.lastPwritevDuration.Store(pwritevDuration.Nanoseconds())
+	metric.Timing(MetricFileWriterWriteDuration, pwritevDuration, fw.metricTags)
 
 	if err != nil {
 		logger.Error().Err(err).Msgf("writev failed (file=%s offset=%d)", fw.filePath, offset)
 		return n, err
 	}
 
-	// Update offset atomically after successful write
 	fw.fileOffset.Add(int64(n))
 
 	return n, nil
@@ -135,7 +137,6 @@ func (fw *SizeFileWriter) Close() error {
 	// We need to complete the rotation: swap files, then close both
 	if fw.nextFile != nil && fw.file != nil {
 		// Complete the rotation by swapping files
-		// This will send the current file to upload channel
 		if err := fw.swapFiles(); err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("failed to complete rotation during close: %w", err)
 		}
@@ -173,16 +174,9 @@ func (fw *SizeFileWriter) Close() error {
 			firstErr = err
 		}
 
-		// Send completed file to upload channel (non-blocking) if it has data
-		if hasData && fw.completedFileChan != nil {
-			select {
-			case fw.completedFileChan <- completedFilePath:
-				// Successfully sent to channel
-			default:
-				// Channel full - log warning but don't block close
-				logger.Warn().Msgf("upload channel full, skipping upload (file=%s)", completedFilePath)
-				fmt.Printf("[WARNING] Upload channel full, skipping upload for %s\n", completedFilePath)
-			}
+		// Rename .tmp to .log (retry 3x, emit metric on failure)
+		if hasData {
+			renameTmpToLog(completedFilePath, fw.metricTags)
 		}
 
 		fw.file = nil
@@ -249,9 +243,9 @@ func (fw *SizeFileWriter) rotateIfNeeded() error {
 
 // createNextFile creates a new file for rotation with preallocation
 func (fw *SizeFileWriter) createNextFile() error {
-	// Generate timestamped filename: {baseFileName}_{YYYY-MM-DD_HH-MM-SS}.log
+	// Generate timestamped filename: {baseFileName}_{YYYY-MM-DD_HH-MM-SS}.log.tmp
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	nextPath := filepath.Join(fw.baseDir, fmt.Sprintf("%s_%s.log", fw.baseFileName, timestamp))
+	nextPath := filepath.Join(fw.baseDir, fmt.Sprintf("%s_%s.log.tmp", fw.baseFileName, timestamp))
 
 	// Try to open new file with preallocation
 	file, err := openDirectIOSize(nextPath, fw.preallocateFileSize)
@@ -302,7 +296,7 @@ func (fw *SizeFileWriter) swapFiles() error {
 		}
 	}
 
-	// Store current file path before closing (for upload)
+	// Store current file path before closing
 	completedFilePath := fw.filePath
 
 	// Close current file
@@ -310,17 +304,8 @@ func (fw *SizeFileWriter) swapFiles() error {
 		return fmt.Errorf("failed to close current file: %w", err)
 	}
 
-	// Send completed file to upload channel (non-blocking)
-	if fw.completedFileChan != nil {
-		select {
-		case fw.completedFileChan <- completedFilePath:
-			// Successfully sent to channel
-		default:
-			// Channel full - log warning but don't block rotation
-			logger.Warn().Msgf("upload channel full, skipping upload (file=%s)", completedFilePath)
-			fmt.Printf("[WARNING] Upload channel full, skipping upload for %s\n", completedFilePath)
-		}
-	}
+	// Rename .tmp to .log (retry 3x, emit metric on failure)
+	renameTmpToLog(completedFilePath, fw.metricTags)
 
 	// Swap next file to current
 	fw.file = fw.nextFile
@@ -328,10 +313,11 @@ func (fw *SizeFileWriter) swapFiles() error {
 	fw.filePath = fw.nextFilePath
 	fw.fileOffset.Store(0) // Reset offset for new file
 
-	// Clear next file fields
 	fw.nextFile = nil
 	fw.nextFd = 0
 	fw.nextFilePath = ""
+
+	metric.Incr(MetricFileWriterRotationCount, fw.metricTags)
 
 	return nil
 }

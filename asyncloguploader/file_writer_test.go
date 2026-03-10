@@ -72,26 +72,22 @@ func TestFileWriter_Rotation(t *testing.T) {
 		config.MaxFileSize = 1024 * 1024 // 1MB
 		config.PreallocateFileSize = 1024 * 1024
 
-		uploadChan := make(chan string, 10)
-		writer, err := NewSizeFileWriter(config, uploadChan)
+		writer, err := NewSizeFileWriter(config, nil)
 		require.NoError(t, err)
 		defer writer.Close()
 
-		// Write data to exceed max size
+		// Write data to exceed max size (3 x 512KB = 1.5MB > 1MB)
 		largeBuffer := make([]byte, 512*1024) // 512KB
 		for i := 0; i < 3; i++ {
 			_, err := writer.WriteVectored([][]byte{largeBuffer})
 			require.NoError(t, err)
 		}
 
-		// Check if rotation occurred
-		select {
-		case completedFile := <-uploadChan:
-			assert.NotEmpty(t, completedFile)
-			assert.FileExists(t, completedFile)
-		default:
-			// Rotation may not have occurred yet
-		}
+		// Rotation should have occurred; after Close, .log files exist
+		err = writer.Close()
+		require.NoError(t, err)
+		actualFile := findLogFile(t, tmpDir, "test")
+		assert.NotEmpty(t, actualFile, "Log file should exist after rotation and close")
 	})
 
 	t.Run("CreatesNewFileAfterRotation", func(t *testing.T) {
@@ -99,8 +95,7 @@ func TestFileWriter_Rotation(t *testing.T) {
 		config := DefaultConfig(filepath.Join(tmpDir, "test.log"))
 		config.MaxFileSize = 1024 * 1024 // 1MB
 
-		uploadChan := make(chan string, 10)
-		writer, err := NewSizeFileWriter(config, uploadChan)
+		writer, err := NewSizeFileWriter(config, nil)
 		require.NoError(t, err)
 		defer writer.Close()
 
