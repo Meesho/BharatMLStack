@@ -1,0 +1,43 @@
+# Build
+build/
+dist/
+tmp/
+var/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+*.cmake
+!CMakeLists.txt
+
+# C/C++ artifacts
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Python (legacy / optional)
+hnswlib.egg-info/
+*.pyd
+hnswlib.cpython*.so
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE / editor
+.idea/
+.vscode/
+.vs/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
