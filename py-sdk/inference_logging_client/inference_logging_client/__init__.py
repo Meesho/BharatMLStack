@@ -263,8 +263,8 @@ def decode_mplog_dataframe(
     # Track decode errors for summary
     decode_errors = []
 
-    # Check if DataFrame is empty
-    if df.count() == 0:
+    # Check if DataFrame is empty (limit(1) avoids a full scan)
+    if df.limit(1).count() == 0:
         from pyspark.sql.types import StructType
         return spark.createDataFrame([], StructType([]))
 
