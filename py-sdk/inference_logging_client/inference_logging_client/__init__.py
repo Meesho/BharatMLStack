@@ -350,6 +350,7 @@ def decode_mplog_dataframe(
         "day",
         "hour",
     ]
+    _reserved_columns = {"entity_id"} | {c for c in row_metadata_columns if c in df_columns}
     
     # Build full output schema: entity_id + metadata cols + all feature names from all schemas
     all_feature_names = set()
