@@ -28,6 +28,15 @@ except ImportError:
     _ZSTD_AVAILABLE = False
     zstd = None
 
+# Prefer orjson for fast JSON parsing in decode_mplog_dataframe (3-10x faster than json)
+try:
+    import orjson
+
+    _ORJSON_AVAILABLE = True
+except ImportError:
+    orjson = None
+    _ORJSON_AVAILABLE = False
+
 from .exceptions import (
     DecodeError,
     FormatError,
@@ -377,6 +386,9 @@ def decode_mplog_dataframe(
     def _decode_batch(iterator):
         import pandas as pd
 
+        # Prefer orjson for 3-10x faster JSON parsing of features/entities/parent_entity
+        _loads = orjson.loads if (_ORJSON_AVAILABLE and orjson is not None) else json.loads
+
         # Reuse one decompressor for all rows in this worker to avoid repeated allocation
         dctx = None
         if decompress and _ZSTD_AVAILABLE and zstd is not None:
@@ -417,8 +429,13 @@ def decode_mplog_dataframe(
                         continue
                 if isinstance(features_data, str):
                     try:
-                        features_list = json.loads(features_data)
-                    except (json.JSONDecodeError, ValueError, TypeError):
+                        features_list = _loads(features_data)
+                    except (ValueError, TypeError):
+                        continue
+                elif isinstance(features_data, bytes):
+                    try:
+                        features_list = _loads(features_data)
+                    except (ValueError, TypeError):
                         continue
                 else:
                     features_list = features_data
@@ -430,8 +447,8 @@ def decode_mplog_dataframe(
                     if entities_raw is not None:
                         if isinstance(entities_raw, str):
                             try:
-                                entities_val = json.loads(entities_raw)
-                            except (json.JSONDecodeError, ValueError):
+                                entities_val = _loads(entities_raw)
+                            except (ValueError, TypeError):
                                 entities_val = [entities_raw]
                         elif isinstance(entities_raw, list):
                             entities_val = entities_raw
@@ -445,8 +462,8 @@ def decode_mplog_dataframe(
                     if parent_val is not None:
                         if isinstance(parent_val, str):
                             try:
-                                parent_val = json.loads(parent_val)
-                            except (json.JSONDecodeError, ValueError):
+                                parent_val = _loads(parent_val)
+                            except (ValueError, TypeError):
                                 parent_val = [parent_val]
                         if isinstance(parent_val, list):
                             parent_entity_val = (
