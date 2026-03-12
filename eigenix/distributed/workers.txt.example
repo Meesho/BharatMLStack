@@ -1,0 +1,12 @@
+# Distributed K-Means worker list.
+# Format: HOST:PORT, one worker per line.
+# Workers must be started BEFORE the coordinator.
+# Each worker listens on its specified port; coordinator connects to them.
+
+# Local testing (2 workers on localhost):
+127.0.0.1:9001
+127.0.0.1:9002
+
+# Remote VMs (uncomment and adjust):
+# 192.168.1.10:9001
+# 192.168.1.11:9001

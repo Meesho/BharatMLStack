@@ -31,6 +31,55 @@ inline float sqnorm(const float* x, int dim) {
 
 }  // namespace
 
+void BlasKMeans::fix_clusters(float* centroids, size_t* counts, int k, int dim, size_t n_total) {
+    constexpr float SPLIT_EPS = 1.0f / 1024.0f;
+
+    // Phase 1: fix empty clusters by splitting the largest.
+    for (int c = 0; c < k; ++c) {
+        if (counts[c] != 0) continue;
+        int donor = 0;
+        for (int j = 1; j < k; ++j)
+            if (counts[j] > counts[donor]) donor = j;
+        if (counts[donor] <= 1) continue;
+
+        float* dst = centroids + static_cast<size_t>(c) * dim;
+        float* src = centroids + static_cast<size_t>(donor) * dim;
+        std::memcpy(dst, src, static_cast<size_t>(dim) * sizeof(float));
+        for (int j = 0; j < dim; ++j) {
+            float sign = (j % 2 == 0) ? 1.0f : -1.0f;
+            dst[j] *= (1.0f + sign * SPLIT_EPS);
+            src[j] *= (1.0f - sign * SPLIT_EPS);
+        }
+        counts[c] = counts[donor] / 2;
+        counts[donor] -= counts[c];
+    }
+
+    // Phase 2: split oversized clusters into the smallest ones.
+    size_t mean_sz = n_total / static_cast<size_t>(k);
+    constexpr size_t IMBALANCE_FACTOR = 3;
+    size_t threshold = mean_sz * IMBALANCE_FACTOR;
+    for (int pass = 0; pass < k; ++pass) {
+        int largest = 0, smallest = 0;
+        for (int c = 1; c < k; ++c) {
+            if (counts[c] > counts[largest]) largest = c;
+            if (counts[c] < counts[smallest]) smallest = c;
+        }
+        if (counts[largest] <= threshold) break;
+        if (largest == smallest) break;
+
+        float* dst = centroids + static_cast<size_t>(smallest) * dim;
+        float* src = centroids + static_cast<size_t>(largest) * dim;
+        std::memcpy(dst, src, static_cast<size_t>(dim) * sizeof(float));
+        for (int j = 0; j < dim; ++j) {
+            float sign = (j % 2 == 0) ? 1.0f : -1.0f;
+            dst[j] *= (1.0f + sign * SPLIT_EPS);
+            src[j] *= (1.0f - sign * SPLIT_EPS);
+        }
+        counts[smallest] = counts[largest] / 2;
+        counts[largest] -= counts[smallest];
+    }
+}
+
 void BlasKMeans::random_init(const float* data, size_t n, int dim, int k,
                              std::mt19937& rng) {
     centroids_.resize(static_cast<size_t>(k) * dim);
@@ -186,52 +235,7 @@ void BlasKMeans::train_once(const float* data, size_t n, int dim, int k,
 
         iterations_ = static_cast<int>(iter + 1);
 
-        constexpr float SPLIT_EPS = 1.0f / 1024.0f;
-
-        // Phase 1: fix empty clusters by splitting the largest.
-        for (int c = 0; c < k; ++c) {
-            if (centroid_counts[c] != 0) continue;
-            int donor = 0;
-            for (int j = 1; j < k; ++j)
-                if (centroid_counts[j] > centroid_counts[donor]) donor = j;
-            if (centroid_counts[donor] <= 1) continue;
-
-            float* dst = centroids_.data() + static_cast<size_t>(c) * dim;
-            float* src = centroids_.data() + static_cast<size_t>(donor) * dim;
-            std::memcpy(dst, src, static_cast<size_t>(dim) * sizeof(float));
-            for (int j = 0; j < dim; ++j) {
-                float sign = (j % 2 == 0) ? 1.0f : -1.0f;
-                dst[j] *= (1.0f + sign * SPLIT_EPS);
-                src[j] *= (1.0f - sign * SPLIT_EPS);
-            }
-            centroid_counts[c] = centroid_counts[donor] / 2;
-            centroid_counts[donor] -= centroid_counts[c];
-        }
-
-        // Phase 2: split oversized clusters into the smallest ones.
-        size_t mean_sz = n / static_cast<size_t>(k);
-        constexpr size_t IMBALANCE_FACTOR = 3;
-        size_t threshold = mean_sz * IMBALANCE_FACTOR;
-        for (int pass = 0; pass < k; ++pass) {
-            int largest = 0, smallest = 0;
-            for (int c = 1; c < k; ++c) {
-                if (centroid_counts[c] > centroid_counts[largest]) largest = c;
-                if (centroid_counts[c] < centroid_counts[smallest]) smallest = c;
-            }
-            if (centroid_counts[largest] <= threshold) break;
-            if (largest == smallest) break;
-
-            float* dst = centroids_.data() + static_cast<size_t>(smallest) * dim;
-            float* src = centroids_.data() + static_cast<size_t>(largest) * dim;
-            std::memcpy(dst, src, static_cast<size_t>(dim) * sizeof(float));
-            for (int j = 0; j < dim; ++j) {
-                float sign = (j % 2 == 0) ? 1.0f : -1.0f;
-                dst[j] *= (1.0f + sign * SPLIT_EPS);
-                src[j] *= (1.0f - sign * SPLIT_EPS);
-            }
-            centroid_counts[smallest] = centroid_counts[largest] / 2;
-            centroid_counts[largest] -= centroid_counts[smallest];
-        }
+        fix_clusters(centroids_.data(), centroid_counts.data(), k, dim, n);
 
         compute_centroid_norms();
 

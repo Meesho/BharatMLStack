@@ -26,19 +26,24 @@ public:
 
     static constexpr size_t BATCH_SIZE = 100000;
 
-private:
+    // Cluster repair logic extracted from train_once — also used by distributed coordinator.
+    static void fix_clusters(float* centroids, size_t* counts, int k, int dim, size_t n_total);
+
+protected:
     std::vector<float> centroid_norms_;
     mutable std::vector<float> dist_buf_;
 
+    void compute_centroid_norms();
+    void assign_batch(const float* data, const float* data_norms,
+                      size_t n, int* labels) const;
+
+private:
     void train_once(const float* data, size_t n, int dim, int k,
                     const TrainConfig& cfg);
     void random_init(const float* data, size_t n, int dim, int k,
                      std::mt19937& rng);
     void kmeanspp_init(const float* data, size_t n, int dim, int k,
                        std::mt19937& rng);
-    void compute_centroid_norms();
-    void assign_batch(const float* data, const float* data_norms,
-                      size_t n, int* labels) const;
 };
 
 }  // namespace eigenix

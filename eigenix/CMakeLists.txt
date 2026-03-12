@@ -115,3 +115,6 @@ if(GTest_FOUND)
 else()
     message(STATUS "GTest not found — tests will not be built")
 endif()
+
+# ---------- Distributed K-Means POC ----------
+add_subdirectory(distributed)

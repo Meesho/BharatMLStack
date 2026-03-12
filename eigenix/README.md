@@ -37,6 +37,17 @@ eigenix/
 │   └── main_bench.cpp          # Full benchmark harness
 ├── tests/
 │   └── test_correctness.cpp    # GTest suite (9 test cases)
+├── distributed/                # Distributed BLAS K-Means POC (raw TCP)
+│   ├── CMakeLists.txt
+│   ├── workers.txt.example     # Worker address config
+│   ├── run_distributed.sh      # Local launch helper
+│   ├── include/
+│   │   ├── dist_protocol.hpp   # Wire protocol (MsgHeader, MsgType, ShardConfig)
+│   │   └── dist_net.hpp        # TCP helpers (send_all, recv_all, connect_to, etc.)
+│   └── src/
+│       ├── dist_net.cpp
+│       ├── dist_coordinator.cpp
+│       └── dist_worker.cpp
 └── results/
     └── .gitkeep
 ```
@@ -243,6 +254,144 @@ All kernels use `_mm_prefetch` for the next cache line during distance loops. Th
 - Set thread count via `OMP_NUM_THREADS` or let it auto-detect
 - For BLAS, set `OPENBLAS_NUM_THREADS=1` to avoid nested parallelism (our code manages OpenMP threading)
 - Pin threads with `OMP_PROC_BIND=close` for stable benchmark results
+
+---
+
+## Distributed BLAS K-Means POC
+
+A data-parallel extension of the BLAS backend across multiple VMs via raw TCP (no MPI/ZMQ).
+
+### Algorithm
+
+Each iteration: coordinator broadcasts centroids → workers run BLAS `assign_batch` on their shard → workers send back per-cluster sums + counts → coordinator all-reduces, updates centroids, runs Phase 1/2 cluster repair, checks convergence.
+
+```
+Coordinator                       Worker i
+───────────                       ────────
+generate data, split N shards
+send ShardConfig + SHARD_DATA ──→ store shard, precompute data_norms
+                              ←── READY
+random init centroids
+loop:
+  broadcast CENTROIDS         ──→ assign_batch (BLAS SGEMM)
+                                  accumulate local sums + counts
+  recv LOCAL_STATS            ←── send k×dim sums + k uint64 counts
+  all-reduce, update centroids
+  Phase1+2 cluster repair
+  if max_shift ≤ tol → DONE   ──→ break
+final assign + metrics
+```
+
+### Build
+
+The distributed targets are built automatically alongside the main library:
+
+```bash
+cmake -B build
+cmake --build build -j$(nproc)
+# Produces: build/distributed/dist_coordinator
+#           build/distributed/dist_worker
+```
+
+### Run: Local Test (2 workers, same machine)
+
+```bash
+# Terminal 1
+./build/distributed/dist_worker --port 9001 --verbose
+
+# Terminal 2
+./build/distributed/dist_worker --port 9002 --verbose
+
+# Terminal 3
+./build/distributed/dist_coordinator \
+  --workers distributed/workers.txt.example \
+  --n 1000000 --k 256 --dim 128 \
+  --max-iter 100 --tol 0.01 --seed 42 --verbose
+```
+
+Or use the helper script (starts workers locally then coordinator):
+
+```bash
+./distributed/run_distributed.sh build distributed/workers.txt.example 1000000 256 128
+```
+
+### Run: Remote VMs
+
+1. **Build on each VM** (same steps as above).
+
+2. **Start workers on each VM** — workers listen for the coordinator:
+   ```bash
+   # On VM1 (e.g. 192.168.1.10):
+   ./build/distributed/dist_worker --port 9001 --threads 8 --verbose
+
+   # On VM2 (e.g. 192.168.1.11):
+   ./build/distributed/dist_worker --port 9001 --threads 8 --verbose
+   ```
+
+3. **Create a `workers.txt`** on the coordinator machine:
+   ```
+   192.168.1.10:9001
+   192.168.1.11:9001
+   ```
+
+4. **Run the coordinator** (coordinator connects to workers, so workers must be started first):
+   ```bash
+   ./build/distributed/dist_coordinator \
+     --workers workers.txt \
+     --n 5000000 --k 1000 --dim 2000 \
+     --max-iter 100 --tol 0.01 --seed 42 --verbose
+   ```
+
+### CLI Reference
+
+**`dist_worker`**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--port PORT` | `9001` | Port to listen on for coordinator connection |
+| `--threads T` | OMP default | Number of OpenMP threads for BLAS + accumulation |
+| `--verbose` | off | Per-iteration timing logs |
+
+**`dist_coordinator`**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--workers FILE` | required | Path to workers.txt (one `HOST:PORT` per line) |
+| `--n N` | `1000000` | Total number of data points |
+| `--k K` | `256` | Number of clusters |
+| `--dim D` | `128` | Vector dimensionality |
+| `--max-iter I` | `100` | Maximum iterations |
+| `--tol T` | `0.01` | Centroid shift convergence threshold |
+| `--seed S` | `42` | RNG seed (same seed → same data + init) |
+| `--verbose` | off | Per-iteration timing logs |
+
+### `workers.txt` Format
+
+```
+# One HOST:PORT per line. Lines starting with # are ignored.
+127.0.0.1:9001
+127.0.0.1:9002
+192.168.1.10:9001
+```
+
+### Wire Protocol
+
+All messages use a fixed 12-byte header (`magic` + `msg_type` + `payload_len`) followed by a variable payload. Key message types:
+
+| Message | Direction | Payload |
+|---------|-----------|---------|
+| `SHARD_CONFIG` | Coord → Worker | 32-byte config struct (n_local, dim, k, ...) |
+| `SHARD_DATA` | Coord → Worker | `n_local × dim` floats |
+| `CENTROIDS` | Coord → Worker | `k × dim` floats (per iteration) |
+| `LOCAL_STATS` | Worker → Coord | `k × dim` floats (sums) + `k` uint64 (counts) |
+| `DONE` | Coord → Worker | empty — convergence signal |
+| `READY` | Worker → Coord | empty — shard received ACK |
+
+### Expected Scalability
+
+Communication per iteration is `k × dim × 4 bytes` broadcast + same for reduction.
+Example: k=256, dim=128 → ~256 KB/iter per worker — negligible on 1 GbE.
+Compute scales linearly with the shard size; ideal speedup is `N_workers × (single-node compute / (compute + comm))`.
 
 ## License
 
