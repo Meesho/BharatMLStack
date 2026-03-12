@@ -202,7 +202,7 @@ def decode_mplog(
     rows = []
     for entity_id, row_data in zip(entity_ids, decoded_rows):
         row = {"entity_id": entity_id}
-        row.update(row_data)
+        row.update({k: v for k, v in row_data.items() if k != "entity_id"})
         rows.append(row)
 
     # Create Spark DataFrame from list of dicts
@@ -350,6 +350,7 @@ def decode_mplog_dataframe(
         "day",
         "hour",
     ]
+    
     # Build full output schema: entity_id + metadata cols + all feature names from all schemas
     all_feature_names = set()
     for feat_list in schema_cache.values():
@@ -467,6 +468,8 @@ def decode_mplog_dataframe(
                     result_row = {"entity_id": entity_id}
                     # Convert all feature values to strings for schema compatibility
                     for k, v in decoded_features.items():
+                        if k in _reserved_columns:
+                            continue
                         if v is None:
                             result_row[k] = None
                         elif isinstance(v, (list, tuple)):
