@@ -43,14 +43,31 @@ bool recv_all(int fd, void* buf, size_t len) {
     return true;
 }
 
-bool send_msg(int fd, MsgType type, const void* payload, uint32_t payload_len) {
+bool send_msg(int fd, MsgType type, const void* payload, uint64_t payload_len) {
     MsgHeader hdr{};
     hdr.magic = PROTOCOL_MAGIC;
     hdr.msg_type = static_cast<uint32_t>(type);
     hdr.payload_len = payload_len;
     if (!send_all(fd, &hdr, sizeof(hdr))) return false;
     if (payload_len > 0 && payload) {
-        if (!send_all(fd, payload, payload_len)) return false;
+        if (!send_all(fd, payload, static_cast<size_t>(payload_len))) return false;
+    }
+    return true;
+}
+
+bool send_msg_header(int fd, MsgType type, uint64_t payload_len) {
+    MsgHeader hdr{};
+    hdr.magic = PROTOCOL_MAGIC;
+    hdr.msg_type = static_cast<uint32_t>(type);
+    hdr.payload_len = payload_len;
+    return send_all(fd, &hdr, sizeof(hdr));
+}
+
+bool recv_msg_header(int fd, MsgHeader& hdr) {
+    if (!recv_all(fd, &hdr, sizeof(hdr))) return false;
+    if (hdr.magic != PROTOCOL_MAGIC) {
+        std::fprintf(stderr, "[NET] Bad magic: 0x%08X\n", hdr.magic);
+        return false;
     }
     return true;
 }

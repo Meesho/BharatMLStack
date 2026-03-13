@@ -16,10 +16,18 @@ bool send_all(int fd, const void* buf, size_t len);
 bool recv_all(int fd, void* buf, size_t len);
 
 // Send header + payload as one logical message.
-bool send_msg(int fd, MsgType type, const void* payload = nullptr, uint32_t payload_len = 0);
+bool send_msg(int fd, MsgType type, const void* payload = nullptr, uint64_t payload_len = 0);
 
 // Receive header + payload. Allocates payload into out_payload.
 bool recv_msg(int fd, MsgHeader& hdr, std::vector<uint8_t>& out_payload);
+
+// Send header only, then caller sends payload via send_all() separately.
+// Use for large payloads (e.g. SHARD_DATA) to avoid extra copies.
+bool send_msg_header(int fd, MsgType type, uint64_t payload_len);
+
+// Receive header only, caller reads payload via recv_all() separately.
+// Use for large payloads to avoid allocating into vector<uint8_t>.
+bool recv_msg_header(int fd, MsgHeader& hdr);
 
 // Create a listening TCP socket on port. Returns fd or -1.
 int make_listener(uint16_t port, int backlog = 64);

@@ -93,26 +93,29 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "[WORKER] Config: worker_id=%u n_local=%u dim=%u k=%u max_iter=%u\n",
                      cfg.worker_id, cfg.n_local, cfg.dim, cfg.k, cfg.max_iter);
 
-    // Receive SHARD_DATA.
-    if (!recv_msg(coord_fd, hdr, payload) || MsgType(hdr.msg_type) != MsgType::SHARD_DATA) {
+    // Receive SHARD_DATA — use header-only recv to avoid allocating a
+    // temporary vector<uint8_t> (shard can exceed 4 GB).
+    if (!recv_msg_header(coord_fd, hdr) || MsgType(hdr.msg_type) != MsgType::SHARD_DATA) {
         std::fprintf(stderr, "[WORKER] Expected SHARD_DATA\n");
         close_fd(coord_fd);
         return 1;
     }
 
     size_t expected_bytes = static_cast<size_t>(cfg.n_local) * cfg.dim * sizeof(float);
-    if (payload.size() != expected_bytes) {
-        std::fprintf(stderr, "[WORKER] Shard size mismatch: got %zu, expected %zu\n",
-                     payload.size(), expected_bytes);
+    if (hdr.payload_len != expected_bytes) {
+        std::fprintf(stderr, "[WORKER] Shard size mismatch: got %llu, expected %zu\n",
+                     static_cast<unsigned long long>(hdr.payload_len), expected_bytes);
         close_fd(coord_fd);
         return 1;
     }
 
-    // Store shard data.
+    // Receive shard data directly into the float vector (no intermediate copy).
     std::vector<float> shard(static_cast<size_t>(cfg.n_local) * cfg.dim);
-    std::memcpy(shard.data(), payload.data(), expected_bytes);
-    payload.clear();
-    payload.shrink_to_fit();
+    if (!recv_all(coord_fd, shard.data(), expected_bytes)) {
+        std::fprintf(stderr, "[WORKER] Failed to receive shard data\n");
+        close_fd(coord_fd);
+        return 1;
+    }
 
     // Precompute data norms (done once).
     std::vector<float> data_norms(cfg.n_local);
@@ -214,7 +217,7 @@ int main(int argc, char* argv[]) {
         std::memcpy(out.data() + kd * sizeof(float), local_counts.data(),
                     static_cast<size_t>(k) * sizeof(uint64_t));
 
-        if (!send_msg(coord_fd, MsgType::LOCAL_STATS, out.data(), static_cast<uint32_t>(payload_bytes))) {
+        if (!send_msg(coord_fd, MsgType::LOCAL_STATS, out.data(), static_cast<uint64_t>(payload_bytes))) {
             std::fprintf(stderr, "[WORKER %u] Failed to send LOCAL_STATS\n", cfg.worker_id);
             break;
         }

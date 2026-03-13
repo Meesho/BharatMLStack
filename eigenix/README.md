@@ -263,12 +263,14 @@ A data-parallel extension of the BLAS backend across multiple VMs via raw TCP (n
 
 ### Algorithm
 
-Each iteration: coordinator broadcasts centroids → workers run BLAS `assign_batch` on their shard → workers send back per-cluster sums + counts → coordinator all-reduces, updates centroids, runs Phase 1/2 cluster repair, checks convergence.
+Matches the single-node benchmark methodology: **train on 30% of data** (`--train-fraction 0.3`), then **assign all N points** using the converged centroids. Only the training subset is sharded across workers.
 
 ```
 Coordinator                       Worker i
 ───────────                       ────────
-generate data, split N shards
+generate N total points
+subsample n_train = 30% of N
+split n_train into shards
 send ShardConfig + SHARD_DATA ──→ store shard, precompute data_norms
                               ←── READY
 random init centroids
@@ -279,7 +281,8 @@ loop:
   all-reduce, update centroids
   Phase1+2 cluster repair
   if max_shift ≤ tol → DONE   ──→ break
-final assign + metrics
+assign ALL N points locally
+report: inertia, sizes, throughput
 ```
 
 ### Build
@@ -362,6 +365,7 @@ Or use the helper script (starts workers locally then coordinator):
 | `--dim D` | `128` | Vector dimensionality |
 | `--max-iter I` | `100` | Maximum iterations |
 | `--tol T` | `0.01` | Centroid shift convergence threshold |
+| `--train-fraction F` | `0.3` | Fraction of N used for training (rest used only in final assign) |
 | `--seed S` | `42` | RNG seed (same seed → same data + init) |
 | `--verbose` | off | Per-iteration timing logs |
 
@@ -376,7 +380,7 @@ Or use the helper script (starts workers locally then coordinator):
 
 ### Wire Protocol
 
-All messages use a fixed 12-byte header (`magic` + `msg_type` + `payload_len`) followed by a variable payload. Key message types:
+All messages use a fixed 16-byte header (`magic:u32` + `msg_type:u32` + `payload_len:u64`) followed by a variable payload. `payload_len` is 64-bit to support shards exceeding 4 GB. Key message types:
 
 | Message | Direction | Payload |
 |---------|-----------|---------|
@@ -386,6 +390,31 @@ All messages use a fixed 12-byte header (`magic` + `msg_type` + `payload_len`) f
 | `LOCAL_STATS` | Worker → Coord | `k × dim` floats (sums) + `k` uint64 (counts) |
 | `DONE` | Coord → Worker | empty — convergence signal |
 | `READY` | Worker → Coord | empty — shard received ACK |
+
+### Final Output
+
+After convergence the coordinator prints:
+
+```
+[DIST] Convergence: iter=23, max_shift=0.0082
+[DIST] Total wall time: 4231ms
+[DIST] Avg per-iter comm:    89ms (36.4%)
+[DIST] Avg per-iter compute: 97ms (39.5%)
+[DIST] Avg per-iter update:   8ms  (3.3%)
+[DIST] Inertia: 3.2417e+09
+
+Cluster Health Report (Distributed, N=2000000, K=256):
+  Empty clusters     : 0 / 256
+  Size min           : 6821
+  Size max           : 9102
+  Size stddev        : 312.4
+  Dist min/max/mean  : 0.112 / 18.43 / 6.21
+  Max radius ratio   : 2.87  (cluster #134)
+```
+
+Results are also written to `results/dist_benchmark.csv` with columns:
+`n_workers`, `n_points`, `k`, `dim`, `wall_ms`, `iters`, `inertia`,
+`comm_ms_avg`, `compute_ms_avg`, `cluster_size_min`, `cluster_size_max`, `cluster_size_stddev`, `speedup`.
 
 ### Expected Scalability
 

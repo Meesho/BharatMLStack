@@ -24,9 +24,9 @@ static constexpr uint32_t PROTOCOL_MAGIC = 0xE16E1E16;
 struct alignas(4) MsgHeader {
     uint32_t magic;
     uint32_t msg_type;
-    uint32_t payload_len;
+    uint64_t payload_len;
 };
-static_assert(sizeof(MsgHeader) == 12, "MsgHeader must be 12 bytes");
+static_assert(sizeof(MsgHeader) == 16, "MsgHeader must be 16 bytes");
 
 struct ShardConfig {
     uint32_t n_local;

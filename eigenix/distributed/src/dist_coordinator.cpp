@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <numeric>
 #include <random>
 #include <string>
@@ -24,6 +25,7 @@ struct CoordArgs {
     int dim = 128;
     size_t max_iter = 100;
     float tol = 0.01f;
+    float train_fraction = 0.3f;
     unsigned seed = 42;
     bool verbose = false;
 };
@@ -38,17 +40,22 @@ CoordArgs parse_args(int argc, char* argv[]) {
         else if (a == "--dim" && i + 1 < argc) args.dim = std::stoi(argv[++i]);
         else if (a == "--max-iter" && i + 1 < argc) args.max_iter = std::stoull(argv[++i]);
         else if (a == "--tol" && i + 1 < argc) args.tol = std::stof(argv[++i]);
+        else if (a == "--train-fraction" && i + 1 < argc) args.train_fraction = std::stof(argv[++i]);
         else if (a == "--seed" && i + 1 < argc) args.seed = static_cast<unsigned>(std::stoul(argv[++i]));
         else if (a == "--verbose") args.verbose = true;
         else {
             std::fprintf(stderr,
                 "Usage: dist_coordinator --workers FILE --n N --k K --dim D\n"
-                "       [--max-iter I] [--tol T] [--seed S] [--verbose]\n");
+                "       [--max-iter I] [--tol T] [--train-fraction F] [--seed S] [--verbose]\n");
             std::exit(1);
         }
     }
     if (args.workers_file.empty()) {
         std::fprintf(stderr, "Error: --workers is required\n");
+        std::exit(1);
+    }
+    if (args.train_fraction <= 0.0f || args.train_fraction > 1.0f) {
+        std::fprintf(stderr, "Error: --train-fraction must be in (0, 1]\n");
         std::exit(1);
     }
     return args;
@@ -94,24 +101,33 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::fprintf(stderr, "[COORD] %d workers, n=%zu, k=%d, dim=%d, max_iter=%zu, tol=%.4f, seed=%u\n",
-                 N, args.n, args.k, args.dim, args.max_iter, args.tol, args.seed);
+    // Compute n_train from fraction (matching single-node bench methodology).
+    size_t n_train = static_cast<size_t>(static_cast<double>(args.n) * args.train_fraction);
+    if (n_train < static_cast<size_t>(args.k)) n_train = static_cast<size_t>(args.k);
+    if (n_train > args.n) n_train = args.n;
+
+    std::fprintf(stderr, "[COORD] %d workers, n_total=%zu, n_train=%zu (%.0f%%), k=%d, dim=%d, max_iter=%zu, tol=%.4f, seed=%u\n",
+                 N, args.n, n_train, args.train_fraction * 100.0f,
+                 args.k, args.dim, args.max_iter, args.tol, args.seed);
 
     using namespace eigenix::dist;
     using Clock = std::chrono::steady_clock;
 
-    // ========== Generate data ==========
+    // ========== Generate full dataset ==========
     auto t_gen = Clock::now();
     auto data = eigenix::generate_gaussian_mixture(args.n, args.dim, args.k, args.seed);
     double gen_ms = std::chrono::duration<double, std::milli>(Clock::now() - t_gen).count();
     std::fprintf(stderr, "[COORD] Data generated in %.0fms (%.1f MB)\n",
                  gen_ms, static_cast<double>(data.size() * sizeof(float)) / (1024.0 * 1024.0));
 
-    // ========== Compute shard offsets ==========
+    // Training uses the first n_train points (same as single-node bench).
+    // The full dataset is kept for final assign.
+
+    // ========== Compute shard offsets (over n_train only) ==========
     std::vector<uint32_t> shard_n(N);
     std::vector<size_t> shard_offset(N);
-    size_t base_sz = args.n / static_cast<size_t>(N);
-    size_t remainder = args.n % static_cast<size_t>(N);
+    size_t base_sz = n_train / static_cast<size_t>(N);
+    size_t remainder = n_train % static_cast<size_t>(N);
     for (int i = 0; i < N; ++i) {
         shard_n[i] = static_cast<uint32_t>(base_sz + (static_cast<size_t>(i) < remainder ? 1 : 0));
         shard_offset[i] = (i == 0) ? 0 : shard_offset[i - 1] + shard_n[i - 1];
@@ -130,7 +146,7 @@ int main(int argc, char* argv[]) {
     }
     std::fprintf(stderr, "[COORD] All workers connected\n");
 
-    // ========== Send shards ==========
+    // ========== Send training shards ==========
     auto t_shard = Clock::now();
     for (int i = 0; i < N; ++i) {
         ShardConfig cfg{};
@@ -144,9 +160,15 @@ int main(int argc, char* argv[]) {
         cfg.n_workers = static_cast<uint32_t>(N);
 
         send_msg(worker_fds[i], MsgType::SHARD_CONFIG, &cfg, sizeof(ShardConfig));
-        send_msg(worker_fds[i], MsgType::SHARD_DATA,
-                 data.data() + shard_offset[i] * args.dim,
-                 shard_n[i] * static_cast<uint32_t>(args.dim) * sizeof(float));
+
+        // Use header + raw send_all for SHARD_DATA to support payloads > 4 GB.
+        uint64_t shard_bytes = static_cast<uint64_t>(shard_n[i]) * args.dim * sizeof(float);
+        if (!send_msg_header(worker_fds[i], MsgType::SHARD_DATA, shard_bytes) ||
+            !send_all(worker_fds[i], data.data() + shard_offset[i] * args.dim,
+                      static_cast<size_t>(shard_bytes))) {
+            std::fprintf(stderr, "[COORD] Failed sending shard to worker %d\n", i);
+            return 1;
+        }
     }
 
     // Wait for READY from all workers.
@@ -159,9 +181,9 @@ int main(int argc, char* argv[]) {
         }
     }
     double shard_ms = std::chrono::duration<double, std::milli>(Clock::now() - t_shard).count();
-    std::fprintf(stderr, "[COORD] Shards distributed in %.0fms\n", shard_ms);
+    std::fprintf(stderr, "[COORD] Training shards distributed in %.0fms\n", shard_ms);
 
-    // ========== Initialize centroids (random from full dataset) ==========
+    // ========== Initialize centroids (random from training data) ==========
     int k = args.k;
     int dim = args.dim;
     size_t kd = static_cast<size_t>(k) * dim;
@@ -169,7 +191,7 @@ int main(int argc, char* argv[]) {
 
     {
         std::mt19937 rng(args.seed);
-        std::vector<size_t> indices(args.n);
+        std::vector<size_t> indices(n_train);
         std::iota(indices.begin(), indices.end(), size_t(0));
         std::shuffle(indices.begin(), indices.end(), rng);
         for (int c = 0; c < k; ++c)
@@ -178,7 +200,7 @@ int main(int argc, char* argv[]) {
                         static_cast<size_t>(dim) * sizeof(float));
     }
 
-    // ========== Iteration loop ==========
+    // ========== Training iteration loop ==========
     std::vector<float> prev_centroids(kd);
     std::vector<double> centroid_sums_d(kd);
     std::vector<uint64_t> centroid_counts(k);
@@ -196,7 +218,7 @@ int main(int argc, char* argv[]) {
         auto t_comm = Clock::now();
         for (int i = 0; i < N; ++i) {
             if (!send_msg(worker_fds[i], MsgType::CENTROIDS,
-                          coord_centroids.data(), static_cast<uint32_t>(kd * sizeof(float)))) {
+                          coord_centroids.data(), static_cast<uint64_t>(kd * sizeof(float)))) {
                 std::fprintf(stderr, "[COORD] Failed sending centroids to worker %d\n", i);
                 return 1;
             }
@@ -243,7 +265,7 @@ int main(int argc, char* argv[]) {
         for (int c = 0; c < k; ++c)
             centroid_counts_sz[c] = static_cast<size_t>(centroid_counts[c]);
         eigenix::BlasKMeans::fix_clusters(coord_centroids.data(), centroid_counts_sz.data(),
-                                          k, dim, args.n);
+                                          k, dim, n_train);
 
         // Compute max_shift.
         float max_shift = 0.0f;
@@ -287,43 +309,30 @@ int main(int argc, char* argv[]) {
 
     double train_ms = std::chrono::duration<double, std::milli>(Clock::now() - t_train).count();
 
-    // ========== Final metrics ==========
-    // Use BlasKMeans for final assign on full dataset.
-    eigenix::BlasKMeans final_km;
-    // We can't directly set centroids on BlasKMeans (train is the only way to populate it),
-    // so compute inertia manually.
+    // ========== Final assign on ALL n_total points ==========
+    auto t_assign = Clock::now();
     std::vector<int> final_labels(args.n);
 
-    // Assign each point to nearest centroid.
-    {
-        std::vector<float> cnorms(k);
+    #pragma omp parallel for schedule(static)
+    for (size_t i = 0; i < args.n; ++i) {
+        const float* x = data.data() + i * dim;
+        int best = 0;
+        float best_d = std::numeric_limits<float>::max();
         for (int c = 0; c < k; ++c) {
-            float s = 0.0f;
+            float d = 0.0f;
+            const float* cv = coord_centroids.data() + static_cast<size_t>(c) * dim;
             for (int j = 0; j < dim; ++j) {
-                float v = coord_centroids[static_cast<size_t>(c) * dim + j];
-                s += v * v;
+                float t = x[j] - cv[j];
+                d += t * t;
             }
-            cnorms[c] = s;
+            if (d < best_d) { best_d = d; best = c; }
         }
-
-        #pragma omp parallel for schedule(static)
-        for (size_t i = 0; i < args.n; ++i) {
-            const float* x = data.data() + i * dim;
-            int best = 0;
-            float best_d = std::numeric_limits<float>::max();
-            for (int c = 0; c < k; ++c) {
-                float d = 0.0f;
-                const float* cv = coord_centroids.data() + static_cast<size_t>(c) * dim;
-                for (int j = 0; j < dim; ++j) {
-                    float t = x[j] - cv[j];
-                    d += t * t;
-                }
-                if (d < best_d) { best_d = d; best = c; }
-            }
-            final_labels[i] = best;
-        }
+        final_labels[i] = best;
     }
 
+    double assign_ms = std::chrono::duration<double, std::milli>(Clock::now() - t_assign).count();
+
+    // ========== Final metrics (over all n_total) ==========
     float inertia = eigenix::compute_inertia(data.data(), args.n, dim,
                                               final_labels.data(), coord_centroids.data(), k);
 
@@ -331,20 +340,32 @@ int main(int argc, char* argv[]) {
     eigenix::compute_cluster_sizes(final_labels.data(), args.n, k, sizes.data());
     int n_empty = eigenix::count_empty_clusters(sizes.data(), k);
     float imbalance = eigenix::compute_imbalance_ratio(sizes.data(), k);
+    float size_stddev = eigenix::compute_cluster_size_stddev(sizes.data(), k);
+
+    size_t size_min = *std::min_element(sizes.begin(), sizes.end());
+    size_t size_max = *std::max_element(sizes.begin(), sizes.end());
+
+    double throughput = static_cast<double>(args.n) / (assign_ms / 1000.0) / 1e6;
 
     // ========== Report ==========
     std::fprintf(stderr, "\n========== Distributed K-Means Results ==========\n");
     std::fprintf(stderr, "Workers:           %d\n", N);
-    std::fprintf(stderr, "Points:            %zu\n", args.n);
+    std::fprintf(stderr, "Points (total):    %zu\n", args.n);
+    std::fprintf(stderr, "Points (train):    %zu (%.0f%%)\n", n_train, args.train_fraction * 100.0f);
     std::fprintf(stderr, "Dimensions:        %d\n", dim);
     std::fprintf(stderr, "Clusters:          %d\n", k);
     std::fprintf(stderr, "Convergence:       iter=%d, max_shift=%.4f\n", final_iter, final_shift);
     std::fprintf(stderr, "Inertia:           %.6e\n", inertia);
     std::fprintf(stderr, "Empty clusters:    %d / %d\n", n_empty, k);
     std::fprintf(stderr, "Imbalance ratio:   %.2f\n", imbalance);
+    std::fprintf(stderr, "Cluster size min:  %zu\n", size_min);
+    std::fprintf(stderr, "Cluster size max:  %zu\n", size_max);
+    std::fprintf(stderr, "Cluster size std:  %.1f\n", size_stddev);
     std::fprintf(stderr, "Data gen time:     %.0fms\n", gen_ms);
     std::fprintf(stderr, "Shard dist time:   %.0fms\n", shard_ms);
     std::fprintf(stderr, "Training time:     %.0fms\n", train_ms);
+    std::fprintf(stderr, "Assign time:       %.0fms (all %zu points)\n", assign_ms, args.n);
+    std::fprintf(stderr, "Throughput:        %.2f Mvecs/sec\n", throughput);
     std::fprintf(stderr, "Avg comm/iter:     %.1fms\n", total_comm_ms / final_iter);
     std::fprintf(stderr, "Avg compute/iter:  %.1fms\n", total_compute_ms / final_iter);
     std::fprintf(stderr, "================================================\n");
