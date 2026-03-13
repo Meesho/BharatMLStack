@@ -120,10 +120,29 @@ int main(int argc, char* argv[]) {
     std::fprintf(stderr, "[COORD] Data generated in %.0fms (%.1f MB)\n",
                  gen_ms, static_cast<double>(data.size() * sizeof(float)) / (1024.0 * 1024.0));
 
-    // Training uses the first n_train points (same as single-node bench).
-    // The full dataset is kept for final assign.
+    // Build a randomly-shuffled training subsample — identical to main_bench.cpp methodology.
+    // generate_gaussian_mixture produces points in cluster order, so contiguous slicing would
+    // give a biased subsample covering only a fraction of the Gaussian components.
+    std::vector<size_t> shuffle_indices(args.n);
+    std::iota(shuffle_indices.begin(), shuffle_indices.end(), size_t(0));
+    {
+        std::mt19937 shuffle_rng(args.seed);
+        std::shuffle(shuffle_indices.begin(), shuffle_indices.end(), shuffle_rng);
+    }
 
-    // ========== Compute shard offsets (over n_train only) ==========
+    // Build contiguous train buffer by copying rows in shuffled order (matching bench).
+    auto t_subsample = Clock::now();
+    std::vector<float> train_data(n_train * static_cast<size_t>(args.dim));
+    #pragma omp parallel for schedule(static)
+    for (size_t i = 0; i < n_train; ++i)
+        std::memcpy(train_data.data() + i * args.dim,
+                    data.data() + shuffle_indices[i] * args.dim,
+                    static_cast<size_t>(args.dim) * sizeof(float));
+    std::fprintf(stderr, "[COORD] Training subsample built in %.0fms (%.1f MB, random shuffle)\n",
+                 std::chrono::duration<double, std::milli>(Clock::now() - t_subsample).count(),
+                 static_cast<double>(train_data.size() * sizeof(float)) / (1024.0 * 1024.0));
+
+    // ========== Compute shard offsets over n_train ==========
     std::vector<uint32_t> shard_n(N);
     std::vector<size_t> shard_offset(N);
     size_t base_sz = n_train / static_cast<size_t>(N);
@@ -146,7 +165,7 @@ int main(int argc, char* argv[]) {
     }
     std::fprintf(stderr, "[COORD] All workers connected\n");
 
-    // ========== Send training shards ==========
+    // ========== Send training shards (from shuffled train_data) ==========
     auto t_shard = Clock::now();
     for (int i = 0; i < N; ++i) {
         ShardConfig cfg{};
@@ -164,7 +183,7 @@ int main(int argc, char* argv[]) {
         // Use header + raw send_all for SHARD_DATA to support payloads > 4 GB.
         uint64_t shard_bytes = static_cast<uint64_t>(shard_n[i]) * args.dim * sizeof(float);
         if (!send_msg_header(worker_fds[i], MsgType::SHARD_DATA, shard_bytes) ||
-            !send_all(worker_fds[i], data.data() + shard_offset[i] * args.dim,
+            !send_all(worker_fds[i], train_data.data() + shard_offset[i] * args.dim,
                       static_cast<size_t>(shard_bytes))) {
             std::fprintf(stderr, "[COORD] Failed sending shard to worker %d\n", i);
             return 1;
@@ -183,20 +202,17 @@ int main(int argc, char* argv[]) {
     double shard_ms = std::chrono::duration<double, std::milli>(Clock::now() - t_shard).count();
     std::fprintf(stderr, "[COORD] Training shards distributed in %.0fms\n", shard_ms);
 
-    // ========== Initialize centroids (random from training data) ==========
+    // ========== Initialize centroids (random from shuffled training data) ==========
     int k = args.k;
     int dim = args.dim;
     size_t kd = static_cast<size_t>(k) * dim;
     std::vector<float> coord_centroids(kd);
 
     {
-        std::mt19937 rng(args.seed);
-        std::vector<size_t> indices(n_train);
-        std::iota(indices.begin(), indices.end(), size_t(0));
-        std::shuffle(indices.begin(), indices.end(), rng);
+        // train_data is already randomly shuffled — just pick the first k rows.
         for (int c = 0; c < k; ++c)
             std::memcpy(coord_centroids.data() + static_cast<size_t>(c) * dim,
-                        data.data() + indices[c] * dim,
+                        train_data.data() + static_cast<size_t>(c) * dim,
                         static_cast<size_t>(dim) * sizeof(float));
     }
 
@@ -289,8 +305,12 @@ int main(int argc, char* argv[]) {
         if (args.verbose && (iter == 0 || (iter + 1) % 5 == 0 ||
                              max_shift <= args.tol || iter + 1 == args.max_iter)) {
             double elapsed = std::chrono::duration<double, std::milli>(Clock::now() - t_train).count();
-            std::fprintf(stderr, "[COORD] iter %zu/%zu  max_shift=%.4f  comm=%.1fms  update=%.1fms  elapsed=%.0fms\n",
-                         iter + 1, args.max_iter, max_shift, comm_ms, compute_ms, elapsed);
+            // Per-iter bytes: N * (centroid broadcast + LOCAL_STATS reply) per worker
+            double bytes_per_iter = static_cast<double>(N) * 2.0 * kd * sizeof(float)
+                                  + static_cast<double>(N) * k * sizeof(uint64_t);
+            double bw_mbps = (bytes_per_iter / (1024.0 * 1024.0)) / (comm_ms / 1000.0);
+            std::fprintf(stderr, "[COORD] iter %zu/%zu  max_shift=%.4f  comm=%.1fms (%.1f MB/s)  update=%.1fms  elapsed=%.0fms\n",
+                         iter + 1, args.max_iter, max_shift, comm_ms, bw_mbps, compute_ms, elapsed);
         }
 
         if (max_shift <= args.tol) {

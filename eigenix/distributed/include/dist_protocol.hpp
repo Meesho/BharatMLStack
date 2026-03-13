@@ -21,7 +21,7 @@ enum class MsgType : uint32_t {
 
 static constexpr uint32_t PROTOCOL_MAGIC = 0xE16E1E16;
 
-struct alignas(4) MsgHeader {
+struct alignas(8) MsgHeader {
     uint32_t magic;
     uint32_t msg_type;
     uint64_t payload_len;
