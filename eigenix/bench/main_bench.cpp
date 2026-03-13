@@ -25,7 +25,7 @@
 
 using namespace eigenix;
 
-static constexpr int DIM = 2000;
+static constexpr int DIM = 768;
 static constexpr int DEFAULT_K = 1000;
 static constexpr int NUM_GAUSSIANS = 50;
 static constexpr unsigned DEFAULT_DATA_SEED = 42;
@@ -252,10 +252,8 @@ int main() {
     auto warmup_data = generate_gaussian_mixture(WARMUP_N, DIM, NUM_GAUSSIANS, 99);
 
     BlasKMeans blas;
-    FaissKMeans faiss_km;
-    SimdKMeans simd;
 
-    std::vector<KMeansBase*> backends = {&faiss_km, &blas, &simd};
+    std::vector<KMeansBase*> backends = {&blas};
     int num_backends = static_cast<int>(backends.size());
 
     // FAISS requires >= 39 points per centroid; use that as the divisor so

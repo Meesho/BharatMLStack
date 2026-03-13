@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/build/cmake_install.cmake",
+		"/Users/adityakumargarg/Desktop/projects/OSS/BharatMLStack/eigenix/build/distributed/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
