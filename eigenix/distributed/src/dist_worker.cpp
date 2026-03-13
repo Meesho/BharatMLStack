@@ -138,6 +138,18 @@ int main(int argc, char* argv[]) {
     int dim = static_cast<int>(cfg.dim);
     size_t kd = static_cast<size_t>(k) * dim;
 
+    // Pre-allocate buffers outside the loop to avoid per-iteration heap churn.
+    int nthreads = 1;
+    #pragma omp parallel
+    { nthreads = omp_get_num_threads(); }
+
+    std::vector<double> all_sums(static_cast<size_t>(nthreads) * kd);
+    std::vector<uint64_t> all_counts(static_cast<size_t>(nthreads) * k);
+    std::vector<float> local_sums(kd);
+    std::vector<uint64_t> local_counts(k);
+    size_t payload_bytes = kd * sizeof(float) + static_cast<size_t>(k) * sizeof(uint64_t);
+    std::vector<uint8_t> out(payload_bytes);
+
     // Iteration loop.
     for (uint32_t iter = 0; ; ++iter) {
         MsgHeader iter_hdr{};
@@ -166,12 +178,8 @@ int main(int argc, char* argv[]) {
         wkm.assign_batch(shard.data(), data_norms.data(), cfg.n_local, labels.data());
 
         // Accumulate local sums + counts using thread-local buffers.
-        int nthreads = 1;
-        #pragma omp parallel
-        { nthreads = omp_get_num_threads(); }
-
-        std::vector<double> all_sums(static_cast<size_t>(nthreads) * kd, 0.0);
-        std::vector<uint64_t> all_counts(static_cast<size_t>(nthreads) * k, 0);
+        std::fill(all_sums.begin(), all_sums.end(), 0.0);
+        std::fill(all_counts.begin(), all_counts.end(), 0ULL);
 
         #pragma omp parallel
         {
@@ -188,11 +196,11 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // Reduce thread-local buffers.
-        std::vector<float> local_sums(kd, 0.0f);
-        std::vector<uint64_t> local_counts(k, 0);
+        // Reduce thread-local buffers (parallelized over clusters).
+        std::fill(local_sums.begin(), local_sums.end(), 0.0f);
+        std::fill(local_counts.begin(), local_counts.end(), 0ULL);
+        #pragma omp parallel for schedule(static)
         for (int c = 0; c < k; ++c) {
-            double sum_buf[1];  // just to accumulate per-dim
             for (int j = 0; j < dim; ++j) {
                 double acc = 0.0;
                 for (int t = 0; t < nthreads; ++t)
@@ -211,8 +219,6 @@ int main(int argc, char* argv[]) {
                          cfg.worker_id, iter, compute_ms);
 
         // Pack and send LOCAL_STATS: [k*dim floats | k uint64_t counts].
-        size_t payload_bytes = kd * sizeof(float) + static_cast<size_t>(k) * sizeof(uint64_t);
-        std::vector<uint8_t> out(payload_bytes);
         std::memcpy(out.data(), local_sums.data(), kd * sizeof(float));
         std::memcpy(out.data() + kd * sizeof(float), local_counts.data(),
                     static_cast<size_t>(k) * sizeof(uint64_t));

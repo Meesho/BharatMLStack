@@ -14,9 +14,23 @@
 #include <numeric>
 #include <random>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
+
+// Thin subclass to inject centroids and use BLAS-accelerated assign.
+class CoordKMeans : public eigenix::BlasKMeans {
+public:
+    void set_centroids(const float* c, int k, int dim) {
+        k_ = k;
+        dim_ = dim;
+        centroids_.assign(c, c + static_cast<size_t>(k) * dim);
+        compute_centroid_norms();
+    }
+    void train(const float*, size_t, int, int, const eigenix::TrainConfig&) override {}
+    std::string name() const override { return "CoordFinalAssign"; }
+};
 
 struct CoordArgs {
     std::string workers_file;
@@ -230,31 +244,58 @@ int main(int argc, char* argv[]) {
     float final_shift = 0.0f;
 
     for (size_t iter = 0; iter < args.max_iter; ++iter) {
-        // --- Broadcast centroids ---
+        // --- Broadcast centroids (parallel) ---
         auto t_comm = Clock::now();
-        for (int i = 0; i < N; ++i) {
-            if (!send_msg(worker_fds[i], MsgType::CENTROIDS,
-                          coord_centroids.data(), static_cast<uint64_t>(kd * sizeof(float)))) {
-                std::fprintf(stderr, "[COORD] Failed sending centroids to worker %d\n", i);
-                return 1;
+        {
+            std::vector<bool> send_ok(N, false);
+            std::vector<std::thread> send_threads;
+            for (int i = 0; i < N; ++i) {
+                send_threads.emplace_back([&, i]() {
+                    send_ok[i] = send_msg(worker_fds[i], MsgType::CENTROIDS,
+                                          coord_centroids.data(), static_cast<uint64_t>(kd * sizeof(float)));
+                });
+            }
+            for (auto& t : send_threads) t.join();
+            for (int i = 0; i < N; ++i) {
+                if (!send_ok[i]) {
+                    std::fprintf(stderr, "[COORD] Failed sending centroids to worker %d\n", i);
+                    return 1;
+                }
             }
         }
 
-        // --- Collect LOCAL_STATS ---
+        // --- Collect LOCAL_STATS (parallel) ---
         std::fill(centroid_sums_d.begin(), centroid_sums_d.end(), 0.0);
         std::fill(centroid_counts.begin(), centroid_counts.end(), 0ULL);
 
-        for (int i = 0; i < N; ++i) {
-            MsgHeader hdr{};
-            std::vector<uint8_t> payload;
-            if (!recv_msg(worker_fds[i], hdr, payload) ||
-                MsgType(hdr.msg_type) != MsgType::LOCAL_STATS) {
-                std::fprintf(stderr, "[COORD] Worker %d did not send LOCAL_STATS at iter %zu\n", i, iter);
-                return 1;
+        // Per-worker buffers to receive into in parallel, then reduce.
+        std::vector<std::vector<uint8_t>> worker_payloads(N);
+        {
+            std::vector<bool> recv_ok(N, false);
+            std::vector<std::thread> recv_threads;
+            for (int i = 0; i < N; ++i) {
+                recv_threads.emplace_back([&, i]() {
+                    MsgHeader hdr{};
+                    if (recv_msg(worker_fds[i], hdr, worker_payloads[i]) &&
+                        MsgType(hdr.msg_type) == MsgType::LOCAL_STATS) {
+                        recv_ok[i] = true;
+                    }
+                });
             }
-            const float* wsum = reinterpret_cast<const float*>(payload.data());
+            for (auto& t : recv_threads) t.join();
+            for (int i = 0; i < N; ++i) {
+                if (!recv_ok[i]) {
+                    std::fprintf(stderr, "[COORD] Worker %d did not send LOCAL_STATS at iter %zu\n", i, iter);
+                    return 1;
+                }
+            }
+        }
+
+        // Reduce worker stats (sequential — small data).
+        for (int i = 0; i < N; ++i) {
+            const float* wsum = reinterpret_cast<const float*>(worker_payloads[i].data());
             const uint64_t* wcnt = reinterpret_cast<const uint64_t*>(
-                payload.data() + kd * sizeof(float));
+                worker_payloads[i].data() + kd * sizeof(float));
             for (int c = 0; c < k; ++c) {
                 centroid_counts[c] += wcnt[c];
                 for (int j = 0; j < dim; ++j)
@@ -329,27 +370,12 @@ int main(int argc, char* argv[]) {
 
     double train_ms = std::chrono::duration<double, std::milli>(Clock::now() - t_train).count();
 
-    // ========== Final assign on ALL n_total points ==========
+    // ========== Final assign on ALL n_total points (BLAS-accelerated) ==========
     auto t_assign = Clock::now();
-    std::vector<int> final_labels(args.n);
-
-    #pragma omp parallel for schedule(static)
-    for (size_t i = 0; i < args.n; ++i) {
-        const float* x = data.data() + i * dim;
-        int best = 0;
-        float best_d = std::numeric_limits<float>::max();
-        for (int c = 0; c < k; ++c) {
-            float d = 0.0f;
-            const float* cv = coord_centroids.data() + static_cast<size_t>(c) * dim;
-            for (int j = 0; j < dim; ++j) {
-                float t = x[j] - cv[j];
-                d += t * t;
-            }
-            if (d < best_d) { best_d = d; best = c; }
-        }
-        final_labels[i] = best;
-    }
-
+    CoordKMeans final_km;
+    final_km.set_centroids(coord_centroids.data(), k, dim);
+    std::vector<int> final_labels;
+    final_km.assign(data.data(), args.n, dim, final_labels);
     double assign_ms = std::chrono::duration<double, std::milli>(Clock::now() - t_assign).count();
 
     // ========== Final metrics (over all n_total) ==========
