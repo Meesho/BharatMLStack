@@ -40,6 +40,7 @@ struct CoordArgs {
     size_t max_iter = 100;
     float tol = 0.01f;
     float train_fraction = 0.3f;
+    int num_gaussians = 50;
     unsigned seed = 42;
     bool verbose = false;
 };
@@ -55,12 +56,13 @@ CoordArgs parse_args(int argc, char* argv[]) {
         else if (a == "--max-iter" && i + 1 < argc) args.max_iter = std::stoull(argv[++i]);
         else if (a == "--tol" && i + 1 < argc) args.tol = std::stof(argv[++i]);
         else if (a == "--train-fraction" && i + 1 < argc) args.train_fraction = std::stof(argv[++i]);
+        else if (a == "--num-gaussians" && i + 1 < argc) args.num_gaussians = std::stoi(argv[++i]);
         else if (a == "--seed" && i + 1 < argc) args.seed = static_cast<unsigned>(std::stoul(argv[++i]));
         else if (a == "--verbose") args.verbose = true;
         else {
             std::fprintf(stderr,
                 "Usage: dist_coordinator --workers FILE --n N --k K --dim D\n"
-                "       [--max-iter I] [--tol T] [--train-fraction F] [--seed S] [--verbose]\n");
+                "       [--max-iter I] [--tol T] [--train-fraction F] [--num-gaussians G] [--seed S] [--verbose]\n");
             std::exit(1);
         }
     }
@@ -129,7 +131,7 @@ int main(int argc, char* argv[]) {
 
     // ========== Generate full dataset ==========
     auto t_gen = Clock::now();
-    auto data = eigenix::generate_gaussian_mixture(args.n, args.dim, args.k, args.seed);
+    auto data = eigenix::generate_gaussian_mixture(args.n, args.dim, args.num_gaussians, args.seed);
     double gen_ms = std::chrono::duration<double, std::milli>(Clock::now() - t_gen).count();
     std::fprintf(stderr, "[COORD] Data generated in %.0fms (%.1f MB)\n",
                  gen_ms, static_cast<double>(data.size() * sizeof(float)) / (1024.0 * 1024.0));
