@@ -1,59 +1,37 @@
-"""Spark-side utilities: version extraction UDF, JSON parsing via from_json, repartitioning."""
+"""Spark-side utilities: version extraction (SQL expression), JSON parsing, repartitioning."""
 
 from __future__ import annotations
 
-import base64
-import warnings
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame as SparkDataFrame
 
-from .utils import unpack_metadata_byte
-
 # Max distinct (mp_config_id, version) pairs we allow before raising (data quality guard)
 _MAX_DISTINCT_PAIRS = 1000
-
-
-def _metadata_to_version_impl(metadata_value: object) -> Optional[int]:
-    """Extract schema version from metadata column value. Used inside Spark UDF.
-
-    - If string: base64-decode then take first byte.
-    - If bytes/bytearray: take first byte.
-    - Unpack version from byte (bits 2-5) and return as int.
-    - Returns None for null, empty, or decode failure.
-    """
-    if metadata_value is None:
-        return None
-    try:
-        if isinstance(metadata_value, str):
-            decoded = base64.b64decode(metadata_value)
-        elif isinstance(metadata_value, (bytes, bytearray)):
-            decoded = bytes(metadata_value)
-        else:
-            return None
-        if len(decoded) < 1:
-            return None
-        _, version, _ = unpack_metadata_byte(decoded[0])
-        return version
-    except Exception:
-        return None
 
 
 def add_version_column(
     df: "SparkDataFrame",
     metadata_column: str = "metadata",
 ) -> "SparkDataFrame":
-    """Add _schema_version column using a Python UDF (lightweight: single-byte decode per row).
+    """Add _schema_version column using a pure Spark SQL expression (JVM-only, no Python UDF).
 
-    UDF: metadata value (string or bytes) -> base64 decode if string -> unpack_metadata_byte -> version (int).
-    Runs on driver/executors; intended to run once before the heavy decode step.
+    metadata column is a plain base64 string.  The first decoded byte encodes:
+      bits 2-5 → schema version (0-15)
+    Expression: unbase64 → first byte → hex → decimal int → (>> 2) & 0x0F
     """
     from pyspark.sql import functions as F
     from pyspark.sql.types import IntegerType
 
-    udf = F.udf(_metadata_to_version_impl, IntegerType())
-    return df.withColumn("_schema_version", udf(F.col(metadata_column)))
+    # unbase64 → first byte as binary → hex string (e.g. "04") → decimal int
+    raw_byte = F.conv(
+        F.hex(F.substring(F.unbase64(F.col(metadata_column)), 1, 1)),
+        16,
+        10,
+    ).cast(IntegerType())
+    version = F.shiftRight(raw_byte, 2).bitwiseAND(F.lit(0x0F)).cast(IntegerType())
+    return df.withColumn("_schema_version", version)
 
 
 def collect_distinct_pairs(
@@ -92,10 +70,7 @@ def prepare_partitions(
     num_partitions: int,
     mp_config_id_column: str = "mp_config_id",
 ) -> "SparkDataFrame":
-    """Repartition by (mp_config_id, _schema_version) for schema locality.
-
-    df must already have _schema_version. Returns repartitioned DataFrame.
-    """
+    """Repartition by (mp_config_id, _schema_version) for schema locality."""
     from pyspark.sql import functions as F
 
     if "_schema_version" not in df.columns:
@@ -117,9 +92,8 @@ def parse_json_columns(
     """Parse features and entities JSON columns on the JVM via from_json (vectorized).
 
     Adds features_parsed (array of map) and entities_parsed (array of string).
-    If JVM parsing fails for some rows (non-null input -> null parsed), warns so the
-    UDF can fall back to Python json.loads for those rows; UDF should use
-    features_parsed if not null, else parse the raw features string in Python.
+    Rows where JVM parsing fails will have features_parsed=null; the Arrow UDF falls
+    back to Python json.loads for those rows.
     """
     from pyspark.sql import functions as F
     from pyspark.sql.types import ArrayType, MapType, StringType
@@ -138,28 +112,5 @@ def parse_json_columns(
         )
     else:
         df = df.withColumn("entities_parsed", F.lit(None).cast(entities_schema))
-
-    # Validation: any row where original is non-null but parsed is null (JVM parse failure)
-    features_failures = df.filter(
-        F.col(features_column).isNotNull() & F.col("features_parsed").isNull()
-    ).limit(1).count()
-    if features_failures > 0:
-        warnings.warn(
-            "Some rows had non-null features but JVM from_json returned null (parse failure). "
-            "UDF should fall back to Python json.loads for those rows (use features_parsed if not null, else parse raw features).",
-            UserWarning,
-            stacklevel=2,
-        )
-    if entities_column in df.columns:
-        entities_failures = df.filter(
-            F.col(entities_column).isNotNull() & F.col("entities_parsed").isNull()
-        ).limit(1).count()
-        if entities_failures > 0:
-            warnings.warn(
-                "Some rows had non-null entities but JVM from_json returned null (parse failure). "
-                "UDF should fall back to Python json.loads for those rows (use entities_parsed if not null, else parse raw entities).",
-                UserWarning,
-                stacklevel=2,
-            )
 
     return df

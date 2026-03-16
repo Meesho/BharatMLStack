@@ -1,9 +1,9 @@
 """
 Public API: decode_single_config and decode_multi_config.
 
-Orchestrate the full pipeline: JVM JSON parse, version column, plan build/broadcast,
-mapPartitions decode, output schema. All complexity is internal; caller provides
-a DataFrame and gets decoded output.
+Orchestrate the full pipeline: JVM JSON parse, version column (SQL expression), plan
+build/broadcast, mapInArrow decode, output schema. All complexity is internal; caller
+provides a DataFrame and gets decoded output.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import os
 import warnings
 from typing import Any, Optional, Set, Tuple, Union
 
-from .decode_udf import make_partition_decoder
+from .decode_udf import make_arrow_decoder
 from .plan_builder import build_and_broadcast_plans, build_output_schema
 from .spark_utils import (
     add_version_column,
@@ -50,22 +50,13 @@ def _decode_internal(
     features_column: str,
     metadata_column: str,
 ) -> Union[Any, Tuple[Any, dict]]:
-    """Single pipeline: parse JSON, add version, build/broadcast plans, mapPartitions decode."""
+    """Single pipeline: JVM JSON parse → SQL version column → broadcast plans → mapInArrow decode."""
     inference_host = inference_host or os.getenv("INFERENCE_HOST", "http://localhost:8082")
-
-    if df.limit(1).count() == 0:
-        metadata_cols_empty = [c for c in ROW_METADATA_COLUMNS if c in df.columns]
-        empty_schema = build_output_schema(df, metadata_cols_empty, set(), {}, stringify_features)
-        empty_df = spark.createDataFrame([], empty_schema)
-        return empty_df if stringify_features else (empty_df, {})
 
     df = parse_json_columns(df, features_column=features_column, entities_column="entities")
     df = add_version_column(df, metadata_column=metadata_column)
 
-    try:
-        pairs = collect_distinct_pairs(df, mp_config_id_column=_MP_CONFIG_ID_COLUMN)
-    except ValueError as e:
-        raise e
+    pairs = collect_distinct_pairs(df, mp_config_id_column=_MP_CONFIG_ID_COLUMN)
 
     if not pairs:
         warnings.warn(
@@ -101,10 +92,13 @@ def _decode_internal(
     output_columns = ["entity_id"] + metadata_cols + sorted(output_feature_names)
     feature_columns_ordered = sorted(output_feature_names)
 
-    df = prepare_partitions(df, num_partitions or _DEFAULT_NUM_PARTITIONS, mp_config_id_column=_MP_CONFIG_ID_COLUMN)
+    df = prepare_partitions(
+        df, num_partitions or _DEFAULT_NUM_PARTITIONS, mp_config_id_column=_MP_CONFIG_ID_COLUMN
+    )
 
-    udf_fn = make_partition_decoder(
+    arrow_fn = make_arrow_decoder(
         broadcast_plans,
+        output_schema=output_schema,
         features_column=features_column,
         metadata_cols_in_df=metadata_cols,
         output_columns=output_columns,
@@ -112,11 +106,14 @@ def _decode_internal(
         stringify_features=stringify_features,
         feature_type_lookup=type_map,
     )
-    result_rdd = df.rdd.mapPartitions(udf_fn)
-    result_df = spark.createDataFrame(result_rdd, output_schema)
+    result_df = df.mapInArrow(arrow_fn, output_schema)
 
     # Reorder: entity_id first, then metadata, then features sorted
-    reorder = ["entity_id"] + [c for c in ROW_METADATA_COLUMNS if c in result_df.columns] + sorted(output_feature_names)
+    reorder = (
+        ["entity_id"]
+        + [c for c in ROW_METADATA_COLUMNS if c in result_df.columns]
+        + sorted(output_feature_names)
+    )
     result_df = result_df.select([c for c in reorder if c in result_df.columns])
 
     if stringify_features:
