@@ -306,12 +306,16 @@ func handleForPSDBLayout2Cache(fgId int, ddb PSDBBlock, buffer *bytes.Buffer, co
 	if len(header) != PSDBLayout2HeaderBytes {
 		return fmt.Errorf("header length is not %d", PSDBLayout2HeaderBytes)
 	}
-	var fgDataLen uint16
+	var payloadLen int
 	if compressed {
-		fgDataLen = uint16(len(header) + len(ddb.GetCompressedData()))
+		payloadLen = len(header) + len(ddb.GetCompressedData())
 	} else {
-		fgDataLen = uint16(len(header) + len(ddb.GetOriginalData()))
+		payloadLen = len(header) + len(ddb.GetOriginalData())
 	}
+	if payloadLen > 65535 {
+		return fmt.Errorf("feature group payload too large: %d bytes exceeds uint16 max (65535)", payloadLen)
+	}
+	fgDataLen := uint16(payloadLen)
 	fgSerializedData := make([]byte, csdbPrefixLen+fgDataLen)
 	system.ByteOrder.PutUint16(fgSerializedData[0:2], uint16(fgId))
 	system.ByteOrder.PutUint16(fgSerializedData[2:4], uint16(fgDataLen))

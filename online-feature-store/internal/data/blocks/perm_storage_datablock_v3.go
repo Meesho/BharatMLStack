@@ -65,11 +65,17 @@ func setupHeadersLayout2(p *PermStorageDataBlock) error {
 	setupExpiryAt(p)
 	setupLayoutVersion(p)
 	setupDataType(p)
-	// Append 10th byte: bitmap present flag
+	// Write 10th byte (index 9): bitmap present flag.
+	// Only append if the buffer hasn't been extended yet; otherwise overwrite in place
+	// to keep setupHeadersLayout2 idempotent across repeated Serialize() calls.
+	bitmapByte := byte(0)
 	if len(p.bitmap) > 0 {
-		p.buf = append(p.buf, bitmapPresentMask)
+		bitmapByte = bitmapPresentMask
+	}
+	if len(p.buf) <= PSDBLayout1HeaderBytes {
+		p.buf = append(p.buf, bitmapByte)
 	} else {
-		p.buf = append(p.buf, 0)
+		p.buf[PSDBLayout1HeaderBytes] = bitmapByte
 	}
 	return nil
 }
@@ -715,7 +721,13 @@ func serializeBoolVectorLayout2(p *PermStorageDataBlock) ([]byte, error) {
 				}
 			}
 		}
-		p.originalData = p.originalData[:idx]
+		usedLen := idx
+		if shift != 7 {
+			usedLen++
+		}
+		p.originalData = p.originalData[:usedLen]
+		x := byte((shift + 1) % 8)
+		setupBoolDtypeLastIdx(p, x)
 		prependBitmapToPayload(p)
 		return encodeData(p, enc)
 	}

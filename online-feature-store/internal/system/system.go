@@ -1091,7 +1091,7 @@ func GetFP32Vector(featureLabels []string, featureValues *persist.FeatureValues,
 	}
 	for label, meta := range featureMeta {
 		if !labelExists[label] {
-			fp32Vectors[meta.Sequence] = ByteOrder.FP16Vector(meta.DefaultValuesInBytes)
+			fp32Vectors[meta.Sequence] = ByteOrder.Float32Vector(meta.DefaultValuesInBytes)
 		}
 	}
 	bitmap := make([]byte, (numVectors+7)/8)
@@ -1100,7 +1100,7 @@ func GetFP32Vector(featureLabels []string, featureValues *persist.FeatureValues,
 		if meta == nil {
 			continue
 		}
-		defaultVec := ByteOrder.FP16Vector(meta.DefaultValuesInBytes)
+		defaultVec := ByteOrder.Float32Vector(meta.DefaultValuesInBytes)
 		if !slicesEqualFloat32(fp32Vectors[seq], defaultVec) {
 			bitmap[seq/8] |= 1 << (seq % 8)
 		}

@@ -70,6 +70,8 @@ func ShadowSerializeAsLayout(
 
 	if err != nil {
 		log.Warn().Err(err).Msg("shadow serialize: failed to build PSDB")
+		pooled.Clear()
+		pool.Put(pooled)
 		return -1
 	}
 

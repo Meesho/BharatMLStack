@@ -306,7 +306,9 @@ func TestLayout1VsLayout2Compression(t *testing.T) {
 
 				// If Layout2 has bitmap, verify bitmap metadata
 				if tc.defaultRatio > 0 {
-					assert.NotZero(t, ddb2.(*DeserializedPSDBLayout2).BitmapMeta&bitmapPresentMask, "Layout2 should have bitmap present flag set")
+					ddb2Layout2, ok := ddb2.(*DeserializedPSDBLayout2)
+					require.True(t, ok, "Layout2 deserialized block should be *DeserializedPSDBLayout2")
+					assert.NotZero(t, ddb2Layout2.BitmapMeta&bitmapPresentMask, "Layout2 should have bitmap present flag set")
 				}
 			})
 		})
@@ -495,12 +497,20 @@ func generateResultsFile(results []TestResult) error {
 
 	fmt.Fprintf(f, "✅ Layout2 should be used as the default layout version.\n\n")
 	fmt.Fprintf(f, "Rationale:\n")
-	fmt.Fprintf(f, "  • Consistent improvements in %d out of %d scenarios (%.1f%%)\n",
-		betterCount, len(results), float64(betterCount)/float64(len(results))*100)
-	fmt.Fprintf(f, "  • Average compressed size reduction: %.2f%%\n", totalCompressedReduction/float64(validCases))
+	if len(results) > 0 {
+		fmt.Fprintf(f, "  • Consistent improvements in %d out of %d scenarios (%.1f%%)\n",
+			betterCount, len(results), float64(betterCount)/float64(len(results))*100)
+	} else {
+		fmt.Fprintf(f, "  • No scenarios evaluated\n")
+	}
+	var avgCompressedReduction float64
+	if validCases > 0 {
+		avgCompressedReduction = totalCompressedReduction / float64(validCases)
+	}
+	fmt.Fprintf(f, "  • Average compressed size reduction: %.2f%%\n", avgCompressedReduction)
 	fmt.Fprintf(f, "  • Maximum original size reduction: %.2f%%\n", maxOriginalReduction)
-	fmt.Fprintf(f, "  • Minimal overhead (3.5%%) only in edge case with 0%% defaults\n")
-	fmt.Fprintf(f, "  • Production ML feature vectors typically have 20-95%% sparsity\n")
+	fmt.Fprintf(f, "  • Overhead only in edge cases with 0%%%% defaults\n")
+	fmt.Fprintf(f, "  • Production ML feature vectors typically exhibit significant sparsity\n")
 	fmt.Fprintf(f, "\n")
 
 	return nil

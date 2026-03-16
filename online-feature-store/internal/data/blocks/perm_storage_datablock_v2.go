@@ -94,7 +94,7 @@ func (b *PermStorageDataBlockBuilder) SetBitmap(bitmap []byte) *PermStorageDataB
 	return b
 }
 
-// SetupBitmapMeta is a no-op; bitmap present is encoded in byte 8 bit 3 during Serialize when layout-2 and bitmap non-empty.
+// SetupBitmapMeta is a no-op; bitmap present is encoded in byte 9 bit 0 during Serialize when layout-2 and bitmap non-empty.
 func (b *PermStorageDataBlockBuilder) SetupBitmapMeta(numFeatures int) *PermStorageDataBlockBuilder {
 	return b
 }

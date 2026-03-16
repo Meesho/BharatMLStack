@@ -198,6 +198,9 @@ func (d *DeserializedPSDBLayout2) GetStringVectorFeature(pos int, noOfFeatures i
 		if (bitmap[byteIdx] & (1 << bitIdx)) == 0 {
 			return defaultValue, nil
 		}
+		if pos >= len(vectorLengths) {
+			return nil, fmt.Errorf("pos %d out of bounds for vectorLengths (len=%d)", pos, len(vectorLengths))
+		}
 		offset, err := skipStringVectorsInDense(dense, vectorLengths, bitmap, pos)
 		if err != nil {
 			return nil, err
@@ -299,6 +302,9 @@ func (d *DeserializedPSDBLayout2) GetNumericVectorFeature(pos int, vectorLengths
 
 func (d *DeserializedPSDBLayout2) GetBoolVectorFeature(pos int, vectorLengths []uint16, defaultValue []byte) ([]byte, error) {
 	numVectors := len(vectorLengths)
+	if pos < 0 || pos >= numVectors {
+		return nil, fmt.Errorf("pos %d out of bounds for vectorLengths (len=%d)", pos, numVectors)
+	}
 	vectorLen := int(vectorLengths[pos])
 	data := d.OriginalData
 
