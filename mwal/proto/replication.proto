@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package mwal.replication;
+
+option cc_generic_services = false;
+
+// A single WAL batch as written by the leader.
+message ReplicateEntry {
+  uint64 first_seq = 1;   // First sequence number in this batch
+  uint32 count    = 2;    // Number of operations in the batch
+  bytes  payload  = 3;    // Exact mwal WAL record bytes (possibly compressed)
+}
+
+// Leader → Replica: append one or more WAL batches.
+message ReplicateRequest {
+  uint64 term          = 1;  // Leader's Raft term (for fencing)
+  uint64 leader_commit = 2;  // Leader's committed LSN
+  uint64 prev_lsn      = 3;  // Last LSN the leader believes the replica has
+  repeated ReplicateEntry entries = 4;
+}
+
+message ReplicateResponse {
+  bool   success            = 1;
+  string message            = 2;
+  uint64 last_persisted_lsn = 3;  // Replica's persisted LSN after appending
+  uint64 term_seen          = 4;  // Replica's current Raft term
+}
+
+// Catch-up streaming: leader streams WAL entries to a lagging replica.
+message StreamWALRequest {
+  uint64 start_lsn = 1;
+  uint64 end_lsn   = 2;  // 0 = stream to current end
+  uint64 term      = 3;
+}
+
+message WALChunk {
+  repeated ReplicateEntry entries = 1;
+}
+
+// Periodic follower → leader progress heartbeat.
+message ProgressReport {
+  uint64 node_id       = 1;
+  uint64 persisted_lsn = 2;  // Highest LSN written to replica's WAL
+  uint64 applied_lsn   = 3;  // Highest LSN applied to replica's state
+  uint64 term          = 4;
+}
+
+message ProgressAck {
+  uint64 committed_lsn = 1;  // Leader's current committed LSN
+}
+
+// Replication service exposed by every node.
+service ReplicationService {
+  // Append WAL entries (ISR: sync ack; OSR: async).
+  rpc Replicate(ReplicateRequest) returns (ReplicateResponse);
+
+  // Stream WAL entries for catch-up.
+  rpc StreamWAL(StreamWALRequest) returns (stream WALChunk);
+
+  // Follower reports progress; leader returns committed LSN.
+  rpc ReportProgress(ProgressReport) returns (ProgressAck);
+}

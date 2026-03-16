@@ -66,6 +66,18 @@ class DBWal {
   Status NewWalIterator(SequenceNumber start_seq,
                         std::unique_ptr<WalIterator>* result);
 
+  // --- Replication APIs ---
+
+  // Append a pre-sequenced, pre-compressed WAL record received from the leader.
+  // Bypasses group commit / WriteThread — acquires writer_mu_ directly.
+  // |term| is optional (0 = no term); stored for audit / truncation.
+  Status AppendReplicated(SequenceNumber first_seq, uint32_t count,
+                          const Slice& payload, uint64_t term = 0);
+
+  // Remove all WAL records with sequence numbers > lsn.
+  // Used during leader failover to discard a divergent tail.
+  Status TruncateAfter(SequenceNumber lsn);
+
  private:
   DBWal();
 

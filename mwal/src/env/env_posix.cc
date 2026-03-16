@@ -267,9 +267,9 @@ class PosixEnv : public Env {
       ::flock(fd, LOCK_UN);
       ::close(fd);
     }
-    std::string path = posix_lock->path();
+    // Do NOT unlink the lock file — it must persist so that concurrent
+    // processes contend on the same inode via flock().
     delete posix_lock;
-    ::unlink(path.c_str());
     return Status::OK();
   }
 };

@@ -3,10 +3,14 @@
 #include "mwal/db_wal.h"
 
 #include <cassert>
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
 #include <string>
 #include <vector>
+
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "file/sequential_file_reader.h"
 #include "file/writable_file_writer.h"
@@ -68,9 +72,9 @@ Status DBWal::Open(const WALOptions& options, Env* env,
   if (!s.ok()) return s;
 
   // A4: acquire directory lock
+  std::string lock_path = options.wal_dir + "/LOCK";
   std::unique_ptr<FileLock> dir_lock;
   {
-    std::string lock_path = options.wal_dir + "/LOCK";
     FileLock* raw_lock = nullptr;
     s = env->LockFile(lock_path, &raw_lock);
     if (!s.ok()) return s;
@@ -102,11 +106,19 @@ Status DBWal::Open(const WALOptions& options, Env* env,
   // B5: auto-recovery if callback is set and WAL files exist
   if (s.ok() && options.recovery_callback && !existing.empty()) {
     s = wal->Recover(options.recovery_callback);
-    if (!s.ok()) return s;
+    if (!s.ok()) {
+      wal->Close();
+      env->DeleteFile(lock_path);
+      return s;
+    }
     // Recover() already creates a new log file; skip NewLogFile below.
   } else if (s.ok()) {
     s = wal->NewLogFile();
-    if (!s.ok()) return s;
+    if (!s.ok()) {
+      wal->Close();
+      env->DeleteFile(lock_path);
+      return s;
+    }
   }
 
   // Start async write coalescer if configured
@@ -273,6 +285,10 @@ Status DBWal::Write(const WriteOptions& options, WriteBatch* batch) {
       IOStatus ios = log_writer_->AddRecord(record_data);
       if (!ios.ok()) {
         s = IOToStatus(ios);
+      }
+
+      if (s.ok() && options_.write_record_callback) {
+        options_.write_record_callback(first_seq, total_count, record_data);
       }
 
       if (s.ok() && !single_writer) {
@@ -444,6 +460,10 @@ Status DBWal::WriteCoalescedBatches(std::vector<WriteBatch*>& batches) {
   IOStatus ios = log_writer_->AddRecord(record_data);
   if (!ios.ok()) return IOToStatus(ios);
 
+  if (options_.write_record_callback) {
+    options_.write_record_callback(first_seq, total_count, record_data);
+  }
+
   // Assign individual sequences back to each batch
   if (batches.size() > 1) {
     SequenceNumber seq = first_seq;
@@ -460,6 +480,157 @@ Status DBWal::WriteCoalescedBatches(std::vector<WriteBatch*>& batches) {
   }
 
   return Status::OK();
+}
+
+Status DBWal::AppendReplicated(SequenceNumber first_seq, uint32_t count,
+                               const Slice& payload, uint64_t /*term*/) {
+  std::lock_guard<std::mutex> lock(writer_mu_);
+  if (closed_) return Status::Aborted("WAL is closed");
+
+  IOStatus ios = log_writer_->AddRecord(payload);
+  if (!ios.ok()) return IOToStatus(ios);
+
+  // Advance last_sequence_ to first_seq + count - 1 only if it moves forward.
+  SequenceNumber new_end = first_seq + count - 1;
+  SequenceNumber expected = last_sequence_.load(std::memory_order_relaxed);
+  while (expected < new_end) {
+    if (last_sequence_.compare_exchange_weak(expected, new_end,
+                                             std::memory_order_release,
+                                             std::memory_order_relaxed)) {
+      break;
+    }
+  }
+
+  if (options_.max_wal_file_size > 0 && log_writer_ &&
+      log_writer_->file()->GetFileSize() > options_.max_wal_file_size) {
+    Status rs = RotateLogFile();
+    if (!rs.ok()) return rs;
+  }
+
+  return Status::OK();
+}
+
+Status DBWal::TruncateAfter(SequenceNumber lsn) {
+  std::lock_guard<std::mutex> lock(writer_mu_);
+  if (closed_) return Status::Aborted("WAL is closed");
+
+  // Close the current log writer so all data is flushed.
+  if (log_writer_) {
+    IOStatus ios = log_writer_->WriteBuffer();
+    if (!ios.ok()) return IOToStatus(ios);
+    ios = log_writer_->Close();
+    if (!ios.ok()) return IOToStatus(ios);
+    log_writer_.reset();
+  }
+
+  // lsn == 0 means "truncate everything".
+  if (lsn == 0) {
+    std::vector<WalFileInfo> files;
+    Status s = wal_manager_->GetSortedWalFiles(&files);
+    if (!s.ok()) return s;
+    for (const auto& f : files) {
+      s = env_->DeleteFile(f.path);
+      if (!s.ok()) return s;
+    }
+    last_sequence_.store(0, std::memory_order_release);
+    log_number_.store(0, std::memory_order_release);
+    return NewLogFile();
+  }
+
+  // Nothing to truncate if lsn >= current end.
+  SequenceNumber cur_seq = last_sequence_.load(std::memory_order_relaxed);
+  if (lsn >= cur_seq) {
+    return NewLogFile();
+  }
+
+  std::vector<WalFileInfo> files;
+  Status s = wal_manager_->GetSortedWalFiles(&files);
+  if (!s.ok()) return s;
+
+  if (files.empty()) {
+    last_sequence_.store(lsn, std::memory_order_release);
+    return NewLogFile();
+  }
+
+  // Scan files in forward order.  For each file, read all records and decide
+  // whether the file is fully kept, partially kept, or fully deleted.
+  bool truncation_done = false;
+
+  for (size_t fi = 0; fi < files.size(); ++fi) {
+    if (truncation_done) {
+      // Every file past the truncation point is deleted.
+      s = env_->DeleteFile(files[fi].path);
+      if (!s.ok()) return s;
+      continue;
+    }
+
+    const auto& f = files[fi];
+    std::unique_ptr<SequentialFile> seq_file;
+    s = env_->NewSequentialFile(f.path, &seq_file, EnvOptions());
+    if (!s.ok()) return s;
+
+    auto file_reader =
+        std::make_unique<SequentialFileReader>(std::move(seq_file), f.path);
+    RecoveryReporter reporter;
+    log::Reader reader(std::move(file_reader), &reporter, true, f.log_number);
+
+    Slice record;
+    std::string scratch;
+    uint64_t last_good_end = 0;
+    bool has_good_record = false;
+    bool has_bad_record = false;
+
+    while (reader.ReadRecord(&record, &scratch,
+                             WALRecoveryMode::kTolerateCorruptedTailRecords)) {
+      std::string decompressed;
+      Slice payload;
+      s = WalDecompressor::Decompress(record, &decompressed, &payload);
+      if (!s.ok()) return s;
+
+      WriteBatch batch;
+      WriteBatchInternal::SetContents(&batch, payload);
+      SequenceNumber seq = batch.Sequence();
+      uint32_t cnt = batch.Count();
+      SequenceNumber batch_end = (cnt > 0) ? seq + cnt - 1 : seq;
+
+      if (batch_end <= lsn) {
+        last_good_end = reader.LastRecordEnd();
+        has_good_record = true;
+      } else {
+        has_bad_record = true;
+        break;
+      }
+    }
+
+    if (has_bad_record) {
+      if (has_good_record) {
+        // Truncate this file to keep only the good prefix.
+        if (::truncate(f.path.c_str(),
+                       static_cast<off_t>(last_good_end)) != 0) {
+          return Status::IOError(f.path, strerror(errno));
+        }
+        log_number_.store(f.log_number, std::memory_order_release);
+      } else {
+        // No good records in this file — delete it.
+        s = env_->DeleteFile(f.path);
+        if (!s.ok()) return s;
+        // log_number_ stays at the previous file's number.
+        if (fi > 0) {
+          log_number_.store(files[fi - 1].log_number,
+                            std::memory_order_release);
+        } else {
+          log_number_.store(0, std::memory_order_release);
+        }
+      }
+      truncation_done = true;
+    } else {
+      // Entire file is <= lsn. Keep it and set log_number_ to it.
+      log_number_.store(f.log_number, std::memory_order_release);
+    }
+  }
+
+  last_sequence_.store(lsn, std::memory_order_release);
+  return NewLogFile();
 }
 
 Status DBWal::Recover(

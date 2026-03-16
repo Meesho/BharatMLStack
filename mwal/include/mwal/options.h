@@ -8,12 +8,20 @@
 #include <string>
 
 #include "mwal/compression_type.h"
+#include "mwal/slice.h"
 #include "mwal/status.h"
 
 namespace mwal {
 
 class WriteBatch;
 using SequenceNumber = uint64_t;
+
+// Invoked by the leader after every successful WAL AddRecord, while writer_mu_
+// is still held.  The callback receives the exact bytes written to disk so the
+// replication layer can forward them to replicas without re-serialising.
+using WriteRecordCallback = std::function<void(SequenceNumber first_seq,
+                                               uint32_t count,
+                                               const Slice& record_payload)>;
 
 enum class WALRecoveryMode : char {
   kTolerateCorruptedTailRecords = 0x00,
@@ -54,6 +62,10 @@ struct WALOptions {
   // Max time in ms before pending async batches are flushed. 0 = disabled
   // (flush only on new Submit or Stop).
   uint64_t max_async_flush_interval_ms = 0;
+
+  // Called after every successful WAL write with the serialised record bytes.
+  // Intended for the replication leader to capture payloads for fan-out.
+  WriteRecordCallback write_record_callback;
 };
 
 struct WriteOptions {
