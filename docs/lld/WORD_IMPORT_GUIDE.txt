@@ -1,0 +1,373 @@
+================================================================================
+          WORD IMPORT GUIDE - LLD_TEMPLATE_FOR_WORD.txt
+================================================================================
+
+FILE LOCATION:
+  /Users/shubamkaushik/Desktop/BharatMLStack/docs/lld/LLD_TEMPLATE_FOR_WORD.txt
+
+FILE SIZE:
+  25 KB | 686 lines | 20 sections
+
+FORMAT:
+  Plain text (.txt) - optimized for clean import into Microsoft Word
+
+================================================================================
+HOW TO USE IN MICROSOFT WORD
+================================================================================
+
+OPTION 1: DIRECT COPY-PASTE
+1. Open LLD_TEMPLATE_FOR_WORD.txt in any text editor
+2. Select all (Ctrl+A or Cmd+A)
+3. Copy (Ctrl+C or Cmd+C)
+4. Create new Word document
+5. Paste (Ctrl+V or Cmd+V)
+6. Apply formatting (see formatting tips below)
+
+OPTION 2: IMPORT AS FILE
+1. Open Microsoft Word
+2. Go to Insert > Object > Text from File
+3. Navigate to LLD_TEMPLATE_FOR_WORD.txt
+4. Click Insert
+5. Apply formatting (see formatting tips below)
+
+OPTION 3: SAVE & OPEN
+1. Rename LLD_TEMPLATE_FOR_WORD.txt to LLD_TEMPLATE.doc
+2. Open in Word (Word will convert automatically)
+3. Apply formatting
+
+================================================================================
+FORMATTING TIPS FOR WORD
+================================================================================
+
+HEADERS & STRUCTURE:
+1. Select "Executive Summary" line
+   - Set Font: Heading 1 (24pt, Bold)
+2. Select "SECTION 1: HIGH-LEVEL SYSTEM CONTEXT" lines
+   - Set Font: Heading 2 (18pt, Bold)
+3. Select other subsections (Key Features, etc.)
+   - Set Font: Heading 3 (14pt, Bold)
+
+SPACING:
+1. Select all text (Ctrl+A)
+2. Paragraph > Line spacing: Single (1.0)
+3. For breaks between sections: Add 1 blank line before heading
+
+MARGINS:
+1. Page Layout > Margins > Normal (1 inch all sides)
+   OR
+   Page Layout > Margins > Custom if you prefer different sizes
+
+FONTS:
+1. Body text: Calibri or Times New Roman, 11pt
+2. Code blocks: Courier New or Consolas, 10pt
+3. Headers: Same font as body, bold
+
+================================================================================
+DOCUMENT SECTIONS
+================================================================================
+
+The template includes 20 major sections:
+
+1.  Executive Summary                 - Overview of Layout V2/V3
+2.  Architecture Overview             - System context & flows
+3.  System Context & Components       - File structure & entities
+4.  Serialization Pipeline            - Data encoding process
+5.  Deserialization Pipeline          - Data decoding process
+6.  Data Format Specification         - Byte-level specifications
+7.  Type System & Encoding            - Type handling details
+8.  Bitmap-Based Sparse Encoding      - Sparse encoding algorithm
+9.  Algorithm Details                 - Pseudocode & algorithms
+10. Error Handling & Edge Cases       - Error scenarios & fixes
+11. Performance Characteristics       - Metrics & analysis
+12. Storage Integration              - Storage layer details
+13. Configuration & Metadata         - Config system details
+14. Testing Strategy                 - Test coverage approach
+15. Migration & Backward Compatibility- Version support
+16. Integration Points & APIs        - Public API surface
+17. Usage Examples                   - Code examples
+18. Known Issues & Limitations       - Current limitations
+19. Future Enhancements             - Proposed improvements
+20. References                       - Document references
+
+================================================================================
+PLACEHOLDER SECTIONS
+================================================================================
+
+The template includes PLACEHOLDER notes for sections that need detailed content.
+
+Locations of placeholders:
+  - Section 5: Deserialization Pipeline (full details)
+  - Section 7: Type System & Encoding (comprehensive coverage)
+  - Section 8: Bitmap-Based Sparse Encoding (algorithm details)
+  - Section 9: Algorithm Details (pseudocode)
+  - Section 10: Error Handling & Edge Cases (full coverage)
+  - Section 11: Performance Characteristics (metrics)
+  - Section 12: Storage Integration (storage details)
+  - Section 13: Configuration & Metadata (config details)
+  - Section 14: Testing Strategy (test documentation)
+  - Section 15: Migration & Backward Compatibility (migration guide)
+  - Section 16: Integration Points & APIs (API details)
+  - Section 17: Usage Examples (more examples)
+  - Section 18: Known Issues & Limitations (issues list)
+  - Section 19: Future Enhancements (improvements list)
+
+TO FILL PLACEHOLDERS:
+1. Search for "PLACEHOLDER:" in Word
+2. Replace with detailed content
+3. Refer to lld_doc_generation_prompt.md for guidance
+
+================================================================================
+PRE-POPULATED CONTENT
+================================================================================
+
+The template already includes detailed content for:
+
+✓ Executive Summary
+  - Key features overview
+  - Expected benefits
+  - Scope summary
+
+✓ Architecture Overview
+  - High-level system context diagram (ASCII)
+  - Component interaction flows (Serialization & Deserialization)
+  - Data flow patterns
+
+✓ System Context & Components
+  - Complete file structure
+  - Key entities table
+  - Responsibilities mapping
+
+✓ Data Format Specification
+  - 10-byte header layout (byte-level breakdown)
+  - Payload structure (with/without bitmap)
+  - Data type encoding table
+  - Example serialized bytes
+
+✓ Storage Integration (partial)
+  - Storage systems (Redis, Scylla)
+  - Storage interface overview
+
+✓ References
+  - PR and branch information
+  - Commit references
+  - Key files for reference
+
+✓ Error Handling (PR #266 fixes)
+  - Critical fixes documented
+  - Locations identified
+
+✓ Integration Points & APIs (partial)
+  - Builder pattern API
+  - Serialization/deserialization methods
+  - Storage interface
+
+================================================================================
+DIAGRAMS & VISUAL ELEMENTS
+================================================================================
+
+The template includes ASCII diagrams that display well in Word:
+
+1. System Context Diagram (Architecture Overview)
+   - Shows Online Feature Store flow
+   - Component relationships
+   - Feature request/ingestion points
+
+2. Component Interaction Model (Architecture Overview)
+   - Serialization Flow (5 steps)
+   - Deserialization Flow (4 steps)
+
+3. File Structure (System Context & Components)
+   - Directory tree format
+   - File organization
+
+4. Header Byte Layout (Data Format Specification)
+   - Bit-level breakdown
+   - Byte assignment
+
+5. Payload Layout (Data Format Specification)
+   - Bitmap + Dense structure
+   - Data organization
+
+These diagrams will maintain formatting when pasted into Word.
+
+================================================================================
+COPY-PASTE READY SECTIONS
+================================================================================
+
+These sections are production-ready and can be used immediately:
+
+✓ Section 1: Executive Summary (ready to use)
+✓ Section 2: Architecture Overview (ready to use)
+✓ Section 3: System Context & Components (ready to use)
+✓ Section 6: Data Format Specification (ready to use)
+✓ Section 16: Integration Points & APIs (basic API reference)
+✓ Section 20: References (ready to use)
+
+All other sections have content structure with placeholders for detailed
+content. Reference lld_doc_generation_prompt.md for guidance on each section.
+
+================================================================================
+WORKFLOW RECOMMENDATIONS
+================================================================================
+
+RECOMMENDED WORKFLOW:
+
+1. Import document into Word
+2. Apply heading styles to sections
+3. Generate Table of Contents (References > Table of Contents)
+4. Go through each section with "PLACEHOLDER:" notation
+5. Fill in placeholders with detailed content
+6. Reference COMMIT_ANALYSIS.md for technical details
+7. Reference lld_doc_generation_prompt.md for section guidance
+8. Add code snippets as needed
+9. Format diagrams (keep as ASCII for monospace fonts)
+10. Review and finalize
+
+ESTIMATED COMPLETION TIME:
+- Formatting: 30 minutes
+- Filling placeholders: 4-8 hours (depending on detail level)
+- Review & finalization: 1-2 hours
+
+Total: ~5-11 hours for complete LLD document
+
+================================================================================
+WORD FORMATTING SHORTCUTS
+================================================================================
+
+CREATE TABLE OF CONTENTS:
+1. References > Table of Contents > Automatic Table
+2. Select "Automatic Table 1"
+3. Update field (right-click) when content changes
+
+FORMAT CODE BLOCKS:
+1. Select code block
+2. Format > Paragraph > Indentation > Left: 0.25"
+3. Font > Select monospace (Courier New, Consolas, etc.)
+4. Format > Borders and Shading > Light Gray background
+
+NUMBERING & BULLETS:
+1. Select list items
+2. Home > Bullets and Numbering > Select style
+3. Adjust indentation as needed
+
+PAGE BREAKS:
+1. Place cursor at start of section
+2. Insert > Page Break
+3. Useful before major sections
+
+DOCUMENT PROPERTIES:
+1. File > Properties > Details
+2. Add Title, Author, Subject
+3. Helps with document management
+
+================================================================================
+FILE COMPARISON
+================================================================================
+
+Multiple versions available in docs/lld/:
+
+1. lld_doc_generation_prompt.md
+   - Comprehensive generation prompt (346 lines)
+   - Use with LLM for automated content generation
+   - Contains detailed section guidance
+
+2. LLD_TEMPLATE.md
+   - Markdown format template (438 lines)
+   - Good for GitHub/repository documentation
+   - Includes architecture diagrams
+
+3. LLD_TEMPLATE_FOR_WORD.txt
+   - Plain text format (686 lines) ← YOU ARE HERE
+   - Optimized for Microsoft Word import
+   - Clean formatting for easy styling
+   - Best for formal document creation
+
+4. COMMIT_ANALYSIS.md
+   - Technical reference (371 lines)
+   - All 14 commits detailed
+   - Use to fill in technical sections
+
+5. README.md
+   - Quick reference guide (193 lines)
+   - Start here for overview
+   - Usage instructions
+
+CHOOSE YOUR FORMAT:
+- For Word documents: Use LLD_TEMPLATE_FOR_WORD.txt (this file)
+- For GitHub/web: Use LLD_TEMPLATE.md
+- For LLM generation: Use lld_doc_generation_prompt.md
+- For technical reference: Use COMMIT_ANALYSIS.md
+
+================================================================================
+SUPPORT & RESOURCES
+================================================================================
+
+GUIDANCE DOCUMENTS:
+- README.md - Quick start guide
+- lld_doc_generation_prompt.md - Detailed section guidance
+- COMMIT_ANALYSIS.md - Technical deep dive
+
+REFERENCE MATERIALS:
+- Branch: poc/fs_layout
+- Base: main
+- 14 commits analyzed
+- 42 files changed
+
+KEY COMMITS FOR REFERENCE:
+- a14f1df4: Layout V2 introduction
+- 468d003f: Extend to all data types
+- 8e364d05: Critical bounds checking fixes
+- 272b8db9: Test results
+
+WHEN YOU GET STUCK:
+1. Check README.md for overview
+2. Check lld_doc_generation_prompt.md for section guidance
+3. Check COMMIT_ANALYSIS.md for technical details
+4. Refer to actual source code when needed
+
+================================================================================
+VERSION CONTROL
+================================================================================
+
+Document Metadata:
+  Version: 1.0
+  Created: 2026-03-16
+  Format: Plain Text (.txt)
+  Status: Draft - Ready for Word import
+
+How to Version:
+1. Save as "LLD_PSDB_Layout_V2_V3_DRAFT.docx" after import
+2. Make changes in Word
+3. Save as "LLD_PSDB_Layout_V2_V3_v1.0.docx" when complete
+4. Update version number in document footer
+
+================================================================================
+FINAL CHECKLIST
+================================================================================
+
+Before finalizing document:
+
+□ All sections have appropriate content
+□ No more "PLACEHOLDER:" notations
+□ Heading styles applied correctly
+□ Table of Contents generated
+□ Code examples are properly formatted
+□ Diagrams display correctly
+□ Page numbers added
+□ Headers/footers added if needed
+□ Spelling and grammar checked
+□ Document properties filled out
+□ References verified
+□ Peer review completed
+□ Version number set correctly
+□ Saved with final filename
+
+================================================================================
+
+Ready to import? Start with Option 1 (Direct Copy-Paste) above.
+
+Questions? Refer to README.md or lld_doc_generation_prompt.md
+
+Happy documenting!
+
+================================================================================

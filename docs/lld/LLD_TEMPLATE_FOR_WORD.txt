@@ -1,0 +1,686 @@
+================================================================================
+                         LOW-LEVEL DESIGN (LLD) DOCUMENT
+                    PSDB Layout V2 & V3: Optimized Sparse Feature Storage
+================================================================================
+
+PROJECT:          BharatMLStack Online Feature Store
+COMPONENT:        Permanent Storage Data Block (PSDB) Serialization Layer
+BRANCH:           poc/fs_layout
+STATUS:           In Development (PR #266)
+LAST UPDATED:     2026-03-16
+DOCUMENT VERSION: 1.0
+AUTHOR:           Technical Design Team
+STATUS:           Draft - In Development
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. Executive Summary
+2. Architecture Overview
+3. System Context & Components
+4. Serialization Pipeline
+5. Deserialization Pipeline
+6. Data Format Specification
+7. Type System & Encoding
+8. Bitmap-Based Sparse Encoding
+9. Algorithm Details
+10. Error Handling & Edge Cases
+11. Performance Characteristics
+12. Storage Integration
+13. Configuration & Metadata
+14. Testing Strategy
+15. Migration & Backward Compatibility
+16. Integration Points & APIs
+17. Usage Examples
+18. Known Issues & Limitations
+19. Future Enhancements
+20. References
+
+================================================================================
+EXECUTIVE SUMMARY
+================================================================================
+
+The PSDB Layout V2 & V3 introduces bitmap-based sparse feature encoding to the
+online feature store's permanent storage layer. This design reduces storage
+footprint for datasets with missing or default-valued features through:
+
+KEY FEATURES:
+  - Bitmap Metadata: Optional per-feature presence indicator
+  - Sparse Payload: Only non-default features are serialized
+  - Compression Integration: Works alongside existing compression algorithms
+  - Type Safety: Full support for all scalar and vector data types
+  - Backward Compatibility: Layout V1 support maintained through versioning
+
+EXPECTED BENEFITS:
+  - 20-60% storage reduction for sparse feature sets
+  - Minimal latency overhead for dense feature sets
+  - Transparent handling of missing features via defaults
+
+SCOPE:
+  - 14 commits integrating bitmap-based sparse encoding
+  - 42 files modified across serialization, deserialization, and storage
+  - 5,187 insertions and 1,177 deletions from main branch
+
+================================================================================
+ARCHITECTURE OVERVIEW
+================================================================================
+
+SECTION 1: HIGH-LEVEL SYSTEM CONTEXT
+
+The PSDB serialization layer sits at the core of the feature store's
+data persistence pipeline:
+
+Online Feature Store Application
+|
++-- Feature Request
+    |
+    +-- Feature Retrieval Handler
+        |
+        +-- PSDB Deserializer (Layout V1/V2)
+            - Version Detection
+            - Decompression
+            - Bitmap-Aware Extraction
+            - Type Conversion
+            |
+            +-- Storage Repository Layer
+                - Redis Store
+                - Scylla Store
+                |
+                +-- Feature Persistence Handler
+                    |
+                    +-- PSDB Serializer (Layout V1/V2/V3)
+                        - Bitmap Generation
+                        - Layout Selection
+                        - Type-Safe Encoding
+                        - Compression
+                        |
+                        +-- Feature Ingestion Point
+
+
+SECTION 2: COMPONENT INTERACTION MODEL
+
+SERIALIZATION FLOW:
+-------------------
+
+Feature Data ([]float32, [][]bool, etc.)
+  |
+  +-- Type Detection (DataType enum)
+  |
+  +-- Bitmap Generation (Optional sparse encoding)
+      - Feature presence bits
+      - Size calculation: (numFeatures + 7) / 8
+  |
+  +-- Header Construction
+      - Feature schema version
+      - Expiry timestamp
+      - Layout version (1/2/3)
+      - Compression type
+      - Data type encoding
+      - Bitmap presence flag (V2+)
+      - Bool last index (bool only)
+  |
+  +-- Type-Specific Encoding
+      - Scalar: Direct bytes
+      - Vector: Packed format
+      - String: Pascal format (length-prefixed)
+      - Bool: Bit-packed
+  |
+  +-- Compression (Type, GZIP, etc.)
+  |
+  +-- Serialized Bytes ([]byte)
+
+
+DESERIALIZATION FLOW:
+---------------------
+
+Serialized Bytes ([]byte)
+  |
+  +-- Header Extraction
+      - Read bytes 0-9 (Layout V2)
+      - Detect version
+      - Extract metadata
+  |
+  +-- Decompression
+      - Decompress payload
+      - Handle TypeNone (no-op)
+  |
+  +-- Bitmap Extraction (if V2)
+      - Read bitmap section
+      - Calculate bitmap size
+      - Separate dense payload
+  |
+  +-- Feature Extraction
+      - Query bitmap for presence
+      - Extract from dense/defaults
+      - Type-specific decoding
+  |
+  +-- Feature Data ([]float32, [][]bool, etc.)
+
+================================================================================
+SYSTEM CONTEXT & COMPONENTS
+================================================================================
+
+FILE STRUCTURE:
+
+online-feature-store/internal/data/blocks/
+  - perm_storage_datablock_v2.go          (Layout V2 serialization)
+  - perm_storage_datablock_v3.go          (Layout V3 future expansion)
+  - deserialized_psdb.go                  (Base V1 struct)
+  - deserialized_psdb_v2.go               (V1 deserialization)
+  - deserialized_psdb_layout2.go          (V2-specific deserialization)
+  - perm_storage_datablock_v2_test.go     (Serialization tests)
+  - deserialized_psdb_v2_test.go          (V2 deserialization tests)
+  - layout_comparison_test.go             (Benchmarking & comparison)
+  - layout_comparison_results.txt         (Test results snapshot)
+  - cache_storage_datablock_v2.go         (Memory cache variant)
+  - cache_storage_datablock_v2_test.go    (Cache tests)
+  - psdb_shadow_compare.go                (Validation framework)
+
+go-sdk/pkg/datatypeconverter/byteorder/
+  - system.go                             (Type encoding/decoding)
+  - types.go                              (DataType definitions)
+
+
+KEY ENTITIES:
+
+Component                   | Responsibility                   | Key Files
+========================================================================================
+PermStorageDataBlock        | Serialization builder & executor | perm_storage_datablock_v2.go
+DeserializedPSDB            | Layout V1 deserialization       | deserialized_psdb_v2.go
+DeserializedPSDBLayout2     | Layout V2 with bitmap           | deserialized_psdb_layout2.go
+ByteOrder                   | Type-aware encoding/decoding    | byteorder/system.go
+DataType                    | Type enumeration & metadata     | types.go
+PSDBBlock Interface         | Abstract serialization          | Implemented by structures
+
+================================================================================
+SERIALIZATION PIPELINE
+================================================================================
+
+OVERVIEW:
+
+The serialization pipeline transforms in-memory feature data into a compact
+byte format optimized for sparse data. It handles all scalar and vector types
+with automatic bitmap generation for sparse encoding.
+
+ENTRY POINT PATTERN:
+
+// From persist.go - Feature persistence flow
+func (h *Handler) persistFeatures(ctx context.Context,
+                                  features map[string]interface{}) error {
+
+    // 1. Create PSDB builder
+    builder := NewPermStorageDataBlockBuilder()
+
+    // 2. Set data and metadata
+    builder.SetData(features[dataType])
+    builder.SetNoOfFeatures(len(features))
+    builder.SetDataType(dataType)
+
+    // 3. Optional: Set bitmap for sparse encoding
+    if shouldEnableSparseMode(features) {
+        builder.SetBitmap(generateBitmap(features))
+    }
+
+    // 4. Serialize
+    psdb := builder.Build()
+    serialized, err := psdb.Serialize()
+
+    // 5. Persist to storage
+    return h.store.Set(featureKey, serialized)
+}
+
+
+SERIALIZATION STEPS:
+
+Step 1: Type Detection
+  Input: Feature data in container ([]float32, []int32, []bool, etc.)
+  Output: Validated DataType enum
+  [Detailed implementation: perm_storage_datablock_v2.go:serializeXXXV2()]
+
+Step 2: Bitmap Generation (Optional)
+  Input: Feature data, optional bitmap indicator
+  Output: Bitmap byte array marking non-default features
+  Size: (numFeatures + 7) / 8 bytes
+  [Implementation: Handled in SetBitmap()]
+
+Step 3: Header Construction
+  Input: Metadata (schema version, expiry, layout, compression, datatype)
+  Output: 10-byte header for Layout V2
+  [Implementation: setupHeadersV2() and related functions]
+
+Step 4: Type-Specific Encoding
+  Input: Feature values, type-specific encoder
+  Output: originalData buffer filled with encoded bytes
+  Handlers:
+    - serializeFP32AndLessV2() - Floating point types
+    - serializeInt32AndLessV2() - Integer types
+    - serializeUint32AndLessV2() - Unsigned integer types
+    - serializeBoolV2() / serializeBoolVectorV2() - Boolean types
+    - serializeStringV2() / serializeStringVectorV2() - String types
+
+Step 5: Compression
+  Input: Encoded data, compression type
+  Output: Compressed bytes (or original if compression ineffective)
+  [Implementation: encodeData() and compression.Encoder interface]
+
+================================================================================
+DESERIALIZATION PIPELINE
+================================================================================
+
+[This section contains detailed deserialization steps and logic flow]
+
+PLACEHOLDER: Add detailed deserialization pipeline documentation here
+including header parsing, version detection, decompression, bitmap extraction,
+and feature extraction logic with code references.
+
+================================================================================
+DATA FORMAT SPECIFICATION
+================================================================================
+
+HEADER LAYOUT (10 bytes for Layout V2):
+
+Byte 0-1:     Feature Schema Version (uint16)
+              Bits [15:0] = Schema Version number
+              Byte Order: System byte order
+
+Byte 2-6:     Expiry Timestamp (40 bits = 5 bytes)
+              Encoded as 5 bytes in system byte order
+              Can be decoded as uint64 with EncodeExpiry()
+              Checked with IsExpired() for cache validation
+
+Byte 7:       Layout, Compression, and DataType High Bit
+              Bits [7:4] = Layout Version (4 bits)
+                           Values: 0=V1, 1=V2, 2=V3, 3=Reserved
+              Bits [3:1] = Compression Type (3 bits)
+                           Values: 0=None, 1=TypeA, 2=TypeB, etc.
+              Bit [0:0]   = DataType High Bit (1 bit)
+                           MSB of 5-bit DataType enum
+
+Byte 8:       DataType Low 4 Bits and Bool Index
+              Bits [7:4] = DataType Low 4 Bits (4 bits)
+                           Combined with byte 7 bit 0 for full enum
+              Bits [3:0] = Bool DType Last Index (4 bits)
+                           Only meaningful for Bool data types
+                           Marks position of last set bit in last byte
+
+Byte 9:       Layout V2+ Metadata (Bitmap Presence)
+              Bit [0:0]   = Bitmap Present Flag (1 bit)
+                           1 = Bitmap section present
+                           0 = No bitmap (Layout V1 style)
+              Bits [7:1] = Reserved (7 bits)
+                           Must be zero; reserved for future use
+
+TOTAL: 10 bytes for Layout V2 (9 bytes header + 1 byte metadata)
+
+
+PAYLOAD LAYOUT (Layout V2):
+
+If BitmapMeta & 0x01 == 1 (Bitmap Present):
+    ┌─────────────────────────────────────────┐
+    │ Bitmap Section                          │
+    │ Size: (numFeatures + 7) / 8 bytes       │
+    │ Bit i = 1 if feature i is present       │
+    │ Bit i = 0 if feature i uses default     │
+    │ Byte order: MSB = feature 0 in byte     │
+    └─────────────────────────────────────────┘
+    ┌─────────────────────────────────────────┐
+    │ Dense Payload                           │
+    │ Only non-default features (sparse)      │
+    │ Order: ascending by feature index       │
+    │ Type-specific encoding per feature      │
+    └─────────────────────────────────────────┘
+
+Else (BitmapMeta & 0x01 == 0 - No Bitmap):
+    ┌─────────────────────────────────────────┐
+    │ All Features (dense)                    │
+    │ Layout V1 style (all features present)  │
+    │ Type-specific encoding per feature      │
+    └─────────────────────────────────────────┘
+
+
+DATA TYPE ENCODING TABLE:
+
+DataType     | Bytes  | Variants       | Encoding Method
+=================================================================
+FP8E4M3      | 1      | Scalar, Vector | float8.FP8E4M3FromFP32Value()
+FP8E5M2      | 1      | Scalar, Vector | float8.FP8E5M2FromFP32Value()
+FP16         | 2      | Scalar, Vector | float16.Fromfloat32() + PutUint16()
+FP32         | 4      | Scalar, Vector | math.Float32bits() + PutUint32()
+FP64         | 8      | Scalar, Vector | math.Float64bits() + PutUint64()
+Int8         | 1      | Scalar, Vector | Direct byte cast
+Int16        | 2      | Scalar, Vector | PutUint16(uint16(value))
+Int32        | 4      | Scalar, Vector | PutUint32(uint32(value))
+Int64        | 8      | Scalar, Vector | PutUint64(uint64(value))
+Uint8        | 1      | Scalar, Vector | Direct byte assignment
+Uint16       | 2      | Scalar, Vector | PutUint16(value)
+Uint32       | 4      | Scalar, Vector | PutUint32(value)
+Uint64       | 8      | Scalar, Vector | PutUint64(value)
+Bool         | 1 bit  | Scalar, Vector | Bit-packed in bytes
+String       | Var    | Scalar, Vector | 2-byte length + data (Pascal)
+
+
+EXAMPLE SERIALIZED BYTES (Float32 Scalar, No Compression):
+
+[Byte 0-1]   0x0001              (Schema version = 1)
+[Byte 2-6]   0xABCDEF0102        (Expiry timestamp)
+[Byte 7]     0x24                (Layout=0x2, Compression=0x1, FP32 high=0)
+[Byte 8]     0x30                (FP32 low=0x3, Bool index=0)
+[Byte 9]     0x00                (No bitmap)
+[Byte 10+]   (compressed/encoded feature values)
+
+================================================================================
+TYPE SYSTEM & ENCODING
+================================================================================
+
+[Detailed type encoding specifications and conversions]
+
+PLACEHOLDER: Add comprehensive type system documentation including:
+- Type enumeration values
+- Encoder/decoder function mappings
+- Default value handling per type
+- Vector vs scalar differences
+- Type conversion procedures
+
+================================================================================
+BITMAP-BASED SPARSE ENCODING
+================================================================================
+
+[Complete bitmap algorithm documentation]
+
+PLACEHOLDER: Add detailed bitmap algorithm documentation including:
+- Bitmap index calculation: byteIdx = pos / 8, bitIdx = pos % 8
+- Bitmap presence detection
+- Count set bits before position
+- Error handling for undersized bitmaps
+- Performance implications
+
+================================================================================
+ALGORITHM DETAILS
+================================================================================
+
+[Pseudocode and detailed algorithm implementations]
+
+PLACEHOLDER: Add detailed algorithms including:
+- Serialization pseudocode for each data type
+- Deserialization pseudocode with bitmap handling
+- Compression/decompression flow
+- Feature extraction with bitmap queries
+
+================================================================================
+ERROR HANDLING & EDGE CASES
+================================================================================
+
+[Error scenarios and handling strategies]
+
+CRITICAL FIXES FROM PR #266:
+
+1. Bitmap Bounds Checking
+   Issue: Array access without validation could panic
+   Fix: Add byteIdx >= len(bitmap) check before access
+   Locations: countSetBitsBefore(), skipStringVectorsInDense(),
+             GetNumericVectorFeature(), GetBoolVectorFeature()
+
+2. Bool Vector Serialization
+   Issue: Partial byte with unfilled bits was dropped
+   Fix: Include partial byte if shift != 7
+   Location: serializeBoolVectorV2()
+
+3. Type Mismatch
+   Issue: FP32Vector decoder using FP16Vector
+   Fix: Change to ByteOrder.Float32Vector
+   Location: byteorder/system.go
+
+PLACEHOLDER: Add comprehensive error handling documentation
+
+================================================================================
+PERFORMANCE CHARACTERISTICS
+================================================================================
+
+[Performance metrics and analysis]
+
+SPACE OPTIMIZATION METRICS:
+
+Test Scenario Coverage: 9+ different feature configurations
+Expected Space Savings: 20-60% for sparse feature sets
+Compression Ratios: Varies by data type and sparsity
+
+PLACEHOLDER: Add detailed performance analysis with:
+- Compression efficiency by data type
+- Serialization/deserialization latency
+- Bitmap overhead calculations
+- Dense vs sparse tradeoff analysis
+
+================================================================================
+STORAGE INTEGRATION
+================================================================================
+
+[Storage layer integration details]
+
+STORAGE SYSTEMS:
+- Redis: Key-value store for cache layer
+- Scylla: Distributed column store for persistence
+
+PLACEHOLDER: Add storage integration documentation
+
+================================================================================
+CONFIGURATION & METADATA
+================================================================================
+
+[Configuration system documentation]
+
+METADATA FIELDS:
+- Feature Schema Version: Tracks schema evolution
+- Expiry Timestamp: Cache validation and TTL
+- Layout Version: Dual-path V1/V2 support
+- Compression Type: Optional data compression
+- Bitmap Presence: Sparse encoding indicator
+
+PLACEHOLDER: Add configuration documentation
+
+================================================================================
+TESTING STRATEGY
+================================================================================
+
+[Test coverage and validation approach]
+
+TEST FILES:
+- perm_storage_datablock_v2_test.go (Serialization)
+- deserialized_psdb_v2_test.go (Deserialization V2)
+- cache_storage_datablock_v2_test.go (Cache variant)
+- layout_comparison_test.go (Benchmarking)
+- psdb_shadow_compare.go (Validation framework)
+
+VALIDATION APPROACH:
+- Unit tests for each data type
+- Integration tests with storage
+- Shadow comparison (V1 vs V2)
+- Benchmark tests with 9+ scenarios
+
+PLACEHOLDER: Add comprehensive testing documentation
+
+================================================================================
+MIGRATION & BACKWARD COMPATIBILITY
+================================================================================
+
+[Version compatibility and migration path]
+
+VERSION SUPPORT:
+- Layout V1: Legacy support maintained
+- Layout V2: Bitmap-based sparse encoding (current)
+- Layout V3: Future expansion (reserved)
+
+COMPATIBILITY:
+- Automatic version detection from header
+- Fallback to V1 deserializer when bitmap absent
+- Dual-path implementation for safe transitions
+
+PLACEHOLDER: Add migration documentation
+
+================================================================================
+INTEGRATION POINTS & APIs
+================================================================================
+
+[Public API surface and integration contracts]
+
+BUILDER PATTERN:
+
+PermStorageDataBlockBuilder provides fluent API:
+  - SetData(data interface{})
+  - SetDataType(dataType DataType)
+  - SetNoOfFeatures(count int)
+  - SetBitmap(bitmap []byte)
+  - SetBitmapMeta(numFeatures int)
+  - Build() *PermStorageDataBlock
+
+SERIALIZATION:
+  - Serialize() ([]byte, error)
+  - serializeLayout1() ([]byte, error)
+  - serializeLayout2() ([]byte, error)
+
+DESERIALIZATION:
+  - DeserializePSDB(data []byte) (PSDBBlock, error)
+  - deserializePSDBForLayout1(data []byte) (*DeserializedPSDB, error)
+  - deserializePSDBForLayout2(data []byte) (*DeserializedPSDBLayout2, error)
+
+STORAGE INTERFACE:
+  - Set(key string, value []byte) error
+  - Get(key string) ([]byte, error)
+
+PLACEHOLDER: Add detailed API documentation with examples
+
+================================================================================
+USAGE EXAMPLES
+================================================================================
+
+[Code examples for common operations]
+
+EXAMPLE 1: Serializing Float32 Features
+
+  // Create builder
+  builder := NewPermStorageDataBlockBuilder()
+
+  // Set up data
+  features := []float32{1.5, 2.5, 3.5}
+  builder.SetData(features)
+  builder.SetNoOfFeatures(len(features))
+  builder.SetDataType(DataTypeFP32)
+
+  // Optionally set bitmap for sparse encoding
+  bitmap := []byte{0xFF}  // All features present
+  builder.SetBitmap(bitmap)
+
+  // Serialize
+  psdb := builder.Build()
+  serialized, err := psdb.Serialize()
+
+  // Store result
+  err = storage.Set("feature_key", serialized)
+
+
+EXAMPLE 2: Deserializing with Bitmap
+
+  // Read serialized data
+  data, err := storage.Get("feature_key")
+
+  // Deserialize
+  psdbBlock, err := DeserializePSDB(data)
+
+  // Check layout version
+  layout := psdbBlock.GetLayoutVersion()
+
+  if layout == 2 {
+    // Cast to Layout 2 for bitmap operations
+    layout2 := psdbBlock.(*DeserializedPSDBLayout2)
+
+    // Extract feature at position 0
+    feature, err := layout2.GetNumericScalarFeature(0, 3, defaultValue)
+  }
+
+PLACEHOLDER: Add more comprehensive usage examples
+
+================================================================================
+KNOWN ISSUES & LIMITATIONS
+================================================================================
+
+[Current limitations and open issues from PR #266]
+
+PR #266 CRITICAL FIXES:
+  ✓ Bool vector serialization (partial byte inclusion)
+  ✓ Type mismatch in FP32 defaults (FP16Vector → Float32Vector)
+  ✓ Bitmap bounds checking (4 functions updated)
+
+REMAINING AREAS FOR DOCUMENTATION:
+  - Hardcoded test parameters (from PR review)
+  - Test output to repo root (from PR review)
+  - Unused function generateSparseData (from PR review)
+
+PLACEHOLDER: Add known issues documentation
+
+================================================================================
+FUTURE ENHANCEMENTS
+================================================================================
+
+[Proposed improvements and next steps]
+
+POTENTIAL IMPROVEMENTS:
+  - Layout V3 expansion
+  - Advanced compression algorithms
+  - Adaptive bitmap strategies
+  - SIMD optimization for bitmap operations
+  - Caching optimizations per component
+
+PLACEHOLDER: Add future enhancements documentation
+
+================================================================================
+REFERENCES
+================================================================================
+
+DOCUMENTATION:
+  - PR #266: PSDB Layout V2 Implementation
+  - Branch: poc/fs_layout
+  - Base Branch: main
+  - Total Commits: 14 unique commits
+  - Files Changed: 42 files (5,187 insertions, 1,177 deletions)
+
+RELATED FEATURES:
+  - Feature sparse encoding optimization
+  - Bitmap-based data compression
+  - Storage footprint reduction
+
+COMMIT REFERENCES:
+  - a14f1df4: Layout V2 introduction (foundational)
+  - 468d003f: Extend to all data types (major feature)
+  - a415a4da: Separate layout 2 implementation
+  - 8e364d05: Critical bounds checking fixes (PR #266)
+  - 272b8db9: Test results documentation
+  - ff6223ed: Metrics accuracy improvements
+
+KEY FILES FOR REFERENCE:
+  - online-feature-store/internal/data/blocks/perm_storage_datablock_v2.go
+  - online-feature-store/internal/data/blocks/deserialized_psdb_layout2.go
+  - go-sdk/pkg/datatypeconverter/byteorder/system.go
+  - online-feature-store/internal/data/blocks/layout_comparison_test.go
+
+================================================================================
+
+Document Version:     1.0
+Last Updated:         2026-03-16
+Author:               Technical Design Team
+Status:               Draft - In Development
+Branch:               poc/fs_layout
+Project:              BharatMLStack Online Feature Store
+
+================================================================================
+END OF DOCUMENT
+================================================================================
+
+NOTES FOR WORD IMPORT:
+- This document is formatted for easy copying into Microsoft Word
+- Remove extra spacing as needed in Word's paragraph formatting
+- Use Word's heading styles for proper TOC generation
+- Set font to Calibri or similar for consistent display
+- Recommended page margins: 1 inch all sides
+- Single spacing for body text, 1.5 for section breaks
+
+================================================================================
