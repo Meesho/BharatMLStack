@@ -487,9 +487,9 @@ func (p *PersistHandler) maybeShadowCompare(entityLabel string, fgLabel string, 
 	vectorLengths, _ := p.config.GetVectorLengths(entityLabel, fgConf.Id, int(activeVersion))
 
 	tags := []string{
-		"entity_label", entityLabel,
-		"fg_label", fgLabel,
-		"data_type", dataType.String(),
+		"entity_label:" + entityLabel,
+		"fg_label:" + fgLabel,
+		"data_type:" + dataType.String(),
 	}
 
 	layout1Size := blocks.ShadowSerializeAsLayout(

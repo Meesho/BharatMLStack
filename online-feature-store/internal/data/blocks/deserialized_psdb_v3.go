@@ -320,6 +320,7 @@ func (d *DeserializedPSDBLayout2) GetBoolVectorFeature(pos int, vectorLengths []
 		if byteIdx >= len(bitmap) {
 			return nil, fmt.Errorf("bitmap index out of bounds")
 		}
+		// Bitmap uses LSB-first ordering: vector i is present if bit (i%8) of byte (i/8) is set.
 		if (bitmap[byteIdx] & (1 << bitIdx)) == 0 {
 			return defaultValue, nil
 		}
@@ -339,6 +340,8 @@ func (d *DeserializedPSDBLayout2) GetBoolVectorFeature(pos int, vectorLengths []
 		for i := 0; i < vectorLen; i++ {
 			sourceBitPos := startBit + i
 			sourceByteIndex := sourceBitPos / 8
+			// Dense bool payload uses MSB-first ordering within each byte:
+			// bit 0 of the logical stream is stored in the MSB (bit 7) of byte 0.
 			sourceBitOffset := 7 - (sourceBitPos % 8)
 			sourceBitMask := byte(1 << sourceBitOffset)
 			if sourceByteIndex >= len(dense) {
