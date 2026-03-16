@@ -125,7 +125,7 @@ func (csdb *CacheStorageDataBlock) serialize(compressed bool) ([]byte, error) {
 			case 1:
 				err = handleForPSDBLayout1(fgId, ddb, &buffer, compressed)
 			case 2:
-				err = handleForPSDBLayout2Cache(fgId, ddb, &buffer, compressed)
+				err = handleForPSDBLayout2(fgId, ddb, &buffer, compressed)
 			}
 			if err != nil {
 				return nil, err
@@ -301,7 +301,7 @@ func handleForPSDBLayout1(fgId int, ddb PSDBBlock, buffer *bytes.Buffer, compres
 	return err
 }
 
-func handleForPSDBLayout2Cache(fgId int, ddb PSDBBlock, buffer *bytes.Buffer, compressed bool) error {
+func handleForPSDBLayout2(fgId int, ddb PSDBBlock, buffer *bytes.Buffer, compressed bool) error {
 	header := ddb.GetHeader()
 	if len(header) != PSDBLayout2HeaderBytes {
 		return fmt.Errorf("header length is not %d", PSDBLayout2HeaderBytes)

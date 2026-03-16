@@ -33,7 +33,7 @@ type PermStorageDataBlock struct {
 	// 64-bit aligned fields
 	expiryAt       uint64
 	Data           interface{}
-	bitmap         []byte // NEW, optional, nil by default
+	bitmap         []byte
 	buf            []byte
 	originalData   []byte
 	compressedData []byte
@@ -204,7 +204,7 @@ func setupDataType(p *PermStorageDataBlock) {
 }
 
 func setupBoolDtypeLastIdx(p *PermStorageDataBlock, boolDtypeLastIdx uint8) {
-	// Byte 8: lower 4 bits = boolDtypeLastIdx (0-15)
+	// For byte 8: Clear lower 4 bits, then set the lower 4 bits of boolDtypeLastIdx
 	p.buf[8] = (p.buf[8] & 0xF0) | (boolDtypeLastIdx & 0x0F)
 }
 
@@ -242,12 +242,10 @@ func serializeFP32AndLessV2(p *PermStorageDataBlock) ([]byte, error) {
 	}
 	idx := 0
 	putFloat, _ := system.GetToByteFP32AndLess(p.dataType)
-
 	for _, v := range values {
 		putFloat(p.originalData[idx:idx+unitSize], v)
 		idx += unitSize
 	}
-
 	return encodeData(p, enc)
 }
 
@@ -264,12 +262,10 @@ func serializeInt32AndLessV2(p *PermStorageDataBlock) ([]byte, error) {
 	}
 	idx := 0
 	putInt, _ := system.GetToByteInt32AndLess(p.dataType)
-
 	for _, v := range values {
 		putInt(p.originalData[idx:idx+unitSize], v)
 		idx += unitSize
 	}
-
 	return encodeData(p, enc)
 }
 
@@ -286,12 +282,10 @@ func serializeUint32AndLessV2(p *PermStorageDataBlock) ([]byte, error) {
 	}
 	idx := 0
 	putUint, _ := system.GetToByteUint32AndLess(p.dataType)
-
 	for _, v := range values {
 		putUint(p.originalData[idx:idx+unitSize], v)
 		idx += unitSize
 	}
-
 	return encodeData(p, enc)
 }
 
@@ -307,12 +301,10 @@ func serializeFP64V2(p *PermStorageDataBlock) ([]byte, error) {
 		return nil, fmt.Errorf("fp64 Data expected to come in fp64 container")
 	}
 	idx := 0
-
 	for _, v := range values {
 		system.ByteOrder.PutFloat64(p.originalData[idx:idx+unitSize], v)
 		idx += unitSize
 	}
-
 	return encodeData(p, enc)
 }
 
@@ -328,12 +320,10 @@ func serializeInt64V2(p *PermStorageDataBlock) ([]byte, error) {
 		return nil, fmt.Errorf("int64 Data expected to come in int64 container")
 	}
 	idx := 0
-
 	for _, v := range values {
 		system.ByteOrder.PutInt64(p.originalData[idx:idx+unitSize], v)
 		idx += unitSize
 	}
-
 	return encodeData(p, enc)
 }
 
@@ -349,12 +339,10 @@ func serializeUint64V2(p *PermStorageDataBlock) ([]byte, error) {
 		return nil, fmt.Errorf("uint64 Data expected to come in uint64 container")
 	}
 	idx := 0
-
 	for _, v := range values {
 		system.ByteOrder.PutUint64(p.originalData[idx:idx+unitSize], v)
 		idx += unitSize
 	}
-
 	return encodeData(p, enc)
 }
 
@@ -376,15 +364,20 @@ func serializeStringV2(p *PermStorageDataBlock) ([]byte, error) {
 	}
 
 	strLenOffsetIdx := 0
-	strDataOffsetIdx := len(values) * 2
+	strDataOffsetIdx := len(values) * 2 // Start of string data after all length offsets
 
 	for i, str := range values {
 		strLen := len(str)
 		if strLen > maxStringLength || strLen > int(p.stringLengths[i]) {
 			return nil, fmt.Errorf("string at index %d of length %d exceeds max length of %d or booked size %d", i, strLen, maxStringLength, p.stringLengths[i])
 		}
+		// Write offset
 		system.ByteOrder.PutUint16(p.originalData[strLenOffsetIdx:], uint16(strLen))
+
+		// Write string
 		copy(p.originalData[strDataOffsetIdx:], []byte(str))
+
+		// Update indices
 		strLenOffsetIdx += 2
 		strDataOffsetIdx += strLen
 	}
@@ -394,6 +387,7 @@ func serializeStringV2(p *PermStorageDataBlock) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return encodeData(p, enc)
 }
 
@@ -445,7 +439,6 @@ func serializeFP32VectorAndLessV2(p *PermStorageDataBlock) ([]byte, error) {
 
 	idx := 0
 	putFloat, _ := system.GetToByteFP32AndLess(p.dataType)
-
 	for i, v := range values {
 		if len(v) != int(p.vectorLengths[i]) {
 			return nil, fmt.Errorf("mismatch in vector length at index %d", i)
@@ -477,7 +470,6 @@ func serializeInt32VectorAndLessV2(p *PermStorageDataBlock) ([]byte, error) {
 
 	idx := 0
 	putInt, _ := system.GetToByteInt32AndLess(p.dataType)
-
 	for i, v := range values {
 		if len(v) != int(p.vectorLengths[i]) {
 			return nil, fmt.Errorf("mismatch in vector length at index %d", i)
@@ -509,7 +501,6 @@ func serializeUint32VectorAndLessV2(p *PermStorageDataBlock) ([]byte, error) {
 
 	idx := 0
 	putUint, _ := system.GetToByteUint32AndLess(p.dataType)
-
 	for i, v := range values {
 		if len(v) != int(p.vectorLengths[i]) {
 			return nil, fmt.Errorf("mismatch in vector length at index %d", i)
@@ -540,7 +531,6 @@ func serializeFP64VectorV2(p *PermStorageDataBlock) ([]byte, error) {
 	}
 
 	idx := 0
-
 	for i, v := range values {
 		if len(v) != int(p.vectorLengths[i]) {
 			return nil, fmt.Errorf("mismatch in vector length at index %d", i)
@@ -570,7 +560,6 @@ func serializeInt64VectorV2(p *PermStorageDataBlock) ([]byte, error) {
 			len(values), len(p.vectorLengths))
 	}
 	idx := 0
-
 	for i, v := range values {
 		if len(v) != int(p.vectorLengths[i]) {
 			return nil, fmt.Errorf("mismatch in vector length at index %d", i)
@@ -601,7 +590,6 @@ func serializeUint64VectorV2(p *PermStorageDataBlock) ([]byte, error) {
 	}
 
 	idx := 0
-
 	for i, v := range values {
 		if len(v) != int(p.vectorLengths[i]) {
 			return nil, fmt.Errorf("mismatch in vector length at index %d", i)
@@ -648,7 +636,7 @@ func serializeStringVectorV2(p *PermStorageDataBlock) ([]byte, error) {
 		totalStrings += int(p.vectorLengths[i])
 	}
 	strLenOffsetIdx := 0
-	strDataOffsetIdx := totalStrings * 2
+	strDataOffsetIdx := totalStrings * 2 // Start of string data after all length prefixes
 
 	for i, vec := range values {
 		if len(vec) != int(p.vectorLengths[i]) {
@@ -661,12 +649,20 @@ func serializeStringVectorV2(p *PermStorageDataBlock) ([]byte, error) {
 				return nil, fmt.Errorf("string in vector %d of length %d exceeds max length of %d or booked size %d",
 					i, strLen, maxStringLength, p.stringLengths[i])
 			}
+
+			// Write string length
 			system.ByteOrder.PutUint16(p.originalData[strLenOffsetIdx:], uint16(strLen))
+
+			// Write string data
 			copy(p.originalData[strDataOffsetIdx:], []byte(str))
+
+			// Update indices
 			strLenOffsetIdx += 2
 			strDataOffsetIdx += strLen
 		}
 	}
+
+	// Trim the buffer to actual size
 	p.originalData = p.originalData[:strDataOffsetIdx]
 	return encodeData(p, enc)
 }
@@ -676,6 +672,7 @@ func serializeBoolVectorV2(p *PermStorageDataBlock) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Casting p.Data to expected Data type []uint8 (assuming each bool is represented by 1 bit)
 	var values [][]uint8
 	values, ok := p.Data.([][]uint8)
 	if !ok || values == nil || len(values) == 0 {
@@ -689,7 +686,7 @@ func serializeBoolVectorV2(p *PermStorageDataBlock) ([]byte, error) {
 
 	idx := 0
 	shift := 7
-
+	// Iterate over each v in the 2D slice
 	for i, v := range values {
 		if len(v) != int(p.vectorLengths[i]) {
 			return nil, fmt.Errorf("mismatch in vector length at index %d", i)
@@ -698,6 +695,7 @@ func serializeBoolVectorV2(p *PermStorageDataBlock) ([]byte, error) {
 			if vv > 1 {
 				return nil, fmt.Errorf("invalid bool value: %d; expected 0 or 1", vv)
 			}
+			// Set each bit in the current byte in p.originalData[idx]
 			p.originalData[idx] |= vv << shift
 			shift--
 			if shift < 0 {

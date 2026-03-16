@@ -17,6 +17,7 @@ type DeserializedPSDB struct {
 	Header         []byte
 	CompressedData []byte
 	OriginalData   []byte
+
 	// 16-bit field
 	FeatureSchemaVersion uint16
 
@@ -104,7 +105,6 @@ func DeserializePSDB(data []byte) (PSDBBlock, error) {
 	}
 }
 
-// DeserializePSDBWithoutDecompression deserializes without decompressing payload.
 func DeserializePSDBWithoutDecompression(data []byte) (PSDBBlock, error) {
 	if len(data) == 0 {
 		return &DeserializedPSDB{
@@ -220,7 +220,6 @@ func deserializePSDBForLayout1WithoutDecompression(data []byte) (*DeserializedPS
 	}, nil
 }
 
-// NegativeCacheDeserializePSDB returns a negative-cache PSDBBlock.
 func NegativeCacheDeserializePSDB() PSDBBlock {
 	return &DeserializedPSDB{
 		FeatureSchemaVersion: 0,
@@ -236,7 +235,6 @@ func NegativeCacheDeserializePSDB() PSDBBlock {
 	}
 }
 
-// NegativeCacheExpiredPSDB returns a negative-cache expired PSDBBlock.
 func NegativeCacheExpiredPSDB() PSDBBlock {
 	return &DeserializedPSDB{
 		NegativeCache: true,
@@ -265,6 +263,32 @@ func (d *DeserializedPSDB) GetStringScalarFeature(pos int, noOfFeatures int, def
 	return d.OriginalData[offset : offset+int(length)], nil
 }
 
+// GetStringVectorFeature retrieves a specific vector's string data at position 'pos'
+//
+// Data Layout Example for 3 vectors with lengths [2,3,3]:
+// Length Section: [v1-len1][v1-len2] [v2-len1][v2-len2][v2-len3] [v3-len1][v3-len2][v3-len3]
+// Data Section:   [v1-str1][v1-str2] [v2-str1][v2-str2][v2-str3] [v3-str1][v3-str2][v3-str3]
+//
+// Algorithm:
+// 1. Calculate offsets:
+//   - offset: Counts total number of strings to find start of Data Section
+//   - idx: Counts strings before target vector to find its length entries
+//   - sum: Accumulates string lengths before target vector to find its data
+//
+// 2. For each vector before target position:
+//   - Add its length to idx (to skip its length entries)
+//   - Add up actual string lengths (from length entries) to sum
+//
+// 3. For target vector:
+//   - Read each string length and corresponding data
+//   - Combine length and data into result
+//
+// Example for pos=1 (second vector):
+//
+//		offset = 2+3+3 = 8 (total strings) * 2 (bytes per length) = start of Data Section
+//		sum = len(v1-str1) + len(v1-str2) = offset to v2's string data
+//	 offset = 16 + sum (start of v2's string data)
+//	 idx = 2 (strings in v1) * 2 = position of v2's length entries
 func (d *DeserializedPSDB) GetStringVectorFeature(pos int, noOfFeatures int, vectorLengths []uint16, defaultValue []byte) ([]byte, error) {
 	if d.DataType != types.DataTypeStringVector {
 		return nil, fmt.Errorf("data type is not a string vector")
@@ -287,18 +311,18 @@ func (d *DeserializedPSDB) GetStringVectorFeature(pos int, noOfFeatures int, vec
 	offset += sum
 	idx *= 2
 	dim := vectorLengths[pos]
-	out := make([]byte, 2*dim)
+	data := make([]byte, 2*dim)
 	j := 0
 	for i := 0; i < int(dim); i++ {
 		length := system.ByteOrder.Uint16(d.OriginalData[idx : idx+2])
-		out[j] = d.OriginalData[idx]
-		out[j+1] = d.OriginalData[idx+1]
+		data[j] = d.OriginalData[idx]
+		data[j+1] = d.OriginalData[idx+1]
 		j += 2
 		idx += 2
-		out = append(out, d.OriginalData[offset:offset+int(length)]...)
+		data = append(data, d.OriginalData[offset:offset+int(length)]...)
 		offset += int(length)
 	}
-	return out, nil
+	return data, nil
 }
 
 func (dd *DeserializedPSDB) GetNumericScalarFeature(pos int, numFeatures int, defaultValue []byte) ([]byte, error) {
@@ -342,28 +366,36 @@ func (dd *DeserializedPSDB) GetBoolScalarFeature(pos int) ([]byte, error) {
 }
 
 func (dd *DeserializedPSDB) GetBoolVectorFeature(pos int, vectorLengths []uint16, defaultValue []byte) ([]byte, error) {
-	vectorLen := int(vectorLengths[pos])
-	data := dd.OriginalData
+	// Calculate the starting bit position by summing up previous vector lengths
 	startBit := 0
 	for i := 0; i < pos; i++ {
 		startBit += int(vectorLengths[i])
 	}
-	result := make([]byte, vectorLen)
+
+	vectorLen := int(vectorLengths[pos])
+	data := dd.OriginalData
+	result := make([]byte, vectorLen) // Allocate enough bytes to hold all bits
+
+	// Read bits from the source and pack them into the result
 	for i := 0; i < vectorLen; i++ {
 		sourceBitPos := startBit + i
 		sourceByteIndex := sourceBitPos / 8
 		sourceBitOffset := 7 - (sourceBitPos % 8)
 		sourceBitMask := byte(1 << sourceBitOffset)
+
 		if sourceByteIndex >= len(data) {
 			return nil, fmt.Errorf("position out of bounds")
 		}
+
+		// Extract the bit from source
 		bitValue := (data[sourceByteIndex] & sourceBitMask) >> sourceBitOffset
+
+		// Place the bit in the result
 		result[i] = bitValue
 	}
+
 	return result, nil
 }
-
-// --- Helper functions (unchanged, used by callers for type conversion) ---
 
 func HelperVectorFeatureToTypeInt32(vector []byte) ([]int32, error) {
 	unitSize := types.DataTypeInt32.Size()

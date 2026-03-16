@@ -357,7 +357,6 @@ func (d *DeserializedPSDBLayout2) GetBoolVectorFeature(pos int, vectorLengths []
 }
 
 // GetBoolScalarFeature — no bitmap handling for bool scalars, same as V1
-// Inherited from DeserializedPSDB via embedding.
 
 // --- V2 helper functions ---
 
