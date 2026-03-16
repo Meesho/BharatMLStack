@@ -9,6 +9,8 @@ This package provides functionality to:
 Main functions:
     - decode_mplog: Decode MPLog bytes to a Spark DataFrame
     - decode_mplog_dataframe: Decode MPLog features from a Spark DataFrame
+    - decode_single_config: Decode MPLog for a single config (caller filters by mp_config_id)
+    - decode_multi_config: Decode MPLog for all configs in a DataFrame
     - get_mplog_metadata: Extract metadata from MPLog bytes
 """
 
@@ -53,11 +55,12 @@ from .formats import (
     decode_proto_format,
     decode_proto_features,
 )
+from .api import decode_multi_config, decode_single_config
 from .io import clear_schema_cache, get_feature_schema, get_mplog_metadata, parse_mplog_protobuf
 from .types import FORMAT_TYPE_MAP, DecodedMPLog, FeatureInfo, Format
 from .utils import format_dataframe_floats, get_format_name, unpack_metadata_byte
 
-__version__ = "0.2.6"
+__version__ = "0.2.7"
 
 # Maximum supported schema version (4 bits = 0-15)
 _MAX_SCHEMA_VERSION = 15
@@ -65,6 +68,8 @@ _MAX_SCHEMA_VERSION = 15
 __all__ = [
     "decode_mplog",
     "decode_mplog_dataframe",
+    "decode_single_config",
+    "decode_multi_config",
     "get_mplog_metadata",
     "get_feature_schema",
     "clear_schema_cache",

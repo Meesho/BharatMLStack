@@ -163,7 +163,7 @@ def decode_single_config(
 
     Example (use case 1: single config, all features):
         >>> from pyspark.sql import SparkSession
-        >>> from inference_logging_client.api import decode_single_config
+        >>> from inference_logging_client import decode_single_config
         >>> spark = SparkSession.builder.appName("decode").getOrCreate()
         >>> df = spark.read.parquet("logs.parquet")
         >>> decoded = decode_single_config(df, spark, mp_config_id="my-model")
@@ -211,7 +211,7 @@ def decode_multi_config(
 
     Example (use case 2: multi config, all features):
         >>> from pyspark.sql import SparkSession
-        >>> from inference_logging_client.api import decode_multi_config
+        >>> from inference_logging_client import decode_multi_config
         >>> spark = SparkSession.builder.appName("decode").getOrCreate()
         >>> df = spark.read.parquet("logs.parquet")
         >>> decoded = decode_multi_config(df, spark)
