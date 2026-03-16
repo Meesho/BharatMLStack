@@ -278,7 +278,12 @@ func (d *DeserializedPSDBLayout2) GetNumericVectorFeature(pos int, vectorLengths
 		}
 		var start int
 		for j := 0; j < pos; j++ {
-			if (bitmap[j/8] & (1 << (j % 8))) != 0 {
+			byteIdx := j / 8
+			bitIdx := j % 8
+			if byteIdx >= len(bitmap) {
+				return nil, fmt.Errorf("bitmap index out of bounds")
+			}
+			if (bitmap[byteIdx] & (1 << bitIdx)) != 0 {
 				start += int(vectorLengths[j]) * size
 			}
 		}
@@ -314,7 +319,12 @@ func (d *DeserializedPSDBLayout2) GetBoolVectorFeature(pos int, vectorLengths []
 		}
 		var startByte int
 		for j := 0; j < pos; j++ {
-			if (bitmap[j/8] & (1 << (j % 8))) != 0 {
+			byteIdx := j / 8
+			bitIdx := j % 8
+			if byteIdx >= len(bitmap) {
+				return nil, fmt.Errorf("bitmap index out of bounds")
+			}
+			if (bitmap[byteIdx] & (1 << bitIdx)) != 0 {
 				startByte += (int(vectorLengths[j]) + 7) / 8
 			}
 		}
@@ -350,6 +360,9 @@ func countSetBitsBefore(bitmap []byte, pos int, numFeatures int) int {
 		}
 		byteIdx := i / 8
 		bitIdx := i % 8
+		if byteIdx >= len(bitmap) {
+			break // Stop counting if bitmap is exhausted
+		}
 		if (bitmap[byteIdx] & (1 << bitIdx)) != 0 {
 			count++
 		}
@@ -378,7 +391,12 @@ func skipStringsInDense(dense []byte, skipCount int) (offset int, length uint16,
 func skipStringVectorsInDense(dense []byte, vectorLengths []uint16, bitmap []byte, pos int) (int, error) {
 	offset := 0
 	for j := 0; j < pos; j++ {
-		if (bitmap[j/8] & (1 << (j % 8))) == 0 {
+		byteIdx := j / 8
+		bitIdx := j % 8
+		if byteIdx >= len(bitmap) {
+			return 0, fmt.Errorf("bitmap index out of bounds")
+		}
+		if (bitmap[byteIdx] & (1 << bitIdx)) == 0 {
 			continue
 		}
 		for k := 0; k < int(vectorLengths[j]); k++ {

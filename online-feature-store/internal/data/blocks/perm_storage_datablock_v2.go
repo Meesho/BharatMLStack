@@ -712,5 +712,11 @@ func serializeBoolVectorV2(p *PermStorageDataBlock) ([]byte, error) {
 		return nil, fmt.Errorf("issue with shift operation in bool v")
 	}
 	setupBoolDtypeLastIdx(p, x)
+	// Include the partial byte in the original data if there are unfilled bits
+	bytesUsed := idx
+	if shift != 7 {
+		bytesUsed++
+	}
+	p.originalData = p.originalData[:bytesUsed]
 	return encodeData(p, enc)
 }

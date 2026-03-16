@@ -772,7 +772,7 @@ func UnpackUint16InUint8(highLow uint16) (uint8, uint8) {
 
 // 	for label, meta := range featureMeta {
 // 		if !labelExists[label] {
-// 			fp32Vectors[meta.Sequence] = ByteOrder.FP16Vector(meta.DefaultValuesInBytes)
+// 			fp32Vectors[meta.Sequence] = ByteOrder.Float32Vector(meta.DefaultValuesInBytes)
 // 		}
 // 	}
 // 	return fp32Vectors, nil
