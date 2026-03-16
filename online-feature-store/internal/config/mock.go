@@ -220,3 +220,7 @@ func (m *MockConfigManager) UpdateCBConfigs() error {
 	args := m.Called()
 	return args.Error(0)
 }
+
+func (m *MockConfigManager) GetLayoutShadowComparisonConfig() LayoutShadowComparisonConfig {
+	return LayoutShadowComparisonConfig{}
+}

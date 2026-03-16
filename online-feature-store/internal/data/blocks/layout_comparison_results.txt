@@ -1,6 +1,6 @@
 ╔════════════════════════════════════════════════════════════════════════════════╗
 ║   Layout1 vs Layout2 Compression — Catalog Use Case (entityLabel=catalog)     ║
-║                    Generated: 2026-02-26 15:05:31                                 ║
+║                    Generated: 2026-03-16 00:26:43                                 ║
 ╚════════════════════════════════════════════════════════════════════════════════╝
 
 ┌────────────────────────────────────────────────────────────────────────────────┐
@@ -50,11 +50,11 @@ catalog/derived_4_fp32 3/4 defaults (75%)          |        4 |     75.0% |     
 catalog/rt_raw_ad_attributes_v1_fp32 0/1 defaul... |        1 |      0.0% |               4 |               5 |           +1 |    +25.00%
 catalog/rt_raw_ad_attributes_v1_fp32 1/1 defaul... |        1 |    100.0% |               4 |               1 |           -3 |    -75.00%
 catalog/derived_ads_fp32 6/12 defaults (50%)       |       12 |     50.0% |              48 |              26 |          -22 |    -45.83%
-catalog/derived_ads_fp32 9/12 defaults (75%)       |       12 |     75.0% |              36 |              14 |          -22 |    -61.11%
-catalog/organic__derived_fp32 60/121 defaults (... |      121 |     49.6% |             344 |             260 |          -84 |    -24.42%
-catalog/organic__derived_fp32 96/121 defaults (... |      121 |     79.3% |             171 |             116 |          -55 |    -32.16%
-catalog/derived_fp32 457/914 defaults (50%)        |      914 |     50.0% |            2189 |            1806 |         -383 |    -17.50%
-catalog/derived_fp32 731/914 defaults (80%)        |      914 |     80.0% |            1026 |             847 |         -179 |    -17.45%
+catalog/derived_ads_fp32 9/12 defaults (75%)       |       12 |     75.0% |              41 |              14 |          -27 |    -65.85%
+catalog/organic__derived_fp32 60/121 defaults (... |      121 |     49.6% |             335 |             260 |          -75 |    -22.39%
+catalog/organic__derived_fp32 96/121 defaults (... |      121 |     79.3% |             184 |             116 |          -68 |    -36.96%
+catalog/derived_fp32 457/914 defaults (50%)        |      914 |     50.0% |            2192 |            1799 |         -393 |    -17.93%
+catalog/derived_fp32 731/914 defaults (80%)        |      914 |     80.0% |            1038 |             847 |         -191 |    -18.40%
 catalog/derived_2_fp32 0/1 defaults (0%)           |        1 |      0.0% |               4 |               5 |           +1 |    +25.00%
 catalog/derived_2_fp32 1/1 defaults (100%)         |        1 |    100.0% |               4 |               1 |           -3 |    -75.00%
 catalog/rt_raw_ad_cpc_value_fp32 0/1 defaults (0%) |        1 |      0.0% |               4 |               5 |           +1 |    +25.00%
@@ -69,10 +69,10 @@ Test Name                                          | Features |   Defaults |    
 --------------------------------------------------------------------------------------------------------------------------------------------
 catalog/properties_string 0/1 defaults (0%)        |        1 |      0.0% |               7 |               8 |           +1 |    +14.29%
 catalog/properties_string 1/1 defaults (100%)      |        1 |    100.0% |               2 |               1 |           -1 |    -50.00%
-catalog/derived_string 9/19 defaults (47%)         |       19 |     47.4% |              68 |              71 |           +3 |     +4.41%
-catalog/derived_string 15/19 defaults (79%)        |       19 |     78.9% |              47 |              31 |          -16 |    -34.04%
+catalog/derived_string 9/19 defaults (47%)         |       19 |     47.4% |              67 |              67 |           +0 |     +0.00%
+catalog/derived_string 15/19 defaults (79%)        |       19 |     78.9% |              50 |              31 |          -19 |    -38.00%
 catalog/properties_2_string 1/2 defaults (50%)     |        2 |     50.0% |               9 |               8 |           -1 |    -11.11%
-catalog/rt_raw_is_live_on_ad_string 0/1 default... |        1 |      0.0% |               6 |               7 |           +1 |    +16.67%
+catalog/rt_raw_is_live_on_ad_string 0/1 default... |        1 |      0.0% |               7 |               8 |           +1 |    +14.29%
 catalog/rt_raw_is_live_on_ad_string 1/1 default... |        1 |    100.0% |               2 |               1 |           -1 |    -50.00%
 catalog/realtime_string 0/1 defaults (0%)          |        1 |      0.0% |               7 |               8 |           +1 |    +14.29%
 catalog/realtime_string 1/1 defaults (100%)        |        1 |    100.0% |               2 |               1 |           -1 |    -50.00%
@@ -83,7 +83,7 @@ Test Name                                          | Features |   Defaults |    
 catalog/realtime_int64_1 0/1 defaults (0%)         |        1 |      0.0% |               8 |               9 |           +1 |    +12.50%
 catalog/realtime_int64_1 1/1 defaults (100%)       |        1 |    100.0% |               8 |               1 |           -7 |    -87.50%
 catalog/realtime_int64 2/4 defaults (50%)          |        4 |     50.0% |              32 |              17 |          -15 |    -46.88%
-catalog/realtime_int64 3/4 defaults (75%)          |        4 |     75.0% |              29 |               9 |          -20 |    -68.97%
+catalog/realtime_int64 3/4 defaults (75%)          |        4 |     75.0% |              32 |               9 |          -23 |    -71.88%
 
 [DataTypeFP32Vector]
 Test Name                                          | Features |   Defaults |        Layout 1 |        Layout 2 |   Difference |  Percentage
@@ -96,14 +96,14 @@ Test Name                                          | Features |   Defaults |    
 --------------------------------------------------------------------------------------------------------------------------------------------
 catalog/rt_raw_ad_attributes_int32 2/4 defaults... |        4 |     50.0% |              16 |               9 |           -7 |    -43.75%
 catalog/rt_raw_ad_attributes_int32 3/4 defaults... |        4 |     75.0% |              16 |               5 |          -11 |    -68.75%
-catalog/derived_int32 41/83 defaults (49%)         |       83 |     49.4% |             273 |             179 |          -94 |    -34.43%
-catalog/derived_int32 66/83 defaults (80%)         |       83 |     79.5% |             136 |              79 |          -57 |    -41.91%
+catalog/derived_int32 41/83 defaults (49%)         |       83 |     49.4% |             277 |             179 |          -98 |    -35.38%
+catalog/derived_int32 66/83 defaults (80%)         |       83 |     79.5% |             140 |              79 |          -61 |    -43.57%
 
 [DataTypeUint64]
 Test Name                                          | Features |   Defaults |        Layout 1 |        Layout 2 |   Difference |  Percentage
 --------------------------------------------------------------------------------------------------------------------------------------------
-catalog/raw_uint64 3/6 defaults (50%)              |        6 |     50.0% |              48 |              25 |          -23 |    -47.92%
-catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |              39 |              17 |          -22 |    -56.41%
+catalog/raw_uint64 3/6 defaults (50%)              |        6 |     50.0% |              46 |              25 |          -21 |    -45.65%
+catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |              48 |              17 |          -31 |    -64.58%
 
 
 ┌────────────────────────────────────────────────────────────────────────────────┐
@@ -694,7 +694,7 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Layout1 (Baseline):
      Original Size:       48 bytes
-     Compressed Size:     36 bytes
+     Compressed Size:     41 bytes
 
    Layout2 (Optimized):
      Original Size:       14 bytes
@@ -702,8 +702,8 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Improvements:
      Original Size:      +34 bytes (70.83%)
-     Compressed Size:    +22 bytes (61.11%)
-     Total Size:      46.67% reduction
+     Compressed Size:    +27 bytes (65.85%)
+     Total Size:      52.00% reduction
      Result: ✅ Layout2 is BETTER
 
 29. catalog/organic__derived_fp32 60/121 defaults (50%)
@@ -715,7 +715,7 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Layout1 (Baseline):
      Original Size:      484 bytes
-     Compressed Size:    344 bytes
+     Compressed Size:    335 bytes
 
    Layout2 (Optimized):
      Original Size:      260 bytes
@@ -723,8 +723,8 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Improvements:
      Original Size:     +224 bytes (46.28%)
-     Compressed Size:    +84 bytes (24.42%)
-     Total Size:      23.51% reduction
+     Compressed Size:    +75 bytes (22.39%)
+     Total Size:      21.51% reduction
      Result: ✅ Layout2 is BETTER
 
 30. catalog/organic__derived_fp32 96/121 defaults (79%)
@@ -736,7 +736,7 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Layout1 (Baseline):
      Original Size:      484 bytes
-     Compressed Size:    171 bytes
+     Compressed Size:    184 bytes
 
    Layout2 (Optimized):
      Original Size:      116 bytes
@@ -744,8 +744,8 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Improvements:
      Original Size:     +368 bytes (76.03%)
-     Compressed Size:    +55 bytes (32.16%)
-     Total Size:      30.00% reduction
+     Compressed Size:    +68 bytes (36.96%)
+     Total Size:      34.72% reduction
      Result: ✅ Layout2 is BETTER
 
 31. catalog/derived_fp32 457/914 defaults (50%)
@@ -757,16 +757,16 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Layout1 (Baseline):
      Original Size:     3656 bytes
-     Compressed Size:   2189 bytes
+     Compressed Size:   2192 bytes
 
    Layout2 (Optimized):
      Original Size:     1943 bytes
-     Compressed Size:   1806 bytes
+     Compressed Size:   1799 bytes
 
    Improvements:
      Original Size:    +1713 bytes (46.85%)
-     Compressed Size:   +383 bytes (17.50%)
-     Total Size:      17.38% reduction
+     Compressed Size:   +393 bytes (17.93%)
+     Total Size:      17.81% reduction
      Result: ✅ Layout2 is BETTER
 
 32. catalog/derived_fp32 731/914 defaults (80%)
@@ -778,7 +778,7 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Layout1 (Baseline):
      Original Size:     3656 bytes
-     Compressed Size:   1026 bytes
+     Compressed Size:   1038 bytes
 
    Layout2 (Optimized):
      Original Size:      847 bytes
@@ -786,8 +786,8 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Improvements:
      Original Size:    +2809 bytes (76.83%)
-     Compressed Size:   +179 bytes (17.45%)
-     Total Size:      17.20% reduction
+     Compressed Size:   +191 bytes (18.40%)
+     Total Size:      18.15% reduction
      Result: ✅ Layout2 is BETTER
 
 33. catalog/derived_2_fp32 0/1 defaults (0%)
@@ -1010,18 +1010,18 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
      Compression:     1
 
    Layout1 (Baseline):
-     Original Size:       88 bytes
-     Compressed Size:     68 bytes
+     Original Size:       87 bytes
+     Compressed Size:     67 bytes
 
    Layout2 (Optimized):
-     Original Size:       73 bytes
-     Compressed Size:     71 bytes
+     Original Size:       72 bytes
+     Compressed Size:     67 bytes
 
    Improvements:
-     Original Size:      +15 bytes (17.05%)
-     Compressed Size:     -3 bytes (-4.41%)
-     Total Size:      -5.19% reduction
-     Result: ⚠️  Layout2 has overhead (expected for 0% defaults)
+     Original Size:      +15 bytes (17.24%)
+     Compressed Size:     +0 bytes (0.00%)
+     Total Size:      -1.32% reduction
+     Result: ✅ Layout2 is BETTER
 
 44. catalog/derived_string 15/19 defaults (79%)
    ──────────────────────────────────────────────────────────────────────────────
@@ -1032,7 +1032,7 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Layout1 (Baseline):
      Original Size:       58 bytes
-     Compressed Size:     47 bytes
+     Compressed Size:     50 bytes
 
    Layout2 (Optimized):
      Original Size:       31 bytes
@@ -1040,8 +1040,8 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Improvements:
      Original Size:      +27 bytes (46.55%)
-     Compressed Size:    +16 bytes (34.04%)
-     Total Size:      26.79% reduction
+     Compressed Size:    +19 bytes (38.00%)
+     Total Size:      30.51% reduction
      Result: ✅ Layout2 is BETTER
 
 45. catalog/properties_2_string 1/2 defaults (50%)
@@ -1073,17 +1073,17 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
      Compression:     1
 
    Layout1 (Baseline):
-     Original Size:        6 bytes
-     Compressed Size:      6 bytes
-
-   Layout2 (Optimized):
      Original Size:        7 bytes
      Compressed Size:      7 bytes
 
+   Layout2 (Optimized):
+     Original Size:        8 bytes
+     Compressed Size:      8 bytes
+
    Improvements:
-     Original Size:       -1 bytes (-16.67%)
-     Compressed Size:     -1 bytes (-16.67%)
-     Total Size:      -13.33% reduction
+     Original Size:       -1 bytes (-14.29%)
+     Compressed Size:     -1 bytes (-14.29%)
+     Total Size:      -12.50% reduction
      Result: ⚠️  Layout2 has overhead (expected for 0% defaults)
 
 47. catalog/rt_raw_is_live_on_ad_string 1/1 defaults (100%)
@@ -1223,7 +1223,7 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Layout1 (Baseline):
      Original Size:       32 bytes
-     Compressed Size:     29 bytes
+     Compressed Size:     32 bytes
 
    Layout2 (Optimized):
      Original Size:        9 bytes
@@ -1231,8 +1231,8 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Improvements:
      Original Size:      +23 bytes (71.88%)
-     Compressed Size:    +20 bytes (68.97%)
-     Total Size:      50.00% reduction
+     Compressed Size:    +23 bytes (71.88%)
+     Total Size:      53.66% reduction
      Result: ✅ Layout2 is BETTER
 
 
@@ -1332,7 +1332,7 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Layout1 (Baseline):
      Original Size:      332 bytes
-     Compressed Size:    273 bytes
+     Compressed Size:    277 bytes
 
    Layout2 (Optimized):
      Original Size:      179 bytes
@@ -1340,8 +1340,8 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Improvements:
      Original Size:     +153 bytes (46.08%)
-     Compressed Size:    +94 bytes (34.43%)
-     Total Size:      32.98% reduction
+     Compressed Size:    +98 bytes (35.38%)
+     Total Size:      33.92% reduction
      Result: ✅ Layout2 is BETTER
 
 59. catalog/derived_int32 66/83 defaults (80%)
@@ -1353,7 +1353,7 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Layout1 (Baseline):
      Original Size:      332 bytes
-     Compressed Size:    136 bytes
+     Compressed Size:    140 bytes
 
    Layout2 (Optimized):
      Original Size:       79 bytes
@@ -1361,8 +1361,8 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Improvements:
      Original Size:     +253 bytes (76.20%)
-     Compressed Size:    +57 bytes (41.91%)
-     Total Size:      38.62% reduction
+     Compressed Size:    +61 bytes (43.57%)
+     Total Size:      40.27% reduction
      Result: ✅ Layout2 is BETTER
 
 
@@ -1376,7 +1376,7 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Layout1 (Baseline):
      Original Size:       48 bytes
-     Compressed Size:     48 bytes
+     Compressed Size:     46 bytes
 
    Layout2 (Optimized):
      Original Size:       25 bytes
@@ -1384,8 +1384,8 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Improvements:
      Original Size:      +23 bytes (47.92%)
-     Compressed Size:    +23 bytes (47.92%)
-     Total Size:      38.60% reduction
+     Compressed Size:    +21 bytes (45.65%)
+     Total Size:      36.36% reduction
      Result: ✅ Layout2 is BETTER
 
 61. catalog/raw_uint64 4/6 defaults (67%)
@@ -1397,7 +1397,7 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Layout1 (Baseline):
      Original Size:       48 bytes
-     Compressed Size:     39 bytes
+     Compressed Size:     48 bytes
 
    Layout2 (Optimized):
      Original Size:       17 bytes
@@ -1405,8 +1405,8 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 
    Improvements:
      Original Size:      +31 bytes (64.58%)
-     Compressed Size:    +22 bytes (56.41%)
-     Total Size:      43.75% reduction
+     Compressed Size:    +31 bytes (64.58%)
+     Total Size:      52.63% reduction
      Result: ✅ Layout2 is BETTER
 
 
@@ -1414,12 +1414,12 @@ catalog/raw_uint64 4/6 defaults (67%)              |        6 |     66.7% |     
 │ Aggregate Statistics                                                           │
 └────────────────────────────────────────────────────────────────────────────────┘
 
-Tests Passed: 42/61 scenarios
-Layout2 Better: 42/61 scenarios (68.9%)
+Tests Passed: 43/61 scenarios
+Layout2 Better: 43/61 scenarios (70.5%)
 
 Average Improvements (excluding 0% defaults):
   Original Size:    61.41% reduction
-  Compressed Size:  55.39% reduction
+  Compressed Size:  56.06% reduction
 
 Maximum Improvements:
   Original Size:    93.75% reduction
@@ -1427,7 +1427,7 @@ Maximum Improvements:
 
 Minimum Improvements (with defaults present):
   Original Size:    11.11% reduction
-  Compressed Size:  -4.41% reduction
+  Compressed Size:  0.00% reduction
 
 
 ┌────────────────────────────────────────────────────────────────────────────────┐
@@ -1437,8 +1437,8 @@ Minimum Improvements (with defaults present):
 ✅ Layout2 should be used as the default layout version.
 
 Rationale:
-  • Consistent improvements in 42 out of 61 scenarios (68.9%)
-  • Average compressed size reduction: 55.39%
+  • Consistent improvements in 43 out of 61 scenarios (70.5%)
+  • Average compressed size reduction: 56.06%
   • Maximum original size reduction: 93.75%
   • Minimal overhead (3.5%) only in edge case with 0% defaults
   • Production ML feature vectors typically have 20-95% sparsity

@@ -295,18 +295,18 @@ func TestLayout1VsLayout2Compression(t *testing.T) {
 				// Verify both can be deserialized successfully
 				ddb1, err := DeserializePSDB(layout1Results.serialized)
 				require.NoError(t, err, "Layout1 deserialization should succeed")
-				assert.Equal(t, tc.dataType, ddb1.DataType, "Layout1 should preserve data type")
-				assert.NotNil(t, ddb1.OriginalData, "Layout1 should have original data")
+				assert.Equal(t, tc.dataType, ddb1.GetDataType(), "Layout1 should preserve data type")
+				assert.NotNil(t, ddb1.GetOriginalData(), "Layout1 should have original data")
 
 				ddb2, err := DeserializePSDB(layout2Results.serialized)
 				require.NoError(t, err, "Layout2 deserialization should succeed")
-				assert.Equal(t, uint8(2), ddb2.LayoutVersion, "Layout2 should have correct layout version")
-				assert.Equal(t, tc.dataType, ddb2.DataType, "Layout2 should preserve data type")
-				assert.NotNil(t, ddb2.OriginalData, "Layout2 should have original data")
+				assert.Equal(t, uint8(2), ddb2.GetLayoutVersion(), "Layout2 should have correct layout version")
+				assert.Equal(t, tc.dataType, ddb2.GetDataType(), "Layout2 should preserve data type")
+				assert.NotNil(t, ddb2.GetOriginalData(), "Layout2 should have original data")
 
 				// If Layout2 has bitmap, verify bitmap metadata
 				if tc.defaultRatio > 0 {
-					assert.NotZero(t, ddb2.BitmapMeta&bitmapPresentMask, "Layout2 should have bitmap present flag set")
+					assert.NotZero(t, ddb2.(*DeserializedPSDBLayout2).BitmapMeta&bitmapPresentMask, "Layout2 should have bitmap present flag set")
 				}
 			})
 		})
@@ -598,9 +598,9 @@ func serializeWithLayout(t *testing.T, layoutVersion uint8, numFeatures int, dat
 
 	// Initialize buffer
 	if psdb.buf == nil {
-		psdb.buf = make([]byte, PSDBLayout1LengthBytes)
+		psdb.buf = make([]byte, PSDBLayout1HeaderBytes)
 	} else {
-		psdb.buf = psdb.buf[:PSDBLayout1LengthBytes]
+		psdb.buf = psdb.buf[:PSDBLayout1HeaderBytes]
 	}
 
 	psdb.layoutVersion = layoutVersion
@@ -653,9 +653,9 @@ func serializeWithLayout(t *testing.T, layoutVersion uint8, numFeatures int, dat
 	serialized, err := psdb.Serialize()
 	require.NoError(t, err, "Serialization should succeed for layout %d", layoutVersion)
 
-	headerSize := PSDBLayout1LengthBytes
+	headerSize := PSDBLayout1HeaderBytes
 	if layoutVersion == 2 {
-		headerSize = PSDBLayout1LengthBytes + PSDBLayout2ExtraBytes
+		headerSize = PSDBLayout2HeaderBytes
 	}
 
 	return serializationResults{
@@ -930,9 +930,9 @@ func serializeWithLayoutByType(t *testing.T, layoutVersion uint8, numFeatures in
 	defer GetPSDBPool().Put(psdb)
 
 	if psdb.buf == nil {
-		psdb.buf = make([]byte, PSDBLayout1LengthBytes)
+		psdb.buf = make([]byte, PSDBLayout1HeaderBytes)
 	} else {
-		psdb.buf = psdb.buf[:PSDBLayout1LengthBytes]
+		psdb.buf = psdb.buf[:PSDBLayout1HeaderBytes]
 	}
 	psdb.layoutVersion = layoutVersion
 	psdb.featureSchemaVersion = 1
@@ -1041,9 +1041,9 @@ func serializeWithLayoutByType(t *testing.T, layoutVersion uint8, numFeatures in
 	serialized, err := psdb.Serialize()
 	require.NoError(t, err, "Serialization should succeed for layout %d type %v", layoutVersion, dataType)
 	serializedCopy := append([]byte(nil), serialized...)
-	headerSize := PSDBLayout1LengthBytes
+	headerSize := PSDBLayout1HeaderBytes
 	if layoutVersion == 2 {
-		headerSize = PSDBLayout1LengthBytes + PSDBLayout2ExtraBytes
+		headerSize = PSDBLayout2HeaderBytes
 	}
 	origSize := psdb.originalDataLen
 	return serializationResults{

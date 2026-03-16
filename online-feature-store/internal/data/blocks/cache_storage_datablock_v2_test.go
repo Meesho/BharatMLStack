@@ -60,7 +60,7 @@ func TestSerializeForInMemoryInt32(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeInt32, ddb.DataType)
+				assert.Equal(t, types.DataTypeInt32, ddb.GetDataType())
 
 				// Verify all values
 				for i, expected := range []int32{1, 2, 3} {
@@ -116,7 +116,7 @@ func TestSerializeForInMemoryInt32(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeInt32, ddb.DataType)
+				assert.Equal(t, types.DataTypeInt32, ddb.GetDataType())
 
 				// Test random positions
 				testPositions := []int{0, 42, 1000, 5000, 9999}
@@ -182,7 +182,7 @@ func TestSerializeForInMemoryInt32(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeInt32Vector, ddb.DataType)
+				assert.Equal(t, types.DataTypeInt32Vector, ddb.GetDataType())
 
 				vectorLengths := make([]uint16, 1000)
 				for i := range vectorLengths {
@@ -272,7 +272,7 @@ func TestSerializeForInMemoryInt8(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeInt8, ddb.DataType)
+				assert.Equal(t, types.DataTypeInt8, ddb.GetDataType())
 
 				// Verify all values
 				for i, expected := range []int8{1, 2, 3} {
@@ -328,7 +328,7 @@ func TestSerializeForInMemoryInt8(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeInt8, ddb.DataType)
+				assert.Equal(t, types.DataTypeInt8, ddb.GetDataType())
 
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
@@ -394,7 +394,7 @@ func TestSerializeForInMemoryInt8(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeInt8Vector, ddb.DataType)
+				assert.Equal(t, types.DataTypeInt8Vector, ddb.GetDataType())
 
 				vectorLengths := make([]uint16, 1000)
 				for i := range vectorLengths {
@@ -485,7 +485,7 @@ func TestSerializeForInMemoryInt16(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeInt16, ddb.DataType)
+				assert.Equal(t, types.DataTypeInt16, ddb.GetDataType())
 
 				// Verify all values
 				for i, expected := range []int16{1000, 2000, 3000} {
@@ -541,7 +541,7 @@ func TestSerializeForInMemoryInt16(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeInt16, ddb.DataType)
+				assert.Equal(t, types.DataTypeInt16, ddb.GetDataType())
 
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
@@ -607,7 +607,7 @@ func TestSerializeForInMemoryInt16(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeInt16Vector, ddb.DataType)
+				assert.Equal(t, types.DataTypeInt16Vector, ddb.GetDataType())
 
 				vectorLengths := make([]uint16, 1000)
 				for i := range vectorLengths {
@@ -698,7 +698,7 @@ func TestSerializeForInMemoryInt64(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeInt64, ddb.DataType)
+				assert.Equal(t, types.DataTypeInt64, ddb.GetDataType())
 
 				// Verify all values
 				for i, expected := range []int64{1000000000000, 2000000000000, 3000000000000} {
@@ -754,7 +754,7 @@ func TestSerializeForInMemoryInt64(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeInt64, ddb.DataType)
+				assert.Equal(t, types.DataTypeInt64, ddb.GetDataType())
 
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
@@ -820,7 +820,7 @@ func TestSerializeForInMemoryInt64(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeInt64Vector, ddb.DataType)
+				assert.Equal(t, types.DataTypeInt64Vector, ddb.GetDataType())
 
 				vectorLengths := make([]uint16, 1000)
 				for i := range vectorLengths {
@@ -910,7 +910,7 @@ func TestSerializeForInMemoryFP8(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeFP8E4M3, ddb.DataType)
+				assert.Equal(t, types.DataTypeFP8E4M3, ddb.GetDataType())
 
 				// Verify all values
 				for i, expected := range []float32{1.0, 2.0, 4.0} {
@@ -970,7 +970,7 @@ func TestSerializeForInMemoryFP8(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeFP8E4M3, ddb.DataType)
+				assert.Equal(t, types.DataTypeFP8E4M3, ddb.GetDataType())
 
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
@@ -1044,7 +1044,7 @@ func TestSerializeForInMemoryFP8(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeFP8E4M3Vector, ddb.DataType)
+				assert.Equal(t, types.DataTypeFP8E4M3Vector, ddb.GetDataType())
 
 				vectorLengths := make([]uint16, 1000)
 				for i := range vectorLengths {
@@ -1139,7 +1139,7 @@ func TestSerializeForInMemoryFP32(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeFP32, ddb.DataType)
+				assert.Equal(t, types.DataTypeFP32, ddb.GetDataType())
 
 				// Verify all values
 				for i, expected := range []float32{1.234, 2.345, 3.456} {
@@ -1195,7 +1195,7 @@ func TestSerializeForInMemoryFP32(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeFP32, ddb.DataType)
+				assert.Equal(t, types.DataTypeFP32, ddb.GetDataType())
 
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
@@ -1261,7 +1261,7 @@ func TestSerializeForInMemoryFP32(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeFP32Vector, ddb.DataType)
+				assert.Equal(t, types.DataTypeFP32Vector, ddb.GetDataType())
 
 				vectorLengths := make([]uint16, 1000)
 				for i := range vectorLengths {
@@ -1352,7 +1352,7 @@ func TestSerializeForInMemoryFP64(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeFP64, ddb.DataType)
+				assert.Equal(t, types.DataTypeFP64, ddb.GetDataType())
 
 				// Verify all values
 				for i, expected := range []float64{1.23456789, 2.34567890, 3.45678901} {
@@ -1408,7 +1408,7 @@ func TestSerializeForInMemoryFP64(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeFP64, ddb.DataType)
+				assert.Equal(t, types.DataTypeFP64, ddb.GetDataType())
 
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
@@ -1474,7 +1474,7 @@ func TestSerializeForInMemoryFP64(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeFP64Vector, ddb.DataType)
+				assert.Equal(t, types.DataTypeFP64Vector, ddb.GetDataType())
 
 				vectorLengths := make([]uint16, 500)
 				for i := range vectorLengths {
@@ -1565,7 +1565,7 @@ func TestSerializeForInMemoryString(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeString, ddb.DataType)
+				assert.Equal(t, types.DataTypeString, ddb.GetDataType())
 
 				// Verify all values
 				for i, expected := range []string{"hello", "world", "test"} {
@@ -1623,7 +1623,7 @@ func TestSerializeForInMemoryString(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeString, ddb.DataType)
+				assert.Equal(t, types.DataTypeString, ddb.GetDataType())
 
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
@@ -1690,7 +1690,7 @@ func TestSerializeForInMemoryString(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeStringVector, ddb.DataType)
+				assert.Equal(t, types.DataTypeStringVector, ddb.GetDataType())
 
 				vectorLengths := make([]uint16, 400)
 				for i := range vectorLengths {
@@ -1779,7 +1779,7 @@ func TestSerializeForInMemoryBool(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeBool, ddb.DataType)
+				assert.Equal(t, types.DataTypeBool, ddb.GetDataType())
 
 				// Verify all values
 				for i, expected := range []bool{true, false, true} {
@@ -1835,7 +1835,7 @@ func TestSerializeForInMemoryBool(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeBool, ddb.DataType)
+				assert.Equal(t, types.DataTypeBool, ddb.GetDataType())
 
 				// Test random positions
 				testPositions := []int{0, 42, 100, 500, 999}
@@ -1902,7 +1902,7 @@ func TestSerializeForInMemoryBool(t *testing.T) {
 
 				ddb := ddbMap[1]
 				require.NotNil(t, ddb)
-				assert.Equal(t, types.DataTypeBoolVector, ddb.DataType)
+				assert.Equal(t, types.DataTypeBoolVector, ddb.GetDataType())
 
 				vectorLengths := make([]uint16, 1000)
 				for i := range vectorLengths {

@@ -546,3 +546,8 @@ func (e *Etcd) UpdateCBConfigs() error {
 	}
 	return nil
 }
+
+func (e *Etcd) GetLayoutShadowComparisonConfig() LayoutShadowComparisonConfig {
+	instance := e.GetEtcdInstance()
+	return instance.LayoutShadowComparison
+}

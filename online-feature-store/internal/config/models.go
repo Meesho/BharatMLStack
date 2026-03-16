@@ -8,11 +8,17 @@ import (
 type _version int
 
 type FeatureRegistry struct {
-	Entities             map[string]Entity                `json:"entities"`
-	Storage              Storage                          `json:"storage"`
-	Security             Security                         `json:"security"`
-	P2PEnabledPercentage int                              `json:"p2p-enabled-percentage"`
-	CircuitBreaker       map[string]circuitbreaker.Config `json:"circuitbreaker"`
+	Entities               map[string]Entity                `json:"entities"`
+	Storage                Storage                          `json:"storage"`
+	Security               Security                         `json:"security"`
+	P2PEnabledPercentage   int                              `json:"p2p-enabled-percentage"`
+	CircuitBreaker         map[string]circuitbreaker.Config `json:"circuitbreaker"`
+	LayoutShadowComparison LayoutShadowComparisonConfig     `json:"layout-shadow-comparison"`
+}
+
+type LayoutShadowComparisonConfig struct {
+	Enabled    bool    `json:"enabled"`
+	SampleRate float64 `json:"sample-rate"`
 }
 
 type Security struct {

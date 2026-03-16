@@ -52,7 +52,7 @@ func TestGetPSDBPool(t *testing.T) {
 	assert.Zero(t, psdb1.featureSchemaVersion, "Version should be cleared")
 	assert.Zero(t, psdb1.expiryAt, "TTL should be cleared")
 	assert.Equal(t, compression.TypeNone, psdb1.compressionType, "Compression type should be cleared")
-	assert.Equal(t, PSDBLayout1LengthBytes, len(psdb1.buf), "Buffer should be reset to prefix length")
+	assert.Equal(t, PSDBLayout1HeaderBytes, len(psdb1.buf), "Buffer should be reset to prefix length")
 	assert.Nil(t, psdb1.Data, "Data should be nil")
 
 	// Put second PSDB back

@@ -40,7 +40,7 @@ func (r *RedisStore) PersistV2(storeId string, entityLabel string, pkMap map[str
 	return fmt.Errorf("%w: PersistV2 for Redis store", ErrNotImplemented)
 }
 
-func (r *RedisStore) RetrieveV2(entityLabel string, pkMap map[string]string, fgIds []int) (map[int]*blocks.DeserializedPSDB, error) {
+func (r *RedisStore) RetrieveV2(entityLabel string, pkMap map[string]string, fgIds []int) (map[int]blocks.PSDBBlock, error) {
 	return nil, fmt.Errorf("%w: RetrieveV2 for Redis store", ErrNotImplemented)
 }
 
@@ -188,12 +188,12 @@ func (r *RedisStore) createCSDBFromRow(row models.Row) (*blocks.CacheStorageData
 			return nil, 0, fmt.Errorf("failed to deserialize PSDB for fgId %d: %w", fgId, err)
 		}
 
-		if !ddb.Expired && ddb.ExpiryAt > currentTime {
+		if !ddb.IsExpired() && ddb.GetExpiryAt() > currentTime {
 			err = csdb.AddFGIdToDDB(fgId, ddb)
 			if err != nil {
 				return nil, 0, fmt.Errorf("failed to add FGId to CSDB for fgId %d: %w", fgId, err)
 			}
-			maxTtlAcrossFgs = max(maxTtlAcrossFgs, ddb.ExpiryAt-currentTime)
+			maxTtlAcrossFgs = max(maxTtlAcrossFgs, ddb.GetExpiryAt()-currentTime)
 		}
 	}
 
@@ -201,16 +201,16 @@ func (r *RedisStore) createCSDBFromRow(row models.Row) (*blocks.CacheStorageData
 }
 
 func (r *RedisStore) mergeRowIntoCSDB(existingCSDB *blocks.CacheStorageDataBlock, row models.Row) (*blocks.CacheStorageDataBlock, uint64, error) {
-	var existingFGIdtoCSDBMap map[int]*blocks.DeserializedPSDB
+	var existingFGIdtoCSDBMap map[int]blocks.PSDBBlock
 	if len(existingCSDB.GetSerializedData()) > 0 {
 		var err error
 		existingFGIdtoCSDBMap, err = existingCSDB.GetDeserializedPSDBForAllFGIds()
 		if err != nil {
 			log.Warn().Err(err).Msg("Failed to deserialize existing FGs, proceeding with new data only")
-			existingFGIdtoCSDBMap = make(map[int]*blocks.DeserializedPSDB)
+			existingFGIdtoCSDBMap = make(map[int]blocks.PSDBBlock)
 		}
 	} else {
-		existingFGIdtoCSDBMap = make(map[int]*blocks.DeserializedPSDB)
+		existingFGIdtoCSDBMap = make(map[int]blocks.PSDBBlock)
 	}
 
 	mergedCSDB := blocks.NewCacheStorageDataBlock(1)
@@ -219,12 +219,12 @@ func (r *RedisStore) mergeRowIntoCSDB(existingCSDB *blocks.CacheStorageDataBlock
 	currentTime := uint64(time.Now().Unix())
 
 	for fgId, ddb := range existingFGIdtoCSDBMap {
-		if !ddb.Expired && ddb.ExpiryAt > currentTime {
-			err := mergedCSDB.AddFGIdToDDB(fgId, ddb.Copy())
+		if !ddb.IsExpired() && ddb.GetExpiryAt() > currentTime {
+			err := mergedCSDB.AddFGIdToDDB(fgId, ddb.CopyBlock())
 			if err != nil {
 				return nil, 0, fmt.Errorf("failed to add existing fg id %d to ddb: %w", fgId, err)
 			}
-			maxTtlAcrossFgs = max(maxTtlAcrossFgs, ddb.ExpiryAt-currentTime)
+			maxTtlAcrossFgs = max(maxTtlAcrossFgs, ddb.GetExpiryAt()-currentTime)
 		}
 	}
 
@@ -239,22 +239,22 @@ func (r *RedisStore) mergeRowIntoCSDB(existingCSDB *blocks.CacheStorageDataBlock
 			return nil, 0, fmt.Errorf("failed to deserialize PSDB for fgId %d: %w", fgId, err)
 		}
 
-		if !ddb.Expired && ddb.ExpiryAt > currentTime {
+		if !ddb.IsExpired() && ddb.GetExpiryAt() > currentTime {
 			err = mergedCSDB.AddFGIdToDDB(fgId, ddb)
 			if err != nil {
 				return nil, 0, fmt.Errorf("failed to add FGId to merged CSDB for fgId %d: %w", fgId, err)
 			}
-			maxTtlAcrossFgs = max(maxTtlAcrossFgs, ddb.ExpiryAt-currentTime)
+			maxTtlAcrossFgs = max(maxTtlAcrossFgs, ddb.GetExpiryAt()-currentTime)
 		}
 	}
 
 	return mergedCSDB, maxTtlAcrossFgs, nil
 }
 
-func (r *RedisStore) BatchRetrieveV2(entityLabel string, pkMaps []map[string]string, fgIds []int) ([]map[int]*blocks.DeserializedPSDB, error) {
+func (r *RedisStore) BatchRetrieveV2(entityLabel string, pkMaps []map[string]string, fgIds []int) ([]map[int]blocks.PSDBBlock, error) {
 	t1 := time.Now()
 	metric.Count("db_retrieve_count", int64(len(pkMaps)), []string{"entity_label", entityLabel, "db_type", "redis"})
-	results := make([]map[int]*blocks.DeserializedPSDB, len(pkMaps))
+	results := make([]map[int]blocks.PSDBBlock, len(pkMaps))
 
 	colPKMap, pkCols, err := r.configManager.GetPKMapAndPKColumnsForEntity(entityLabel)
 	if err != nil {
@@ -275,11 +275,9 @@ func (r *RedisStore) BatchRetrieveV2(entityLabel string, pkMaps []map[string]str
 	for i, value := range values {
 		if value == nil {
 			// No data found for this key, create negative cache entries for all fgIds
-			results[i] = make(map[int]*blocks.DeserializedPSDB)
+			results[i] = make(map[int]blocks.PSDBBlock)
 			for _, fgId := range fgIds {
-				results[i][fgId] = &blocks.DeserializedPSDB{
-					NegativeCache: true,
-				}
+				results[i][fgId] = blocks.NegativeCacheDeserializePSDB()
 			}
 			continue
 		}

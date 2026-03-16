@@ -21,8 +21,8 @@ import (
 // [72] bits [9]  - Bitmap Present (bit 0 of byte 9)
 
 const (
-	PSDBLayout1LengthBytes = 9
-	PSDBLayout2ExtraBytes  = 1
+	PSDBLayout1HeaderBytes = 9
+	PSDBLayout2HeaderBytes = 10
 	maxStringLength        = 65535
 	layoutVersionIdx       = 7
 	bitmapPresentBit       = 0 // bit 0 of 10th byte (72nd bit)
@@ -57,6 +57,10 @@ type PermStorageDataBlock struct {
 }
 
 func (p *PermStorageDataBlock) Clear() {
+	headerLen := PSDBLayout1HeaderBytes
+	if p.layoutVersion == 2 {
+		headerLen = PSDBLayout2HeaderBytes
+	}
 	p.layoutVersion = 0
 	p.featureSchemaVersion = 0
 	p.expiryAt = 0
@@ -66,10 +70,6 @@ func (p *PermStorageDataBlock) Clear() {
 	p.boolDtypeLastIdx = 0
 	p.originalDataLen = 0
 	p.compressedDataLen = 0
-	headerLen := PSDBLayout1LengthBytes
-	if p.layoutVersion == 2 {
-		headerLen = PSDBLayout1LengthBytes + PSDBLayout2ExtraBytes
-	}
 	if len(p.buf) > headerLen {
 		p.buf = p.buf[:headerLen]
 	}
@@ -104,7 +104,7 @@ func (p *PermStorageDataBlock) Serialize() ([]byte, error) {
 	case 1:
 		return p.serializeLayout1()
 	case 2:
-		return p.serializeLayout1()
+		return p.serializeLayout2()
 	default:
 		return nil, fmt.Errorf("unsupported layout version: %d", p.layoutVersion)
 	}
@@ -157,21 +157,14 @@ func setupHeadersV2(p *PermStorageDataBlock) error {
 		return errors.New("perm storage data block v2 is nil")
 	}
 
-	if len(p.buf) < PSDBLayout1LengthBytes {
-		return fmt.Errorf("buffer too small: required=%d, actual=%d", PSDBLayout1LengthBytes, len(p.buf))
+	if len(p.buf) < PSDBLayout1HeaderBytes {
+		return fmt.Errorf("buffer too small: required=%d, actual=%d", PSDBLayout1HeaderBytes, len(p.buf))
 	}
 
 	setupFeatureSchemaVersion(p)
 	setupExpiryAt(p)
 	setupLayoutVersion(p)
 	setupDataType(p)
-	if p.layoutVersion == 2 {
-		if len(p.bitmap) > 0 {
-			p.buf = append(p.buf, bitmapPresentMask) // 10th byte: bit 0 (72nd bit) = bitmap present
-		} else {
-			p.buf = append(p.buf, 0)
-		}
-	}
 	return nil
 }
 
@@ -250,35 +243,9 @@ func serializeFP32AndLessV2(p *PermStorageDataBlock) ([]byte, error) {
 	idx := 0
 	putFloat, _ := system.GetToByteFP32AndLess(p.dataType)
 
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-
-		for i, v := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			putFloat(p.originalData[idx:idx+unitSize], v)
-			idx += unitSize
-		}
-
-		p.originalData = p.originalData[:idx]
-	} else {
-		for _, v := range values {
-			putFloat(p.originalData[idx:idx+unitSize], v)
-			idx += unitSize
-		}
-	}
-
-	// ─────────────────────────────
-	// Step 2: layout-2 payload handling
-	// ─────────────────────────────
-	if p.layoutVersion == 2 {
-		// prepend bitmap to payload if present (10th byte already appended in setupHeadersV2)
-		if len(p.bitmap) > 0 {
-			tmp := make([]byte, 0, len(p.bitmap)+len(p.originalData))
-			tmp = append(tmp, p.bitmap...)
-			tmp = append(tmp, p.originalData...)
-			p.originalData = tmp
-		}
+	for _, v := range values {
+		putFloat(p.originalData[idx:idx+unitSize], v)
+		idx += unitSize
 	}
 
 	return encodeData(p, enc)
@@ -298,30 +265,11 @@ func serializeInt32AndLessV2(p *PermStorageDataBlock) ([]byte, error) {
 	idx := 0
 	putInt, _ := system.GetToByteInt32AndLess(p.dataType)
 
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-		for i, v := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			putInt(p.originalData[idx:idx+unitSize], v)
-			idx += unitSize
-		}
-		p.originalData = p.originalData[:idx]
-	} else {
-		for _, v := range values {
-			putInt(p.originalData[idx:idx+unitSize], v)
-			idx += unitSize
-		}
+	for _, v := range values {
+		putInt(p.originalData[idx:idx+unitSize], v)
+		idx += unitSize
 	}
 
-	if p.layoutVersion == 2 {
-		if len(p.bitmap) > 0 {
-			tmp := make([]byte, 0, len(p.bitmap)+len(p.originalData))
-			tmp = append(tmp, p.bitmap...)
-			tmp = append(tmp, p.originalData...)
-			p.originalData = tmp
-		}
-	}
 	return encodeData(p, enc)
 }
 
@@ -339,30 +287,11 @@ func serializeUint32AndLessV2(p *PermStorageDataBlock) ([]byte, error) {
 	idx := 0
 	putUint, _ := system.GetToByteUint32AndLess(p.dataType)
 
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-		for i, v := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			putUint(p.originalData[idx:idx+unitSize], v)
-			idx += unitSize
-		}
-		p.originalData = p.originalData[:idx]
-	} else {
-		for _, v := range values {
-			putUint(p.originalData[idx:idx+unitSize], v)
-			idx += unitSize
-		}
+	for _, v := range values {
+		putUint(p.originalData[idx:idx+unitSize], v)
+		idx += unitSize
 	}
 
-	if p.layoutVersion == 2 {
-		if len(p.bitmap) > 0 {
-			tmp := make([]byte, 0, len(p.bitmap)+len(p.originalData))
-			tmp = append(tmp, p.bitmap...)
-			tmp = append(tmp, p.originalData...)
-			p.originalData = tmp
-		}
-	}
 	return encodeData(p, enc)
 }
 
@@ -379,30 +308,11 @@ func serializeFP64V2(p *PermStorageDataBlock) ([]byte, error) {
 	}
 	idx := 0
 
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-		for i, v := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			system.ByteOrder.PutFloat64(p.originalData[idx:idx+unitSize], v)
-			idx += unitSize
-		}
-		p.originalData = p.originalData[:idx]
-	} else {
-		for _, v := range values {
-			system.ByteOrder.PutFloat64(p.originalData[idx:idx+unitSize], v)
-			idx += unitSize
-		}
+	for _, v := range values {
+		system.ByteOrder.PutFloat64(p.originalData[idx:idx+unitSize], v)
+		idx += unitSize
 	}
 
-	if p.layoutVersion == 2 {
-		if len(p.bitmap) > 0 {
-			tmp := make([]byte, 0, len(p.bitmap)+len(p.originalData))
-			tmp = append(tmp, p.bitmap...)
-			tmp = append(tmp, p.originalData...)
-			p.originalData = tmp
-		}
-	}
 	return encodeData(p, enc)
 }
 
@@ -419,30 +329,11 @@ func serializeInt64V2(p *PermStorageDataBlock) ([]byte, error) {
 	}
 	idx := 0
 
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-		for i, v := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			system.ByteOrder.PutInt64(p.originalData[idx:idx+unitSize], v)
-			idx += unitSize
-		}
-		p.originalData = p.originalData[:idx]
-	} else {
-		for _, v := range values {
-			system.ByteOrder.PutInt64(p.originalData[idx:idx+unitSize], v)
-			idx += unitSize
-		}
+	for _, v := range values {
+		system.ByteOrder.PutInt64(p.originalData[idx:idx+unitSize], v)
+		idx += unitSize
 	}
 
-	if p.layoutVersion == 2 {
-		if len(p.bitmap) > 0 {
-			tmp := make([]byte, 0, len(p.bitmap)+len(p.originalData))
-			tmp = append(tmp, p.bitmap...)
-			tmp = append(tmp, p.originalData...)
-			p.originalData = tmp
-		}
-	}
 	return encodeData(p, enc)
 }
 
@@ -459,30 +350,11 @@ func serializeUint64V2(p *PermStorageDataBlock) ([]byte, error) {
 	}
 	idx := 0
 
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-		for i, v := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			system.ByteOrder.PutUint64(p.originalData[idx:idx+unitSize], v)
-			idx += unitSize
-		}
-		p.originalData = p.originalData[:idx]
-	} else {
-		for _, v := range values {
-			system.ByteOrder.PutUint64(p.originalData[idx:idx+unitSize], v)
-			idx += unitSize
-		}
+	for _, v := range values {
+		system.ByteOrder.PutUint64(p.originalData[idx:idx+unitSize], v)
+		idx += unitSize
 	}
 
-	if p.layoutVersion == 2 {
-		if len(p.bitmap) > 0 {
-			tmp := make([]byte, 0, len(p.bitmap)+len(p.originalData))
-			tmp = append(tmp, p.bitmap...)
-			tmp = append(tmp, p.originalData...)
-			p.originalData = tmp
-		}
-	}
 	return encodeData(p, enc)
 }
 
@@ -501,31 +373,6 @@ func serializeStringV2(p *PermStorageDataBlock) ([]byte, error) {
 	if len(values) != len(p.stringLengths) {
 		return nil, fmt.Errorf("mismatch in number of strings (%d) and number of defined string lengths (%d)",
 			len(values), len(p.stringLengths))
-	}
-
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-		dense := make([]byte, 0)
-		for i, str := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			strLen := len(str)
-			if strLen > maxStringLength || strLen > int(p.stringLengths[i]) {
-				return nil, fmt.Errorf("string at index %d of length %d exceeds max length of %d or booked size %d", i, strLen, maxStringLength, p.stringLengths[i])
-			}
-			lenBuf := make([]byte, 2)
-			system.ByteOrder.PutUint16(lenBuf, uint16(strLen))
-			dense = append(dense, lenBuf...)
-			dense = append(dense, []byte(str)...)
-		}
-		p.originalData = make([]byte, 0, len(p.bitmap)+len(dense))
-		p.originalData = append(p.originalData, p.bitmap...)
-		p.originalData = append(p.originalData, dense...)
-		enc, err := compression.GetEncoder(p.compressionType)
-		if err != nil {
-			return nil, err
-		}
-		return encodeData(p, enc)
 	}
 
 	strLenOffsetIdx := 0
@@ -599,27 +446,6 @@ func serializeFP32VectorAndLessV2(p *PermStorageDataBlock) ([]byte, error) {
 	idx := 0
 	putFloat, _ := system.GetToByteFP32AndLess(p.dataType)
 
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-		for i, v := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			if len(v) != int(p.vectorLengths[i]) {
-				return nil, fmt.Errorf("mismatch in vector length at index %d", i)
-			}
-			for _, vv := range v {
-				putFloat(p.originalData[idx:idx+unitSize], vv)
-				idx += unitSize
-			}
-		}
-		p.originalData = p.originalData[:idx]
-		tmp := make([]byte, 0, len(p.bitmap)+len(p.originalData))
-		tmp = append(tmp, p.bitmap...)
-		tmp = append(tmp, p.originalData...)
-		p.originalData = tmp
-		return encodeData(p, enc)
-	}
-
 	for i, v := range values {
 		if len(v) != int(p.vectorLengths[i]) {
 			return nil, fmt.Errorf("mismatch in vector length at index %d", i)
@@ -651,27 +477,6 @@ func serializeInt32VectorAndLessV2(p *PermStorageDataBlock) ([]byte, error) {
 
 	idx := 0
 	putInt, _ := system.GetToByteInt32AndLess(p.dataType)
-
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-		for i, v := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			if len(v) != int(p.vectorLengths[i]) {
-				return nil, fmt.Errorf("mismatch in vector length at index %d", i)
-			}
-			for _, vv := range v {
-				putInt(p.originalData[idx:idx+unitSize], vv)
-				idx += unitSize
-			}
-		}
-		p.originalData = p.originalData[:idx]
-		tmp := make([]byte, 0, len(p.bitmap)+len(p.originalData))
-		tmp = append(tmp, p.bitmap...)
-		tmp = append(tmp, p.originalData...)
-		p.originalData = tmp
-		return encodeData(p, enc)
-	}
 
 	for i, v := range values {
 		if len(v) != int(p.vectorLengths[i]) {
@@ -705,27 +510,6 @@ func serializeUint32VectorAndLessV2(p *PermStorageDataBlock) ([]byte, error) {
 	idx := 0
 	putUint, _ := system.GetToByteUint32AndLess(p.dataType)
 
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-		for i, v := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			if len(v) != int(p.vectorLengths[i]) {
-				return nil, fmt.Errorf("mismatch in vector length at index %d", i)
-			}
-			for _, vv := range v {
-				putUint(p.originalData[idx:idx+unitSize], vv)
-				idx += unitSize
-			}
-		}
-		p.originalData = p.originalData[:idx]
-		tmp := make([]byte, 0, len(p.bitmap)+len(p.originalData))
-		tmp = append(tmp, p.bitmap...)
-		tmp = append(tmp, p.originalData...)
-		p.originalData = tmp
-		return encodeData(p, enc)
-	}
-
 	for i, v := range values {
 		if len(v) != int(p.vectorLengths[i]) {
 			return nil, fmt.Errorf("mismatch in vector length at index %d", i)
@@ -757,27 +541,6 @@ func serializeFP64VectorV2(p *PermStorageDataBlock) ([]byte, error) {
 
 	idx := 0
 
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-		for i, v := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			if len(v) != int(p.vectorLengths[i]) {
-				return nil, fmt.Errorf("mismatch in vector length at index %d", i)
-			}
-			for _, vv := range v {
-				system.ByteOrder.PutFloat64(p.originalData[idx:idx+unitSize], vv)
-				idx += unitSize
-			}
-		}
-		p.originalData = p.originalData[:idx]
-		tmp := make([]byte, 0, len(p.bitmap)+len(p.originalData))
-		tmp = append(tmp, p.bitmap...)
-		tmp = append(tmp, p.originalData...)
-		p.originalData = tmp
-		return encodeData(p, enc)
-	}
-
 	for i, v := range values {
 		if len(v) != int(p.vectorLengths[i]) {
 			return nil, fmt.Errorf("mismatch in vector length at index %d", i)
@@ -807,27 +570,6 @@ func serializeInt64VectorV2(p *PermStorageDataBlock) ([]byte, error) {
 			len(values), len(p.vectorLengths))
 	}
 	idx := 0
-
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-		for i, v := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			if len(v) != int(p.vectorLengths[i]) {
-				return nil, fmt.Errorf("mismatch in vector length at index %d", i)
-			}
-			for _, vv := range v {
-				system.ByteOrder.PutInt64(p.originalData[idx:idx+unitSize], vv)
-				idx += unitSize
-			}
-		}
-		p.originalData = p.originalData[:idx]
-		tmp := make([]byte, 0, len(p.bitmap)+len(p.originalData))
-		tmp = append(tmp, p.bitmap...)
-		tmp = append(tmp, p.originalData...)
-		p.originalData = tmp
-		return encodeData(p, enc)
-	}
 
 	for i, v := range values {
 		if len(v) != int(p.vectorLengths[i]) {
@@ -859,27 +601,6 @@ func serializeUint64VectorV2(p *PermStorageDataBlock) ([]byte, error) {
 	}
 
 	idx := 0
-
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-		for i, v := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			if len(v) != int(p.vectorLengths[i]) {
-				return nil, fmt.Errorf("mismatch in vector length at index %d", i)
-			}
-			for _, vv := range v {
-				system.ByteOrder.PutUint64(p.originalData[idx:idx+unitSize], vv)
-				idx += unitSize
-			}
-		}
-		p.originalData = p.originalData[:idx]
-		tmp := make([]byte, 0, len(p.bitmap)+len(p.originalData))
-		tmp = append(tmp, p.bitmap...)
-		tmp = append(tmp, p.originalData...)
-		p.originalData = tmp
-		return encodeData(p, enc)
-	}
 
 	for i, v := range values {
 		if len(v) != int(p.vectorLengths[i]) {
@@ -920,34 +641,6 @@ func serializeStringVectorV2(p *PermStorageDataBlock) ([]byte, error) {
 	if len(values) != len(p.stringLengths) {
 		return nil, fmt.Errorf("mismatch in number of vectors (%d) and number of defined string lengths (%d)",
 			len(values), len(p.stringLengths))
-	}
-
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-		dense := make([]byte, 0)
-		for i, vec := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			if len(vec) != int(p.vectorLengths[i]) {
-				return nil, fmt.Errorf("mismatch in vector length at index %d: expected %d, got %d",
-					i, p.vectorLengths[i], len(vec))
-			}
-			for _, str := range vec {
-				strLen := len(str)
-				if strLen > maxStringLength || strLen > int(p.stringLengths[i]) {
-					return nil, fmt.Errorf("string in vector %d of length %d exceeds max length of %d or booked size %d",
-						i, strLen, maxStringLength, p.stringLengths[i])
-				}
-				lenBuf := make([]byte, 2)
-				system.ByteOrder.PutUint16(lenBuf, uint16(strLen))
-				dense = append(dense, lenBuf...)
-				dense = append(dense, []byte(str)...)
-			}
-		}
-		p.originalData = make([]byte, 0, len(p.bitmap)+len(dense))
-		p.originalData = append(p.originalData, p.bitmap...)
-		p.originalData = append(p.originalData, dense...)
-		return encodeData(p, enc)
 	}
 
 	totalStrings := 0
@@ -996,34 +689,6 @@ func serializeBoolVectorV2(p *PermStorageDataBlock) ([]byte, error) {
 
 	idx := 0
 	shift := 7
-
-	if p.layoutVersion == 2 && len(p.bitmap) > 0 {
-		for i, v := range values {
-			if (p.bitmap[i/8] & (1 << (i % 8))) == 0 {
-				continue
-			}
-			if len(v) != int(p.vectorLengths[i]) {
-				return nil, fmt.Errorf("mismatch in vector length at index %d", i)
-			}
-			for _, vv := range v {
-				if vv > 1 {
-					return nil, fmt.Errorf("invalid bool value: %d; expected 0 or 1", vv)
-				}
-				p.originalData[idx] |= vv << shift
-				shift--
-				if shift < 0 {
-					shift = 7
-					idx++
-				}
-			}
-		}
-		p.originalData = p.originalData[:idx]
-		tmp := make([]byte, 0, len(p.bitmap)+len(p.originalData))
-		tmp = append(tmp, p.bitmap...)
-		tmp = append(tmp, p.originalData...)
-		p.originalData = tmp
-		return encodeData(p, enc)
-	}
 
 	for i, v := range values {
 		if len(v) != int(p.vectorLengths[i]) {

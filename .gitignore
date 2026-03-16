@@ -5,6 +5,7 @@ dist/
 .env*
 .idea/
 .vscode/
+.claude/
 workspace/
 __pycache__/
 java-sdk/onfs/feature-store-client/target/

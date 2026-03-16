@@ -12,8 +12,8 @@ const (
 
 type Store interface {
 	PersistV2(storeId string, entityLabel string, pkMap map[string]string, fgIdToPsDb map[int]*blocks.PermStorageDataBlock) error
-	RetrieveV2(entityLabel string, pkMap map[string]string, fgIds []int) (map[int]*blocks.DeserializedPSDB, error)
+	RetrieveV2(entityLabel string, pkMap map[string]string, fgIds []int) (map[int]blocks.PSDBBlock, error)
 	BatchPersistV2(storeId string, entityLabel string, rows []models.Row) error
-	BatchRetrieveV2(entityLabel string, pkMaps []map[string]string, fgIds []int) ([]map[int]*blocks.DeserializedPSDB, error)
+	BatchRetrieveV2(entityLabel string, pkMaps []map[string]string, fgIds []int) ([]map[int]blocks.PSDBBlock, error)
 	Type() string
 }
