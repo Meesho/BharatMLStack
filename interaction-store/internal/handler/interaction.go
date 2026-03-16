@@ -3,11 +3,14 @@ package handler
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/model"
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/handler/persist"
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/handler/retrieve"
+	"github.com/Meesho/BharatMLStack/interaction-store/pkg/metric"
 	"github.com/Meesho/BharatMLStack/interaction-store/pkg/proto/timeseries"
+	"golang.org/x/sync/errgroup"
 )
 
 type InteractionHandler struct {
@@ -36,6 +39,7 @@ func InitInteractionHandler() *InteractionHandler {
 }
 
 func (h *InteractionHandler) PersistClickData(ctx context.Context, req *timeseries.PersistClickDataRequest) (*timeseries.PersistDataResponse, error) {
+	start := time.Now()
 	events := make([]model.ClickEvent, len(req.Data))
 	for i, data := range req.Data {
 		events[i] = model.ClickEvent{
@@ -51,12 +55,15 @@ func (h *InteractionHandler) PersistClickData(ctx context.Context, req *timeseri
 		}
 	}
 	if err := h.clickPersistHandler.Persist(req.UserId, events); err != nil {
+		metric.Timing("click_persist_latency", time.Since(start), []string{metric.TagAsString("status", "failure")})
 		return nil, err
 	}
+	metric.Timing("click_persist_latency", time.Since(start), []string{metric.TagAsString("status", "success")})
 	return &timeseries.PersistDataResponse{Message: "success"}, nil
 }
 
 func (h *InteractionHandler) PersistOrderData(ctx context.Context, req *timeseries.PersistOrderDataRequest) (*timeseries.PersistDataResponse, error) {
+	start := time.Now()
 	events := make([]model.FlattenedOrderEvent, len(req.Data))
 	for i, data := range req.Data {
 		events[i] = model.FlattenedOrderEvent{
@@ -68,83 +75,141 @@ func (h *InteractionHandler) PersistOrderData(ctx context.Context, req *timeseri
 		}
 	}
 	if err := h.orderPersistHandler.Persist(req.UserId, events); err != nil {
+		metric.Timing("order_persist_latency", time.Since(start), []string{metric.TagAsString("status", "failure")})
 		return nil, err
 	}
+	metric.Timing("order_persist_latency", time.Since(start), []string{metric.TagAsString("status", "success")})
 	return &timeseries.PersistDataResponse{Message: "success"}, nil
 }
 
 func (h *InteractionHandler) RetrieveClickInteractions(ctx context.Context, req *timeseries.RetrieveDataRequest) (*timeseries.RetrieveClickDataResponse, error) {
+	start := time.Now()
 	events, err := h.clickRetrieveHandler.Retrieve(req.UserId, req.StartTimestamp, req.EndTimestamp, req.Limit)
 	if err != nil {
+		metric.Timing("click_retrieve_latency", time.Since(start), []string{metric.TagAsString("status", "failure")})
 		return nil, err
 	}
 	protoEvents := h.convertClickEventsToProto(events)
+	metric.Timing("click_retrieve_latency", time.Since(start), []string{metric.TagAsString("status", "success")})
 	return &timeseries.RetrieveClickDataResponse{Data: protoEvents}, nil
 }
 
 func (h *InteractionHandler) RetrieveOrderInteractions(ctx context.Context, req *timeseries.RetrieveDataRequest) (*timeseries.RetrieveOrderDataResponse, error) {
+	start := time.Now()
 	events, err := h.orderRetrieveHandler.Retrieve(req.UserId, req.StartTimestamp, req.EndTimestamp, req.Limit)
 	if err != nil {
+		metric.Timing("order_retrieve_latency", time.Since(start), []string{metric.TagAsString("status", "failure")})
 		return nil, err
 	}
 	protoEvents := h.convertOrderEventsToProto(events)
+	metric.Timing("order_retrieve_latency", time.Since(start), []string{metric.TagAsString("status", "success")})
 	return &timeseries.RetrieveOrderDataResponse{Data: protoEvents}, nil
 }
 
 func (h *InteractionHandler) RetrieveInteractions(ctx context.Context, req *timeseries.RetrieveInteractionsRequest) (*timeseries.RetrieveInteractionsResponse, error) {
+	start := time.Now()
 	response := &timeseries.RetrieveInteractionsResponse{
 		Data: make(map[string]*timeseries.InteractionData),
 	}
-
 	interactionData := &timeseries.InteractionData{}
 
-	for _, interactionType := range req.InteractionTypes {
-		switch interactionType {
+	var wantClick, wantOrder bool
+	for _, t := range req.InteractionTypes {
+		switch t {
 		case timeseries.InteractionTypeProto_CLICK:
-			events, err := h.clickRetrieveHandler.Retrieve(req.UserId, req.StartTimestamp, req.EndTimestamp, req.Limit)
-			if err != nil {
-				return nil, err
-			}
-			protoEvents := h.convertClickEventsToProto(events)
-			interactionData.ClickEvents = protoEvents
-
+			wantClick = true
 		case timeseries.InteractionTypeProto_ORDER:
-			events, err := h.orderRetrieveHandler.Retrieve(req.UserId, req.StartTimestamp, req.EndTimestamp, req.Limit)
-			if err != nil {
-				return nil, err
-			}
-			protoEvents := h.convertOrderEventsToProto(events)
-			interactionData.OrderEvents = protoEvents
+			wantOrder = true
 		}
 	}
 
+	if wantClick && wantOrder {
+		var clickProto []*timeseries.ClickEvent
+		var orderProto []*timeseries.OrderEvent
+		g := new(errgroup.Group)
+		if wantClick {
+			g.Go(func() error {
+				events, err := h.clickRetrieveHandler.Retrieve(req.UserId, req.StartTimestamp, req.EndTimestamp, req.Limit)
+				if err != nil {
+					return err
+				}
+				clickProto = h.convertClickEventsToProto(events)
+				return nil
+			})
+		}
+		if wantOrder {
+			g.Go(func() error {
+				events, err := h.orderRetrieveHandler.Retrieve(req.UserId, req.StartTimestamp, req.EndTimestamp, req.Limit)
+				if err != nil {
+					return err
+				}
+				orderProto = h.convertOrderEventsToProto(events)
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			metric.Timing("interactions_retrieve_latency", time.Since(start), []string{metric.TagAsString("status", "failure"), metric.TagAsString("path", "parallel")})
+			return nil, err
+		}
+		interactionData.ClickEvents = clickProto
+		interactionData.OrderEvents = orderProto
+		metric.Timing("interactions_retrieve_latency", time.Since(start), []string{metric.TagAsString("status", "success"), metric.TagAsString("path", "parallel")})
+		response.Data[req.UserId] = interactionData
+		return response, nil
+	}
+
+	if wantClick {
+		events, err := h.clickRetrieveHandler.Retrieve(req.UserId, req.StartTimestamp, req.EndTimestamp, req.Limit)
+		if err != nil {
+			metric.Timing("interactions_retrieve_latency", time.Since(start), []string{metric.TagAsString("status", "failure"), metric.TagAsString("path", "sequential")})
+			return nil, err
+		}
+		interactionData.ClickEvents = h.convertClickEventsToProto(events)
+	}
+	if wantOrder {
+		events, err := h.orderRetrieveHandler.Retrieve(req.UserId, req.StartTimestamp, req.EndTimestamp, req.Limit)
+		if err != nil {
+			metric.Timing("interactions_retrieve_latency", time.Since(start), []string{metric.TagAsString("status", "failure"), metric.TagAsString("path", "sequential")})
+			return nil, err
+		}
+		interactionData.OrderEvents = h.convertOrderEventsToProto(events)
+	}
 	response.Data[req.UserId] = interactionData
+	metric.Timing("interactions_retrieve_latency", time.Since(start), []string{metric.TagAsString("status", "success"), metric.TagAsString("path", "sequential")})
 	return response, nil
 }
 
 func (h *InteractionHandler) convertClickEventsToProto(events []model.ClickEvent) []*timeseries.ClickEvent {
-	protoEvents := make([]*timeseries.ClickEvent, len(events))
-	for i, event := range events {
-		protoEvents[i] = &timeseries.ClickEvent{
-			CatalogId: event.ClickEventData.Payload.CatalogId,
-			ProductId: event.ClickEventData.Payload.ProductId,
-			Timestamp: event.ClickEventData.Payload.ClickedAt,
-			Metadata:  event.ClickEventData.Payload.Metadata,
+	n := len(events)
+	backing := make([]timeseries.ClickEvent, n)
+	ptrs := make([]*timeseries.ClickEvent, n)
+	for i := range events {
+		p := &events[i].ClickEventData.Payload
+		backing[i] = timeseries.ClickEvent{
+			CatalogId: p.CatalogId,
+			ProductId: p.ProductId,
+			Timestamp: p.ClickedAt,
+			Metadata:  p.Metadata,
 		}
+		ptrs[i] = &backing[i]
 	}
-	return protoEvents
+	return ptrs
 }
 
 func (h *InteractionHandler) convertOrderEventsToProto(events []model.FlattenedOrderEvent) []*timeseries.OrderEvent {
-	protoEvents := make([]*timeseries.OrderEvent, len(events))
-	for i, event := range events {
-		protoEvents[i] = &timeseries.OrderEvent{
-			CatalogId:   event.CatalogID,
-			ProductId:   event.ProductID,
-			SubOrderNum: event.SubOrderNum,
-			Timestamp:   event.OrderedAt,
-			Metadata:    event.Metadata,
+	n := len(events)
+	backing := make([]timeseries.OrderEvent, n)
+	ptrs := make([]*timeseries.OrderEvent, n)
+	for i := range events {
+		e := &events[i]
+		backing[i] = timeseries.OrderEvent{
+			CatalogId:   e.CatalogID,
+			ProductId:   e.ProductID,
+			SubOrderNum: e.SubOrderNum,
+			Timestamp:   e.OrderedAt,
+			Metadata:    e.Metadata,
 		}
+		ptrs[i] = &backing[i]
 	}
-	return protoEvents
+	return ptrs
 }

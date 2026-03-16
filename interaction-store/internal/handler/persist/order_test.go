@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/constants"
 	blocks "github.com/Meesho/BharatMLStack/interaction-store/internal/data/block"
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/model"
 	"github.com/stretchr/testify/assert"
@@ -274,16 +275,16 @@ func TestOrderPersistHandler_mergeAndTrimEvents_TrimsToMaxEvents(t *testing.T) {
 
 	baseTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC).UnixMilli()
 
-	existing := make([]model.FlattenedOrderEvent, maxOrderEventsPerWeek)
-	for i := 0; i < maxOrderEventsPerWeek; i++ {
+	existing := make([]model.FlattenedOrderEvent, constants.MaxOrderEventsPerWeek)
+	for i := 0; i < constants.MaxOrderEventsPerWeek; i++ {
 		existing[i] = createTestFlattenedOrderEvent(baseTime+int64(i*1000), int32(100+i), int32(200+i), "SUB001")
 	}
 
-	newEvent := createTestFlattenedOrderEvent(baseTime+int64(maxOrderEventsPerWeek*1000), 999, 999, "SUB999")
+	newEvent := createTestFlattenedOrderEvent(baseTime+int64(constants.MaxOrderEventsPerWeek*1000), 999, 999, "SUB999")
 
 	result := handler.mergeAndTrimEvents(existing, newEvent)
 
-	assert.Len(t, result, maxOrderEventsPerWeek)
+	assert.Len(t, result, constants.MaxOrderEventsPerWeek)
 	assert.Equal(t, int32(999), result[0].ProductID)
 }
 

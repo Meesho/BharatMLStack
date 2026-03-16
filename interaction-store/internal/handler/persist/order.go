@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/compression"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/constants"
 	blocks "github.com/Meesho/BharatMLStack/interaction-store/internal/data/block"
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/enum"
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/model"
@@ -34,8 +35,6 @@ func InitOrderPersistHandler() *OrderPersistHandler {
 	return orderPersistHandler
 }
 
-const maxOrderEventsPerWeek = 500
-
 func (p *OrderPersistHandler) Persist(userId string, data []model.FlattenedOrderEvent) error {
 	bucketEvents, weekFlags := p.partitionEventsByBucket(data)
 	for bucketIdx, events := range bucketEvents {
@@ -48,11 +47,11 @@ func (p *OrderPersistHandler) Persist(userId string, data []model.FlattenedOrder
 
 func (p *OrderPersistHandler) partitionEventsByBucket(events []model.FlattenedOrderEvent) (map[int][]model.FlattenedOrderEvent, []bool) {
 	bucketEvents := make(map[int][]model.FlattenedOrderEvent)
-	weekFlags := make([]bool, 24)
+	weekFlags := make([]bool, constants.TotalWeeks)
 
 	for _, event := range events {
-		week := utils.WeekFromTimestampMs(event.OrderedAt) % 24
-		bucketIdx := week / 8
+		week := utils.WeekFromTimestampMs(event.OrderedAt) % constants.TotalWeeks
+		bucketIdx := week / constants.WeeksPerBucket
 		bucketEvents[bucketIdx] = append(bucketEvents[bucketIdx], event)
 		weekFlags[week] = true
 	}
@@ -93,10 +92,10 @@ func (p *OrderPersistHandler) persistToBucket(bucketIdx int, userId string, even
 
 func (p *OrderPersistHandler) getColumnsForBucket(bucketIdx int, weekFlags []bool) []string {
 	var columns []string
-	startWeek, endWeek := bucketIdx*8, (bucketIdx+1)*8
-	for week := startWeek; week < endWeek; week++ {
+	startWeek, endWeek := bucketIdx*constants.WeeksPerBucket, (bucketIdx+1)*constants.WeeksPerBucket
+	for week := endWeek - 1; week >= startWeek; week-- {
 		if weekFlags[week] {
-			columns = append(columns, "week_"+strconv.Itoa(week))
+			columns = append(columns, constants.WeekColumnPrefix+strconv.Itoa(week))
 		}
 	}
 	return columns
@@ -129,8 +128,8 @@ func (p *OrderPersistHandler) mergeEvents(newEvents []model.FlattenedOrderEvent,
 	finalEvents := make(map[string][]model.FlattenedOrderEvent)
 
 	for _, event := range newEvents {
-		week := utils.WeekFromTimestampMs(event.OrderedAt) % 24
-		column := "week_" + strconv.Itoa(week)
+		week := utils.WeekFromTimestampMs(event.OrderedAt) % constants.TotalWeeks
+		column := constants.WeekColumnPrefix + strconv.Itoa(week)
 
 		accumulated, alreadyProcessed := finalEvents[column]
 		if !alreadyProcessed {
@@ -166,7 +165,7 @@ func (p *OrderPersistHandler) getExistingOrderEvents(ddb *blocks.DeserializedPSD
 func (p *OrderPersistHandler) mergeAndTrimEvents(existing []model.FlattenedOrderEvent, newEvent model.FlattenedOrderEvent) []model.FlattenedOrderEvent {
 	if len(existing) > 0 {
 		largestTimestamp := existing[0].OrderedAt
-		if utils.TimestampDiffInWeeks(newEvent.OrderedAt, largestTimestamp) >= 24 {
+		if utils.TimestampDiffInWeeks(newEvent.OrderedAt, largestTimestamp) >= constants.TotalWeeks {
 			existing = existing[:0]
 		}
 	}
@@ -176,8 +175,8 @@ func (p *OrderPersistHandler) mergeAndTrimEvents(existing []model.FlattenedOrder
 		return existing[i].OrderedAt > existing[j].OrderedAt
 	})
 
-	if len(existing) > maxOrderEventsPerWeek {
-		existing = existing[:maxOrderEventsPerWeek]
+	if len(existing) > constants.MaxOrderEventsPerWeek {
+		existing = existing[:constants.MaxOrderEventsPerWeek]
 	}
 	return existing
 }

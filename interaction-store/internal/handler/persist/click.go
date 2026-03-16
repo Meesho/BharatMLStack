@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/compression"
+	"github.com/Meesho/BharatMLStack/interaction-store/internal/constants"
 	blocks "github.com/Meesho/BharatMLStack/interaction-store/internal/data/block"
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/enum"
 	"github.com/Meesho/BharatMLStack/interaction-store/internal/data/model"
@@ -34,8 +35,6 @@ func InitClickPersistHandler() *ClickPersistHandler {
 	return clickPersistHandler
 }
 
-const maxClickEventsPerWeek = 500
-
 func (p *ClickPersistHandler) Persist(userId string, data []model.ClickEvent) error {
 	bucketEvents, weekFlags := p.partitionEventsByBucket(data)
 	for bucketIdx, events := range bucketEvents {
@@ -48,11 +47,11 @@ func (p *ClickPersistHandler) Persist(userId string, data []model.ClickEvent) er
 
 func (p *ClickPersistHandler) partitionEventsByBucket(events []model.ClickEvent) (map[int][]model.ClickEvent, []bool) {
 	bucketToEvents := make(map[int][]model.ClickEvent)
-	weekFlags := make([]bool, 24)
+	weekFlags := make([]bool, constants.TotalWeeks)
 
 	for _, event := range events {
-		week := utils.WeekFromTimestampMs(event.ClickEventData.Payload.ClickedAt) % 24
-		bucketIdx := week / 8
+		week := utils.WeekFromTimestampMs(event.ClickEventData.Payload.ClickedAt) % constants.TotalWeeks
+		bucketIdx := week / constants.WeeksPerBucket
 		bucketToEvents[bucketIdx] = append(bucketToEvents[bucketIdx], event)
 		weekFlags[week] = true
 	}
@@ -93,10 +92,10 @@ func (p *ClickPersistHandler) persistToBucket(bucketIdx int, userId string, even
 
 func (p *ClickPersistHandler) getColumnsForBucket(bucketIdx int, weekFlags []bool) []string {
 	var columns []string
-	startWeek, endWeek := bucketIdx*8, (bucketIdx+1)*8
-	for week := startWeek; week < endWeek; week++ {
+	startWeek, endWeek := bucketIdx*constants.WeeksPerBucket, (bucketIdx+1)*constants.WeeksPerBucket
+	for week := endWeek - 1; week >= startWeek; week-- {
 		if weekFlags[week] {
-			columns = append(columns, "week_"+strconv.Itoa(week))
+			columns = append(columns, constants.WeekColumnPrefix+strconv.Itoa(week))
 		}
 	}
 	return columns
@@ -129,8 +128,8 @@ func (p *ClickPersistHandler) mergeEvents(newEvents []model.ClickEvent, storageB
 	finalEvents := make(map[string][]model.ClickEvent)
 
 	for _, event := range newEvents {
-		week := utils.WeekFromTimestampMs(event.ClickEventData.Payload.ClickedAt) % 24
-		column := "week_" + strconv.Itoa(week)
+		week := utils.WeekFromTimestampMs(event.ClickEventData.Payload.ClickedAt) % constants.TotalWeeks
+		column := constants.WeekColumnPrefix + strconv.Itoa(week)
 
 		accumulated, alreadyProcessed := finalEvents[column]
 		if !alreadyProcessed {
@@ -166,7 +165,7 @@ func (p *ClickPersistHandler) getExistingClickEvents(ddb *blocks.DeserializedPSD
 func (p *ClickPersistHandler) mergeAndTrimEvents(existing []model.ClickEvent, newEvent model.ClickEvent) []model.ClickEvent {
 	if len(existing) > 0 {
 		largestTimestamp := existing[0].ClickEventData.Payload.ClickedAt
-		if utils.TimestampDiffInWeeks(newEvent.ClickEventData.Payload.ClickedAt, largestTimestamp) >= 24 {
+		if utils.TimestampDiffInWeeks(newEvent.ClickEventData.Payload.ClickedAt, largestTimestamp) >= constants.TotalWeeks {
 			existing = existing[:0]
 		}
 	}
@@ -176,8 +175,8 @@ func (p *ClickPersistHandler) mergeAndTrimEvents(existing []model.ClickEvent, ne
 		return existing[i].ClickEventData.Payload.ClickedAt > existing[j].ClickEventData.Payload.ClickedAt
 	})
 
-	if len(existing) > maxClickEventsPerWeek {
-		existing = existing[:maxClickEventsPerWeek]
+	if len(existing) > constants.MaxClickEventsPerWeek {
+		existing = existing[:constants.MaxClickEventsPerWeek]
 	}
 	return existing
 }
