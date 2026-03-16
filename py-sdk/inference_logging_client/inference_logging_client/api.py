@@ -136,15 +136,17 @@ def decode_single_config(
     metadata_column: str = "metadata",
 ) -> Union[Any, Tuple[Any, dict]]:
     """
-    Decode MPLog features for a single model config. Filters by mp_config_id then runs the pipeline.
+    Decode MPLog features for a single model config. Caller must pass a DataFrame
+    already restricted to the desired mp_config_id; no filter is applied here.
 
     Proto-only; decompression is always on. Version is taken from _schema_version (JVM-side);
     features/entities are parsed on the JVM via from_json when possible.
 
     Args:
         df: Input Spark DataFrame with features, metadata, mp_config_id (and optionally entities).
+            Must contain only rows for the single config to decode.
         spark: SparkSession.
-        mp_config_id: Filter to rows with this mp_config_id only.
+        mp_config_id: The config id these rows belong to (for documentation; no filter applied).
         inference_host: Base URL for schema API; defaults to INFERENCE_HOST env or http://localhost:8082.
         needed_columns: If set, only these feature names are decoded (narrow output).
         num_partitions: Repartition by (mp_config_id, _schema_version) to this count; default 50000.
@@ -167,10 +169,8 @@ def decode_single_config(
         >>> decoded = decode_single_config(df, spark, mp_config_id="my-model")
         >>> decoded.show()
     """
-    from pyspark.sql import functions as F
-    filtered = df.filter(F.col(_MP_CONFIG_ID_COLUMN) == mp_config_id)
     return _decode_internal(
-        filtered, spark, inference_host, needed_columns, num_partitions,
+        df, spark, inference_host, needed_columns, num_partitions,
         stringify_features, features_column, metadata_column,
     )
 
