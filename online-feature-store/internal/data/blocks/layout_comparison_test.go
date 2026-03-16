@@ -666,41 +666,6 @@ func serializeWithLayout(t *testing.T, layoutVersion uint8, numFeatures int, dat
 	}
 }
 
-// generateSparseData creates test data with specified sparsity (default ratio) for FP32
-func generateSparseData(numFeatures int, defaultRatio float64) ([]float32, []byte) {
-	rand.Seed(time.Now().UnixNano())
-
-	data := make([]float32, numFeatures)
-	bitmap := make([]byte, (numFeatures+7)/8)
-
-	numDefaults := int(float64(numFeatures) * defaultRatio)
-
-	// Create a list of indices
-	indices := make([]int, numFeatures)
-	for i := range indices {
-		indices[i] = i
-	}
-
-	// Shuffle indices
-	rand.Shuffle(len(indices), func(i, j int) {
-		indices[i], indices[j] = indices[j], indices[i]
-	})
-
-	// Set first numDefaults indices to 0.0 (default), rest to random values
-	for i := 0; i < numFeatures; i++ {
-		idx := indices[i]
-		if i < numDefaults {
-			data[idx] = 0.0
-			// bitmap bit remains 0
-		} else {
-			data[idx] = rand.Float32()
-			bitmap[idx/8] |= 1 << (idx % 8)
-		}
-	}
-
-	return data, bitmap
-}
-
 // sparseDataResult holds generated sparse data and bitmap for any type
 type sparseDataResult struct {
 	data        interface{}
@@ -713,7 +678,6 @@ type sparseDataResult struct {
 // generateSparseDataByType creates test data with specified sparsity for the given data type.
 // Bool scalar is not supported (layout-1 only). For vector types, numFeatures = numVectors.
 func generateSparseDataByType(dataType types.DataType, numFeatures int, defaultRatio float64) (*sparseDataResult, error) {
-	rand.Seed(time.Now().UnixNano())
 	bitmap := make([]byte, (numFeatures+7)/8)
 	numDefaults := int(float64(numFeatures) * defaultRatio)
 	indices := make([]int, numFeatures)
