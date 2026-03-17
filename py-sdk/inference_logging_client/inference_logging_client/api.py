@@ -53,6 +53,26 @@ def _decode_internal(
     """Single pipeline: JVM JSON parse → SQL version column → broadcast plans → mapInArrow decode."""
     inference_host = inference_host or os.getenv("INFERENCE_HOST", "http://localhost:8082")
 
+    required = [features_column, metadata_column, _MP_CONFIG_ID_COLUMN]
+    df_cols = list(df.columns)
+    missing = [c for c in required if c not in df_cols]
+    if missing:
+        # Spark column resolution is case-sensitive; suggest exact name if case-insensitive match exists
+        hints = []
+        param_for = {"features": "features_column", "metadata": "metadata_column", "mp_config_id": "mp_config_id"}
+        for c in missing:
+            low = c.lower()
+            match = next((x for x in df_cols if x.lower() == low), None)
+            if match and match != c:
+                param = param_for.get(c, c)
+                hints.append(f"Pass {param}='{match}'")
+        hint_str = " " + ("(" + "; ".join(hints) + ")") if hints else ""
+        raise ValueError(
+            f"DataFrame must contain columns {missing} for decode. "
+            f"Available columns: {df_cols}. "
+            f"Column names are case-sensitive in Spark{hint_str}."
+        )
+
     df = parse_json_columns(df, features_column=features_column, entities_column="entities")
     df = add_version_column(df, metadata_column=metadata_column)
 
