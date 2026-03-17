@@ -9,6 +9,8 @@ This package provides functionality to:
 Main functions:
     - decode_mplog: Decode MPLog bytes to a Spark DataFrame
     - decode_mplog_dataframe: Decode MPLog features from a Spark DataFrame
+    - decode_single_config: Decode MPLog for a single config (caller filters by mp_config_id)
+    - decode_multi_config: Decode MPLog for all configs in a DataFrame
     - get_mplog_metadata: Extract metadata from MPLog bytes
 """
 
@@ -28,6 +30,15 @@ except ImportError:
     _ZSTD_AVAILABLE = False
     zstd = None
 
+# Prefer orjson for fast JSON parsing in decode_mplog_dataframe (3-10x faster than json)
+try:
+    import orjson
+
+    _ORJSON_AVAILABLE = True
+except ImportError:
+    orjson = None
+    _ORJSON_AVAILABLE = False
+
 from .exceptions import (
     DecodeError,
     FormatError,
@@ -44,11 +55,12 @@ from .formats import (
     decode_proto_format,
     decode_proto_features,
 )
+from .api import decode_multi_config, decode_single_config
 from .io import clear_schema_cache, get_feature_schema, get_mplog_metadata, parse_mplog_protobuf
 from .types import FORMAT_TYPE_MAP, DecodedMPLog, FeatureInfo, Format
 from .utils import format_dataframe_floats, get_format_name, unpack_metadata_byte
 
-__version__ = "0.1.0"
+__version__ = "0.2.9"
 
 # Maximum supported schema version (4 bits = 0-15)
 _MAX_SCHEMA_VERSION = 15
@@ -56,6 +68,8 @@ _MAX_SCHEMA_VERSION = 15
 __all__ = [
     "decode_mplog",
     "decode_mplog_dataframe",
+    "decode_single_config",
+    "decode_multi_config",
     "get_mplog_metadata",
     "get_feature_schema",
     "clear_schema_cache",
@@ -371,29 +385,43 @@ def decode_mplog_dataframe(
     full_schema = StructType(schema_fields)
     all_columns_ordered = ["entity_id"] + metadata_cols_in_schema + sorted(all_feature_names)
 
-    def _safe_get(row, col, default=None):
-        try:
-            val = row[col] if col in row.index else getattr(row, col, default)
-            if hasattr(val, "isna") and val.isna():
-                return default
-            return val
-        except (KeyError, AttributeError):
-            return default
+    # Zstd magic for inline decompress (reuse decompressor per batch)
+    _ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 
     def _decode_batch(iterator):
         import pandas as pd
+
+        # Prefer orjson for 3-10x faster JSON parsing of features/entities/parent_entity
+        _loads = orjson.loads if (_ORJSON_AVAILABLE and orjson is not None) else json.loads
+
+        # Reuse one decompressor for all rows in this worker to avoid repeated allocation
+        dctx = None
+        if decompress and _ZSTD_AVAILABLE and zstd is not None:
+            dctx = zstd.ZstdDecompressor()
+
         for pdf in iterator:
             out_rows = []
-            for idx, row in pdf.iterrows():
-                features_data = _safe_get(row, features_column)
+            # Column index map for O(1) access (avoids iterrows() and _safe_get overhead)
+            col_idx = {name: i for i, name in enumerate(pdf.columns)}
+
+            def _get(row, name, default=None):
+                if name not in col_idx:
+                    return default
+                val = row[col_idx[name]]
+                return default if pd.isna(val) else val
+
+            for row in pdf.itertuples(index=False):
+                # row is a named tuple; access by position via col_idx
+                # (itertuples is 5-10x faster than iterrows)
+                features_data = _get(row, features_column)
                 if features_data is None:
                     continue
-                metadata_data = _safe_get(row, metadata_column)
+                metadata_data = _get(row, metadata_column)
                 metadata_byte = _extract_metadata_byte(metadata_data, json, base64)
                 _, version, _ = unpack_metadata_byte(metadata_byte)
                 if not (0 <= version <= _MAX_SCHEMA_VERSION):
                     continue
-                mp_config_id = _safe_get(row, mp_config_id_column)
+                mp_config_id = _get(row, mp_config_id_column)
                 if mp_config_id is None:
                     continue
                 mp_config_id = str(mp_config_id)
@@ -406,8 +434,13 @@ def decode_mplog_dataframe(
                         continue
                 if isinstance(features_data, str):
                     try:
-                        features_list = json.loads(features_data)
-                    except (json.JSONDecodeError, ValueError, TypeError):
+                        features_list = _loads(features_data)
+                    except (ValueError, TypeError):
+                        continue
+                elif isinstance(features_data, bytes):
+                    try:
+                        features_list = _loads(features_data)
+                    except (ValueError, TypeError):
                         continue
                 else:
                     features_list = features_data
@@ -415,12 +448,12 @@ def decode_mplog_dataframe(
                     continue
                 entities_val = None
                 if "entities" in df_columns:
-                    entities_raw = _safe_get(row, "entities")
+                    entities_raw = _get(row, "entities")
                     if entities_raw is not None:
                         if isinstance(entities_raw, str):
                             try:
-                                entities_val = json.loads(entities_raw)
-                            except (json.JSONDecodeError, ValueError):
+                                entities_val = _loads(entities_raw)
+                            except (ValueError, TypeError):
                                 entities_val = [entities_raw]
                         elif isinstance(entities_raw, list):
                             entities_val = entities_raw
@@ -430,21 +463,31 @@ def decode_mplog_dataframe(
                 detected_format = FORMAT_TYPE_MAP.get(format_type_num, Format.PROTO)
                 parent_entity_val = None
                 if "parent_entity" in df_columns:
-                    parent_val = _safe_get(row, "parent_entity")
+                    parent_val = _get(row, "parent_entity")
                     if parent_val is not None:
                         if isinstance(parent_val, str):
                             try:
-                                parent_val = json.loads(parent_val)
-                            except (json.JSONDecodeError, ValueError):
+                                parent_val = _loads(parent_val)
+                            except (ValueError, TypeError):
                                 parent_val = [parent_val]
                         if isinstance(parent_val, list):
-                            parent_entity_val = parent_val[0] if len(parent_val) == 1 else str(parent_val) if len(parent_val) > 1 else None
+                            parent_entity_val = (
+                                parent_val[0]
+                                if len(parent_val) == 1
+                                else str(parent_val)
+                                if len(parent_val) > 1
+                                else None
+                            )
                         else:
                             parent_entity_val = parent_val
                 for i, feature_item in enumerate(features_list):
                     if not isinstance(feature_item, dict):
                         continue
-                    entity_id = str(entities_val[i]) if entities_val and i < len(entities_val) else f"entity_{i}"
+                    entity_id = (
+                        str(entities_val[i])
+                        if entities_val and i < len(entities_val)
+                        else f"entity_{i}"
+                    )
                     encoded_features_b64 = feature_item.get("encoded_features", "")
                     if not encoded_features_b64:
                         continue
@@ -454,9 +497,14 @@ def decode_mplog_dataframe(
                         continue
                     if len(encoded_bytes) == 0:
                         continue
-                    working_data = encoded_bytes
-                    if decompress:
-                        working_data = _decompress_zstd(encoded_bytes)
+                    # Reuse shared decompressor; only decompress when magic matches
+                    if dctx and len(encoded_bytes) >= 4 and encoded_bytes[:4] == _ZSTD_MAGIC:
+                        try:
+                            working_data = dctx.decompress(encoded_bytes)
+                        except Exception:
+                            continue
+                    else:
+                        working_data = encoded_bytes
                     try:
                         if detected_format == Format.ARROW:
                             decoded_features = decode_arrow_features(working_data, feature_schema)
@@ -467,7 +515,6 @@ def decode_mplog_dataframe(
                     except Exception:
                         continue
                     result_row = {"entity_id": entity_id}
-                    # Convert all feature values to strings for schema compatibility
                     for k, v in decoded_features.items():
                         if k in _reserved_columns:
                             continue
@@ -481,22 +528,23 @@ def decode_mplog_dataframe(
                             result_row[k] = str(v)
                     for col in row_metadata_columns:
                         if col in df_columns:
-                            # Pass through as-is to preserve original types
-                            # (LongType, TimestampType, etc.)
-                            result_row[col] = _safe_get(row, col)
+                            result_row[col] = _get(row, col)
                     if parent_entity_val is not None:
                         result_row["parent_entity"] = parent_entity_val
-                    # Fill missing schema columns with None
-                    for col in all_columns_ordered:
-                        if col not in result_row:
-                            result_row[col] = None
+                    # pd.DataFrame(..., columns=all_columns_ordered) fills missing keys as NaN
                     out_rows.append(result_row)
             if out_rows:
                 out_pdf = pd.DataFrame(out_rows, columns=all_columns_ordered)
                 yield out_pdf
 
     n_partitions = num_partitions if num_partitions is not None else 10000
-    df_repart = df.repartition(n_partitions)
+    current_parts = df.rdd.getNumPartitions()
+    # Repartition by mp_config_id for schema locality (same config -> same partition)
+    if current_parts != n_partitions:
+        from pyspark.sql import functions as F
+        df_repart = df.repartition(n_partitions, F.col(mp_config_id_column))
+    else:
+        df_repart = df
 
     batch_limit = max_records_per_batch if max_records_per_batch is not None else 200
     prev_max_records = spark.conf.get("spark.sql.execution.arrow.maxRecordsPerBatch")
