@@ -21,15 +21,19 @@ func ShadowSerializeAsLayout(
 	stringLengths []uint16,
 	vectorLengths []uint16,
 ) (serializedSize int) {
+	pool := GetPSDBPool()
+	pooled := pool.Get()
+
+	// Always return the pooled PSDB, even on panic
 	defer func() {
+		pooled.Clear()
+		pool.Put(pooled)
 		if r := recover(); r != nil {
 			log.Warn().Msgf("shadow serialize panic recovered: %v", r)
 			serializedSize = -1
 		}
 	}()
 
-	pool := GetPSDBPool()
-	pooled := pool.Get()
 	builder := pooled.Builder.
 		SetID(layoutVersion).
 		SetDataType(dataType).
@@ -70,21 +74,14 @@ func ShadowSerializeAsLayout(
 
 	if err != nil {
 		log.Warn().Err(err).Msg("shadow serialize: failed to build PSDB")
-		pooled.Clear()
-		pool.Put(pooled)
 		return -1
 	}
 
 	serialized, err := psdb.Serialize()
 	if err != nil {
 		log.Warn().Err(err).Msg("shadow serialize: failed to serialize PSDB")
-		psdb.Clear()
-		pool.Put(psdb)
 		return -1
 	}
 
-	size := len(serialized)
-	psdb.Clear()
-	pool.Put(psdb)
-	return size
+	return len(serialized)
 }
