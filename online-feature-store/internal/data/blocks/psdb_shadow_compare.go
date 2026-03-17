@@ -6,25 +6,11 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// ShadowSerializeAsLayout builds a PSDB with the given layout version, serializes it,
-// returns the serialized size, then returns the PSDB to the pool.
-// Panics are recovered so shadow path never fails the primary write.
-func ShadowSerializeAsLayout(
-	layoutVersion uint,
-	dataType types.DataType,
-	featureData interface{},
-	featureBitmap []byte,
-	compressionType compression.Type,
-	ttlInSeconds uint64,
-	activeVersion uint32,
-	numOfFeatures int,
-	stringLengths []uint16,
-	vectorLengths []uint16,
-) (serializedSize int) {
+// ShadowSerializeAsLayout builds a PSDB with the given layout version, serializes it, returns the serialized size, then returns the PSDB to the pool.
+func ShadowSerializeAsLayout(layoutVersion uint, dataType types.DataType, featureData interface{}, featureBitmap []byte, compressionType compression.Type, ttlInSeconds uint64, activeVersion uint32, numOfFeatures int, stringLengths []uint16, vectorLengths []uint16) (serializedSize int) {
 	pool := GetPSDBPool()
 	pooled := pool.Get()
 
-	// Always return the pooled PSDB, even on panic
 	defer func() {
 		pooled.Clear()
 		pool.Put(pooled)

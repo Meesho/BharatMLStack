@@ -217,7 +217,7 @@ func (p *PersistHandler) preparePersistData(persistData *PersistData) error {
 			}
 			psDbBlock := p.BuildPSDBBlock(persistData.EntityLabel, persistData.AllFGIdToFgConf[fgId].DataType, featureData, featureBitmap, fgConf, uint32(activeVersion))
 			// Shadow layout comparison (sampled)
-			p.maybeShadowCompare(persistData.EntityLabel, fgSchema.GetLabel(), persistData.AllFGIdToFgConf[fgId].DataType, featureData, featureBitmap, fgConf, uint32(activeVersion), psDbBlock)
+			p.maybeShadowCompare(persistData.EntityLabel, fgSchema.GetLabel(), persistData.AllFGIdToFgConf[fgId].DataType, featureData, featureBitmap, fgConf, uint32(activeVersion))
 			if persistData.StoreIdToRows[fgConf.StoreId] == nil {
 				persistData.StoreIdToRows[fgConf.StoreId] = make([]Row, len(persistData.Query.Data))
 			}
@@ -471,7 +471,7 @@ func cleanupPSDBs(rows []Row) {
 }
 
 // maybeShadowCompare builds a shadow Layout2 PSDB on sampled requests and emits size comparison metrics
-func (p *PersistHandler) maybeShadowCompare(entityLabel string, fgLabel string, dataType types.DataType, featureData interface{}, featureBitmap []byte, fgConf *config.FeatureGroup, activeVersion uint32, psDbBlock *blocks.PermStorageDataBlock) {
+func (p *PersistHandler) maybeShadowCompare(entityLabel string, fgLabel string, dataType types.DataType, featureData interface{}, featureBitmap []byte, fgConf *config.FeatureGroup, activeVersion uint32) {
 	shadowConf := p.config.GetLayoutShadowComparisonConfig()
 	if !shadowConf.Enabled {
 		return
