@@ -8,6 +8,7 @@ source "$SCRIPT_DIR/helpers.sh"
 
 ensure_built
 setup_tmpdir
+TESTS_FAILED=0
 
 # ─── Test 1: 3-node failover ────────────────────────────────────────────────
 run_3_node_failover() {
@@ -78,8 +79,8 @@ run_3_node_failover() {
   log_info "Restarting old leader (node $leader)..."
   restart_node "$leader" 3
 
-  log_info "Waiting for catch-up (10s)..."
-  sleep 10
+  log_info "Waiting for catch-up (25s)..."
+  sleep 25
 
   # Stop all nodes
   for nid in 1 2 3; do
@@ -163,7 +164,8 @@ run_5_node_failover() {
 
   log_info "Restarting old leader (node $leader)..."
   restart_node "$leader" 5
-  sleep 12
+  log_info "Waiting for catch-up (25s)..."
+  sleep 25
 
   for nid in 1 2 3 4 5; do
     stop_node "$nid"
@@ -244,7 +246,8 @@ run_double_failover() {
   log_info "Restarting both killed nodes..."
   restart_node "$leader" 3
   restart_node "$second_leader" 3
-  sleep 12
+  log_info "Waiting for catch-up (25s)..."
+  sleep 25
 
   local third_leader
   third_leader=$(wait_for_leader 3 20) || true

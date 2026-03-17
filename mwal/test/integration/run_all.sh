@@ -36,16 +36,19 @@ if [[ ! -x "${BUILD_DIR}/examples/replicated_node" ]] || [[ ! -x "${BUILD_DIR}/e
   echo ""
 fi
 
-# ── Test registry ────────────────────────────────────────────────────────────
-declare -A TESTS=(
-  [basic]="test_basic_replication.sh"
-  [failover]="test_leader_failover.sh"
-  [isr]="test_isr_osr.sh"
-  [stress]="test_stress.sh"
-  [chaos]="test_chaos.sh"
-)
-
+# ── Test registry (Bash 3.2 compatible: no associative arrays) ────────────────
 TEST_ORDER=(basic failover isr stress chaos)
+
+get_script() {
+  case "$1" in
+    basic)   echo "test_basic_replication.sh" ;;
+    failover) echo "test_leader_failover.sh" ;;
+    isr)     echo "test_isr_osr.sh" ;;
+    stress)  echo "test_stress.sh" ;;
+    chaos)   echo "test_chaos.sh" ;;
+    *)       echo "" ;;
+  esac
+}
 
 # ── Determine which tests to run ─────────────────────────────────────────────
 if [[ $# -gt 0 ]]; then
@@ -57,7 +60,9 @@ fi
 # ── Run tests ────────────────────────────────────────────────────────────────
 total_passed=0
 total_failed=0
-declare -A suite_results=()
+RESULTS_DIR=$(mktemp -d 2>/dev/null || echo "${TMPDIR:-/tmp}/run_all_results.$$")
+mkdir -p "$RESULTS_DIR"
+trap "rm -rf '$RESULTS_DIR'" EXIT
 
 echo ""
 echo "╔══════════════════════════════════════════════════════╗"
@@ -66,10 +71,10 @@ echo "╚═══════════════════════�
 echo ""
 
 for name in "${selected[@]}"; do
-  script="${TESTS[$name]:-}"
+  script=$(get_script "$name")
   if [[ -z "$script" ]]; then
     echo -e "${RED}Unknown test suite: $name${NC}"
-    echo "Available: ${!TESTS[*]}"
+    echo "Available: basic failover isr stress chaos"
     exit 1
   fi
 
@@ -86,11 +91,11 @@ for name in "${selected[@]}"; do
   start_time=$SECONDS
   if bash "$script_path"; then
     elapsed=$((SECONDS - start_time))
-    suite_results[$name]="PASS (${elapsed}s)"
+    echo "PASS (${elapsed}s)" > "${RESULTS_DIR}/${name}"
     echo -e "\n${GREEN}  ✓ $name passed (${elapsed}s)${NC}\n"
   else
     elapsed=$((SECONDS - start_time))
-    suite_results[$name]="FAIL (${elapsed}s)"
+    echo "FAIL (${elapsed}s)" > "${RESULTS_DIR}/${name}"
     total_failed=$((total_failed + 1))
     echo -e "\n${RED}  ✗ $name failed (${elapsed}s)${NC}\n"
   fi
@@ -103,7 +108,8 @@ echo "║                  FINAL SUMMARY                       ║"
 echo "╠══════════════════════════════════════════════════════╣"
 
 for name in "${selected[@]}"; do
-  result="${suite_results[$name]:-SKIPPED}"
+  result="SKIPPED"
+  [[ -f "${RESULTS_DIR}/${name}" ]] && result=$(cat "${RESULTS_DIR}/${name}")
   if [[ "$result" == PASS* ]]; then
     printf "║  ${GREEN}%-12s %s${NC}%*s║\n" "$name" "$result" $((36 - ${#name} - ${#result})) ""
   else

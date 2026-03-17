@@ -90,6 +90,7 @@ start_node() {
 
   ( while true; do sleep 3600; done ) > "$input_pipe" &
   NODE_WRITER_PIDS[$nid]=$!
+  disown ${NODE_WRITER_PIDS[$nid]} 2>/dev/null || true
 
   log_info "Started node $nid (pid=${NODE_PIDS[$nid]}, gRPC=$grpc_port, Raft=$raft_port)"
 }
@@ -186,12 +187,18 @@ write_records() {
 
 stop_node() {
   local nid=$1
-  send_cmd "$nid" "quit"
-  sleep 0.5
+  # Only send "quit" if the node is still running; otherwise writing to the FIFO blocks (no reader)
   if [[ -n "${NODE_PIDS[$nid]:-}" ]] && kill -0 "${NODE_PIDS[$nid]}" 2>/dev/null; then
-    kill "${NODE_PIDS[$nid]}" 2>/dev/null || true
-    wait "${NODE_PIDS[$nid]}" 2>/dev/null || true
+    send_cmd "$nid" "quit"
+    # Give node time to read "quit", run mgr.Stop(), wal->Close(), and exit (releases WAL LOCK)
+    sleep 2
+    if kill -0 "${NODE_PIDS[$nid]}" 2>/dev/null; then
+      kill "${NODE_PIDS[$nid]}" 2>/dev/null || true
+      wait "${NODE_PIDS[$nid]}" 2>/dev/null || true
+    fi
   fi
+  # Always wait so the process is fully gone and WAL LOCK is released before wal_dump runs
+  [[ -n "${NODE_PIDS[$nid]:-}" ]] && wait "${NODE_PIDS[$nid]}" 2>/dev/null || true
   if [[ -n "${NODE_WRITER_PIDS[$nid]:-}" ]]; then
     kill "${NODE_WRITER_PIDS[$nid]}" 2>/dev/null || true
   fi
@@ -248,7 +255,16 @@ compare_wal_dumps() {
   local out_b="${TEST_TMPDIR}/dump_${nid_b}.txt"
   "$WAL_DUMP" "$dir_a" > "$out_a" 2>/dev/null || true
   "$WAL_DUMP" "$dir_b" > "$out_b" 2>/dev/null || true
-  diff -q "$out_a" "$out_b"
+  if diff -q "$out_a" "$out_b" >/dev/null 2>&1; then
+    return 0
+  fi
+  local count_a count_b
+  count_a=$(wc -l < "$out_a" 2>/dev/null || echo 0)
+  count_b=$(wc -l < "$out_b" 2>/dev/null || echo 0)
+  log_fail "WAL dumps differ: node $nid_a has $count_a lines, node $nid_b has $count_b lines"
+  log_info "First 30 lines of diff (node $nid_a vs node $nid_b):"
+  diff -u "$out_a" "$out_b" 2>/dev/null | head -30 >&2 || true
+  return 1
 }
 
 assert_ok() {
@@ -261,4 +277,14 @@ assert_ok() {
     log_fail "$msg"
     return 1
   fi
+}
+
+print_summary() {
+  local failed="${TESTS_FAILED:-0}"
+  if [[ "$failed" -gt 0 ]]; then
+    log_fail "$failed test(s) failed"
+    exit 1
+  fi
+  log_ok "All tests passed"
+  exit 0
 }

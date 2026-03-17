@@ -38,6 +38,13 @@ int main(int argc, char** argv) {
   mwal::WALOptions wal_opts;
   wal_opts.wal_dir = wal_dir;
   wal_opts.max_wal_file_size = 4 * 1024 * 1024;
+  // Run recovery when opening existing WAL so last_sequence_ is set correctly.
+  // Otherwise a restarted node reports last_persisted_lsn=0 and catch-up appends
+  // from seq 1 into a new file while old files remain, producing duplicate entries.
+  wal_opts.recovery_callback = [](mwal::SequenceNumber /*seq*/,
+                                  mwal::WriteBatch* /*batch*/) {
+    return mwal::Status::OK();
+  };
 
   mwal::replication::ReplicationManager* mgr_ptr = nullptr;
 

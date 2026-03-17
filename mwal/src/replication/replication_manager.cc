@@ -4,7 +4,10 @@
 #include <chrono>
 #include <thread>
 
+#include "mwal/compression_type.h"
+#include "mwal/wal_iterator.h"
 #include "replication.pb.h"
+#include "wal/wal_compressor.h"
 
 namespace mwal {
 namespace replication {
@@ -107,8 +110,37 @@ void ReplicationManager::ReplicationLoop() {
         batch.swap(pending_entries_);
       }
     }
-    if (!batch.empty() && is_leader_.load(std::memory_order_acquire)) {
-      FanOutEntries(batch);
+    if (is_leader_.load(std::memory_order_acquire)) {
+      if (!batch.empty()) {
+        FanOutEntries(batch);
+      } else {
+        // No new writes: probe replicas so lagging ones (e.g. restarted node)
+        // return gap and we trigger CatchUpReplica.
+        uint64_t term = current_term_.load(std::memory_order_acquire);
+        uint64_t commit = committed_lsn_.load(std::memory_order_acquire);
+        uint64_t my_lsn = wal_->GetLatestSequenceNumber();
+        ReplicateRequest probe;
+        probe.set_term(term);
+        probe.set_leader_commit(commit);
+        probe.set_prev_lsn(my_lsn);
+        auto isr = isr_tracker_.GetISRSet();
+        for (const auto& [node_id, client] : clients_) {
+          if (!client || !client->IsConnected()) continue;
+          ReplicateResponse resp = client->SendReplicate(probe);
+          if (resp.success()) {
+            isr_tracker_.UpdateReplicaProgress(node_id, resp.last_persisted_lsn(),
+                                              resp.last_persisted_lsn());
+          } else if (isr.count(node_id) == 0) {
+            const std::string& msg = resp.message();
+            bool replica_responded = (msg == "gap detected" || msg == "stale term" ||
+                                      msg.find("truncate failed") != std::string::npos ||
+                                      msg.find("append failed") != std::string::npos);
+            if (replica_responded && resp.last_persisted_lsn() < my_lsn) {
+              CatchUpReplica(node_id, resp.last_persisted_lsn() + 1);
+            }
+          }
+        }
+      }
     }
     committed_lsn_.store(isr_tracker_.ComputeCommittedLSN(),
                          std::memory_order_release);
@@ -166,11 +198,78 @@ void ReplicationManager::FanOutEntries(std::vector<PendingEntry>& entries) {
   }
 }
 
-void ReplicationManager::CatchUpReplica(uint64_t /*node_id*/,
-                                        uint64_t /*start_lsn*/) {
-  // Replica catch-up is pull-based: the replica calls the leader's StreamWAL
-  // when it detects it is behind (e.g. from Replicate response). The leader
-  // does not push StreamWAL to replicas.
+void ReplicationManager::CatchUpReplica(uint64_t node_id, uint64_t start_lsn) {
+  auto it = clients_.find(node_id);
+  if (it == clients_.end() || !it->second || !it->second->IsConnected()) {
+    return;
+  }
+  ReplicationClient* client = it->second.get();
+  std::unique_ptr<WalIterator> iter;
+  Status s = wal_->NewWalIterator(start_lsn, &iter);
+  if (!s.ok()) return;
+  uint64_t leader_end = wal_->GetLatestSequenceNumber();
+  if (start_lsn > leader_end) return;
+
+  const uint64_t term = current_term_.load(std::memory_order_acquire);
+  const uint64_t commit = committed_lsn_.load(std::memory_order_release);
+  const uint32_t kMaxCatchUpEntries = 50;
+  uint32_t count_in_req = 0;
+  ReplicateRequest req;
+  req.set_term(term);
+  req.set_leader_commit(commit);
+  uint64_t prev_lsn = start_lsn > 0 ? start_lsn - 1 : 0;
+
+  while (iter->Valid() && !shutdown_.load(std::memory_order_acquire)) {
+    uint64_t first_seq = iter->GetSequenceNumber();
+    const WriteBatch& batch = iter->GetBatch();
+    uint32_t batch_count = static_cast<uint32_t>(batch.Count());
+    std::string payload;
+    if (!WalCompressor::Compress(kNoCompression, Slice(batch.Data()), &payload)
+             .ok()) {
+      break;
+    }
+
+    if (count_in_req == 0) {
+      req.set_prev_lsn(prev_lsn);
+      req.clear_entries();
+    }
+    auto* entry = req.add_entries();
+    entry->set_first_seq(first_seq);
+    entry->set_count(batch_count);
+    entry->set_payload(payload);
+    count_in_req++;
+
+    iter->Next();
+    uint64_t last_seq_sent = first_seq + batch_count - 1;
+
+    if (count_in_req >= kMaxCatchUpEntries || !iter->Valid() ||
+        last_seq_sent >= leader_end) {
+      ReplicateResponse resp = client->SendReplicate(req);
+      if (resp.success()) {
+        isr_tracker_.UpdateReplicaProgress(node_id, resp.last_persisted_lsn(),
+                                          resp.last_persisted_lsn());
+        prev_lsn = resp.last_persisted_lsn();
+        count_in_req = 0;
+        if (last_seq_sent >= leader_end) break;
+      } else {
+        // Only use last_persisted_lsn when the replica actually responded (gap,
+        // truncate, append failure). On RPC failure (timeout, etc.) it is 0 and
+        // must not be used or we would send prev_lsn=0 and wipe the replica's log.
+        const std::string& msg = resp.message();
+        bool replica_responded = (msg == "gap detected" || msg == "stale term" ||
+                                  msg.find("truncate failed") != std::string::npos ||
+                                  msg.find("append failed") != std::string::npos);
+        if (replica_responded && resp.last_persisted_lsn() < prev_lsn) {
+          prev_lsn = resp.last_persisted_lsn();
+          s = wal_->NewWalIterator(prev_lsn + 1, &iter);
+          if (!s.ok()) break;
+        } else if (!replica_responded) {
+          break;  // RPC failure; next FanOutEntries will retry catch-up
+        }
+        count_in_req = 0;
+      }
+    }
+  }
 }
 
 // Lightweight in-memory state_mgr for NuRaft.
