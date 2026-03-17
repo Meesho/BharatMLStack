@@ -5,6 +5,8 @@ from __future__ import annotations
 import struct
 from typing import Any
 
+from .decoder import decode_scalar_value, decode_vector_or_string
+
 # Pre-created Struct objects for unpack_from — avoids repeated format string parsing
 _STRUCT_U16 = struct.Struct("<H")
 _STRUCT_U8 = struct.Struct("<B")
@@ -13,9 +15,9 @@ _STRUCT_U8 = struct.Struct("<B")
 def decode_proto_selective(data: bytes, plan: list[tuple]) -> dict[str, Any]:
     """Decode proto-encoded features using a precompiled plan. Uses memoryview for zero-copy slicing.
 
-    Plan entries:
-    - ("scalar", name, fixed_size, decoder, should_decode, feature_type)
-    - ("var", name, None, decoder, should_decode, feature_type)
+    Plan entries (no callables; feature_type is used to resolve decoder at decode time):
+    - ("scalar", name, fixed_size, feature_type, should_decode)
+    - ("var", name, None, feature_type, should_decode)
     - ("skip_bytes", total_size, None, False, None)
 
     Skips byte 0 (generated flag), starts at pos=1. On any bounds violation, sets remaining
@@ -27,7 +29,6 @@ def decode_proto_selective(data: bytes, plan: list[tuple]) -> dict[str, Any]:
     mv = memoryview(data)
     pos = 1  # skip generated flag
     result: dict[str, Any] = {}
-    # Names we will decode (for filling None on bounds violation)
     decoded_names = _decoded_names_from_plan(plan)
 
     for entry in plan:
@@ -40,16 +41,18 @@ def decode_proto_selective(data: bytes, plan: list[tuple]) -> dict[str, Any]:
             pos += total_size
             continue
         if kind == "scalar":
-            name, fixed_size, decoder, should_decode, _ = entry[1], entry[2], entry[3], entry[4], entry[5]
+            name, fixed_size, feature_type, should_decode = entry[1], entry[2], entry[3], entry[4]
             if pos + fixed_size > len(data):
                 _fill_remaining_none(result, decoded_names)
                 return result
             if should_decode:
-                result[name] = decoder(mv[pos : pos + fixed_size].tobytes())
+                result[name] = decode_scalar_value(
+                    mv[pos : pos + fixed_size].tobytes(), feature_type
+                )
             pos += fixed_size
             continue
         if kind == "var":
-            name, decoder, should_decode = entry[1], entry[3], entry[4]
+            name, feature_type, should_decode = entry[1], entry[3], entry[4]
             if pos + 2 > len(data):
                 _fill_remaining_none(result, decoded_names)
                 return result
@@ -59,7 +62,9 @@ def decode_proto_selective(data: bytes, plan: list[tuple]) -> dict[str, Any]:
                 _fill_remaining_none(result, decoded_names)
                 return result
             if should_decode:
-                result[name] = decoder(mv[pos : pos + size].tobytes())
+                result[name] = decode_vector_or_string(
+                    mv[pos : pos + size].tobytes(), feature_type
+                )
             pos += size
             continue
 
@@ -91,11 +96,10 @@ def _fill_remaining_none(result: dict[str, Any], decoded_names: list[str]) -> No
 def decode_proto_fixed(data: bytes, fixed_plan: tuple) -> dict[str, Any]:
     """Decode proto for all-scalar schemas using precomputed offsets. Zero branching per feature.
 
-    fixed_plan: (offsets, sizes, names, types, decoders) from try_build_fixed_plan.
-    Single bounds check; then tight loop over features.
+    fixed_plan: (offsets, sizes, names, types) from try_build_fixed_plan (no callables).
+    Decoder resolved at decode time via decode_scalar_value(bytes, types[i]).
     """
-    offsets, sizes, names, _types, decoders = fixed_plan
-    # Minimum data length: 1 (generated flag) + last feature end (offsets[-1] + sizes[-1])
+    offsets, sizes, names, types = fixed_plan
     if not offsets:
         return {}
     min_length = 1 + offsets[-1] + sizes[-1]
@@ -106,5 +110,5 @@ def decode_proto_fixed(data: bytes, fixed_plan: tuple) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for i in range(len(names)):
         o, sz = offsets[i], sizes[i]
-        result[names[i]] = decoders[i](mv[o : o + sz].tobytes())
+        result[names[i]] = decode_scalar_value(mv[o : o + sz].tobytes(), types[i])
     return result

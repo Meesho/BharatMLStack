@@ -116,8 +116,8 @@ class TestCompilePlan:
         plan = compile_selective_plan(schema, needed_columns=None)
         pctr = next(e for e in plan if e[0] == "scalar" and e[1] == "pctr_score")
         pcvr = next(e for e in plan if e[0] == "scalar" and e[1] == "pcvr_score")
-        assert pctr[5] == "FP32"  # canonical type
-        assert pcvr[5] == "FP32"
+        assert pctr[3] == "FP32"  # feature_type (canonical)
+        assert pcvr[3] == "FP32"
         assert pctr[2] == 4 and pcvr[2] == 4  # fixed_size
 
 
@@ -281,9 +281,9 @@ class TestTypeNormalization:
         s2 = [FeatureInfo("a", "DataTypeFP32", 0)]
         p1 = compile_selective_plan(s1, needed_columns=None)
         p2 = compile_selective_plan(s2, needed_columns=None)
-        assert p1[0][5] == "FP32"
-        assert p2[0][5] == "FP32"
-        assert p1[0][2] == p2[0][2] == 4
+        assert p1[0][3] == "FP32"  # feature_type
+        assert p2[0][3] == "FP32"
+        assert p1[0][2] == p2[0][2] == 4  # fixed_size
 
     def test_unknown_type_raises(self):
         with pytest.raises(ValueError, match="Unknown feature type"):

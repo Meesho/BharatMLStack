@@ -100,7 +100,10 @@ def test_compile_skip_plan_contiguous_scalar_run_collapsing():
 
 
 def test_compile_skip_plan_both_naming_conventions():
-    """Schema can mix DataTypeX and X; plan decodes correctly."""
+    """Schema can mix DataTypeX and X; plan stores feature_type (no callables, picklable)."""
+    from inference_logging_client.decoder import decode_scalar_value
+    import struct
+
     schema = [
         FeatureInfo("f1", "DataTypeFP32", 0),
         FeatureInfo("f2", "INT64", 1),
@@ -115,20 +118,19 @@ def test_compile_skip_plan_both_naming_conventions():
     # f4 is sized
     sized = [e for e in decode_entries if e[2] is True]
     assert len(sized) == 1 and sized[0][1] == "f4"
-    # Scalars have bound decoders that work
-    import struct
+    # Scalars: entry is (kind, name, is_sized, fixed_size, feature_type); decode via feature_type
     for entry in decode_entries:
         if entry[2]:  # sized
             continue
-        _, name, is_sized, fixed_size, decoder, _ = entry
+        _, name, _is_sized, fixed_size, feature_type = entry
         if name == "f1":
-            out = decoder(struct.pack("<f", 1.5))
+            out = decode_scalar_value(struct.pack("<f", 1.5), feature_type)
             assert out == 1.5
         elif name == "f2":
-            out = decoder(struct.pack("<q", -99))
+            out = decode_scalar_value(struct.pack("<q", -99), feature_type)
             assert out == -99
         elif name == "f3":
-            out = decoder(struct.pack("<i", 42))
+            out = decode_scalar_value(struct.pack("<i", 42), feature_type)
             assert out == 42
 
 
@@ -136,7 +138,7 @@ def test_compile_skip_plan_both_naming_conventions():
 
 
 def test_try_build_fixed_plan_all_scalar_returns_tuple():
-    """All-scalar schema returns (offsets, sizes, names, types, decoders)."""
+    """All-scalar schema returns (offsets, sizes, names, types) — no callables, picklable."""
     schema = [
         FeatureInfo("a", "INT32", 0),
         FeatureInfo("b", "FP32", 1),
@@ -144,12 +146,11 @@ def test_try_build_fixed_plan_all_scalar_returns_tuple():
     ]
     result = try_build_fixed_plan(schema)
     assert result is not None
-    offsets, sizes, names, types, decoders = result
+    offsets, sizes, names, types = result
     assert offsets == (1, 5, 9)  # after 1-byte flag: 4, 4, 8
     assert sizes == (4, 4, 8)
     assert names == ("a", "b", "c")
     assert types == ("INT32", "FP32", "INT64")
-    assert len(decoders) == 3
 
 
 def test_try_build_fixed_plan_any_sized_returns_none():

@@ -63,7 +63,7 @@ def _output_names_from_plan(plan_kind: str, plan_value: Any, schema: List[Featur
     """Extract set of feature names that will be decoded (should_decode=True)."""
     out: Set[str] = set()
     if plan_kind == "fixed":
-        # fixed_plan = (offsets, sizes, names, types, decoders)
+        # fixed_plan = (offsets, sizes, names, types)
         out.update(plan_value[2])
     else:
         # general: selective plan entries ("scalar", name, ...) or ("var", name, ...) with entry[4] True

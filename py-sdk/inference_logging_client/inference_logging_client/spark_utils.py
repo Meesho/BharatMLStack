@@ -30,7 +30,7 @@ def add_version_column(
         16,
         10,
     ).cast(IntegerType())
-    version = F.shiftRight(raw_byte, 2).bitwiseAND(F.lit(0x0F)).cast(IntegerType())
+    version = F.shiftright(raw_byte, 2).bitwiseAND(F.lit(0x0F)).cast(IntegerType())
     return df.withColumn("_schema_version", version)
 
 
