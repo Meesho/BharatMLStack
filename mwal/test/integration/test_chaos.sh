@@ -13,6 +13,8 @@ source "$SCRIPT_DIR/helpers.sh"
 
 ensure_built
 setup_tmpdir
+TESTS_FAILED=0
+TESTS_PASSED=0
 
 CHAOS_DURATION=${CHAOS_DURATION:-60}
 CHAOS_NODES=${CHAOS_NODES:-5}
@@ -67,14 +69,14 @@ while (( SECONDS < chaos_end )); do
   sleep "$CHAOS_KILL_INTERVAL"
 
   # Count alive nodes — don't kill if we'd lose majority
-  local alive=0
+  alive=0
   for nid in $(seq 1 "$CHAOS_NODES"); do
     if [[ -n "${NODE_PIDS[$nid]:-}" ]] && kill -0 "${NODE_PIDS[$nid]}" 2>/dev/null; then
       alive=$((alive + 1))
     fi
   done
 
-  local majority=$(( (CHAOS_NODES / 2) + 1 ))
+  majority=$(( (CHAOS_NODES / 2) + 1 ))
   if (( alive <= majority )); then
     log_info "Only $alive nodes alive (need $majority majority) — restarting killed nodes instead"
     for nid in $(seq 1 "$CHAOS_NODES"); do
@@ -88,7 +90,7 @@ while (( SECONDS < chaos_end )); do
   fi
 
   # Pick a random alive node to kill
-  local candidates=()
+  candidates=()
   for nid in $(seq 1 "$CHAOS_NODES"); do
     if [[ -n "${NODE_PIDS[$nid]:-}" ]] && kill -0 "${NODE_PIDS[$nid]}" 2>/dev/null; then
       candidates+=("$nid")
@@ -99,7 +101,7 @@ while (( SECONDS < chaos_end )); do
     continue
   fi
 
-  local victim=${candidates[$((RANDOM % ${#candidates[@]}))]}
+  victim=${candidates[$((RANDOM % ${#candidates[@]}))]}
   kill_count=$((kill_count + 1))
   log_info "Chaos #$kill_count: killing node $victim"
   kill_node "$victim"
@@ -136,12 +138,10 @@ done
 sleep 2
 
 # Find the node with the most records (should be the last leader)
-local max_records=0
-local max_node=1
+max_records=0
+max_node=1
 for nid in $(seq 1 "$CHAOS_NODES"); do
-  local dump
   dump=$(dump_wal "$nid")
-  local cnt
   cnt=$(wc -l < "$dump" | tr -d ' ')
   log_info "Node $nid: $cnt records"
   if (( cnt > max_records )); then
@@ -156,16 +156,13 @@ log_info "Writes attempted: $local_write_count"
 # In chaos mode, not all writes may succeed (leader may be killed mid-write).
 # But all surviving records must be consistent across nodes.
 # Check that all nodes that have records are consistent with each other.
-local ref_dump
 ref_dump=$(dump_wal "$max_node")
-local converged=true
+converged=true
 
 for nid in $(seq 1 "$CHAOS_NODES"); do
   if [[ "$nid" == "$max_node" ]]; then continue; fi
-  local other_dump
   other_dump=$(dump_wal "$nid")
 
-  local ref_lines other_lines
   ref_lines=$(wc -l < "$ref_dump" | tr -d ' ')
   other_lines=$(wc -l < "$other_dump" | tr -d ' ')
 

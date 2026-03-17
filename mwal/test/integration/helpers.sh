@@ -215,6 +215,22 @@ kill_node() {
   fi
 }
 
+# Pause node process (SIGSTOP) so it stops replicating and can be moved to OSR.
+pause_node() {
+  local nid=$1
+  if [[ -n "${NODE_PIDS[$nid]:-}" ]] && kill -0 "${NODE_PIDS[$nid]}" 2>/dev/null; then
+    kill -STOP "${NODE_PIDS[$nid]}"
+  fi
+}
+
+# Resume node process (SIGCONT) after pause.
+resume_node() {
+  local nid=$1
+  if [[ -n "${NODE_PIDS[$nid]:-}" ]] && kill -0 "${NODE_PIDS[$nid]}" 2>/dev/null; then
+    kill -CONT "${NODE_PIDS[$nid]}"
+  fi
+}
+
 restart_node() {
   local nid=$1
   local num_nodes=$2
@@ -244,6 +260,14 @@ check_record_count() {
   local count
   count=$("$WAL_DUMP" "$wal_dir" 2>/dev/null | wc -l)
   [[ ${count:-0} -ge $min_count ]]
+}
+
+# Write node WAL to a temp file and echo its path (for chaos test verification).
+dump_wal() {
+  local nid=$1
+  local out="${TEST_TMPDIR}/chaos_dump_${nid}.txt"
+  "$WAL_DUMP" "${NODE_WAL_DIRS[$nid]}" > "$out" 2>/dev/null || true
+  echo "$out"
 }
 
 compare_wal_dumps() {
