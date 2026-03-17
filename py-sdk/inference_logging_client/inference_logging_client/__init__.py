@@ -13,7 +13,7 @@ Main functions:
 """
 
 import warnings
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Collection, Optional
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame as SparkDataFrame
@@ -48,7 +48,7 @@ from .io import clear_schema_cache, get_feature_schema, get_mplog_metadata, pars
 from .types import FORMAT_TYPE_MAP, DecodedMPLog, FeatureInfo, Format
 from .utils import format_dataframe_floats, get_format_name, unpack_metadata_byte
 
-__version__ = "0.1.0"
+__version__ = "0.3.1"
 
 # Maximum supported schema version (4 bits = 0-15)
 _MAX_SCHEMA_VERSION = 15
@@ -108,6 +108,7 @@ def decode_mplog(
     inference_host: Optional[str] = None,
     decompress: bool = True,
     schema: Optional[list] = None,
+    needed_columns: Optional[Collection[str]] = None,
 ) -> "SparkDataFrame":
     """
     Main function to decode MPLog bytes to a Spark DataFrame.
@@ -121,6 +122,8 @@ def decode_mplog(
         inference_host: The inference service host URL. If None, reads from INFERENCE_HOST env var.
         decompress: Whether to attempt zstd decompression
         schema: Optional pre-fetched schema (list of FeatureInfo). If provided, skips schema fetch.
+        needed_columns: Optional set or list of feature names to include. If provided, only these
+            columns are returned (reduces memory and output size). If None, all schema columns are returned.
 
     Returns:
         Spark DataFrame with entity_id as first column and features as remaining columns
@@ -179,26 +182,38 @@ def decode_mplog(
 
     # Decode based on format
     if detected_format == Format.PROTO:
-        entity_ids, decoded_rows = decode_proto_format(working_data, schema)
+        entity_ids, decoded_rows = decode_proto_format(
+            working_data, schema, needed_columns=needed_columns
+        )
     elif detected_format == Format.ARROW:
-        entity_ids, decoded_rows = decode_arrow_format(working_data, schema)
+        entity_ids, decoded_rows = decode_arrow_format(
+            working_data, schema, needed_columns=needed_columns
+        )
     elif detected_format == Format.PARQUET:
-        entity_ids, decoded_rows = decode_parquet_format(working_data, schema)
+        entity_ids, decoded_rows = decode_parquet_format(
+            working_data, schema, needed_columns=needed_columns
+        )
     else:
         raise FormatError(f"Unsupported format: {detected_format}")
+
+    # Restrict to needed_columns when provided (smaller output schema and rows)
+    output_schema = schema
+    if needed_columns is not None:
+        needed_set = set(needed_columns)
+        output_schema = [f for f in schema if f.name in needed_set]
 
     if not decoded_rows:
         # Return empty DataFrame with correct schema
         from pyspark.sql.types import StringType, StructField, StructType
 
-        # Build empty schema with entity_id + feature columns
+        # Build empty schema with entity_id + feature columns (only output_schema)
         fields = [StructField("entity_id", StringType(), True)]
-        for f in schema:
+        for f in output_schema:
             fields.append(StructField(f.name, StringType(), True))
         empty_schema = StructType(fields)
         return spark.createDataFrame([], empty_schema)
 
-    # Build rows with entity_id as first field
+    # Build rows: format decoders already return only needed_columns when set
     rows = []
     for entity_id, row_data in zip(entity_ids, decoded_rows):
         row = {"entity_id": entity_id}
@@ -255,6 +270,7 @@ def decode_mplog_dataframe(
     mp_config_id_column: str = "mp_config_id",
     num_partitions: Optional[int] = None,
     max_records_per_batch: Optional[int] = None,
+    needed_columns: Optional[Collection[str]] = None,
 ) -> "SparkDataFrame":
     """
     Decode MPLog features from a Spark DataFrame with specific column structure.
@@ -281,6 +297,8 @@ def decode_mplog_dataframe(
             partition size small when rows are large (3-5 MB each). Increase if rows are small.
         max_records_per_batch: Max rows per Arrow batch in mapInPandas. When set (default 200),
             applied temporarily during this call to limit memory per batch when rows are large.
+        needed_columns: Optional set or list of feature names to include. If provided, only these
+            columns are decoded and returned (reduces memory and output size). If None, all schema columns are returned.
 
     Returns:
         Spark DataFrame with decoded features. Each row from input becomes multiple rows
@@ -352,11 +370,14 @@ def decode_mplog_dataframe(
     ]
     _reserved_columns = {"entity_id"} | {c for c in row_metadata_columns if c in df_columns}
     
-    # Build full output schema: entity_id + metadata cols + all feature names from all schemas
+    # Build full output schema: entity_id + metadata cols + (optionally restricted) feature names
     all_feature_names = set()
     for feat_list in schema_cache.values():
         for f in feat_list:
             all_feature_names.add(f.name)
+    if needed_columns is not None:
+        needed_set = set(needed_columns)
+        all_feature_names = all_feature_names & needed_set
     metadata_cols_in_schema = [c for c in row_metadata_columns if c in df_columns]
     from pyspark.sql.types import StringType, StructField, StructType
     # Map input column names to their Spark types so we can preserve them in the output
@@ -459,11 +480,17 @@ def decode_mplog_dataframe(
                         working_data = _decompress_zstd(encoded_bytes)
                     try:
                         if detected_format == Format.ARROW:
-                            decoded_features = decode_arrow_features(working_data, feature_schema)
+                            decoded_features = decode_arrow_features(
+                                working_data, feature_schema, needed_columns=needed_columns
+                            )
                         elif detected_format == Format.PARQUET:
-                            decoded_features = decode_parquet_features(working_data, feature_schema)
+                            decoded_features = decode_parquet_features(
+                                working_data, feature_schema, needed_columns=needed_columns
+                            )
                         else:
-                            decoded_features = decode_proto_features(working_data, feature_schema)
+                            decoded_features = decode_proto_features(
+                                working_data, feature_schema, needed_columns=needed_columns
+                            )
                     except Exception:
                         continue
                     result_row = {"entity_id": entity_id}
