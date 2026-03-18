@@ -31,12 +31,10 @@ func (dm *DeleteManager) IncMemtableKeyCount(memId uint32) {
 	dm.memtableData[memId]++
 }
 
-// EnsureTrimmedBeforeWrap trims the file head and advances the index watermark if needed.
-// Called by the write path (OnBeforeWrap) so we punch before wrap and never punch new data.
+// EnsureTrimmedBeforeWrap trims the file head and advances the index watermark.
+// Called only when the write path is about to wrap (OnBeforeWrap), so we always punch
+// before wrap and never punch newly written data.
 func (dm *DeleteManager) EnsureTrimmedBeforeWrap() error {
-	if !dm.wrapFile.TrimHeadIfNeeded() {
-		return nil
-	}
 	memIdAtHead, err := dm.keyIndex.PeekMemIdAtHead()
 	if err != nil {
 		return err
