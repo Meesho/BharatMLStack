@@ -146,7 +146,7 @@ func NewWrapCache(config Config, mountPoint string) (*WrapCache, error) {
 			Rounds:              rounds,
 			RbInitial:           config.KeysPerShard,
 			RbMax:               config.KeysPerShard,
-			DeleteAmortizedStep: 10000,
+			DeleteAmortizedStep: 10,
 			MaxFileSize:         config.FileSize,
 			BlockSize:           blockSize,
 			Directory:           mountPoint,
