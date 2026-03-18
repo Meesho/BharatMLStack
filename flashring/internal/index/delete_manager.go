@@ -71,6 +71,7 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 		}
 
 		dm.wrapFile.TrimHead()
+		dm.keyIndex.AdvanceSmallestActiveMemtable(dm.toBeDeletedMemId)
 		return errors.New("trim needed retry this write")
 	}
 	return nil

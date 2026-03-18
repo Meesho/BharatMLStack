@@ -3,6 +3,7 @@ package index
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
@@ -21,12 +22,13 @@ const (
 )
 
 type Index struct {
-	mu       *sync.RWMutex
-	rm       map[uint64]int
-	rb       *RingBuffer
-	mc       *maths.MorrisLogCounter
-	startAt  int64
-	hashBits int
+	mu                     *sync.RWMutex
+	rm                     map[uint64]int
+	rb                     *RingBuffer
+	mc                     *maths.MorrisLogCounter
+	startAt                int64
+	hashBits               int
+	smallestActiveMemtable uint32 // memIds < this have been trimmed; treat as NotFound (no disk read)
 }
 
 func NewIndex(hashBits int, rbInitial, rbMax, deleteAmortizedStep int, mu *sync.RWMutex) *Index {
@@ -75,6 +77,10 @@ func (i *Index) Get(key string) (length, lastAccess, remainingTTL uint16, freq u
 		entry, hashNextPrev, _ := i.rb.Get(int(idx))
 		if isHashMatch(hhi, hlo, hashNextPrev) {
 			length, deltaExptime, lastAccess, freq, memId, offset := decode(entry)
+			// Entry points to a trimmed memtable: don't read from disk; treat as not found.
+			if memId < atomic.LoadUint32(&i.smallestActiveMemtable) {
+				return 0, 0, 0, 0, 0, 0, StatusNotFound
+			}
 			exptime := int(deltaExptime) + int(i.startAt/60)
 			currentTime := int(time.Now().Unix() / 60)
 			remainingTTL := exptime - currentTime
@@ -139,6 +145,21 @@ func (ki *Index) PeekMemIdAtHead() (uint32, error) {
 	}
 	memId, _ := DecodeMemIdOffset(entry)
 	return memId, nil
+}
+
+// AdvanceSmallestActiveMemtable marks the given memtable (and all smaller) as trimmed.
+// Call after TrimHead() so Gets for keys in that region return NotFound instead of reading disk.
+func (ki *Index) AdvanceSmallestActiveMemtable(trimmedMemId uint32) {
+	newMin := trimmedMemId + 1
+	for {
+		cur := atomic.LoadUint32(&ki.smallestActiveMemtable)
+		if cur >= newMin {
+			return
+		}
+		if atomic.CompareAndSwapUint32(&ki.smallestActiveMemtable, cur, newMin) {
+			return
+		}
+	}
 }
 
 func (i *Index) generateLastAccess() uint16 {
