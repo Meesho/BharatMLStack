@@ -29,6 +29,10 @@ type WrapAppendFile struct {
 	ReadFile             *os.File               // read file
 	Stat                 *Stat                  // file statistics
 	WriteRing            *iouring.IoUringWriter // io_uring writer for batched writes
+	// OnBeforeWrap is called when a write would cause the ring to wrap. The caller must
+	// trim the head (and advance PhysicalStartOffset) so we write into reclaimed space.
+	// If nil, wrap proceeds without trimming (legacy behaviour; can punch new data).
+	OnBeforeWrap func() error
 }
 
 func NewWrapAppendFile(config FileConfig) (*WrapAppendFile, error) {
@@ -80,6 +84,12 @@ func (r *WrapAppendFile) Pwrite(buf []byte) (currentPhysicalOffset int64, err er
 
 	r.PhysicalWriteOffset += int64(n)
 	if r.PhysicalWriteOffset >= r.MaxFileSize {
+		if r.OnBeforeWrap != nil {
+			if err := r.OnBeforeWrap(); err != nil {
+				r.PhysicalWriteOffset -= int64(n) // rollback
+				return 0, err
+			}
+		}
 		r.wrapped = true
 		r.PhysicalWriteOffset = r.PhysicalStartOffset
 	}
@@ -113,11 +123,18 @@ func (r *WrapAppendFile) PwriteBatch(buf []byte, chunkSize int) (totalWritten in
 			if end > len(buf) {
 				end = len(buf)
 			}
+			chunkLen := end - written
 			bufs = append(bufs, buf[written:end])
 			offsets = append(offsets, uint64(r.PhysicalWriteOffset))
 
+			// Before wrap: trim head so we write into reclaimed space (punch-before-wrap).
+			if r.PhysicalWriteOffset+int64(chunkLen) >= r.MaxFileSize && r.OnBeforeWrap != nil {
+				if err := r.OnBeforeWrap(); err != nil {
+					return totalWritten, r.PhysicalWriteOffset, err
+				}
+			}
 			// Advance write offset, handle ring-buffer wrap
-			r.PhysicalWriteOffset += int64(end - written)
+			r.PhysicalWriteOffset += int64(chunkLen)
 			if r.PhysicalWriteOffset >= r.MaxFileSize {
 				r.wrapped = true
 				r.PhysicalWriteOffset = r.PhysicalStartOffset

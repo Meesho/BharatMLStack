@@ -31,6 +31,20 @@ func (dm *DeleteManager) IncMemtableKeyCount(memId uint32) {
 	dm.memtableData[memId]++
 }
 
+// EnsureTrimmedBeforeWrap trims the file head and advances the index watermark if needed.
+// Called by the write path (OnBeforeWrap) so we punch before wrap and never punch new data.
+func (dm *DeleteManager) EnsureTrimmedBeforeWrap() error {
+	if !dm.wrapFile.TrimHeadIfNeeded() {
+		return nil
+	}
+	memIdAtHead, err := dm.keyIndex.PeekMemIdAtHead()
+	if err != nil {
+		return err
+	}
+	dm.keyIndex.AdvanceSmallestActiveMemtable(memIdAtHead)
+	return dm.wrapFile.TrimHead()
+}
+
 func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 	if dm.deleteInProgress {
 		memtableId, count := dm.keyIndex.Delete(dm.deleteCount)
@@ -70,8 +84,8 @@ func (dm *DeleteManager) ExecuteDeleteIfNeeded() error {
 			return fmt.Errorf("memIdAtHead: %d, toBeDeletedMemId: %d", memIdAtHead, dm.toBeDeletedMemId)
 		}
 
-		dm.wrapFile.TrimHead()
 		dm.keyIndex.AdvanceSmallestActiveMemtable(dm.toBeDeletedMemId)
+		dm.wrapFile.TrimHead()
 		return errors.New("trim needed retry this write")
 	}
 	return nil

@@ -83,6 +83,7 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) (*ShardCache, erro
 	dm := index.NewDeleteManager(ki, file, config.DeleteAmortizedStep)
 
 	file.WriteRing = config.IoUringWriter
+	file.OnBeforeWrap = dm.EnsureTrimmedBeforeWrap
 
 	sc := &ShardCache{
 		keyIndex:          ki,
