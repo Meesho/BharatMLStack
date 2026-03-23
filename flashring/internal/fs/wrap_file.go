@@ -81,7 +81,7 @@ func (r *WrapAppendFile) Pwrite(buf []byte) (currentPhysicalOffset int64, err er
 	r.PhysicalWriteOffset += int64(n)
 	if r.PhysicalWriteOffset >= r.MaxFileSize {
 		r.wrapped = true
-		r.PhysicalWriteOffset = r.PhysicalStartOffset
+		r.PhysicalWriteOffset = 0
 	}
 	r.LogicalCurrentOffset += int64(n)
 	r.Stat.WriteCount.Add(1)
@@ -120,7 +120,7 @@ func (r *WrapAppendFile) PwriteBatch(buf []byte, chunkSize int) (totalWritten in
 			r.PhysicalWriteOffset += int64(end - written)
 			if r.PhysicalWriteOffset >= r.MaxFileSize {
 				r.wrapped = true
-				r.PhysicalWriteOffset = r.PhysicalStartOffset
+				r.PhysicalWriteOffset = 0
 			}
 			written = end
 		}
@@ -147,6 +147,31 @@ func (r *WrapAppendFile) TrimHeadIfNeeded() bool {
 	return false
 }
 
+// isValidReadRegion checks whether [physOffset, physEnd) falls entirely within
+// the ring's live data.
+//
+// When wrapped, the writer and start pointers chase each other around
+// [0, MaxFileSize). Three sub-cases:
+//
+//	W == S  →  ring is full (writer just caught up); entire file is valid.
+//	W <  S  →  two valid segments: [S, MaxFileSize) and [0, W).
+//	W >  S  →  contiguous [S, W); the region [W, MaxFileSize) was punched
+//	           by the TrimHead that sent S past W's position.
+func (r *WrapAppendFile) isValidReadRegion(physOffset, physEnd int64) bool {
+	if !r.wrapped {
+		return physOffset >= r.PhysicalStartOffset && physEnd <= r.PhysicalWriteOffset
+	}
+	W, S := r.PhysicalWriteOffset, r.PhysicalStartOffset
+	if W == S {
+		return physEnd <= r.MaxFileSize
+	}
+	if W < S {
+		return (physOffset >= S && physEnd <= r.MaxFileSize) ||
+			(physOffset >= 0 && physEnd <= W)
+	}
+	return physOffset >= S && physEnd <= W
+}
+
 func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 	if r.ReadDirectIO {
 		if !isAlignedOffset(fileOffset, r.blockSize) {
@@ -157,34 +182,19 @@ func (r *WrapAppendFile) Pread(fileOffset int64, buf []byte) (int32, error) {
 		}
 	}
 
-	// Validate read window depending on wrap state
-	readEnd := fileOffset + int64(len(buf))
-	valid := false
-
-	if !r.wrapped {
-		// Single valid region: [PhysicalStartOffset, PhysicalWriteOffset)
-		valid = fileOffset >= r.PhysicalStartOffset && readEnd <= r.PhysicalWriteOffset
-	} else {
-		// Only allow reads from the tail that has not been overwritten or punched.
-		// Safe region: [readStart, MaxFileSize) where readStart = max(PhysicalStartOffset, PhysicalWriteOffset).
-		// This excludes both the punched region and the overwritten head (avoids bad CR32).
-		fileOffset = fileOffset % r.MaxFileSize
-		readEnd = readEnd % r.MaxFileSize
-		readStart := r.PhysicalStartOffset
-		if r.PhysicalWriteOffset > readStart {
-			readStart = r.PhysicalWriteOffset
-		}
-		valid = fileOffset >= readStart && readEnd <= r.MaxFileSize
+	physOffset := fileOffset
+	if r.wrapped {
+		physOffset = fileOffset % r.MaxFileSize
 	}
-	if !valid {
+	physEnd := physOffset + int64(len(buf))
+
+	if !r.isValidReadRegion(physOffset, physEnd) {
 		return 0, ErrFileOffsetOutOfRange
 	}
 
 	var startTime = time.Now()
-	n, err := syscall.Pread(r.ReadFd, buf, fileOffset)
+	n, err := syscall.Pread(r.ReadFd, buf, physOffset)
 	metrics.Timing(metrics.KEY_PREAD_LATENCY, time.Since(startTime), []string{})
-	// flags := unix.RWF_HIPRI // optionally: | unix.RWF_NOWAIT
-	// n, err := preadv2(r.ReadFd, buf, fileOffset, flags)
 	if err != nil {
 		return 0, err
 	}
@@ -203,26 +213,17 @@ func (r *WrapAppendFile) ValidateReadOffset(fileOffset int64, bufLen int) (int64
 		}
 	}
 
-	readEnd := fileOffset + int64(bufLen)
-	valid := false
-
-	if !r.wrapped {
-		valid = fileOffset >= r.PhysicalStartOffset && readEnd <= r.PhysicalWriteOffset
-	} else {
-		// Only allow reads from the tail [readStart, MaxFileSize), readStart = max(PhysicalStartOffset, PhysicalWriteOffset).
-		fileOffset = fileOffset % r.MaxFileSize
-		readEnd = readEnd % r.MaxFileSize
-		readStart := r.PhysicalStartOffset
-		if r.PhysicalWriteOffset > readStart {
-			readStart = r.PhysicalWriteOffset
-		}
-		valid = fileOffset >= readStart && readEnd <= r.MaxFileSize
+	physOffset := fileOffset
+	if r.wrapped {
+		physOffset = fileOffset % r.MaxFileSize
 	}
-	if !valid {
+	physEnd := physOffset + int64(bufLen)
+
+	if !r.isValidReadRegion(physOffset, physEnd) {
 		return 0, ErrFileOffsetOutOfRange
 	}
 
-	return fileOffset, nil
+	return physOffset, nil
 }
 
 func (r *WrapAppendFile) TrimHead() (err error) {

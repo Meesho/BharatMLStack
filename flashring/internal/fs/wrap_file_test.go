@@ -268,7 +268,7 @@ func TestPread_Success_WithWrap(t *testing.T) {
 
 	config := FileConfig{
 		Filename:          filename,
-		MaxFileSize:       8192, // Small for easy wrapping
+		MaxFileSize:       8192,
 		FilePunchHoleSize: 4096,
 		BlockSize:         4096,
 	}
@@ -279,13 +279,12 @@ func TestPread_Success_WithWrap(t *testing.T) {
 	}
 	defer cleanupWrapFile(waf)
 
-	// Fill the file to cause wrapping
+	// Fill the file: data1 at [0,4096), data2 at [4096,8192).
 	data1 := createAlignedBuffer(4096, 4096)
 	for i := range data1 {
 		data1[i] = byte(1)
 	}
-	_, err = waf.Pwrite(data1)
-	if err != nil {
+	if _, err = waf.Pwrite(data1); err != nil {
 		t.Fatalf("First Pwrite failed: %v", err)
 	}
 
@@ -293,47 +292,92 @@ func TestPread_Success_WithWrap(t *testing.T) {
 	for i := range data2 {
 		data2[i] = byte(2)
 	}
-	_, err = waf.Pwrite(data2)
-	if err != nil {
+	if _, err = waf.Pwrite(data2); err != nil {
 		t.Fatalf("Second Pwrite failed: %v", err)
 	}
 
-	// Now write more to wrap around
-	data3 := createAlignedBuffer(4096, 4096)
-	for i := range data3 {
-		data3[i] = byte(3)
-	}
-	_, err = waf.Pwrite(data3)
-	if err != nil {
-		t.Fatalf("Third Pwrite failed: %v", err)
-	}
-
+	// Second Pwrite reaches MaxFileSize → writer wraps to 0.
 	if !waf.wrapped {
-		t.Errorf("Expected wrapped to be true")
+		t.Fatalf("Expected wrapped to be true after filling file")
+	}
+	if waf.PhysicalWriteOffset != 0 {
+		t.Fatalf("Expected PhysicalWriteOffset=0 after wrap, got %d", waf.PhysicalWriteOffset)
 	}
 
-	// When wrapped, only the tail [PhysicalWriteOffset, MaxFileSize) is valid for reads.
-	// Tail [4096, 8192) - should contain data2 (not overwritten yet).
+	// W == S == 0 (full ring): both regions are readable.
 	readData := createAlignedBuffer(4096, 4096)
+	if _, err = waf.Pread(0, readData); err != nil {
+		t.Fatalf("Pread [0,4096) in full ring failed: %v", err)
+	}
+	if _, err = waf.Pread(4096, readData); err != nil {
+		t.Fatalf("Pread [4096,8192) in full ring failed: %v", err)
+	}
+
+	// TrimHead: punch [0,4096), S advances to 4096.
+	if err = waf.TrimHead(); err != nil {
+		t.Fatalf("TrimHead failed: %v", err)
+	}
+	if waf.PhysicalStartOffset != 4096 {
+		t.Fatalf("Expected PhysicalStartOffset=4096 after trim, got %d", waf.PhysicalStartOffset)
+	}
+
+	// Now W(0) < S(4096). Valid region: [4096, 8192).
+	// Punched region [0,4096) must be rejected.
+	if _, err = waf.Pread(0, readData); err != ErrFileOffsetOutOfRange {
+		t.Errorf("Pread from punched region should fail, got %v", err)
+	}
 	n, err := waf.Pread(4096, readData)
 	if err != nil {
-		t.Fatalf("Pread from tail region failed: %v", err)
+		t.Fatalf("Pread from old tail failed: %v", err)
 	}
 	if n != 4096 {
 		t.Errorf("Expected read length 4096, got %d", n)
 	}
 	for i := range readData {
 		if readData[i] != byte(2) {
-			t.Errorf("Data mismatch in tail at index %d: expected 2, got %d", i, readData[i])
+			t.Errorf("Old tail data mismatch at %d: expected 2, got %d", i, readData[i])
+			break
 		}
 	}
 
-	// Head [0, PhysicalWriteOffset) = [0, 4096) has been overwritten by data3.
-	// Reading from it must fail to avoid returning stale/wrong data (bad CR32 in cache).
-	readData2 := createAlignedBuffer(4096, 4096)
-	_, err = waf.Pread(0, readData2)
-	if err != ErrFileOffsetOutOfRange {
-		t.Errorf("Pread from overwritten head should return ErrFileOffsetOutOfRange, got %v", err)
+	// Write data3 into the freed region [0,4096). W advances to 4096.
+	data3 := createAlignedBuffer(4096, 4096)
+	for i := range data3 {
+		data3[i] = byte(3)
+	}
+	if _, err = waf.Pwrite(data3); err != nil {
+		t.Fatalf("Third Pwrite failed: %v", err)
+	}
+
+	// W == S == 4096 (full ring again): both regions readable.
+	readOld := createAlignedBuffer(4096, 4096)
+	n, err = waf.Pread(4096, readOld)
+	if err != nil {
+		t.Fatalf("Pread old tail [4096,8192) after refill failed: %v", err)
+	}
+	if n != 4096 {
+		t.Errorf("Expected 4096 bytes, got %d", n)
+	}
+	for i := range readOld {
+		if readOld[i] != byte(2) {
+			t.Errorf("Old tail mismatch at %d: expected 2, got %d", i, readOld[i])
+			break
+		}
+	}
+
+	readNew := createAlignedBuffer(4096, 4096)
+	n, err = waf.Pread(0, readNew)
+	if err != nil {
+		t.Fatalf("Pread new data [0,4096) after refill failed: %v", err)
+	}
+	if n != 4096 {
+		t.Errorf("Expected 4096 bytes, got %d", n)
+	}
+	for i := range readNew {
+		if readNew[i] != byte(3) {
+			t.Errorf("New data mismatch at %d: expected 3, got %d", i, readNew[i])
+			break
+		}
 	}
 }
 
