@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -18,25 +18,18 @@ import {
   DialogContent,
   DialogActions,
   FormHelperText,
-  Chip,
   IconButton,
   Tooltip,
-  Popover,
-  List,
-  ListItem,
-  ListItemButton,
-  Checkbox,
-  Divider,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
   Snackbar,
+  Chip,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import FilterListIcon from '@mui/icons-material/FilterList';
 import CategoryIcon from '@mui/icons-material/Category';
 import InfoIcon from '@mui/icons-material/Info';
 import PersonIcon from '@mui/icons-material/Person';
@@ -44,10 +37,9 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import StorageIcon from '@mui/icons-material/Storage';
 import { useAuth } from '../../../Auth/AuthContext';
 import embeddingPlatformAPI from '../../../../services/embeddingPlatform/api';
-import { 
-  validateEntityPayload, 
-  getDefaultFormValues
-} from '../../../../services/embeddingPlatform/utils';
+import { validateEntityPayload, getDefaultFormValues } from '../../../../services/embeddingPlatform/utils';
+import { useNotification } from '../shared/hooks/useNotification';
+import { useStatusFilter, useTableFilter, StatusChip, StatusFilterHeader, ViewDetailModal } from '../shared';
 
 const EntityRegistry = () => {
   const [entities, setEntities] = useState([]);
@@ -60,22 +52,18 @@ const EntityRegistry = () => {
   const [open, setOpen] = useState(false);
   const [entityData, setEntityData] = useState(getDefaultFormValues('entity'));
   const [validationErrors, setValidationErrors] = useState({});
-  const [selectedStatuses, setSelectedStatuses] = useState(['PENDING', 'APPROVED', 'REJECTED']);
-  const [notification, setNotification] = useState({
-    open: false,
-    message: '',
-    severity: 'success'
-  });
+  const { selectedStatuses, setSelectedStatuses, handleStatusChange } = useStatusFilter(['PENDING', 'APPROVED', 'REJECTED']);
+  const { notification, showNotification, closeNotification } = useNotification();
   const { user } = useAuth();
 
   const fetchStores = useCallback(async () => {
     try {
-      const response = await embeddingPlatformAPI.getStoresFromETCD();
+      const response = await embeddingPlatformAPI.getStores();
       if (response.stores) {
         setStores(response.stores);
       }
     } catch (error) {
-      console.error('Error fetching stores from ETCD:', error);
+      console.error('Error fetching stores:', error);
     }
   }, []);
 
@@ -105,275 +93,19 @@ const EntityRegistry = () => {
     fetchEntities();
   }, [fetchStores, fetchEntities]);
 
-  // Filtered and sorted data using useMemo
-  const filteredEntities = useMemo(() => {
-    let filtered = [...entities];
-    
-    // Status filtering
-    if (selectedStatuses.length > 0) {
-      filtered = filtered.filter(entity => 
-        selectedStatuses.includes(entity.status?.toUpperCase())
-      );
-    }
-    
-    // Search filtering
-    if (searchQuery) {
-      const searchLower = searchQuery.toLowerCase();
-      filtered = filtered.filter(entity => {
-        return (
-          String(entity.request_id || '').toLowerCase().includes(searchLower) ||
-          String(entity.payload?.entity || '').toLowerCase().includes(searchLower) ||
-          String(entity.payload?.store_id || '').toLowerCase().includes(searchLower) ||
-          (entity.status && entity.status.toLowerCase().includes(searchLower))
-        );
-      });
-    }
-    
-    return filtered.sort((a, b) => {
-      return new Date(b.created_at) - new Date(a.created_at);
-    });
-  }, [entities, searchQuery, selectedStatuses]);
-
-  const getStatusChip = (status) => {
-    const statusUpper = (status || '').toUpperCase();
-    let bgcolor = '#EEEEEE';
-    let textColor = '#616161';
-
-    switch (statusUpper) {
-      case 'PENDING':
-        bgcolor = '#FFF8E1';
-        textColor = '#F57C00';
-        break;
-      case 'APPROVED':
-        bgcolor = '#E7F6E7';
-        textColor = '#2E7D32';
-        break;
-      case 'REJECTED':
-        bgcolor = '#FFEBEE';
-        textColor = '#D32F2F';
-        break;
-      case 'CANCELLED':
-        bgcolor = '#EEEEEE';
-        textColor = '#616161';
-        break;
-      case 'FAILED':
-        bgcolor = '#FFCDD2';
-        textColor = '#C62828';
-        break;
-      default:
-        break;
-    }
-
-    return (
-      <Chip
-        label={status || 'N/A'}
-        sx={{
-          backgroundColor: bgcolor,
-          color: textColor,
-          fontWeight: 'bold',
-          fontSize: '0.75rem'
-        }}
-      />
-    );
-  };
-
-  // Status Column Header with filtering
-  const StatusColumnHeader = () => {
-    const [anchorEl, setAnchorEl] = useState(null);
-    
-    const statusOptions = [
-      { value: 'PENDING', label: 'Pending', color: '#FFF8E1', textColor: '#F57C00' },
-      { value: 'APPROVED', label: 'Approved', color: '#E7F6E7', textColor: '#2E7D32' },
-      { value: 'REJECTED', label: 'Rejected', color: '#FFEBEE', textColor: '#D32F2F' },
-      { value: 'CANCELLED', label: 'Cancelled', color: '#EEEEEE', textColor: '#616161' },
-      { value: 'FAILED', label: 'Failed', color: '#FFCDD2', textColor: '#C62828' }
-    ];
-
-    const handleClick = (event) => {
-      setAnchorEl(event.currentTarget);
-    };
-
-    const handleClose = () => {
-      setAnchorEl(null);
-    };
-
-    const handleStatusToggle = (status) => {
-      setSelectedStatuses(prev => 
-        prev.includes(status) 
-          ? prev.filter(s => s !== status)
-          : [...prev, status]
-      );
-    };
-
-    const handleSelectAll = () => {
-      setSelectedStatuses(statusOptions.map(option => option.value));
-    };
-
-    const handleClearAll = () => {
-      setSelectedStatuses([]);
-    };
-
-    const open = Boolean(anchorEl);
-
-    return (
-      <>
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            flexDirection: 'column',
-            alignItems: 'flex-start',
-            width: '100%'
-          }}
-        >
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              cursor: 'pointer',
-              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
-              borderRadius: 1,
-              p: 0.5
-            }}
-            onClick={handleClick}
-          >
-            <Typography sx={{ fontWeight: 'bold', color: '#031022' }}>
-              Status
-            </Typography>
-            <FilterListIcon 
-              sx={{ 
-                ml: 0.5, 
-                fontSize: 16,
-                color: selectedStatuses.length < statusOptions.length ? '#1976d2' : '#666'
-              }} 
-            />
-            {selectedStatuses.length > 0 && selectedStatuses.length < statusOptions.length && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: 2,
-                  right: 2,
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  backgroundColor: '#1976d2',
-                }}
-              />
-            )}
-          </Box>
-          
-          {/* Show active filters */}
-          {selectedStatuses.length > 0 && (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5, maxWidth: '100%' }}>
-              {selectedStatuses.slice(0, 2).map((status) => {
-                const option = statusOptions.find(opt => opt.value === status);
-                return option ? (
-                  <Chip
-                    key={status}
-                    label={option.label}
-                    size="small"
-                    sx={{
-                      backgroundColor: option.color,
-                      color: option.textColor,
-                      fontWeight: 'bold',
-                      fontSize: '0.65rem',
-                      height: 18,
-                      '& .MuiChip-label': { px: 0.5 }
-                    }}
-                  />
-                ) : null;
-              })}
-              {selectedStatuses.length > 2 && (
-                <Chip
-                  label={`+${selectedStatuses.length - 2}`}
-                  size="small"
-                  sx={{
-                    backgroundColor: '#f5f5f5',
-                    color: '#666',
-                    fontWeight: 'bold',
-                    fontSize: '0.65rem',
-                    height: 18,
-                    '& .MuiChip-label': { px: 0.5 }
-                  }}
-                />
-              )}
-            </Box>
-          )}
-        </Box>
-        <Popover
-          open={open}
-          anchorEl={anchorEl}
-          onClose={handleClose}
-          anchorOrigin={{
-            vertical: 'bottom',
-            horizontal: 'left',
-          }}
-          transformOrigin={{
-            vertical: 'top',
-            horizontal: 'left',
-          }}
-          PaperProps={{
-            sx: {
-              width: 200,
-              maxHeight: 300,
-              overflow: 'auto'
-            }
-          }}
-        >
-          <Box sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography variant="subtitle2" fontWeight="bold">
-                Filter by Status
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 0.5 }}>
-                <Button 
-                  size="small" 
-                  onClick={handleSelectAll}
-                  sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 'auto' }}
-                >
-                  All
-                </Button>
-                <Button 
-                  size="small" 
-                  onClick={handleClearAll}
-                  sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 'auto' }}
-                >
-                  Clear
-                </Button>
-              </Box>
-            </Box>
-            <Divider sx={{ mb: 1 }} />
-            <List dense sx={{ py: 0 }}>
-              {statusOptions.map((option) => (
-                <ListItem key={option.value} disablePadding>
-                  <ListItemButton
-                    onClick={() => handleStatusToggle(option.value)}
-                    sx={{ py: 0.5, px: 1 }}
-                  >
-                    <Checkbox
-                      checked={selectedStatuses.includes(option.value)}
-                      size="small"
-                      sx={{ mr: 1, p: 0 }}
-                    />
-                    <Chip
-                      label={option.label}
-                      size="small"
-                      sx={{
-                        backgroundColor: option.color,
-                        color: option.textColor,
-                        fontWeight: 'bold',
-                        fontSize: '0.75rem',
-                        height: 24
-                      }}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          </Box>
-        </Popover>
-      </>
-    );
-  };
+  const filteredEntities = useTableFilter({
+    data: entities,
+    searchQuery,
+    selectedStatuses,
+    searchFields: (entity) => [
+      entity.request_id,
+      entity.payload?.entity,
+      entity.payload?.store_id,
+      entity.status,
+    ],
+    sortField: 'created_at',
+    sortOrder: 'desc',
+  });
 
   const handleViewEntity = (entity) => {
     setSelectedEntity(entity);
@@ -407,13 +139,6 @@ const EntityRegistry = () => {
     }));
   };
 
-  const showNotification = (message, severity) => {
-    setNotification({ open: true, message, severity });
-  };
-
-  const handleCloseNotification = () => {
-    setNotification(prev => ({ ...prev, open: false }));
-  };
 
   const handleSubmit = async () => {
     const validation = validateEntityPayload(entityData);
@@ -505,7 +230,7 @@ const EntityRegistry = () => {
             '&:hover': {
               backgroundColor: '#380730'
             },
-            minWidth: '150px'
+            minWidth: 'fit-content'
           }}
         >
           Register Entity
@@ -573,7 +298,10 @@ const EntityRegistry = () => {
                   borderRight: '1px solid rgba(224, 224, 224, 1)',
                 }}
               >
-                <StatusColumnHeader />
+                <StatusFilterHeader
+                  selectedStatuses={selectedStatuses}
+                  onStatusChange={handleStatusChange}
+                />
               </TableCell>
               <TableCell
                 sx={{
@@ -608,7 +336,7 @@ const EntityRegistry = () => {
                     {entity.payload?.store_id || 'N/A'}
                   </TableCell>
                   <TableCell sx={{ borderRight: '1px solid rgba(224, 224, 224, 1)' }}>
-                    {getStatusChip(entity.status)}
+                    <StatusChip status={entity.status} />
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -684,146 +412,68 @@ const EntityRegistry = () => {
       </Dialog>
 
       {/* View Entity Details Modal */}
-      <Dialog open={showViewModal} onClose={handleCloseViewModal} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <CategoryIcon sx={{ color: '#522b4a' }} />
-            Entity Details
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          {selectedEntity && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 2 }}>
-              {/* Entity Information Section */}
-              <Box sx={{ p: 2, backgroundColor: 'rgba(82, 43, 74, 0.02)', borderRadius: 1, border: '1px solid rgba(82, 43, 74, 0.1)' }}>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <InfoIcon fontSize="small" sx={{ color: '#522b4a' }} />
-                  Entity Information
-                </Typography>
-                
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Request ID
-                    </Typography>
-                    <Typography variant="body1" sx={{ fontFamily: 'monospace', color: '#522b4a' }}>
-                      {selectedEntity.request_id || 'N/A'}
-                    </Typography>
-                  </Box>
-                  
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Status
-                    </Typography>
-                    <Box sx={{ mt: 0.5 }}>
-                      {getStatusChip(selectedEntity.status)}
-                    </Box>
-                  </Box>
-                </Box>
-              </Box>
-
-              {/* Entity Configuration Section */}
-              <Box sx={{ p: 2, backgroundColor: 'rgba(255, 152, 0, 0.02)', borderRadius: 1, border: '1px solid rgba(255, 152, 0, 0.1)' }}>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <CategoryIcon fontSize="small" sx={{ color: '#ff9800' }} />
-                  Entity Configuration
-                </Typography>
-                
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Entity Name
-                    </Typography>
-                    <Chip 
-                      label={selectedEntity.payload?.entity || 'N/A'}
-                      size="small"
-                      sx={{ 
-                        backgroundColor: '#fff3e0',
-                        color: '#ff9800',
-                        fontWeight: 600,
-                        mt: 0.5
-                      }}
-                    />
-                  </Box>
-
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Associated Store ID
-                    </Typography>
-                    <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                      <StorageIcon fontSize="small" sx={{ color: '#1976d2' }} />
-                      <Typography component="span" sx={{ fontFamily: 'monospace', backgroundColor: '#f5f5f5', p: 1, borderRadius: 0.5 }}>
-                        {selectedEntity.payload?.store_id || 'N/A'}
-                      </Typography>
-                    </Typography>
-                  </Box>
-                </Box>
-              </Box>
-
-              {/* Metadata Section */}
-              <Box sx={{ p: 2, backgroundColor: 'rgba(158, 158, 158, 0.02)', borderRadius: 1, border: '1px solid rgba(158, 158, 158, 0.1)' }}>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <PersonIcon fontSize="small" sx={{ color: '#757575' }} />
-                  Request Metadata
-                </Typography>
-                
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Created By
-                    </Typography>
-                    <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                      <PersonIcon fontSize="small" sx={{ color: '#522b4a' }} />
-                      {selectedEntity.created_by || 'N/A'}
-                    </Typography>
-                  </Box>
-                  
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Created At
-                    </Typography>
-                    <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                      <AccessTimeIcon fontSize="small" sx={{ color: '#1976d2' }} />
-                      {selectedEntity.created_at ? new Date(selectedEntity.created_at).toLocaleString() : 'N/A'}
-                    </Typography>
-                  </Box>
-                </Box>
-
-                {selectedEntity.reason && selectedEntity.reason !== 'N/A' && (
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Additional Notes
-                    </Typography>
-                    <Typography variant="body1" sx={{ mt: 0.5, p: 1, backgroundColor: '#f9f9f9', borderRadius: 0.5, fontStyle: 'italic' }}>
-                      {selectedEntity.reason}
-                    </Typography>
-                  </Box>
-                )}
-              </Box>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2, backgroundColor: '#fafafa', borderTop: '1px solid #e0e0e0' }}>
-          <Button 
-            onClick={handleCloseViewModal}
-            sx={{ 
-              color: '#522b4a',
-              '&:hover': { backgroundColor: 'rgba(82, 43, 74, 0.04)' }
-            }}
-          >
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ViewDetailModal
+        open={showViewModal}
+        onClose={handleCloseViewModal}
+        data={selectedEntity}
+        config={{
+          title: 'Entity Details',
+          icon: CategoryIcon,
+          sections: [
+            {
+              title: 'Entity Information',
+              icon: InfoIcon,
+              layout: 'grid',
+              fields: [
+                { label: 'Request ID', key: 'request_id', type: 'monospace' },
+                { label: 'Status', key: 'status', type: 'status' }
+              ]
+            },
+            {
+              title: 'Entity Configuration',
+              icon: CategoryIcon,
+              backgroundColor: 'rgba(255, 152, 0, 0.02)',
+              borderColor: 'rgba(255, 152, 0, 0.1)',
+              fields: [
+                { label: 'Entity Name', key: 'payload.entity', type: 'chip' },
+                { label: 'Associated Store ID', key: 'payload.store_id', type: 'monospace' }
+              ]
+            },
+            {
+              title: 'Request Metadata',
+              icon: PersonIcon,
+              backgroundColor: 'rgba(158, 158, 158, 0.02)',
+              borderColor: 'rgba(158, 158, 158, 0.1)',
+              layout: 'grid',
+              fields: [
+                { label: 'Created By', key: 'created_by' },
+                { label: 'Created At', key: 'created_at', type: 'date' }
+              ]
+            },
+            {
+              title: 'Additional Notes',
+              icon: InfoIcon,
+              render: (data) => {
+                if (!data?.reason || data.reason === 'N/A') return null;
+                return (
+                  <Typography variant="body1" sx={{ mt: 0.5, p: 1, backgroundColor: '#f9f9f9', borderRadius: 0.5, fontStyle: 'italic' }}>
+                    {data.reason}
+                  </Typography>
+                );
+              }
+            }
+          ]
+        }}
+      />
 
       <Snackbar
         open={notification.open}
         autoHideDuration={6000}
-        onClose={handleCloseNotification}
+        onClose={closeNotification}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
         <Alert
-          onClose={handleCloseNotification}
+          onClose={closeNotification}
           severity={notification.severity}
           sx={{ width: '100%' }}
         >

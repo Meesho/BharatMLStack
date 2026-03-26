@@ -1,8 +1,8 @@
 
 const env = window.env || {};
 
-export const REACT_APP_HORIZON_BASE_URL = process.env.REACT_APP_HORIZON_BASE_URL || env.REACT_APP_HORIZON_BASE_URL || "http://localhost:8082";
-export const REACT_APP_HORIZON_PROD_BASE_URL = process.env.REACT_APP_HORIZON_PROD_BASE_URL || env.REACT_APP_HORIZON_PROD_BASE_URL || "http://localhost:8085";
+export const REACT_APP_HORIZON_BASE_URL = process.env.REACT_APP_HORIZON_BASE_URL || env.REACT_APP_HORIZON_BASE_URL || "http://horizon-v2.int.meesho.int";
+export const REACT_APP_HORIZON_PROD_BASE_URL = process.env.REACT_APP_HORIZON_PROD_BASE_URL || env.REACT_APP_HORIZON_PROD_BASE_URL || "http://horizon-v2.prd.meesho.int";
 export const REACT_APP_SKYE_BASE_URL = process.env.REACT_APP_SKYE_BASE_URL || env.REACT_APP_SKYE_BASE_URL || "http://localhost:8083";
 export const REACT_APP_MODEL_INFERENCE_BASE_URL = process.env.REACT_APP_MODEL_INFERENCE_BASE_URL || env.REACT_APP_MODEL_INFERENCE_BASE_URL || "http://localhost:8084";
 export const REACT_APP_ENVIRONMENT = process.env.REACT_APP_ENVIRONMENT || env.REACT_APP_ENVIRONMENT || "production";
@@ -19,10 +19,10 @@ const getBooleanEnv = (key, defaultValue = false) => {
 
 // Service-wise feature flags
 export const REACT_APP_ONLINE_FEATURE_STORE_ENABLED = getBooleanEnv('REACT_APP_ONLINE_FEATURE_STORE_ENABLED', true);
-export const REACT_APP_INFERFLOW_ENABLED = getBooleanEnv('REACT_APP_INFERFLOW_ENABLED', false);
-export const REACT_APP_NUMERIX_ENABLED = getBooleanEnv('REACT_APP_NUMERIX_ENABLED', false);
-export const REACT_APP_PREDATOR_ENABLED = getBooleanEnv('REACT_APP_PREDATOR_ENABLED', false);
-export const REACT_APP_EMBEDDING_PLATFORM_ENABLED = getBooleanEnv('REACT_APP_EMBEDDING_PLATFORM_ENABLED', false);
+export const REACT_APP_INFERFLOW_ENABLED = getBooleanEnv('REACT_APP_INFERFLOW_ENABLED', true);
+export const REACT_APP_NUMERIX_ENABLED = getBooleanEnv('REACT_APP_NUMERIX_ENABLED', true);
+export const REACT_APP_PREDATOR_ENABLED = getBooleanEnv('REACT_APP_PREDATOR_ENABLED', true);
+export const REACT_APP_EMBEDDING_PLATFORM_ENABLED = getBooleanEnv('REACT_APP_EMBEDDING_PLATFORM_ENABLED', true);
 
 // SSO Configuration
 export const REACT_APP_SSO_ENABLED = getBooleanEnv('REACT_APP_SSO_ENABLED', true);

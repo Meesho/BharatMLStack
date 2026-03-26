@@ -1,0 +1,24 @@
+[project]
+name = "episodic-memory-prototype"
+version = "0.1.0"
+description = "Episodic memory system for LLM agents — prototype & evaluation"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "sentence-transformers>=2.2",
+    "anthropic>=0.30",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "ruff>=0.4"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["memory*", "agent*", "baseline*", "simulator*", "eval*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

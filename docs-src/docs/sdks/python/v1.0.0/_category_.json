@@ -1,8 +1,4 @@
 {
-    "label": "v1.0.0",
-    "position": 1,
-    "link": {
-        "type": "generated-index",
-        "description": "Python SDK v1.0.0 documentation for BharatML Stack. Contains API reference, usage guides, and examples for the Python client libraries including gRPC feature client, Spark feature push client, and common utilities."
-    }
+  "label": "v1.0.0",
+  "position": 1
 }

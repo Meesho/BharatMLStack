@@ -90,6 +90,7 @@ func Init() {
 		metadata.POST("/actions", metadataController.CreateAction)       // super_admin only
 		metadata.PUT("/actions/:id", metadataController.UpdateAction)    // super_admin only
 		metadata.DELETE("/actions/:id", metadataController.DeleteAction) // super_admin only
+		api.GET("/api/v1/horizon/permission-by-role", controller.NewController().GetPermissionByRole)
 	}
 }
 

@@ -9,8 +9,8 @@ export const SERVICES = {
 export const MENU_PERMISSION_MAP = {
   // InferFlow service mappings
   'Deployable': { service: SERVICES.InferFlow, screenType: 'deployable' },
-  'MPConfig': { service: SERVICES.InferFlow, screenType: 'mp-config' },
-  'MPConfigApproval': { service: SERVICES.InferFlow, screenType: 'mp-config-approval' },
+  'MPConfig': { service: SERVICES.InferFlow, screenType: 'inferflow-config' },
+  'MPConfigApproval': { service: SERVICES.InferFlow, screenType: 'inferflow-config-approval' },
   
   // Numerix service mappings
   'NumerixConfigDR': { service: SERVICES.NUMERIX, screenType: 'numerix-config' },
@@ -24,9 +24,7 @@ export const MENU_PERMISSION_MAP = {
   // Note: StoreDiscovery, StoreRegistry, and EntityRegistry also exist in Online Feature Store
   // They only require permission check when under EmbeddingPlatform parent
   'StoreDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'store-discovery', requiredParentKey: 'EmbeddingPlatform' },
-  'EntityDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'entity-discovery' },
-  'ModelDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'model-discovery' },
-  'VariantDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'variant-discovery' },
+  'HierarchicalDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'hierarchical-discovery' },
   'FilterDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'filter-discovery' },
   'JobFrequencyDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'job-frequency-discovery' },
   'StoreRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'store-registry', requiredParentKey: 'EmbeddingPlatform' },
@@ -42,8 +40,6 @@ export const MENU_PERMISSION_MAP = {
   'EmbeddingFilterApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'filter-approval' },
   'EmbeddingJobFrequencyApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'job-frequency-approval' },
   'DeploymentOperations': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'deployment-operations' },
-  'OnboardVariantToDB': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'onboard-variant-to-db' },
-  'OnboardVariantApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'onboard-variant-approval' },
   
   // Online Feature Store service mappings
   'FeatureDiscovery': { service: SERVICES.ONLINE_FEATURE_STORE, screenType: 'feature-discovery', requiredParentKey: 'FeatureStore' },

@@ -1,0 +1,151 @@
+# Default values for trufflebox-ui helm chart
+
+namespace: prd-trufflebox-ui
+applicationName: trufflebox-ui
+replicaCount: 2
+
+labels:
+  env: prd
+  team: bharatml
+  bu: ml
+  priority: p2
+  priority_v2: cp3
+  service_type: ""
+
+priorityClassName: ""
+
+telegraf:
+  enabled: false
+
+otel_enabled: false
+
+infrastructure:
+  secretStore:
+    name: vault-backend
+    kind: ClusterSecretStore
+  vault:
+    basePath: ""
+    otelTokenPath: ""
+
+deployment:
+  enabled: true
+  replicaCount: 2
+  revisionHistoryLimit: 3
+  image:
+    repository: ghcr.io/meesho/trufflebox-ui
+    tag: latest
+    pullPolicy: IfNotPresent
+  ports:
+    - containerPort: 80
+      name: http
+      protocol: TCP
+  probes:
+    liveness:
+      path: /
+      port: 80
+      scheme: HTTP
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 5
+    readiness:
+      path: /
+      port: 80
+      scheme: HTTP
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 5
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+  env:
+    - name: REACT_APP_ENVIRONMENT
+      value: "production"
+    - name: REACT_APP_HORIZON_BASE_URL
+      value: "http://horizon:8082"
+    - name: REACT_APP_ONLINE_FEATURE_STORE_ENABLED
+      value: "true"
+    - name: REACT_APP_INFERFLOW_ENABLED
+      value: "true"
+    - name: REACT_APP_NUMERIX_ENABLED
+      value: "true"
+    - name: REACT_APP_PREDATOR_ENABLED
+      value: "true"
+    - name: REACT_APP_EMBEDDING_PLATFORM_ENABLED
+      value: "false"
+  serviceAccount:
+    enabled: false
+    annotations: {}
+  updateStrategy:
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+  terminationGracePeriodSeconds: 30
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  pollingInterval: 30
+  scaledown:
+    stabilizationWindowSeconds: 300
+    policies:
+      - type: Percent
+        value: 10
+        periodseconds: 60
+    selectpolicy: Min
+  scaleup:
+    stabilizationWindowSeconds: 0
+    policies:
+      - type: Percent
+        value: 50
+        periodseconds: 60
+    selectpolicy: Max
+  triggers:
+    - type: cpu
+      metadata:
+        value: "70"
+      metricType: Utilization
+
+ingress:
+  enabled: false
+  ingressClassName: contour-internal
+createContourGateway: false
+
+externalSecret:
+  enabled: false
+  path: ""
+
+configMap:
+  enabled: false
+
+canary:
+  enabled: false
+  promURL: ""
+  slackChannel: ""
+  slackWebhookURL: ""
+
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: "10%"
+
+disasterRecovery:
+  enabled: false

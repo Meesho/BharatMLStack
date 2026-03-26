@@ -170,8 +170,13 @@ func (h *Handler) decodeFeatureValue(encodedValue []byte, entityLabel, featureLa
 			return nil, fmt.Errorf("failed to get string lengths for feature group %v: %s", featureGroup.Id, err)
 		}
 		sequence, err := h.config.GetSequenceNo(entityLabel, featureGroup.Id, activeVersion, featureLabel)
-		if err != nil || sequence == -1 {
-			return nil, fmt.Errorf("failed to get sequence number for feature %s in feature group %v: %s", featureLabel, featureGroup.Id, err)
+		if err != nil {
+			log.Error().Err(err).Msgf("failed to get sequence number for feature %s in feature group %v", featureLabel, featureGroup.Id)
+			return nil, fmt.Errorf("failed to get sequence number for feature %s in feature group %v: %w", featureLabel, featureGroup.Id, err)
+		}
+		if sequence == -1 {
+			log.Error().Msgf("sequence number not found for feature %s in feature group %v", featureLabel, featureGroup.Id)
+			return nil, fmt.Errorf("sequence number not found for feature %s in feature group %v", featureLabel, featureGroup.Id)
 		}
 		decodedValue, err := blocks.HelperVectorFeatureStringToConcatenatedString(encodedValue, int(stringLengths[sequence]))
 		if err != nil {

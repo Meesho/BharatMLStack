@@ -49,4 +49,5 @@ type Authenticator interface {
 	GetUserByEmail(email string) (*auth.User, error)
 	UpdateUserRole(id uint, role string, updatedBy uint) error
 	UpdateUserStatus(id uint, isActive bool, updatedBy uint) error
+	GetPermissionByRole(role string) PermissionResponse
 }

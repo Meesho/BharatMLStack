@@ -59,3 +59,17 @@ type RefreshTokenResponse struct {
 	Token        string `json:"token"`
 	RefreshToken string `json:"refresh_token"`
 }
+type PermissionResponse struct {
+	Role        string       `json:"role"`
+	Permissions []ServiceSet `json:"permissions"`
+}
+
+type ServiceSet struct {
+	Service string       `json:"service"`
+	Screens []ScreenInfo `json:"screens"`
+}
+
+type ScreenInfo struct {
+	ScreenType     string   `json:"screenType"`
+	AllowedActions []string `json:"allowedActions"`
+}

@@ -9,28 +9,24 @@ import (
 	"strings"
 	"time"
 
-	numerixConfig "github.com/Meesho/BharatMLStack/horizon/internal/numerix/config"
+	numerixPkg "github.com/Meesho/BharatMLStack/horizon/internal/numerix"
+	numerixConfig "github.com/Meesho/BharatMLStack/horizon/internal/numerix/etcd"
 	pb "github.com/Meesho/BharatMLStack/horizon/internal/numerix/proto/protogen"
-	"github.com/Meesho/BharatMLStack/horizon/internal/numerix/util"
-	binaryops "github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/numerix/binaryops"
+	util "github.com/Meesho/BharatMLStack/horizon/internal/numerix/util"
 	numerix_config "github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/numerix/config"
 	numerix_request "github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/numerix/request"
-	unaryops "github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/numerix/unaryops"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/grpc"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/random"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/serializer"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )
 
 type Numerix struct {
-	Config               numerixConfig.Manager
-	NumerixConfigRepo    numerix_config.Repository
-	NumerixRequestRepo   numerix_request.Repository
-	NumerixBinaryOpsRepo binaryops.Repository
-	NumerixUnaryOpsRepo  unaryops.Repository
+	Config             numerixConfig.Manager
+	NumerixConfigRepo  numerix_config.Repository
+	NumerixRequestRepo numerix_request.Repository
 }
 
 const (
@@ -47,6 +43,8 @@ const (
 	typeFloat32          = "fp32"
 	typeFloat64          = "fp64"
 	numerixComputeMethod = "/numerix.Numerix/Compute"
+	defaultPage          = 1
+	defaultPageSize      = 25
 )
 
 func InitV1ConfigHandler() Config {
@@ -57,32 +55,20 @@ func InitV1ConfigHandler() Config {
 		}
 		sqlConn := conn.(*infra.SQLConnection)
 
-		NumerixConfigRepo, err := numerix_config.NewRepository(sqlConn)
+		numerixConfigRepo, err := numerix_config.NewRepository(sqlConn)
 		if err != nil {
 			log.Fatal().Err(err).Msg("Failed to create config repository")
 		}
 
-		NumerixRequestRepo, err := numerix_request.NewRepository(sqlConn)
+		numerixRequestRepo, err := numerix_request.NewRepository(sqlConn)
 		if err != nil {
 			log.Fatal().Err(err).Msg("Failed to create request repository")
 		}
 
-		NumerixBinaryOpsRepo, err := binaryops.NewRepository(sqlConn)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to create binary ops repository")
-		}
-
-		NumerixUnaryOpsRepo, err := unaryops.NewRepository(sqlConn)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to create unary ops repository")
-		}
-
 		config = &Numerix{
-			Config:               numerixConfig.NewEtcdInstance(),
-			NumerixConfigRepo:    NumerixConfigRepo,
-			NumerixRequestRepo:   NumerixRequestRepo,
-			NumerixBinaryOpsRepo: NumerixBinaryOpsRepo,
-			NumerixUnaryOpsRepo:  NumerixUnaryOpsRepo,
+			Config:             numerixConfig.NewEtcdInstance(),
+			NumerixConfigRepo:  numerixConfigRepo,
+			NumerixRequestRepo: numerixRequestRepo,
 		}
 	}
 	return config
@@ -120,7 +106,7 @@ func (i *Numerix) Edit(request EditConfigRequest) (Response, error) {
 
 	return Response{
 		Error: emptyResponse,
-		Data:  Message{fmt.Sprintf("Numerix Config edit request created successfully with Request Id %d and Config Id %d", table.RequestID, request.Payload.ConfigID)},
+		Data:  Message{fmt.Sprintf("numerix Config edit request created successfully with Request Id %d and Config Id %d", table.RequestID, request.Payload.ConfigID)},
 	}, nil
 }
 
@@ -240,7 +226,7 @@ func (i *Numerix) ReviewRequest(request ReviewRequestConfigRequest) (Response, e
 
 		if request.Status == approved {
 
-			err = i.CreateOrUpdateNumerixConfig(tx, &tableResponse)
+			err = i.CreateOrUpdatenumerixConfig(tx, &tableResponse)
 			if err != nil {
 				return err
 			}
@@ -267,7 +253,7 @@ func (i *Numerix) ReviewRequest(request ReviewRequestConfigRequest) (Response, e
 	}, nil
 }
 
-func (i *Numerix) CreateOrUpdateNumerixConfig(tx *gorm.DB, table *numerix_request.Table) error {
+func (i *Numerix) CreateOrUpdatenumerixConfig(tx *gorm.DB, table *numerix_request.Table) error {
 	newTable := &numerix_config.Table{
 		ConfigID: table.ConfigID,
 		Active:   activeTrue,
@@ -316,6 +302,24 @@ func (i *Numerix) createOrUpdateEtcdConfig(configID string, expression string, r
 	}
 }
 
+func (i *Numerix) GenerateExpression(request ExpressionGenerateRequest) (ExpressionGenerateResponse, error) {
+	err := util.ValidateExpression(request.Expression)
+	if err != nil {
+		return ExpressionGenerateResponse{}, err
+	}
+	expression, err := util.InfixToPostfix(request.Expression)
+	if err != nil {
+		return ExpressionGenerateResponse{}, err
+	}
+	expressionString := strings.Join(expression, " ")
+
+	response := ExpressionGenerateResponse{
+		Error: emptyResponse,
+		Data:  expressionString,
+	}
+	return response, nil
+}
+
 func (i *Numerix) GetExpressionVariables(request ExpressionVariablesRequest) (ExpressionVariablesResponse, error) {
 
 	expression, err := i.NumerixConfigRepo.GetExpression(request.ConfigID)
@@ -331,16 +335,22 @@ func (i *Numerix) GetExpressionVariables(request ExpressionVariablesRequest) (Ex
 	return response, nil
 }
 
-func (i *Numerix) GetAll() (GetAllConfigsResponse, error) {
+func (i *Numerix) GetAll(request GetAllConfigsRequest) (GetAllConfigsResponse, error) {
+	if request.Page <= 0 {
+		request.Page = defaultPage
+	}
+	if request.PageSize <= 0 {
+		request.PageSize = defaultPageSize
+	}
 
-	tables, err := i.NumerixConfigRepo.GetAll()
+	tables, totalCount, err := i.NumerixConfigRepo.GetAllPaginated(request.Page, request.PageSize, request.ConfigID)
 	if err != nil {
 		return GetAllConfigsResponse{}, err
 	}
 
-	NumerixConfigs := make([]NumerixConfig, len(tables))
+	numerixConfigs := make([]NumerixConfig, len(tables))
 	for i, table := range tables {
-		NumerixConfigs[i] = NumerixConfig{
+		numerixConfigs[i] = NumerixConfig{
 			ConfigID:          table.ConfigID,
 			InfixExpression:   table.ConfigValue.InfixExpression,
 			PostfixExpression: table.ConfigValue.PostfixExpression,
@@ -348,14 +358,25 @@ func (i *Numerix) GetAll() (GetAllConfigsResponse, error) {
 			CreatedAt:         table.CreatedAt,
 			UpdatedBy:         table.UpdatedBy,
 			UpdatedAt:         table.UpdatedAt,
-			MonitoringUrl:     viper.GetString("NUMERIX_MONITORING_URL"),
+			MonitoringUrl:     numerixPkg.NumerixMonitoringUrl,
 			TestResults:       table.TestResults,
 		}
 	}
 
+	totalPages := int(totalCount) / request.PageSize
+	if int(totalCount)%request.PageSize != 0 {
+		totalPages++
+	}
+
 	response := GetAllConfigsResponse{
 		Error: emptyResponse,
-		Data:  NumerixConfigs,
+		Data:  numerixConfigs,
+		Pagination: &PaginationMeta{
+			Page:       request.Page,
+			PageSize:   request.PageSize,
+			TotalCount: totalCount,
+			TotalPages: totalPages,
+		},
 	}
 	return response, nil
 }
@@ -577,12 +598,14 @@ func (g *Numerix) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctionalR
 		if request.DataType == typeFloat32 {
 			for _, byteValue := range byteValues {
 				f, _ := serializer.BytesToFloat32LE(byteValue)
-				data = append(data, fmt.Sprintf("%.7g", f)) // Full fp32 precision
+				// Use 'f' format to avoid scientific notation
+				data = append(data, strconv.FormatFloat(float64(f), 'f', 7, 32))
 			}
 		} else {
 			for _, byteValue := range byteValues {
 				f, _ := serializer.BytesToFloat64LE(byteValue)
-				data = append(data, fmt.Sprintf("%.17g", f)) // Full fp64 precision
+				// Use 'f' format to avoid scientific notation
+				data = append(data, strconv.FormatFloat(f, 'f', 15, 64))
 			}
 		}
 		computationScore := ComputationalScore{
@@ -595,58 +618,16 @@ func (g *Numerix) ExecuteFuncitonalTestRequest(request ExecuteRequestFunctionalR
 		response.ComputationalScoreData.ComputationalScores = append(response.ComputationalScoreData.ComputationalScores, computationScore)
 	}
 
-	NumerixConfig, err := g.NumerixConfigRepo.GetByConfigID(request.ComputeId)
+	numerixConfig, err := g.NumerixConfigRepo.GetByConfigID(request.ComputeId)
 	if err != nil {
-		fmt.Println("Error getting Numerix config: ", err)
+		fmt.Println("Error getting numerix config: ", err)
 	} else {
-		NumerixConfig.TestResults = json.RawMessage(`{"is_functionally_tested": true}`)
-		err = g.NumerixConfigRepo.Update(&NumerixConfig)
+		numerixConfig.TestResults = json.RawMessage(`{"is_functionally_tested": true}`)
+		err = g.NumerixConfigRepo.Update(&numerixConfig)
 		if err != nil {
-			fmt.Println("Error updating Numerix config: ", err)
+			fmt.Println("Error updating numerix config: ", err)
 		}
 	}
 
-	return response, nil
-}
-
-func (i *Numerix) GetBinaryOps() (GetBinaryOpsResponse, error) {
-	binaryOps, err := i.NumerixBinaryOpsRepo.GetAll()
-	if err != nil {
-		return GetBinaryOpsResponse{}, err
-	}
-
-	binaryOpsResponse := make([]BinaryOp, len(binaryOps))
-	for i, binaryOp := range binaryOps {
-		binaryOpsResponse[i] = BinaryOp{
-			Operator:   binaryOp.Operator,
-			Precedence: binaryOp.Precedence,
-		}
-	}
-
-	response := GetBinaryOpsResponse{
-		Error: emptyResponse,
-		Data:  binaryOpsResponse,
-	}
-	return response, nil
-}
-
-func (i *Numerix) GetUnaryOps() (GetUnaryOpsResponse, error) {
-	unaryOps, err := i.NumerixUnaryOpsRepo.GetAll()
-	if err != nil {
-		return GetUnaryOpsResponse{}, err
-	}
-
-	unaryOpsResponse := make([]UnaryOp, len(unaryOps))
-	for i, unaryOp := range unaryOps {
-		unaryOpsResponse[i] = UnaryOp{
-			Operator:   unaryOp.Operator,
-			Parameters: unaryOp.Parameters,
-		}
-	}
-
-	response := GetUnaryOpsResponse{
-		Error: emptyResponse,
-		Data:  unaryOpsResponse,
-	}
 	return response, nil
 }

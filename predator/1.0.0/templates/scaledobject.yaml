@@ -1,0 +1,56 @@
+{{- if and .Values.autoscaling .Values.autoscaling.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  labels:
+    {{- include "labels.common" . | nindent 4 }}
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.namespace }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.namespace }} 
+  pollingInterval:  {{ .Values.autoscaling.pollingInterval }}
+  {{- if ( default false (.Values.disasterRecovery).enabled ) }}
+  minReplicaCount: 1
+  {{- else }}
+  minReplicaCount:  {{ .Values.canary.minCanaryReplicas | default $.Values.autoscaling.minReplicas }}
+  {{- end }}
+  maxReplicaCount:  {{ .Values.canary.maxCanaryReplicas | default $.Values.autoscaling.maxReplicas }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: {{ .Values.autoscaling.scaledown.stabilizationWindowSeconds }}
+          policies:
+          {{- range .Values.autoscaling.scaledown.policies }}
+          - type: {{ .type }}
+            value: {{ .value }}
+            periodSeconds: {{ .periodseconds }}
+          {{- end }}
+          selectPolicy: {{ .Values.autoscaling.scaledown.selectpolicy }}
+        scaleUp: 
+          stabilizationWindowSeconds: {{ .Values.autoscaling.scaleup.stabilizationWindowSeconds }}
+          policies:
+          {{- range .Values.autoscaling.scaleup.policies }}
+          - type: {{ .type }}
+            value: {{ .value }}
+            periodSeconds: {{ .periodseconds }}
+          {{- end }}
+          selectPolicy: {{ .Values.autoscaling.scaleup.selectpolicy }}
+  triggers:
+  {{- if ( default false (.Values.disasterRecovery).enabled ) }}
+  {{- range $.Values.autoscaling.triggers }}
+    {{- if or  (eq .type "cpu") (eq .type "memory") }}
+    - metadata:
+      {{- toYaml .metadata | nindent 8 }} 
+      type: {{ .type }}
+      metricType: "Utilization"
+    {{- end }}
+  {{- end }}
+  {{- else }}
+  {{- toYaml .Values.autoscaling.triggers | nindent 2 }}
+  {{ end }}
+
+{{- end }}

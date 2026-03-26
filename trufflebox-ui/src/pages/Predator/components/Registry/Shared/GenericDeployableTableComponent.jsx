@@ -266,7 +266,7 @@ const GenericDeployableTableComponent = ({
           }}
         />
         
-        {hasPermission(service, screenType, ACTIONS.ONBOARD) && (
+        {/* {hasPermission(service, screenType, ACTIONS.ONBOARD) && (
           <Button
             variant="contained"
             onClick={handleOnboardDeployable}
@@ -279,7 +279,19 @@ const GenericDeployableTableComponent = ({
           >
             Onboard Deployable
           </Button>
-        )}
+        )} */}
+        <Button
+            variant="contained"
+            onClick={handleOnboardDeployable}
+            sx={{
+              backgroundColor: '#450839',
+              '&:hover': {
+                backgroundColor: '#380730'
+              },
+            }}
+          >
+            Onboard Deployable
+          </Button>
       </Box>
 
       <TableContainer sx={{ maxHeight: 'calc(100vh - 250px)' }}>

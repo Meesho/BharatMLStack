@@ -8,8 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/viper"
-
+	onlinefeaturestore "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/scylla"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 
@@ -35,14 +34,6 @@ type OnlineFeatureStore struct {
 
 var FeatureList = []string{"PARENT", "PCTR_CALIBRATION", "PCVR_CALIBRATION"}
 
-const (
-	storageScyllaPrefix        = "SCYLLA_"
-	activeConfIds              = "ACTIVE_CONFIG_IDS"
-	storageRedisFailoverPrefix = "REDIS_FAILOVER_"
-	distributedCachePrefix     = "DISTRIBUTED_CACHE_"
-	inMemoryCachePrefix        = "IN_MEMORY_CACHE_"
-)
-
 var (
 	confIdToDbTypeMap                 = make(map[string]string)
 	distributedCacheConfIdToDbTypeMap = make(map[string]string)
@@ -52,32 +43,34 @@ var (
 func InitV1ConfigHandler() Config {
 	if config == nil {
 		once.Do(func() {
-			scyllaActiveConfIdsStr := viper.GetString(storageScyllaPrefix + activeConfIds)
-			redisFailoverActiveConfIdsStr := viper.GetString(storageRedisFailoverPrefix + activeConfIds)
-			distributedCacheActiveConfIdsStr := viper.GetString(distributedCachePrefix + activeConfIds)
-			inMemoryCacheActiveConfIdsStr := viper.GetString(inMemoryCachePrefix + activeConfIds)
-			scyllaStores := make(map[int]scylla.Store)
-
-			if scyllaActiveConfIdsStr != "" {
-				scyllaActiveIds := strings.Split(scyllaActiveConfIdsStr, ",")
-				scyllaStores = make(map[int]scylla.Store, len(scyllaActiveIds))
-				for _, configIdStr := range scyllaActiveIds {
-					confIdToDbTypeMap[configIdStr] = "scylla"
-					activeConfigId, err := strconv.Atoi(configIdStr)
-					if err != nil {
-						log.Error().Msgf("Error in converting config id %s to int", configIdStr)
-						continue
-					}
-					connFacade, _ := infra.Scylla.GetConnection(activeConfigId)
-					conn := connFacade.(*infra.ScyllaClusterConnection)
-					scyllaStore, err2 := scylla.NewRepository(conn)
-					if err2 != nil {
-						log.Error().Msgf("Error in creating scylla store")
-					}
-					scyllaStores[activeConfigId] = scyllaStore
+			scyllaActiveConfIdsStr := onlinefeaturestore.ScyllaActiveConfIdsStr
+			redisFailoverActiveConfIdsStr := onlinefeaturestore.RedisFailoverActiveConfIdsStr
+			distributedCacheActiveConfIdsStr := onlinefeaturestore.DistributedCacheActiveConfIdsStr
+			inMemoryCacheActiveConfIdsStr := onlinefeaturestore.InMemoryCacheActiveConfIdsStr
+			if scyllaActiveConfIdsStr == "" {
+				log.Panic().Msg("SCYLLA_ACTIVE_CONFIG_IDS environment variable is not set. Please set SCYLLA_ACTIVE_CONFIG_IDS to initialize the handler.")
+			}
+			scyllaActiveIds := strings.Split(scyllaActiveConfIdsStr, ",")
+			scyllaStores := make(map[int]scylla.Store, len(scyllaActiveIds))
+			for _, configIdStr := range scyllaActiveIds {
+				confIdToDbTypeMap[configIdStr] = "scylla"
+				activeConfigId, err := strconv.Atoi(configIdStr)
+				if err != nil {
+					log.Panic().Msgf("Error in converting config id %s to int: %v", configIdStr, err)
 				}
-			} else {
-				log.Warn().Msg("SCYLLA_ACTIVE_CONFIG_IDS not configured, running without Scylla stores")
+				connFacade, err := infra.Scylla.GetConnection(activeConfigId)
+				if err != nil {
+					log.Panic().Msgf("Error getting Scylla connection for config id %d: %v", activeConfigId, err)
+				}
+				conn, ok := connFacade.(*infra.ScyllaClusterConnection)
+				if !ok {
+					log.Panic().Msgf("Error: Scylla connection is not of type ScyllaClusterConnection for config id %d", activeConfigId)
+				}
+				scyllaStore, err := scylla.NewRepository(conn)
+				if err != nil {
+					log.Panic().Msgf("Error in creating scylla store for config id %d: %v", activeConfigId, err)
+				}
+				scyllaStores[activeConfigId] = scyllaStore
 			}
 			if redisFailoverActiveConfIdsStr != "" {
 				redisFailoverActiveIds := strings.Split(redisFailoverActiveConfIdsStr, ",")
@@ -100,27 +93,33 @@ func InitV1ConfigHandler() Config {
 				}
 			}
 
-			connection, _ := infra.SQL.GetConnection()
-			sqlConn := connection.(*infra.SQLConnection)
+			connection, err := infra.SQL.GetConnection()
+			if err != nil {
+				log.Panic().Msgf("Error getting SQL connection: %v", err)
+			}
+			sqlConn, ok := connection.(*infra.SQLConnection)
+			if !ok {
+				log.Panic().Msg("Error: SQL connection is not of type SQLConnection")
+			}
 			entityRepo, err := entity.NewRepository(sqlConn)
 			if err != nil {
-				log.Error().Msgf("Error in creating entity repository")
+				log.Panic().Msgf("Error in creating entity repository: %v", err)
 			}
 			fgRepo, err := featuregroup.NewRepository(sqlConn)
 			if err != nil {
-				log.Error().Msgf("Error in creating feature group repository")
+				log.Panic().Msgf("Error in creating feature group repository: %v", err)
 			}
 			featureRepo, err := features.NewRepository(sqlConn)
 			if err != nil {
-				log.Error().Msgf("Error in creating feature repository")
+				log.Panic().Msgf("Error in creating feature repository: %v", err)
 			}
 			storeRepo, err := store.NewRepository(sqlConn)
 			if err != nil {
-				log.Error().Msgf("Error in creating store repository")
+				log.Panic().Msgf("Error in creating store repository: %v", err)
 			}
 			jobRepo, err := job.NewRepository(sqlConn)
 			if err != nil {
-				log.Error().Msgf("Error in creating job repository")
+				log.Panic().Msgf("Error in creating job repository: %v", err)
 			}
 			config = &OnlineFeatureStore{
 				Config:       config2.NewEtcdConfig(),
@@ -131,6 +130,7 @@ func InitV1ConfigHandler() Config {
 				jobRepo:      jobRepo,
 				scyllaStores: scyllaStores,
 			}
+			log.Info().Msgf("Online Feature Store handler initialized successfully")
 		})
 	}
 	return config

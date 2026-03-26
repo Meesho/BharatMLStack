@@ -68,9 +68,7 @@ function Header({ onMenuItemClick }) {
       'EmbeddingApproval': <ApprovalIcon />,
       'EmbeddingOperations': <SettingsIcon />,
       'StoreDiscovery': <StorageIcon />,
-      'EntityDiscovery': <CategoryIcon />,
-      'ModelDiscovery': <ModelTrainingIcon />,
-      'VariantDiscovery': <ScienceIcon />,
+      'HierarchicalDiscovery': <CategoryIcon />,
       'FilterDiscovery': <FilterAltIcon />,
       'JobFrequencyDiscovery': <ScheduleIcon />,
       'StoreRegistry': <StorageIcon />,
@@ -142,10 +140,10 @@ function Header({ onMenuItemClick }) {
       children: [
         {
           key: 'MPDiscovery',
-          label: 'Discovery / Registry',
+          label: 'Registry',
           subItems: [
-            { key: 'Deployable', label: 'Deployable', path: '/inferflow/deployable', screenType: 'deployable' },
-            { key: 'MPConfig', label: 'Config', path: '/inferflow/config-registry', screenType: 'mp-config' },
+            { key: 'Deployable', label: 'Deployables', path: '/inferflow/deployable', screenType: 'deployable' },
+            { key: 'MPConfig', label: 'Inferpipes', path: '/inferflow/config-registry', screenType: 'inferflow-config' },
           ],
           roles: null,
         },
@@ -153,7 +151,7 @@ function Header({ onMenuItemClick }) {
           key: 'MPApproval',
           label: 'Approval',
           subItems: [
-            { key: 'MPConfigApproval', label: 'Config', path: '/inferflow/config-approval', screenType: 'mp-config-approval' },
+            { key: 'MPConfigApproval', label: 'Inferpipes', path: '/inferflow/config-approval', screenType: 'inferflow-config-approval' },
           ],
           roles: null,
         },
@@ -213,9 +211,7 @@ function Header({ onMenuItemClick }) {
           label: 'Discovery',
           subItems: [
             { key: 'StoreDiscovery', label: 'Store', path: '/embedding-platform/discovery/stores', screenType: 'store-discovery' },
-            { key: 'EntityDiscovery', label: 'Entity', path: '/embedding-platform/discovery/entities', screenType: 'entity-discovery' },
-            { key: 'ModelDiscovery', label: 'Model', path: '/embedding-platform/discovery/models', screenType: 'model-discovery' },
-            { key: 'VariantDiscovery', label: 'Variant', path: '/embedding-platform/discovery/variants', screenType: 'variant-discovery' },
+            { key: 'HierarchicalDiscovery', label: 'Entity/Model/Variant', path: '/embedding-platform/discovery/hierarchical', screenType: 'hierarchical-discovery' },
             { key: 'FilterDiscovery', label: 'Filter', path: '/embedding-platform/discovery/filters', screenType: 'filter-discovery' },
             { key: 'JobFrequencyDiscovery', label: 'Job Frequency', path: '/embedding-platform/discovery/job-frequencies', screenType: 'job-frequency-discovery' },
           ],

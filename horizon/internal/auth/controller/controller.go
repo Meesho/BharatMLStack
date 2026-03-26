@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/auth/handler"
+	"github.com/Meesho/BharatMLStack/horizon/internal/constant"
 	"github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/controller"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/api"
 	"github.com/gin-gonic/gin"
@@ -24,6 +25,7 @@ type Auth interface {
 	GoogleOAuthCallback(ctx *gin.Context)
 	RefreshToken(ctx *gin.Context)
 	TrackSession(ctx *gin.Context)
+	GetPermissionByRole(ctx *gin.Context)
 }
 
 var (
@@ -214,11 +216,11 @@ func (a *AuthController) RefreshToken(ctx *gin.Context) {
 // TrackSession tracks user session (authenticated endpoint)
 func (a *AuthController) TrackSession(ctx *gin.Context) {
 	var request struct {
-		Email           string `json:"email"`
-		UserID          string `json:"user_id,omitempty"`
-		Role            string `json:"role"`
+		Email            string `json:"email"`
+		UserID           string `json:"user_id,omitempty"`
+		Role             string `json:"role"`
 		SessionStartTime string `json:"session_start_time"`
-		UserAgent       string `json:"user_agent"`
+		UserAgent        string `json:"user_agent"`
 	}
 
 	if err := ctx.BindJSON(&request); err != nil {
@@ -233,4 +235,14 @@ func (a *AuthController) TrackSession(ctx *gin.Context) {
 		"message":    "Session tracked successfully",
 		"session_id": ctx.GetString("session_id"), // Can be generated if needed
 	})
+}
+
+func (a *AuthController) GetPermissionByRole(ctx *gin.Context) {
+	role := ctx.GetString("role")
+	if role == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{constant.Error: "Role is required"})
+		return
+	}
+	rolePermission := a.Authenticator.GetPermissionByRole(role)
+	ctx.JSON(http.StatusOK, rolePermission)
 }
