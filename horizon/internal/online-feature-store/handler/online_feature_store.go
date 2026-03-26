@@ -889,7 +889,8 @@ func (o *OnlineFeatureStore) GetAllEntitiesRequest(email, role string) ([]entity
 	var err error
 	if role == "user" {
 		response, err = o.entityRepo.GetAllByUserId(email)
-	} else if role == "admin" {
+	} else if role == "admin" || role == "super_admin" {
+		// Both admin and super_admin can see all entities
 		response, err = o.entityRepo.GetAll()
 	} else {
 		return response, fmt.Errorf("invalid role")
@@ -906,7 +907,8 @@ func (o *OnlineFeatureStore) GetAllFeatureGroupsRequest(email, role string) ([]f
 	var err error
 	if role == "user" {
 		response, err = o.fgRepo.GetAllByUserId(email)
-	} else if role == "admin" {
+	} else if role == "admin" || role == "super_admin" {
+		// Both admin and super_admin can see all feature groups
 		response, err = o.fgRepo.GetAll()
 	} else {
 		return response, fmt.Errorf("invalid role")
@@ -923,7 +925,8 @@ func (o *OnlineFeatureStore) GetAllJobsRequest(email, role string) ([]job.Table,
 	var err error
 	if role == "user" {
 		response, err = o.jobRepo.GetAllByUserId(email)
-	} else if role == "admin" {
+	} else if role == "admin" || role == "super_admin" {
+		// Both admin and super_admin can see all jobs
 		response, err = o.jobRepo.GetAll()
 	} else {
 		return response, fmt.Errorf("invalid role")
@@ -940,7 +943,8 @@ func (o *OnlineFeatureStore) GetAllStoresRequest(email, role string) ([]store.Ta
 	var err error
 	if role == "user" {
 		response, err = o.storeRepo.GetAllByUserId(email)
-	} else if role == "admin" {
+	} else if role == "admin" || role == "super_admin" {
+		// Both admin and super_admin can see all stores
 		response, err = o.storeRepo.GetAll()
 	} else {
 		return response, fmt.Errorf("invalid role")
@@ -957,7 +961,8 @@ func (o *OnlineFeatureStore) GetAllFeaturesRequest(email, role string) ([]featur
 	var err error
 	if role == "user" {
 		response, err = o.featureRepo.GetAllByUserId(email)
-	} else if role == "admin" {
+	} else if role == "admin" || role == "super_admin" {
+		// Both admin and super_admin can see all features
 		response, err = o.featureRepo.GetAll()
 	} else {
 		return response, fmt.Errorf("invalid role")

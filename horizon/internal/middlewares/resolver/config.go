@@ -2,6 +2,18 @@ package resolver
 
 import "github.com/gin-gonic/gin"
 
+// Common action constants used across all resolvers
+const (
+	moduleView    = "view"
+	moduleOnboard = "onboard"
+	modulePromote = "promote"
+	moduleEdit    = "edit"
+	moduleApprove = "approve"
+	moduleCancel  = "cancel"
+	moduleDelete  = "delete"
+	moduleTest    = "test"
+)
+
 type ScreenModule struct {
 	ScreenType string
 	Module     string

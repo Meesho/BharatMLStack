@@ -35,6 +35,8 @@ const UserManagement = () => {
   const [loading, setLoading] = useState(true);
   const [updateStatus, setUpdateStatus] = useState({ message: '', type: '', show: false });
   const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'super_admin';
+  const isAdmin = user?.role === 'admin' || isSuperAdmin;
 
   // Fetch users
   useEffect(() => {
@@ -69,30 +71,35 @@ const UserManagement = () => {
     }
   }, [user?.token]);
 
-  // Handle role update
-  const handleRoleUpdate = async (email, newRole) => {
+  // Handle role update (super_admin only)
+  const handleRoleUpdate = async (userId, newRole) => {
+    if (!isSuperAdmin) {
+      setUpdateStatus({
+        message: 'Only super_admin can update user roles.',
+        type: 'error',
+        show: true
+      });
+      return;
+    }
+
     try {
-      const userToUpdate = users.find(u => u.email === email);
-      const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/update-user`, {
+      const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/users/${userId}/role`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${user.token}`,
         },
-        body: JSON.stringify({
-          email: email,
-          is_active: userToUpdate.is_active,
-          role: newRole
-        }),
+        body: JSON.stringify({ role: newRole }),
       });
 
       if (!response.ok) {
-        console.log('Failed to update user role');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update user role');
       }
 
       setUsers(prevUsers =>
         prevUsers.map(u =>
-          u.email === email ? { ...u, role: newRole } : u
+          u.id === userId ? { ...u, role: newRole } : u
         )
       );
 
@@ -103,37 +110,52 @@ const UserManagement = () => {
       });
     } catch (error) {
       setUpdateStatus({
-        message: 'Failed to update user role. Please try again.',
+        message: error.message || 'Failed to update user role. Please try again.',
         type: 'error',
         show: true
       });
     }
   };
 
-  // Handle status update
-  const handleStatusUpdate = async (email, newStatus) => {
+  // Handle status update (admin/super_admin)
+  const handleStatusUpdate = async (userId, newStatus) => {
+    if (!isAdmin) {
+      setUpdateStatus({
+        message: 'Only admin or super_admin can update user status.',
+        type: 'error',
+        show: true
+      });
+      return;
+    }
+
+    // Prevent self-deactivation
+    if (user?.email && users.find(u => u.id === userId)?.email === user.email && !newStatus) {
+      setUpdateStatus({
+        message: 'You cannot deactivate yourself.',
+        type: 'error',
+        show: true
+      });
+      return;
+    }
+
     try {
-      const userToUpdate = users.find(u => u.email === email);
-      const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/update-user`, {
+      const response = await fetch(`${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/users/${userId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${user.token}`,
         },
-        body: JSON.stringify({
-          email: email,
-          is_active: newStatus,
-          role: userToUpdate.role
-        }),
+        body: JSON.stringify({ is_active: newStatus }),
       });
 
       if (!response.ok) {
-        console.log('Failed to update user status');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update user status');
       }
 
       setUsers(prevUsers =>
         prevUsers.map(u =>
-          u.email === email ? { ...u, is_active: newStatus } : u
+          u.id === userId ? { ...u, is_active: newStatus } : u
         )
       );
 
@@ -144,7 +166,7 @@ const UserManagement = () => {
       });
     } catch (error) {
       setUpdateStatus({
-        message: 'Failed to update user status. Please try again.',
+        message: error.message || 'Failed to update user status. Please try again.',
         type: 'error',
         show: true
       });
@@ -152,10 +174,11 @@ const UserManagement = () => {
   };
 
   // Filter users based on search term
-  const filteredUsers = users.filter(user => 
-    `${user.first_name} ${user.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.role.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredUsers = users.filter(userData => 
+    `${userData.first_name || ''} ${userData.last_name || ''}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    userData.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    userData.role?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    userData.auth_provider?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleCloseSnackbar = () => {
@@ -242,6 +265,16 @@ const UserManagement = () => {
                       fontSize: '0.875rem'
                     }}
                   >
+                    Auth Provider
+                  </TableCell>
+                  <TableCell 
+                    sx={{ 
+                      backgroundColor: '#450839', 
+                      color: 'white', 
+                      fontWeight: 'bold',
+                      fontSize: '0.875rem'
+                    }}
+                  >
                     Role
                   </TableCell>
                   <TableCell 
@@ -268,6 +301,7 @@ const UserManagement = () => {
                         </Box>
                       </TableCell>
                       <TableCell><Skeleton variant="text" width={180} height={20} /></TableCell>
+                      <TableCell><Skeleton variant="text" width={100} height={20} /></TableCell>
                       <TableCell><Skeleton variant="text" width={80} height={20} /></TableCell>
                       <TableCell><Skeleton variant="text" width={100} height={20} /></TableCell>
                     </TableRow>
@@ -295,10 +329,15 @@ const UserManagement = () => {
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <FormControl size="small" sx={{ minWidth: 120 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            {userData.auth_provider || 'password'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <FormControl size="small" sx={{ minWidth: 120 }} disabled={!isSuperAdmin}>
                             <Select
                               value={userData.role || 'user'}
-                              onChange={(e) => handleRoleUpdate(userData.email, e.target.value)}
+                              onChange={(e) => handleRoleUpdate(userData.id, e.target.value)}
                               variant="outlined"
                               sx={{
                                 '& .MuiSelect-select': {
@@ -320,18 +359,37 @@ const UserManagement = () => {
                                   Admin
                                 </Box>
                               </MenuItem>
+                              {isSuperAdmin && (
+                                <MenuItem value="super_admin">
+                                  <Box display="flex" alignItems="center" gap={1}>
+                                    <AdminPanelSettingsIcon fontSize="small" />
+                                    Super Admin
+                                  </Box>
+                                </MenuItem>
+                              )}
                             </Select>
                           </FormControl>
                         </TableCell>
                         <TableCell>
                           <Box display="flex" alignItems="center" gap={2}>
-                            <Tooltip title={userData.is_active ? 'Click to deactivate' : 'Click to activate'}>
-                              <Switch
-                                checked={userData.is_active || false}
-                                onChange={(e) => handleStatusUpdate(userData.email, e.target.checked)}
-                                size="medium"
-                                color='success'
-                              />
+                            <Tooltip 
+                              title={
+                                user?.email === userData.email && !userData.is_active
+                                  ? 'Cannot deactivate yourself'
+                                  : userData.is_active 
+                                    ? 'Click to deactivate' 
+                                    : 'Click to activate'
+                              }
+                            >
+                              <span>
+                                <Switch
+                                  checked={userData.is_active || false}
+                                  onChange={(e) => handleStatusUpdate(userData.id, e.target.checked)}
+                                  disabled={user?.email === userData.email && userData.is_active}
+                                  size="medium"
+                                  color='success'
+                                />
+                              </span>
                             </Tooltip>
                           </Box>
                         </TableCell>
@@ -340,7 +398,7 @@ const UserManagement = () => {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={4} align="center" sx={{ py: 8 }}>
+                    <TableCell colSpan={5} align="center" sx={{ py: 8 }}>
                       <Box textAlign="center">
                         <GroupIcon sx={{ fontSize: 48, color: '#ccc', mb: 2 }} />
                         <Typography variant="h6" color="text.secondary" gutterBottom>

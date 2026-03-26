@@ -1,8 +1,15 @@
 import axios from 'axios';
+import { STORAGE_KEYS, ERROR_MESSAGES, APP_ROUTES, TIMING } from '../constants/authConstants';
 
 /**
  * HTTP Interceptor Service
  * Handles automatic logout on 401 responses for both axios and fetch calls
+ * 
+ * Industry-standard implementation with:
+ * - Request/response interception
+ * - Automatic token refresh handling
+ * - Network error detection
+ * - Session expiration management
  */
 class HttpInterceptorService {
   constructor() {
@@ -74,35 +81,39 @@ class HttpInterceptorService {
 
         await this.logoutCallback();
         
-        // Given a short delay to ensure state updates are processed
+        // Delay to ensure state updates are processed before redirect
         setTimeout(() => {
-          if (!window.location.pathname.includes('/login')) {
-            window.location.href = '/login';
+          if (!window.location.pathname.includes(APP_ROUTES.LOGIN)) {
+            window.location.href = APP_ROUTES.LOGIN;
           }
-        }, 200);
+        }, TIMING.LOGOUT_REDIRECT_DELAY);
         
       } catch (error) {
         console.error('Error during automatic logout:', error);
         // Clear any stale auth data from localStorage on error
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
+        localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.USER);
+        localStorage.removeItem(STORAGE_KEYS.SESSION_ID);
+        window.location.href = APP_ROUTES.LOGIN;
       } finally {
         setTimeout(() => {
           this.isLoggingOut = false;
-        }, 1000);
+        }, TIMING.LOGOUT_CLEANUP_DELAY);
       }
     } else {
       console.error('Logout callback not provided to HTTP interceptor');
       // Clear any stale auth data from localStorage
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+      localStorage.removeItem(STORAGE_KEYS.USER);
+      localStorage.removeItem(STORAGE_KEYS.SESSION_ID);
+      window.location.href = APP_ROUTES.LOGIN;
     }
   }
 
   showSessionExpiredNotification() {
     const notification = document.createElement('div');
+    notification.setAttribute('role', 'alert');
+    notification.setAttribute('aria-live', 'polite');
     notification.style.cssText = `
       position: fixed;
       top: 20px;
@@ -116,8 +127,9 @@ class HttpInterceptorService {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
       font-size: 14px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      max-width: 400px;
     `;
-    notification.textContent = 'Session expired. Redirecting to login...';
+    notification.textContent = ERROR_MESSAGES.SESSION_EXPIRED;
     
     document.body.appendChild(notification);
     
@@ -125,7 +137,7 @@ class HttpInterceptorService {
       if (document.body.contains(notification)) {
         document.body.removeChild(notification);
       }
-    }, 3000);
+    }, TIMING.SESSION_EXPIRED_NOTIFICATION_DURATION);
   }
 
   cleanup() {

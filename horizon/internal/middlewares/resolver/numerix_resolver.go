@@ -7,15 +7,6 @@ const (
 
 	serviceNumerix = "numerix"
 
-	moduleView    = "view"
-	moduleOnboard = "onboard"
-	modulePromote = "promote"
-	moduleEdit    = "edit"
-	moduleReview  = "review"
-	moduleCancel  = "cancel"
-	moduleDelete  = "delete"
-	moduleTest    = "test"
-
 	resolverNumerixExpressionGenerate     = "NumerixExpressionGenerateResolver"
 	resolverNumerixExpressionVariables    = "NumerixExpressionVariablesResolver"
 	resolverNumerixConfigOnboard          = "NumerixConfigOnboardResolver"
@@ -45,7 +36,7 @@ func (r *numerixResolver) GetResolvers() map[string]Func {
 		resolverNumerixConfigPromote:          StaticResolver(screenTypeNumerixConfig, modulePromote, serviceNumerix),
 		resolverNumerixConfigDiscovery:        StaticResolver(screenTypeNumerixConfig, moduleView, serviceNumerix),
 		resolverNumerixConfigEdit:             StaticResolver(screenTypeNumerixConfig, moduleEdit, serviceNumerix),
-		resolverNumerixConfigRequestReview:    StaticResolver(screenTypeNumerixConfigApproval, moduleReview, serviceNumerix),
+		resolverNumerixConfigRequestReview:    StaticResolver(screenTypeNumerixConfigApproval, moduleApprove, serviceNumerix),
 		resolverNumerixConfigRequestCancel:    StaticResolver(screenTypeNumerixConfigApproval, moduleCancel, serviceNumerix),
 		resolverNumerixConfigRequestDiscovery: StaticResolver(screenTypeNumerixConfigApproval, moduleView, serviceNumerix),
 		resolverNumerixConfigRequestDelete:    StaticResolver(screenTypeNumerixConfigApproval, moduleDelete, serviceNumerix),

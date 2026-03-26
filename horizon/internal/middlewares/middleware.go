@@ -8,9 +8,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Meesho/BharatMLStack/horizon/internal/auth/constants"
 	"github.com/Meesho/BharatMLStack/horizon/internal/auth/handler"
 	"github.com/Meesho/BharatMLStack/horizon/internal/middlewares/resolver"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/apiresolver"
+	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/metadata"
+	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/permissions"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/rolepermission"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/token"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
@@ -32,7 +35,9 @@ type Middleware interface {
 type MiddlewareHandler struct {
 	tokenRepo          token.Repository
 	apiResolverRepo    apiresolver.Repository
-	rolePermissionRepo rolepermission.Repository
+	rolePermissionRepo rolepermission.Repository // Keep for backward compatibility
+	permissionRepo     permissions.Repository    // New permissions repository
+	metadataRepo       metadata.MetadataRepository // Metadata repository for lookups
 	mwhandler          *resolver.Handler
 }
 
@@ -56,10 +61,20 @@ func NewMiddleware() Middleware {
 		if err != nil {
 			log.Error().Msgf("Error in creating role permission repository")
 		}
+		permissionRepo, err := permissions.NewRepository(sqlConn)
+		if err != nil {
+			log.Error().Msgf("Error in creating permission repository")
+		}
+		metadataRepo, err := metadata.NewRepository(sqlConn)
+		if err != nil {
+			log.Error().Msgf("Error in creating metadata repository")
+		}
 		middleware = &MiddlewareHandler{
 			tokenRepo:          tokenRepo,
 			apiResolverRepo:    apiResolverRepo,
 			rolePermissionRepo: rolePermissionRepo,
+			permissionRepo:     permissionRepo,
+			metadataRepo:       metadataRepo,
 			mwhandler:          mwhandler,
 		}
 	})
@@ -77,9 +92,11 @@ func (m *MiddlewareHandler) GetMiddleWares() []gin.HandlerFunc {
 func (m *MiddlewareHandler) Cors() []gin.HandlerFunc {
 	var middlewares []gin.HandlerFunc
 	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowOrigins = []string{"*"} // Adjust to specific origins if needed
-	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}
-	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization"}
+	// WARNING: CORS allowing all origins is a security risk in production
+	// Should be configured via environment variable
+	corsConfig.AllowOrigins = []string{constants.CORSAllowAllOrigins} // TODO: Make configurable via env var
+	corsConfig.AllowMethods = strings.Split(constants.CORSAllowedMethods, ",")
+	corsConfig.AllowHeaders = strings.Split(constants.CORSAllowedHeaders, ",")
 	corsConfig.AllowCredentials = true
 
 	middlewares = append(middlewares, cors.New(corsConfig))
@@ -89,14 +106,15 @@ func (m *MiddlewareHandler) Cors() []gin.HandlerFunc {
 // AuthMiddleware checks for a valid JWT token except on login and register routes
 func (m *MiddlewareHandler) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Bypass authentication for login, register, and specific routes
-		if strings.HasPrefix(c.Request.URL.Path, "/login") ||
-			strings.HasPrefix(c.Request.URL.Path, "/register") ||
-			strings.HasPrefix(c.Request.URL.Path, "/health") ||
-			strings.HasPrefix(c.Request.URL.Path, "/api/1.0/fs-config") ||
-			strings.HasPrefix(c.Request.URL.Path, "/api/v1/online-feature-store/get-source-mapping") ||
-			strings.HasPrefix(c.Request.URL.Path, "/api/v1/online-feature-store/get-online-features-mapping") ||
-			strings.HasPrefix(c.Request.URL.Path, "/api/v1/online-feature-store/retrieve-feature-groups") {
+		// Bypass authentication for public routes
+		isPublicRoute := false
+		for _, publicRoute := range constants.PublicRoutes {
+			if strings.HasPrefix(c.Request.URL.Path, publicRoute) {
+				isPublicRoute = true
+				break
+			}
+		}
+		if isPublicRoute {
 			c.Next()
 			return
 		}
@@ -206,16 +224,91 @@ func (m *MiddlewareHandler) CheckScreenPermission(c *gin.Context, claims *handle
 		return
 	}
 	screenModule := resolver(c)
-	isPermit, err := m.rolePermissionRepo.CheckPermission(claims.Role, screenModule.Service, screenModule.ScreenType, screenModule.Module)
+	
+	// Super admin bypass - has all permissions
+	if claims.Role == constants.RoleSuperAdmin {
+		return
+	}
+	
+	// Look up service_id from service name
+	service, err := m.metadataRepo.GetServiceByName(screenModule.Service)
 	if err != nil {
+		log.Warn().Err(err).Str("service", screenModule.Service).Msg("Service not found in metadata")
+		c.JSON(http.StatusForbidden, gin.H{"error": constants.ErrPermissionDenied})
+		c.Abort()
+		return
+	}
+	
+	// Look up screen_type_id from screen type name and service_id
+	screenType, err := m.metadataRepo.GetScreenTypeByServiceAndName(service.ID, screenModule.ScreenType)
+	if err != nil {
+		log.Warn().Err(err).Str("screenType", screenModule.ScreenType).Msg("Screen type not found in metadata")
+		c.JSON(http.StatusForbidden, gin.H{"error": constants.ErrPermissionDenied})
+		c.Abort()
+		return
+	}
+	
+	// Look up action_id from action name
+	action, err := m.metadataRepo.GetActionByName(screenModule.Module)
+	if err != nil {
+		log.Warn().Err(err).Str("action", screenModule.Module).Msg("Action not found in metadata")
+		c.JSON(http.StatusForbidden, gin.H{"error": constants.ErrPermissionDenied})
+		c.Abort()
+		return
+	}
+	
+	// Check permission using new permissions system with IDs
+	isPermit, err := m.permissionRepo.CheckPermission(claims.Role, service.ID, screenType.ID, action.ID)
+	if err != nil {
+		log.Error().Err(err).Msg("Error checking permission")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking permission"})
 		c.Abort()
 		return
 	}
 	if !isPermit {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Permission Denied"})
+		c.JSON(http.StatusForbidden, gin.H{"error": constants.ErrPermissionDenied})
 		c.Abort()
 		return
+	}
+}
+
+// RequireSuperAdmin middleware ensures only super_admin can access
+func (m *MiddlewareHandler) RequireSuperAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get("role")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Role not found in context"})
+			c.Abort()
+			return
+		}
+		
+		if role != constants.RoleSuperAdmin {
+			c.JSON(http.StatusForbidden, gin.H{"error": constants.ErrOnlySuperAdmin})
+			c.Abort()
+			return
+		}
+		
+		c.Next()
+	}
+}
+
+// RequireAdminOrSuperAdmin middleware ensures admin or super_admin can access
+func (m *MiddlewareHandler) RequireAdminOrSuperAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get("role")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Role not found in context"})
+			c.Abort()
+			return
+		}
+		
+		if role != constants.RoleAdmin && role != constants.RoleSuperAdmin {
+			c.JSON(http.StatusForbidden, gin.H{"error": constants.ErrOnlyAdminOrSuperAdmin})
+			c.Abort()
+			return
+		}
+		
+		c.Next()
 	}
 }
 

@@ -15,6 +15,8 @@ type Repository interface {
 	UpdateUser(user *User) error
 	DeleteUser(id uint) error
 	UpdateUserAccessAndRole(email string, isActive bool, role string) error
+	UpdateUserRole(id uint, role string, updatedBy uint) error
+	UpdateUserStatus(id uint, isActive bool, updatedBy uint) error
 }
 
 type Auth struct {
@@ -97,5 +99,17 @@ func (auth *Auth) UpdateUserAccessAndRole(email string, isActive bool, role stri
 	} else {
 		result = auth.db.Model(&User{}).Where("email = ?", email).Update("is_active", isActive)
 	}
+	return result.Error
+}
+
+// UpdateUserRole updates a user's role by ID
+func (auth *Auth) UpdateUserRole(id uint, role string, updatedBy uint) error {
+	result := auth.db.Model(&User{}).Where("id = ?", id).Update("role", role)
+	return result.Error
+}
+
+// UpdateUserStatus updates a user's active status by ID
+func (auth *Auth) UpdateUserStatus(id uint, isActive bool, updatedBy uint) error {
+	result := auth.db.Model(&User{}).Where("id = ?", id).Update("is_active", isActive)
 	return result.Error
 }
