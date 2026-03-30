@@ -1,6 +1,10 @@
 package maths
 
-import "time"
+import (
+	"time"
+
+	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
+)
 
 type Params struct {
 	Freq        uint64
@@ -45,8 +49,26 @@ func NewPredictor(config PredictorConfig) *Predictor {
 	return p
 }
 
+func scoreBucket(score float32) string {
+	switch {
+	case score < 0.1:
+		return "0.0-0.1"
+	case score < 0.3:
+		return "0.1-0.3"
+	case score < 0.5:
+		return "0.3-0.5"
+	case score < 0.7:
+		return "0.5-0.7"
+	case score < 1.0:
+		return "0.7-1.0"
+	default:
+		return "1.0+"
+	}
+}
+
 func (p *Predictor) Predict(freq uint64, lastAccess uint64, keyMemId uint32, activeMemId uint32) bool {
 	score := p.Estimator.CalculateRewriteScore(freq, lastAccess, keyMemId, activeMemId, p.MaxMemTableCount)
+	metrics.Incr(metrics.KEY_REWRITE_SCORE, metrics.BuildTag(metrics.NewTag(metrics.TAG_SCORE_BUCKET, scoreBucket(score))))
 	return score > p.ReWriteScoreThreshold
 }
 

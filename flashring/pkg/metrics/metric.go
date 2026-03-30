@@ -53,6 +53,12 @@ const (
 	KEY_MEMTABLE_MISS             = "flashring_memtable_miss"
 	KEY_DATA_LENGTH               = "flashring_data_length"
 	KEY_IOURING_SIZE              = "flashring_iouring_size"
+	KEY_REWRITE_SCORE             = "flashring_rewrite_score"
+)
+
+// Rewrite score tag keys
+const (
+	TAG_SCORE_BUCKET = "score_bucket"
 )
 
 // Flashring tag keys
