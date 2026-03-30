@@ -54,11 +54,15 @@ const (
 	KEY_DATA_LENGTH               = "flashring_data_length"
 	KEY_IOURING_SIZE              = "flashring_iouring_size"
 	KEY_REWRITE_SCORE             = "flashring_rewrite_score"
+	KEY_REWRITE_DECISION          = "flashring_rewrite_decision"
 )
 
-// Rewrite score tag keys
+// Rewrite predictor tag keys
 const (
 	TAG_SCORE_BUCKET = "score_bucket"
+	TAG_DECISION     = "decision"
+	TAG_RING_ZONE    = "ring_zone"
+	TAG_FREQ_BAND    = "freq_band"
 )
 
 // Flashring tag keys

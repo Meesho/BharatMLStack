@@ -66,10 +66,53 @@ func scoreBucket(score float32) string {
 	}
 }
 
+func ringZone(keyMemId, activeMemId, maxMemTableCount uint32) string {
+	risk := (activeMemId - keyMemId + maxMemTableCount) % maxMemTableCount
+	pct := float64(risk) / float64(maxMemTableCount)
+	switch {
+	case pct < 0.25:
+		return "0-25%"
+	case pct < 0.50:
+		return "25-50%"
+	case pct < 0.75:
+		return "50-75%"
+	default:
+		return "75-100%"
+	}
+}
+
+func freqBand(freq uint64) string {
+	switch {
+	case freq <= 1:
+		return "cold"
+	case freq <= 5:
+		return "warm"
+	case freq <= 20:
+		return "hot"
+	default:
+		return "very_hot"
+	}
+}
+
 func (p *Predictor) Predict(freq uint64, lastAccess uint64, keyMemId uint32, activeMemId uint32) bool {
 	score := p.Estimator.CalculateRewriteScore(freq, lastAccess, keyMemId, activeMemId, p.MaxMemTableCount)
+	rewrite := score > p.ReWriteScoreThreshold
+
+	zone := ringZone(keyMemId, activeMemId, p.MaxMemTableCount)
+	band := freqBand(freq)
+	decision := "skip"
+	if rewrite {
+		decision = "rewrite"
+	}
+
 	metrics.Incr(metrics.KEY_REWRITE_SCORE, metrics.BuildTag(metrics.NewTag(metrics.TAG_SCORE_BUCKET, scoreBucket(score))))
-	return score > p.ReWriteScoreThreshold
+	metrics.Incr(metrics.KEY_REWRITE_DECISION, metrics.BuildTag(
+		metrics.NewTag(metrics.TAG_DECISION, decision),
+		metrics.NewTag(metrics.TAG_RING_ZONE, zone),
+		metrics.NewTag(metrics.TAG_FREQ_BAND, band),
+	))
+
+	return rewrite
 }
 
 func (p *Predictor) Observe(hitRate float64) {
