@@ -17,7 +17,17 @@ type Predictor struct {
 	GridSearchEstimator   *GridSearchEstimator
 	ReWriteScoreThreshold float32
 	MaxMemTableCount      uint32
+	freqBands             FreqBands
 	hitRateCh             chan float64
+}
+
+// FreqBands defines the upper bounds for frequency band labels.
+// Keys with freq <= Cold are "cold", <= Warm are "warm", <= Hot are "hot",
+// and anything above Hot is "very_hot".
+type FreqBands struct {
+	Cold uint64
+	Warm uint64
+	Hot  uint64
 }
 
 type PredictorConfig struct {
@@ -26,6 +36,7 @@ type PredictorConfig struct {
 	SampleDuration        time.Duration
 	MaxMemTableCount      uint32
 	GridSearchEpsilon     float64
+	FreqBands             FreqBands
 }
 
 func NewPredictor(config PredictorConfig) *Predictor {
@@ -34,11 +45,16 @@ func NewPredictor(config PredictorConfig) *Predictor {
 		WLA:   config.Weights[0].WLA,
 	}
 	gridSearchEstimator := NewGridSearchEstimator(config.SampleDuration, config.Weights, estimator, config.GridSearchEpsilon)
+	fb := config.FreqBands
+	if fb.Cold == 0 && fb.Warm == 0 && fb.Hot == 0 {
+		fb = FreqBands{Cold: 1, Warm: 5, Hot: 20}
+	}
 	p := &Predictor{
 		Estimator:             estimator,
 		GridSearchEstimator:   gridSearchEstimator,
 		ReWriteScoreThreshold: config.ReWriteScoreThreshold,
 		MaxMemTableCount:      config.MaxMemTableCount,
+		freqBands:             fb,
 		hitRateCh:             make(chan float64, 1024),
 	}
 	go func() {
@@ -81,13 +97,13 @@ func ringZone(keyMemId, activeMemId, maxMemTableCount uint32) string {
 	}
 }
 
-func freqBand(freq uint64) string {
+func freqBand(freq uint64, fb FreqBands) string {
 	switch {
-	case freq <= 1:
+	case freq <= fb.Cold:
 		return "cold"
-	case freq <= 5:
+	case freq <= fb.Warm:
 		return "warm"
-	case freq <= 20:
+	case freq <= fb.Hot:
 		return "hot"
 	default:
 		return "very_hot"
@@ -99,7 +115,7 @@ func (p *Predictor) Predict(freq uint64, lastAccess uint64, keyMemId uint32, act
 	rewrite := score > p.ReWriteScoreThreshold
 
 	zone := ringZone(keyMemId, activeMemId, p.MaxMemTableCount)
-	band := freqBand(freq)
+	band := freqBand(freq, p.freqBands)
 	decision := "skip"
 	if rewrite {
 		decision = "rewrite"

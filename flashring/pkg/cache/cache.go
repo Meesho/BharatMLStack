@@ -39,6 +39,7 @@ type Config struct {
 	ReWriteScoreThreshold float32
 	GridSearchEpsilon     float64
 	SampleDuration        time.Duration
+	FreqBands             maths.FreqBands
 }
 
 var (
@@ -116,6 +117,7 @@ func NewWrapCache(config Config, mountPoint string) (*WrapCache, error) {
 		SampleDuration:        config.SampleDuration,
 		MaxMemTableCount:      uint32(maxMemTableCount),
 		GridSearchEpsilon:     config.GridSearchEpsilon,
+		FreqBands:             config.FreqBands,
 	})
 
 	readRing, err := iouring.NewParallelBatchIoUringReader(iouring.BatchIoUringConfig{
