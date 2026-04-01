@@ -15,6 +15,10 @@ type ActivityInput struct {
 	Async               bool                   `json:"async"`
 	PluginVersion       string                 `json:"plugin_version"`
 	StepId              string                 `json:"step_id,omitempty"`
+	// Config holds plugin-specific configuration injected from etcd at call time.
+	// Plugins should read environment-specific values from here instead of os.Getenv,
+	// so that config can be updated in etcd without redeploying the orchestrator.
+	Config map[string]string `json:"config,omitempty"`
 }
 
 // ActivityOutput is the generic output returned by all activities.
