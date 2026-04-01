@@ -55,6 +55,7 @@ const (
 	KEY_IOURING_SIZE              = "flashring_iouring_size"
 	KEY_REWRITE_SCORE             = "flashring_rewrite_score"
 	KEY_REWRITE_DECISION          = "flashring_rewrite_decision"
+	KEY_ACCESS_FREQ               = "flashring_access_freq"
 )
 
 // Rewrite predictor tag keys

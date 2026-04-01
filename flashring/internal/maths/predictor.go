@@ -121,6 +121,7 @@ func (p *Predictor) Predict(freq uint64, lastAccess uint64, keyMemId uint32, act
 		decision = "rewrite"
 	}
 
+	metrics.Timing(metrics.KEY_ACCESS_FREQ, time.Duration(freq)*time.Millisecond, nil)
 	metrics.Incr(metrics.KEY_REWRITE_SCORE, metrics.BuildTag(metrics.NewTag(metrics.TAG_SCORE_BUCKET, scoreBucket(score))))
 	metrics.Incr(metrics.KEY_REWRITE_DECISION, metrics.BuildTag(
 		metrics.NewTag(metrics.TAG_DECISION, decision),
