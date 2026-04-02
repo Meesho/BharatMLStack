@@ -54,10 +54,13 @@ func NewSizeFileWriter(config Config, metricTags []string) (*SizeFileWriter, err
 		return nil, fmt.Errorf("failed to extract base path: %w", err)
 	}
 
+	// Resolve pod/host identity at runtime (in Kubernetes, hostname == pod name)
+	podName := getHostname()
+
 	// Generate timestamped filename for initial file
 	// Use .log.tmp during active write; rename to .log on rotation/close
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	initialPath := filepath.Join(baseDir, generateFileName(baseFileName, config.PodName, timestamp))
+	initialPath := filepath.Join(baseDir, generateFileName(baseFileName, podName, timestamp))
 
 	// Open initial file (always starts at offset 0 for new files)
 	file, err := openDirectIOSize(initialPath, config.PreallocateFileSize)
@@ -72,7 +75,7 @@ func NewSizeFileWriter(config Config, metricTags []string) (*SizeFileWriter, err
 		maxFileSize:         config.MaxFileSize,
 		baseDir:             baseDir,
 		baseFileName:        baseFileName,
-		podName:             config.PodName,
+		podName:             podName,
 		preallocateFileSize: config.PreallocateFileSize,
 		metricTags:          getBaseTags(metricTags),
 	}

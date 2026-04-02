@@ -260,11 +260,10 @@ func TestFileWriter_GetLastPwritevDuration(t *testing.T) {
 	})
 }
 
-func TestFileWriter_PodNameInFilename(t *testing.T) {
-	t.Run("IncludesPodNameWhenConfigured", func(t *testing.T) {
+func TestFileWriter_HostnameInFilename(t *testing.T) {
+	t.Run("IncludesHostnameAutomatically", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		config := DefaultConfig(filepath.Join(tmpDir, "test.log"))
-		config.PodName = "pod-abc-123"
 		config.MaxFileSize = 0
 
 		writer, err := NewSizeFileWriter(config, nil)
@@ -277,33 +276,14 @@ func TestFileWriter_PodNameInFilename(t *testing.T) {
 		err = writer.Close()
 		require.NoError(t, err)
 
-		// Verify the filename contains --{podname}
+		// Verify the filename contains --{hostname} (auto-fetched)
+		hostname := getHostname()
 		logFile := findLogFile(t, tmpDir, "test")
 		require.NotEmpty(t, logFile, "log file should exist")
 		name := filepath.Base(logFile)
-		assert.Contains(t, name, "--pod-abc-123_")
-		assert.True(t, filepath.Ext(name) == ".log")
-	})
-
-	t.Run("OmitsPodNameWhenEmpty", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		config := DefaultConfig(filepath.Join(tmpDir, "test.log"))
-		config.PodName = ""
-		config.MaxFileSize = 0
-
-		writer, err := NewSizeFileWriter(config, nil)
-		require.NoError(t, err)
-
-		_, err = writer.WriteVectored([][]byte{[]byte("hello")})
-		require.NoError(t, err)
-
-		err = writer.Close()
-		require.NoError(t, err)
-
-		logFile := findLogFile(t, tmpDir, "test")
-		require.NotEmpty(t, logFile, "log file should exist")
-		name := filepath.Base(logFile)
-		assert.NotContains(t, name, "--")
+		if hostname != "" {
+			assert.Contains(t, name, "--"+hostname+"_")
+		}
 		assert.True(t, filepath.Ext(name) == ".log")
 	})
 }

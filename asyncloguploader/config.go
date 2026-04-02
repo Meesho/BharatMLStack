@@ -23,12 +23,6 @@ type Config struct {
 	// Upload configuration
 	GCSUploadConfig *GCSUploadConfig // Optional: GCS upload configuration (uploader scans log dir)
 
-	// PodName is an optional identifier (e.g. Kubernetes pod name) included in
-	// log filenames for distinguishing output from different pods.
-	// When non-empty, filenames become {event}--{podname}_{timestamp}.log.
-	// When empty, the current format {event}_{timestamp}.log is preserved.
-	PodName string
-
 	// MetricTags are application-provided tags propagated to all metric emissions
 	// (e.g., from metric.BuildTag(metric.NewTag("service", "x"), ...))
 	MetricTags []string
