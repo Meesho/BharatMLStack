@@ -260,6 +260,73 @@ func TestFileWriter_GetLastPwritevDuration(t *testing.T) {
 	})
 }
 
+func TestFileWriter_PodNameInFilename(t *testing.T) {
+	t.Run("IncludesPodNameWhenConfigured", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		config := DefaultConfig(filepath.Join(tmpDir, "test.log"))
+		config.PodName = "pod-abc-123"
+		config.MaxFileSize = 0
+
+		writer, err := NewSizeFileWriter(config, nil)
+		require.NoError(t, err)
+
+		// Write some data so the file is not empty on close
+		_, err = writer.WriteVectored([][]byte{[]byte("hello")})
+		require.NoError(t, err)
+
+		err = writer.Close()
+		require.NoError(t, err)
+
+		// Verify the filename contains --{podname}
+		logFile := findLogFile(t, tmpDir, "test")
+		require.NotEmpty(t, logFile, "log file should exist")
+		name := filepath.Base(logFile)
+		assert.Contains(t, name, "--pod-abc-123_")
+		assert.True(t, filepath.Ext(name) == ".log")
+	})
+
+	t.Run("OmitsPodNameWhenEmpty", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		config := DefaultConfig(filepath.Join(tmpDir, "test.log"))
+		config.PodName = ""
+		config.MaxFileSize = 0
+
+		writer, err := NewSizeFileWriter(config, nil)
+		require.NoError(t, err)
+
+		_, err = writer.WriteVectored([][]byte{[]byte("hello")})
+		require.NoError(t, err)
+
+		err = writer.Close()
+		require.NoError(t, err)
+
+		logFile := findLogFile(t, tmpDir, "test")
+		require.NotEmpty(t, logFile, "log file should exist")
+		name := filepath.Base(logFile)
+		assert.NotContains(t, name, "--")
+		assert.True(t, filepath.Ext(name) == ".log")
+	})
+}
+
+func TestGenerateFileName(t *testing.T) {
+	ts := "2026-03-02_14-30-00"
+
+	t.Run("WithPodName", func(t *testing.T) {
+		result := generateFileName("event", "pod-123", ts)
+		assert.Equal(t, "event--pod-123_2026-03-02_14-30-00.log.tmp", result)
+	})
+
+	t.Run("WithoutPodName", func(t *testing.T) {
+		result := generateFileName("event", "", ts)
+		assert.Equal(t, "event_2026-03-02_14-30-00.log.tmp", result)
+	})
+
+	t.Run("EventNameWithUnderscores", func(t *testing.T) {
+		result := generateFileName("image_search", "pod-abc", ts)
+		assert.Equal(t, "image_search--pod-abc_2026-03-02_14-30-00.log.tmp", result)
+	})
+}
+
 // findLogFile finds a log file in the directory matching the base name
 func findLogFile(t *testing.T, dir, baseName string) string {
 	entries, err := os.ReadDir(dir)

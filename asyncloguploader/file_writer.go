@@ -1,6 +1,7 @@
 package asyncloguploader
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -15,4 +16,14 @@ type FileWriter interface {
 
 	// Close closes the file writer and releases resources
 	Close() error
+}
+
+// generateFileName builds the log filename from base name, optional pod name, and timestamp.
+// With podName:    {baseName}--{podName}_{timestamp}.log.tmp
+// Without podName: {baseName}_{timestamp}.log.tmp
+func generateFileName(baseName, podName, timestamp string) string {
+	if podName != "" {
+		return fmt.Sprintf("%s--%s_%s.log.tmp", baseName, podName, timestamp)
+	}
+	return fmt.Sprintf("%s_%s.log.tmp", baseName, timestamp)
 }

@@ -21,7 +21,11 @@ import (
 // Note: GCSUploadConfig is now defined in config.go
 // This file uses GCSUploadConfig from the config package
 
-// filenamePartitionRegex matches {eventname}_{YYYY-MM-DD_HH-MM-SS}.log
+// filenamePodPartitionRegex matches {event}--{podname}_{YYYY-MM-DD_HH-MM-SS}.log
+// Non-greedy (.+?) for event stops at the first "--" separator.
+var filenamePodPartitionRegex = regexp.MustCompile(`^(.+?)--(.+?)_(\d{4}-\d{2}-\d{2})_(\d{2})-\d{2}-\d{2}\.log$`)
+
+// filenamePartitionRegex matches {eventname}_{YYYY-MM-DD_HH-MM-SS}.log (no pod name)
 var filenamePartitionRegex = regexp.MustCompile(`^(.+)_(\d{4}-\d{2}-\d{2})_(\d{2})-\d{2}-\d{2}\.log$`)
 
 // Uploader handles uploading completed log files to GCS by scanning the log directory
@@ -236,22 +240,35 @@ func (u *Uploader) uploadFile(ctx context.Context, filePath string) error {
 }
 
 // generateObjectName generates the GCS object name from file path.
-// Partitions by eventname/date/hour when filename matches {event}_{YYYY-MM-DD_HH-MM-SS}.log.
+// Supports two filename formats:
+//   - With pod:    {event}--{podname}_{YYYY-MM-DD_HH-MM-SS}.log  -> {prefix}/{event}/{date}/{hour}/{filename}
+//   - Without pod: {event}_{YYYY-MM-DD_HH-MM-SS}.log             -> {prefix}/{event}/{date}/{hour}/{filename}
+//
 // Fallback: flat {ObjectPrefix}{filename}
 func (u *Uploader) generateObjectName(filePath string) string {
 	fileName := filepath.Base(filePath)
-	matches := filenamePartitionRegex.FindStringSubmatch(fileName)
-	if len(matches) == 4 {
+	prefix := u.config.ObjectPrefix
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
+		prefix = prefix + "/"
+	}
+
+	// Try pod-name format first: {event}--{pod}_{date}_{time}.log
+	if matches := filenamePodPartitionRegex.FindStringSubmatch(fileName); len(matches) == 5 {
+		eventName := matches[1]
+		date := matches[3] // YYYY-MM-DD
+		hour := matches[4] // HH
+		return fmt.Sprintf("%s%s/%s/%s/%s", prefix, eventName, date, hour, fileName)
+	}
+
+	// Fallback to no-pod format: {event}_{date}_{time}.log
+	if matches := filenamePartitionRegex.FindStringSubmatch(fileName); len(matches) == 4 {
 		eventName := matches[1]
 		date := matches[2] // YYYY-MM-DD
 		hour := matches[3] // HH
-		prefix := u.config.ObjectPrefix
-		if prefix != "" && !strings.HasSuffix(prefix, "/") {
-			prefix = prefix + "/"
-		}
 		return fmt.Sprintf("%s%s/%s/%s/%s", prefix, eventName, date, hour, fileName)
 	}
-	// Fallback: flat structure
+
+	// Final fallback: flat structure
 	if u.config.ObjectPrefix != "" {
 		return fmt.Sprintf("%s%s", u.config.ObjectPrefix, fileName)
 	}
