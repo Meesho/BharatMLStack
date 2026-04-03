@@ -59,6 +59,8 @@ func decode(entry *Entry) (length, deltaExptime, lastAccess, freq uint16, memId,
 
 func encodeLastAccessNFreq(lastAccess, freq uint16, entry *Entry) {
 	d1 := ByteOrder.Uint64(entry[:8])
+	// Clear lastAccess (bits 31:16) and freq (bits 15:0) before writing new values.
+	d1 &^= uint64(LAST_ACCESS_MASK)<<LAST_ACCESS_SHIFT | uint64(FREQ_MASK)<<FREQ_SHIFT
 	d1 |= uint64(lastAccess&LAST_ACCESS_MASK) << LAST_ACCESS_SHIFT
 	d1 |= uint64(freq&FREQ_MASK) << FREQ_SHIFT
 	ByteOrder.PutUint64(entry[:8], d1)
