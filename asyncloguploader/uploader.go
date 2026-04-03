@@ -6,46 +6,41 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
 	logger "github.com/rs/zerolog/log"
 	"google.golang.org/api/option"
+
+	"github.com/Meesho/go-core/metric"
 )
 
 // Note: GCSUploadConfig is now defined in config.go
 // This file uses GCSUploadConfig from the config package
 
-// Uploader handles uploading completed log files to GCS
+// filenamePartitionRegex matches {eventname}_{YYYY-MM-DD_HH-MM-SS}.log
+var filenamePartitionRegex = regexp.MustCompile(`^(.+)_(\d{4}-\d{2}-\d{2})_(\d{2})-\d{2}-\d{2}\.log$`)
+
+// Uploader handles uploading completed log files to GCS by scanning the log directory
 type Uploader struct {
-	config      GCSUploadConfig
-	client      *storage.Client
-	uploadChan  chan string
-	wg          sync.WaitGroup
-	ctx         context.Context
-	cancel      context.CancelFunc
-	uploadStats Stats
-	statsMu     sync.RWMutex
-	chunkMgr    *ChunkManager
-	stopOnce    sync.Once // Ensures Stop() is idempotent
+	config       GCSUploadConfig
+	client       *storage.Client
+	scanDir      string
+	scanInterval time.Duration
+	wg           sync.WaitGroup
+	ctx          context.Context
+	cancel       context.CancelFunc
+	metricTags   []string
+	chunkMgr     *ChunkManager
+	stopOnce     sync.Once // Ensures Stop() is idempotent
 }
 
-// Stats tracks upload statistics
-type Stats struct {
-	TotalFiles        int64
-	Successful        int64
-	Failed            int64
-	TotalBytes        int64
-	TotalDuration     time.Duration
-	LastUploadTime    time.Time
-	MinUploadDuration time.Duration
-	MaxUploadDuration time.Duration
-	AvgUploadDuration time.Duration
-}
-
-// NewUploader creates a new GCS uploader service
-func NewUploader(config GCSUploadConfig) (*Uploader, error) {
+// NewUploader creates a new GCS uploader service that scans scanDir for .log files
+// metricTags are application-provided tags for metric emissions (e.g., from Config.MetricTags)
+func NewUploader(config GCSUploadConfig, scanDir string, metricTags []string) (*Uploader, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -61,19 +56,27 @@ func NewUploader(config GCSUploadConfig) (*Uploader, error) {
 		return nil, fmt.Errorf("failed to create storage client: %w", err)
 	}
 
+	interval := config.ScanInterval
+	if interval <= 0 {
+		interval = 10 * time.Second
+	}
+
+	tags := getBaseTags(metricTags)
 	uploader := &Uploader{
-		config:     config,
-		client:     client,
-		uploadChan: make(chan string, config.ChannelBufferSize),
-		ctx:        ctx,
-		cancel:     cancel,
-		chunkMgr:   NewChunkManager(config.MaxChunksPerCompose),
+		config:       config,
+		client:       client,
+		scanDir:      scanDir,
+		scanInterval: interval,
+		ctx:          ctx,
+		cancel:       cancel,
+		metricTags:   tags,
+		chunkMgr:     NewChunkManager(config.MaxChunksPerCompose),
 	}
 
 	return uploader, nil
 }
 
-// Start starts the uploader service (reads from channel and uploads files)
+// Start starts the uploader service (scans scanDir for .log files and uploads)
 func (u *Uploader) Start() {
 	u.wg.Add(1)
 	go u.uploadWorker()
@@ -83,73 +86,69 @@ func (u *Uploader) Start() {
 // Safe to call multiple times (idempotent)
 func (u *Uploader) Stop() {
 	u.stopOnce.Do(func() {
-		// Close channel first to stop accepting new files
-		close(u.uploadChan)
-
-		// Wait for upload worker to finish processing all files in channel
-		u.wg.Wait()
-
-		// Now cancel context (this will cancel any ongoing uploads)
+		// Cancel context to signal worker to stop
 		u.cancel()
+
+		// Wait for upload worker to finish (does final scan before exiting)
+		u.wg.Wait()
 
 		// Close client
 		u.client.Close()
 	})
 }
 
-// GetUploadChannel returns the channel to send file paths for upload
-func (u *Uploader) GetUploadChannel() chan<- string {
-	return u.uploadChan
-}
-
-// GetStats returns current upload statistics
-func (u *Uploader) GetStats() Stats {
-	u.statsMu.RLock()
-	defer u.statsMu.RUnlock()
-
-	// Calculate average upload duration
-	stats := u.uploadStats
-	if stats.Successful > 0 && stats.TotalDuration > 0 {
-		stats.AvgUploadDuration = stats.TotalDuration / time.Duration(stats.Successful)
-	}
-
-	return stats
-}
-
-// uploadWorker reads from channel and uploads files
+// uploadWorker scans scanDir periodically for .log files and uploads them
 func (u *Uploader) uploadWorker() {
 	defer u.wg.Done()
 
-	for filePath := range u.uploadChan {
-		if filePath == "" {
-			continue
-		}
+	ticker := time.NewTicker(u.scanInterval)
+	defer ticker.Stop()
 
-		logger.Debug().Msgf("Processing file for upload: %s", filePath)
-
-		// Upload file with retries (stats are updated inside uploadFileWithRetry)
-		if err := u.uploadFileWithRetry(filePath); err != nil {
-			logger.Error().Err(err).Msgf("Failed to upload %s after %d retries", filePath, u.config.MaxRetries)
-			u.statsMu.Lock()
-			u.uploadStats.Failed++
-			u.uploadStats.TotalFiles++
-			u.statsMu.Unlock()
-		} else {
-			logger.Debug().Msgf("Successfully uploaded: %s", filePath)
-			u.statsMu.Lock()
-			u.uploadStats.Successful++
-			u.uploadStats.TotalFiles++
-			u.uploadStats.LastUploadTime = time.Now()
-			u.statsMu.Unlock()
+	for {
+		select {
+		case <-u.ctx.Done():
+			// Final scan before exiting - use fresh context so uploadFile/uploadParallel
+			// do not see canceled u.ctx and fail
+			ctxShutdown, cancelShutdown := context.WithTimeout(context.Background(), 1*time.Minute)
+			defer cancelShutdown()
+			u.scanAndUploadWithContext(ctxShutdown)
+			logger.Debug().Msg("Upload worker exiting (context cancelled)")
+			return
+		case <-ticker.C:
+			u.scanAndUploadWithContext(u.ctx)
 		}
 	}
-
-	logger.Debug().Msg("Upload worker exiting (channel closed)")
 }
 
-// uploadFileWithRetry uploads a file with retry logic
-func (u *Uploader) uploadFileWithRetry(filePath string) error {
+// scanAndUploadWithContext lists .log files in scanDir and uploads each using the given context.
+func (u *Uploader) scanAndUploadWithContext(ctx context.Context) {
+	entries, err := os.ReadDir(u.scanDir)
+	if err != nil {
+		logger.Debug().Err(err).Msgf("Failed to read scan dir %s", u.scanDir)
+		return
+	}
+
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".log") {
+			continue
+		}
+		path := filepath.Join(u.scanDir, e.Name())
+
+		logger.Debug().Msgf("Processing file for upload: %s", path)
+
+		if err := u.uploadFileWithRetry(ctx, path); err != nil {
+			logger.Error().Err(err).Msgf("Failed to upload %s after %d retries", path, u.config.MaxRetries)
+			metric.Incr(MetricUploadFileFailed, u.metricTags)
+		} else {
+			logger.Debug().Msgf("Successfully uploaded: %s", path)
+		}
+	}
+}
+
+// uploadFileWithRetry uploads a file with retry logic using the given context.
+func (u *Uploader) uploadFileWithRetry(ctx context.Context, filePath string) error {
 	// Get file size BEFORE upload (file will be deleted after successful upload)
+	metric.Incr(MetricUploadFile, u.metricTags)
 	fileInfo, statErr := os.Stat(filePath)
 	var fileSize int64
 	if statErr == nil {
@@ -161,32 +160,20 @@ func (u *Uploader) uploadFileWithRetry(filePath string) error {
 		if attempt > 0 {
 			// Wait before retry
 			select {
-			case <-u.ctx.Done():
+			case <-ctx.Done():
 				return fmt.Errorf("uploader stopped")
 			case <-time.After(u.config.RetryDelay):
 			}
 		}
 
 		start := time.Now()
-		err := u.uploadFile(filePath)
-		duration := time.Since(start)
+		err := u.uploadFile(ctx, filePath)
+		metric.TimingWithStart(MetricUploadFileDuration, start, u.metricTags)
 
 		if err == nil {
-			// Success - update stats using fileSize we got before upload
+			// Success - emit bytes metric
 			if statErr == nil && fileSize > 0 {
-				u.statsMu.Lock()
-				u.uploadStats.TotalBytes += fileSize
-				u.uploadStats.TotalDuration += duration
-
-				// Update min/max upload duration
-				if u.uploadStats.MinUploadDuration == 0 || duration < u.uploadStats.MinUploadDuration {
-					u.uploadStats.MinUploadDuration = duration
-				}
-				if duration > u.uploadStats.MaxUploadDuration {
-					u.uploadStats.MaxUploadDuration = duration
-				}
-
-				u.statsMu.Unlock()
+				metric.Count(MetricUploadBytes, fileSize, u.metricTags)
 			}
 			return nil
 		}
@@ -206,7 +193,7 @@ func (u *Uploader) uploadFileWithRetry(filePath string) error {
 }
 
 // uploadFile uploads a single file to GCS using parallel chunk upload
-func (u *Uploader) uploadFile(filePath string) error {
+func (u *Uploader) uploadFile(ctx context.Context, filePath string) error {
 	// Open file for reading
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -232,7 +219,7 @@ func (u *Uploader) uploadFile(filePath string) error {
 	objectName := u.generateObjectName(filePath)
 
 	// Upload using parallel chunk upload with chunk manager
-	if err := u.uploadParallel(u.ctx, u.client, u.config.Bucket, objectName, buf, u.config.ChunkSize); err != nil {
+	if err := u.uploadParallel(ctx, u.client, u.config.Bucket, objectName, buf, u.config.ChunkSize); err != nil {
 		return fmt.Errorf("parallel upload failed: %w", err)
 	}
 
@@ -248,9 +235,23 @@ func (u *Uploader) uploadFile(filePath string) error {
 	return nil
 }
 
-// generateObjectName generates the GCS object name from file path
+// generateObjectName generates the GCS object name from file path.
+// Partitions by eventname/date/hour when filename matches {event}_{YYYY-MM-DD_HH-MM-SS}.log.
+// Fallback: flat {ObjectPrefix}{filename}
 func (u *Uploader) generateObjectName(filePath string) string {
 	fileName := filepath.Base(filePath)
+	matches := filenamePartitionRegex.FindStringSubmatch(fileName)
+	if len(matches) == 4 {
+		eventName := matches[1]
+		date := matches[2] // YYYY-MM-DD
+		hour := matches[3] // HH
+		prefix := u.config.ObjectPrefix
+		if prefix != "" && !strings.HasSuffix(prefix, "/") {
+			prefix = prefix + "/"
+		}
+		return fmt.Sprintf("%s%s/%s/%s/%s", prefix, eventName, date, hour, fileName)
+	}
+	// Fallback: flat structure
 	if u.config.ObjectPrefix != "" {
 		return fmt.Sprintf("%s%s", u.config.ObjectPrefix, fileName)
 	}
