@@ -45,7 +45,7 @@ The `asyncloguploader` module provides a high-performance, asynchronous logging 
 │  │  - ShardCollection (multiple shards)                 │  │
 │  │  - FileWriter (Direct I/O, rotation)                 │  │
 │  │  - Flush worker (threshold-based)                    │  │
-│  │  - Statistics tracking                               │  │
+│  │  - Metrics via go-core/metric                        │  │
 │  └──────────────────────────────────────────────────────┘  │
 │         │                    │                              │
 │         ▼                    ▼                              │
@@ -73,7 +73,7 @@ The `asyncloguploader` module provides a high-performance, asynchronous logging 
            │            │ - GCS Client     │
            │            │ - Chunk Manager   │
            │            │ - Retry Logic     │
-           │            │ - Statistics      │
+           │            │ - Metrics         │
            │            └──────────────────┘
            │                    │
            │                    ▼
@@ -117,7 +117,7 @@ The `asyncloguploader` module provides a high-performance, asynchronous logging 
 3. **Upload Path**:
    ```
    File rotation → FileWriter.swapFiles()
-                → File path sent to uploadChannel
+                → Rename .tmp to .log; Uploader scans dir for .log files
                 → Uploader.uploadWorker()
                 → ChunkManager (parallel upload)
                 → GCS Compose API
@@ -152,8 +152,7 @@ type LoggerManager struct {
     HasEventLogger(eventName string) bool
     ListEventLoggers() []string
     Close() error
-    GetAggregatedStats() (totalLogs, droppedLogs, bytesWritten, flushes, flushErrors, setSwaps int64)
-    GetUploadStats() *Stats
+    // Metrics emitted via go-core/metric; use Config.MetricTags for tag propagation
 }
 ```
 
@@ -164,7 +163,7 @@ type LoggerManager struct {
 **Key Responsibilities**:
 - Shard collection management
 - Flush worker coordination
-- Statistics tracking
+- Metrics via go-core/metric
 - Graceful shutdown
 
 **Key Design Decisions**:
@@ -268,7 +267,7 @@ shard := sc.shards[shardIdx]
 - Parallel chunk uploads
 - Multi-level compose (handles >32 chunks)
 - Retry logic with exponential backoff
-- Statistics tracking
+- Metrics via go-core/metric
 
 **Key Design Decisions**:
 - **Parallel Chunks**: Uploads chunks concurrently
@@ -386,7 +385,6 @@ type Config struct {
     PreallocateFileSize int64         // Preallocation size (0 = disabled)
     FlushInterval       time.Duration // Periodic flush interval (default: 10s)
     FlushTimeout        time.Duration // Write completion timeout (default: 10ms)
-    UploadChannel       chan<- string // Optional: custom upload channel
     GCSUploadConfig     *GCSUploadConfig // Optional: GCS upload config
 }
 ```
@@ -402,7 +400,7 @@ type GCSUploadConfig struct {
     MaxRetries          int           // Max retry attempts (default: 3)
     RetryDelay          time.Duration // Retry delay (default: 5s)
     GRPCPoolSize        int           // gRPC connection pool size (default: 64)
-    ChannelBufferSize   int           // Upload channel buffer (default: 100)
+    ScanInterval        time.Duration // Scan log dir for .log files (default: 10s)
 }
 ```
 
@@ -427,40 +425,22 @@ type GCSUploadConfig struct {
 - **Cleanup**: Temporary chunks cleaned up on error
 - **Non-Blocking**: Upload failures don't block logging
 
-## 8. Statistics and Monitoring
+## 8. Metrics and Monitoring
 
-### 8.1 Logger Statistics
+Metrics are emitted via `github.com/Meesho/go-core/metric`. Use `Config.MetricTags` for tag propagation. Event name is added as `event_name` tag.
 
-- `TotalLogs`: Total log attempts
-- `DroppedLogs`: Logs dropped (buffer full, closed, etc.)
-- `BytesWritten`: Total bytes written to buffers
-- `Flushes`: Number of flush operations
-- `FlushErrors`: Number of flush failures
-- `FlushQueueDepth`: Current flush queue depth
-- `BlockedSwaps`: Swaps that blocked waiting for flush
+### 8.1 Logger Metrics
 
-### 8.2 Flush Metrics
+- `logBytes`, `logBytesDropped`, `logBytesSuccess`, `logBytesWritten`
+- `logBytesFlushAttempts`, `logBytesFlushSuccess`, `logBytesFlushFailure`, `logBytesFlushDuration`
 
-- `AvgFlushDuration`: Average flush duration
-- `MaxFlushDuration`: Maximum flush duration
-- `AvgWriteDuration`: Average write duration
-- `MaxWriteDuration`: Maximum write duration
-- `AvgPwritevDuration`: Average Pwritev syscall duration
-- `MaxPwritevDuration`: Maximum Pwritev duration
-- `WritePercent`: Write duration as % of flush duration
-- `PwritevPercent`: Pwritev duration as % of flush duration
+### 8.2 FileWriter Metrics
 
-### 8.3 Upload Statistics
+- `fileWriterWriteDuration`, `fileWriterRotationCount`
 
-- `TotalFiles`: Total files processed
-- `Successful`: Successful uploads
-- `Failed`: Failed uploads
-- `TotalBytes`: Total bytes uploaded
-- `TotalDuration`: Total upload duration
-- `LastUploadTime`: Last successful upload time
-- `MinUploadDuration`: Minimum upload duration
-- `MaxUploadDuration`: Maximum upload duration
-- `AvgUploadDuration`: Average upload duration
+### 8.3 Upload Metrics
+
+- `uploadFile`, `uploadFileFailed`, `uploadFileDuration`, `uploadBytes`
 
 ## 9. File Format
 

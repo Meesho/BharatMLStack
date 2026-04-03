@@ -32,6 +32,7 @@ type SizeFileWriter struct {
 	// Configuration
 	baseDir             string
 	baseFileName        string
+	podName             string
 	preallocateFileSize int64
 
 	// Mutex for rotation operations
@@ -53,10 +54,13 @@ func NewSizeFileWriter(config Config, metricTags []string) (*SizeFileWriter, err
 		return nil, fmt.Errorf("failed to extract base path: %w", err)
 	}
 
+	// Resolve pod/host identity at runtime (in Kubernetes, hostname == pod name)
+	podName := getHostname()
+
 	// Generate timestamped filename for initial file
 	// Use .log.tmp during active write; rename to .log on rotation/close
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	initialPath := filepath.Join(baseDir, fmt.Sprintf("%s_%s.log.tmp", baseFileName, timestamp))
+	initialPath := filepath.Join(baseDir, generateFileName(baseFileName, podName, timestamp))
 
 	// Open initial file (always starts at offset 0 for new files)
 	file, err := openDirectIOSize(initialPath, config.PreallocateFileSize)
@@ -71,6 +75,7 @@ func NewSizeFileWriter(config Config, metricTags []string) (*SizeFileWriter, err
 		maxFileSize:         config.MaxFileSize,
 		baseDir:             baseDir,
 		baseFileName:        baseFileName,
+		podName:             podName,
 		preallocateFileSize: config.PreallocateFileSize,
 		metricTags:          getBaseTags(metricTags),
 	}
@@ -231,7 +236,7 @@ func (fw *SizeFileWriter) rotateIfNeeded() error {
 // createNextFile creates a new file for rotation
 func (fw *SizeFileWriter) createNextFile() error {
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	nextPath := filepath.Join(fw.baseDir, fmt.Sprintf("%s_%s.log.tmp", fw.baseFileName, timestamp))
+	nextPath := filepath.Join(fw.baseDir, generateFileName(fw.baseFileName, fw.podName, timestamp))
 
 	file, err := openDirectIOSize(nextPath, fw.preallocateFileSize)
 	if err != nil {

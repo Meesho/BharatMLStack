@@ -61,38 +61,52 @@ func TestShard_Write(t *testing.T) {
 		assert.Greater(t, shard.Offset(), int32(headerOffset))
 	})
 
-	t.Run("PrependsLengthPrefix", func(t *testing.T) {
+	t.Run("PrependsLengthPrefixAndTimestamp", func(t *testing.T) {
 		shard, err := NewShard(1024*1024, 1, flushChan, nil)
 		require.NoError(t, err)
 		defer shard.Close()
 
 		data := []byte("test")
+		before := time.Now().UnixNano()
 		n, _ := shard.Write(data)
+		after := time.Now().UnixNano()
 
-		// Should write 4-byte length prefix + data
-		expectedSize := 4 + len(data)
+		// Should write 4-byte length prefix + 8-byte timestamp + data
+		const timestampSize = 8
+		expectedSize := 4 + timestampSize + len(data)
 		assert.Equal(t, expectedSize, n)
 
-		// Verify length prefix is written correctly
+		// Verify length prefix = timestampSize + len(data)
 		activeBufPtr := shard.activeBuffer.Load()
 		require.NotNil(t, activeBufPtr)
 		activeBuf := *activeBufPtr
-		offset := shard.Offset()
-		lengthPrefix := binary.LittleEndian.Uint32(activeBuf.data[offset-int32(n):offset-int32(len(data))])
-		assert.Equal(t, uint32(len(data)), lengthPrefix)
+
+		recordStart := int32(headerOffset) // first record starts right after header
+		lengthPrefix := binary.LittleEndian.Uint32(activeBuf.data[recordStart : recordStart+4])
+		assert.Equal(t, uint32(timestampSize+len(data)), lengthPrefix)
+
+		// Verify timestamp is within expected range
+		tsNano := binary.LittleEndian.Uint64(activeBuf.data[recordStart+4 : recordStart+4+timestampSize])
+		assert.GreaterOrEqual(t, int64(tsNano), before)
+		assert.LessOrEqual(t, int64(tsNano), after)
+
+		// Verify payload
+		payloadStart := recordStart + 4 + int32(timestampSize)
+		assert.Equal(t, data, activeBuf.data[payloadStart:payloadStart+int32(len(data))])
 	})
 
 	t.Run("ReturnsNeedsFlushWhenBufferFull", func(t *testing.T) {
-		shard, err := NewShard(1024, 1, flushChan, nil) // Small capacity
+		shard, err := NewShard(1024, 1, flushChan, nil) // Small capacity (aligned to 4096)
 		require.NoError(t, err)
 		defer shard.Close()
 
-		// Fill buffer
+		// Fill buffer; each record = 4 (prefix) + 8 (timestamp) + 500 (payload) = 512 bytes
 		largeData := make([]byte, 500)
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 20; i++ {
 			n, needsFlush := shard.Write(largeData)
 			if needsFlush {
-				assert.Greater(t, n, 0)
+				// n=0 when the buffer is full and the write couldn't fit (caller should retry);
+				// n>0 when the write succeeded but the buffer hit the 90% threshold.
 				return
 			}
 			assert.Greater(t, n, 0)
@@ -120,17 +134,14 @@ func TestShard_TrySwap(t *testing.T) {
 		defer shard.Close()
 
 		// Write enough data to trigger swap (90% of capacity)
-		// Need to account for headerOffset (8 bytes) and length prefix (4 bytes per write)
+		// Account for headerOffset (8), length prefix (4), and timestamp (8) per write
 		capacity := int(shard.Capacity())
 		targetSize := capacity * 9 / 10
-		dataSize := targetSize - headerOffset - 4 // Subtract header and length prefix
+		dataSize := targetSize - headerOffset - 4 - 8 // Subtract header, length prefix, and timestamp
 		largeData := make([]byte, dataSize)
 		n, needsFlush := shard.Write(largeData)
-		
-		// Should have written data
+
 		assert.Greater(t, n, 0)
-		// When buffer is nearly full, swap should be triggered
-		// Note: swap might not always succeed due to CAS, but Write should indicate needsFlush
 		_ = needsFlush
 	})
 

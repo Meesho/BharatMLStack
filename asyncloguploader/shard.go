@@ -231,8 +231,10 @@ func alignSize(size int) int {
 }
 
 // Write writes data to the active buffer (lock-free hot path)
-// Prepends a 4-byte length prefix (little-endian) before the log data
-// Returns the number of bytes written (including length prefix) and whether the buffer needs flushing
+// Prepends a 4-byte length prefix and 8-byte nanosecond timestamp (little-endian) before the log data
+// On-disk record layout: [4-byte recLen (LE)][8-byte timestamp (LE)][payload]
+// recLen = timestampSize + len(payload)
+// Returns the number of bytes written (including prefix + timestamp) and whether the buffer needs flushing
 func (s *Shard) Write(p []byte) (n int, needsFlush bool) {
 	if len(p) == 0 {
 		return 0, false
@@ -241,14 +243,13 @@ func (s *Shard) Write(p []byte) (n int, needsFlush bool) {
 	// Get active buffer
 	activeBufPtr := s.activeBuffer.Load()
 	if activeBufPtr == nil {
-		// Active buffer is nil - shard may be in invalid state
 		return 0, true
 	}
 	activeBuf := *activeBufPtr
 
-	// Reserve space for: 4-byte length prefix + log data
 	const lengthPrefixSize = 4
-	totalSize := lengthPrefixSize + len(p)
+	const timestampSize = 8
+	totalSize := lengthPrefixSize + timestampSize + len(p)
 
 	// Try to reserve space in the buffer (starting after the 8-byte header)
 	currentOffset := activeBuf.offset.Load()
@@ -258,7 +259,6 @@ func (s *Shard) Write(p []byte) (n int, needsFlush bool) {
 	// IMPORTANT: Check buffer space BEFORE checking readyForFlush
 	// This allows writes to the new active buffer after swap, even if readyForFlush is still true
 	if newOffset >= s.capacity {
-		// Active buffer is full - swap so it becomes inactive and can be flushed
 		s.trySwap()
 		return 0, true
 	}
@@ -271,25 +271,26 @@ func (s *Shard) Write(p []byte) (n int, needsFlush bool) {
 
 	// Try to atomically update the offset (CAS)
 	if !activeBuf.offset.CompareAndSwap(currentOffset, newOffset) {
-		// Another goroutine updated the offset, retry
 		return s.Write(p)
 	}
 
 	// Increment inflight counter
 	activeBuf.inflight.Add(1)
 
-	// Write 4-byte length prefix (little-endian uint32)
-	binary.LittleEndian.PutUint32(activeBuf.data[currentOffset:currentOffset+lengthPrefixSize], uint32(len(p)))
+	// Write 4-byte length prefix: recLen = timestampSize + len(payload)
+	binary.LittleEndian.PutUint32(activeBuf.data[currentOffset:currentOffset+lengthPrefixSize], uint32(timestampSize+len(p)))
 
-	// Use copy() for data copy - Go's copy() is already highly optimized and safe
-	copy(activeBuf.data[currentOffset+lengthPrefixSize:newOffset], p)
+	// Write 8-byte nanosecond timestamp
+	binary.LittleEndian.PutUint64(activeBuf.data[currentOffset+lengthPrefixSize:currentOffset+lengthPrefixSize+timestampSize], uint64(time.Now().UnixNano()))
+
+	// Copy payload after timestamp
+	copy(activeBuf.data[currentOffset+lengthPrefixSize+timestampSize:newOffset], p)
 
 	// Decrement inflight counter: write completed
 	activeBuf.inflight.Add(-1)
 
 	// Check if buffer is now full or nearly full (within 10%)
 	if newOffset >= s.capacity*9/10 {
-		// CRITICAL: Force swap immediately so inactive buffer has the data
 		s.trySwap()
 		return totalSize, true
 	}

@@ -23,7 +23,8 @@ import (
     "log"
     "time"
     
-    "github.com/neehar-mavuduru/logger-double-buffer/asyncloguploader"
+    "github.com/Meesho/BharatMLStack/asyncloguploader"
+    "github.com/Meesho/go-core/metric"
 )
 
 func main() {
@@ -32,6 +33,10 @@ func main() {
     config.BufferSize = 64 * 1024 * 1024  // 64MB
     config.NumShards = 8
     config.MaxFileSize = 100 * 1024 * 1024  // 100MB rotation
+    config.MetricTags = metric.BuildTag(
+        metric.NewTag("service", "myapp"),
+        metric.NewTag("env", "prod"),
+    )
     
     // Optional: Configure GCS upload
     gcsConfig := asyncloguploader.DefaultGCSUploadConfig("my-gcs-bucket")
@@ -53,41 +58,12 @@ func main() {
     // Give time for async operations
     time.Sleep(2 * time.Second)
     
-    // Check statistics
-    totalLogs, droppedLogs, bytesWritten, flushes, flushErrors, _ := 
-        loggerManager.GetAggregatedStats()
-    log.Printf("Stats: total=%d, dropped=%d, bytes=%d, flushes=%d, errors=%d",
-        totalLogs, droppedLogs, bytesWritten, flushes, flushErrors)
+    // Metrics (logBytes, logBytesDropped, logBytesSuccess, etc.) are emitted
+    // via go-core/metric and can be viewed in Grafana with Config.MetricTags.
 }
 ```
 
 ### Advanced Usage
-
-#### Custom Upload Channel
-
-```go
-// Create custom upload channel
-uploadChan := make(chan string, 100)
-
-// Create logger manager with custom upload channel
-config := asyncloguploader.DefaultConfig("/var/log/myapp/app.log")
-config.UploadChannel = uploadChan
-
-loggerManager, err := asyncloguploader.NewLoggerManager(config)
-if err != nil {
-    log.Fatal(err)
-}
-defer loggerManager.Close()
-
-// Custom upload handler
-go func() {
-    for filePath := range uploadChan {
-        // Custom upload logic
-        log.Printf("Uploading: %s", filePath)
-        // ... upload to your storage system
-    }
-}()
-```
 
 #### Event Logger Management
 
@@ -114,26 +90,21 @@ if err != nil {
 }
 ```
 
-#### Statistics and Monitoring
+#### Metrics and Tag Propagation
 
 ```go
-// Get aggregated statistics across all loggers
-totalLogs, droppedLogs, bytesWritten, flushes, flushErrors, _ := 
-    loggerManager.GetAggregatedStats()
+// Pass application tags for Grafana filtering
+config.MetricTags = metric.BuildTag(
+    metric.NewTag("service", "myapp"),
+    metric.NewTag("env", "prod"),
+)
 
-// Get flush performance metrics
-metrics := loggerManager.GetAggregatedFlushMetrics()
-log.Printf("Avg flush duration: %v", metrics.AvgFlushDuration)
-log.Printf("Max flush duration: %v", metrics.MaxFlushDuration)
-log.Printf("Write time: %.2f%% of flush time", metrics.WritePercent)
-
-// Get upload statistics (if GCS uploader is configured)
-uploadStats := loggerManager.GetUploadStats()
-if uploadStats != nil {
-    log.Printf("Upload stats: total=%d, success=%d, failed=%d",
-        uploadStats.TotalFiles, uploadStats.Successful, uploadStats.Failed)
-    log.Printf("Avg upload duration: %v", uploadStats.AvgUploadDuration)
-}
+// Metrics are emitted via go-core/metric:
+// - logBytes, logBytesDropped, logBytesSuccess, logBytesWritten
+// - logBytesFlushAttempts, logBytesFlushSuccess, logBytesFlushFailure, logBytesFlushDuration
+// - fileWriterWriteDuration, fileWriterRotationCount
+// - uploadFile, uploadFileFailed, uploadFileDuration, uploadBytes
+// Event name is automatically added as event_name tag for event-scoped metrics.
 ```
 
 ## Architecture
@@ -154,11 +125,9 @@ Application → LoggerManager → Logger → ShardCollection → Shard (Buffer)
                                                               ↓
                                                          Flush Worker
                                                               ↓
-                                                         FileWriter (Direct I/O)
+                                                         FileWriter (.tmp → .log on rotation)
                                                               ↓
-                                                         Upload Channel
-                                                              ↓
-                                                         Uploader → GCS
+                                                         Uploader (scans dir for .log) → GCS
 ```
 
 ## Configuration
@@ -174,8 +143,7 @@ type Config struct {
     PreallocateFileSize int64         // Preallocation size (0 = disabled)
     FlushInterval       time.Duration // Periodic flush interval (default: 10s)
     FlushTimeout        time.Duration // Write completion timeout (default: 10ms)
-    UploadChannel       chan<- string // Optional: custom upload channel
-    GCSUploadConfig     *GCSUploadConfig // Optional: GCS upload config
+    GCSUploadConfig     *GCSUploadConfig // Optional: GCS upload config (scans log dir)
 }
 ```
 
@@ -190,7 +158,7 @@ type GCSUploadConfig struct {
     MaxRetries          int           // Max retry attempts (default: 3)
     RetryDelay          time.Duration // Retry delay (default: 5s)
     GRPCPoolSize        int           // gRPC connection pool size (default: 64)
-    ChannelBufferSize   int           // Upload channel buffer (default: 100)
+    ScanInterval        time.Duration // Scan log dir for .log files (default: 10s)
 }
 ```
 
@@ -213,7 +181,7 @@ config := asyncloguploader.Config{
         MaxRetries:          5,
         RetryDelay:          10 * time.Second,
         GRPCPoolSize:        128,
-        ChannelBufferSize:   200,
+        ScanInterval:        10 * time.Second,
     },
 }
 ```
@@ -315,47 +283,32 @@ gcloud auth application-default login
 - **Cleanup**: Temporary chunks cleaned up on error
 - **Non-Blocking**: Upload failures don't block logging
 
-## Statistics
+## Metrics
 
-### Logger Statistics
+Metrics are emitted via `github.com/Meesho/go-core/metric`. Use `Config.MetricTags` to pass application tags (e.g., service, env) for Grafana filtering. Event name is automatically added as `event_name` tag.
 
-```go
-totalLogs, droppedLogs, bytesWritten, flushes, flushErrors, _ := 
-    loggerManager.GetAggregatedStats()
-```
+### Logger Metrics
 
-- `TotalLogs`: Total log attempts
-- `DroppedLogs`: Logs dropped (buffer full, closed, etc.)
-- `BytesWritten`: Total bytes written to buffers
-- `Flushes`: Number of flush operations
-- `FlushErrors`: Number of flush failures
+- `logBytes`: Total log attempts
+- `logBytesDropped`: Logs dropped (buffer full, closed, etc.)
+- `logBytesSuccess`: Successful writes
+- `logBytesWritten`: Bytes written (Count metric)
+- `logBytesFlushAttempts`: Flush operations started
+- `logBytesFlushSuccess`: Successful flushes
+- `logBytesFlushFailure`: Failed flushes
+- `logBytesFlushDuration`: Flush duration (Timing)
 
-### Flush Metrics
+### FileWriter Metrics
 
-```go
-metrics := loggerManager.GetAggregatedFlushMetrics()
-```
+- `fileWriterWriteDuration`: Write duration per WriteVectored call
+- `fileWriterRotationCount`: File rotations completed
 
-- `AvgFlushDuration`: Average flush duration
-- `MaxFlushDuration`: Maximum flush duration
-- `AvgWriteDuration`: Average write duration
-- `WritePercent`: Write time as % of flush time
-- `AvgPwritevDuration`: Average Pwritev syscall duration
-- `PwritevPercent`: Pwritev time as % of flush time
+### Upload Metrics
 
-### Upload Statistics
-
-```go
-uploadStats := loggerManager.GetUploadStats()
-```
-
-- `TotalFiles`: Total files processed
-- `Successful`: Successful uploads
-- `Failed`: Failed uploads
-- `TotalBytes`: Total bytes uploaded
-- `AvgUploadDuration`: Average upload duration
-- `MinUploadDuration`: Minimum upload duration
-- `MaxUploadDuration`: Maximum upload duration
+- `uploadFile`: Upload attempts
+- `uploadFileFailed`: Failed uploads after retries
+- `uploadFileDuration`: Upload duration (Timing)
+- `uploadBytes`: Bytes uploaded (Count)
 
 ## Requirements
 
