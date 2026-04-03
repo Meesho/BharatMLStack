@@ -34,7 +34,7 @@ func NewIndex(hashBits int, rbInitial, rbMax, deleteAmortizedStep int, mu *sync.
 		mu:       mu,
 		rm:       make(map[uint64]int),
 		rb:       NewRingBuffer(rbInitial, rbMax),
-		mc:       maths.New(12),
+		mc:       maths.New(),
 		startAt:  time.Now().Unix(),
 		hashBits: hashBits,
 	}
@@ -82,9 +82,9 @@ func (i *Index) Get(key string) (length, lastAccess, remainingTTL uint16, freq u
 				return 0, 0, 0, 0, 0, 0, StatusExpired
 			}
 			lastAccess = i.generateLastAccess()
-			freq = i.incrFreq(freq)
+			freq = i.incrFreq(freq, hlo)
 			encodeLastAccessNFreq(lastAccess, freq, entry)
-			return length, lastAccess, uint16(remainingTTL), i.mc.Value(uint32(freq)), memId, offset, StatusOK
+			return length, lastAccess, uint16(remainingTTL), i.mc.Value(uint16(freq)), memId, offset, StatusOK
 		}
 		if hasNext(hashNextPrev) {
 			idx = int(decodeNext(hashNextPrev))
@@ -145,8 +145,8 @@ func (i *Index) generateLastAccess() uint16 {
 	return uint16((time.Now().Unix() - i.startAt) / 60)
 }
 
-func (i *Index) incrFreq(freq uint16) uint16 {
-	newFreq, _ := i.mc.Inc(uint32(freq))
+func (i *Index) incrFreq(freq uint16, hlo uint64) uint16 {
+	newFreq, _ := i.mc.Inc(uint16(freq), hlo)
 	return uint16(newFreq)
 }
 

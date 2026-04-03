@@ -5,84 +5,39 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	tests := []struct {
-		name     string
-		expClamp uint32
-		wantErr  bool
-	}{
-		{
-			name:     "valid small expClamp",
-			expClamp: 5,
-			wantErr:  false,
-		},
-		{
-			name:     "valid zero expClamp",
-			expClamp: 0,
-			wantErr:  false,
-		},
-		{
-			name:     "valid medium expClamp",
-			expClamp: 15, // smaller reasonable test value
-			wantErr:  false,
-		},
-		{
-			name:     "invalid expClamp exceeds 20-bit",
-			expClamp: 1 << eBits, // exceeds 20-bit capacity
-			wantErr:  true,
-		},
+	counter := New()
+	if counter == nil {
+		t.Fatal("New() returned nil")
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			defer func() {
-				if r := recover(); (r != nil) != tt.wantErr {
-					t.Errorf("New() panic = %v, wantErr %v", r != nil, tt.wantErr)
-				}
-			}()
-
-			counter := New(tt.expClamp)
-			if !tt.wantErr {
-				if counter == nil {
-					t.Error("New() returned nil for valid input")
-					return
-				}
-				if counter.expClamp != tt.expClamp {
-					t.Errorf("New() expClamp = %v, want %v", counter.expClamp, tt.expClamp)
-				}
-				if len(counter.th) != int(tt.expClamp+1) {
-					t.Errorf("New() threshold table length = %v, want %v", len(counter.th), tt.expClamp+1)
-				}
-				if len(counter.pow10) != int(tt.expClamp+1) {
-					t.Errorf("New() pow10 table length = %v, want %v", len(counter.pow10), tt.expClamp+1)
-				}
-			}
-		})
+	if counter.expClamp != 15 {
+		t.Errorf("expClamp = %v, want 15", counter.expClamp)
+	}
+	if len(counter.th) != 16 {
+		t.Errorf("threshold table length = %v, want 16", len(counter.th))
+	}
+	if len(counter.pow2) != 16 {
+		t.Errorf("pow2 table length = %v, want 16", len(counter.pow2))
 	}
 }
 
-func TestPow10Table(t *testing.T) {
-	counter := New(5)
+func TestPow2Table(t *testing.T) {
+	counter := New()
 
-	expected := []uint64{1, 10, 100, 1000, 10000, 100000}
+	expected := []uint64{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768}
 	for i, exp := range expected {
-		if counter.pow10[i] != exp {
-			t.Errorf("pow10[%d] = %v, want %v", i, counter.pow10[i], exp)
+		if counter.pow2[i] != exp {
+			t.Errorf("pow2[%d] = %v, want %v", i, counter.pow2[i], exp)
 		}
 	}
 }
 
 func TestThresholdTable(t *testing.T) {
-	counter := New(3)
+	counter := New()
 
-	// th[e] should equal floor(2^32 / 10^e)
-	max32 := uint64(^uint32(0)) // 2^32 - 1
+	max32 := uint64(^uint32(0))
 
-	for e := uint32(0); e <= 3; e++ {
-		var pow10e uint64 = 1
-		for i := uint32(0); i < e; i++ {
-			pow10e *= 10
-		}
-		expected := uint32(max32 / pow10e)
+	for e := uint32(0); e <= 15; e++ {
+		expected := uint32(max32 >> e)
 		if counter.th[e] != expected {
 			t.Errorf("th[%d] = %v, want %v", e, counter.th[e], expected)
 		}
@@ -90,37 +45,47 @@ func TestThresholdTable(t *testing.T) {
 }
 
 func TestValue(t *testing.T) {
-	counter := New(5)
+	counter := New()
 
 	tests := []struct {
 		name     string
-		v        uint32
+		v        uint16
 		expected uint64
 	}{
 		{
 			name:     "mantissa 0, exponent 0",
-			v:        0, // m=0, e=0
+			v:        0,
 			expected: 0,
 		},
 		{
 			name:     "mantissa 5, exponent 0",
-			v:        5, // m=5, e=0
-			expected: 5,
+			v:        5,
+			expected: 5, // 5 << 0
 		},
 		{
 			name:     "mantissa 3, exponent 1",
-			v:        (1 << eShift) | 3, // m=3, e=1
-			expected: 30,
+			v:        (1 << eShift) | 3,
+			expected: 6, // 3 << 1
 		},
 		{
-			name:     "mantissa 7, exponent 2",
-			v:        (2 << eShift) | 7, // m=7, e=2
-			expected: 700,
+			name:     "mantissa 100, exponent 2",
+			v:        (2 << eShift) | 100,
+			expected: 400, // 100 << 2
 		},
 		{
-			name:     "mantissa 9, exponent 3",
-			v:        (3 << eShift) | 9, // m=9, e=3
-			expected: 9000,
+			name:     "mantissa 4095, exponent 0",
+			v:        4095,
+			expected: 4095, // 4095 << 0
+		},
+		{
+			name:     "mantissa 2048, exponent 1",
+			v:        (1 << eShift) | 2048,
+			expected: 4096, // 2048 << 1
+		},
+		{
+			name:     "mantissa 2048, exponent 15",
+			v:        (15 << eShift) | 2048,
+			expected: 2048 << 15, // 67108864
 		},
 	}
 
@@ -135,106 +100,84 @@ func TestValue(t *testing.T) {
 }
 
 func TestIncBasicBehavior(t *testing.T) {
-	counter := New(5)
+	counter := New()
 
-	// Test mantissa increment when increment succeeds
-	// We'll force hits by setting a predictable RNG state
-	originalRng := counter.rng
-	defer func() { counter.rng = originalRng }()
-
-	counter.rng = 0
-
-	v := uint32(5) // m=5, e=0
-	newV, hit := counter.Inc(v)
+	// With e=0, th[0] = 0xFFFFFFFF, so any hlo will hit (uint32(hlo) < th[0])
+	v := uint16(5) // m=5, e=0
+	newV, hit := counter.Inc(v, 0)
 
 	if !hit {
-		t.Error("Inc() should have hit with RNG=0")
+		t.Error("Inc() should always hit at e=0")
 	}
 
-	expectedM := uint32(6)
-	expectedE := uint32(0)
-	expectedV := (expectedE << eShift) | expectedM
-
+	expectedV := uint16(6) // m=6, e=0
 	if newV != expectedV {
 		t.Errorf("Inc(%v) = %v, want %v", v, newV, expectedV)
 	}
 }
 
 func TestIncMantissaOverflow(t *testing.T) {
-	counter := New(5)
+	counter := New()
 
-	originalRng := counter.rng
-	defer func() { counter.rng = originalRng }()
-	counter.rng = 0
-
-	// Test mantissa overflow: m=9 -> m=0, e++
-	v := uint32(9) // m=9, e=0
-	newV, hit := counter.Inc(v)
+	// m=4095 (mOverflow-1), e=0 -> increment should cause overflow
+	v := uint16(mOverflow - 1) // m=4095, e=0
+	newV, hit := counter.Inc(v, 0)
 
 	if !hit {
-		t.Error("Inc() should have hit with RNG=0")
+		t.Error("Inc() should always hit at e=0")
 	}
 
-	expectedM := uint32(0)
-	expectedE := uint32(1)
+	// On overflow: m becomes 4096>>1 = 2048, e becomes 1
+	expectedM := uint16(mOverflow >> 1) // 2048
+	expectedE := uint16(1)
 	expectedV := (expectedE << eShift) | expectedM
 
 	if newV != expectedV {
-		t.Errorf("Inc(%v) = %v, want %v (m=0, e=1)", v, newV, expectedV)
+		t.Errorf("Inc(%v) = %v, want %v (m=2048, e=1)", v, newV, expectedV)
+	}
+
+	// Verify the decoded value is reasonable
+	// Before: Value(4095) = 4095 << 0 = 4095
+	// After:  Value(newV) = 2048 << 1 = 4096
+	valBefore := counter.Value(v)
+	valAfter := counter.Value(newV)
+	if valAfter <= valBefore {
+		t.Errorf("Value should increase after overflow: before=%v, after=%v", valBefore, valAfter)
 	}
 }
 
 func TestIncExponentSaturation(t *testing.T) {
-	counter := New(2) // expClamp = 2
+	counter := New()
 
-	originalRng := counter.rng
-	defer func() { counter.rng = originalRng }()
-	counter.rng = 0
-
-	// Test saturation at expClamp: m=9, e=expClamp
-	v := (uint32(2) << eShift) | 9 // m=9, e=2 (at expClamp)
-	newV, hit := counter.Inc(v)
+	// m=4095, e=15 (max exponent) -> should saturate
+	v := (uint16(15) << eShift) | uint16(mOverflow-1) // m=4095, e=15
+	newV, hit := counter.Inc(v, 0)
 
 	if !hit {
-		t.Error("Inc() should have hit with RNG=0")
+		t.Error("Inc() should hit")
 	}
 
-	// Should saturate at m=9, e=2 (not overflow)
-	expectedM := uint32(9) // mOverflow - 1
-	expectedE := uint32(2) // stays at expClamp
-	expectedV := (expectedE << eShift) | expectedM
-
-	if newV != expectedV {
-		t.Errorf("Inc(%v) = %v, want %v (saturated)", v, newV, expectedV)
+	// Should saturate: m stays at 4095, e stays at 15
+	if newV != v {
+		t.Errorf("Inc(%v) = %v, want %v (saturated at max)", v, newV, v)
 	}
 }
 
 func TestIncMissBehavior(t *testing.T) {
-	counter := New(5)
+	counter := New()
 
-	originalRng := counter.rng
-	defer func() { counter.rng = originalRng }()
+	// At e=1, th[1] = 0xFFFFFFFF >> 1 = 0x7FFFFFFF
+	// hlo with uint32 >= 0x7FFFFFFF should miss
+	v := (uint16(1) << eShift) | 5 // m=5, e=1
+	hlo := uint64(0xFFFFFFFF)      // uint32(hlo) = 0xFFFFFFFF >= th[1]
 
-	// Use a higher exponent where th[e] is smaller and easier to exceed
-	v := uint32((3 << eShift) | 5) // m=5, e=3
+	newV, hit := counter.Inc(v, hlo)
 
-	missFound := false
-	for seed := uint32(0xFFFFFF00); seed != 0; seed++ {
-		counter.rng = seed
-		testRand := counter.rand32()
-		if testRand >= counter.th[3] {
-			counter.rng = seed
-			newV, hit := counter.Inc(v)
-
-			if !hit && newV == v {
-				missFound = true
-				break
-			}
-		}
+	if hit {
+		t.Error("Inc() should miss when uint32(hlo) >= th[e]")
 	}
-
-	if !missFound {
-		t.Skip("Could not find RNG seed that causes miss - test may be flaky")
+	if newV != v {
+		t.Errorf("Inc() on miss should return original value: got %v, want %v", newV, v)
 	}
 }
 
@@ -243,45 +186,42 @@ func TestIncStatisticalBehavior(t *testing.T) {
 		t.Skip("skipping statistical test in short mode")
 	}
 
-	counter := New(10)
+	counter := New()
 
-	originalRng := counter.rng
-	defer func() { counter.rng = originalRng }()
-	counter.rng = 12345
-
-	// Test with e=0 (should hit approximately 100% of the time)
-	v := uint32(5) // m=5, e=0
+	// Test with e=0 (should hit ~100% of the time since th[0] = 0xFFFFFFFF)
+	v := uint16(5)
 	hits := 0
 	trials := 1000
 
 	for i := 0; i < trials; i++ {
-		_, hit := counter.Inc(v)
+		_, hit := counter.Inc(v, uint64(i))
 		if hit {
 			hits++
 		}
 	}
 
-	// With e=0, probability should be close to 1.0
 	hitRate := float64(hits) / float64(trials)
-	if hitRate < 0.95 { // Allow some variance due to PRNG
-		t.Errorf("Hit rate for e=0 = %v, want > 0.95", hitRate)
+	if hitRate < 0.99 {
+		t.Errorf("Hit rate for e=0 = %v, want ~1.0", hitRate)
 	}
 
-	// Test with e=1 (should hit approximately 10% of the time)
-	v = (1 << eShift) | 5 // m=5, e=1
+	// Test with e=1 (should hit approximately 50% of the time)
+	// th[1] = 0x7FFFFFFF, so uint32(hlo) < th[1] means lower half hits
+	v = (1 << eShift) | 5
 	hits = 0
 
 	for i := 0; i < trials; i++ {
-		_, hit := counter.Inc(v)
+		// Use Knuth multiplicative hash to spread uint32 values evenly
+		hlo := uint64(uint32(i) * 2654435761)
+		_, hit := counter.Inc(v, hlo)
 		if hit {
 			hits++
 		}
 	}
 
 	hitRate = float64(hits) / float64(trials)
-	// Allow reasonable variance: 0.05 to 0.15 for 10% expected
-	if hitRate < 0.05 || hitRate > 0.15 {
-		t.Errorf("Hit rate for e=1 = %v, want ~0.10 (0.05-0.15)", hitRate)
+	if hitRate < 0.35 || hitRate > 0.65 {
+		t.Errorf("Hit rate for e=1 = %v, want ~0.50 (0.35-0.65)", hitRate)
 	}
 }
 
@@ -290,62 +230,40 @@ func TestIntegrationCountingApproximation(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	counter := New(10)
+	counter := New()
 
-	originalRng := counter.rng
-	defer func() { counter.rng = originalRng }()
-	counter.rng = 98765
+	v := uint16(0)
+	totalEvents := 100000
 
-	// Simulate counting events - start with higher initial state
-	v := uint32(5) // start with m=5, e=0 to avoid edge cases
-	actualIncrements := 0
-
-	// Perform many logical increments
-	for i := 0; i < 10000; i++ {
-		newV, hit := counter.Inc(v)
+	for i := 0; i < totalEvents; i++ {
+		newV, hit := counter.Inc(v, uint64(i*2654435761)) // Knuth multiplicative hash for spread
 		if hit {
 			v = newV
-			actualIncrements++
 		}
 	}
 
-	// Get the approximate count
 	approxCount := counter.Value(v)
 
-	// Since we started with m=5, the base count is 5
-	// The approximation should account for this
-	if actualIncrements == 0 && approxCount == 5 {
-		// If no actual increments happened, approxCount should still be the initial value
-		return
-	}
-
-	// The approximation should be reasonable
-	// Given the probabilistic nature, we expect some error
-	if actualIncrements > 0 && approxCount > 0 {
-		ratio := float64(approxCount) / float64(actualIncrements+5) // +5 for initial value
-
-		// The ratio should be reasonably close to 1.0
-		// Morris counters can have significant variance, so we allow a wide range
-		if ratio < 0.1 || ratio > 10.0 {
-			t.Errorf("Approximation ratio = %v, actualIncrements = %v, approxCount = %v",
-				ratio, actualIncrements, approxCount)
-		}
+	// The approximation should be in the right ballpark
+	ratio := float64(approxCount) / float64(totalEvents)
+	if ratio < 0.1 || ratio > 10.0 {
+		t.Errorf("Approximation ratio = %v, totalEvents = %v, approxCount = %v",
+			ratio, totalEvents, approxCount)
 	}
 }
 
 func TestBitPacking(t *testing.T) {
-	// Test that mantissa and exponent are properly packed/unpacked
-	counter := New(5)
+	counter := New()
 
 	tests := []struct {
-		mantissa uint32
-		exponent uint32
+		mantissa uint16
+		exponent uint16
 	}{
 		{0, 0},
-		{9, 0},
-		{0, 5},
-		{7, 3},
-		{15, 2}, // This tests mantissa > 9 (should mask to 4 bits)
+		{4095, 0},
+		{0, 15},
+		{2048, 3},
+		{100, 7},
 	}
 
 	for _, tt := range tests {
@@ -354,37 +272,34 @@ func TestBitPacking(t *testing.T) {
 		extractedM := v & mMask
 		extractedE := v >> eShift
 
-		expectedM := tt.mantissa & mMask // masked to 4 bits
-
-		if extractedM != expectedM {
-			t.Errorf("Mantissa packing: got %v, want %v", extractedM, expectedM)
+		if extractedM != tt.mantissa&mMask {
+			t.Errorf("Mantissa packing: got %v, want %v", extractedM, tt.mantissa&mMask)
 		}
 		if extractedE != tt.exponent {
 			t.Errorf("Exponent packing: got %v, want %v", extractedE, tt.exponent)
 		}
 
-		// Test Value() decoding
 		decoded := counter.Value(v)
-		expected := uint64(expectedM) * counter.pow10[tt.exponent]
+		expected := uint64(tt.mantissa&mMask) << tt.exponent
 		if decoded != expected {
-			t.Errorf("Value() = %v, want %v", decoded, expected)
+			t.Errorf("Value() = %v, want %v (m=%v, e=%v)", decoded, expected, tt.mantissa, tt.exponent)
 		}
 	}
 }
 
 func BenchmarkInc(b *testing.B) {
-	counter := New(10)
-	v := uint32(123)
+	counter := New()
+	v := uint16(123)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		v, _ = counter.Inc(v)
+		v, _ = counter.Inc(v, uint64(i))
 	}
 }
 
 func BenchmarkValue(b *testing.B) {
-	counter := New(10)
-	v := uint32(123)
+	counter := New()
+	v := uint16(123)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

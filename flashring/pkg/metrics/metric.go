@@ -56,6 +56,7 @@ const (
 	KEY_REWRITE_SCORE             = "flashring_rewrite_score"
 	KEY_REWRITE_DECISION          = "flashring_rewrite_decision"
 	KEY_ACCESS_FREQ               = "flashring_access_freq"
+	KEY_LAST_ACCESS               = "flashring_last_access"
 )
 
 // Rewrite predictor tag keys
@@ -64,6 +65,7 @@ const (
 	TAG_DECISION     = "decision"
 	TAG_RING_ZONE    = "ring_zone"
 	TAG_FREQ_BAND    = "freq_band"
+	TAG_RECENCY_BAND = "recency_band"
 )
 
 // Flashring tag keys
