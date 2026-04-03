@@ -129,6 +129,16 @@ func (ix *Index) Delete(count int) (uint32, int) {
 	return 0, -1
 }
 
+// DeleteKey removes the key from the index map only. Debug use only.
+func (ix *Index) DeleteKey(key string) bool {
+	_, hlo := hash128(key)
+	if _, ok := ix.rm[hlo]; !ok {
+		return false
+	}
+	delete(ix.rm, hlo)
+	return true
+}
+
 func (ki *Index) GetRB() *RingBuffer {
 	return ki.rb
 }

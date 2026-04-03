@@ -235,6 +235,18 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 	return val, keyFound, expired
 }
 
+// Delete removes the key from the index only. The data remains on disk
+// but becomes unreachable via Get. Debug use only.
+func (wc *WrapCache) Delete(key string) bool {
+	h32 := wc.hash(key)
+	shardIdx := h32 % uint32(len(wc.shards))
+
+	wc.shardLocks[shardIdx].Lock()
+	defer wc.shardLocks[shardIdx].Unlock()
+
+	return wc.shards[shardIdx].DeleteKey(key)
+}
+
 // rewrite puts the value back into the cache asynchronously to move
 // hot data closer to the write head.
 func (wc *WrapCache) rewrite(key string, value []byte, remainingTTLMinutes uint16) {

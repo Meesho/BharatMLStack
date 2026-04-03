@@ -215,6 +215,11 @@ func (fc *ShardCache) Close() {
 	fc.file.Close()
 }
 
+// DeleteKey removes the key from the index only. Debug use only.
+func (fc *ShardCache) DeleteKey(key string) bool {
+	return fc.keyIndex.DeleteKey(key)
+}
+
 func (fc *ShardCache) GetRingBufferActiveEntries() int {
 	return fc.keyIndex.GetRB().ActiveEntries()
 }
