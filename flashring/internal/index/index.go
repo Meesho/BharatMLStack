@@ -74,17 +74,18 @@ func (i *Index) Get(key string) (length, lastAccess, remainingTTL uint16, freq u
 	for {
 		entry, hashNextPrev, _ := i.rb.Get(int(idx))
 		if isHashMatch(hhi, hlo, hashNextPrev) {
-			length, deltaExptime, lastAccess, freq, memId, offset := decode(entry)
+			length, deltaExptime, oldLastAccess, freq, memId, offset := decode(entry)
 			exptime := int(deltaExptime) + int(i.startAt/60)
 			currentTime := int(time.Now().Unix() / 60)
 			remainingTTL := exptime - currentTime
 			if remainingTTL <= 0 {
 				return 0, 0, 0, 0, 0, 0, StatusExpired
 			}
-			lastAccess = i.generateLastAccess()
+			newLastAccess := i.generateLastAccess()
+			recency := newLastAccess - oldLastAccess // minutes since previous access
 			freq = i.incrFreq(freq, hlo)
-			encodeLastAccessNFreq(lastAccess, freq, entry)
-			return length, lastAccess, uint16(remainingTTL), i.mc.Value(uint16(freq)), memId, offset, StatusOK
+			encodeLastAccessNFreq(newLastAccess, freq, entry)
+			return length, recency, uint16(remainingTTL), i.mc.Value(uint16(freq)), memId, offset, StatusOK
 		}
 		if hasNext(hashNextPrev) {
 			idx = int(decodeNext(hashNextPrev))
