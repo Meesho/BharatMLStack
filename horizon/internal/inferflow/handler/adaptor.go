@@ -212,16 +212,17 @@ func AdaptToDBPredatorComponent(inferflowConfig InferflowConfig) []dbModel.Preda
 		}
 
 		predatorComp := dbModel.PredatorComponent{
-			Component:     ranker.Component,
-			ComponentID:   ranker.ComponentID,
-			Calibration:   ranker.Calibration,
-			ModelName:     ranker.ModelName,
-			ModelEndPoint: ranker.ModelEndPoint,
-			Deadline:      ranker.Deadline,
-			BatchSize:     ranker.BatchSize,
-			Inputs:        dbInputs,
-			Outputs:       dbOutputs,
-			RoutingConfig: routingConfig,
+			Component:      ranker.Component,
+			ComponentID:    ranker.ComponentID,
+			Calibration:    ranker.Calibration,
+			ModelName:      ranker.ModelName,
+			ModelEndPoint:  ranker.ModelEndPoint,
+			Deadline:       ranker.Deadline,
+			BatchSize:      ranker.BatchSize,
+			Inputs:         dbInputs,
+			Outputs:        dbOutputs,
+			RoutingConfig:  routingConfig,
+			SlateComponent: ranker.SlateComponent,
 		}
 		predatorComponents = append(predatorComponents, predatorComp)
 	}
@@ -234,12 +235,13 @@ func AdaptToDBNumerixComponent(inferflowConfig InferflowConfig) []dbModel.Numeri
 
 	for _, reRanker := range inferflowConfig.ComponentConfig.NumerixComponents {
 		NumerixComp := dbModel.NumerixComponent{
-			Component:    reRanker.Component,
-			ComponentID:  reRanker.ComponentID,
-			ScoreCol:     reRanker.ScoreCol,
-			ComputeID:    reRanker.ComputeID,
-			ScoreMapping: reRanker.ScoreMapping,
-			DataType:     reRanker.DataType,
+			Component:      reRanker.Component,
+			ComponentID:    reRanker.ComponentID,
+			ScoreCol:       reRanker.ScoreCol,
+			ComputeID:      reRanker.ComputeID,
+			ScoreMapping:   reRanker.ScoreMapping,
+			DataType:       reRanker.DataType,
+			SlateComponent: reRanker.SlateComponent,
 		}
 		NumerixComponents = append(NumerixComponents, NumerixComp)
 	}
@@ -342,15 +344,16 @@ func AdaptToDBOnboardPayload(onboardPayload OnboardPayload) dbModel.OnboardPaylo
 
 	for i, ranker := range onboardPayload.Rankers {
 		dbOnboardPayload.Rankers[i] = dbModel.OnboardRanker{
-			ModelName:     ranker.ModelName,
-			Calibration:   ranker.Calibration,
-			EndPoint:      ranker.EndPoint,
-			EntityID:      ranker.EntityID,
-			Inputs:        make([]dbModel.PredatorInput, len(ranker.Inputs)),
-			Outputs:       make([]dbModel.PredatorOutput, len(ranker.Outputs)),
-			BatchSize:     ranker.BatchSize,
-			Deadline:      ranker.Deadline,
-			RoutingConfig: make([]dbModel.RoutingConfig, len(ranker.RoutingConfig)),
+			ModelName:      ranker.ModelName,
+			Calibration:    ranker.Calibration,
+			EndPoint:       ranker.EndPoint,
+			EntityID:       ranker.EntityID,
+			Inputs:         make([]dbModel.PredatorInput, len(ranker.Inputs)),
+			Outputs:        make([]dbModel.PredatorOutput, len(ranker.Outputs)),
+			BatchSize:      ranker.BatchSize,
+			Deadline:       ranker.Deadline,
+			RoutingConfig:  make([]dbModel.RoutingConfig, len(ranker.RoutingConfig)),
+			SlateComponent: ranker.SlateComponent,
 		}
 		for j, input := range ranker.Inputs {
 			dbOnboardPayload.Rankers[i].Inputs[j] = dbModel.PredatorInput{
@@ -379,11 +382,12 @@ func AdaptToDBOnboardPayload(onboardPayload OnboardPayload) dbModel.OnboardPaylo
 	}
 	for i, reRanker := range onboardPayload.ReRankers {
 		dbOnboardPayload.ReRankers[i] = dbModel.OnboardReRanker{
-			Score:       reRanker.Score,
-			EqID:        reRanker.EqID,
-			EqVariables: reRanker.EqVariables,
-			DataType:    reRanker.DataType,
-			EntityID:    reRanker.EntityID,
+			Score:          reRanker.Score,
+			EqID:           reRanker.EqID,
+			EqVariables:    reRanker.EqVariables,
+			DataType:       reRanker.DataType,
+			EntityID:       reRanker.EntityID,
+			SlateComponent: reRanker.SlateComponent,
 		}
 	}
 	return dbOnboardPayload
@@ -422,15 +426,16 @@ func AdaptFromDbToOnboardPayload(dbOnboardPayload dbModel.OnboardPayload) Onboar
 
 	for i, predatorComponent := range dbOnboardPayload.Rankers {
 		onboardPayload.Rankers = append(onboardPayload.Rankers, Ranker{
-			ModelName:     predatorComponent.ModelName,
-			Calibration:   predatorComponent.Calibration,
-			EndPoint:      predatorComponent.EndPoint,
-			Inputs:        make([]Input, len(predatorComponent.Inputs)),
-			Outputs:       make([]Output, len(predatorComponent.Outputs)),
-			EntityID:      predatorComponent.EntityID,
-			BatchSize:     predatorComponent.BatchSize,
-			Deadline:      predatorComponent.Deadline,
-			RoutingConfig: make([]RoutingConfig, len(predatorComponent.RoutingConfig)),
+			ModelName:      predatorComponent.ModelName,
+			Calibration:    predatorComponent.Calibration,
+			EndPoint:       predatorComponent.EndPoint,
+			Inputs:         make([]Input, len(predatorComponent.Inputs)),
+			Outputs:        make([]Output, len(predatorComponent.Outputs)),
+			EntityID:       predatorComponent.EntityID,
+			BatchSize:      predatorComponent.BatchSize,
+			Deadline:       predatorComponent.Deadline,
+			RoutingConfig:  make([]RoutingConfig, len(predatorComponent.RoutingConfig)),
+			SlateComponent: predatorComponent.SlateComponent,
 		})
 		for j, input := range predatorComponent.Inputs {
 			onboardPayload.Rankers[i].Inputs[j] = Input{
@@ -460,11 +465,12 @@ func AdaptFromDbToOnboardPayload(dbOnboardPayload dbModel.OnboardPayload) Onboar
 
 	for _, reRanker := range dbOnboardPayload.ReRankers {
 		onboardPayload.ReRankers = append(onboardPayload.ReRankers, ReRanker{
-			Score:       reRanker.Score,
-			EqID:        reRanker.EqID,
-			EqVariables: reRanker.EqVariables,
-			DataType:    reRanker.DataType,
-			EntityID:    reRanker.EntityID,
+			Score:          reRanker.Score,
+			EqID:           reRanker.EqID,
+			EqVariables:    reRanker.EqVariables,
+			DataType:       reRanker.DataType,
+			EntityID:       reRanker.EntityID,
+			SlateComponent: reRanker.SlateComponent,
 		})
 	}
 
@@ -536,16 +542,17 @@ func AdaptFromDbToPredatorComponent(dbPredatorComponents []dbModel.PredatorCompo
 		}
 
 		predatorComponent := PredatorComponent{
-			Component:     predatorComponent.Component,
-			ComponentID:   predatorComponent.ComponentID,
-			ModelName:     predatorComponent.ModelName,
-			ModelEndPoint: predatorComponent.ModelEndPoint,
-			Calibration:   predatorComponent.Calibration,
-			Deadline:      predatorComponent.Deadline,
-			BatchSize:     predatorComponent.BatchSize,
-			Inputs:        dbInputs,
-			Outputs:       dbOutputs,
-			RoutingConfig: routingConfig,
+			Component:      predatorComponent.Component,
+			ComponentID:    predatorComponent.ComponentID,
+			ModelName:      predatorComponent.ModelName,
+			ModelEndPoint:  predatorComponent.ModelEndPoint,
+			Calibration:    predatorComponent.Calibration,
+			Deadline:       predatorComponent.Deadline,
+			BatchSize:      predatorComponent.BatchSize,
+			Inputs:         dbInputs,
+			Outputs:        dbOutputs,
+			RoutingConfig:  routingConfig,
+			SlateComponent: predatorComponent.SlateComponent,
 		}
 		predatorComponents = append(predatorComponents, predatorComponent)
 	}
@@ -557,12 +564,13 @@ func AdaptFromDbToNumerixComponent(dbNumerixComponents []dbModel.NumerixComponen
 	var NumerixComponents []NumerixComponent
 	for _, numerixComponent := range dbNumerixComponents {
 		numerixComponent := NumerixComponent{
-			Component:    numerixComponent.Component,
-			ComponentID:  numerixComponent.ComponentID,
-			ScoreCol:     numerixComponent.ScoreCol,
-			ComputeID:    numerixComponent.ComputeID,
-			ScoreMapping: numerixComponent.ScoreMapping,
-			DataType:     numerixComponent.DataType,
+			Component:      numerixComponent.Component,
+			ComponentID:    numerixComponent.ComponentID,
+			ScoreCol:       numerixComponent.ScoreCol,
+			ComputeID:      numerixComponent.ComputeID,
+			ScoreMapping:   numerixComponent.ScoreMapping,
+			DataType:       numerixComponent.DataType,
+			SlateComponent: numerixComponent.SlateComponent,
 		}
 		NumerixComponents = append(NumerixComponents, numerixComponent)
 	}
@@ -690,16 +698,17 @@ func AdaptToEtcdPredatorComponent(dbPredatorComponents []dbModel.PredatorCompone
 		}
 
 		predatorComponent := etcdModel.PredatorComponent{
-			Component:     predatorComponent.Component,
-			ComponentID:   predatorComponent.ComponentID,
-			Calibration:   predatorComponent.Calibration,
-			ModelName:     predatorComponent.ModelName,
-			ModelEndPoint: predatorComponent.ModelEndPoint,
-			Deadline:      predatorComponent.Deadline,
-			BatchSize:     predatorComponent.BatchSize,
-			Inputs:        dbInputs,
-			Outputs:       dbOutputs,
-			RoutingConfig: routingConfig,
+			Component:      predatorComponent.Component,
+			ComponentID:    predatorComponent.ComponentID,
+			Calibration:    predatorComponent.Calibration,
+			ModelName:      predatorComponent.ModelName,
+			ModelEndPoint:  predatorComponent.ModelEndPoint,
+			Deadline:       predatorComponent.Deadline,
+			BatchSize:      predatorComponent.BatchSize,
+			Inputs:         dbInputs,
+			Outputs:        dbOutputs,
+			RoutingConfig:  routingConfig,
+			SlateComponent: predatorComponent.SlateComponent,
 		}
 		predatorComponents = append(predatorComponents, predatorComponent)
 	}
@@ -711,12 +720,13 @@ func AdaptToEtcdNumerixComponent(dbNumerixComponents []dbModel.NumerixComponent)
 	var NumerixComponents []etcdModel.NumerixComponent
 	for _, NumerixComponent := range dbNumerixComponents {
 		NumerixComponent := etcdModel.NumerixComponent{
-			Component:    NumerixComponent.Component,
-			ComponentID:  NumerixComponent.ComponentID,
-			ScoreCol:     NumerixComponent.ScoreCol,
-			ComputeID:    NumerixComponent.ComputeID,
-			ScoreMapping: NumerixComponent.ScoreMapping,
-			DataType:     NumerixComponent.DataType,
+			Component:      NumerixComponent.Component,
+			ComponentID:    NumerixComponent.ComponentID,
+			ScoreCol:       NumerixComponent.ScoreCol,
+			ComputeID:      NumerixComponent.ComputeID,
+			ScoreMapping:   NumerixComponent.ScoreMapping,
+			DataType:       NumerixComponent.DataType,
+			SlateComponent: NumerixComponent.SlateComponent,
 		}
 		NumerixComponents = append(NumerixComponents, NumerixComponent)
 	}
