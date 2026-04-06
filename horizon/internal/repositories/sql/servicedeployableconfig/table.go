@@ -28,6 +28,8 @@ type ServiceDeployableConfig struct {
 	DeploymentRunID         string
 	DeployableHealth        string `gorm:"type:ENUM('DEPLOYMENT_REASON_ARGO_APP_HEALTH_DEGRADED', 'DEPLOYMENT_REASON_ARGO_APP_HEALTHY')"`
 	WorkFlowStatus          string `gorm:"type:ENUM('WORKFLOW_COMPLETED' , 'WORKFLOW_NOT_FOUND' , 'WORKFLOW_RUNNING','WORKFLOW_FAILED' ,'WORKFLOW_NOT_STARTED' )"`
+	OverrideTesting         bool   `gorm:"default:false"`
+	DeployableTag           string `gorm:"column:deployable_tag"`
 }
 
 func (ServiceDeployableConfig) TableName() string {

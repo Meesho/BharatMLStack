@@ -89,8 +89,8 @@ const InferflowConfigRegistry = () => {
       setConfigData(transformedData);
     } catch (error) {
       setConfigData([]);
-      showSnackbar(error.message || 'Failed to fetch configurations', 'error');
-      console.log('Error fetching configurations:', error);
+      showSnackbar(error.message || 'Failed to fetch inferpipes', 'error');
+      console.log('Error fetching inferpipes:', error);
     } finally {
       setLoading(false);
     }
@@ -110,7 +110,7 @@ const InferflowConfigRegistry = () => {
 
   const handleOnboard = () => {
     if (!hasPermission(service, screenType, ACTIONS.ONBOARD)) {
-      showSnackbar('You do not have permission to onboard configurations', 'error');
+      showSnackbar('You do not have permission to onboard inferpipes', 'error');
       return;
     }
     setOnboardModalOpen(true);
@@ -123,7 +123,7 @@ const InferflowConfigRegistry = () => {
 
   const handleEditConfig = (row) => {
     if (!hasPermission(service, screenType, ACTIONS.EDIT)) {
-      showSnackbar('You do not have permission to edit configurations', 'error');
+      showSnackbar('You do not have permission to edit inferpipes', 'error');
       return;
     }
     setSelectedConfig(row);
@@ -144,7 +144,7 @@ const InferflowConfigRegistry = () => {
       
       const successMessage = typeof response.data.data === 'string' 
         ? response.data.data 
-        : response.data.data?.message || 'Configuration deleted successfully';
+        : response.data.data?.message || 'Inferpipe deleted successfully';
       
       showSnackbar(successMessage);
       fetchConfigs();
@@ -156,7 +156,7 @@ const InferflowConfigRegistry = () => {
 
   const handleDeleteConfirmationOpen = (row) => {
     if (!hasPermission(service, screenType, ACTIONS.DEACTIVATE)) {
-      showSnackbar('You do not have permission to delete configurations', 'error');
+      showSnackbar('You do not have permission to delete inferpipes', 'error');
       return;
     }
     setDeleteConfirmation({ open: true, config: row });
@@ -168,7 +168,7 @@ const InferflowConfigRegistry = () => {
 
   const handlePromoteConfig = async (row) => {
     if (!hasPermission(service, screenType, ACTIONS.PROMOTE)) {
-      showSnackbar('You do not have permission to promote configurations', 'error');
+      showSnackbar('You do not have permission to promote inferpipes', 'error');
       return;
     }
     
@@ -186,7 +186,7 @@ const InferflowConfigRegistry = () => {
     setShowProdCredentialModal(false);
     
     if (!selectedConfigForPromotion) {
-      showSnackbar('No configuration selected for promotion', 'error');
+      showSnackbar('No inferpipe selected for promotion', 'error');
       return;
     }
 
@@ -203,7 +203,7 @@ const InferflowConfigRegistry = () => {
 
   const handleScaleUpConfig = (row) => {
     if (!hasPermission(service, screenType, ACTIONS.SCALE_UP)) {
-      showSnackbar('You do not have permission to scale up configurations', 'error');
+      showSnackbar('You do not have permission to scale up inferpipes', 'error');
       return;
     }
     
@@ -219,7 +219,7 @@ const InferflowConfigRegistry = () => {
 
   const handleCloneConfig = (row) => {
     if (!hasPermission(service, screenType, ACTIONS.CLONE)) {
-      showSnackbar('You do not have permission to clone configurations', 'error');
+      showSnackbar('You do not have permission to clone inferpipes', 'error');
       return;
     }
     setSelectedConfig(row);
@@ -228,7 +228,7 @@ const InferflowConfigRegistry = () => {
 
   const handleTestConfig = (row) => {
     if (!hasPermission(service, screenType, ACTIONS.TEST)) {
-      showSnackbar('You do not have permission to test configurations', 'error');
+      showSnackbar('You do not have permission to test inferpipes', 'error');
       return;
     }
     setSelectedConfig(row);
@@ -237,7 +237,7 @@ const InferflowConfigRegistry = () => {
 
   const handleTestComplete = (configId, status) => {
     fetchConfigs();
-    showSnackbar(`Test ${status} for config: ${configId}`, status === 'success' ? 'success' : 'error');
+    showSnackbar(`Test ${status} for inferpipe: ${configId}`, status === 'success' ? 'success' : 'error');
   };
 
   const handleViewDetails = (row) => {
@@ -261,7 +261,7 @@ const InferflowConfigRegistry = () => {
       <Box sx={{ padding: '1.5rem' }}>
         <Alert severity="warning">
           <Typography variant="h6">Access Denied</Typography>
-          <Typography>You do not have permission to view InferFlow configurations.</Typography>
+          <Typography>You do not have permission to view Inferpipes.</Typography>
         </Alert>
       </Box>
     );
@@ -358,7 +358,7 @@ const InferflowConfigRegistry = () => {
         </DialogTitle>
         <DialogContent sx={{ mt: 2 }}>
           <Typography>
-            Are you sure you want to delete the configuration with ID: {deleteConfirmation.config?.config_id}?
+            Are you sure you want to delete the inferpipe with ID: {deleteConfirmation.config?.config_id}?
           </Typography>
           <Typography variant="body2" color="error" sx={{ mt: 1 }}>
             This action cannot be undone.
@@ -388,7 +388,7 @@ const InferflowConfigRegistry = () => {
         onClose={handleProductionCredentialClose}
         onSuccess={handleProductionCredentialSuccess}
         title="Production Credential Verification"
-        description="Please enter your production credentials to proceed with the InferFlow configuration promotion."
+        description="Please enter your production credentials to proceed with the Inferpipe promotion."
       />
 
       <Snackbar

@@ -73,7 +73,7 @@ func ValidateEnvironmentConfig(serviceName, workingEnv string, serviceConfigLoad
 			Str("serviceName", serviceName).
 			Str("workingEnv", workingEnv).
 			Msg("Environment config validation failed - config.yaml not found")
-		return fmt.Errorf("config.yaml not found for environment '%s' and service '%s' (expected: configs/services/%s/%s/config.yaml): %w", workingEnv, serviceName, serviceName, workingEnv, err)
+		return fmt.Errorf("config.yaml not found for environment '%s' and service '%s' (expected: horizon/configs/services/%s/%s/config.yaml): %w", workingEnv, serviceName, serviceName, workingEnv, err)
 	}
 
 	log.Info().
@@ -153,4 +153,3 @@ func ValidateMultiEnvironmentOnboarding(serviceName string, environments []Envir
 
 	return nil
 }
-

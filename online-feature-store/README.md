@@ -33,10 +33,6 @@ Online-feature-store consists of several key components working together:
 
 ![Online-feature-store Architecture](../docs-src/static/img/v1.0.0-onfs-arch.png)
 
-## 🚀 Quick Start
-
-For detailed setup instructions, see the [**Quick Start Guide**](quick-start/README.md).
-
 ## 🧰 SDKs
 
 Online-feature-store provides SDKs to interact with the feature store:
@@ -44,6 +40,9 @@ Online-feature-store provides SDKs to interact with the feature store:
 - **[Go SDK](sdks/go/README.md)** - For backend services and ML inference
 - **[Python SDK](sdks/python/README.md)** - For feature ingestion and Spark jobs
 
+## 🚀 Quick Start
+
+For detailed setup instructions, see the [**Quick Start Guide**](quick-start/README.md).
 
 ## 📊 Use Cases
 
@@ -681,9 +680,6 @@ There are several ways to get help with Online-feature-store:
 
 Feedback and contributions are welcome!
 
-## Contributing
-
-We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to get started.
 
 ## Community & Support
 

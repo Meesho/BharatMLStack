@@ -302,7 +302,7 @@ const GenericInferflowConfigApprovalTable = ({ onReview }) => {
     },
     { 
       field: 'ConfigId', 
-      headerName: 'Config ID',
+      headerName: 'Inferpipe ID',
       width: '20%',
       stickyColumn: false
     },
@@ -367,7 +367,7 @@ const GenericInferflowConfigApprovalTable = ({ onReview }) => {
           minWidth: 'max-content'
         }}>
           {/* View Configuration Details */}
-          <Tooltip title="View Configuration Details" disableTransition>
+          <Tooltip title="View Inferpipe Details" disableTransition>
             <IconButton 
               size="small"
               onClick={(e) => {
@@ -519,7 +519,7 @@ const GenericInferflowConfigApprovalTable = ({ onReview }) => {
     if (!hasPermission(service, screenType, ACTIONS.REJECT)) {
       setSnackbar({
         open: true,
-        message: 'You do not have permission to reject configurations',
+        message: 'You do not have permission to reject inferpipes',
         severity: 'error'
       });
       return;
@@ -536,7 +536,7 @@ const GenericInferflowConfigApprovalTable = ({ onReview }) => {
       if (success) {
         setSnackbar({
           open: true,
-          message: 'Configuration approved successfully',
+          message: 'Inferpipe approved successfully',
           severity: 'success'
         });
         fetchConfigData();
@@ -544,7 +544,7 @@ const GenericInferflowConfigApprovalTable = ({ onReview }) => {
       } else {
         setSnackbar({
           open: true,
-          message: 'Failed to approve configuration',
+          message: 'Failed to approve inferpipe',
           severity: 'error'
         });
       }
@@ -571,7 +571,7 @@ const GenericInferflowConfigApprovalTable = ({ onReview }) => {
       if (success) {
         setSnackbar({
           open: true,
-          message: 'Configuration rejected successfully',
+          message: 'Inferpipe rejected successfully',
           severity: 'success'
         });
         fetchConfigData();
@@ -579,7 +579,7 @@ const GenericInferflowConfigApprovalTable = ({ onReview }) => {
       } else {
         setSnackbar({
           open: true,
-          message: 'Failed to reject configuration',
+          message: 'Failed to reject inferpipe',
           severity: 'error'
         });
       }
@@ -780,7 +780,7 @@ const GenericInferflowConfigApprovalTable = ({ onReview }) => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <DataObjectIcon />
             <Typography variant="h6">
-              InferFlow Config Approval Details - {selectedConfig?.RequestId || 'N/A'}
+              Inferpipe Approval Details - {selectedConfig?.RequestId || 'N/A'}
             </Typography>
           </Box>
           <IconButton 
@@ -811,7 +811,7 @@ const GenericInferflowConfigApprovalTable = ({ onReview }) => {
                 
                 <Box sx={{ display: 'flex', py: 1, borderBottom: '1px solid #f0f0f0' }}>
                   <Typography variant="body1" sx={{ fontWeight: 'bold', width: '40%' }}>
-                    Config ID:
+                    Inferpipe ID:
                   </Typography>
                   <Typography variant="body1" sx={{ width: '60%' }}>
                     {selectedConfig.ConfigId || 'N/A'}
@@ -906,14 +906,14 @@ const GenericInferflowConfigApprovalTable = ({ onReview }) => {
 
               {/* Configuration Details Section */}
               <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', borderBottom: '2px solid #450839', pb: 1 }}>
-                Configuration Details
+                Inferpipe Definition
               </Typography>
               
               {selectedConfig.Payload && selectedConfig.Payload.config_value && (
                 <Box sx={{ mb: 3 }}>
                   <JsonViewer
                     data={selectedConfig.Payload.config_value}
-                    title="Config Value"
+                    title=""
                     defaultExpanded={true}
                     editable={false}
                     maxHeight={400}
@@ -933,7 +933,7 @@ const GenericInferflowConfigApprovalTable = ({ onReview }) => {
                 <Box sx={{ mb: 3 }}>
                   <JsonViewer
                     data={selectedConfig.Payload.config_mapping}
-                    title="Config Mapping"
+                    title="Inferpipe Mapping"
                     defaultExpanded={true}
                     editable={false}
                     maxHeight={400}
@@ -1031,7 +1031,7 @@ const GenericInferflowConfigApprovalTable = ({ onReview }) => {
           {selectedActivity && (
             <Box>
               <Typography variant="h6" sx={{ mb: 2, color: '#450839', fontWeight: 500 }}>
-                Request ID: {selectedActivity.requestId} | Config ID: {selectedActivity.configId}
+                Request ID: {selectedActivity.requestId} | Inferpipe ID: {selectedActivity.configId}
               </Typography>
               
               <Paper elevation={0} sx={{ p: 2, bgcolor: '#f8f9fa', borderRadius: 1, mb: 3 }}>
@@ -1148,7 +1148,7 @@ const GenericInferflowConfigApprovalTable = ({ onReview }) => {
         </DialogTitle>
         <DialogContent sx={{ pt: 3 }}>
           <Typography>
-            Are you sure you want to approve this configuration request?
+            Are you sure you want to approve this inferpipe request?
           </Typography>
         </DialogContent>
         <DialogActions>

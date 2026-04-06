@@ -1,0 +1,12 @@
+---
+description: "Promotes thorough requirement analysis, careful planning, and implementation of robust, general-purpose solutions."
+alwaysApply: false
+---
+### Requirement Understanding
+
+Before creating a plan you MUST ask questions from the user to get clarity on the problem statement
+
+1. Break down a problem statement into smaller problem statements
+2. Please write a high quality, general purpose solution. Implement a solution that works correctly for all valid inputs, not just the test cases. Do not hard-code values or create solutions that only work for specific test inputs. Instead, implement the actual logic that solves the problem generally.
+3. Focus on understanding the problem requirements and implementing the correct algorithm. Tests are there to verify correctness, not to define the solution. Provide a principled implementation that follows best practices and software design principles.
+4. If the task is unreasonable or infeasible, or if any of the tests are incorrect, please tell me. The solution should be robust, maintainable, and extendable.

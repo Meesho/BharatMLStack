@@ -14,6 +14,8 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  FormControlLabel,
+  Switch,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -214,7 +216,7 @@ const InferflowConfigForm = ({
         </Grid>
         <TextField
           fullWidth
-          label="Config Identifier"
+          label="Inferpipe Identifier"
           size="small"
           value={formData.config_identifier}
           onChange={handleBasicInfoChange('config_identifier')}
@@ -243,12 +245,12 @@ const InferflowConfigForm = ({
         >
           {isEditMode ? (
             <Typography variant="caption">
-              InferFlow Config ID: <strong>{configId}</strong> (cannot be changed)
+              Inferpipe ID: <strong>{configId}</strong> (cannot be changed)
             </Typography>
           ) : (
             <>
               <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                <strong>💡 InferFlow Config ID Generation:</strong> The above three fields (Real Estate, Tenant, Config Identifier) will be automatically combined using hyphens (-) to create your unique InferFlow Config ID.
+                <strong>💡 Inferpipe ID Generation:</strong> The above three fields (Real Estate, Tenant, Inferpipe Identifier) will be automatically combined using hyphens (-) to create your unique InferFlow inferpipe ID.
               </Typography>
               <Typography variant="caption" sx={{ color: '#666', mt: 0.5, display: 'block' }}>
                 Example: <code>fy-organic-nqd</code>
@@ -430,6 +432,18 @@ const InferflowConfigForm = ({
                     type="number"
                     value={ranker.deadline}
                     onChange={(e) => handleRankerChange(rankerIndex, 'deadline', e.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={4}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={ranker.slate_component || false}
+                        onChange={(e) => handleRankerChange(rankerIndex, 'slate_component', e.target.checked)}
+                        color="primary"
+                      />
+                    }
+                    label="Slate Component"
                   />
                 </Grid>
               </Grid>
@@ -1060,6 +1074,19 @@ const InferflowConfigForm = ({
                   />
                 </Grid>
                 
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={reRanker.slate_component || false}
+                        onChange={(e) => handleReRankerChange(index, 'slate_component', e.target.checked)}
+                        color="secondary"
+                      />
+                    }
+                    label="Slate Component"
+                  />
+                </Grid>
+
                 {/* Entity IDs for re-ranker */}
                 <Grid item xs={12}>
                   <Box sx={{ mt: 2 }}>

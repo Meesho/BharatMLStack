@@ -26,6 +26,7 @@ type Config interface {
 	ExecuteFuncitonalTestRequest(ctx *gin.Context)
 	GetLatestRequest(ctx *gin.Context)
 	GetLoggingTTL(ctx *gin.Context)
+	GetFeatureSchema(ctx *gin.Context)
 }
 
 var (
@@ -362,6 +363,18 @@ func (c *V1) GetLoggingTTL(ctx *gin.Context) {
 		ctx.JSON(api.NewBadRequestError(err.Error()).StatusCode, handler.GetLoggingTTLResponse{
 			Data: emptyResponse,
 		})
+	}
+	ctx.JSON(200, response)
+}
+
+func (c *V1) GetFeatureSchema(ctx *gin.Context) {
+	response, err := c.Config.GetFeatureSchema(handler.FeatureSchemaRequest{
+		ModelConfigId: ctx.Query("model_config_id"),
+		Version:       strings.TrimSpace(ctx.Query("version")),
+	})
+	if err != nil {
+		ctx.JSON(api.NewBadRequestError(err.Error()).StatusCode, "Error getting feature schema")
+		return
 	}
 	ctx.JSON(200, response)
 }

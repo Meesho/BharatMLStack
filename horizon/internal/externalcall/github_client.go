@@ -17,7 +17,7 @@ var (
 func InitGitHubClient(
 	appID int64,
 	installationID int64,
-	privateKeyPath string,
+	privateKey []byte,
 	owner string,
 	commitAuthor string,
 	commitEmail string,
@@ -26,10 +26,10 @@ func InitGitHubClient(
 ) {
 	initGitHubOnce.Do(func() {
 		config := github.GitHubConfig{
-			AppID:                        appID,
-			InstallationID:               installationID,
-			PrivateKeyPath:               privateKeyPath,
-			Owner:                        owner,
+			AppID:          appID,
+			InstallationID: installationID,
+			PrivateKey:     privateKey,
+			Owner:          owner,
 			// HelmChartRepo, InfraHelmChartRepo, ArgoRepo removed - not used
 			// All repository operations use REPOSITORY_NAME environment variable
 			CommitAuthor:                 commitAuthor,

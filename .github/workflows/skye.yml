@@ -1,0 +1,56 @@
+name: Skye CI
+
+on:
+  pull_request:
+    branches: [master, develop]
+    paths: ['skye/**']
+  push:
+    branches: [master, develop]
+    paths: ['skye/**']
+
+jobs:
+  build-skye:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./skye
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-skye-${{ hashFiles('skye/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-skye-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Build binaries
+        run: |
+          go build -o /dev/null ./cmd/admin
+          go build -o /dev/null ./cmd/consumers
+          go build -o /dev/null ./cmd/serving
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: Run staticcheck
+        run: staticcheck ./...

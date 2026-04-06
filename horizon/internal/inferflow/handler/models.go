@@ -27,23 +27,25 @@ type RoutingConfig struct {
 }
 
 type Ranker struct {
-	ModelName     string          `json:"model_name"`
-	BatchSize     int             `json:"batch_size"`
-	Deadline      int             `json:"deadline"`
-	Calibration   string          `json:"calibration"`
-	EndPoint      string          `json:"end_point"`
-	Inputs        []Input         `json:"inputs"`
-	Outputs       []Output        `json:"outputs"`
-	EntityID      []string        `json:"entity_id"`
-	RoutingConfig []RoutingConfig `json:"route_config"`
+	ModelName      string          `json:"model_name"`
+	BatchSize      int             `json:"batch_size"`
+	Deadline       int             `json:"deadline"`
+	Calibration    string          `json:"calibration"`
+	EndPoint       string          `json:"end_point"`
+	Inputs         []Input         `json:"inputs"`
+	Outputs        []Output        `json:"outputs"`
+	EntityID       []string        `json:"entity_id"`
+	RoutingConfig  []RoutingConfig `json:"route_config"`
+	SlateComponent bool            `json:"slate_component"`
 }
 
 type ReRanker struct {
-	EqVariables map[string]string `json:"eq_variables"`
-	Score       string            `json:"score"`
-	EqID        int               `json:"eq_id"`
-	DataType    string            `json:"data_type"`
-	EntityID    []string          `json:"entity_id"`
+	EqVariables    map[string]string `json:"eq_variables"`
+	Score          string            `json:"score"`
+	EqID           int               `json:"eq_id"`
+	DataType       string            `json:"data_type"`
+	EntityID       []string          `json:"entity_id"`
+	SlateComponent bool              `json:"slate_component"`
 }
 
 type ResponseConfig struct {
@@ -52,6 +54,7 @@ type ResponseConfig struct {
 	ResponseFeatures                   []string `json:"response_features"`
 	LogSelectiveFeatures               bool     `json:"log_features"`
 	LogBatchSize                       int      `json:"log_batch_size"`
+	LoggingTTL                         int      `json:"logging_ttl"`
 }
 
 type ConfigMapping struct {
@@ -60,6 +63,7 @@ type ConfigMapping struct {
 	DeployableID          int      `json:"deployable_id,omitempty"`
 	DeployableName        string   `json:"deployable_name,omitempty"`
 	ResponseDefaultValues []string `json:"response_default_values"`
+	SourceConfigID        string   `json:"source_config_id"`
 }
 
 type OnboardPayload struct {
@@ -84,6 +88,7 @@ func (r InferflowOnboardRequest) GetConfigMapping() dbModel.ConfigMapping {
 		ConnectionConfigID:    r.Payload.ConfigMapping.ConnectionConfigID,
 		DeployableID:          r.Payload.ConfigMapping.DeployableID,
 		ResponseDefaultValues: r.Payload.ConfigMapping.ResponseDefaultValues,
+		SourceConfigID:        r.Payload.ConfigMapping.SourceConfigID,
 	}
 }
 
@@ -97,12 +102,13 @@ type Response struct {
 }
 
 type NumerixComponent struct {
-	Component    string            `json:"component"`
-	ComponentID  string            `json:"component_id"`
-	ScoreCol     string            `json:"score_col"`
-	ComputeID    string            `json:"compute_id"`
-	ScoreMapping map[string]string `json:"score_mapping"`
-	DataType     string            `json:"data_type"`
+	Component      string            `json:"component"`
+	ComponentID    string            `json:"component_id"`
+	ScoreCol       string            `json:"score_col"`
+	ComputeID      string            `json:"compute_id"`
+	ScoreMapping   map[string]string `json:"score_mapping"`
+	DataType       string            `json:"data_type"`
+	SlateComponent bool              `json:"slate_component"`
 }
 
 type PredatorInput struct {
@@ -120,16 +126,17 @@ type PredatorOutput struct {
 }
 
 type PredatorComponent struct {
-	Component     string           `json:"component"`
-	ComponentID   string           `json:"component_id"`
-	ModelName     string           `json:"model_name"`
-	ModelEndPoint string           `json:"model_end_point"`
-	Calibration   string           `json:"calibration,omitempty"`
-	Deadline      int              `json:"deadline"`
-	BatchSize     int              `json:"batch_size"`
-	Inputs        []PredatorInput  `json:"inputs"`
-	Outputs       []PredatorOutput `json:"outputs"`
-	RoutingConfig []RoutingConfig  `json:"route_config,omitempty"`
+	Component      string           `json:"component"`
+	ComponentID    string           `json:"component_id"`
+	ModelName      string           `json:"model_name"`
+	ModelEndPoint  string           `json:"model_end_point"`
+	Calibration    string           `json:"calibration,omitempty"`
+	Deadline       int              `json:"deadline"`
+	BatchSize      int              `json:"batch_size"`
+	Inputs         []PredatorInput  `json:"inputs"`
+	Outputs        []PredatorOutput `json:"outputs"`
+	RoutingConfig  []RoutingConfig  `json:"route_config,omitempty"`
+	SlateComponent bool             `json:"slate_component"`
 }
 
 type FinalResponseConfig struct {
@@ -138,6 +145,7 @@ type FinalResponseConfig struct {
 	Features             []string `json:"features"`
 	LogSelectiveFeatures bool     `json:"log_features"`
 	LogBatchSize         int      `json:"log_batch_size"`
+	LoggingTTL           int      `json:"logging_ttl"`
 }
 
 type FSKey struct {
@@ -180,14 +188,23 @@ type RTPComponent struct {
 	CompCacheEnabled  bool       `json:"comp_cache_enabled"`
 }
 
+type SeenScoreComponent struct {
+	Component     string     `json:"component"`
+	ComponentID   string     `json:"component_id,omitempty"`
+	ColNamePrefix string     `json:"col_name_prefix,omitempty"`
+	FSKeys        []FSKey    `json:"fs_keys"`
+	FSRequest     *FSRequest `json:"fs_request"`
+}
+
 type ComponentConfig struct {
-	CacheEnabled       bool                `json:"cache_enabled"`
-	CacheTTL           int                 `json:"cache_ttl"`
-	CacheVersion       int                 `json:"cache_version"`
-	FeatureComponents  []FeatureComponent  `json:"feature_components"`
-	RTPComponents      []RTPComponent      `json:"real_time_pricing_feature_components,omitempty"`
-	PredatorComponents []PredatorComponent `json:"predator_components"`
-	NumerixComponents  []NumerixComponent  `json:"numerix_components"`
+	CacheEnabled        bool                 `json:"cache_enabled"`
+	CacheTTL            int                  `json:"cache_ttl"`
+	CacheVersion        int                  `json:"cache_version"`
+	FeatureComponents   []FeatureComponent   `json:"feature_components"`
+	RTPComponents       []RTPComponent       `json:"real_time_pricing_feature_components,omitempty"`
+	SeenScoreComponents []SeenScoreComponent `json:"seen_score_components"`
+	PredatorComponents  []PredatorComponent  `json:"predator_components"`
+	NumerixComponents   []NumerixComponent   `json:"numerix_components"`
 }
 
 type DagExecutionConfig struct {
@@ -231,6 +248,7 @@ func (r PromoteConfigRequest) GetConfigMapping() dbModel.ConfigMapping {
 		ConnectionConfigID:    r.Payload.ConfigMapping.ConnectionConfigID,
 		DeployableID:          r.Payload.ConfigMapping.DeployableID,
 		ResponseDefaultValues: r.Payload.ConfigMapping.ResponseDefaultValues,
+		SourceConfigID:        r.Payload.ConfigMapping.SourceConfigID,
 	}
 }
 
@@ -245,6 +263,7 @@ func (r EditConfigOrCloneConfigRequest) GetConfigMapping() dbModel.ConfigMapping
 		ConnectionConfigID:    r.Payload.ConfigMapping.ConnectionConfigID,
 		DeployableID:          r.Payload.ConfigMapping.DeployableID,
 		ResponseDefaultValues: r.Payload.ConfigMapping.ResponseDefaultValues,
+		SourceConfigID:        r.Payload.ConfigMapping.SourceConfigID,
 	}
 }
 
@@ -259,6 +278,7 @@ type ScaleUpConfigPayload struct {
 	ConfigValue            InferflowConfig          `json:"config_value"`
 	ConfigMapping          ConfigMapping            `json:"config_mapping"`
 	LoggingPerc            int                      `json:"logging_perc"`
+	LoggingTTL             int                      `json:"logging_ttl"`
 	ModelNameToEndPointMap []ModelNameToEndPointMap `json:"proposed_model_endpoints"`
 }
 
@@ -353,6 +373,7 @@ type ConfigTable struct {
 	CreatedAt               time.Time        `json:"created_at"`
 	UpdatedAt               time.Time        `json:"updated_at"`
 	TestResults             TestResults      `json:"test_results"`
+	SourceConfigID          string           `json:"source_config_id"`
 }
 
 type TestResults struct {
@@ -444,4 +465,13 @@ type RTPFeatureGroup struct {
 	Label    string   `json:"label"`
 	Features []string `json:"features"`
 	DataType string   `json:"dataType"`
+}
+
+type FeatureSchemaRequest struct {
+	ModelConfigId string `json:"model_config_id"`
+	Version       string `json:"version"`
+}
+
+type FeatureSchemaResponse struct {
+	Data []dbModel.SchemaComponents `json:"data"`
 }

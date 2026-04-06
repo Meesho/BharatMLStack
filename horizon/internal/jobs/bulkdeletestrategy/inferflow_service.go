@@ -87,7 +87,7 @@ func (m *InferflowService) fetchNonActiveInferflowConfigList(serviceDeployable s
 		discoveryConfigId = append(discoveryConfigId, discoveryConfigEntity.ID)
 	}
 
-	inferflowConfigList, err := inferflowConfigRepo.FindByDiscoveryIDsAndCreatedBefore(discoveryConfigId, maxInferflowInactiveAge)
+	inferflowConfigList, err := inferflowConfigRepo.FindByDiscoveryIDsAndCreatedBefore(discoveryConfigId, bulkDeleteInferflowMaxInactiveDays)
 	if err != nil {
 		return nil, err
 	}

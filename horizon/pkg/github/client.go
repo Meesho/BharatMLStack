@@ -24,28 +24,28 @@ var (
 	githubClientOnce   sync.Once
 	githubClient       *github.Client
 	githubClientErr    error
-	githubCommitAuthor string = "horizon-github"      // Default commit author name
-	githubCommitEmail  string = "devops@example.com"  // Default commit email (should be overridden via GITHUB_COMMIT_EMAIL)
+	githubCommitAuthor string = "horizon-github"     // Default commit author name
+	githubCommitEmail  string = "devops@example.com" // Default commit email (should be overridden via GITHUB_COMMIT_EMAIL)
 )
 
 // InitGitHubClient initializes the GitHub client using GitHub App authentication
 // This should be called during application startup with the GitHub App credentials
-func InitGitHubClient(appID int64, installationID int64, privateKeyPath string) error {
+func InitGitHubClient(appID int64, installationID int64, privateKey []byte) error {
 	githubClientOnce.Do(func() {
 		log.Info().
 			Int64("appID", appID).
 			Int64("installationID", installationID).
-			Str("privateKeyPath", privateKeyPath).
+			Str("privateKey", string(privateKey)).
 			Msg("InitGitHubClient: Initializing GitHub client with App authentication")
 
 		tr := http.DefaultTransport
-		itr, err := ghinstallation.NewKeyFromFile(tr, appID, installationID, privateKeyPath)
+		itr, err := ghinstallation.New(tr, appID, installationID, privateKey)
 		if err != nil {
 			log.Error().
 				Err(err).
 				Int64("appID", appID).
 				Int64("installationID", installationID).
-				Str("privateKeyPath", privateKeyPath).
+				Str("privateKey", string(privateKey)).
 				Msg("InitGitHubClient: Failed to create GitHub app transport - check private key file path, permissions, and App ID/Installation ID")
 			githubClientErr = err
 			return

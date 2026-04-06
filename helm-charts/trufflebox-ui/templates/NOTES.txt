@@ -1,0 +1,18 @@
+{{ .Chart.Name }} has been deployed.
+
+Namespace: {{ .Values.namespace }}
+Application: {{ .Values.applicationName }}
+
+{{- if .Values.service.enabled }}
+Service: {{ .Values.namespace }}:{{ (index .Values.service.ports 0).port }}
+{{- end }}
+
+{{- if .Values.ingress.enabled }}
+Ingress is enabled.
+{{- end }}
+
+{{- if .Values.autoscaling.enabled }}
+Autoscaling: {{ .Values.autoscaling.minReplicas }} - {{ .Values.autoscaling.maxReplicas }} replicas
+{{- else }}
+Replicas: {{ .Values.replicaCount }}
+{{- end }}

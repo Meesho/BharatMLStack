@@ -217,7 +217,7 @@ func TestPreProcessFGs(t *testing.T) {
 				m.On("GetActiveFeatureSchema", "user", "nonexistent_fg").Return(nil,
 					fmt.Errorf("feature group not found"))
 			},
-			expectedError: "failed to get active schema for feature group nonexistent_fg: feature group not found",
+			expectedError: "failed to get active schema for feature group nonexistent_fg, in entity user: feature group not found",
 		},
 	}
 
@@ -649,7 +649,7 @@ func TestPreProcessForKeys(t *testing.T) {
 				m.On("GetFeatureGroup", "user", "nonexistent").Return(nil,
 					fmt.Errorf("feature group not found")).Once()
 			},
-			expectedError: "failed to get active schema: feature group not found",
+			expectedError: "failed to get active schema for feature group nonexistent, in entity user: feature group not found",
 		},
 		{
 			name: "Error - GetDefaultValueByte fails",
@@ -686,7 +686,7 @@ func TestPreProcessForKeys(t *testing.T) {
 				m.On("GetDefaultValueByte", "user", 1, 1, "nonexistent_feature").Return(nil,
 					fmt.Errorf("feature not found")).Once()
 			},
-			expectedError: "failed to get default value for feature nonexistent_feature: feature not found",
+			expectedError: "failed to get default value for feature nonexistent_feature, in feature group user_profile, in entity user: feature not found",
 		},
 	}
 

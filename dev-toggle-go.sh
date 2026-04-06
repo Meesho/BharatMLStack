@@ -459,13 +459,16 @@ enable_dev_mode() {
     echo "# Folder: $FOLDER_NAME" >> "$STATE_FILE"
     log_debug "Created state file: $STATE_FILE"
 
-    # Find and copy all .go files from internal repo
-    log_info "Step 4: Searching for .go files to copy..."
+    # Find and copy all .go files and config files from internal repo
+    # Copy: .go sources and common config types (.yaml, .yml, .json, .env, .pbtxt)
+    log_info "Step 4: Searching for .go and config files to copy..."
     log_debug "Scanning directory: $INTERNAL_FOLDER_DIR"
     
     local copied_count=0
-    local file_count=$(find "$INTERNAL_FOLDER_DIR" -name "*.go" -type f | wc -l)
-    log_info "Found $file_count .go file(s) to copy"
+    local find_patterns=(-name "*.go" -o -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.env" -o -name "*.pbtxt")
+    local file_count
+    file_count=$(find "$INTERNAL_FOLDER_DIR" -type f \( "${find_patterns[@]}" \) | wc -l)
+    log_info "Found $file_count file(s) to copy (.go and configs)"
     
     while IFS= read -r -d '' src_file; do
         # Get relative path from INTERNAL_FOLDER_DIR
@@ -492,7 +495,7 @@ enable_dev_mode() {
         # Record in state file
         echo "FILE:$rel_path" >> "$STATE_FILE"
         ((copied_count++))
-    done < <(find "$INTERNAL_FOLDER_DIR" -name "*.go" -type f -print0)
+    done < <(find "$INTERNAL_FOLDER_DIR" -type f \( "${find_patterns[@]}" \) -print0)
 
     log_info "Successfully copied $copied_count file(s)"
 
@@ -582,6 +585,12 @@ enable_dev_mode() {
     echo "  Files copied: $copied_count"
     echo "  go.mod updated: $([ -f "$GO_MOD_APPEND_FILE" ] && echo "YES" || echo "NO")"
     echo "  State file: $STATE_FILE"
+    if [ "$FOLDER_NAME" = "horizon" ]; then
+        echo ""
+        echo "To run tests including internal (meesho) config tests, use:"
+        echo "  cd $TARGET_DIR && go test -tags=meesho ./..."
+        echo "Without -tags=meesho, only the standard tests run (internal test files are skipped)."
+    fi
 }
 
 disable_dev_mode() {

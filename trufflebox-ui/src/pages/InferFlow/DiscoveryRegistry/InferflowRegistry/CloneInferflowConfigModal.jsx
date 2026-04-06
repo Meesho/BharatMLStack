@@ -245,7 +245,7 @@ const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => 
   const fetchMPHosts = async () => {
     try {
       const response = await axios.get(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/deployable-discovery/deployables?service_name=InferFlow`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/deployable-discovery/deployables?service_name=inferflow`,
         {
           headers: {
             Authorization: `Bearer ${user?.token}`,
@@ -263,7 +263,7 @@ const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => 
         setMpHosts([]);
       }
     } catch (error) {
-      console.log('Error fetching InferFlow hosts:', error);
+      console.log('Error fetching inferflow hosts:', error);
       setMpHosts([]);
     }
   };
@@ -508,6 +508,7 @@ const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => 
         batch_size: '',
         deadline: '110',
         entity_id: [],
+        slate_component: false,
         inputs: [{
           name: '',
           features: [],
@@ -544,7 +545,8 @@ const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => 
         score: '',
         data_type: 'DataTypeFP32',
         eq_id: '',
-        entity_id: []
+        entity_id: [],
+        slate_component: false
       }]
     }));
     setExpandedReRankers(prev => [...prev, newIndex]);
@@ -717,7 +719,7 @@ const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => 
 
     // Validate config mapping
     if (!formData.config_mapping.deployable_id) {
-      errors.push('InferFlow Host selection is required');
+      errors.push('inferflow Host selection is required');
     }
 
     // Validate response entity ID (must be at 0th position of response_features)
@@ -822,11 +824,11 @@ const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => 
         return;
       }
 
-      const successMessage = response.data.data?.message || 'InferFlow Config cloned successfully';
+      const successMessage = response.data.data?.message || 'inferflow Config cloned successfully';
       onSuccess(successMessage);
       onClose();
     } catch (error) {
-      setError(error.response?.data?.error || error.message || 'Failed to clone InferFlow config');
+      setError(error.response?.data?.error || error.message || 'Failed to clone inferflow config');
     } finally {
       setLoading(false);
     }
@@ -862,7 +864,7 @@ const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => 
         justifyContent: 'space-between',
         alignItems: 'center'
       }}>
-        <Typography variant="h6">Clone InferFlow Config</Typography>
+        <Typography variant="h6">Clone Inferpipe</Typography>
         <IconButton
           edge="end"
           color="inherit"
@@ -877,7 +879,7 @@ const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => 
         <Box sx={{ p: 2 }}>
           <Alert severity="info" sx={{ mb: 2 }}>
             <Typography variant="body2">
-              <strong>Cloning Configuration:</strong> You can modify any field to create a new configuration. Change the Config Identifier to create a different config ID.
+              <strong>Cloning Inferpipe:</strong> You can modify any field to create a new inferpipe. Change the inferpipe Identifier to create a different inferpipe ID.
             </Typography>
           </Alert>
           
@@ -935,7 +937,7 @@ const CloneInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => 
             '&:hover': { bgcolor: '#380730' }
           }}
         >
-          {loading ? 'Cloning...' : 'Clone Config'}
+          {loading ? 'Cloning...' : 'Clone Inferpipe'}
         </Button>
       </DialogActions>
 

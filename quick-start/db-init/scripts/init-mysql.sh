@@ -84,6 +84,137 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     PRIMARY KEY (request_id)
   );
   
+  -- Skye/Embedding Platform request tables
+  CREATE TABLE IF NOT EXISTS store_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS entity_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS model_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS variant_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS variant_onboarding_tasks (
+    task_id INT AUTO_INCREMENT PRIMARY KEY,
+    entity VARCHAR(255) NOT NULL,
+    model VARCHAR(255) NOT NULL,
+    variant VARCHAR(255) NOT NULL,
+    payload TEXT,
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_status (status),
+    INDEX idx_created_at (created_at)
+  );
+  
+  CREATE TABLE IF NOT EXISTS filter_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS job_frequency_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS qdrant_cluster_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS variant_promotion_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS variant_onboarding_requests (
+    request_id int unsigned NOT NULL AUTO_INCREMENT,
+    reason text NOT NULL,
+    payload text NOT NULL,
+    request_type text NOT NULL,
+    created_by varchar(255) NOT NULL,
+    approved_by varchar(255),
+    status varchar(255) NOT NULL DEFAULT 'PENDING',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+  );
+  
   CREATE TABLE IF NOT EXISTS users (
     id bigint unsigned NOT NULL AUTO_INCREMENT,
     first_name varchar(50) NOT NULL,
@@ -374,19 +505,22 @@ mysql -hmysql -uroot -proot --skip-ssl -e "
     id int NOT NULL AUTO_INCREMENT,
     name varchar(255),
     host varchar(255) NOT NULL,
+    active tinyint(1) DEFAULT 0,
     service enum('inferflow', 'predator', 'numerix'),
-    active boolean DEFAULT false,
     created_by varchar(255),
     updated_by varchar(255),
-    created_at datetime DEFAULT CURRENT_TIMESTAMP,
-    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     config json,
-    monitoring_url varchar(255) DEFAULT NULL,
-    deployable_running_status boolean,
+    monitoring_url varchar(512) DEFAULT NULL,
+    deployable_running_status tinyint(1),
     deployable_work_flow_id varchar(255),
     deployment_run_id varchar(255),
     deployable_health enum('DEPLOYMENT_REASON_ARGO_APP_HEALTH_DEGRADED', 'DEPLOYMENT_REASON_ARGO_APP_HEALTHY'),
     work_flow_status enum('WORKFLOW_COMPLETED','WORKFLOW_NOT_FOUND','WORKFLOW_RUNNING','WORKFLOW_FAILED','WORKFLOW_NOT_STARTED'),
+    override_testing tinyint(1) DEFAULT 0,
+    deployable_tag varchar(255),
+    bulk_delete_enabled tinyint(1) NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
     UNIQUE KEY host (host)
   );
@@ -433,14 +567,26 @@ echo "  📦 Inserting deployable metadata..."
 mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   INSERT IGNORE INTO deployable_metadata (id,\`key\`, value, active, created_at, updated_at) VALUES
     (1, 'node_selectors', 'bharatml-stack-control-plane', 1, NOW(), NOW()),
-    (3, 'gcs_base_path', 'NA', 1, NOW(), NOW()),
-    (4, 'gcs_base_path', 'gs://gcs-dsci-model-repository-int/dummy-tmp/*', 1, NOW(), NOW()),
     (6, 'triton_image_tags', '25.06-py3', 1, NOW(), NOW()),
     (7, 'gcs_triton_path', 'NA', 1, NOW(), NOW()),
     (8, 'gcs_triton_path', 'some_path', 1, NOW(), NOW()),
     (9, 'service_account', 'NA', 1, NOW(), NOW()),
-    (10, 'service_account', 'sa-dsci-model-inference-svc@meesho-shared-int-0525.iam.gserviceaccount.com', 1, NOW(), NOW())
-  ON DUPLICATE KEY UPDATE 
+    (10, 'service_account', 'sa-dsci-model-inference-svc@meesho-shared-int-0525.iam.gserviceaccount.com', 1, NOW(), NOW()),
+    (11, 'machine_type', 'GPU', 1, NOW(), NOW()),
+    (12, 'machine_type', 'CPU', 1, NOW(), NOW()),
+    (14, 'cpu_limit_unit', 'm', 1, NOW(), NOW()),
+    (15, 'cpu_request_unit', 'm', 1, NOW(), NOW()),
+    (16, 'memory_request_unit', 'M', 1, NOW(), NOW()),
+    (17, 'memory_limit_unit', 'M', 1, NOW(), NOW()),
+    (18, 'deployment_strategy', 'rollingUpdate', 1, NOW(), NOW()),
+    (19, 'memory_request_unit', 'G', 1, NOW(), NOW()),
+    (20, 'memory_limit_unit', 'G', 1, NOW(), NOW()),
+    (21, 'gcs_triton_path', 'gs://gcs-dsci-model-repository-int/scripts/launch_triton_server.py', 1, NOW(), NOW()),
+    (22, 'deployment_strategy', 'canary', 1, NOW(), NOW()),
+    (86, 'gcs_base_path', 'gs://gcs-dsci-model-repository-int/BMS/predator-gpu/*', 1, NOW(), NOW()),
+    (87, 'gcs_base_path', 'gs://gcs-dsci-model-repository-int/BMS/predator-cpu/*', 1, NOW(), NOW()),
+    (88, 'gcs_base_path', 'NA', 1, NOW(), NOW())
+  ON DUPLICATE KEY UPDATE
     value = VALUES(value),
     updated_at = NOW();
 "
@@ -647,7 +793,73 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   ('POST', '/api/v1/horizon/deployable-registry/deployables/refresh', 'DeployableRefreshResolver'),
   ('GET', '/api/v1/horizon/deployable-discovery/deployables/metadata', 'DeployableMetadataViewResolver'),
   ('GET', '/api/v1/horizon/deployable-discovery/deployables', 'DeployableViewResolver'),
-  ('PUT', '/api/v1/horizon/deployable-registry/deployables/tune-thresholds', 'DeployableTuneResolver');
+  ('PUT', '/api/v1/horizon/deployable-registry/deployables/tune-thresholds', 'DeployableTuneResolver'),
+
+  -- Skye/Embedding Platform APIs
+  -- Store APIs
+  ('POST', '/api/v1/horizon/skye/requests/store/register', 'SkyeStoreRegisterResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/store/approve', 'SkyeStoreApproveResolver'),
+  ('GET', '/api/v1/horizon/skye/data/stores', 'SkyeStoreDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/skye/data/store-requests', 'SkyeStoreRequestDiscoveryResolver'),
+
+  -- Entity APIs
+  ('POST', '/api/v1/horizon/skye/requests/entity/register', 'SkyeEntityRegisterResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/entity/approve', 'SkyeEntityApproveResolver'),
+  ('GET', '/api/v1/horizon/skye/data/entities', 'SkyeEntityDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/skye/data/entity-requests', 'SkyeEntityRequestDiscoveryResolver'),
+
+  -- Model APIs
+  ('POST', '/api/v1/horizon/skye/requests/model/register', 'SkyeModelRegisterResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/model/edit', 'SkyeModelEditResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/model/approve', 'SkyeModelApproveResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/model/edit/approve', 'SkyeModelEditApproveResolver'),
+  ('GET', '/api/v1/horizon/skye/data/models', 'SkyeModelDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/skye/data/model-requests', 'SkyeModelRequestDiscoveryResolver'),
+
+  -- Variant APIs
+  ('POST', '/api/v1/horizon/skye/requests/variant/register', 'SkyeVariantRegisterResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/variant/edit', 'SkyeVariantEditResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/variant/approve', 'SkyeVariantApproveResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/variant/edit/approve', 'SkyeVariantEditApproveResolver'),
+  ('GET', '/api/v1/horizon/skye/data/variants', 'SkyeVariantDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/skye/data/variant-requests', 'SkyeVariantRequestDiscoveryResolver'),
+
+  -- Filter APIs
+  ('POST', '/api/v1/horizon/skye/requests/filter/register', 'SkyeFilterRegisterResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/filter/approve', 'SkyeFilterApproveResolver'),
+  ('GET', '/api/v1/horizon/skye/data/filters', 'SkyeFilterDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/skye/data/filter-requests', 'SkyeFilterRequestDiscoveryResolver'),
+
+  -- Job Frequency APIs
+  ('POST', '/api/v1/horizon/skye/requests/job-frequency/register', 'SkyeJobFrequencyRegisterResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/job-frequency/approve', 'SkyeJobFrequencyApproveResolver'),
+  ('GET', '/api/v1/horizon/skye/data/job-frequencies', 'SkyeJobFrequencyDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/skye/data/job-frequency-requests', 'SkyeJobFrequencyRequestDiscoveryResolver'),
+
+  -- Qdrant/Deployment Operations APIs
+  ('POST', '/api/v1/horizon/skye/requests/qdrant/create-cluster', 'SkyeQdrantCreateResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/qdrant/approve', 'SkyeQdrantApproveResolver'),
+  ('GET', '/api/v1/horizon/skye/data/qdrant/clusters', 'SkyeQdrantDiscoveryResolver'),
+
+  -- Variant Promotion APIs
+  ('POST', '/api/v1/horizon/skye/requests/variant/promote', 'SkyeVariantPromoteResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/variant/promote/approve', 'SkyeVariantPromoteApproveResolver'),
+
+  -- Variant Onboarding APIs
+  ('POST', '/api/v1/horizon/skye/requests/variant/onboard', 'SkyeVariantOnboardResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/variant/onboard/approve', 'SkyeVariantOnboardApproveResolver'),
+  ('GET', '/api/v1/horizon/skye/data/variant-onboarding/requests', 'SkyeVariantOnboardRequestDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/skye/data/variant-onboarding/tasks', 'SkyeVariantOnboardTaskDiscoveryResolver'),
+
+  -- Variant Scaleup APIs
+  ('POST', '/api/v1/horizon/skye/requests/variant/scale-up', 'SkyeVariantScaleupResolver'),
+  ('POST', '/api/v1/horizon/skye/requests/variant/scale-up/approve', 'SkyeVariantScaleupApproveResolver'),
+  ('GET', '/api/v1/horizon/skye/data/variant-scaleup/requests', 'SkyeVariantScaleupRequestDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/skye/data/variant-scaleup/tasks', 'SkyeVariantScaleupTaskDiscoveryResolver'),
+
+  -- MQ ID to Topics and Variants List APIs
+  ('GET', '/api/v1/horizon/skye/data/mq-id-topics', 'SkyeMQIdTopicsDiscoveryResolver'),
+  ('GET', '/api/v1/horizon/skye/data/variants-list', 'SkyeVariantsListDiscoveryResolver');
 "
 
 # Insert role permissions for admin role
@@ -721,7 +933,68 @@ mysql -hmysql -uroot -proot --skip-ssl testdb -e "
   ('admin', 'application', 'application-discovery-registry', 'onboard'),
   ('admin', 'application', 'connection-config', 'view'),
   ('admin', 'application', 'connection-config', 'edit'),
-  ('admin', 'application', 'connection-config', 'onboard');
+  ('admin', 'application', 'connection-config', 'onboard'),
+
+  -- Embedding Platform (Skye) permissions
+  -- Store permissions
+  ('admin', 'embedding_platform', 'store-discovery', 'view'),
+  ('admin', 'embedding_platform', 'store-registry', 'onboard'),
+  ('admin', 'embedding_platform', 'store-registry', 'view'),
+  ('admin', 'embedding_platform', 'store-approval', 'review'),
+  ('admin', 'embedding_platform', 'store-approval', 'view'),
+
+  -- Entity permissions
+  ('admin', 'embedding_platform', 'entity-discovery', 'view'),
+  ('admin', 'embedding_platform', 'entity-registry', 'onboard'),
+  ('admin', 'embedding_platform', 'entity-registry', 'view'),
+  ('admin', 'embedding_platform', 'entity-approval', 'review'),
+  ('admin', 'embedding_platform', 'entity-approval', 'view'),
+
+  -- Model permissions
+  ('admin', 'embedding_platform', 'model-discovery', 'view'),
+  ('admin', 'embedding_platform', 'model-registry', 'onboard'),
+  ('admin', 'embedding_platform', 'model-registry', 'edit'),
+  ('admin', 'embedding_platform', 'model-registry', 'view'),
+  ('admin', 'embedding_platform', 'model-approval', 'review'),
+  ('admin', 'embedding_platform', 'model-approval', 'view'),
+
+  -- Variant permissions
+  ('admin', 'embedding_platform', 'variant-discovery', 'view'),
+  ('admin', 'embedding_platform', 'variant-registry', 'onboard'),
+  ('admin', 'embedding_platform', 'variant-registry', 'edit'),
+  ('admin', 'embedding_platform', 'variant-registry', 'view'),
+  ('admin', 'embedding_platform', 'variant-registry', 'promote'),
+  ('admin', 'embedding_platform', 'variant-approval', 'review'),
+  ('admin', 'embedding_platform', 'variant-approval', 'view'),
+
+  -- Filter permissions
+  ('admin', 'embedding_platform', 'filter-discovery', 'view'),
+  ('admin', 'embedding_platform', 'filter-registry', 'onboard'),
+  ('admin', 'embedding_platform', 'filter-registry', 'view'),
+  ('admin', 'embedding_platform', 'filter-approval', 'review'),
+  ('admin', 'embedding_platform', 'filter-approval', 'view'),
+
+  -- Job Frequency permissions
+  ('admin', 'embedding_platform', 'job-frequency-discovery', 'view'),
+  ('admin', 'embedding_platform', 'job-frequency-registry', 'onboard'),
+  ('admin', 'embedding_platform', 'job-frequency-registry', 'view'),
+  ('admin', 'embedding_platform', 'job-frequency-approval', 'review'),
+  ('admin', 'embedding_platform', 'job-frequency-approval', 'view'),
+
+  -- Deployment Operations (Qdrant) permissions
+  ('admin', 'embedding_platform', 'deployment-operations', 'onboard'),
+  ('admin', 'embedding_platform', 'deployment-operations', 'view'),
+  ('admin', 'embedding_platform', 'deployment-operations', 'review'),
+
+  -- Variant Onboarding permissions
+  ('admin', 'embedding_platform', 'onboard-variant-to-db', 'onboard'),
+  ('admin', 'embedding_platform', 'onboard-variant-to-db', 'view'),
+  ('admin', 'embedding_platform', 'onboard-variant-approval', 'review'),
+  ('admin', 'embedding_platform', 'onboard-variant-approval', 'view'),
+
+  -- MQ ID to Topics and Variants List permissions
+  ('admin', 'embedding_platform', 'model-discovery', 'view'),
+  ('admin', 'embedding_platform', 'variant-discovery', 'view');
 "
 
 # Verify initialization

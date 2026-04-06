@@ -252,7 +252,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
   const fetchMPHosts = async () => {
     try {
       const response = await axios.get(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/deployable-discovery/deployables?service_name=InferFlow`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/deployable-discovery/deployables?service_name=inferflow`,
         {
           headers: {
             Authorization: `Bearer ${user?.token}`,
@@ -270,7 +270,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
         setMpHosts([]);
       }
     } catch (error) {
-      console.log('Error fetching InferFlow hosts:', error);
+      console.log('Error fetching inferflow hosts:', error);
       setMpHosts([]);
     }
   };
@@ -515,6 +515,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
         batch_size: '',
         deadline: '110',
         entity_id: [],
+        slate_component: false,
         inputs: [{
           name: '',
           features: [],
@@ -551,7 +552,8 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
         score: '',
         data_type: 'DataTypeFP32',
         eq_id: '',
-        entity_id: []
+        entity_id: [],
+        slate_component: false
       }]
     }));
     setExpandedReRankers(prev => [...prev, newIndex]);
@@ -724,7 +726,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
 
     // Validate config mapping
     if (!formData.config_mapping.deployable_id) {
-      errors.push('InferFlow Host selection is required');
+      errors.push('inferflow Host selection is required');
     }
 
     // Validate response entity ID (must be at 0th position of response_features)
@@ -755,7 +757,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
       return;
     }
 
-    // Check if InferFlow host has changed
+    // Check if inferflow host has changed
     const originalDeployableId = originalConfig?.config_mapping?.deployable_id || '';
     const currentDeployableId = formData.config_mapping.deployable_id || '';
     
@@ -850,11 +852,11 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
         return;
       }
 
-      const successMessage = response.data.data?.message || 'InferFlow Config updated successfully';
+      const successMessage = response.data.data?.message || 'Inferpipe updated successfully';
       onSuccess(successMessage);
       onClose();
     } catch (error) {
-      setError(error.response?.data?.error || error.message || 'Failed to update InferFlow config');
+      setError(error.response?.data?.error || error.message || 'Failed to update Inferpipe');
     } finally {
       setLoading(false);
     }
@@ -871,7 +873,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
         <DialogContent>
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 4 }}>
             <CircularProgress />
-            <Typography sx={{ ml: 2 }}>Loading configuration...</Typography>
+            <Typography sx={{ ml: 2 }}>Loading inferpipe...</Typography>
           </Box>
         </DialogContent>
       </Dialog>
@@ -896,7 +898,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
         justifyContent: 'space-between',
         alignItems: 'center'
       }}>
-        <Typography variant="h6">Edit InferFlow Config</Typography>
+        <Typography variant="h6">Edit Inferpipe</Typography>
         <IconButton
           edge="end"
           color="inherit"
@@ -1008,7 +1010,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <CompareArrowsIcon />
-          <Typography variant="h6">Configuration Changes</Typography>
+          <Typography variant="h6">Inferpipe Changes</Typography>
         </Box>
         <IconButton
           edge="end"
@@ -1024,7 +1026,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
           <JsonDiffView
             originalText={JSON.stringify(originalConfig, null, 2)}
             changedText={JSON.stringify(formData, null, 2)}
-            title="Original vs Current Configuration"
+            title="Original vs Current Inferpipe"
           />
         )}
       </DialogContent>
@@ -1058,7 +1060,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
           alignItems: 'center'
         }}
       >
-        <Typography variant="h6">Confirm InferFlow Host Change</Typography>
+        <Typography variant="h6">Confirm inferflow Host Change</Typography>
         <IconButton onClick={() => setShowHostChangeConfirmation(false)} size="small" sx={{ color: 'white' }}>
           <CloseIcon />
         </IconButton>
@@ -1066,14 +1068,14 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
       <DialogContent sx={{ mt: 2 }}>
         <Alert severity="warning" sx={{ mb: 3 }}>
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            The InferFlow Host has been changed. Please review the details before confirming:
+            The inferflow Host has been changed. Please review the details before confirming:
           </Typography>
         </Alert>
 
         {/* Original Host */}
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: '#450839' }}>
-            Previous InferFlow Host:
+            Previous inferflow Host:
           </Typography>
           {(() => {
             const originalDeployableId = originalConfig?.config_mapping?.deployable_id || '';
@@ -1103,7 +1105,7 @@ const EditInferflowConfigModal = ({ open, onClose, onSuccess, configData }) => {
         {/* New Host */}
         <Box sx={{ mb: 2 }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: '#450839' }}>
-            New InferFlow Host:
+            New inferflow Host:
           </Typography>
           {(() => {
             const currentDeployableId = formData.config_mapping.deployable_id || '';

@@ -5,6 +5,7 @@ import (
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/Meesho/BharatMLStack/horizon/internal/jobs"
+	skyeJobs "github.com/Meesho/BharatMLStack/horizon/internal/skye/jobs"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -36,4 +37,38 @@ func Init(config configs.Configs) {
 
 		c.Start()
 	})
+}
+
+func InitVariantOnboardingScheduler(config configs.Configs) {
+	c := cron.New(cron.WithSeconds())
+
+	_, err := c.AddFunc(config.VariantOnboardingCronExpression, func() {
+		job := skyeJobs.InitVariantOnboardingJob(config)
+		job.Run()
+	})
+
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to schedule variant onboarding job")
+		return
+	}
+
+	c.Start()
+	log.Info().Msg("Variant onboarding scheduler started (runs every 5 minutes)")
+}
+
+func InitVariantScaleUpScheduler(config configs.Configs) {
+	c := cron.New(cron.WithSeconds())
+
+	_, err := c.AddFunc(config.VariantScaleUpCronExpression, func() {
+		job := skyeJobs.InitVariantScaleUpJob(config)
+		job.Run()
+	})
+
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to schedule variant scale up job")
+		return
+	}
+
+	c.Start()
+	log.Info().Msg("Variant Scale Up scheduler started (runs every 5 minutes)")
 }

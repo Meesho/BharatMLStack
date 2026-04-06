@@ -429,12 +429,18 @@ func (v *V1) handleMap(dataMap, metaMap *map[string]string, output interface{}, 
 					return err
 				}
 				val.SetMapIndex(reflect.ValueOf(mapKey), reflect.ValueOf(floatVal))
-			case reflect.Int, reflect.Int64:
+			case reflect.Int:
 				floatVal, err := strconv.ParseInt(data, 10, 64)
 				if err != nil {
 					return err
 				}
 				val.SetMapIndex(reflect.ValueOf(mapKey), reflect.ValueOf(floatVal))
+			case reflect.Int64:
+				intVal, err := strconv.ParseInt(data, 10, 64)
+				if err != nil {
+					return err
+				}
+				val.SetMapIndex(reflect.ValueOf(mapKey), reflect.ValueOf(intVal))
 			case reflect.Int8:
 				floatVal, err := strconv.ParseInt(data, 10, 8)
 				if err != nil {
@@ -644,4 +650,23 @@ func (v *V1) DeleteNode(path string) error {
 		return err
 	}
 	return nil
+}
+
+// GetWatcherDataMaps returns copies of the watcher's dataMap and metaMap
+func (v *V1) GetWatcherDataMaps() (map[string]string, map[string]string, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	// Create copies to prevent external modification
+	dataMapCopy := make(map[string]string, len(v.dataMap))
+	for k, v := range v.dataMap {
+		dataMapCopy[k] = v
+	}
+
+	metaMapCopy := make(map[string]string, len(v.metaMap))
+	for k, v := range v.metaMap {
+		metaMapCopy[k] = v
+	}
+
+	return dataMapCopy, metaMapCopy, nil
 }

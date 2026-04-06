@@ -26,6 +26,7 @@ type Table struct {
 	CreatedAt       time.Time `gorm:"not null"`
 	UpdatedAt       time.Time
 	TestResults     inferflow.TestResults `gorm:"type:json"`
+	SourceConfigID  string                `gorm:"column:source_config_id"`
 }
 
 func (Table) TableName() string {

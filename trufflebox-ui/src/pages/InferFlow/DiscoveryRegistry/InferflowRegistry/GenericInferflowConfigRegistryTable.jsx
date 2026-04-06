@@ -63,7 +63,7 @@ const GenericInferflowConfigRegistryTable = ({
   const allColumns = [
     { 
       field: 'config_id', 
-      headerName: 'Config ID',
+      headerName: 'Inferpipe ID',
       width: '35%',
     },
     {
@@ -102,7 +102,7 @@ const GenericInferflowConfigRegistryTable = ({
 
           {/* Test Action */}
           {hasPermission(service, screenType, ACTIONS.TEST) && onTestConfig && (
-            <Tooltip title="Test Configuration" disableTransition>
+            <Tooltip title="Test Inferpipe" disableTransition>
               <IconButton 
                 onClick={() => onTestConfig(row)}
                 size="small"
@@ -262,7 +262,7 @@ const GenericInferflowConfigRegistryTable = ({
     <Paper elevation={3} sx={{ width: '100%', height: '100vh', padding: '1rem', display: 'flex', flexDirection: 'column', marginTop: '1rem' }}>
       <Box sx={{ marginBottom: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
         <TextField
-          placeholder="Search by Config ID or Host"
+          placeholder="Search by Inferpipe ID or Host"
           variant="outlined"
           size="small"
           sx={{ 
@@ -289,7 +289,7 @@ const GenericInferflowConfigRegistryTable = ({
               '&:hover': { backgroundColor: '#380730' },
             }}
           >
-            Onboard InferFlow Config
+            Onboard Inferpipe
           </Button>
         )}
         <Box sx={{ display: 'flex', gap: '0.5rem' }}>

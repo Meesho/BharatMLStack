@@ -37,6 +37,7 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
       batch_size: '',
       deadline: '110',
       entity_id: [],
+      slate_component: false,
       inputs: [{
         name: '',
         features: [],
@@ -174,7 +175,7 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
   const fetchMPHosts = async () => {
     try {
       const response = await axios.get(
-        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/deployable-discovery/deployables?service_name=InferFlow`,
+        `${URL_CONSTANTS.REACT_APP_HORIZON_BASE_URL}/api/v1/horizon/deployable-discovery/deployables?service_name=inferflow`,
         {
           headers: {
             Authorization: `Bearer ${user?.token}`,
@@ -192,7 +193,7 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
         setMpHosts([]);
       }
     } catch (error) {
-      console.log('Error fetching InferFlow hosts:', error);
+      console.log('Error fetching inferflow hosts:', error);
       setMpHosts([]);
     }
   };
@@ -434,6 +435,7 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
         batch_size: '',
         deadline: '110',
         entity_id: [],
+        slate_component: false,
         inputs: [{
           name: '',
           features: [],
@@ -472,7 +474,8 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
         score: '',
         data_type: 'DataTypeFP32',
         eq_id: '',
-        entity_id: []
+        entity_id: [],
+        slate_component: false
       }]
     }));
     // Expand the newly added re-ranker
@@ -532,7 +535,7 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
       errors.push('Tenant is required');
     }
     if (!formData.config_identifier.trim()) {
-      errors.push('Config Identifier is required');
+      errors.push('Inferpipe Identifier is required');
     }
 
     // Validate rankers (all fields required except calibration)
@@ -649,7 +652,7 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
 
     // Validate config mapping
     if (!formData.config_mapping.deployable_id) {
-      errors.push('InferFlow Host selection is required');
+      errors.push('inferflow Host selection is required');
     }
 
     // Validate response entity ID (must be at 0th position of response_features)
@@ -755,11 +758,11 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
         return;
       }
 
-      const successMessage = response.data.data?.message || 'InferFlow Config onboarded successfully';
+      const successMessage = response.data.data?.message || 'Inferpipe onboarded successfully';
       onSuccess(successMessage);
       onClose();
     } catch (error) {
-      setError(error.response?.data?.error || error.message || 'Failed to onboard InferFlow config');
+      setError(error.response?.data?.error || error.message || 'Failed to onboard Inferpipe');
     } finally {
       setLoading(false);
     }
@@ -782,7 +785,7 @@ const OnboardInferflowConfigModal = ({ open, onClose, onSuccess }) => {
         justifyContent: 'space-between',
         alignItems: 'center'
       }}>
-        <Typography variant="h6">Onboard InferFlow Config</Typography>
+        <Typography variant="h6">Onboard Inferpipe</Typography>
         <IconButton
           edge="end"
           color="inherit"

@@ -230,10 +230,10 @@ const PromoteInferflowConfigModal = ({ open, onClose, onSuccess, configData }) =
 
     // Validate required fields
     if (!formData.config_id.trim()) {
-      errors.push('Config ID is required');
+      errors.push('Inferpipe ID is required');
     }
     if (!formData.config_value.trim()) {
-      errors.push('Config Value is required');
+      errors.push('Inferpipe Value is required');
     }
     if (!formData.selectedHost) {
       errors.push('Please select a InferFlow production host for promotion');
@@ -334,10 +334,10 @@ const PromoteInferflowConfigModal = ({ open, onClose, onSuccess, configData }) =
       onClose();
       onSuccess(successMessage);
     } catch (err) {
-      setError(err.response?.data?.error || 'An error occurred while promoting the configuration');
+      setError(err.response?.data?.error || 'An error occurred while promoting the inferpipe');
       setSnackbar({
         open: true,
-        message: err.response?.data?.error || 'An error occurred while promoting the configuration',
+        message: err.response?.data?.error || 'An error occurred while promoting the inferpipe',
         severity: 'error'
       });
     } finally {
@@ -365,7 +365,7 @@ const PromoteInferflowConfigModal = ({ open, onClose, onSuccess, configData }) =
           }}
         >
           <Box display="flex" alignItems="center" gap={1}>
-            <Typography variant="h6">Promote InferFlow Config</Typography>
+            <Typography variant="h6">Promote Inferpipe</Typography>
           </Box>
           <IconButton onClick={onClose} size="small" sx={{ color: 'white' }}>
             <CloseIcon />
@@ -376,7 +376,7 @@ const PromoteInferflowConfigModal = ({ open, onClose, onSuccess, configData }) =
             {/* Config ID - Read Only */}
             <TextField
               fullWidth
-              label="InferFlow Config ID"
+              label="Inferpipe ID"
               value={formData.config_id}
               disabled
               sx={{ 
@@ -391,7 +391,7 @@ const PromoteInferflowConfigModal = ({ open, onClose, onSuccess, configData }) =
             {/* Config Value - Read Only */}
             <TextField
               fullWidth
-              label="Config Value"
+              label="Inferpipe Value"
               value={formData.config_value}
               disabled
               multiline
@@ -485,7 +485,7 @@ const PromoteInferflowConfigModal = ({ open, onClose, onSuccess, configData }) =
             {/* Info Alert */}
             <Alert severity="info" sx={{ mb: 2 }}>
               <Typography variant="body2">
-                This configuration will be promoted to the selected production model host with your production credentials. Make sure the model is already onboarded on production.
+                This inferpipe will be promoted to the selected production model host with your production credentials. Make sure the model is already onboarded on production.
               </Typography>
             </Alert>
 

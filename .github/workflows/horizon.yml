@@ -2,10 +2,10 @@ name: Horizon CI
 
 on:
   pull_request:
-    branches: [master, develop]
+    branches: [main, develop]
     paths: ['horizon/**']
   push:
-    branches: [master, develop]
+    branches: [main, develop]
     paths: ['horizon/**']
 
 jobs:

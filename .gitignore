@@ -18,3 +18,5 @@ java-sdk/onfs/feature-store-core/target/
 horizon/pem/*.pem
 horizon/pem/*.key
 horizon/configs/*.pem
+go.work
+go.work.sum

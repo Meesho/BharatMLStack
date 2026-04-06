@@ -2,10 +2,10 @@ name: Python SDK CI
 
 on:
   pull_request:
-    branches: [master, develop]
+    branches: [main, develop]
     paths: ['py-sdk/**']
   push:
-    branches: [master, develop]
+    branches: [main, develop]
     paths: ['py-sdk/**']
 
 jobs:
