@@ -25,6 +25,12 @@ type Memtable struct {
 	next          *Memtable
 	prev          *Memtable
 	ShardIdx      uint32
+
+	// flushStartOffset is the byte offset within the page where real data
+	// begins. On the first (staggered) memtable this equals the stagger
+	// offset so Flush() skips the uninitialized region. Reset to 0 after
+	// the first flush.
+	flushStartOffset int
 }
 
 type MemtableConfig struct {
@@ -102,20 +108,28 @@ func (m *Memtable) Flush() (n int, fileOffset int64, err error) {
 	}
 
 	chunkSize := fs.BLOCK_SIZE
-	numChunks := len(m.page.Buf) / chunkSize
-	if len(m.page.Buf)%chunkSize != 0 {
-		numChunks++
+
+	// When the memtable has a stagger offset (first cycle only), skip the
+	// uninitialized region: advance the file's write pointer past it, then
+	// write only the real data. Total file advancement = flushStartOffset +
+	// len(usedBuf) = capacity, preserving the memId*capacity layout.
+	startOff := m.flushStartOffset
+	if startOff > 0 {
+		m.file.AdvanceWriteOffset(int64(startOff))
 	}
 
+	buf := m.page.Buf[startOff:]
+
 	// PwriteBatch submits all chunks via io_uring.
-	totalWritten, fileOffset, err := m.file.PwriteBatch(m.page.Buf, chunkSize)
+	totalWritten, fileOffset, err := m.file.PwriteBatch(buf, chunkSize)
 	if err != nil {
 		return 0, 0, err
 	}
 
 	m.currentOffset = 0
 	m.readyForFlush = false
-	return totalWritten, fileOffset, nil
+	m.flushStartOffset = 0 // subsequent flushes write the full page
+	return startOff + totalWritten, fileOffset, nil
 }
 
 func (m *Memtable) Discard() {

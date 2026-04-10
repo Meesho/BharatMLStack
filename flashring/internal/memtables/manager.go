@@ -56,6 +56,7 @@ func NewMemtableManager(file *fs.WrapAppendFile, capacity int32, flushStaggerOff
 	// Pre-advance the active memtable so this shard's first flush happens
 	// earlier/later than its peers, spreading flush I/O over time.
 	memtable1.currentOffset = flushStaggerOffset
+	memtable1.flushStartOffset = flushStaggerOffset
 
 	memtableManager := &MemtableManager{
 		file:           file,

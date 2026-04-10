@@ -140,6 +140,18 @@ func (r *WrapAppendFile) PwriteBatch(buf []byte, chunkSize int) (totalWritten in
 	return totalWritten, r.PhysicalWriteOffset, nil
 }
 
+// AdvanceWriteOffset moves the write pointer forward by n bytes without
+// writing any data. Used to skip over uninitialized regions in staggered
+// memtables so that the memId*capacity file layout is preserved.
+func (r *WrapAppendFile) AdvanceWriteOffset(n int64) {
+	r.PhysicalWriteOffset += n
+	if r.PhysicalWriteOffset >= r.MaxFileSize {
+		r.wrapped = true
+		r.PhysicalWriteOffset = 0
+	}
+	r.LogicalCurrentOffset += n
+}
+
 func (r *WrapAppendFile) TrimHeadIfNeeded() bool {
 	if r.wrapped && r.PhysicalWriteOffset == r.PhysicalStartOffset {
 		return true
