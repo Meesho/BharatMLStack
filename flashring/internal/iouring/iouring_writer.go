@@ -3,41 +3,41 @@
 
 package iouring
 
-import (
-	"fmt"
-)
-
-// IoUringWriter wraps a raw IoUring ring and exposes only the write API.
+// IoUringWriter wraps a BatchIoUringWriter with decoupled submit/complete
+// goroutines. The ring mutex is held only during SQE prep + io_uring_enter,
+// not during CQE drain, allowing concurrent flush batches from different
+// shards to interleave submission.
 type IoUringWriter struct {
-	ring       *IoUring
-	maxBatchSz int
+	batch *BatchIoUringWriter
 }
 
-// NewIoUringWriter creates an IoUringWriter backed by a new io_uring ring.
+// NewIoUringWriter creates an IoUringWriter backed by a decoupled batch writer.
 func NewIoUringWriter(entries uint32, flags uint32) (*IoUringWriter, error) {
-	ring, err := NewIoUring(entries, flags)
+	b, err := NewBatchIoUringWriter(BatchIoUringConfig{
+		RingDepth:   entries,
+		MaxBatch:    int(entries),
+		MaxInflight: int(entries),
+		QueueSize:   1024,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("io_uring writer init: %w", err)
+		return nil, err
 	}
-	return &IoUringWriter{
-		ring:       ring,
-		maxBatchSz: int(ring.sqEntries),
-	}, nil
+	return &IoUringWriter{batch: b}, nil
 }
 
 // MaxBatchSize returns the maximum number of SQEs that can be submitted in
 // a single SubmitWriteBatch call.
 func (w *IoUringWriter) MaxBatchSize() int {
-	return w.maxBatchSz
+	return w.batch.MaxBatchSize()
 }
 
-// SubmitWriteBatch submits N pwrite operations in a single io_uring_enter
-// call and waits for all completions. Thread-safe.
+// SubmitWriteBatch submits N pwrite operations and waits for all completions.
+// Thread-safe. The ring mutex is NOT held during CQE drain.
 func (w *IoUringWriter) SubmitWriteBatch(fd int, bufs [][]byte, offsets []uint64) ([]int, error) {
-	return w.ring.SubmitWriteBatch(fd, bufs, offsets)
+	return w.batch.SubmitWriteBatch(fd, bufs, offsets)
 }
 
-// Close releases the underlying io_uring ring.
+// Close releases the underlying io_uring ring and stops background goroutines.
 func (w *IoUringWriter) Close() {
-	w.ring.Close()
+	w.batch.Close()
 }
