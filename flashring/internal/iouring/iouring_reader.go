@@ -13,8 +13,8 @@ import (
 	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 )
 
-// batchReadResult holds the outcome of a single batched pread.
-type batchReadResult struct {
+// ReadResult holds the outcome of a single io_uring pread.
+type ReadResult struct {
 	N   int
 	Err error
 }
@@ -24,13 +24,13 @@ type batchReadRequest struct {
 	fd     int
 	buf    []byte
 	offset uint64
-	done   chan batchReadResult
+	done   chan ReadResult
 }
 
 var batchReqPool = sync.Pool{
 	New: func() interface{} {
 		return &batchReadRequest{
-			done: make(chan batchReadResult, 1),
+			done: make(chan ReadResult, 1),
 		}
 	},
 }
@@ -154,6 +154,26 @@ func (b *BatchIoUringReader) Submit(fd int, buf []byte, offset uint64) (int, err
 	return n, err
 }
 
+// SubmitAsync enqueues a pread request and returns immediately with a channel
+// that will receive the result when the io_uring completion arrives.
+// Unlike Submit, it does not block the caller. Thread-safe.
+// The caller must read exactly once from the returned channel.
+func (b *BatchIoUringReader) SubmitAsync(fd int, buf []byte, offset uint64) <-chan ReadResult {
+	if len(buf) == 0 {
+		ch := make(chan ReadResult, 1)
+		ch <- ReadResult{}
+		return ch
+	}
+	req := &batchReadRequest{
+		fd:     fd,
+		buf:    buf,
+		offset: offset,
+		done:   make(chan ReadResult, 1),
+	}
+	b.reqCh <- req
+	return req.done
+}
+
 // Close shuts down both goroutines and releases the io_uring ring.
 func (b *BatchIoUringReader) Close() {
 	close(b.closeCh)
@@ -211,7 +231,7 @@ func (b *BatchIoUringReader) submitLoop() {
 				b.inflight[slot].Store(req)
 			case <-b.closeCh:
 				for j := i; j < len(batch); j++ {
-					batch[j].done <- batchReadResult{Err: fmt.Errorf("io_uring: shutting down")}
+					batch[j].done <- ReadResult{Err: fmt.Errorf("io_uring: shutting down")}
 				}
 				return
 			}
@@ -229,7 +249,7 @@ func (b *BatchIoUringReader) submitLoop() {
 					req := b.inflight[slots[j]].Swap(nil)
 					b.freeSlots <- slots[j]
 					if req != nil {
-						req.done <- batchReadResult{
+						req.done <- ReadResult{
 							Err: fmt.Errorf("io_uring: SQ full, batch=%d depth=%d", len(batch), b.ring.sqEntries),
 						}
 					}
@@ -250,7 +270,7 @@ func (b *BatchIoUringReader) submitLoop() {
 					req := b.inflight[slots[i]].Swap(nil)
 					b.freeSlots <- slots[i]
 					if req != nil {
-						req.done <- batchReadResult{Err: fmt.Errorf("io_uring_enter: %w", err)}
+						req.done <- ReadResult{Err: fmt.Errorf("io_uring_enter: %w", err)}
 					}
 				}
 			}
@@ -305,12 +325,12 @@ func (b *BatchIoUringReader) completeLoop() {
 		}
 
 		if res < 0 {
-			req.done <- batchReadResult{
+			req.done <- ReadResult{
 				Err: fmt.Errorf("io_uring pread errno %d (%s), fd=%d off=%d len=%d",
 					-res, syscall.Errno(-res), req.fd, req.offset, len(req.buf)),
 			}
 		} else {
-			req.done <- batchReadResult{N: int(res)}
+			req.done <- ReadResult{N: int(res)}
 		}
 	}
 }
@@ -347,6 +367,13 @@ func NewParallelBatchIoUringReader(cfg BatchIoUringConfig, numRings int) (*Paral
 func (p *ParallelBatchIoUringReader) Submit(fd int, buf []byte, offset uint64) (int, error) {
 	idx := p.next.Add(1) % uint64(len(p.readers))
 	return p.readers[idx].Submit(fd, buf, offset)
+}
+
+// SubmitAsync routes the pread to the next ring via round-robin and returns
+// immediately with a channel for the result. Thread-safe.
+func (p *ParallelBatchIoUringReader) SubmitAsync(fd int, buf []byte, offset uint64) <-chan ReadResult {
+	idx := p.next.Add(1) % uint64(len(p.readers))
+	return p.readers[idx].SubmitAsync(fd, buf, offset)
 }
 
 // Close shuts down all underlying batch readers.

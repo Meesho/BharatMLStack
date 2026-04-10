@@ -223,3 +223,143 @@ func (fc *ShardCache) DeleteKey(key string) bool {
 func (fc *ShardCache) GetRingBufferActiveEntries() int {
 	return fc.keyIndex.GetRB().ActiveEntries()
 }
+
+// ---------------------------------------------------------------------------
+// MGet support — separate functions that duplicate parts of Get/readFromDiskAsync
+// to allow the caller to split index lookups from disk I/O.
+// ---------------------------------------------------------------------------
+
+// MGetMeta holds the result of an index lookup for batch gets.
+type MGetMeta struct {
+	Found         bool
+	Expired       bool
+	ShouldReWrite bool
+	RemainingTTL  uint16
+	// Value is non-nil when the data was found in a memtable (no disk read needed).
+	Value         []byte
+	NeedsDiskRead bool
+	Length        uint16
+	FileOffset    int64
+}
+
+// PendingRead represents an in-flight async io_uring disk read.
+type PendingRead struct {
+	done        <-chan iouring.ReadResult
+	page        *fs.AlignedPage
+	alignedSize int
+	pageOffset  int
+	length      uint16
+}
+
+// GetMetaForMGet performs an index lookup and memtable check for a single key
+// without issuing any disk I/O. This is the first phase of an MGet operation.
+func (fc *ShardCache) GetMetaForMGet(key string) MGetMeta {
+	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
+
+	if status == index.StatusNotFound {
+		metrics.Incr(metrics.KEY_KEY_NOT_FOUND_COUNT, []string{})
+		return MGetMeta{}
+	}
+
+	metrics.Timing(metrics.KEY_DATA_LENGTH, time.Duration(length), []string{})
+
+	if status == index.StatusExpired {
+		metrics.Incr(metrics.KEY_KEY_EXPIRED_COUNT, []string{})
+		return MGetMeta{Expired: true}
+	}
+
+	_, currMemId, _ := fc.mm.GetMemtable()
+	shouldReWrite := fc.predictor.Predict(uint64(freq), uint64(lastAccess), memId, currMemId)
+
+	mt := fc.mm.GetMemtableById(memId)
+	if mt != nil {
+		metrics.Incr(metrics.KEY_MEMTABLE_HIT, []string{})
+		buf, exists := mt.GetBufForRead(int(offset), length)
+		if !exists {
+			return MGetMeta{ShouldReWrite: shouldReWrite}
+		}
+		return MGetMeta{
+			Found:         true,
+			Value:         buf,
+			Length:        length,
+			RemainingTTL:  remainingTTL,
+			ShouldReWrite: shouldReWrite,
+		}
+	}
+
+	metrics.Incr(metrics.KEY_MEMTABLE_MISS, []string{})
+	fileOffset := int64(uint64(memId)*uint64(fc.mm.Capacity) + uint64(offset))
+
+	return MGetMeta{
+		Found:         true,
+		NeedsDiskRead: true,
+		Length:        length,
+		FileOffset:    fileOffset,
+		RemainingTTL:  remainingTTL,
+		ShouldReWrite: shouldReWrite,
+	}
+}
+
+// SubmitDiskReadAsync enqueues an aligned disk read via io_uring without
+// blocking for completion. Returns a PendingRead handle for CollectDiskRead.
+func (fc *ShardCache) SubmitDiskReadAsync(fileOffset int64, length uint16) (*PendingRead, error) {
+	alignedStart, alignedSize := fs.AlignRange(fileOffset, int(length), fs.BLOCK_SIZE)
+	page := fc.readPageAllocator.Get(int(alignedSize))
+	readBuf := page.Buf[:alignedSize]
+
+	validOffset, err := fc.file.ValidateReadOffset(alignedStart, int(alignedSize))
+	if err != nil {
+		fc.readPageAllocator.Put(page)
+		return nil, err
+	}
+
+	done := fc.iouringReader.SubmitAsync(fc.file.ReadFd, readBuf, uint64(validOffset))
+
+	return &PendingRead{
+		done:        done,
+		page:        page,
+		alignedSize: int(alignedSize),
+		pageOffset:  int(fileOffset - alignedStart),
+		length:      length,
+	}, nil
+}
+
+// CollectDiskRead blocks until the pending io_uring read completes, copies
+// the result into a new buffer, and frees the aligned page. Returns nil on failure.
+func (fc *ShardCache) CollectDiskRead(pr *PendingRead) []byte {
+	result := <-pr.done
+	defer fc.readPageAllocator.Put(pr.page)
+
+	if result.Err != nil || result.N != pr.alignedSize {
+		if result.Err != nil {
+			log.Warn().Err(result.Err).Msg("io_uring pread failed in MGet")
+		}
+		return nil
+	}
+
+	buf := make([]byte, pr.length)
+	copy(buf, pr.page.Buf[pr.pageOffset:pr.pageOffset+int(pr.length)])
+	return buf
+}
+
+// ValidateAndExtract checks the CRC32 and key, then extracts the value from
+// a raw data buffer. Used by MGet for both memtable and disk-read results.
+func (fc *ShardCache) ValidateAndExtract(buf []byte, key string, length uint16) ([]byte, bool) {
+	if int(length) > len(buf) || length < 4 {
+		metrics.Incr(metrics.KEY_BAD_LENGTH_COUNT, []string{})
+		return nil, false
+	}
+	gotCRC := index.ByteOrder.Uint32(buf[0:4])
+	computedCRC := crc32.ChecksumIEEE(buf[4:length])
+	if gotCRC != computedCRC {
+		metrics.Incr(metrics.KEY_BAD_CR32_COUNT, []string{})
+		return nil, false
+	}
+	gotKey := string(buf[4 : 4+len(key)])
+	if gotKey != key {
+		metrics.Incr(metrics.KEY_BAD_KEY_COUNT, []string{})
+		return nil, false
+	}
+	valLen := int(length) - 4 - len(key)
+	return buf[4+len(key) : 4+len(key)+valLen], true
+}

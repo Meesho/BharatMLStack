@@ -265,6 +265,119 @@ func (wc *WrapCache) Close() error {
 	return nil
 }
 
+// MGetResult holds the result for a single key in a batch get.
+type MGetResult struct {
+	Value   []byte
+	Found   bool
+	Expired bool
+}
+
+// MGet fetches multiple keys in a single call, batching disk I/O through
+// io_uring for significantly lower and more consistent latency than issuing
+// individual Get calls (even concurrently via goroutines).
+//
+// The operation runs in three phases on a single goroutine:
+//  1. Index lookups + memtable checks for every key (in-memory, fast).
+//  2. Submit all required disk reads to io_uring in a tight loop so the
+//     submit goroutine can collect them into one batch / one io_uring_enter.
+//  3. Collect completions, validate CRC32, and return results.
+func (wc *WrapCache) MGet(keys []string) []MGetResult {
+	results := make([]MGetResult, len(keys))
+
+	type pendingEntry struct {
+		keyIdx   int
+		key      string
+		shardIdx uint32
+		meta     filecache.MGetMeta
+		pending  *filecache.PendingRead
+	}
+
+	var diskReads []pendingEntry
+
+	// ── Phase 1: index lookups + memtable checks (sequential, all in-memory) ──
+	for i, key := range keys {
+		h32 := wc.hash(key)
+		shardIdx := h32 % uint32(len(wc.shards))
+
+		meta := wc.shards[shardIdx].GetMetaForMGet(key)
+		metrics.Incr(metrics.KEY_GETS, metrics.GetShardTag(shardIdx))
+
+		if meta.Expired {
+			metrics.Incr(metrics.KEY_EXPIRED_ENTRIES, metrics.GetShardTag(shardIdx))
+			results[i] = MGetResult{Expired: true}
+			continue
+		}
+
+		if !meta.Found {
+			continue
+		}
+
+		// Memtable hit — validate and return inline.
+		if meta.Value != nil {
+			val, ok := wc.shards[shardIdx].ValidateAndExtract(meta.Value, key, meta.Length)
+			if ok {
+				metrics.Incr(metrics.KEY_HITS, metrics.GetShardTag(shardIdx))
+				results[i] = MGetResult{Value: val, Found: true}
+			}
+			if meta.ShouldReWrite && ok {
+				metrics.Incr(metrics.KEY_REWRITES, metrics.GetShardTag(shardIdx))
+				valCopy := make([]byte, len(val))
+				copy(valCopy, val)
+				go wc.rewrite(key, valCopy, meta.RemainingTTL)
+			}
+			continue
+		}
+
+		// Needs disk read — collect for Phase 2.
+		if meta.NeedsDiskRead {
+			diskReads = append(diskReads, pendingEntry{
+				keyIdx:   i,
+				key:      key,
+				shardIdx: shardIdx,
+				meta:     meta,
+			})
+		}
+	}
+
+	// ── Phase 2: submit all disk reads in a tight loop (no goroutines). ──
+	// Requests land in io_uring reqCh back-to-back so the submit goroutine
+	// drains them as a single batch → one io_uring_enter call.
+	for j := range diskReads {
+		pr, err := wc.shards[diskReads[j].shardIdx].SubmitDiskReadAsync(
+			diskReads[j].meta.FileOffset, diskReads[j].meta.Length)
+		if err != nil {
+			continue
+		}
+		diskReads[j].pending = pr
+	}
+
+	// ── Phase 3: collect all completions + validate ──
+	for _, dr := range diskReads {
+		if dr.pending == nil {
+			continue
+		}
+
+		buf := wc.shards[dr.shardIdx].CollectDiskRead(dr.pending)
+		if buf == nil {
+			continue
+		}
+
+		val, ok := wc.shards[dr.shardIdx].ValidateAndExtract(buf, dr.key, dr.meta.Length)
+		if ok {
+			metrics.Incr(metrics.KEY_HITS, metrics.GetShardTag(dr.shardIdx))
+			results[dr.keyIdx] = MGetResult{Value: val, Found: true}
+		}
+		if dr.meta.ShouldReWrite && ok {
+			metrics.Incr(metrics.KEY_REWRITES, metrics.GetShardTag(dr.shardIdx))
+			valCopy := make([]byte, len(val))
+			copy(valCopy, val)
+			go wc.rewrite(dr.key, valCopy, dr.meta.RemainingTTL)
+		}
+	}
+
+	return results
+}
+
 func (wc *WrapCache) hash(key string) uint32 {
 	return uint32(xxhash.Sum64String(key) ^ wc.seed)
 }
