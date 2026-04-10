@@ -47,7 +47,7 @@ func TestNewMemtableManager_Success(t *testing.T) {
 	file := createTestFileForManager(t)
 	defer cleanupManagerFile(file)
 
-	manager, err := NewMemtableManager(file, capacity)
+	manager, err := NewMemtableManager(file, capacity, 0)
 	if err != nil {
 		t.Fatalf("NewMemtableManager failed: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestNewMemtableManager_InvalidCapacity(t *testing.T) {
 	file := createTestFileForManager(t)
 	defer cleanupManagerFile(file)
 
-	_, err := NewMemtableManager(file, capacity)
+	_, err := NewMemtableManager(file, capacity, 0)
 	if err == nil {
 		t.Errorf("Expected NewMemtableManager to fail with invalid capacity")
 	}
@@ -102,7 +102,7 @@ func TestNewMemtableManager_InvalidCapacity(t *testing.T) {
 func TestNewMemtableManager_NilFile(t *testing.T) {
 	capacity := int32(fs.BLOCK_SIZE * 2)
 
-	_, err := NewMemtableManager(nil, capacity)
+	_, err := NewMemtableManager(nil, capacity, 0)
 	if err == nil {
 		t.Errorf("Expected NewMemtableManager to fail with nil file")
 	}
@@ -113,7 +113,7 @@ func TestMemtableManager_GetMemtable(t *testing.T) {
 	file := createTestFileForManager(t)
 	defer cleanupManagerFile(file)
 
-	manager, err := NewMemtableManager(file, capacity)
+	manager, err := NewMemtableManager(file, capacity, 0)
 	if err != nil {
 		t.Fatalf("NewMemtableManager failed: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestMemtableManager_GetMemtableById(t *testing.T) {
 	file := createTestFileForManager(t)
 	defer cleanupManagerFile(file)
 
-	manager, err := NewMemtableManager(file, capacity)
+	manager, err := NewMemtableManager(file, capacity, 0)
 	if err != nil {
 		t.Fatalf("NewMemtableManager failed: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestMemtableManager_Flush(t *testing.T) {
 	file := createTestFileForManager(t)
 	defer cleanupManagerFile(file)
 
-	manager, err := NewMemtableManager(file, capacity)
+	manager, err := NewMemtableManager(file, capacity, 0)
 	if err != nil {
 		t.Fatalf("NewMemtableManager failed: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestMemtableManager_FlushSwapsBetweenMemtables(t *testing.T) {
 	file := createTestFileForManager(t)
 	defer cleanupManagerFile(file)
 
-	manager, err := NewMemtableManager(file, capacity)
+	manager, err := NewMemtableManager(file, capacity, 0)
 	if err != nil {
 		t.Fatalf("NewMemtableManager failed: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestMemtableManager_FlushConcurrency(t *testing.T) {
 	file := createTestFileForManager(t)
 	defer cleanupManagerFile(file)
 
-	manager, err := NewMemtableManager(file, capacity)
+	manager, err := NewMemtableManager(file, capacity, 0)
 	if err != nil {
 		t.Fatalf("NewMemtableManager failed: %v", err)
 	}
@@ -296,7 +296,7 @@ func TestMemtableManager_GetMemtableAfterFlush(t *testing.T) {
 	file := createTestFileForManager(t)
 	defer cleanupManagerFile(file)
 
-	manager, err := NewMemtableManager(file, capacity)
+	manager, err := NewMemtableManager(file, capacity, 0)
 	if err != nil {
 		t.Fatalf("NewMemtableManager failed: %v", err)
 	}
@@ -333,7 +333,7 @@ func TestMemtableManager_Integration(t *testing.T) {
 	file := createTestFileForManager(t)
 	defer cleanupManagerFile(file)
 
-	manager, err := NewMemtableManager(file, capacity)
+	manager, err := NewMemtableManager(file, capacity, 0)
 	if err != nil {
 		t.Fatalf("NewMemtableManager failed: %v", err)
 	}

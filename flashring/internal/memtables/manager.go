@@ -19,7 +19,11 @@ type MemtableManager struct {
 	semaphore      chan int
 }
 
-func NewMemtableManager(file *fs.WrapAppendFile, capacity int32) (*MemtableManager, error) {
+// NewMemtableManager creates a double-buffered memtable pair.
+// flushStaggerOffset advances the active memtable's write position so that
+// different shards fill (and therefore flush) at staggered times, avoiding
+// synchronized flush storms that compete with reads for NVMe bandwidth.
+func NewMemtableManager(file *fs.WrapAppendFile, capacity int32, flushStaggerOffset int) (*MemtableManager, error) {
 	allocatorConfig := allocators.SlabAlignedPageAllocatorConfig{
 		SizeClasses: []allocators.SizeClass{
 			{Size: int(capacity), MinCount: 2},
@@ -49,6 +53,10 @@ func NewMemtableManager(file *fs.WrapAppendFile, capacity int32) (*MemtableManag
 	if err != nil {
 		return nil, err
 	}
+	// Pre-advance the active memtable so this shard's first flush happens
+	// earlier/later than its peers, spreading flush I/O over time.
+	memtable1.currentOffset = flushStaggerOffset
+
 	memtableManager := &MemtableManager{
 		file:           file,
 		Capacity:       capacity,

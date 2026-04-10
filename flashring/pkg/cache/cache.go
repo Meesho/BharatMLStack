@@ -144,6 +144,13 @@ func NewWrapCache(config Config, mountPoint string) (*WrapCache, error) {
 	metrics.BuildShardTags(config.NumShards)
 	shardLocks := make([]sync.RWMutex, config.NumShards)
 	shards := make([]*filecache.ShardCache, config.NumShards)
+
+	// Stagger each shard's first memtable fill level so flushes are spread
+	// evenly over time instead of all firing at once. Shard i starts with
+	// i/N of its memtable already "used", so it fills sooner by that fraction.
+	// After the first cycle the stagger is self-sustaining.
+	staggerStep := (int(config.MemtableSize) / config.NumShards) &^ (blockSize - 1) // block-align
+
 	for i := 0; i < config.NumShards; i++ {
 		shards[i], err = filecache.NewShardCache(filecache.ShardCacheConfig{
 			MemtableSize:        config.MemtableSize,
@@ -157,6 +164,7 @@ func NewWrapCache(config Config, mountPoint string) (*WrapCache, error) {
 			Predictor:           predictor,
 			IoUringReader:       readRing,
 			IoUringWriter:       writeRing,
+			FlushStaggerOffset:  i * staggerStep,
 		}, &shardLocks[i])
 		if err != nil {
 			for j := 0; j < i; j++ {

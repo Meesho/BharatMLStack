@@ -29,7 +29,7 @@ func createManagerBenchmarkFile(b *testing.B) *fs.WrapAppendFile {
 func Benchmark_Puts(b *testing.B) {
 	file := createManagerBenchmarkFile(b)
 
-	manager, err := NewMemtableManager(file, 1024*1024*1024)
+	manager, err := NewMemtableManager(file, 1024*1024*1024, 0)
 	if err != nil {
 		b.Fatalf("Failed to create memtable manager: %v", err)
 	}

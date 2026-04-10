@@ -44,6 +44,10 @@ type ShardCacheConfig struct {
 
 	// Dedicated io_uring writer for batched writes (shared across all shards).
 	IoUringWriter *iouring.IoUringWriter
+
+	// FlushStaggerOffset pre-advances the first memtable so shards flush at
+	// staggered times instead of all at once.
+	FlushStaggerOffset int
 }
 
 func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) (*ShardCache, error) {
@@ -59,7 +63,7 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) (*ShardCache, erro
 	if err != nil {
 		return nil, fmt.Errorf("create shard file: %w", err)
 	}
-	memtableManager, err := memtables.NewMemtableManager(file, config.MemtableSize)
+	memtableManager, err := memtables.NewMemtableManager(file, config.MemtableSize, config.FlushStaggerOffset)
 	if err != nil {
 		file.Close()
 		return nil, fmt.Errorf("create memtable manager: %w", err)
