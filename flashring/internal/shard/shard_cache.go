@@ -346,6 +346,54 @@ func (fc *ShardCache) CollectDiskRead(pr *PendingRead) []byte {
 	return buf
 }
 
+// CoalescedPendingRead represents an in-flight async io_uring disk read that
+// covers a merged aligned region shared by multiple keys.
+type CoalescedPendingRead struct {
+	done        <-chan iouring.ReadResult
+	page        *fs.AlignedPage
+	alignedSize int
+}
+
+// SubmitCoalescedReadAsync enqueues a single aligned disk read that covers
+// multiple keys whose file offsets fall within [alignedStart, alignedStart+alignedSize).
+func (fc *ShardCache) SubmitCoalescedReadAsync(alignedStart int64, alignedSize int) (*CoalescedPendingRead, error) {
+	page := fc.readPageAllocator.Get(alignedSize)
+	readBuf := page.Buf[:alignedSize]
+
+	validOffset, err := fc.file.ValidateReadOffset(alignedStart, alignedSize)
+	if err != nil {
+		fc.readPageAllocator.Put(page)
+		return nil, err
+	}
+
+	done := fc.iouringReader.SubmitAsync(fc.file.ReadFd, readBuf, uint64(validOffset))
+
+	return &CoalescedPendingRead{
+		done:        done,
+		page:        page,
+		alignedSize: alignedSize,
+	}, nil
+}
+
+// CollectCoalescedRead blocks until the coalesced io_uring read completes and
+// returns the full aligned buffer. The caller extracts individual key regions
+// using each key's offset relative to the aligned start.
+func (fc *ShardCache) CollectCoalescedRead(pr *CoalescedPendingRead) []byte {
+	result := <-pr.done
+	defer fc.readPageAllocator.Put(pr.page)
+
+	if result.Err != nil || result.N != pr.alignedSize {
+		if result.Err != nil {
+			log.Warn().Err(result.Err).Msg("io_uring coalesced pread failed in MGet")
+		}
+		return nil
+	}
+
+	buf := make([]byte, pr.alignedSize)
+	copy(buf, pr.page.Buf[:pr.alignedSize])
+	return buf
+}
+
 // ValidateAndExtract checks the CRC32 and key, then extracts the value from
 // a raw data buffer. Used by MGet for both memtable and disk-read results.
 func (fc *ShardCache) ValidateAndExtract(buf []byte, key string, length uint16) ([]byte, bool) {

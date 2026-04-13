@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
 	"github.com/Meesho/BharatMLStack/flashring/internal/iouring"
 	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
 	filecache "github.com/Meesho/BharatMLStack/flashring/internal/shard"
@@ -284,11 +286,12 @@ type MGetResult struct {
 // io_uring for significantly lower and more consistent latency than issuing
 // individual Get calls (even concurrently via goroutines).
 //
-// The operation runs in three phases on a single goroutine:
+// The operation runs in four phases on a single goroutine:
 //  1. Index lookups + memtable checks for every key (in-memory, fast).
-//  2. Submit all required disk reads to io_uring in a tight loop so the
-//     submit goroutine can collect them into one batch / one io_uring_enter.
-//  3. Collect completions, validate CRC32, and return results.
+//  2. Coalesce: sort pending reads by (shard, offset), merge overlapping
+//     aligned ranges so nearby keys share a single io_uring pread.
+//  3. Submit one pread per coalesced group in a tight loop.
+//  4. Collect completions, scatter to individual keys, validate CRC32.
 func (wc *WrapCache) MGet(keys []string) []MGetResult {
 	results := make([]MGetResult, len(keys))
 
@@ -297,7 +300,6 @@ func (wc *WrapCache) MGet(keys []string) []MGetResult {
 		key      string
 		shardIdx uint32
 		meta     filecache.MGetMeta
-		pending  *filecache.PendingRead
 	}
 
 	var diskReads []pendingEntry
@@ -336,7 +338,7 @@ func (wc *WrapCache) MGet(keys []string) []MGetResult {
 			continue
 		}
 
-		// Needs disk read — collect for Phase 2.
+		// Needs disk read — collect for coalescing.
 		if meta.NeedsDiskRead {
 			diskReads = append(diskReads, pendingEntry{
 				keyIdx:   i,
@@ -347,39 +349,94 @@ func (wc *WrapCache) MGet(keys []string) []MGetResult {
 		}
 	}
 
-	// ── Phase 2: submit all disk reads in a tight loop (no goroutines). ──
-	// Requests land in io_uring reqCh back-to-back so the submit goroutine
-	// drains them as a single batch → one io_uring_enter call.
-	for j := range diskReads {
-		pr, err := wc.shards[diskReads[j].shardIdx].SubmitDiskReadAsync(
-			diskReads[j].meta.FileOffset, diskReads[j].meta.Length)
+	if len(diskReads) == 0 {
+		return results
+	}
+
+	// ── Phase 2: coalesce nearby disk reads ──
+	// Sort by (shard, file offset) so keys that map to overlapping or
+	// adjacent 4KB-aligned blocks end up next to each other.
+	sort.Slice(diskReads, func(i, j int) bool {
+		if diskReads[i].shardIdx != diskReads[j].shardIdx {
+			return diskReads[i].shardIdx < diskReads[j].shardIdx
+		}
+		return diskReads[i].meta.FileOffset < diskReads[j].meta.FileOffset
+	})
+
+	type coalescedGroup struct {
+		shardIdx     uint32
+		alignedStart int64
+		alignedEnd   int64 // exclusive
+		members      []int // indices into diskReads
+		pending      *filecache.CoalescedPendingRead
+	}
+
+	groups := make([]coalescedGroup, 0, len(diskReads))
+	for i, dr := range diskReads {
+		aStart, aSize := fs.AlignRange(dr.meta.FileOffset, int(dr.meta.Length), fs.BLOCK_SIZE)
+		aEnd := aStart + aSize
+
+		if len(groups) > 0 {
+			last := &groups[len(groups)-1]
+			if dr.shardIdx == last.shardIdx && aStart <= last.alignedEnd {
+				// Overlapping or adjacent — extend the group.
+				if aEnd > last.alignedEnd {
+					last.alignedEnd = aEnd
+				}
+				last.members = append(last.members, i)
+				continue
+			}
+		}
+
+		groups = append(groups, coalescedGroup{
+			shardIdx:     dr.shardIdx,
+			alignedStart: aStart,
+			alignedEnd:   aEnd,
+			members:      []int{i},
+		})
+	}
+
+	// ── Phase 3: submit one io_uring pread per coalesced group ──
+	for g := range groups {
+		size := int(groups[g].alignedEnd - groups[g].alignedStart)
+		pr, err := wc.shards[groups[g].shardIdx].SubmitCoalescedReadAsync(
+			groups[g].alignedStart, size)
 		if err != nil {
 			continue
 		}
-		diskReads[j].pending = pr
+		groups[g].pending = pr
 	}
 
-	// ── Phase 3: collect all completions + validate ──
-	for _, dr := range diskReads {
-		if dr.pending == nil {
+	// ── Phase 4: collect completions, scatter to individual keys ──
+	for _, grp := range groups {
+		if grp.pending == nil {
 			continue
 		}
 
-		buf := wc.shards[dr.shardIdx].CollectDiskRead(dr.pending)
-		if buf == nil {
+		coalescedBuf := wc.shards[grp.shardIdx].CollectCoalescedRead(grp.pending)
+		if coalescedBuf == nil {
 			continue
 		}
 
-		val, ok := wc.shards[dr.shardIdx].ValidateAndExtract(buf, dr.key, dr.meta.Length)
-		if ok {
-			metrics.Incr(metrics.KEY_HITS, metrics.GetShardTag(dr.shardIdx))
-			results[dr.keyIdx] = MGetResult{Value: val, Found: true}
-		}
-		if dr.meta.ShouldReWrite && ok {
-			metrics.Incr(metrics.KEY_REWRITES, metrics.GetShardTag(dr.shardIdx))
-			valCopy := make([]byte, len(val))
-			copy(valCopy, val)
-			go wc.rewrite(dr.key, valCopy, dr.meta.RemainingTTL)
+		for _, memberIdx := range grp.members {
+			dr := diskReads[memberIdx]
+			bufOffset := int(dr.meta.FileOffset - grp.alignedStart)
+			if bufOffset < 0 || bufOffset+int(dr.meta.Length) > len(coalescedBuf) {
+				continue
+			}
+
+			keyBuf := coalescedBuf[bufOffset : bufOffset+int(dr.meta.Length)]
+			val, ok := wc.shards[dr.shardIdx].ValidateAndExtract(keyBuf, dr.key, dr.meta.Length)
+			if ok {
+				metrics.Incr(metrics.KEY_HITS, metrics.GetShardTag(dr.shardIdx))
+				results[dr.keyIdx] = MGetResult{Value: val, Found: true}
+			}
+			if dr.meta.ShouldReWrite && ok {
+				metrics.Incr(metrics.KEY_REWRITES, metrics.GetShardTag(dr.shardIdx))
+				valCopy := make([]byte, len(val))
+				copy(valCopy, val)
+				go wc.rewrite(dr.key, valCopy, dr.meta.RemainingTTL)
+			}
 		}
 	}
 
