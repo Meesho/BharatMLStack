@@ -73,7 +73,7 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) (*ShardCache, erro
 	sizeClasses := make([]allocators.SizeClass, 0)
 	i := fs.BLOCK_SIZE
 	minCount := 24
-	iMax := (1 << 16)
+	iMax := (1 << 17)
 	for i < iMax {
 		sizeClasses = append(sizeClasses, allocators.SizeClass{Size: i, MinCount: minCount})
 		i *= 2

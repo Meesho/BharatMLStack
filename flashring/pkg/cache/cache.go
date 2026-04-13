@@ -23,7 +23,7 @@ const (
 	rounds              = 1
 	maxKeysShard        = (1 << 26) // 67M
 	blockSize           = 4096
-	maxCoalescedReadSz  = 32768 // must match the largest slab allocator size class
+	maxCoalescedReadSz  = 65536 // must match the largest slab allocator size class
 )
 
 // Cache is the common interface for all cache backends.
