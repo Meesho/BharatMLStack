@@ -20,9 +20,10 @@ import (
 )
 
 const (
-	rounds       = 1
-	maxKeysShard = (1 << 26) // 67M
-	blockSize    = 4096
+	rounds              = 1
+	maxKeysShard        = (1 << 26) // 67M
+	blockSize           = 4096
+	maxCoalescedReadSz  = 32768 // must match the largest slab allocator size class
 )
 
 // Cache is the common interface for all cache backends.
@@ -378,11 +379,15 @@ func (wc *WrapCache) MGet(keys []string) []MGetResult {
 
 		if len(groups) > 0 {
 			last := &groups[len(groups)-1]
-			if dr.shardIdx == last.shardIdx && aStart <= last.alignedEnd {
-				// Overlapping or adjacent — extend the group.
-				if aEnd > last.alignedEnd {
-					last.alignedEnd = aEnd
-				}
+			// Merge if same shard, overlapping/adjacent, and the result
+			// still fits within the slab allocator's largest size class.
+			mergedEnd := last.alignedEnd
+			if aEnd > mergedEnd {
+				mergedEnd = aEnd
+			}
+			if dr.shardIdx == last.shardIdx && aStart <= last.alignedEnd &&
+				mergedEnd-last.alignedStart <= maxCoalescedReadSz {
+				last.alignedEnd = mergedEnd
 				last.members = append(last.members, i)
 				continue
 			}
