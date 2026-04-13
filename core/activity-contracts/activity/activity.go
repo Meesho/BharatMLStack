@@ -15,6 +15,10 @@ type ActivityInput struct {
 	Async               bool                   `json:"async"`
 	PluginVersion       string                 `json:"plugin_version"`
 	StepId              string                 `json:"step_id,omitempty"`
+	// Attempt is the 1-based Temporal activity attempt number for this invocation.
+	// Async plugins must include this in the payload they send to the external system
+	// so that callbacks can be routed back to the exact attempt that triggered the work.
+	Attempt int `json:"attempt,omitempty"`
 	// Config holds plugin-specific configuration injected from etcd at call time.
 	// Plugins should read environment-specific values from here instead of os.Getenv,
 	// so that config can be updated in etcd without redeploying the orchestrator.
