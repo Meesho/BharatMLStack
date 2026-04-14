@@ -20,10 +20,10 @@ import (
 )
 
 const (
-	rounds              = 1
-	maxKeysShard        = (1 << 26) // 67M
-	blockSize           = 4096
-	maxCoalescedReadSz  = 65536 // must match the largest slab allocator size class
+	rounds             = 1
+	maxKeysShard       = (1 << 26) // 67M
+	blockSize          = 4096
+	maxCoalescedReadSz = 65536 // must match the largest slab allocator size class
 )
 
 // Cache is the common interface for all cache backends.
@@ -127,8 +127,8 @@ func NewWrapCache(config Config, mountPoint string) (*WrapCache, error) {
 
 	readRing, err := iouring.NewParallelBatchIoUringReader(iouring.BatchIoUringConfig{
 		RingDepth:   256,
-		MaxBatch:    100,
-		MaxInflight: 100,
+		MaxBatch:    256,
+		MaxInflight: 256,
 		QueueSize:   1024,
 		Window:      0,
 		SQPoll:      true,
