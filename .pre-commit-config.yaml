@@ -7,3 +7,12 @@ repos:
         entry: "pre-commit-scripts/runner.sh"
         language: script
         stages: ["pre-commit", "pre-push"]
+  - repo: local
+    hooks:
+      - id: post-commit
+        name: Post Commit
+        description: Run post-commit scripts.
+        entry: "post-commit-scripts/runner.sh"
+        language: script
+        stages: ["post-commit"]
+        always_run: true
