@@ -126,10 +126,10 @@ func NewWrapCache(config Config, mountPoint string) (*WrapCache, error) {
 	})
 
 	readRing, err := iouring.NewParallelBatchIoUringReader(iouring.BatchIoUringConfig{
-		RingDepth:   256,
-		MaxBatch:    256,
-		MaxInflight: 256,
-		QueueSize:   1024,
+		RingDepth:   512,
+		MaxBatch:    512,
+		MaxInflight: 512,
+		QueueSize:   2048,
 		Window:      0,
 		SQPoll:      true,
 	}, 4)
