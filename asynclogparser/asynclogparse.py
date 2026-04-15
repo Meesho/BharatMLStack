@@ -23,6 +23,7 @@ except ImportError:
 # Constants for the log file format
 HEADER_SIZE = 8  # 4 bytes capacity + 4 bytes validDataBytes
 LENGTH_PREFIX_SIZE = 4  # 4 bytes for record length
+TIMESTAMP_SIZE = 8  # 8 bytes for UnixNano timestamp (uint64 LE)
 
 
 def deframe_log_file(log_path):
@@ -423,15 +424,27 @@ def deframe_log_file(log_path):
                 # asyncloguploader format has NO alignment padding between records
                 if record_length == 0:
                     continue
-                
+
                 # Check if record fits in remaining data
                 if offset + record_length > valid_data_bytes:
                     # Record extends beyond valid data, stop processing this frame
                     break
-                
-                # Extract the record
-                record = data_block[offset:offset+record_length]
-                records.append(record)
+
+                # New format: [8-byte timestamp (UnixNano LE)][protobuf payload]
+                # recLen = TIMESTAMP_SIZE + len(payload)
+                if record_length < TIMESTAMP_SIZE:
+                    # Record too short to contain timestamp, skip
+                    offset += record_length
+                    continue
+
+                # Extract timestamp (first 8 bytes of the record)
+                timestamp_ns = int.from_bytes(
+                    data_block[offset:offset+TIMESTAMP_SIZE],
+                    byteorder='little'
+                )
+                # Extract protobuf payload (remaining bytes after timestamp)
+                payload = data_block[offset+TIMESTAMP_SIZE:offset+record_length]
+                records.append((timestamp_ns, payload))
                 records_in_frame += 1
                 offset += record_length
                 # asyncloguploader format: records are packed back-to-back with NO alignment padding
@@ -582,13 +595,19 @@ def fetch_feature_schema(model_config_id, version=1):
     return None
 
 
-def parse_and_decode_mplog(record):
+def parse_and_decode_mplog(record, timestamp_ns=None):
     """
     Parse MPLog protobuf and decode features using inference-logging-client.
+    record: raw protobuf bytes (timestamp already stripped)
+    timestamp_ns: UnixNano timestamp extracted from the log frame header
     """
     try:
         # Parse the MPLog protobuf using inference-logging-client
-        mplog = ilc.parse_mplog_protobuf(record)
+        # inference-logging-client 0.3.1 uses get_mplog_metadata
+        if hasattr(ilc, 'get_mplog_metadata'):
+            mplog = ilc.get_mplog_metadata(record)
+        else:
+            mplog = ilc.parse_mplog_protobuf(record)
         
         # Extract basic fields
         user_id = getattr(mplog, 'user_id', '')
@@ -749,6 +768,7 @@ def parse_and_decode_mplog(record):
             }
         
         return {
+            'timestamp_ns': timestamp_ns,
             'user_id': user_id,
             'tracking_id': tracking_id,
             'mp_config_id': mp_config_id,
@@ -778,6 +798,11 @@ def format_output(parsed_data, output_file, record_num):
         return
     
     output_file.write(f"=== Record {record_num} ===\n")
+    timestamp_ns = parsed_data.get('timestamp_ns')
+    if timestamp_ns is not None:
+        import datetime
+        ts = datetime.datetime.fromtimestamp(timestamp_ns / 1e9, tz=datetime.timezone.utc)
+        output_file.write(f"Timestamp: {ts.strftime('%Y-%m-%d %H:%M:%S.%f')} UTC (raw: {timestamp_ns} ns)\n")
     output_file.write(f"User ID: {parsed_data['user_id']}\n")
     output_file.write(f"Tracking ID: {parsed_data['tracking_id']}\n")
     output_file.write(f"Model Config ID: {parsed_data['mp_config_id']}\n")
@@ -872,7 +897,7 @@ def main():
     if len(records) > 0:
         print(f"Saving {len(records)} raw protobuf records to {raw_records_file} for verification...")
         with open(raw_records_file, 'wb') as f:
-            for i, record in enumerate(records):
+            for i, (ts_ns, record) in enumerate(records):
                 # Write record with length prefix for easy reading
                 f.write(struct.pack('<I', len(record)))
                 f.write(record)
@@ -909,9 +934,9 @@ def main():
     # Process all records
     print(f"Processing {len(records)} records...")
     with open(output_path, 'w') as out_file:
-        for i, record in enumerate(records):
+        for i, (timestamp_ns, record) in enumerate(records):
             print(f"[DEBUG] Starting record {i+1}/{len(records)}", flush=True)
-            parsed_data = parse_and_decode_mplog(record)
+            parsed_data = parse_and_decode_mplog(record, timestamp_ns=timestamp_ns)
             print(f"[DEBUG] Parsed record {i+1}, formatting output...", flush=True)
             format_output(parsed_data, out_file, i+1)
             out_file.flush()  # Ensure output is written immediately

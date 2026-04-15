@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "inference-logging-client-ssd"
+version = "0.1.0"
+description = "Parse asyncloguploader SSD log files into pandas DataFrames"
+requires-python = ">=3.10"
+dependencies = [
+    "inference-logging-client>=0.3.1",
+    "pandas>=1.5.0",
+]
+
+[project.optional-dependencies]
+# Install zstandard if your logs are zstd-compressed (compression_enabled=True)
+zstd = ["zstandard>=0.21.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/inference_logging_client_ssd"]
