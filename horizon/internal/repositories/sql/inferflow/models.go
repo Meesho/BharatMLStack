@@ -11,12 +11,13 @@ type DagExecutionConfig struct {
 }
 
 type NumerixComponent struct {
-	Component    string            `json:"component"`
-	ComponentID  string            `json:"component_id"`
-	ScoreCol     string            `json:"score_col"`
-	ComputeID    string            `json:"compute_id"`
-	ScoreMapping map[string]string `json:"score_mapping"`
-	DataType     string            `json:"data_type"`
+	Component      string            `json:"component"`
+	ComponentID    string            `json:"component_id"`
+	ScoreCol       string            `json:"score_col"`
+	ComputeID      string            `json:"compute_id"`
+	ScoreMapping   map[string]string `json:"score_mapping"`
+	DataType       string            `json:"data_type"`
+	SlateComponent bool              `json:"slate_component"`
 }
 
 type PredatorInput struct {
@@ -40,16 +41,17 @@ type RoutingConfig struct {
 }
 
 type PredatorComponent struct {
-	Component     string           `json:"component"`
-	ComponentID   string           `json:"component_id"`
-	ModelName     string           `json:"model_name"`
-	ModelEndPoint string           `json:"model_end_point"`
-	Calibration   string           `json:"calibration,omitempty"`
-	Deadline      int              `json:"deadline"`
-	BatchSize     int              `json:"batch_size"`
-	Inputs        []PredatorInput  `json:"inputs"`
-	Outputs       []PredatorOutput `json:"outputs"`
-	RoutingConfig []RoutingConfig  `json:"route_config,omitempty"`
+	Component      string           `json:"component"`
+	ComponentID    string           `json:"component_id"`
+	ModelName      string           `json:"model_name"`
+	ModelEndPoint  string           `json:"model_end_point"`
+	Calibration    string           `json:"calibration,omitempty"`
+	Deadline       int              `json:"deadline"`
+	BatchSize      int              `json:"batch_size"`
+	Inputs         []PredatorInput  `json:"inputs"`
+	Outputs        []PredatorOutput `json:"outputs"`
+	RoutingConfig  []RoutingConfig  `json:"route_config,omitempty"`
+	SlateComponent bool             `json:"slate_component"`
 }
 
 type ResponseConfig struct {
@@ -144,23 +146,25 @@ type OnboardPayload struct {
 }
 
 type OnboardRanker struct {
-	ModelName     string           `json:"model_name"`
-	BatchSize     int              `json:"batch_size"`
-	Deadline      int              `json:"deadline"`
-	Calibration   string           `json:"calibration"`
-	EndPoint      string           `json:"end_point"`
-	Inputs        []PredatorInput  `json:"inputs"`
-	Outputs       []PredatorOutput `json:"outputs"`
-	EntityID      []string         `json:"entity_id"`
-	RoutingConfig []RoutingConfig  `json:"route_config,omitempty"`
+	ModelName      string           `json:"model_name"`
+	BatchSize      int              `json:"batch_size"`
+	Deadline       int              `json:"deadline"`
+	Calibration    string           `json:"calibration"`
+	EndPoint       string           `json:"end_point"`
+	Inputs         []PredatorInput  `json:"inputs"`
+	Outputs        []PredatorOutput `json:"outputs"`
+	EntityID       []string         `json:"entity_id"`
+	RoutingConfig  []RoutingConfig  `json:"route_config,omitempty"`
+	SlateComponent bool             `json:"slate_component"`
 }
 
 type OnboardReRanker struct {
-	EqVariables map[string]string `json:"eq_variables"`
-	Score       string            `json:"score"`
-	EqID        int               `json:"eq_id"`
-	DataType    string            `json:"data_type"`
-	EntityID    []string          `json:"entity_id"`
+	EqVariables    map[string]string `json:"eq_variables"`
+	Score          string            `json:"score"`
+	EqID           int               `json:"eq_id"`
+	DataType       string            `json:"data_type"`
+	EntityID       []string          `json:"entity_id"`
+	SlateComponent bool              `json:"slate_component"`
 }
 
 type Payload struct {

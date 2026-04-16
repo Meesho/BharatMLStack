@@ -918,15 +918,16 @@ func GetPredatorComponents(request InferflowOnboardRequest, offlineToOnlineMappi
 		}
 
 		predatorComponent := PredatorComponent{
-			Component:     "p" + strconv.Itoa(i+1),
-			ComponentID:   strings.Join(ranker.EntityID, COLON_DELIMITER),
-			ModelName:     ranker.ModelName,
-			ModelEndPoint: ranker.EndPoint,
-			Deadline:      ranker.Deadline,
-			BatchSize:     ranker.BatchSize,
-			Inputs:        make([]PredatorInput, 0, len(ranker.Inputs)),
-			Outputs:       make([]PredatorOutput, 0, len(ranker.Outputs)),
-			RoutingConfig: ranker.RoutingConfig,
+			Component:      "p" + strconv.Itoa(i+1),
+			ComponentID:    strings.Join(ranker.EntityID, COLON_DELIMITER),
+			ModelName:      ranker.ModelName,
+			ModelEndPoint:  ranker.EndPoint,
+			Deadline:       ranker.Deadline,
+			BatchSize:      ranker.BatchSize,
+			Inputs:         make([]PredatorInput, 0, len(ranker.Inputs)),
+			Outputs:        make([]PredatorOutput, 0, len(ranker.Outputs)),
+			RoutingConfig:  ranker.RoutingConfig,
+			SlateComponent: ranker.SlateComponent,
 		}
 
 		if ranker.Calibration != "" {
@@ -988,12 +989,13 @@ func GetNumerixComponents(request InferflowOnboardRequest, offlineToOnlineMappin
 			return nil, err
 		}
 		NumerixComponent := NumerixComponent{
-			Component:    "i" + strconv.Itoa(i+1),
-			ComponentID:  strings.Join(reRanker.EntityID, COLON_DELIMITER),
-			ScoreCol:     reRanker.Score,
-			ComputeID:    strconv.Itoa(reRanker.EqID),
-			ScoreMapping: scoremap,
-			DataType:     reRanker.DataType,
+			Component:      "i" + strconv.Itoa(i+1),
+			ComponentID:    strings.Join(reRanker.EntityID, COLON_DELIMITER),
+			ScoreCol:       reRanker.Score,
+			ComputeID:      strconv.Itoa(reRanker.EqID),
+			ScoreMapping:   scoremap,
+			DataType:       reRanker.DataType,
+			SlateComponent: reRanker.SlateComponent,
 		}
 		NumerixComponents = append(NumerixComponents, NumerixComponent)
 	}

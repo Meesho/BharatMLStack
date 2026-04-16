@@ -26,12 +26,13 @@ type ServiceConfigData struct {
 }
 
 type NumerixComponent struct {
-	Component    string            `json:"component"`
-	ComponentID  string            `json:"component_id"`
-	ScoreCol     string            `json:"score_col"`
-	ComputeID    string            `json:"compute_id"`
-	ScoreMapping map[string]string `json:"score_mapping"`
-	DataType     string            `json:"data_type"`
+	Component      string            `json:"component"`
+	ComponentID    string            `json:"component_id"`
+	ScoreCol       string            `json:"score_col"`
+	ComputeID      string            `json:"compute_id"`
+	ScoreMapping   map[string]string `json:"score_mapping"`
+	DataType       string            `json:"data_type"`
+	SlateComponent bool              `json:"slate_component"`
 }
 
 type PredatorInput struct {
@@ -55,16 +56,17 @@ type RoutingConfig struct {
 }
 
 type PredatorComponent struct {
-	Component     string           `json:"component"`
-	ComponentID   string           `json:"component_id"`
-	ModelName     string           `json:"model_name"`
-	Calibration   string           `json:"calibration,omitempty"`
-	ModelEndPoint string           `json:"model_end_point"`
-	Deadline      int              `json:"deadline"`
-	BatchSize     int              `json:"batch_size"`
-	Inputs        []PredatorInput  `json:"inputs"`
-	Outputs       []PredatorOutput `json:"outputs"`
-	RoutingConfig []RoutingConfig  `json:"route_config,omitempty"`
+	Component      string           `json:"component"`
+	ComponentID    string           `json:"component_id"`
+	ModelName      string           `json:"model_name"`
+	Calibration    string           `json:"calibration,omitempty"`
+	ModelEndPoint  string           `json:"model_end_point"`
+	Deadline       int              `json:"deadline"`
+	BatchSize      int              `json:"batch_size"`
+	Inputs         []PredatorInput  `json:"inputs"`
+	Outputs        []PredatorOutput `json:"outputs"`
+	RoutingConfig  []RoutingConfig  `json:"route_config,omitempty"`
+	SlateComponent bool             `json:"slate_component"`
 }
 
 type RTPComponent struct {
