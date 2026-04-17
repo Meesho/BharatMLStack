@@ -576,14 +576,16 @@ services:
       - EXTERNAL_SERVICE_ONFS_FS_HOST=onfs-api-server
       - EXTERNAL_SERVICE_ONFS_FS_PORT=8089
       - EXTERNAL_SERVICE_ONFS_FS_DEAD_LINE=200
-      # Predator config: Port must match K8s service port 80 (not targetPort 8001)
-      # Since we forward localhost:8090 -> K8s service:80 -> pod:8001
-      # The model endpoint in etcd must be configured as: predator.prd.meesho.int:8090
-      - EXTERNAL_SERVICE_PREDATOR_PORT=8090
+      # Predator config: point inferflow at the quick-start dummy predator
+      # container (predator:8001). Original values (port 8090, deadline 200)
+      # are for the K8s + ArgoCD path described in PREDATOR_SETUP.md, which
+      # relies on `extra_hosts: predator.prd.meesho.int:host-gateway` + a
+      # `kubectl port-forward svc/prd-predator 8090:80` from the host.
+      - EXTERNAL_SERVICE_PREDATOR_PORT=8001
       - EXTERNAL_SERVICE_PREDATOR_GRPC_PLAIN_TEXT=true
       - EXTERNAL_SERVICE_PREDATOR_CALLER_ID=inferflow
       - EXTERNAL_SERVICE_PREDATOR_CALLER_TOKEN=inferflow
-      - EXTERNAL_SERVICE_PREDATOR_DEADLINE=200
+      - EXTERNAL_SERVICE_PREDATOR_DEADLINE=5000
       - METRIC_SAMPLING_RATE=1
       - KAFKA_BOOTSTRAP_SERVERS=broker:29092
       - KAFKA_LOGGING_TOPIC=inferflow_inference_logs
