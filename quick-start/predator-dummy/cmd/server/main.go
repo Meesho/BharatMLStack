@@ -88,34 +88,44 @@ func generateScores(hash uint64, numCatalogs int) []float32 {
 	return scores
 }
 
-// ModelInfer implements the ModelInfer RPC
+// scoreFromHash converts a hash into a float32 in [0, 1).
+func scoreFromHash(hash uint64) float32 {
+	score := float64(hash) / float64(^uint64(0))
+	if score < 0 {
+		score = -score
+	}
+	if score >= 1.0 {
+		score = score - float64(int64(score))
+	}
+	return float32(score)
+}
+
+// inferRowCount determines the batch size (number of rows) from the request.
+// Falls back to 0 if shapes are unavailable, which tells callers to use the
+// legacy catalog-based path.
+func inferRowCount(req *triton.ModelInferRequest) int {
+	for _, in := range req.Inputs {
+		if len(in.Shape) > 0 && in.Shape[0] > 0 {
+			return int(in.Shape[0])
+		}
+	}
+	return 0
+}
+
+// ModelInfer implements the ModelInfer RPC.
+//
+// Two execution modes:
+//  1. Per-row mode (preferred): When req.Inputs[0].Shape[0] > 0 AND the request
+//     carries RawInputContents, we hash the input bytes for each row separately
+//     and emit exactly one score per row per requested output. This makes the
+//     dummy's output actually depend on feature values — different features,
+//     different scores.
+//  2. Legacy catalog mode: If no shape is available, fall back to the original
+//     behaviour (hash of input tensor metadata → 10 deterministic scores).
 func (s *server) ModelInfer(ctx context.Context, req *triton.ModelInferRequest) (*triton.ModelInferResponse, error) {
-	// Hash the input features to get deterministic output
-	hash := hashInputs(req.Inputs)
+	rowCount := inferRowCount(req)
+	hasRawInputs := len(req.RawInputContents) > 0
 
-	// Determine number of catalogs from requested outputs
-	// If no outputs specified, use default of 10 catalogs
-	numCatalogs := 10
-	if len(req.Outputs) > 0 {
-		// Try to infer from output shape or use default
-		// For now, we'll use a default number of catalogs
-		// In real scenario, this would come from model config
-		numCatalogs = 10
-	}
-
-	// Generate deterministic scores
-	scores := generateScores(hash, numCatalogs)
-
-	// Convert FP32 scores to bytes (little-endian format)
-	// This is what RawOutputContents expects
-	rawOutputBytes := make([]byte, len(scores)*4) // FP32 is 4 bytes
-	for i, score := range scores {
-		// Convert float32 to uint32 bits, then to bytes (little-endian)
-		bits := math.Float32bits(score)
-		binary.LittleEndian.PutUint32(rawOutputBytes[i*4:(i+1)*4], bits)
-	}
-
-	// Build response
 	response := &triton.ModelInferResponse{
 		ModelName:         req.ModelName,
 		ModelVersion:      req.ModelVersion,
@@ -124,40 +134,82 @@ func (s *server) ModelInfer(ctx context.Context, req *triton.ModelInferRequest) 
 		RawOutputContents: make([][]byte, 0),
 	}
 
-	// If no outputs specified, create a default output
-	if len(req.Outputs) == 0 {
-		response.Outputs = []*triton.ModelInferResponse_InferOutputTensor{
-			{
-				Name:     "output",
-				Datatype: "FP32",
-				Shape:    []int64{int64(len(scores))},
-			},
+	if rowCount > 0 && hasRawInputs {
+		// Per-row hashing: chunk each input tensor's raw bytes by row and hash.
+		rowHashes := make([]uint64, rowCount)
+		for inputIdx, in := range req.Inputs {
+			if inputIdx >= len(req.RawInputContents) {
+				break
+			}
+			raw := req.RawInputContents[inputIdx]
+			if len(raw) == 0 || rowCount == 0 {
+				continue
+			}
+			bytesPerRow := len(raw) / rowCount
+			if bytesPerRow == 0 {
+				continue
+			}
+			for row := 0; row < rowCount; row++ {
+				start := row * bytesPerRow
+				end := start + bytesPerRow
+				if end > len(raw) {
+					end = len(raw)
+				}
+				h := sha256.New()
+				h.Write([]byte(in.Name))
+				h.Write(raw[start:end])
+				sum := h.Sum(nil)
+				// Mix with any previous input's hash for this row so multi-input
+				// tensors compose.
+				mixed := binary.LittleEndian.Uint64(sum[:8])
+				rowHashes[row] = rowHashes[row] ^ mixed
+			}
 		}
+
+		outs := req.Outputs
+		if len(outs) == 0 {
+			outs = []*triton.ModelInferRequest_InferRequestedOutputTensor{{Name: "output"}}
+		}
+
+		// One FP32 score per row per requested output. The helix-client adapter
+		// reads RawOutputContents[outputIdx] as rowCount*4 bytes.
+		for outIdx, outReq := range outs {
+			buf := make([]byte, rowCount*4)
+			for row := 0; row < rowCount; row++ {
+				// Salt the hash with outIdx so multiple outputs differ.
+				score := scoreFromHash(rowHashes[row] + uint64(outIdx)*7919)
+				binary.LittleEndian.PutUint32(buf[row*4:(row+1)*4], math.Float32bits(score))
+			}
+			response.Outputs = append(response.Outputs, &triton.ModelInferResponse_InferOutputTensor{
+				Name:     outReq.Name,
+				Datatype: "FP32",
+				Shape:    []int64{int64(rowCount), 1},
+			})
+			response.RawOutputContents = append(response.RawOutputContents, buf)
+		}
+		return response, nil
+	}
+
+	// Legacy fallback: single catalog-style output (10 deterministic scores).
+	hash := hashInputs(req.Inputs)
+	numCatalogs := 10
+	scores := make([]float32, numCatalogs)
+	for i := 0; i < numCatalogs; i++ {
+		scores[i] = scoreFromHash(hash + uint64(i*7919))
+	}
+	rawOutputBytes := make([]byte, len(scores)*4)
+	for i, score := range scores {
+		binary.LittleEndian.PutUint32(rawOutputBytes[i*4:(i+1)*4], math.Float32bits(score))
+	}
+	if len(req.Outputs) == 0 {
+		response.Outputs = []*triton.ModelInferResponse_InferOutputTensor{{Name: "output", Datatype: "FP32", Shape: []int64{int64(len(scores))}}}
 		response.RawOutputContents = [][]byte{rawOutputBytes}
 	} else {
-		// Fill in requested outputs - each output gets the same scores
 		for _, outputReq := range req.Outputs {
-			response.Outputs = append(response.Outputs, &triton.ModelInferResponse_InferOutputTensor{
-				Name:     outputReq.Name,
-				Datatype: "FP32",
-				Shape:    []int64{int64(len(scores))},
-			})
+			response.Outputs = append(response.Outputs, &triton.ModelInferResponse_InferOutputTensor{Name: outputReq.Name, Datatype: "FP32", Shape: []int64{int64(len(scores))}})
 			response.RawOutputContents = append(response.RawOutputContents, rawOutputBytes)
 		}
 	}
-
-	// Ensure we always return at least one output
-	if len(response.Outputs) == 0 {
-		response.Outputs = []*triton.ModelInferResponse_InferOutputTensor{
-			{
-				Name:     "output",
-				Datatype: "FP32",
-				Shape:    []int64{int64(len(scores))},
-			},
-		}
-		response.RawOutputContents = [][]byte{rawOutputBytes}
-	}
-
 	return response, nil
 }
 
