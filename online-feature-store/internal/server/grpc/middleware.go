@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	AuthToken       = "AUTH_TOKEN"
-	callerIdHeader  = "online-feature-store-caller-id"
-	AuthTokenHeader = "online-feature-store-auth-token"
+	AuthToken       = "auth_token"
+	callerIdHeader  = "online_feature_store_caller_id"
+	AuthTokenHeader = "online_feature_store_auth_token"
 )
 
 func ServerInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
