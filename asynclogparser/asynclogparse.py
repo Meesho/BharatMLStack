@@ -862,15 +862,173 @@ def format_output(parsed_data, output_file, record_num):
     output_file.write("\n")
 
 
+def analyze_file(log_path):
+    """
+    Lightweight structural analysis of a log file.
+    Reports frame structure, data utilization, record counts,
+    and whether records contain timestamp prefixes.
+    Does NOT require inference-logging-client.
+    """
+    import datetime
+
+    file_size = log_path.stat().st_size
+    print(f"\n{'='*60}")
+    print(f"FILE ANALYSIS: {log_path}")
+    print(f"File size: {file_size:,} bytes ({file_size/(1024*1024):.2f} MB)")
+    print(f"{'='*60}\n")
+
+    frames = []
+    total_valid_bytes = 0
+    total_records = 0
+    sample_records = []  # first few records for inspection
+
+    with open(log_path, 'rb') as f:
+        frame_idx = 0
+        while True:
+            frame_start = f.tell()
+            header = f.read(HEADER_SIZE)
+            if len(header) < HEADER_SIZE:
+                break
+
+            capacity = int.from_bytes(header[0:4], byteorder='little')
+            valid_data_bytes = int.from_bytes(header[4:8], byteorder='little')
+
+            frame_info = {
+                'index': frame_idx,
+                'start': frame_start,
+                'capacity': capacity,
+                'valid_data_bytes': valid_data_bytes,
+                'records': 0,
+            }
+
+            # Validate
+            if capacity < HEADER_SIZE or valid_data_bytes > capacity:
+                frame_info['error'] = f"invalid (cap={capacity}, valid={valid_data_bytes})"
+                frames.append(frame_info)
+                break
+
+            data_size = capacity - HEADER_SIZE
+            data_block = f.read(data_size)
+            if len(data_block) < data_size:
+                frame_info['error'] = f"truncated (expected {data_size}, got {len(data_block)})"
+                frames.append(frame_info)
+                break
+
+            # Count records and inspect first few
+            offset = 0
+            records_in_frame = 0
+            while offset < valid_data_bytes:
+                if offset + LENGTH_PREFIX_SIZE > valid_data_bytes:
+                    break
+                rec_len = int.from_bytes(data_block[offset:offset+LENGTH_PREFIX_SIZE], byteorder='little')
+                offset += LENGTH_PREFIX_SIZE
+
+                if rec_len == 0:
+                    continue
+                if offset + rec_len > valid_data_bytes:
+                    break
+
+                records_in_frame += 1
+                if len(sample_records) < 5:
+                    sample_records.append(data_block[offset:offset+rec_len])
+                offset += rec_len
+
+            frame_info['records'] = records_in_frame
+            total_records += records_in_frame
+            total_valid_bytes += valid_data_bytes
+            frames.append(frame_info)
+            frame_idx += 1
+
+    # --- Report ---
+    print(f"FRAME SUMMARY:")
+    print(f"  Total frames: {len(frames)}")
+    print(f"  Total valid data: {total_valid_bytes:,} bytes ({total_valid_bytes/(1024*1024):.2f} MB)")
+    print(f"  Data utilization: {total_valid_bytes/file_size*100:.1f}% of file")
+    print(f"  Total records: {total_records:,}")
+    print()
+
+    print(f"PER-FRAME DETAILS:")
+    for fi in frames:
+        cap_mb = fi['capacity'] / (1024*1024)
+        valid_mb = fi['valid_data_bytes'] / (1024*1024)
+        pct = (fi['valid_data_bytes'] / fi['capacity'] * 100) if fi['capacity'] > 0 else 0
+        err = f"  ERROR: {fi['error']}" if 'error' in fi else ""
+        print(f"  Frame {fi['index']:3d} @ {fi['start']:12,}: "
+              f"capacity={cap_mb:8.2f}MB  valid={valid_mb:8.2f}MB ({pct:5.1f}%)  "
+              f"records={fi['records']:6,}{err}")
+    print()
+
+    # Inspect sample records to detect timestamp prefix
+    print(f"RECORD FORMAT DETECTION (first {len(sample_records)} records):")
+    has_timestamp = True
+    for i, rec in enumerate(sample_records):
+        if len(rec) < TIMESTAMP_SIZE:
+            print(f"  Record {i}: {len(rec)} bytes (too short for timestamp)")
+            has_timestamp = False
+            continue
+        ts_val = int.from_bytes(rec[0:TIMESTAMP_SIZE], byteorder='little')
+        # Valid UnixNano timestamps for 2024-2027 range:
+        # 2024-01-01 = 1704067200000000000, 2028-01-01 = 1830297600000000000
+        ts_looks_valid = 1_600_000_000_000_000_000 < ts_val < 2_000_000_000_000_000_000
+        payload_len = len(rec) - TIMESTAMP_SIZE
+
+        if ts_looks_valid:
+            ts_dt = datetime.datetime.fromtimestamp(ts_val / 1e9, tz=datetime.timezone.utc)
+            print(f"  Record {i}: {len(rec)} bytes, first 8 bytes = {ts_dt.strftime('%Y-%m-%d %H:%M:%S')} UTC "
+                  f"=> LOOKS LIKE TIMESTAMP, payload={payload_len} bytes")
+        else:
+            has_timestamp = False
+            hex_prefix = ' '.join(f'{b:02x}' for b in rec[:min(16, len(rec))])
+            print(f"  Record {i}: {len(rec)} bytes, first 8 bytes as uint64={ts_val} "
+                  f"=> NOT a valid timestamp, hex=[{hex_prefix}]")
+
+    print()
+    if has_timestamp and sample_records:
+        print("  VERDICT: Records HAVE 8-byte timestamp prefix (new format)")
+    elif sample_records:
+        print("  VERDICT: Records do NOT have timestamp prefix (old format)")
+        print("  WARNING: The current parser expects timestamps. Old-format files will be mis-parsed!")
+    print()
+
+    # Summary diagnosis
+    print(f"DIAGNOSIS:")
+    if total_valid_bytes / file_size < 0.1:
+        print(f"  => LOW DATA UTILIZATION ({total_valid_bytes/file_size*100:.1f}%)")
+        print(f"     Only {total_valid_bytes/(1024*1024):.2f}MB of actual data in {file_size/(1024*1024):.2f}MB file.")
+        print(f"     This is a WRITING issue: frames are mostly empty padding.")
+        print(f"     Likely cause: buffers flushed before being full (low traffic or frequent flushes).")
+    elif total_records == 0:
+        print(f"  => NO RECORDS FOUND despite {total_valid_bytes:,} valid bytes.")
+        print(f"     This is a PARSING issue: valid data exists but records can't be extracted.")
+    else:
+        avg_rec_size = total_valid_bytes / total_records if total_records > 0 else 0
+        print(f"  => {total_records:,} records found, avg ~{avg_rec_size:.0f} bytes/record (incl. length prefix)")
+        print(f"     Data utilization: {total_valid_bytes/file_size*100:.1f}%")
+        if total_valid_bytes / file_size > 0.5:
+            print(f"     File is well-utilized. If parsed output seems small, the issue is in decoding/formatting.")
+
+    print(f"\n{'='*60}\n")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Parse asyncloguploader log files using inference-logging-client'
     )
     parser.add_argument('log_file', help='Path to the log file')
-    parser.add_argument('-o', '--output', default=None, 
+    parser.add_argument('-o', '--output', default=None,
                        help='Output file path (default: <log_file>.parsed.log)')
-    
+    parser.add_argument('--analyze', action='store_true',
+                       help='Analyze file structure without parsing protobufs (no inference-logging-client needed)')
+
     args = parser.parse_args()
+
+    if args.analyze:
+        log_path = Path(args.log_file)
+        if not log_path.exists():
+            print(f"Error: Log file not found: {log_path}")
+            sys.exit(1)
+        analyze_file(log_path)
+        return
     
     log_path = Path(args.log_file)
     if not log_path.exists():

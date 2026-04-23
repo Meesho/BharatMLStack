@@ -12,7 +12,7 @@ pip install --upgrade pip
 pip install inference-logging-client==0.3.1
 
 echo "Running asynclogparse.py..."
-python3 asynclogparse.py /Users/neeharmavuduru/Downloads/Image_search_gcs-flush_pdp-ad-multitask-fieldaware-categorylevelscaleup_2026-04-03_16_pdp-ad-multitask-fieldaware-categorylevelscaleup--prd-model-proxy-service-bytes-primary-776f857d9c-sqxh8_2026-04-03_16-34-41.log
+python3 asynclogparse.py /Users/neeharmavuduru/Downloads/Image_search_gcs-flush_search-ad-head-multitask-fieldaware-categorylevelscaleup_2026-04-20_06_search-ad-head-multitask-fieldaware-categorylevelscaleup--logging-test_2026-04-20_06-20-15_0.log
 
 echo "Done!"
 
