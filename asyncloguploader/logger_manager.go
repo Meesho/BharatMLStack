@@ -12,11 +12,12 @@ import (
 // LoggerManager manages multiple Logger instances, one per event name
 // Each event writes to its own log file (e.g., payment.log, login.log)
 type LoggerManager struct {
-	loggers     sync.Map  // eventName (string) -> *Logger
-	baseDir     string    // Base directory for log files
-	config      Config    // Base config (shared settings)
-	uploader    *Uploader // Optional: GCS uploader (created internally if GCSUploadConfig provided)
-	ownUploader bool      // True if uploader was created internally (needs cleanup)
+	loggers     sync.Map     // eventName (string) -> *Logger
+	baseDir     string       // Base directory for log files
+	config      Config       // Base config (shared settings)
+	uploader    *Uploader    // Optional: GCS uploader (created internally if GCSUploadConfig provided)
+	ownUploader bool         // True if uploader was created internally (needs cleanup)
+	ssdManager  *SSDManager  // Optional: SSD lifecycle manager (nil when SSDConfig not set)
 }
 
 // NewLoggerManager creates a new LoggerManager
@@ -32,38 +33,56 @@ func NewLoggerManager(config Config) (*LoggerManager, error) {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	// Extract base directory from LogFilePath
-	// If LogFilePath is already a directory (no file extension), use it directly
-	// Otherwise, extract the directory from the file path
-	cleanedPath := filepath.Clean(config.LogFilePath)
-
-	// Check if the path has a file extension (like .log, .txt, etc.)
-	// If it does, it's a file path - extract the directory
-	// If it doesn't, treat it as a directory and use it directly
-	hasFileExtension := filepath.Ext(cleanedPath) != ""
+	tags := getBaseTags(config.MetricTags)
 
 	var baseDir string
-	if hasFileExtension {
-		// Has file extension, extract directory from file path
-		baseDir = filepath.Dir(cleanedPath)
-	} else {
-		// No file extension - treat as directory and use it directly
-		baseDir = cleanedPath
-	}
+	var ssdManager *SSDManager
 
-	if baseDir == "." || baseDir == "" {
-		baseDir = "."
+	// SSD lifecycle: claim an SSD and use it as the base directory
+	if config.SSDConfig != nil {
+		mgr, err := NewSSDManager(*config.SSDConfig, tags)
+		if err != nil {
+			metric.Incr(MetricLoggerInitializationFailed, tags)
+			return nil, fmt.Errorf("ssd claim failed: %w", err)
+		}
+		ssdManager = mgr
+		baseDir = mgr.SSDPath
+
+		// Snapshot orphan .log.tmp files BEFORE any writers are created,
+		// then rename them to .log in the background so the Uploader picks them up.
+		orphanFiles := listOrphanTmpFiles(baseDir)
+		if len(orphanFiles) > 0 {
+			go recoverOrphanTmpFiles(baseDir, orphanFiles, tags)
+		}
+	} else {
+		// No SSD config — extract base directory from LogFilePath
+		cleanedPath := filepath.Clean(config.LogFilePath)
+		hasFileExtension := filepath.Ext(cleanedPath) != ""
+		if hasFileExtension {
+			baseDir = filepath.Dir(cleanedPath)
+		} else {
+			baseDir = cleanedPath
+		}
+		if baseDir == "." || baseDir == "" {
+			baseDir = "."
+		}
 	}
 
 	lm := &LoggerManager{
-		baseDir: baseDir,
-		config:  config,
+		baseDir:    baseDir,
+		config:     config,
+		ssdManager: ssdManager,
 	}
 
 	// If GCSUploadConfig is provided, create uploader that scans baseDir for .log files
 	if config.GCSUploadConfig != nil {
-		uploader, err := NewUploader(*config.GCSUploadConfig, baseDir, getBaseTags(config.MetricTags))
+		uploader, err := NewUploader(*config.GCSUploadConfig, baseDir, tags)
 		if err != nil {
+			// Clean up SSD claim if uploader creation fails
+			if ssdManager != nil {
+				ssdManager.CancelRenewal()
+				ssdManager.Release()
+			}
 			return nil, fmt.Errorf("failed to create uploader: %w", err)
 		}
 
@@ -72,7 +91,7 @@ func NewLoggerManager(config Config) (*LoggerManager, error) {
 		lm.ownUploader = true
 	}
 
-	metric.Incr(MetricLoggerInitialized, getBaseTags(config.MetricTags))
+	metric.Incr(MetricLoggerInitialized, tags)
 	return lm, nil
 }
 
@@ -218,12 +237,18 @@ func (lm *LoggerManager) ListEventLoggers() []string {
 	return events
 }
 
-// Close gracefully shuts down all loggers, flushing all pending data
-// If LoggerManager created an uploader internally, it will also be stopped
+// Close gracefully shuts down all loggers, flushing all pending data.
+// If LoggerManager created an uploader internally, it will also be stopped.
+// SSD claim is released as the absolute last action.
 func (lm *LoggerManager) Close() error {
 	var firstErr error
 
-	// Close all loggers first
+	// 1. Cancel SSD renewal — stop touching claim file
+	if lm.ssdManager != nil {
+		lm.ssdManager.CancelRenewal()
+	}
+
+	// 2. Close all loggers (drains buffers, rotates .tmp → .log)
 	lm.loggers.Range(func(key, value interface{}) bool {
 		logger := value.(*Logger)
 		if err := logger.Close(); err != nil && firstErr == nil {
@@ -232,9 +257,16 @@ func (lm *LoggerManager) Close() error {
 		return true // continue iteration
 	})
 
-	// Stop uploader if we created it internally
+	// 3. Stop uploader (does final scan + upload before exiting)
 	if lm.ownUploader && lm.uploader != nil {
 		lm.uploader.Stop()
+	}
+
+	// 4. Release SSD claim — absolute last action
+	if lm.ssdManager != nil {
+		if err := lm.ssdManager.Release(); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
 
 	return firstErr

@@ -27,6 +27,13 @@ const (
 	MetricUploadFileDuration         = "uploadFileDuration"
 	MetricUploadBytes                = "uploadBytes"
 	MetricFileRenameFailed           = "fileRenameFailed"
+
+	// SSD lifecycle metrics
+	MetricSSDClaimSuccess      = "ssdClaimSuccess"
+	MetricSSDClaimFailed       = "ssdClaimFailed"
+	MetricSSDRenewalFailed     = "ssdRenewalFailed"
+	MetricSSDOrphanTmpRecovered = "ssdOrphanTmpRecovered"
+	MetricSSDReleased          = "ssdReleased"
 )
 
 func GetLoggerTags(service string, modelId string) []string {

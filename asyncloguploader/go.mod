@@ -9,6 +9,7 @@ require (
 	github.com/Meesho/go-core v1.30.4
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.11.1
+	go.uber.org/goleak v1.3.0
 	golang.org/x/sys v0.38.0
 	google.golang.org/api v0.257.0
 )

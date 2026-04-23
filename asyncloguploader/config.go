@@ -23,6 +23,9 @@ type Config struct {
 	// Upload configuration
 	GCSUploadConfig *GCSUploadConfig // Optional: GCS upload configuration (uploader scans log dir)
 
+	// SSD lifecycle management (optional — nil means use LogFilePath directly)
+	SSDConfig *SSDConfig
+
 	// MetricTags are application-provided tags propagated to all metric emissions
 	// (e.g., from metric.BuildTag(metric.NewTag("service", "x"), ...))
 	MetricTags []string
@@ -38,6 +41,35 @@ type GCSUploadConfig struct {
 	RetryDelay          time.Duration // Delay between retries (default: 5s)
 	GRPCPoolSize        int           // gRPC connection pool size (default: 64)
 	ScanInterval        time.Duration // How often to scan log dir for .log files (default: 10s)
+}
+
+// SSDConfig holds configuration for SSD lifecycle management
+type SSDConfig struct {
+	// Root directory where SSDs are mounted (default: "/mnt/disks")
+	MountRoot string
+
+	// TTL before a claim is considered stale (default: 60s)
+	ClaimTTL time.Duration
+
+	// How often to renew the claim by touching mtime (default: 10s)
+	RenewalInterval time.Duration
+
+	// How long to wait between retry scans when no SSD is available (default: 30s)
+	RetryInterval time.Duration
+
+	// Maximum total wait before failing with ErrNoSSDAvailable (default: 120s)
+	MaxWait time.Duration
+}
+
+// DefaultSSDConfig returns an SSD configuration with baseline defaults
+func DefaultSSDConfig() SSDConfig {
+	return SSDConfig{
+		MountRoot:       "/mnt/disks",
+		ClaimTTL:        60 * time.Second,
+		RenewalInterval: 10 * time.Second,
+		RetryInterval:   30 * time.Second,
+		MaxWait:         120 * time.Second,
+	}
 }
 
 // DefaultConfig returns a configuration with baseline defaults
@@ -103,6 +135,36 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// Validate SSD config if provided
+	if c.SSDConfig != nil {
+		if err := c.SSDConfig.Validate(); err != nil {
+			return fmt.Errorf("SSDConfig validation failed: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// Validate checks if the SSD configuration is valid and applies defaults where needed
+func (s *SSDConfig) Validate() error {
+	if s.MountRoot == "" {
+		s.MountRoot = "/mnt/disks"
+	}
+	if s.ClaimTTL <= 0 {
+		s.ClaimTTL = 60 * time.Second
+	}
+	if s.RenewalInterval <= 0 {
+		s.RenewalInterval = 10 * time.Second
+	}
+	if s.RetryInterval <= 0 {
+		s.RetryInterval = 30 * time.Second
+	}
+	if s.MaxWait <= 0 {
+		s.MaxWait = 120 * time.Second
+	}
+	if s.RenewalInterval >= s.ClaimTTL {
+		return fmt.Errorf("RenewalInterval (%s) must be less than ClaimTTL (%s)", s.RenewalInterval, s.ClaimTTL)
+	}
 	return nil
 }
 
