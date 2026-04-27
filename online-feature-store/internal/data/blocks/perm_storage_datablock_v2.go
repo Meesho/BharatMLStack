@@ -9,25 +9,31 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/types"
 )
 
-//Data Layout
-//[0-15]bits [0th and 1st byte] - Feature Schema Version
-//[16-55]bits [2nd to 6th byte] - Expiry At
-//[56-59]bits [7th byte] - Layout Version
-//[60-62]bits [7th byte] - Compression Type
-//[63-67]bits [7th and 8th byte] - Data Type
-//[68-71]bits [8th byte] - Bool Dtype Last Index
+// Data Layout (9 bytes base)
+// [0-15]   bits [0-1]   - Feature Schema Version
+// [16-55]  bits [2-6]   - Expiry At
+// [56-59]  bits [7]     - Layout Version (upper 4 bits of byte 7)
+// [60-62]  bits [7]     - Compression Type (bits 1-3 of byte 7)
+// [63]     bit  [7]     - Data Type bit 4 (bit 0 of byte 7)
+// [64-67]  bits [8]     - Data Type bits 0-3 (upper 4 bits of byte 8)
+// [68-71]  bits [8]     - Bool Dtype Last Index (lower 4 bits of byte 8; Bool only)
 //Total 9 bytes Header Length
+// [72] bits [9]  - Bitmap Present (bit 0 of byte 9)
 
 const (
-	PSDBLayout1LengthBytes = 9
+	PSDBLayout1HeaderBytes = 9
+	PSDBLayout2HeaderBytes = 10
 	maxStringLength        = 65535
 	layoutVersionIdx       = 7
+	bitmapPresentBit       = 0 // bit 0 of 10th byte (72nd bit)
+	bitmapPresentMask      = 0x01
 )
 
 type PermStorageDataBlock struct {
 	// 64-bit aligned fields
 	expiryAt       uint64
 	Data           interface{}
+	bitmap         []byte
 	buf            []byte
 	originalData   []byte
 	compressedData []byte
@@ -51,6 +57,10 @@ type PermStorageDataBlock struct {
 }
 
 func (p *PermStorageDataBlock) Clear() {
+	headerLen := PSDBLayout1HeaderBytes
+	if p.layoutVersion == 2 {
+		headerLen = PSDBLayout2HeaderBytes
+	}
 	p.layoutVersion = 0
 	p.featureSchemaVersion = 0
 	p.expiryAt = 0
@@ -60,8 +70,8 @@ func (p *PermStorageDataBlock) Clear() {
 	p.boolDtypeLastIdx = 0
 	p.originalDataLen = 0
 	p.compressedDataLen = 0
-	if len(p.buf) > PSDBLayout1LengthBytes {
-		p.buf = p.buf[:PSDBLayout1LengthBytes]
+	if len(p.buf) > headerLen {
+		p.buf = p.buf[:headerLen]
 	}
 	if len(p.originalData) > 0 {
 		p.originalData = p.originalData[:0]
@@ -72,11 +82,29 @@ func (p *PermStorageDataBlock) Clear() {
 	p.Data = nil
 	p.stringLengths = nil
 	p.vectorLengths = nil
+	p.bitmap = nil
 }
+
+func (b *PermStorageDataBlockBuilder) SetBitmap(bitmap []byte) *PermStorageDataBlockBuilder {
+	if len(bitmap) > 0 {
+		b.psdb.bitmap = bitmap
+	} else {
+		b.psdb.bitmap = make([]byte, 0)
+	}
+	return b
+}
+
+// SetupBitmapMeta is a no-op; bitmap present is encoded in byte 9 bit 0 during Serialize when layout-2 and bitmap non-empty.
+func (b *PermStorageDataBlockBuilder) SetupBitmapMeta(numFeatures int) *PermStorageDataBlockBuilder {
+	return b
+}
+
 func (p *PermStorageDataBlock) Serialize() ([]byte, error) {
 	switch p.layoutVersion {
 	case 1:
 		return p.serializeLayout1()
+	case 2:
+		return p.serializeLayout2()
 	default:
 		return nil, fmt.Errorf("unsupported layout version: %d", p.layoutVersion)
 	}
@@ -129,8 +157,8 @@ func setupHeadersV2(p *PermStorageDataBlock) error {
 		return errors.New("perm storage data block v2 is nil")
 	}
 
-	if len(p.buf) < PSDBLayout1LengthBytes {
-		return fmt.Errorf("buffer too small: required=%d, actual=%d", PSDBLayout1LengthBytes, len(p.buf))
+	if len(p.buf) < PSDBLayout1HeaderBytes {
+		return fmt.Errorf("buffer too small: required=%d, actual=%d", PSDBLayout1HeaderBytes, len(p.buf))
 	}
 
 	setupFeatureSchemaVersion(p)
@@ -323,6 +351,7 @@ func serializeUint64V2(p *PermStorageDataBlock) ([]byte, error) {
 // Each string is stored as a 2-byte length prefix followed by the string data:
 // [len1][len2]...[lenN][str1][str2]...[strN]
 // where each len is a uint16 (max 65535) and stored in system byte order.
+// Layout-2: bitmap + dense (only non-default strings: 2-byte len + bytes each).
 func serializeStringV2(p *PermStorageDataBlock) ([]byte, error) {
 	values, ok := p.Data.([]string)
 	if !ok || values == nil || len(values) == 0 {
@@ -602,12 +631,10 @@ func serializeStringVectorV2(p *PermStorageDataBlock) ([]byte, error) {
 			len(values), len(p.stringLengths))
 	}
 
-	// Calculate total number of strings
 	totalStrings := 0
 	for i := range values {
 		totalStrings += int(p.vectorLengths[i])
 	}
-
 	strLenOffsetIdx := 0
 	strDataOffsetIdx := totalStrings * 2 // Start of string data after all length prefixes
 
@@ -683,5 +710,11 @@ func serializeBoolVectorV2(p *PermStorageDataBlock) ([]byte, error) {
 		return nil, fmt.Errorf("issue with shift operation in bool v")
 	}
 	setupBoolDtypeLastIdx(p, x)
+	// Include the partial byte in the original data if there are unfilled bits
+	bytesUsed := idx
+	if shift != 7 {
+		bytesUsed++
+	}
+	p.originalData = p.originalData[:bytesUsed]
 	return encodeData(p, enc)
 }

@@ -29,7 +29,7 @@ type RetrieveData struct {
 	UniqueKeys                         []*retrieve.Keys
 	KeyToOriginalIndices               map[string][]int
 	ReqFGIds                           ds.Set[int]
-	ReqIdxToFgIdToDdb                  map[int]map[int]*blocks.DeserializedPSDB
+	ReqIdxToFgIdToDdb                  map[int]map[int]blocks.PSDBBlock
 }
 
 type PersistData struct {

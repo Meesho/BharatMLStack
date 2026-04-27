@@ -27,14 +27,14 @@ func TestSetupHeadersV2(t *testing.T) {
 		{
 			name: "buffer too small",
 			block: &PermStorageDataBlock{
-				buf: make([]byte, PSDBLayout1LengthBytes-1),
+				buf: make([]byte, PSDBLayout1HeaderBytes-1),
 			},
 			wantErr: true,
 		},
 		{
 			name: "valid setup",
 			block: &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				featureSchemaVersion: 1,
 				layoutVersion:        2,
 				dataType:             3,
@@ -83,7 +83,7 @@ func TestSetupFeatureSchemaVersion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				featureSchemaVersion: tt.featureSchemaVersion,
 			}
 			setupFeatureSchemaVersion(p)
@@ -124,7 +124,7 @@ func TestSetupLayoutVersion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &PermStorageDataBlock{
-				buf:           make([]byte, PSDBLayout1LengthBytes),
+				buf:           make([]byte, PSDBLayout1HeaderBytes),
 				layoutVersion: tt.layoutVersion,
 			}
 			p.buf[7] = tt.initialByte
@@ -165,7 +165,7 @@ func TestSetupCompressionType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &PermStorageDataBlock{
-				buf:             make([]byte, PSDBLayout1LengthBytes),
+				buf:             make([]byte, PSDBLayout1HeaderBytes),
 				compressionType: tt.compressionType,
 			}
 			p.buf[7] = tt.initialByte
@@ -214,7 +214,7 @@ func TestSetupDataType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &PermStorageDataBlock{
-				buf:      make([]byte, PSDBLayout1LengthBytes),
+				buf:      make([]byte, PSDBLayout1HeaderBytes),
 				dataType: tt.dataType,
 			}
 			p.buf[7] = tt.initialByte7
@@ -257,7 +257,7 @@ func TestSetupBoolDtypeLastIdx(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &PermStorageDataBlock{
-				buf: make([]byte, PSDBLayout1LengthBytes),
+				buf: make([]byte, PSDBLayout1HeaderBytes),
 			}
 			p.buf[8] = tt.initialByte
 			setupBoolDtypeLastIdx(p, tt.boolDtypeLastIdx)
@@ -291,7 +291,7 @@ func TestEncodeData(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &PermStorageDataBlock{
-				buf:             make([]byte, PSDBLayout1LengthBytes),
+				buf:             make([]byte, PSDBLayout1HeaderBytes),
 				originalData:    tt.originalData,
 				originalDataLen: len(tt.originalData),
 			}
@@ -356,7 +356,7 @@ func TestSerializeFP32AndLessV2(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             tt.dataType,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -385,10 +385,10 @@ func TestSerializeFP32AndLessV2(t *testing.T) {
 				var actualData []byte
 				if p.compressionType == compression.TypeZSTD {
 					dec := compression.NewZStdDecoder()
-					actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+					actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 					assert.NoError(t, err)
 				} else {
-					actualData = result[PSDBLayout1LengthBytes:]
+					actualData = result[PSDBLayout1HeaderBytes:]
 				}
 
 				// Convert back to float32 and compare
@@ -448,7 +448,7 @@ func TestSerializeInt32AndLessV2(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             tt.dataType,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -477,10 +477,10 @@ func TestSerializeInt32AndLessV2(t *testing.T) {
 				var actualData []byte
 				if p.compressionType == compression.TypeZSTD {
 					dec := compression.NewZStdDecoder()
-					actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+					actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 					assert.NoError(t, err)
 				} else {
-					actualData = result[PSDBLayout1LengthBytes:]
+					actualData = result[PSDBLayout1HeaderBytes:]
 				}
 
 				// Convert back to int32 and compare
@@ -540,7 +540,7 @@ func TestSerializeUint32AndLessV2(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             tt.dataType,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -569,10 +569,10 @@ func TestSerializeUint32AndLessV2(t *testing.T) {
 				var actualData []byte
 				if p.compressionType == compression.TypeZSTD {
 					dec := compression.NewZStdDecoder()
-					actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+					actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 					assert.NoError(t, err)
 				} else {
-					actualData = result[PSDBLayout1LengthBytes:]
+					actualData = result[PSDBLayout1HeaderBytes:]
 				}
 
 				// Convert back to uint32 and compare
@@ -626,7 +626,7 @@ func TestSerializeFP64V2(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             types.DataTypeFP64,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -654,10 +654,10 @@ func TestSerializeFP64V2(t *testing.T) {
 			var actualData []byte
 			if p.compressionType == compression.TypeZSTD {
 				dec := compression.NewZStdDecoder()
-				actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+				actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 				assert.NoError(t, err)
 			} else {
-				actualData = result[PSDBLayout1LengthBytes:]
+				actualData = result[PSDBLayout1HeaderBytes:]
 			}
 
 			// Convert back to float64 and compare
@@ -717,7 +717,7 @@ func TestSerializeInt64V2(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             types.DataTypeInt64,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -745,10 +745,10 @@ func TestSerializeInt64V2(t *testing.T) {
 			var actualData []byte
 			if p.compressionType == compression.TypeZSTD {
 				dec := compression.NewZStdDecoder()
-				actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+				actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 				assert.NoError(t, err)
 			} else {
-				actualData = result[PSDBLayout1LengthBytes:]
+				actualData = result[PSDBLayout1HeaderBytes:]
 			}
 
 			// Convert back to int64 and compare
@@ -800,7 +800,7 @@ func TestSerializeUint64V2(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             types.DataTypeUint64,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -828,10 +828,10 @@ func TestSerializeUint64V2(t *testing.T) {
 			var actualData []byte
 			if p.compressionType == compression.TypeZSTD {
 				dec := compression.NewZStdDecoder()
-				actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+				actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 				assert.NoError(t, err)
 			} else {
-				actualData = result[PSDBLayout1LengthBytes:]
+				actualData = result[PSDBLayout1HeaderBytes:]
 			}
 
 			// Convert back to uint64 and compare
@@ -927,7 +927,7 @@ func TestSerializeStringV2(t *testing.T) {
 			}
 
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             types.DataTypeString,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -960,10 +960,10 @@ func TestSerializeStringV2(t *testing.T) {
 			var actualData []byte
 			if p.compressionType == compression.TypeZSTD {
 				dec := compression.NewZStdDecoder()
-				actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+				actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 				assert.NoError(t, err)
 			} else {
-				actualData = result[PSDBLayout1LengthBytes:]
+				actualData = result[PSDBLayout1HeaderBytes:]
 			}
 
 			// Verify string data
@@ -1042,7 +1042,7 @@ func TestSerializeBoolV2(t *testing.T) {
 			byteCount := (len(tt.data) + 7) / 8
 
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             types.DataTypeBool,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -1065,8 +1065,8 @@ func TestSerializeBoolV2(t *testing.T) {
 			assert.NoError(t, err)
 			assert.NotNil(t, result)
 
-			// Check last bit index is correctly set
-			lastIdx := result[8] & 0x0F // Extract lower 4 bits of byte 8
+			// Check last bit index is correctly set (lower 4 bits of byte 8)
+			lastIdx := result[8] & 0x0F
 			assert.Equal(t, tt.wantLastIdx, lastIdx)
 
 			if tt.checkComp {
@@ -1078,10 +1078,10 @@ func TestSerializeBoolV2(t *testing.T) {
 			var actualData []byte
 			if p.compressionType == compression.TypeZSTD {
 				dec := compression.NewZStdDecoder()
-				actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+				actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 				assert.NoError(t, err)
 			} else {
-				actualData = result[PSDBLayout1LengthBytes:]
+				actualData = result[PSDBLayout1HeaderBytes:]
 			}
 
 			// Convert bit-packed data back to bool array
@@ -1215,7 +1215,7 @@ func TestSerializeFP32VectorAndLessV2(t *testing.T) {
 			}
 
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             tt.dataType,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -1248,10 +1248,10 @@ func TestSerializeFP32VectorAndLessV2(t *testing.T) {
 			var actualData []byte
 			if p.compressionType == compression.TypeZSTD {
 				dec := compression.NewZStdDecoder()
-				actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+				actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 				assert.NoError(t, err)
 			} else {
-				actualData = result[PSDBLayout1LengthBytes:]
+				actualData = result[PSDBLayout1HeaderBytes:]
 			}
 
 			// Convert back to float32 vectors
@@ -1364,7 +1364,7 @@ func TestSerializeInt32VectorAndLessV2(t *testing.T) {
 			}
 
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             tt.dataType,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -1397,10 +1397,10 @@ func TestSerializeInt32VectorAndLessV2(t *testing.T) {
 			var actualData []byte
 			if p.compressionType == compression.TypeZSTD {
 				dec := compression.NewZStdDecoder()
-				actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+				actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 				assert.NoError(t, err)
 			} else {
-				actualData = result[PSDBLayout1LengthBytes:]
+				actualData = result[PSDBLayout1HeaderBytes:]
 			}
 
 			// Convert back to int32 vectors
@@ -1501,7 +1501,7 @@ func TestSerializeUint32VectorAndLessV2(t *testing.T) {
 			}
 
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             tt.dataType,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -1534,10 +1534,10 @@ func TestSerializeUint32VectorAndLessV2(t *testing.T) {
 			var actualData []byte
 			if p.compressionType == compression.TypeZSTD {
 				dec := compression.NewZStdDecoder()
-				actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+				actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 				assert.NoError(t, err)
 			} else {
-				actualData = result[PSDBLayout1LengthBytes:]
+				actualData = result[PSDBLayout1HeaderBytes:]
 			}
 
 			// Convert back to uint32 vectors
@@ -1622,7 +1622,7 @@ func TestSerializeFP64VectorV2(t *testing.T) {
 			}
 
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             types.DataTypeFP64Vector,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -1655,10 +1655,10 @@ func TestSerializeFP64VectorV2(t *testing.T) {
 			var actualData []byte
 			if p.compressionType == compression.TypeZSTD {
 				dec := compression.NewZStdDecoder()
-				actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+				actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 				assert.NoError(t, err)
 			} else {
-				actualData = result[PSDBLayout1LengthBytes:]
+				actualData = result[PSDBLayout1HeaderBytes:]
 			}
 
 			// Convert back to float64 vectors
@@ -1740,7 +1740,7 @@ func TestSerializeInt64VectorV2(t *testing.T) {
 			}
 
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             types.DataTypeInt64Vector,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -1773,10 +1773,10 @@ func TestSerializeInt64VectorV2(t *testing.T) {
 			var actualData []byte
 			if p.compressionType == compression.TypeZSTD {
 				dec := compression.NewZStdDecoder()
-				actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+				actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 				assert.NoError(t, err)
 			} else {
-				actualData = result[PSDBLayout1LengthBytes:]
+				actualData = result[PSDBLayout1HeaderBytes:]
 			}
 
 			// Convert back to int64 vectors
@@ -1849,7 +1849,7 @@ func TestSerializeUint64VectorV2(t *testing.T) {
 			}
 
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             types.DataTypeUint64Vector,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -1882,10 +1882,10 @@ func TestSerializeUint64VectorV2(t *testing.T) {
 			var actualData []byte
 			if p.compressionType == compression.TypeZSTD {
 				dec := compression.NewZStdDecoder()
-				actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+				actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 				assert.NoError(t, err)
 			} else {
-				actualData = result[PSDBLayout1LengthBytes:]
+				actualData = result[PSDBLayout1HeaderBytes:]
 			}
 
 			// Convert back to uint64 vectors
@@ -2019,7 +2019,7 @@ func TestSerializeStringVectorV2(t *testing.T) {
 			}
 
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             types.DataTypeStringVector,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -2053,10 +2053,10 @@ func TestSerializeStringVectorV2(t *testing.T) {
 			var actualData []byte
 			if p.compressionType == compression.TypeZSTD {
 				dec := compression.NewZStdDecoder()
-				actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+				actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 				assert.NoError(t, err)
 			} else {
-				actualData = result[PSDBLayout1LengthBytes:]
+				actualData = result[PSDBLayout1HeaderBytes:]
 			}
 
 			// Convert back to string vectors
@@ -2175,7 +2175,7 @@ func TestSerializeBoolVectorV2(t *testing.T) {
 			totalBytes := (totalBits + 7) / 8 // Round up to nearest byte
 
 			p := &PermStorageDataBlock{
-				buf:                  make([]byte, PSDBLayout1LengthBytes),
+				buf:                  make([]byte, PSDBLayout1HeaderBytes),
 				dataType:             types.DataTypeBoolVector,
 				compressionType:      compression.TypeZSTD,
 				Data:                 tt.data,
@@ -2208,10 +2208,10 @@ func TestSerializeBoolVectorV2(t *testing.T) {
 			var actualData []byte
 			if p.compressionType == compression.TypeZSTD {
 				dec := compression.NewZStdDecoder()
-				actualData, err = dec.Decode(result[PSDBLayout1LengthBytes:])
+				actualData, err = dec.Decode(result[PSDBLayout1HeaderBytes:])
 				assert.NoError(t, err)
 			} else {
-				actualData = result[PSDBLayout1LengthBytes:]
+				actualData = result[PSDBLayout1HeaderBytes:]
 			}
 
 			// Convert back to bool vectors

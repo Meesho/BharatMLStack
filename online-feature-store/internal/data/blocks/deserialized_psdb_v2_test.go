@@ -18,7 +18,7 @@ func TestDeserializePSDBV2(t *testing.T) {
 		name      string
 		buildFunc func() (*PermStorageDataBlock, error)
 		wantErr   bool
-		validate  func(*testing.T, *DeserializedPSDB)
+		validate  func(*testing.T, PSDBBlock)
 	}{
 		{
 			name: "scalar int32",
@@ -32,14 +32,14 @@ func TestDeserializePSDBV2(t *testing.T) {
 					SetScalarValues([]int32{1, 2, 3}, 3).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, uint16(1), d.FeatureSchemaVersion)
-				assert.Equal(t, uint8(1), d.LayoutVersion)
-				assert.Equal(t, types.DataTypeInt32, d.DataType)
-				assert.Equal(t, compression.TypeNone, d.CompressionType)
-				assert.Equal(t, 12, len(d.OriginalData)) // 3 * 4 bytes
-				assert.False(t, d.Expired)
-				assert.False(t, d.NegativeCache)
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, uint16(1), d.GetFeatureSchemaVersion())
+				assert.Equal(t, uint8(1), d.GetLayoutVersion())
+				assert.Equal(t, types.DataTypeInt32, d.GetDataType())
+				assert.Equal(t, compression.TypeNone, d.GetCompressionType())
+				assert.Equal(t, 12, len(d.GetOriginalData())) // 3 * 4 bytes
+				assert.False(t, d.IsExpired())
+				assert.False(t, d.IsNegativeCache())
 			},
 		},
 		{
@@ -62,13 +62,13 @@ func TestDeserializePSDBV2(t *testing.T) {
 					).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, types.DataTypeStringVector, d.DataType)
-				assert.Equal(t, compression.TypeNone, d.CompressionType)
-				assert.NotNil(t, d.CompressedData)
-				assert.NotNil(t, d.OriginalData)
-				assert.False(t, d.Expired)
-				assert.False(t, d.NegativeCache)
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, types.DataTypeStringVector, d.GetDataType())
+				assert.Equal(t, compression.TypeNone, d.GetCompressionType())
+				assert.NotNil(t, d.GetCompressedData())
+				assert.NotNil(t, d.GetOriginalData())
+				assert.False(t, d.IsExpired())
+				assert.False(t, d.IsNegativeCache())
 			},
 		},
 		{
@@ -90,13 +90,13 @@ func TestDeserializePSDBV2(t *testing.T) {
 					).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, types.DataTypeBoolVector, d.DataType)
-				assert.Equal(t, compression.TypeNone, d.CompressionType)
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, types.DataTypeBoolVector, d.GetDataType())
+				assert.Equal(t, compression.TypeNone, d.GetCompressionType())
 				// 7 bits total, rounded up to 1 byte
-				assert.Equal(t, 1, len(d.OriginalData))
-				assert.False(t, d.Expired)
-				assert.False(t, d.NegativeCache)
+				assert.Equal(t, 1, len(d.GetOriginalData()))
+				assert.False(t, d.IsExpired())
+				assert.False(t, d.IsNegativeCache())
 			},
 		},
 		//{
@@ -111,15 +111,15 @@ func TestDeserializePSDBV2(t *testing.T) {
 		//			SetScalarValues([]int32{1}, 1).
 		//			Build()
 		//	},
-		//	validate: func(t *testing.T, d *DeserializedPSDB) {
-		//		assert.True(t, d.Expired)
+		//	validate: func(t *testing.T, d PSDBBlock) {
+		//		assert.True(t, d.IsExpired())
 		//	},
 		//},
 		{
 			name: "invalid layout version",
 			buildFunc: func() (*PermStorageDataBlock, error) {
 				return NewPermStorageDataBlockBuilder().
-					SetID(2). // invalid layout version
+					SetID(3). // unsupported layout version (only 1 and 2 are valid)
 					SetVersion(1).
 					SetTTL(3600).
 					SetDataType(types.DataTypeInt32).
@@ -140,10 +140,10 @@ func TestDeserializePSDBV2(t *testing.T) {
 					SetScalarValues([]float32{1.1, 2.2, 3.3}, 3).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, types.DataTypeFP32, d.DataType)
-				assert.Equal(t, compression.TypeNone, d.CompressionType)
-				assert.Equal(t, 12, len(d.OriginalData)) // 3 * 4 bytes
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, types.DataTypeFP32, d.GetDataType())
+				assert.Equal(t, compression.TypeNone, d.GetCompressionType())
+				assert.Equal(t, 12, len(d.GetOriginalData())) // 3 * 4 bytes
 			},
 		},
 		{
@@ -158,10 +158,10 @@ func TestDeserializePSDBV2(t *testing.T) {
 					SetScalarValues([]float64{1.1, 2.2, 3.3}, 3).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, types.DataTypeFP64, d.DataType)
-				assert.Equal(t, compression.TypeNone, d.CompressionType)
-				assert.Equal(t, 24, len(d.OriginalData)) // 3 * 8 bytes
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, types.DataTypeFP64, d.GetDataType())
+				assert.Equal(t, compression.TypeNone, d.GetCompressionType())
+				assert.Equal(t, 24, len(d.GetOriginalData())) // 3 * 8 bytes
 			},
 		},
 		{
@@ -176,10 +176,10 @@ func TestDeserializePSDBV2(t *testing.T) {
 					SetScalarValues([]int32{1, 2, 3}, 3).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, types.DataTypeInt8, d.DataType)
-				assert.Equal(t, compression.TypeNone, d.CompressionType)
-				assert.Equal(t, 3, len(d.OriginalData)) // 3 * 1 byte
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, types.DataTypeInt8, d.GetDataType())
+				assert.Equal(t, compression.TypeNone, d.GetCompressionType())
+				assert.Equal(t, 3, len(d.GetOriginalData())) // 3 * 1 byte
 			},
 		},
 		{
@@ -194,10 +194,10 @@ func TestDeserializePSDBV2(t *testing.T) {
 					SetScalarValues([]int32{1, 2, 3}, 3).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, types.DataTypeInt16, d.DataType)
-				assert.Equal(t, compression.TypeNone, d.CompressionType)
-				assert.Equal(t, 6, len(d.OriginalData)) // 3 * 2 bytes
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, types.DataTypeInt16, d.GetDataType())
+				assert.Equal(t, compression.TypeNone, d.GetCompressionType())
+				assert.Equal(t, 6, len(d.GetOriginalData())) // 3 * 2 bytes
 			},
 		},
 		{
@@ -212,10 +212,10 @@ func TestDeserializePSDBV2(t *testing.T) {
 					SetScalarValues([]int64{1, 2, 3}, 3).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, types.DataTypeInt64, d.DataType)
-				assert.Equal(t, compression.TypeNone, d.CompressionType)
-				assert.Equal(t, 24, len(d.OriginalData)) // 3 * 8 bytes
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, types.DataTypeInt64, d.GetDataType())
+				assert.Equal(t, compression.TypeNone, d.GetCompressionType())
+				assert.Equal(t, 24, len(d.GetOriginalData())) // 3 * 8 bytes
 			},
 		},
 		{
@@ -234,10 +234,10 @@ func TestDeserializePSDBV2(t *testing.T) {
 					SetVectorValues(values, len(values), []uint16{2, 3}).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, types.DataTypeFP32Vector, d.DataType)
-				assert.Equal(t, compression.TypeNone, d.CompressionType)
-				assert.Equal(t, 20, len(d.OriginalData)) // (2+3) * 4 bytes
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, types.DataTypeFP32Vector, d.GetDataType())
+				assert.Equal(t, compression.TypeNone, d.GetCompressionType())
+				assert.Equal(t, 20, len(d.GetOriginalData())) // (2+3) * 4 bytes
 			},
 		},
 		{
@@ -256,10 +256,10 @@ func TestDeserializePSDBV2(t *testing.T) {
 					SetVectorValues(values, len(values), []uint16{2, 3}).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, types.DataTypeFP64Vector, d.DataType)
-				assert.Equal(t, compression.TypeNone, d.CompressionType)
-				assert.Equal(t, 40, len(d.OriginalData)) // (2+3) * 8 bytes
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, types.DataTypeFP64Vector, d.GetDataType())
+				assert.Equal(t, compression.TypeNone, d.GetCompressionType())
+				assert.Equal(t, 40, len(d.GetOriginalData())) // (2+3) * 8 bytes
 			},
 		},
 		{
@@ -278,10 +278,10 @@ func TestDeserializePSDBV2(t *testing.T) {
 					SetVectorValues(values, len(values), []uint16{2, 3}).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, types.DataTypeInt8Vector, d.DataType)
-				assert.Equal(t, compression.TypeNone, d.CompressionType)
-				assert.Equal(t, 5, len(d.OriginalData)) // (2+3) * 1 byte
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, types.DataTypeInt8Vector, d.GetDataType())
+				assert.Equal(t, compression.TypeNone, d.GetCompressionType())
+				assert.Equal(t, 5, len(d.GetOriginalData())) // (2+3) * 1 byte
 			},
 		},
 		{
@@ -300,10 +300,10 @@ func TestDeserializePSDBV2(t *testing.T) {
 					SetVectorValues(values, len(values), []uint16{2, 3}).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, types.DataTypeInt16Vector, d.DataType)
-				assert.Equal(t, compression.TypeNone, d.CompressionType)
-				assert.Equal(t, 10, len(d.OriginalData)) // (2+3) * 2 bytes
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, types.DataTypeInt16Vector, d.GetDataType())
+				assert.Equal(t, compression.TypeNone, d.GetCompressionType())
+				assert.Equal(t, 10, len(d.GetOriginalData())) // (2+3) * 2 bytes
 			},
 		},
 		{
@@ -322,10 +322,10 @@ func TestDeserializePSDBV2(t *testing.T) {
 					SetVectorValues(values, len(values), []uint16{2, 3}).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, types.DataTypeInt64Vector, d.DataType)
-				assert.Equal(t, compression.TypeNone, d.CompressionType)
-				assert.Equal(t, 40, len(d.OriginalData)) // (2+3) * 8 bytes
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, types.DataTypeInt64Vector, d.GetDataType())
+				assert.Equal(t, compression.TypeNone, d.GetCompressionType())
+				assert.Equal(t, 40, len(d.GetOriginalData())) // (2+3) * 8 bytes
 			},
 		},
 		// {
@@ -373,7 +373,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 	tests := []struct {
 		name      string
 		buildFunc func() (*PermStorageDataBlock, error)
-		validate  func(*testing.T, *DeserializedPSDB)
+		validate  func(*testing.T, PSDBBlock)
 	}{
 		{
 			name: "int32 scalar feature",
@@ -388,10 +388,10 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetScalarValues(values, len(values)).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				// Test each position
 				for pos := 0; pos < 3; pos++ {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, make([]byte, d.GetDataType().Size()))
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt32(feature)
 					require.NoError(t, err)
@@ -415,13 +415,13 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetVectorValues(values, len(values), []uint16{2, 3}).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				// Test each vector
 				vectorLengths := []uint16{2, 3}
 				expectedValues := [][]int32{{1, 2}, {3, 4, 5}}
 
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					values, err := HelperVectorFeatureToTypeInt32(feature)
 					require.NoError(t, err)
@@ -442,10 +442,10 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetStringScalarValues(values, len(values), []uint16{3, 3, 3}).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				expectedValues := []string{"abc", "def", "ghi"}
 				for pos := 0; pos < 3; pos++ {
-					feature, err := d.GetStringScalarFeature(pos, 3)
+					feature, err := d.GetStringScalarFeature(pos, 3, nil)
 					require.NoError(t, err)
 
 					value, err := HelperScalarFeatureToTypeString(feature)
@@ -470,12 +470,12 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetStringVectorValues(values, len(values), []uint16{3, 3}, []uint16{2, 3}).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				vectorLengths := []uint16{2, 3}
 				expectedValues := [][]string{{"abc", "def"}, {"ghi", "jkl", "mno"}}
 
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetStringVectorFeature(pos, 2, vectorLengths)
+					feature, err := d.GetStringVectorFeature(pos, 2, vectorLengths, nil)
 					require.NoError(t, err)
 
 					result, err := HelperVectorFeatureStringToConcatenatedString(feature, int(vectorLengths[pos]))
@@ -498,7 +498,7 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetScalarValues(values, len(values)).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				expectedValues := []bool{true, false, true, true}
 				for pos := 0; pos < 4; pos++ {
 					feature, err := d.GetBoolScalarFeature(pos)
@@ -525,12 +525,12 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetVectorValues(values, len(values), []uint16{3, 4}).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				vectorLengths := []uint16{3, 4}
 				expectedValues := [][]bool{{true, false, true}, {false, true, true, true}}
-				fmt.Printf("d.OriginalData %v\n", d.OriginalData)
+				fmt.Printf("d.GetOriginalData() %v\n", d.GetOriginalData())
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetBoolVectorFeature(pos, vectorLengths)
+					feature, err := d.GetBoolVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					fmt.Printf("feature %v\n", feature)
 					result, err := HelperVectorFeatureBoolToConcatenatedString(feature)
@@ -560,10 +560,10 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetScalarValues(values, len(values)).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				expectedValues := []float32{1.1, 2.2, 3.3}
 				for pos := 0; pos < 3; pos++ {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, make([]byte, d.GetDataType().Size()))
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeFloat32(feature)
 					require.NoError(t, err)
@@ -584,10 +584,10 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetScalarValues(values, len(values)).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				expectedValues := []float64{1.1, 2.2, 3.3}
 				for pos := 0; pos < 3; pos++ {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, make([]byte, d.GetDataType().Size()))
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeFloat64(feature)
 					require.NoError(t, err)
@@ -608,10 +608,10 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetScalarValues(values, len(values)).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				expectedValues := []int8{1, 2, 3}
 				for pos := 0; pos < 3; pos++ {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, make([]byte, d.GetDataType().Size()))
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt8(feature)
 					require.NoError(t, err)
@@ -632,10 +632,10 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetScalarValues(values, len(values)).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				expectedValues := []int16{1, 2, 3}
 				for pos := 0; pos < 3; pos++ {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, make([]byte, d.GetDataType().Size()))
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt16(feature)
 					require.NoError(t, err)
@@ -656,10 +656,10 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetScalarValues(values, len(values)).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				expectedValues := []int64{1, 2, 3}
 				for pos := 0; pos < 3; pos++ {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, make([]byte, d.GetDataType().Size()))
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt64(feature)
 					require.NoError(t, err)
@@ -683,12 +683,12 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetVectorValues(values, len(values), []uint16{2, 3}).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				vectorLengths := []uint16{2, 3}
 				expectedValues := [][]float32{{1.1, 2.2}, {3.3, 4.4, 5.5}}
 
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureFp32ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -717,12 +717,12 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetVectorValues(values, len(values), []uint16{2, 3}).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				vectorLengths := []uint16{2, 3}
 				expectedValues := [][]float64{{1.1, 2.2}, {3.3, 4.4, 5.5}}
 
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureFp64ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -751,12 +751,12 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetVectorValues(values, len(values), []uint16{2, 3}).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				vectorLengths := []uint16{2, 3}
 				expectedValues := [][]int8{{1, 2}, {3, 4, 5}}
 
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt8ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -784,12 +784,12 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetVectorValues(values, len(values), []uint16{2, 3}).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				vectorLengths := []uint16{2, 3}
 				expectedValues := [][]int16{{1, 2}, {3, 4, 5}}
 
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt16ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -817,12 +817,12 @@ func TestDeserializePSDBV2_Features(t *testing.T) {
 					SetVectorValues(values, len(values), []uint16{2, 3}).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				vectorLengths := []uint16{2, 3}
 				expectedValues := [][]int64{{1, 2}, {3, 4, 5}}
 
 				for pos := 0; pos < 2; pos++ {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt64ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -862,7 +862,7 @@ func TestDeserializePSDBV2LargeData(t *testing.T) {
 		name      string
 		buildFunc func() (*PermStorageDataBlock, error)
 		wantErr   bool
-		validate  func(*testing.T, *DeserializedPSDB)
+		validate  func(*testing.T, PSDBBlock)
 	}{
 		{
 			name: "large scalar int32 with compression",
@@ -880,10 +880,10 @@ func TestDeserializePSDBV2LargeData(t *testing.T) {
 					SetScalarValues(values, len(values)).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, compression.TypeZSTD, d.CompressionType)
-				assert.NotNil(t, d.CompressedData)
-				assert.Equal(t, 40000, len(d.OriginalData)) // 10000 * 4 bytes
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, compression.TypeZSTD, d.GetCompressionType())
+				assert.NotNil(t, d.GetCompressedData())
+				assert.Equal(t, 40000, len(d.GetOriginalData())) // 10000 * 4 bytes
 			},
 		},
 		{
@@ -910,10 +910,10 @@ func TestDeserializePSDBV2LargeData(t *testing.T) {
 					SetStringVectorValues(values, len(values), maxLens, vecLens).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, compression.TypeZSTD, d.CompressionType)
-				assert.NotNil(t, d.CompressedData)
-				assert.NotNil(t, d.OriginalData)
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, compression.TypeZSTD, d.GetCompressionType())
+				assert.NotNil(t, d.GetCompressedData())
+				assert.NotNil(t, d.GetOriginalData())
 			},
 		},
 		{
@@ -938,10 +938,10 @@ func TestDeserializePSDBV2LargeData(t *testing.T) {
 					SetVectorValues(values, len(values), vecLens).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
-				assert.Equal(t, compression.TypeZSTD, d.CompressionType)
-				assert.NotNil(t, d.CompressedData)
-				assert.NotNil(t, d.OriginalData)
+			validate: func(t *testing.T, d PSDBBlock) {
+				assert.Equal(t, compression.TypeZSTD, d.GetCompressionType())
+				assert.NotNil(t, d.GetCompressedData())
+				assert.NotNil(t, d.GetOriginalData())
 			},
 		},
 	}
@@ -975,7 +975,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 	tests := []struct {
 		name      string
 		buildFunc func() (*PermStorageDataBlock, error)
-		validate  func(*testing.T, *DeserializedPSDB)
+		validate  func(*testing.T, PSDBBlock)
 	}{
 		{
 			name: "large int32 scalar feature with compression",
@@ -993,10 +993,10 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 					SetScalarValues(values, len(values)).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				// Test random positions
 				for _, pos := range []int{0, 100, 1000, 9999} {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, make([]byte, d.GetDataType().Size()))
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt32(feature)
 					require.NoError(t, err)
@@ -1022,10 +1022,10 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 					SetStringScalarValues(values, len(values), maxLens).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				// Test random positions
 				for _, pos := range []int{0, 50, 500, 4999} {
-					feature, err := d.GetStringScalarFeature(pos, 5000)
+					feature, err := d.GetStringScalarFeature(pos, 5000, nil)
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeString(feature)
 					require.NoError(t, err)
@@ -1055,7 +1055,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 					SetVectorValues(values, len(values), vecLens).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				vectorLengths := make([]uint16, 1000)
 				for i := range vectorLengths {
 					vectorLengths[i] = 16
@@ -1063,7 +1063,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 
 				// Test random positions
 				for _, pos := range []int{0, 50, 500, 999} {
-					feature, err := d.GetBoolVectorFeature(pos, vectorLengths)
+					feature, err := d.GetBoolVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureBoolToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -1098,10 +1098,10 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 					SetScalarValues(values, len(values)).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				// Test random positions
 				for _, pos := range []int{0, 100, 1000, 9999} {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, make([]byte, d.GetDataType().Size()))
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeFloat32(feature)
 					require.NoError(t, err)
@@ -1125,10 +1125,10 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 					SetScalarValues(values, len(values)).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				// Test random positions
 				for _, pos := range []int{0, 100, 1000, 9999} {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, make([]byte, d.GetDataType().Size()))
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeFloat64(feature)
 					require.NoError(t, err)
@@ -1152,10 +1152,10 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 					SetScalarValues(values, len(values)).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				// Test random positions
 				for _, pos := range []int{0, 50, 100, 999} {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, make([]byte, d.GetDataType().Size()))
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt8(feature)
 					require.NoError(t, err)
@@ -1179,10 +1179,10 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 					SetScalarValues(values, len(values)).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				// Test random positions
 				for _, pos := range []int{0, 100, 1000, 4999} {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, make([]byte, d.GetDataType().Size()))
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt16(feature)
 					require.NoError(t, err)
@@ -1206,10 +1206,10 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 					SetScalarValues(values, len(values)).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				// Test random positions
 				for _, pos := range []int{0, 100, 1000, 9999} {
-					feature, err := d.GetNumericScalarFeature(pos)
+					feature, err := d.GetNumericScalarFeature(pos, 3, make([]byte, d.GetDataType().Size()))
 					require.NoError(t, err)
 					value, err := HelperScalarFeatureToTypeInt64(feature)
 					require.NoError(t, err)
@@ -1239,7 +1239,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 					SetVectorValues(values, len(values), vecLens).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				vectorLengths := make([]uint16, 1000)
 				for i := range vectorLengths {
 					vectorLengths[i] = uint16(10 + (i % 5))
@@ -1247,7 +1247,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 
 				// Test random positions
 				for _, pos := range []int{0, 50, 500, 999} {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureFp32ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -1286,7 +1286,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 					SetVectorValues(values, len(values), vecLens).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				vectorLengths := make([]uint16, 1000)
 				for i := range vectorLengths {
 					vectorLengths[i] = uint16(10 + (i % 5))
@@ -1294,7 +1294,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 
 				// Test random positions
 				for _, pos := range []int{0, 50, 500, 999} {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureFp64ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -1333,7 +1333,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 					SetVectorValues(values, len(values), vecLens).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				vectorLengths := make([]uint16, 1000)
 				for i := range vectorLengths {
 					vectorLengths[i] = uint16(10 + (i % 5))
@@ -1341,7 +1341,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 
 				// Test random positions
 				for _, pos := range []int{0, 50, 500, 999} {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt8ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -1380,7 +1380,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 					SetVectorValues(values, len(values), vecLens).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				vectorLengths := make([]uint16, 1000)
 				for i := range vectorLengths {
 					vectorLengths[i] = uint16(10 + (i % 5))
@@ -1388,7 +1388,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 
 				// Test random positions
 				for _, pos := range []int{0, 50, 500, 999} {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt16ToConcatenatedString(feature)
 					require.NoError(t, err)
@@ -1427,7 +1427,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 					SetVectorValues(values, len(values), vecLens).
 					Build()
 			},
-			validate: func(t *testing.T, d *DeserializedPSDB) {
+			validate: func(t *testing.T, d PSDBBlock) {
 				vectorLengths := make([]uint16, 1000)
 				for i := range vectorLengths {
 					vectorLengths[i] = uint16(10 + (i % 5))
@@ -1435,7 +1435,7 @@ func TestDeserializePSDBV2_FeaturesLargeData(t *testing.T) {
 
 				// Test random positions
 				for _, pos := range []int{0, 50, 500, 999} {
-					feature, err := d.GetNumericVectorFeature(pos, vectorLengths)
+					feature, err := d.GetNumericVectorFeature(pos, vectorLengths, nil)
 					require.NoError(t, err)
 					result, err := HelperVectorFeatureInt64ToConcatenatedString(feature)
 					require.NoError(t, err)

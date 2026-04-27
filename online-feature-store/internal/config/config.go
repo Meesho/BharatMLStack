@@ -29,4 +29,5 @@ type Manager interface {
 	GetAllFGIdsForEntity(entityLabel string) (map[int]bool, error)
 	GetCircuitBreakerConfigs() map[string]circuitbreaker.Config
 	UpdateCBConfigs() error
+	GetLayoutShadowComparisonConfig() LayoutShadowComparisonConfig
 }

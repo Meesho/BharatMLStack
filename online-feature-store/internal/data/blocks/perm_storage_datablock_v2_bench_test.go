@@ -53,7 +53,7 @@ func serializeInt32PSDB(data []int32) ([]byte, error) {
 	psdb.Data = data
 
 	// Allocate buffers
-	headerSize := PSDBLayout1LengthBytes
+	headerSize := PSDBLayout1HeaderBytes
 	dataSize := len(data) * 4 // 4 bytes per int32
 
 	if cap(psdb.buf) < headerSize {

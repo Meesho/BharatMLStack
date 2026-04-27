@@ -41,7 +41,7 @@ const (
 type FGData struct {
 	// 64-bit aligned fields (pointers and maps)
 	data    *RetrieveData
-	fgToDDB map[int]*blocks.DeserializedPSDB
+	fgToDDB map[int]blocks.PSDBBlock
 
 	// 32-bit field
 	keyIdx int
@@ -373,7 +373,7 @@ func (h *RetrieveHandler) retrieveFromDistributedCache(keys []*retrieve.Keys, re
 		metric.Gauge("feature.retrieve.cb.open", 1, []string{"entity_name", entityLabel, "cb_key", distributedCacheCBKey})
 		for _, key := range keys {
 			keyIdx := retrieveData.ReqKeyToIdx[getKeyString(key)]
-			fgIdToDDB := make(map[int]*blocks.DeserializedPSDB)
+			fgIdToDDB := make(map[int]blocks.PSDBBlock)
 			fgIds.KeyIterator(func(fgId int) bool {
 				fgIdToDDB[fgId] = blocks.NegativeCacheDeserializePSDB()
 				return true
@@ -701,7 +701,7 @@ func preProcessFGs(retrieveData *RetrieveData, configManager config.Manager) err
 	if err != nil {
 		return fmt.Errorf("invalid entity %s: %w", entityLabel, err)
 	}
-	retrieveData.ReqIdxToFgIdToDdb = make(map[int]map[int]*blocks.DeserializedPSDB)
+	retrieveData.ReqIdxToFgIdToDdb = make(map[int]map[int]blocks.PSDBBlock)
 	numFGs := len(query.FeatureGroups)
 	featureSchema := make([]*retrieve.FeatureSchema, numFGs)
 	fgIdToFeatureLabels := make(map[int]ds.Set[string], numFGs)
@@ -788,12 +788,12 @@ func preProcessFGs(retrieveData *RetrieveData, configManager config.Manager) err
 	return nil
 }
 
-func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks.DeserializedPSDB, keyIdx int) {
+func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]blocks.PSDBBlock, keyIdx int) {
 	keyStr := getKeyString(data.Query.Keys[keyIdx])
 
 	for fgId, ddb := range fgToDDB {
 		if _, ok := data.ReqIdxToFgIdToDdb[keyIdx]; !ok {
-			data.ReqIdxToFgIdToDdb[keyIdx] = make(map[int]*blocks.DeserializedPSDB)
+			data.ReqIdxToFgIdToDdb[keyIdx] = make(map[int]blocks.PSDBBlock)
 		}
 		data.ReqIdxToFgIdToDdb[keyIdx][fgId] = ddb
 		if _, exists := data.ReqFGIdToFeatureLabels[fgId]; !exists {
@@ -804,9 +804,9 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 		// - Expired=true (from DB): validity="expired" (first fetch, data was in DB but expired)
 		// - NegativeCache=true only: validity="negative_cache" (data never existed or cached expired)
 		// - Neither: validity="valid"
-		if ddb.Expired {
+		if ddb.IsExpired() {
 			metric.Count("online.feature.store.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel, "validity", "expired"})
-		} else if ddb.NegativeCache {
+		} else if ddb.IsNegativeCache() {
 			metric.Count("online.feature.store.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel, "validity", "negative_cache"})
 		} else {
 			metric.Count("online.feature.store.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel, "validity", "valid"})
@@ -816,14 +816,14 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			var version int
 			var err error
 
-			if ddb.NegativeCache || ddb.Expired {
+			if ddb.IsNegativeCache() || ddb.IsExpired() {
 				version, err = h.config.GetActiveVersion(data.EntityLabel, fgId)
 				if err != nil {
 					log.Error().Err(err).Msgf("Error while getting active version for feature %s in entity %s, fg %d", featureLabel, data.EntityLabel, fgId)
 					return
 				}
 			} else {
-				version = int(ddb.FeatureSchemaVersion)
+				version = int(ddb.GetFeatureSchemaVersion())
 			}
 			seq, err := h.config.GetSequenceNo(data.EntityLabel, fgId, int(version), featureLabel)
 			if err != nil {
@@ -853,7 +853,7 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 				}
 				// Feature exists in active version
 				seq = activeSeq
-				ddb.NegativeCache = true
+				ddb.SetNegativeCache(true)
 				metric.Count("online.feature.store.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel})
 			}
 
@@ -874,15 +874,20 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			}
 
 			var fdata []byte
-			if ddb.NegativeCache || ddb.Expired {
+			if ddb.IsNegativeCache() || ddb.IsExpired() {
 				fdata, err = h.config.GetDefaultValueByte(data.EntityLabel, fgId, int(version), featureLabel)
 				if err != nil {
 					log.Error().Err(err).Msgf("Error while getting default value for feature %s", featureLabel)
 					return
 				}
 			} else {
+				defaultValue, err := h.config.GetDefaultValueByte(data.EntityLabel, fgId, int(version), featureLabel)
+				if err != nil {
+					log.Error().Err(err).Msgf("Error while getting default value for feature %s", featureLabel)
+					return
+				}
 				// Get feature in original datatype
-				fdata, err = GetFeature(ddb.DataType, ddb, seq, numOfFeatures, stringLengths, vectorLengths)
+				fdata, err = GetFeature(ddb.GetDataType(), ddb, seq, numOfFeatures, stringLengths, vectorLengths, defaultValue)
 				if err != nil {
 					log.Error().Err(err).Msgf("Error while getting feature for sequence no %d from ddb [feature: %s]", seq, featureLabel)
 					return
@@ -890,9 +895,9 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			}
 			// Apply quantization if requested
 			if quantType, ok := featureLabelWithQuantType[featureLabel]; ok {
-				quantFunc, err := quantization.GetQuantizationFunction(ddb.DataType, quantType)
+				quantFunc, err := quantization.GetQuantizationFunction(ddb.GetDataType(), quantType)
 				if err != nil {
-					log.Error().Err(err).Msgf("Error getting quantization function from %v to %v", ddb.DataType, quantType)
+					log.Error().Err(err).Msgf("Error getting quantization function from %v to %v", ddb.GetDataType(), quantType)
 					return
 				}
 				fdata = quantFunc(fdata)
@@ -947,7 +952,7 @@ func (h *RetrieveHandler) persistToCache(entityLabel string, retrieveData *Retri
 
 		for fgId, ddb := range fgIdToDdb {
 			if fgIds.Has(fgId) {
-				csdb.FGIdToDDB[fgId] = ddb.Copy()
+				csdb.FGIdToDDB[fgId] = ddb.CopyBlock()
 			}
 		}
 		// Serialize and store in cache
@@ -990,7 +995,7 @@ func (h *RetrieveHandler) persistToDistributedCache(entityLabel string, retrieve
 
 // ... existing code ...
 
-func GetFeature(dataType types.DataType, ddb *blocks.DeserializedPSDB, seq, numOfFeatures int, stringLengths []uint16, vectorLengths []uint16) ([]byte, error) {
+func GetFeature(dataType types.DataType, ddb blocks.PSDBBlock, seq, numOfFeatures int, stringLengths []uint16, vectorLengths []uint16, defaultValue []byte) ([]byte, error) {
 	switch dataType {
 	case types.DataTypeBool:
 		data, err := ddb.GetBoolScalarFeature(seq)
@@ -1000,63 +1005,63 @@ func GetFeature(dataType types.DataType, ddb *blocks.DeserializedPSDB, seq, numO
 		return data, nil
 
 	case types.DataTypeInt8, types.DataTypeInt16, types.DataTypeInt32, types.DataTypeInt64:
-		data, err := ddb.GetNumericScalarFeature(seq)
+		data, err := ddb.GetNumericScalarFeature(seq, numOfFeatures, defaultValue)
 		if err != nil {
 			return nil, err
 		}
 		return data, nil
 
 	case types.DataTypeUint8, types.DataTypeUint16, types.DataTypeUint32, types.DataTypeUint64:
-		data, err := ddb.GetNumericScalarFeature(seq)
+		data, err := ddb.GetNumericScalarFeature(seq, numOfFeatures, defaultValue)
 		if err != nil {
 			return nil, err
 		}
 		return data, nil
 
 	case types.DataTypeFP16, types.DataTypeFP32, types.DataTypeFP64, types.DataTypeFP8E4M3, types.DataTypeFP8E5M2:
-		data, err := ddb.GetNumericScalarFeature(seq)
+		data, err := ddb.GetNumericScalarFeature(seq, numOfFeatures, defaultValue)
 		if err != nil {
 			return nil, err
 		}
 		return data, nil
 
 	case types.DataTypeString:
-		data, err := ddb.GetStringScalarFeature(seq, numOfFeatures)
+		data, err := ddb.GetStringScalarFeature(seq, numOfFeatures, defaultValue)
 		if err != nil {
 			return nil, err
 		}
 		return data, nil
 
 	case types.DataTypeBoolVector:
-		data, err := ddb.GetBoolVectorFeature(seq, vectorLengths)
+		data, err := ddb.GetBoolVectorFeature(seq, vectorLengths, defaultValue)
 		if err != nil {
 			return nil, err
 		}
 		return data, nil
 
 	case types.DataTypeStringVector:
-		data, err := ddb.GetStringVectorFeature(seq, numOfFeatures, vectorLengths)
+		data, err := ddb.GetStringVectorFeature(seq, numOfFeatures, vectorLengths, defaultValue)
 		if err != nil {
 			return nil, err
 		}
 		return data, nil
 
 	case types.DataTypeInt8Vector, types.DataTypeInt16Vector, types.DataTypeInt32Vector, types.DataTypeInt64Vector:
-		data, err := ddb.GetNumericVectorFeature(seq, vectorLengths)
+		data, err := ddb.GetNumericVectorFeature(seq, vectorLengths, defaultValue)
 		if err != nil {
 			return nil, err
 		}
 		return data, nil
 
 	case types.DataTypeUint8Vector, types.DataTypeUint16Vector, types.DataTypeUint32Vector, types.DataTypeUint64Vector:
-		data, err := ddb.GetNumericVectorFeature(seq, vectorLengths)
+		data, err := ddb.GetNumericVectorFeature(seq, vectorLengths, defaultValue)
 		if err != nil {
 			return nil, err
 		}
 		return data, nil
 
 	case types.DataTypeFP16Vector, types.DataTypeFP32Vector, types.DataTypeFP64Vector, types.DataTypeFP8E4M3Vector, types.DataTypeFP8E5M2Vector:
-		data, err := ddb.GetNumericVectorFeature(seq, vectorLengths)
+		data, err := ddb.GetNumericVectorFeature(seq, vectorLengths, defaultValue)
 		if err != nil {
 			return nil, err
 		}

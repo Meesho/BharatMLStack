@@ -24,7 +24,7 @@ const (
 
 type CacheStorageDataBlock struct {
 	// 8-byte aligned map pointer
-	FGIdToDDB map[int]*DeserializedPSDB // offset: 0
+	FGIdToDDB map[int]PSDBBlock // offset: 0
 
 	// 24-byte slice (ptr, len, cap)
 	serializedCSDB []byte // offset: 8
@@ -41,7 +41,7 @@ type CacheStorageDataBlock struct {
 func NewCacheStorageDataBlock(layoutVersion uint8) *CacheStorageDataBlock {
 	return &CacheStorageDataBlock{
 		layoutVersion: layoutVersion,
-		FGIdToDDB:     make(map[int]*DeserializedPSDB),
+		FGIdToDDB:     make(map[int]PSDBBlock),
 	}
 }
 
@@ -81,7 +81,7 @@ func CreateCSDBForStorage(data []byte) (*CacheStorageDataBlock, error) {
 	return csdb, nil
 }
 
-func (csdb *CacheStorageDataBlock) AddFGIdToDDB(fgId int, ddb *DeserializedPSDB) error {
+func (csdb *CacheStorageDataBlock) AddFGIdToDDB(fgId int, ddb PSDBBlock) error {
 	if fgId < int(system.MinUint16) || fgId > int(system.MaxUint16) {
 		return fmt.Errorf("fgId out of range: %d", fgId)
 	}
@@ -111,7 +111,7 @@ func (csdb *CacheStorageDataBlock) serialize(compressed bool) ([]byte, error) {
 		return nil, err
 	}
 	for fgId, ddb := range csdb.FGIdToDDB {
-		if ddb.NegativeCache {
+		if ddb.IsNegativeCache() {
 			fgSerializedData := make([]byte, csdbPrefixLen)
 			system.ByteOrder.PutUint16(fgSerializedData[0:2], uint16(fgId))
 			system.ByteOrder.PutUint16(fgSerializedData[2:4], 0)
@@ -121,11 +121,11 @@ func (csdb *CacheStorageDataBlock) serialize(compressed bool) ([]byte, error) {
 			}
 		} else {
 			var err error
-			switch ddb.LayoutVersion {
+			switch ddb.GetLayoutVersion() {
 			case 1:
-				{
-					err = handleForPSDBLayout1(fgId, ddb, &buffer, compressed)
-				}
+				err = handleForPSDBLayout1(fgId, ddb, &buffer, compressed)
+			case 2:
+				err = handleForPSDBLayout2(fgId, ddb, &buffer, compressed)
 			}
 			if err != nil {
 				return nil, err
@@ -135,14 +135,14 @@ func (csdb *CacheStorageDataBlock) serialize(compressed bool) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (csdb *CacheStorageDataBlock) GetDeserializedPSDBForAllFGIds() (map[int]*DeserializedPSDB, error) {
+func (csdb *CacheStorageDataBlock) GetDeserializedPSDBForAllFGIds() (map[int]PSDBBlock, error) {
 	if csdb.FGIdToDDB != nil {
 		return csdb.FGIdToDDB, nil
 	}
 	if len(csdb.serializedCSDB) == 0 {
 		return nil, fmt.Errorf("no data to deserialize")
 	}
-	fgIdToDDB := make(map[int]*DeserializedPSDB)
+	fgIdToDDB := make(map[int]PSDBBlock)
 	layoutVersion := csdb.serializedCSDB[0]
 	csdb.layoutVersion = layoutVersion
 	var fgOffLenMap map[int]uint64
@@ -159,7 +159,7 @@ func (csdb *CacheStorageDataBlock) GetDeserializedPSDBForAllFGIds() (map[int]*De
 		startOffSet, endOffSet := system.UnpackUint64InUint32(offLen)
 		fgData := csdb.serializedCSDB[startOffSet:endOffSet]
 		ddb, err := DeserializePSDB(fgData)
-		if err == nil && !ddb.Expired {
+		if err == nil && !ddb.IsExpired() {
 			fgIdToDDB[int(fgId)] = ddb
 		} else {
 			fgIdToDDB = nil
@@ -171,7 +171,7 @@ func (csdb *CacheStorageDataBlock) GetDeserializedPSDBForAllFGIds() (map[int]*De
 	return fgIdToDDB, nil
 }
 
-func (csdb *CacheStorageDataBlock) GetDeserializedPSDBForFGIds(fgIds ds.Set[int]) (map[int]*DeserializedPSDB, error) {
+func (csdb *CacheStorageDataBlock) GetDeserializedPSDBForFGIds(fgIds ds.Set[int]) (map[int]PSDBBlock, error) {
 	if csdb.FGIdToDDB != nil {
 		log.Debug().Msgf("FGIdToDDB size: %d", len(csdb.FGIdToDDB))
 		return csdb.FGIdToDDB, nil
@@ -182,7 +182,7 @@ func (csdb *CacheStorageDataBlock) GetDeserializedPSDBForFGIds(fgIds ds.Set[int]
 	if fgIds.IsEmpty() {
 		return nil, fmt.Errorf("no fgIds to deserialize")
 	}
-	fgIdToDDB := make(map[int]*DeserializedPSDB)
+	fgIdToDDB := make(map[int]PSDBBlock)
 	layoutVersion := csdb.serializedCSDB[0]
 	csdb.layoutVersion = layoutVersion
 	var fgOffLenMap map[int]uint64
@@ -223,11 +223,11 @@ func (csdb *CacheStorageDataBlock) GetDeserializedPSDBForFGIds(fgIds ds.Set[int]
 				fgIdToDDB = nil
 				return false
 			}
-			if ddb.Expired {
+			if ddb.IsExpired() {
 				// For storage mode, return negative cache with expired flag (source of truth)
 				// For cache mode, return nil to trigger cache miss and fetch from DB
 				if csdb.cacheType == CacheTypeStorage {
-					fgIdToDDB[fgId] = &DeserializedPSDB{NegativeCache: true, Expired: true}
+					fgIdToDDB[fgId] = NegativeCacheExpiredPSDB()
 				} else {
 					fgIdToDDB = nil
 					return false
@@ -275,26 +275,57 @@ func getAllFGOffLenMapForCSDBLayout1(csdb *CacheStorageDataBlock) (map[int]uint6
 	return fgOffLenMap, foundFGIds
 }
 
-func handleForPSDBLayout1(fgId int, ddb *DeserializedPSDB, buffer *bytes.Buffer, compressed bool) error {
-	if len(ddb.Header) != PSDBLayout1LengthBytes {
-		return fmt.Errorf("header length is not 9")
+func handleForPSDBLayout1(fgId int, ddb PSDBBlock, buffer *bytes.Buffer, compressed bool) error {
+	header := ddb.GetHeader()
+	if len(header) != PSDBLayout1HeaderBytes {
+		return fmt.Errorf("header length is not %d", PSDBLayout1HeaderBytes)
 	}
 	var fgDataLen uint16
 	if compressed {
-		fgDataLen = uint16(len(ddb.Header) + len(ddb.CompressedData))
+		fgDataLen = uint16(len(header) + len(ddb.GetCompressedData()))
 	} else {
-		fgDataLen = uint16(len(ddb.Header) + len(ddb.OriginalData))
+		fgDataLen = uint16(len(header) + len(ddb.GetOriginalData()))
 	}
 	fgSerializedData := make([]byte, csdbPrefixLen+fgDataLen)
 	system.ByteOrder.PutUint16(fgSerializedData[0:2], uint16(fgId))
 	system.ByteOrder.PutUint16(fgSerializedData[2:4], uint16(fgDataLen))
 	if compressed {
-		copied := copy(fgSerializedData[csdbPrefixLen:], ddb.Header)
-		copy(fgSerializedData[csdbPrefixLen+copied:], ddb.CompressedData)
+		copied := copy(fgSerializedData[csdbPrefixLen:], header)
+		copy(fgSerializedData[csdbPrefixLen+copied:], ddb.GetCompressedData())
 	} else {
-		clearCompressionBits(ddb.Header)
-		copied := copy(fgSerializedData[csdbPrefixLen:], ddb.Header)
-		copy(fgSerializedData[csdbPrefixLen+copied:], ddb.OriginalData)
+		clearCompressionBits(header)
+		copied := copy(fgSerializedData[csdbPrefixLen:], header)
+		copy(fgSerializedData[csdbPrefixLen+copied:], ddb.GetOriginalData())
+	}
+	_, err := buffer.Write(fgSerializedData)
+	return err
+}
+
+func handleForPSDBLayout2(fgId int, ddb PSDBBlock, buffer *bytes.Buffer, compressed bool) error {
+	header := ddb.GetHeader()
+	if len(header) != PSDBLayout2HeaderBytes {
+		return fmt.Errorf("header length is not %d", PSDBLayout2HeaderBytes)
+	}
+	var payloadLen int
+	if compressed {
+		payloadLen = len(header) + len(ddb.GetCompressedData())
+	} else {
+		payloadLen = len(header) + len(ddb.GetOriginalData())
+	}
+	if payloadLen > 65535 {
+		return fmt.Errorf("feature group payload too large: %d bytes exceeds uint16 max (65535)", payloadLen)
+	}
+	fgDataLen := uint16(payloadLen)
+	fgSerializedData := make([]byte, csdbPrefixLen+fgDataLen)
+	system.ByteOrder.PutUint16(fgSerializedData[0:2], uint16(fgId))
+	system.ByteOrder.PutUint16(fgSerializedData[2:4], uint16(fgDataLen))
+	if compressed {
+		copied := copy(fgSerializedData[csdbPrefixLen:], header)
+		copy(fgSerializedData[csdbPrefixLen+copied:], ddb.GetCompressedData())
+	} else {
+		clearCompressionBits(header)
+		copied := copy(fgSerializedData[csdbPrefixLen:], header)
+		copy(fgSerializedData[csdbPrefixLen+copied:], ddb.GetOriginalData())
 	}
 	_, err := buffer.Write(fgSerializedData)
 	return err

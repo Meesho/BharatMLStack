@@ -77,23 +77,20 @@ func NewScyllaStore(table string, connection *infra.ScyllaClusterConnection) (St
 	}, nil
 }
 
-func (s *ScyllaStore) RetrieveV2(entityLabel string, pkMap map[string]string, fgIds []int) (map[int]*blocks.DeserializedPSDB, error) {
+func (s *ScyllaStore) RetrieveV2(entityLabel string, pkMap map[string]string, fgIds []int) (map[int]blocks.PSDBBlock, error) {
 	t1 := time.Now()
 	metric.Incr("db_retrieve_count", []string{"entity_label", entityLabel, "db_type", "scylla"})
 	colPKMap, pkCols, err := s.configManager.GetPKMapAndPKColumnsForEntity(entityLabel)
 	if err != nil {
-		// log.Error().Err(err).Msgf("Error while getting PK and PK columns for entity: %s", entityLabel)
 		return nil, err
 	}
 	if len(pkMap) == 0 || len(colPKMap) != len(pkMap) || len(fgIds) == 0 {
-		// log.Error().Msgf("Error while getting PK and PK columns for entity: %s", entityLabel)
 		return nil, fmt.Errorf("error while getting PK and PK columns for entity: %s", entityLabel)
 	}
 	fgCols := make([]string, 0)
 	for _, fgId := range fgIds {
 		cols, err := s.configManager.GetColumnsForEntityAndFG(entityLabel, fgId)
 		if err != nil {
-			// log.Error().Err(err).Msgf("Error while getting columns for entity: %s and fgId: %d", entityLabel, fgId)
 			fgCols = fgCols[:0]
 			break
 		}
@@ -101,13 +98,12 @@ func (s *ScyllaStore) RetrieveV2(entityLabel string, pkMap map[string]string, fg
 	}
 
 	if len(fgCols) == 0 {
-		// log.Error().Msgf("Error while getting columns for entity: %s", entityLabel)
 		return nil, fmt.Errorf("error while getting columns for entity: %s", entityLabel)
 	}
 	query := s.getRetrievePreparedStatement(s.keySpace, s.table, fgCols, pkCols, s.session)
 	query = prepareRetrieveQueryV2(pkMap, colPKMap, pkCols, query, s.sessionType)
 	log.Debug().Msgf("DB retrieve query : %s", query)
-	fgIdToDDB := make(map[int]*blocks.DeserializedPSDB, len(fgIds))
+	fgIdToDDB := make(map[int]blocks.PSDBBlock, len(fgIds))
 
 	// Execute query based on session type
 	var rowData []map[string]interface{}
@@ -123,20 +119,16 @@ func (s *ScyllaStore) RetrieveV2(entityLabel string, pkMap map[string]string, fg
 	log.Debug().Msgf("DB retrieve query result : %v", rowData)
 	if err != nil {
 		metric.Count("retrieve.failure", 1, []string{"db_type", "scylla", "entity", entityLabel})
-		// log.Error().Err(err).Msgf("Scylla error | in execute query for entityLabel: %s, keys: %v", entityLabel, pkMap)
 		return nil, err
 	}
 	for _, fgId := range fgIds {
 		if len(rowData) == 0 {
-			fgIdToDDB[fgId] = &blocks.DeserializedPSDB{
-				NegativeCache: true,
-			}
+			fgIdToDDB[fgId] = blocks.NegativeCacheDeserializePSDB()
 			continue
 		}
 		fgData := make([]byte, 0)
 		cols, err := s.configManager.GetColumnsForEntityAndFG(entityLabel, fgId)
 		if err != nil {
-			// log.Error().Err(err).Msgf("Error while getting FG columns for entity: %s and fgId: %d", entityLabel, fgId)
 			return nil, err
 		}
 		for _, col := range cols {
@@ -146,17 +138,13 @@ func (s *ScyllaStore) RetrieveV2(entityLabel string, pkMap map[string]string, fg
 		}
 		ddb, err2 := blocks.DeserializePSDB(fgData)
 		if err2 != nil {
-			// log.Error().Err(err2).Msgf("Error while deserializing PSDB for entity: %s and fgId: %d", entityLabel, fgId)
 			return nil, err2
 		}
 		// Convert expired data to negative cache at source.
 		// This prevents expired data from being cached with stale timestamps,
 		// which would cause infinite cache miss → DB fetch loops.
-		if ddb.Expired {
-			fgIdToDDB[fgId] = &blocks.DeserializedPSDB{
-				NegativeCache: true,
-				Expired:       true,
-			}
+		if ddb.IsExpired() {
+			fgIdToDDB[fgId] = blocks.NegativeCacheExpiredPSDB()
 		} else {
 			fgIdToDDB[fgId] = ddb
 		}
@@ -394,7 +382,7 @@ func (s *ScyllaStore) BatchPersistV2(storeId string, entityLabel string, rows []
 	return fmt.Errorf("%w: BatchPersistV2 for Scylla store", ErrNotImplemented)
 }
 
-func (s *ScyllaStore) BatchRetrieveV2(entityLabel string, pkMaps []map[string]string, fgIds []int) ([]map[int]*blocks.DeserializedPSDB, error) {
+func (s *ScyllaStore) BatchRetrieveV2(entityLabel string, pkMaps []map[string]string, fgIds []int) ([]map[int]blocks.PSDBBlock, error) {
 	return nil, fmt.Errorf("%w: BatchRetrieveV2 for Scylla store", ErrNotImplemented)
 }
 

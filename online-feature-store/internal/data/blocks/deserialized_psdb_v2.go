@@ -10,6 +10,7 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/internal/types"
 )
 
+// DeserializedPSDB is the Layout V1 deserialized permanent storage data block.
 type DeserializedPSDB struct {
 	// 64-bit aligned fields
 	ExpiryAt       uint64
@@ -30,31 +31,50 @@ type DeserializedPSDB struct {
 	Expired       bool
 }
 
-func DeserializePSDB(data []byte) (*DeserializedPSDB, error) {
-	if len(data) == 0 {
-		return &DeserializedPSDB{
-			NegativeCache: true,
-		}, nil
-	}
-	layoutVersion, err := extractLayoutVersionFromHeader(data)
-	if err != nil {
-		return nil, err
-	}
-	var ddb *DeserializedPSDB
+// PSDBBlock interface implementation for DeserializedPSDB (Layout V1)
 
-	switch layoutVersion {
-	case 1:
-		ddb, err = deserializePSDBForLayout1(data)
-	default:
-		err = fmt.Errorf("unsupported layout version: %d", layoutVersion)
+func (d *DeserializedPSDB) GetLayoutVersion() uint8              { return d.LayoutVersion }
+func (d *DeserializedPSDB) GetOriginalData() []byte              { return d.OriginalData }
+func (d *DeserializedPSDB) GetCompressedData() []byte            { return d.CompressedData }
+func (d *DeserializedPSDB) GetHeader() []byte                    { return d.Header }
+func (d *DeserializedPSDB) GetDataType() types.DataType          { return d.DataType }
+func (d *DeserializedPSDB) GetCompressionType() compression.Type { return d.CompressionType }
+func (d *DeserializedPSDB) GetFeatureSchemaVersion() uint16      { return d.FeatureSchemaVersion }
+func (d *DeserializedPSDB) GetExpiryAt() uint64                  { return d.ExpiryAt }
+func (d *DeserializedPSDB) IsNegativeCache() bool                { return d.NegativeCache }
+func (d *DeserializedPSDB) IsExpired() bool                      { return d.Expired }
+func (d *DeserializedPSDB) SetNegativeCache(val bool)            { d.NegativeCache = val }
+
+func (d *DeserializedPSDB) CopyBlock() PSDBBlock {
+	if d == nil {
+		return nil
 	}
-	if err == nil {
-		ddb.LayoutVersion = layoutVersion
+	cp := &DeserializedPSDB{
+		FeatureSchemaVersion: d.FeatureSchemaVersion,
+		LayoutVersion:        d.LayoutVersion,
+		ExpiryAt:             d.ExpiryAt,
+		CompressionType:      d.CompressionType,
+		DataType:             d.DataType,
+		NegativeCache:        d.NegativeCache,
+		Expired:              d.Expired,
 	}
-	return ddb, err
+	if d.Header != nil {
+		cp.Header = make([]byte, len(d.Header))
+		copy(cp.Header, d.Header)
+	}
+	if d.CompressedData != nil {
+		cp.CompressedData = make([]byte, len(d.CompressedData))
+		copy(cp.CompressedData, d.CompressedData)
+	}
+	if d.OriginalData != nil {
+		cp.OriginalData = make([]byte, len(d.OriginalData))
+		copy(cp.OriginalData, d.OriginalData)
+	}
+	return cp
 }
 
-func DeserializePSDBWithoutDecompression(data []byte) (*DeserializedPSDB, error) {
+// DeserializePSDB dispatches to the correct layout-specific deserializer.
+func DeserializePSDB(data []byte) (PSDBBlock, error) {
 	if len(data) == 0 {
 		return &DeserializedPSDB{
 			NegativeCache: true,
@@ -64,18 +84,56 @@ func DeserializePSDBWithoutDecompression(data []byte) (*DeserializedPSDB, error)
 	if err != nil {
 		return nil, err
 	}
-	var ddb *DeserializedPSDB
 
 	switch layoutVersion {
 	case 1:
-		ddb, err = deserializePSDBForLayout1WithoutDecompression(data)
-	default:
-		err = fmt.Errorf("unsupported layout version: %d", layoutVersion)
-	}
-	if err == nil {
+		ddb, err := deserializePSDBForLayout1(data)
+		if err != nil {
+			return nil, err
+		}
 		ddb.LayoutVersion = layoutVersion
+		return ddb, nil
+	case 2:
+		ddb, err := deserializePSDBForLayout2(data)
+		if err != nil {
+			return nil, err
+		}
+		ddb.LayoutVersion = layoutVersion
+		return ddb, nil
+	default:
+		return nil, fmt.Errorf("unsupported layout version: %d", layoutVersion)
 	}
-	return ddb, err
+}
+
+func DeserializePSDBWithoutDecompression(data []byte) (PSDBBlock, error) {
+	if len(data) == 0 {
+		return &DeserializedPSDB{
+			NegativeCache: true,
+		}, nil
+	}
+	layoutVersion, err := extractLayoutVersionFromHeader(data)
+	if err != nil {
+		return nil, err
+	}
+
+	switch layoutVersion {
+	case 1:
+		ddb, err := deserializePSDBForLayout1WithoutDecompression(data)
+		if err != nil {
+			return nil, err
+		}
+		ddb.LayoutVersion = layoutVersion
+		return ddb, nil
+	case 2:
+		ddb, err := deserializePSDBForLayout2WithoutDecompression(data)
+		if err != nil {
+			return nil, err
+		}
+		ddb.LayoutVersion = layoutVersion
+		return ddb, nil
+	default:
+		return nil, fmt.Errorf("unsupported layout version: %d", layoutVersion)
+	}
 }
 
 func extractLayoutVersionFromHeader(data []byte) (uint8, error) {
@@ -86,7 +144,7 @@ func extractLayoutVersionFromHeader(data []byte) (uint8, error) {
 }
 
 func deserializePSDBForLayout1(data []byte) (*DeserializedPSDB, error) {
-	if len(data) < PSDBLayout1LengthBytes {
+	if len(data) < PSDBLayout1HeaderBytes {
 		return nil, fmt.Errorf("data is too short to contain a valid PSDBV2 header")
 	}
 	featureSchemaVersion := system.ByteOrder.Uint16(data[0:2])
@@ -99,18 +157,18 @@ func deserializePSDBForLayout1(data []byte) (*DeserializedPSDB, error) {
 	dtT := (data[7] & 0x01) << 4
 	dtT = dtT | ((data[8] & 0xF0) >> 4)
 	dataType := types.DataType(dtT)
-	header := data[0:PSDBLayout1LengthBytes]
+	header := data[0:PSDBLayout1HeaderBytes]
 	var originalData []byte
 	var compressedData []byte
 	if compressionType == compression.TypeNone {
-		originalData = data[PSDBLayout1LengthBytes:]
-		compressedData = data[PSDBLayout1LengthBytes:]
+		originalData = data[PSDBLayout1HeaderBytes:]
+		compressedData = data[PSDBLayout1HeaderBytes:]
 	} else {
 		dec, err := compression.GetDecoder(compressionType)
 		if err != nil {
 			return nil, err
 		}
-		compressedData = data[PSDBLayout1LengthBytes:]
+		compressedData = data[PSDBLayout1HeaderBytes:]
 		originalData, err = dec.Decode(compressedData)
 		if err != nil {
 			return nil, err
@@ -131,7 +189,7 @@ func deserializePSDBForLayout1(data []byte) (*DeserializedPSDB, error) {
 }
 
 func deserializePSDBForLayout1WithoutDecompression(data []byte) (*DeserializedPSDB, error) {
-	if len(data) < PSDBLayout1LengthBytes {
+	if len(data) < PSDBLayout1HeaderBytes {
 		return nil, fmt.Errorf("data is too short to contain a valid PSDBV2 header")
 	}
 	featureSchemaVersion := system.ByteOrder.Uint16(data[0:2])
@@ -144,11 +202,9 @@ func deserializePSDBForLayout1WithoutDecompression(data []byte) (*DeserializedPS
 	dtT := (data[7] & 0x01) << 4
 	dtT = dtT | ((data[8] & 0xF0) >> 4)
 	dataType := types.DataType(dtT)
-	header := data[0:PSDBLayout1LengthBytes]
-	var originalData []byte
-	var compressedData []byte
-	originalData = data[PSDBLayout1LengthBytes:]
-	compressedData = data[PSDBLayout1LengthBytes:]
+	header := data[0:PSDBLayout1HeaderBytes]
+	originalData := data[PSDBLayout1HeaderBytes:]
+	compressedData := data[PSDBLayout1HeaderBytes:]
 
 	return &DeserializedPSDB{
 		FeatureSchemaVersion: featureSchemaVersion,
@@ -164,7 +220,7 @@ func deserializePSDBForLayout1WithoutDecompression(data []byte) (*DeserializedPS
 	}, nil
 }
 
-func NegativeCacheDeserializePSDB() *DeserializedPSDB {
+func NegativeCacheDeserializePSDB() PSDBBlock {
 	return &DeserializedPSDB{
 		FeatureSchemaVersion: 0,
 		LayoutVersion:        1,
@@ -179,7 +235,16 @@ func NegativeCacheDeserializePSDB() *DeserializedPSDB {
 	}
 }
 
-func (d *DeserializedPSDB) GetStringScalarFeature(pos int, noOfFeatures int) ([]byte, error) {
+func NegativeCacheExpiredPSDB() PSDBBlock {
+	return &DeserializedPSDB{
+		NegativeCache: true,
+		Expired:       true,
+	}
+}
+
+// --- Layout V1 Feature Extraction Methods (dense access, no bitmap) ---
+
+func (d *DeserializedPSDB) GetStringScalarFeature(pos int, noOfFeatures int, defaultValue []byte) ([]byte, error) {
 	if d.DataType != types.DataTypeString {
 		return nil, fmt.Errorf("data type is not a string")
 	}
@@ -198,7 +263,7 @@ func (d *DeserializedPSDB) GetStringScalarFeature(pos int, noOfFeatures int) ([]
 	return d.OriginalData[offset : offset+int(length)], nil
 }
 
-// GetVectorStringFeature retrieves a specific vector's string data at position 'pos'
+// GetStringVectorFeature retrieves a specific vector's string data at position 'pos'
 //
 // Data Layout Example for 3 vectors with lengths [2,3,3]:
 // Length Section: [v1-len1][v1-len2] [v2-len1][v2-len2][v2-len3] [v3-len1][v3-len2][v3-len3]
@@ -220,12 +285,11 @@ func (d *DeserializedPSDB) GetStringScalarFeature(pos int, noOfFeatures int) ([]
 //
 // Example for pos=1 (second vector):
 //
-//	offset = 2+3+3 = 8 (total strings) * 2 (bytes per length) = start of Data Section
-//	sum = len(v1-str1) + len(v1-str2) = offset to v2's string data
-//  offset = 16 + sum (start of v2's string data)
-//  idx = 2 (strings in v1) * 2 = position of v2's length entries
-
-func (d *DeserializedPSDB) GetStringVectorFeature(pos int, noOfFeatures int, vectorLengths []uint16) ([]byte, error) {
+//		offset = 2+3+3 = 8 (total strings) * 2 (bytes per length) = start of Data Section
+//		sum = len(v1-str1) + len(v1-str2) = offset to v2's string data
+//	 offset = 16 + sum (start of v2's string data)
+//	 idx = 2 (strings in v1) * 2 = position of v2's length entries
+func (d *DeserializedPSDB) GetStringVectorFeature(pos int, noOfFeatures int, vectorLengths []uint16, defaultValue []byte) ([]byte, error) {
 	if d.DataType != types.DataTypeStringVector {
 		return nil, fmt.Errorf("data type is not a string vector")
 	}
@@ -260,29 +324,33 @@ func (d *DeserializedPSDB) GetStringVectorFeature(pos int, noOfFeatures int, vec
 	}
 	return data, nil
 }
-func (dd *DeserializedPSDB) GetNumericScalarFeature(pos int) ([]byte, error) {
+
+func (dd *DeserializedPSDB) GetNumericScalarFeature(pos int, numFeatures int, defaultValue []byte) ([]byte, error) {
 	size := dd.DataType.Size()
-	start := pos * size
-	end := start + size
-	if start >= len(dd.OriginalData) || end > len(dd.OriginalData) {
+	data := dd.OriginalData
+	offset := pos * size
+	end := offset + size
+	if offset < 0 || end > len(data) {
 		return nil, fmt.Errorf("position out of bounds")
 	}
-	return dd.OriginalData[start:end], nil
+	return data[offset:end], nil
 }
 
-func (dd *DeserializedPSDB) GetNumericVectorFeature(pos int, vectorLengths []uint16) ([]byte, error) {
+func (dd *DeserializedPSDB) GetNumericVectorFeature(pos int, vectorLengths []uint16, defaultValue []byte) ([]byte, error) {
+	data := dd.OriginalData
+	size := dd.DataType.Size()
 	var start int = 0
 	for i, vl := range vectorLengths {
 		if i == pos {
 			break
 		}
-		start += int(vl) * dd.DataType.Size()
+		start += int(vl) * size
 	}
-	end := start + int(vectorLengths[pos])*dd.DataType.Size()
-	if start >= len(dd.OriginalData) || end > len(dd.OriginalData) {
+	end := start + int(vectorLengths[pos])*size
+	if start >= len(data) || end > len(data) {
 		return nil, fmt.Errorf("position out of bounds")
 	}
-	return dd.OriginalData[start:end], nil
+	return data[start:end], nil
 }
 
 func (dd *DeserializedPSDB) GetBoolScalarFeature(pos int) ([]byte, error) {
@@ -297,7 +365,7 @@ func (dd *DeserializedPSDB) GetBoolScalarFeature(pos int) ([]byte, error) {
 	return []byte{b}, nil
 }
 
-func (dd *DeserializedPSDB) GetBoolVectorFeature(pos int, vectorLengths []uint16) ([]byte, error) {
+func (dd *DeserializedPSDB) GetBoolVectorFeature(pos int, vectorLengths []uint16, defaultValue []byte) ([]byte, error) {
 	// Calculate the starting bit position by summing up previous vector lengths
 	startBit := 0
 	for i := 0; i < pos; i++ {
@@ -305,6 +373,7 @@ func (dd *DeserializedPSDB) GetBoolVectorFeature(pos int, vectorLengths []uint16
 	}
 
 	vectorLen := int(vectorLengths[pos])
+	data := dd.OriginalData
 	result := make([]byte, vectorLen) // Allocate enough bytes to hold all bits
 
 	// Read bits from the source and pack them into the result
@@ -314,12 +383,12 @@ func (dd *DeserializedPSDB) GetBoolVectorFeature(pos int, vectorLengths []uint16
 		sourceBitOffset := 7 - (sourceBitPos % 8)
 		sourceBitMask := byte(1 << sourceBitOffset)
 
-		if sourceByteIndex >= len(dd.OriginalData) {
+		if sourceByteIndex >= len(data) {
 			return nil, fmt.Errorf("position out of bounds")
 		}
 
 		// Extract the bit from source
-		bitValue := (dd.OriginalData[sourceByteIndex] & sourceBitMask) >> sourceBitOffset
+		bitValue := (data[sourceByteIndex] & sourceBitMask) >> sourceBitOffset
 
 		// Place the bit in the result
 		result[i] = bitValue
@@ -622,38 +691,4 @@ func HelperVectorFeatureToTypeFP8E4M3(vector []byte) ([]float32, error) {
 		data[i/unitSize] = system.ByteOrder.Float8E4M3AsFP32(vector[i : i+unitSize])
 	}
 	return data, nil
-}
-
-func (d *DeserializedPSDB) Copy() *DeserializedPSDB {
-	if d == nil {
-		return nil
-	}
-
-	copy := &DeserializedPSDB{
-		FeatureSchemaVersion: d.FeatureSchemaVersion,
-		LayoutVersion:        d.LayoutVersion,
-		ExpiryAt:             d.ExpiryAt,
-		CompressionType:      d.CompressionType,
-		DataType:             d.DataType,
-		NegativeCache:        d.NegativeCache,
-		Expired:              d.Expired,
-	}
-
-	// Deep copy byte slices
-	if d.Header != nil {
-		copy.Header = make([]byte, len(d.Header))
-		copy.Header = append(copy.Header[:0], d.Header...)
-	}
-
-	if d.CompressedData != nil {
-		copy.CompressedData = make([]byte, len(d.CompressedData))
-		copy.CompressedData = append(copy.CompressedData[:0], d.CompressedData...)
-	}
-
-	if d.OriginalData != nil {
-		copy.OriginalData = make([]byte, len(d.OriginalData))
-		copy.OriginalData = append(copy.OriginalData[:0], d.OriginalData...)
-	}
-
-	return copy
 }

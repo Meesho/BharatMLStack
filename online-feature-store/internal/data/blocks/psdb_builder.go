@@ -86,7 +86,7 @@ func (p *PermStorageDataBlockBuilder) Build() (*PermStorageDataBlock, error) {
 	if p.psdb.buf == nil {
 		p.psdb.buf = make([]byte, 24)
 	} else {
-		p.psdb.buf = p.psdb.buf[:PSDBLayout1LengthBytes]
+		p.psdb.buf = p.psdb.buf[:PSDBLayout1HeaderBytes]
 	}
 	var err error
 	switch p.psdb.dataType {
@@ -132,9 +132,9 @@ func (p *PermStorageDataBlockBuilder) Build() (*PermStorageDataBlock, error) {
 	}
 
 	if p.psdb.buf == nil {
-		p.psdb.buf = make([]byte, PSDBLayout1LengthBytes)
+		p.psdb.buf = make([]byte, PSDBLayout1HeaderBytes)
 	} else {
-		p.psdb.buf = p.psdb.buf[:PSDBLayout1LengthBytes]
+		p.psdb.buf = p.psdb.buf[:PSDBLayout1HeaderBytes]
 	}
 
 	return p.psdb, nil

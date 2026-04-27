@@ -3,6 +3,7 @@ package feature
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -206,7 +207,7 @@ func (p *PersistHandler) preparePersistData(persistData *PersistData) error {
 			if err != nil {
 				return fmt.Errorf("failed to get feature group %s: %w", fgSchema.GetLabel(), err)
 			}
-			featureData, err := system.ParseFeatureValue(fgSchema.GetFeatureLabels(), data.GetFeatureValues()[fgIndex], persistData.AllFGIdToFgConf[fgId].DataType, persistData.AllFGIdToFgConf[fgId].FeatureMeta)
+			featureData, featureBitmap, err := system.ParseFeatureValue(fgSchema.GetFeatureLabels(), data.GetFeatureValues()[fgIndex], persistData.AllFGIdToFgConf[fgId].DataType, persistData.AllFGIdToFgConf[fgId].FeatureMeta)
 			if err != nil {
 				return NewInvalidEventError(fmt.Sprintf("failed to parse feature value for entity %s and feature group %s: %v", persistData.EntityLabel, fgSchema.GetLabel(), err))
 			}
@@ -214,7 +215,9 @@ func (p *PersistHandler) preparePersistData(persistData *PersistData) error {
 			if err != nil {
 				return fmt.Errorf("failed to get active version for feature group %s: %w", fgSchema.GetLabel(), err)
 			}
-			psDbBlock := p.BuildPSDBBlock(persistData.EntityLabel, persistData.AllFGIdToFgConf[fgId].DataType, featureData, fgConf, uint32(activeVersion))
+			psDbBlock := p.BuildPSDBBlock(persistData.EntityLabel, persistData.AllFGIdToFgConf[fgId].DataType, featureData, featureBitmap, fgConf, uint32(activeVersion))
+			// Shadow layout comparison (sampled)
+			p.maybeShadowCompare(persistData.EntityLabel, fgSchema.GetLabel(), persistData.AllFGIdToFgConf[fgId].DataType, featureData, featureBitmap, fgConf, uint32(activeVersion))
 			if persistData.StoreIdToRows[fgConf.StoreId] == nil {
 				persistData.StoreIdToRows[fgConf.StoreId] = make([]Row, len(persistData.Query.Data))
 			}
@@ -372,14 +375,15 @@ func (p *PersistHandler) RemoveFromDistributedCache(persistData *PersistData) er
 	return nil
 }
 
-func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataType, featureData interface{}, fgConf *config.FeatureGroup, activeVersion uint32) *blocks.PermStorageDataBlock {
+func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataType, featureData interface{}, featureBitmap []byte, fgConf *config.FeatureGroup, activeVersion uint32) *blocks.PermStorageDataBlock {
 	psDbPool := blocks.GetPSDBPool()
 	builder := psDbPool.Get().Builder.
 		SetID(uint(fgConf.LayoutVersion)).
 		SetDataType(dataType).
 		SetCompressionB(compression.TypeZSTD).
 		SetTTL(fgConf.TtlInSeconds).
-		SetVersion(activeVersion)
+		SetVersion(activeVersion).
+		SetBitmap(featureBitmap)
 	numOfFeatures, err := p.config.GetNumOfFeatures(entityLabel, fgConf.Id, int(activeVersion))
 	if err != nil {
 		log.Error().Err(err).Msgf("Failed to get number of features for feature group %v", fgConf.Id)
@@ -394,6 +398,9 @@ func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataT
 	}
 	switch dataType.String() {
 	case "DataTypeString":
+		if fgConf.LayoutVersion == 2 && len(featureBitmap) > 0 {
+			builder = builder.SetupBitmapMeta(numOfFeatures)
+		}
 		psdb, err := builder.
 			SetStringValue(stringLengths).
 			SetScalarValues(featureData, numOfFeatures).
@@ -403,6 +410,9 @@ func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataT
 		}
 		return psdb
 	case "DataTypeStringVector":
+		if fgConf.LayoutVersion == 2 && len(featureBitmap) > 0 {
+			builder = builder.SetupBitmapMeta(numOfFeatures)
+		}
 		psdb, err := builder.
 			SetStringValue(stringLengths).
 			SetVectorValues(featureData, numOfFeatures, vectorLengths).
@@ -413,6 +423,9 @@ func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataT
 		return psdb
 	default:
 		if dataType.IsVector() {
+			if fgConf.LayoutVersion == 2 && len(featureBitmap) > 0 {
+				builder = builder.SetupBitmapMeta(numOfFeatures)
+			}
 			psdb, err := builder.
 				SetVectorValues(featureData, numOfFeatures, vectorLengths).
 				Build()
@@ -420,6 +433,10 @@ func (p *PersistHandler) BuildPSDBBlock(entityLabel string, dataType types.DataT
 				log.Error().Err(err).Msgf("Failed to build PSDB block for feature group %v", fgConf.Id)
 			}
 			return psdb
+		}
+		// Layout-2 scalar numeric: set bitmap meta so header has bitmapLastBitIndex and bitmapPresent
+		if fgConf.LayoutVersion == 2 && len(featureBitmap) > 0 {
+			builder = builder.SetupBitmapMeta(numOfFeatures)
 		}
 		psdb, err := builder.
 			SetScalarValues(featureData, numOfFeatures).
@@ -450,5 +467,56 @@ func cleanupPSDBs(rows []Row) {
 			psdb.Clear()
 			psdbPool.Put(psdb)
 		}
+	}
+}
+
+// maybeShadowCompare builds a shadow Layout2 PSDB on sampled requests and emits size comparison metrics
+func (p *PersistHandler) maybeShadowCompare(entityLabel string, fgLabel string, dataType types.DataType, featureData interface{}, featureBitmap []byte, fgConf *config.FeatureGroup, activeVersion uint32) {
+	shadowConf := p.config.GetLayoutShadowComparisonConfig()
+	if !shadowConf.Enabled {
+		return
+	}
+	if shadowConf.SampleRate < 1.0 && rand.Float64() >= shadowConf.SampleRate {
+		return
+	}
+
+	numOfFeatures, err := p.config.GetNumOfFeatures(entityLabel, fgConf.Id, int(activeVersion))
+	if err != nil {
+		return
+	}
+	stringLengths, _ := p.config.GetStringLengths(entityLabel, fgConf.Id, int(activeVersion))
+	vectorLengths, _ := p.config.GetVectorLengths(entityLabel, fgConf.Id, int(activeVersion))
+
+	tags := []string{
+		"entity_label:" + entityLabel,
+		"fg_label:" + fgLabel,
+		"data_type:" + dataType.String(),
+	}
+
+	layout1Size := blocks.ShadowSerializeAsLayout(
+		1, dataType, featureData, featureBitmap,
+		compression.TypeZSTD, fgConf.TtlInSeconds, activeVersion,
+		numOfFeatures, stringLengths, vectorLengths,
+	)
+	layout2Size := blocks.ShadowSerializeAsLayout(
+		2, dataType, featureData, featureBitmap,
+		compression.TypeZSTD, fgConf.TtlInSeconds, activeVersion,
+		numOfFeatures, stringLengths, vectorLengths,
+	)
+
+	if layout1Size < 0 || layout2Size < 0 {
+		return
+	}
+
+	metric.Gauge("psdb.shadow.layout1.size", float64(layout1Size), tags)
+	metric.Gauge("psdb.shadow.layout2.size", float64(layout2Size), tags)
+
+	if layout1Size > 0 {
+		reductionPct := float64(layout1Size-layout2Size) / float64(layout1Size) * 100
+		metric.Gauge("psdb.shadow.size_reduction_pct", reductionPct, tags)
+	}
+
+	if layout2Size < layout1Size {
+		metric.Count("psdb.shadow.layout2_better", 1, tags)
 	}
 }

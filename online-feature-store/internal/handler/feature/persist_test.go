@@ -745,6 +745,18 @@ func TestPersist(t *testing.T) {
 											StringLength:         0,
 											VectorLength:         0,
 										},
+										"extra_feature_1": {
+											Sequence:             7,
+											DefaultValuesInBytes: []byte{0, 0, 0, 0, 0, 0, 0, 0},
+											StringLength:         0,
+											VectorLength:         0,
+										},
+										"extra_feature_2": {
+											Sequence:             8,
+											DefaultValuesInBytes: []byte{0, 0, 0, 0, 0, 0, 0, 0},
+											StringLength:         0,
+											VectorLength:         0,
+										},
 									},
 								},
 							},
@@ -775,8 +787,8 @@ func TestPersist(t *testing.T) {
 					MaxRowSizeInBytes:    102400,
 				}, nil)
 
-				// Mock GetNumOfFeatures
-				m.On("GetNumOfFeatures", "user_sscat", 1, mock.Anything).Return(7, nil)
+				// Mock GetNumOfFeatures (9 features: 7 original + extra_feature_1, extra_feature_2)
+				m.On("GetNumOfFeatures", "user_sscat", 1, mock.Anything).Return(9, nil)
 
 				// Mock GetStringLengths
 				m.On("GetStringLengths", "user_sscat", 1, mock.Anything).Return([]uint16{0}, nil)
@@ -808,12 +820,11 @@ func TestPersist(t *testing.T) {
 				// Verify PSDB block exists
 				assert.Contains(t, row.FgIdToPsDb, 1, "Should have PSDB block for derived_int64")
 
-				// Verify derived_int64 PSDB block
+				// Verify derived_int64 PSDB block: 7 original features + extra_feature_1 (40), extra_feature_2 (50)
 				psdbInt64 := row.FgIdToPsDb[1]
 				int64Values, ok := psdbInt64.Data.([]int64)
 				assert.True(t, ok, "Int64 block should contain []int64 data")
-				// Only the valid features should be included, extra features should be ignored
-				assert.Equal(t, []int64{-1, 30, 12, 5, 0, 0, 0}, int64Values, "Int64 values should match")
+				assert.Equal(t, []int64{-1, 30, 12, 5, 0, 0, 0, 40, 50}, int64Values, "Int64 values should match")
 			},
 		},
 		{
