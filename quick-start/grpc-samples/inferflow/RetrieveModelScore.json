@@ -1,0 +1,16 @@
+{
+  "entities": [
+    {
+      "entity": "product",
+      "ids": ["product_101", "product_202", "product_303"],
+      "features": [
+        {
+          "name": "user_context",
+          "idsFeatureValue": ["user_001"]
+        }
+      ]
+    }
+  ],
+  "modelConfigId": "ranking_model_v1",
+  "trackingId": "tracking_test_001"
+}

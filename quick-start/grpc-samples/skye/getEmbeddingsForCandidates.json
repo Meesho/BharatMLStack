@@ -1,0 +1,6 @@
+{
+  "entity": "product",
+  "candidateIds": ["product_101", "product_202", "product_303"],
+  "modelName": "product_embedding_v1",
+  "variant": "ads_gold"
+}

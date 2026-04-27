@@ -1,0 +1,14 @@
+{
+  "entity": "product",
+  "limit": 10,
+  "modelName": "product_embedding_v1",
+  "variant": "ads_gold",
+  "embeddings": [
+    {
+      "embedding": [0.12, 0.34, 0.56, 0.78, 0.90, 0.11, 0.22, 0.33, 0.44, 0.55]
+    }
+  ],
+  "filters": [],
+  "globalFilters": { "filter": [] },
+  "attribute": []
+}
