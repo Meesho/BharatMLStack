@@ -5,6 +5,8 @@ import (
 
 	horizonConfig "github.com/Meesho/BharatMLStack/horizon/internal"
 	applicationRouter "github.com/Meesho/BharatMLStack/horizon/internal/application/route"
+	horizonConfig "github.com/Meesho/BharatMLStack/horizon/internal"
+	applicationRouter "github.com/Meesho/BharatMLStack/horizon/internal/application/route"
 	authRouter "github.com/Meesho/BharatMLStack/horizon/internal/auth/router"
 	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	connectionConfigRouter "github.com/Meesho/BharatMLStack/horizon/internal/connectionconfig/route"
@@ -31,6 +33,24 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/logger"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/metric"
+	"github.com/Meesho/BharatMLStack/horizon/pkg/scheduler"
+)
+
+type AppConfig struct {
+	Configs        configs.Configs
+	DynamicConfigs configs.DynamicConfigs
+}
+
+func (cfg *AppConfig) GetStaticConfig() interface{} {
+	return &cfg.Configs
+}
+
+func (cfg *AppConfig) GetDynamicConfig() interface{} {
+	return &cfg.DynamicConfigs
+}
+
+var (
+	appConfig AppConfig
 	"github.com/Meesho/BharatMLStack/horizon/pkg/scheduler"
 )
 

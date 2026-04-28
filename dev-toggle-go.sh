@@ -132,6 +132,7 @@ interactive_select_command() {
     done
 }
 
+<<<<<<< HEAD
 select_internal_repo_branch() {
     local provided_branch="${1:-}"
     local branch=""
@@ -204,6 +205,10 @@ select_internal_repo_branch() {
 
 print_usage() {
     echo "Usage: $0 <folder-name> <command> [branch]"
+=======
+print_usage() {
+    echo "Usage: $0 <folder-name> <command>"
+>>>>>>> f6eea88056c3a28cda8c3264161b49e51d3305fb
     echo ""
     echo "Parameters:"
     echo "  1. folder-name  - Name of the folder to operate on"
@@ -229,16 +234,22 @@ print_usage() {
     echo "       • status   - Show current development mode status"
     echo "       • update   - Update internal configs (pull latest from internal repo)"
     echo ""
+<<<<<<< HEAD
     echo "  3. branch       - (Optional) Internal configs repo branch to use (default: develop)"
     echo "                   Examples: develop, main, feature/my-change"
     echo "                   You can also set INTERNAL_REPO_BRANCH env var."
     echo ""
+=======
+>>>>>>> f6eea88056c3a28cda8c3264161b49e51d3305fb
     echo "Examples:"
     if [ ${#available_folders[@]} -gt 0 ]; then
         local first_folder="${available_folders[0]}"
         echo "  $0 $first_folder enable"
+<<<<<<< HEAD
         echo "  $0 $first_folder enable develop"
         echo "  $0 $first_folder enable main"
+=======
+>>>>>>> f6eea88056c3a28cda8c3264161b49e51d3305fb
         if [ ${#available_folders[@]} -gt 1 ]; then
             local second_folder="${available_folders[1]}"
             echo "  $0 $second_folder status"
@@ -371,8 +382,11 @@ check_status() {
 }
 
 clone_or_update_internal_repo() {
+<<<<<<< HEAD
     local target_branch="${INTERNAL_REPO_BRANCH:-develop}"
 
+=======
+>>>>>>> f6eea88056c3a28cda8c3264161b49e51d3305fb
     if [ -d "$INTERNAL_REPO_DIR/.git" ]; then
         log_info "Internal configs repo already exists, updating..."
         log_debug "Repository path: $INTERNAL_REPO_DIR"
@@ -383,6 +397,7 @@ clone_or_update_internal_repo() {
         git fetch origin
         log_debug "Fetch completed"
         
+<<<<<<< HEAD
         log_info "Using branch: $target_branch"
 
         # Ensure the remote branch exists (and fetch it explicitly if needed)
@@ -408,6 +423,43 @@ clone_or_update_internal_repo() {
         # Reset to latest
         log_info "Resetting to origin/$target_branch..."
         git reset --hard "origin/$target_branch"
+=======
+        # Determine the default branch (main or master)
+        log_debug "Determining default branch..."
+        default_branch=$(git remote show origin | grep 'HEAD branch' | cut -d' ' -f5)
+        if [ -z "$default_branch" ]; then
+            log_debug "Could not detect default branch via remote show, trying fallback..."
+            # Fallback: try main first, then master
+            if git show-ref --verify --quiet refs/remotes/origin/main; then
+                default_branch="main"
+                log_debug "Found refs/remotes/origin/main"
+            elif git show-ref --verify --quiet refs/remotes/origin/master; then
+                default_branch="master"
+                log_debug "Found refs/remotes/origin/master"
+            else
+                log_error "Could not determine default branch (main or master not found)"
+                cd "$TARGET_DIR"
+                exit 1
+            fi
+        fi
+        
+        log_info "Default branch detected: $default_branch"
+        
+        # Checkout the default branch if we're on a different branch
+        current_branch=$(git rev-parse --abbrev-ref HEAD)
+        log_debug "Current branch: $current_branch"
+        if [ "$current_branch" != "$default_branch" ]; then
+            log_info "Switching from $current_branch to $default_branch"
+            git checkout "$default_branch"
+            log_debug "Branch switch completed"
+        else
+            log_debug "Already on $default_branch, no branch switch needed"
+        fi
+        
+        # Reset to latest
+        log_info "Resetting to origin/$default_branch..."
+        git reset --hard "origin/$default_branch"
+>>>>>>> f6eea88056c3a28cda8c3264161b49e51d3305fb
         local commit_hash=$(git rev-parse --short HEAD)
         log_info "Updated to commit: $commit_hash"
         
@@ -416,9 +468,14 @@ clone_or_update_internal_repo() {
         log_info "Internal configs repo not found, cloning..."
         log_debug "Cloning from: $INTERNAL_REPO_URL"
         log_debug "Destination: $INTERNAL_REPO_DIR"
+<<<<<<< HEAD
         log_debug "Branch: $target_branch"
         rm -rf "$INTERNAL_REPO_DIR"
         git clone -b "$target_branch" "$INTERNAL_REPO_URL" "$INTERNAL_REPO_DIR"
+=======
+        rm -rf "$INTERNAL_REPO_DIR"
+        git clone "$INTERNAL_REPO_URL" "$INTERNAL_REPO_DIR"
+>>>>>>> f6eea88056c3a28cda8c3264161b49e51d3305fb
         local commit_hash=$(cd "$INTERNAL_REPO_DIR" && git rev-parse --short HEAD)
         log_info "Clone completed at commit: $commit_hash"
     fi
@@ -459,6 +516,7 @@ enable_dev_mode() {
     echo "# Folder: $FOLDER_NAME" >> "$STATE_FILE"
     log_debug "Created state file: $STATE_FILE"
 
+<<<<<<< HEAD
     # Find and copy all .go files and config files from internal repo
     # Copy: .go sources and common config types (.yaml, .yml, .json, .env, .pbtxt)
     log_info "Step 4: Searching for .go and config files to copy..."
@@ -469,6 +527,15 @@ enable_dev_mode() {
     local file_count
     file_count=$(find "$INTERNAL_FOLDER_DIR" -type f \( "${find_patterns[@]}" \) | wc -l)
     log_info "Found $file_count file(s) to copy (.go and configs)"
+=======
+    # Find and copy all .go files from internal repo
+    log_info "Step 4: Searching for .go files to copy..."
+    log_debug "Scanning directory: $INTERNAL_FOLDER_DIR"
+    
+    local copied_count=0
+    local file_count=$(find "$INTERNAL_FOLDER_DIR" -name "*.go" -type f | wc -l)
+    log_info "Found $file_count .go file(s) to copy"
+>>>>>>> f6eea88056c3a28cda8c3264161b49e51d3305fb
     
     while IFS= read -r -d '' src_file; do
         # Get relative path from INTERNAL_FOLDER_DIR
@@ -495,7 +562,11 @@ enable_dev_mode() {
         # Record in state file
         echo "FILE:$rel_path" >> "$STATE_FILE"
         ((copied_count++))
+<<<<<<< HEAD
     done < <(find "$INTERNAL_FOLDER_DIR" -type f \( "${find_patterns[@]}" \) -print0)
+=======
+    done < <(find "$INTERNAL_FOLDER_DIR" -name "*.go" -type f -print0)
+>>>>>>> f6eea88056c3a28cda8c3264161b49e51d3305fb
 
     log_info "Successfully copied $copied_count file(s)"
 
@@ -504,6 +575,7 @@ enable_dev_mode() {
     if [ -f "$INTERNAL_FOLDER_DIR/go.mod" ]; then
         log_debug "Found go.mod in internal configs: $INTERNAL_FOLDER_DIR/go.mod"
         
+<<<<<<< HEAD
         # Extract require/replace directives from internal go.mod.
         # Supports both single-line directives and block forms:
         #   require ( ... )
@@ -553,15 +625,33 @@ enable_dev_mode() {
                 log_debug "  $line"
             done < "$GO_MOD_APPEND_FILE"
 
+=======
+        # Extract lines that start with "replace " from internal go.mod
+        if grep -E "^replace " "$INTERNAL_FOLDER_DIR/go.mod" > "$GO_MOD_APPEND_FILE"; then
+            local replace_count=$(wc -l < "$GO_MOD_APPEND_FILE")
+            log_info "Found $replace_count replace directive(s) to append"
+            log_debug "Replace directives:"
+            while IFS= read -r line; do
+                log_debug "  $line"
+            done < "$GO_MOD_APPEND_FILE"
+            
+>>>>>>> f6eea88056c3a28cda8c3264161b49e51d3305fb
             # Append to current go.mod
             log_info "Appending to $GO_MOD_FILE..."
             echo "" >> "$GO_MOD_FILE"
             echo "// Added by dev-toggle-go.sh - DO NOT EDIT" >> "$GO_MOD_FILE"
             cat "$GO_MOD_APPEND_FILE" >> "$GO_MOD_FILE"
+<<<<<<< HEAD
 
             log_info "✓ Successfully appended require/replace directives to go.mod"
         else
             log_warn "No require/replace directives found in internal go.mod"
+=======
+            
+            log_info "✓ Successfully appended replace directives to go.mod"
+        else
+            log_warn "No replace directives found in internal go.mod"
+>>>>>>> f6eea88056c3a28cda8c3264161b49e51d3305fb
             rm -f "$GO_MOD_APPEND_FILE"
         fi
     else
@@ -585,12 +675,15 @@ enable_dev_mode() {
     echo "  Files copied: $copied_count"
     echo "  go.mod updated: $([ -f "$GO_MOD_APPEND_FILE" ] && echo "YES" || echo "NO")"
     echo "  State file: $STATE_FILE"
+<<<<<<< HEAD
     if [ "$FOLDER_NAME" = "horizon" ]; then
         echo ""
         echo "To run tests including internal (meesho) config tests, use:"
         echo "  cd $TARGET_DIR && go test -tags=meesho ./..."
         echo "Without -tags=meesho, only the standard tests run (internal test files are skipped)."
     fi
+=======
+>>>>>>> f6eea88056c3a28cda8c3264161b49e51d3305fb
 }
 
 disable_dev_mode() {
@@ -740,7 +833,10 @@ update_internal_configs() {
 # Main script logic
 FOLDER_NAME_INPUT="${1:-}"
 COMMAND="${2:-}"
+<<<<<<< HEAD
 BRANCH_INPUT="${3:-}"
+=======
+>>>>>>> f6eea88056c3a28cda8c3264161b49e51d3305fb
 
 # Interactive mode: prompt for missing parameters
 if [ -z "$FOLDER_NAME_INPUT" ]; then
@@ -754,12 +850,15 @@ if [ -z "$COMMAND" ]; then
     COMMAND=$(interactive_select_command)
 fi
 
+<<<<<<< HEAD
 # If command needs internal configs, choose the branch once (applies to all selected folders)
 if [ "$COMMAND" = "enable" ] || [ "$COMMAND" = "update" ]; then
     INTERNAL_REPO_BRANCH="$(select_internal_repo_branch "$BRANCH_INPUT")"
     log_debug "Internal configs branch: $INTERNAL_REPO_BRANCH"
 fi
 
+=======
+>>>>>>> f6eea88056c3a28cda8c3264161b49e51d3305fb
 # Parse folder names (support multiple folders)
 FOLDER_NAMES=($FOLDER_NAME_INPUT)
 

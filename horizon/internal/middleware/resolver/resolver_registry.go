@@ -12,20 +12,16 @@ type Handler struct {
 func NewHandler() (*Handler, error) {
 	registry := make(map[string]Func)
 	resolverList := []func() (ServiceResolver, error){
-<<<<<<< HEAD:horizon/internal/middlewares/resolver/resolver_registry.go
-		NewnumerixServiceResolver,
 		NewPredatorServiceResolver,
 		NewInferFlowServiceResolver,
 		NewEmbeddingPlatformServiceResolver,
 		NewOnlineFeatureStoreResolver,
-=======
 		NewPredatorServiceResolver,
 		NewDeployableServiceResolver,
 		NewInferflowServiceResolver,
 		NewNumerixServiceResolver,
 		NewApplicationServiceResolver,
 		NewSkyeServiceResolver,
->>>>>>> 719e1f68b6c4710e883a4d61b281c16133c167a5:horizon/internal/middleware/resolver/resolver_registry.go
 	}
 
 	for _, rFn := range resolverList {

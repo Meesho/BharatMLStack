@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+
 	"github.com/Meesho/BharatMLStack/horizon/internal/auth/constants"
 	"github.com/Meesho/BharatMLStack/horizon/internal/auth/handler"
 	"github.com/Meesho/BharatMLStack/horizon/internal/constant"
@@ -65,7 +66,7 @@ func NewMiddleware() Middleware {
 		if err != nil {
 			log.Error().Msgf("Error in creating role permission repository: %v", err)
 		}
-<<<<<<< HEAD:horizon/internal/middlewares/middleware.go
+
 		permissionRepo, err := permissions.NewRepository(sqlConn)
 		if err != nil {
 			log.Error().Msgf("Error in creating permission repository")
@@ -74,9 +75,7 @@ func NewMiddleware() Middleware {
 		if err != nil {
 			log.Error().Msgf("Error in creating metadata repository")
 		}
-=======
 
->>>>>>> 719e1f68b6c4710e883a4d61b281c16133c167a5:horizon/internal/middleware/middleware.go
 		middleware = &MiddlewareHandler{
 			tokenRepo:          tokenRepo,
 			apiResolverRepo:    apiResolverRepo,
@@ -102,9 +101,9 @@ func (m *MiddlewareHandler) Cors() []gin.HandlerFunc {
 	corsConfig := cors.DefaultConfig()
 	// WARNING: CORS allowing all origins is a security risk in production
 	// Should be configured via environment variable
-	corsConfig.AllowOrigins = []string{constants.CORSAllowAllOrigins} // TODO: Make configurable via env var
-	corsConfig.AllowMethods = strings.Split(constants.CORSAllowedMethods, ",")
-	corsConfig.AllowHeaders = strings.Split(constants.CORSAllowedHeaders, ",")
+	corsConfig.AllowOrigins = []string{"*"} // Adjust to specific origins if needed
+	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}
+	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization"}
 	corsConfig.AllowCredentials = true
 
 	middlewares = append(middlewares, cors.New(corsConfig))
@@ -114,7 +113,6 @@ func (m *MiddlewareHandler) Cors() []gin.HandlerFunc {
 // AuthMiddleware checks for a valid JWT token except on login and register routes
 func (m *MiddlewareHandler) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-<<<<<<< HEAD:horizon/internal/middlewares/middleware.go
 		// Bypass authentication for public routes
 		isPublicRoute := false
 		for _, publicRoute := range constants.PublicRoutes {
@@ -124,13 +122,11 @@ func (m *MiddlewareHandler) AuthMiddleware() gin.HandlerFunc {
 			}
 		}
 		if isPublicRoute {
-=======
 		// Bypass authentication for login, register, and specific routes
 		if strings.HasPrefix(c.Request.URL.Path, "/login") ||
 			strings.HasPrefix(c.Request.URL.Path, "/register") ||
 			strings.HasPrefix(c.Request.URL.Path, "/health") ||
 			strings.HasPrefix(c.Request.URL.Path, "/api/1.0/fs-config") {
->>>>>>> 719e1f68b6c4710e883a4d61b281c16133c167a5:horizon/internal/middleware/middleware.go
 			c.Next()
 			return
 		}
@@ -190,6 +186,7 @@ func (m *MiddlewareHandler) AuthMiddleware() gin.HandlerFunc {
 		}
 
 		// m.CheckScreenPermission(c, claims)
+		m.CheckScreenPermission(c, claims)
 
 		// Set claims in the context for later use
 		c.Set("email", claims.Email)
@@ -208,6 +205,7 @@ func (m *MiddlewareHandler) CheckScreenPermission(c *gin.Context, claims *handle
 		path = c.Request.URL.Path
 	}
 
+	// Skip resolver check for online feature store APIs since they don't have resolvers defined
 	if strings.HasPrefix(path, "/api/v1/online-feature-store") {
 		return
 	}
@@ -258,7 +256,6 @@ func (m *MiddlewareHandler) CheckScreenPermission(c *gin.Context, claims *handle
 	// Look up service_id from service name
 	service, err := m.metadataRepo.GetServiceByName(screenModule.Service)
 	if err != nil {
-<<<<<<< HEAD:horizon/internal/middlewares/middleware.go
 		log.Warn().Err(err).Str("service", screenModule.Service).Msg("Service not found in metadata")
 		c.JSON(http.StatusForbidden, gin.H{"error": constants.ErrPermissionDenied})
 		c.Abort()
@@ -288,18 +285,19 @@ func (m *MiddlewareHandler) CheckScreenPermission(c *gin.Context, claims *handle
 	if err != nil {
 		log.Error().Err(err).Msg("Error checking permission")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking permission"})
-=======
+
 		c.JSON(http.StatusInternalServerError, gin.H{constant.Error: "Error checking permission"})
->>>>>>> 719e1f68b6c4710e883a4d61b281c16133c167a5:horizon/internal/middleware/middleware.go
+
+	isPermit, err := m.rolePermissionRepo.CheckPermission(claims.Role, screenModule.Service, screenModule.ScreenType, screenModule.Module)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{constant.Error: "Error checking permission"})
 		c.Abort()
 		return
 	}
 	if !isPermit {
-<<<<<<< HEAD:horizon/internal/middlewares/middleware.go
 		c.JSON(http.StatusForbidden, gin.H{"error": constants.ErrPermissionDenied})
-=======
+
 		c.JSON(http.StatusForbidden, gin.H{constant.Error: "Permission Denied"})
->>>>>>> 719e1f68b6c4710e883a4d61b281c16133c167a5:horizon/internal/middleware/middleware.go
 		c.Abort()
 	}
 }
@@ -343,6 +341,7 @@ func (m *MiddlewareHandler) RequireAdminOrSuperAdmin() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
 
 func cloneRequestBody(c *gin.Context) ([]byte, bool) {
 	bodyBytes, err := io.ReadAll(c.Request.Body)
