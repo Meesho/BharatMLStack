@@ -15,9 +15,9 @@ var (
 	TestGpuDeployableID  int
 	initOnce             sync.Once
 	IsMeeshoEnabled      bool
-	AppEnv           string
-	GcsConfigBucket   string
-	GcsConfigBasePath string
+	AppEnv               string
+	GcsConfigBucket      string
+	GcsConfigBasePath    string
 )
 
 func Init(config configs.Configs) {

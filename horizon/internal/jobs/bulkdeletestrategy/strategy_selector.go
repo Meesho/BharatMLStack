@@ -29,20 +29,20 @@ type StrategySelectorImpl struct {
 }
 
 var (
-	strategySelectorOnce                sync.Once
-	bulkDeletePredatorEnabled           bool
-	bulkDeletePredatorMaxInactiveDays   int
+	strategySelectorOnce               sync.Once
+	bulkDeletePredatorEnabled          bool
+	bulkDeletePredatorMaxInactiveDays  int
 	bulkDeleteInferflowEnabled         bool
 	bulkDeleteInferflowMaxInactiveDays int
-	bulkDeleteNumerixEnabled            bool
-	bulkDeleteNumerixMaxInactiveDays    int
-	enablePredatorRequestSubmission     bool
+	bulkDeleteNumerixEnabled           bool
+	bulkDeleteNumerixMaxInactiveDays   int
+	enablePredatorRequestSubmission    bool
 )
 
 const (
-	inferflowService 	= "inferflow"
-	predatorService   	= "predator"
-	numerixService      = "numerix"
+	inferflowService = "inferflow"
+	predatorService  = "predator"
+	numerixService   = "numerix"
 )
 
 func Init(config configs.Configs) StrategySelectorImpl {
@@ -58,7 +58,6 @@ func Init(config configs.Configs) StrategySelectorImpl {
 		bulkDeleteNumerixMaxInactiveDays = config.BulkDeleteNumerixMaxInactiveDays
 
 		enablePredatorRequestSubmission = config.BulkDeletePredatorRequestSubmissionEnabled
-
 
 		connection, err := infra.SQL.GetConnection()
 		if err != nil {
@@ -110,4 +109,3 @@ func (ss *StrategySelectorImpl) GetBulkDeleteStrategy(service string) (BulkDelet
 		return nil, errors.New("unknown service type: " + service)
 	}
 }
-

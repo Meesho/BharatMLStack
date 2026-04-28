@@ -16,6 +16,7 @@ import FeatureAdditionApproval from './pages/OnlineFeatureStore/components/Featu
 import NumerixConfigDiscoveryRegistry from './pages/Numerix/DiscoveryRegistry/NumerixConfigDiscoveryRegistry';
 import NumerixConfigApproval from './pages/Numerix/Approval/NumerixConfigApproval';
 import UserManagement from './pages/UserManagement';
+import PermissionManagement from './pages/PermissionManagement';
 import ErrorBoundary from './common/ErrorBoundary';
 import ClientDiscovery from './pages/OnlineFeatureStore/components/Discovery/ClientDiscovery';
 import DeployableInferflowRegistry from './pages/InferFlow/DiscoveryRegistry/Deployable/DeployableInferflowRegistry';
@@ -185,14 +186,22 @@ function App() {
                 />
               </>
             )}
-            <Route
-              path="/user-management"
-              element={
-                <ProtectedRoute>
-                  <UserManagement />
-                </ProtectedRoute>
-              }
-            />
+        <Route
+          path="/user-management"
+          element={
+            <ProtectedRoute>
+              <UserManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/permission-management"
+          element={
+            <ProtectedRoute>
+              <PermissionManagement />
+            </ProtectedRoute>
+          }
+        />
 
             {/* Numerix Routes */}
             {isNumerixEnabled() && (

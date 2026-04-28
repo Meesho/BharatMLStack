@@ -24,6 +24,10 @@ export const REACT_APP_NUMERIX_ENABLED = getBooleanEnv('REACT_APP_NUMERIX_ENABLE
 export const REACT_APP_PREDATOR_ENABLED = getBooleanEnv('REACT_APP_PREDATOR_ENABLED', true);
 export const REACT_APP_EMBEDDING_PLATFORM_ENABLED = getBooleanEnv('REACT_APP_EMBEDDING_PLATFORM_ENABLED', true);
 
+// SSO Configuration
+export const REACT_APP_SSO_ENABLED = getBooleanEnv('REACT_APP_SSO_ENABLED', true);
+export const REACT_APP_SSO_PROVIDER = process.env.REACT_APP_SSO_PROVIDER || env.REACT_APP_SSO_PROVIDER || 'google'; // password, google, both
+
 // Feature flag helper functions
 export const isOnlineFeatureStoreEnabled = () => REACT_APP_ONLINE_FEATURE_STORE_ENABLED;
 export const isInferFlowEnabled = () => REACT_APP_INFERFLOW_ENABLED;

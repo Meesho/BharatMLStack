@@ -36,7 +36,7 @@ func (r *NumerixResolver) GetResolvers() map[string]Func {
 		resolverNumerixConfigPromote:          StaticResolver(screenTypeNumerixConfig, modulePromote, serviceNumerix),
 		resolverNumerixConfigDiscovery:        StaticResolver(screenTypeNumerixConfig, moduleView, serviceNumerix),
 		resolverNumerixConfigEdit:             StaticResolver(screenTypeNumerixConfig, moduleEdit, serviceNumerix),
-		resolverNumerixConfigRequestReview:    StaticResolver(screenTypeNumerixConfigApproval, moduleReview, serviceNumerix),
+		resolverNumerixConfigRequestReview:    StaticResolver(screenTypeNumerixConfigApproval, moduleApprove, serviceNumerix),
 		resolverNumerixConfigRequestCancel:    StaticResolver(screenTypeNumerixConfigApproval, moduleCancel, serviceNumerix),
 		resolverNumerixConfigRequestDiscovery: StaticResolver(screenTypeNumerixConfigApproval, moduleView, serviceNumerix),
 		resolverNumerixConfigRequestDelete:    StaticResolver(screenTypeNumerixConfigApproval, moduleDelete, serviceNumerix),

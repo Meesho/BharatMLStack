@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from './AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { APP_ROUTES } from '../../constants/authConstants';
 
 const Unauthorized = () => {
   const { user, logout } = useAuth();
@@ -11,12 +12,12 @@ const Unauthorized = () => {
   };
 
   const handleGoHome = () => {
-    navigate('/');
+    navigate(APP_ROUTES.ROOT);
   };
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate(APP_ROUTES.LOGIN);
   };
 
   return (

@@ -46,9 +46,8 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "CI=false react-scripts build",
+    "build": "react-scripts build",
     "test": "react-scripts test",
-    "lint": "echo 'No ESLint configured; skipping lint step.'",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {

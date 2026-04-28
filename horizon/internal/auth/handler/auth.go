@@ -1,11 +1,15 @@
 package handler
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/Meesho/BharatMLStack/horizon/internal/auth/config"
+	"github.com/Meesho/BharatMLStack/horizon/internal/auth/constants"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/auth"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/rolepermission"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/token"
@@ -52,9 +56,9 @@ func InitAuthHandler() Authenticator {
 func (a *AuthHandler) validatePassword(password string) error {
 	var failedRules []string
 
-	// Check minimum length (8 characters)
-	if len(password) < 8 {
-		failedRules = append(failedRules, "At least 8 characters")
+	// Check minimum length
+	if len(password) < constants.MinPasswordLength {
+		failedRules = append(failedRules, fmt.Sprintf("At least %d characters", constants.MinPasswordLength))
 	}
 
 	// Check for uppercase letter
@@ -83,8 +87,7 @@ func (a *AuthHandler) validatePassword(password string) error {
 	}
 
 	// Check for common passwords
-	commonPasswords := []string{"password", "123456", "qwerty", "abc123", "admin", "user"}
-	for _, common := range commonPasswords {
+	for _, common := range constants.CommonPasswords {
 		if strings.ToLower(password) == common {
 			failedRules = append(failedRules, "Not a common password")
 			break
@@ -100,6 +103,11 @@ func (a *AuthHandler) validatePassword(password string) error {
 
 // Register handler
 func (a *AuthHandler) Register(user *User) error {
+	// Check if password registration is allowed
+	cfg := config.GetOAuthConfig()
+	if cfg.SSOProvider != constants.AuthProviderPassword {
+		return fmt.Errorf("password registration is not enabled. This system uses Google SSO only. Please use Google to create an account")
+	}
 
 	// Validate password before hashing
 	if err := a.validatePassword(user.Password); err != nil {
@@ -120,7 +128,8 @@ func (a *AuthHandler) Register(user *User) error {
 		LastName:     user.LastName,
 		Email:        user.Email,
 		PasswordHash: string(hashedPassword),
-		Role:         "user", // By default onboard everyone with role user
+		Role:         constants.DefaultUserRole, // By default onboard everyone with role user
+		IsActive:     constants.DefaultIsActive, // New users are active by default
 	}
 
 	// Create user in the repository
@@ -136,49 +145,53 @@ func (a *AuthHandler) Register(user *User) error {
 
 // Login method
 func (a *AuthHandler) Login(user *Login) (*LoginResponse, error) {
+	// Check if password authentication is allowed
+	cfg := config.GetOAuthConfig()
+	if cfg.SSOProvider != constants.AuthProviderPassword {
+		return nil, fmt.Errorf("password authentication is not enabled. This system uses Google SSO only")
+	}
+
 	// Fetch user from the repository using email
 	authUser, err := a.authRepo.GetUserByEmailId(user.Email)
 	if err != nil {
 		log.Error().Msgf("User not found with email: %s", user.Email)
-		return nil, fmt.Errorf("invalid email or password")
+		return nil, fmt.Errorf(constants.ErrInvalidCredentials)
+	}
+
+	// Check if user has password authentication
+	if authUser.PasswordHash == "" {
+		return nil, fmt.Errorf(constants.ErrPasswordAuthNotAvailable)
 	}
 
 	// Compare the provided password with the stored password hash
 	err = bcrypt.CompareHashAndPassword([]byte(authUser.PasswordHash), []byte(user.Password))
 	if err != nil {
 		log.Error().Msg("Password mismatch")
-		return nil, fmt.Errorf("invalid email or password")
+		return nil, fmt.Errorf(constants.ErrInvalidCredentials)
 	}
 	if !authUser.IsActive {
 		log.Error().Msgf("User %s is not active, Please contact admin to activate your account", authUser.Email)
-		return nil, fmt.Errorf("User is not active, Please contact admin to activate your account")
+		return nil, fmt.Errorf(constants.ErrUserNotActive)
 	}
 
-	// Generate JWT token
-	expirationTime := time.Now().Add(24 * time.Hour)
-	claims := &Claims{
-		Email: authUser.Email,
-		Role:  authUser.Role,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: expirationTime.Unix(),
-		},
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(JwtKey)
+	// Generate tokens
+	cfg = config.GetOAuthConfig()
+	accessTokenExpiry := time.Duration(cfg.AccessTokenExpiry) * time.Hour
+	refreshTokenExpiry := time.Duration(cfg.RefreshTokenExpiry) * 24 * time.Hour
+
+	accessToken, refreshToken, err := a.generateTokens(authUser.Email, authUser.Role, accessTokenExpiry, refreshTokenExpiry)
 	if err != nil {
-		log.Error().Msgf("Failed to generate JWT token: %v", err)
-		return nil, fmt.Errorf("failed to generate token")
+		return nil, err
 	}
-	saveTokenErr := a.saveToken(authUser.Email, tokenString, expirationTime)
-	if saveTokenErr != nil {
-		log.Error().Msgf("Failed to save token: %v", saveTokenErr)
-		return nil, fmt.Errorf("failed to save token")
-	}
+
 	log.Info().Msgf("User %s logged in successfully", authUser.Email)
 	return &LoginResponse{
-		Email: authUser.Email,
-		Role:  authUser.Role,
-		Token: tokenString,
+		Email:        authUser.Email,
+		Role:         authUser.Role,
+		Token:        accessToken,
+		RefreshToken: refreshToken,
+		AuthProvider: constants.DefaultAuthProvider,
+		IsActive:     authUser.IsActive,
 	}, nil
 }
 
@@ -196,6 +209,44 @@ func (a *AuthHandler) saveToken(email, token string, expiration time.Time) error
 	return err
 }
 
+// generateTokens generates both access and refresh tokens
+func (a *AuthHandler) generateTokens(email, role string, accessExpiry, refreshExpiry time.Duration) (string, string, error) {
+	// Generate access token
+	accessExpirationTime := time.Now().Add(accessExpiry)
+	accessClaims := &Claims{
+		Email: email,
+		Role:  role,
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: accessExpirationTime.Unix(),
+		},
+	}
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
+	accessTokenString, err := accessToken.SignedString(JwtKey)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate access token: %w", err)
+	}
+
+	// Generate refresh token (simple random string, can be enhanced)
+	refreshTokenBytes := make([]byte, constants.RefreshTokenSize)
+	if _, err := rand.Read(refreshTokenBytes); err != nil {
+		return "", "", fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+	refreshTokenString := base64.URLEncoding.EncodeToString(refreshTokenBytes)
+
+	// Save access token
+	if err := a.saveToken(email, accessTokenString, accessExpirationTime); err != nil {
+		return "", "", fmt.Errorf("failed to save access token: %w", err)
+	}
+
+	// Save refresh token
+	refreshExpirationTime := time.Now().Add(refreshExpiry)
+	if err := a.tokenRepo.SaveRefreshToken(email, refreshTokenString, refreshExpirationTime); err != nil {
+		return "", "", fmt.Errorf("failed to save refresh token: %w", err)
+	}
+
+	return accessTokenString, refreshTokenString, nil
+}
+
 func (a *AuthHandler) GetAllUsers() ([]UserListingResponse, error) {
 	users, err := a.authRepo.GetAllUsers()
 	if err != nil {
@@ -205,11 +256,16 @@ func (a *AuthHandler) GetAllUsers() ([]UserListingResponse, error) {
 	userListingResponse := make([]UserListingResponse, len(users))
 	for i, user := range users {
 		userListingResponse[i] = UserListingResponse{
-			FirstName: user.FirstName,
-			LastName:  user.LastName,
-			Email:     user.Email,
-			IsActive:  user.IsActive,
-			Role:      user.Role,
+			ID:           user.ID,
+			FirstName:    user.FirstName,
+			LastName:     user.LastName,
+			Email:        user.Email,
+			IsActive:     user.IsActive,
+			Role:         user.Role,
+			AuthProvider: constants.DefaultAuthProvider,
+		}
+		if !user.CreatedAt.IsZero() {
+			userListingResponse[i].CreatedAt = user.CreatedAt.Format(time.RFC3339)
 		}
 	}
 	return userListingResponse, nil
@@ -222,6 +278,225 @@ func (a *AuthHandler) UpdateUserAccessAndRole(email string, isActive bool, role 
 		return err
 	}
 	return nil
+}
+
+// GetSSOStatus returns SSO configuration status
+func (a *AuthHandler) GetSSOStatus() (*SSOStatusResponse, error) {
+	cfg := config.GetOAuthConfig()
+
+	providers := []string{}
+	if cfg.SSOEnabled && cfg.GoogleClientID != "" && cfg.SSOProvider == constants.AuthProviderGoogle {
+		providers = append(providers, constants.AuthProviderGoogle)
+	}
+
+	allowPassword := cfg.SSOProvider == constants.AuthProviderPassword
+
+	return &SSOStatusResponse{
+		SSOEnabled:    cfg.SSOEnabled && len(providers) > 0,
+		Providers:     providers,
+		AllowPassword: allowPassword,
+	}, nil
+}
+
+// InitiateGoogleOAuth initiates Google OAuth flow
+func (a *AuthHandler) InitiateGoogleOAuth() (string, string, error) {
+	return InitiateGoogleOAuth()
+}
+
+// LoginWithGoogle handles Google OAuth callback and logs in/creates user
+func (a *AuthHandler) LoginWithGoogle(code, state string) (*LoginResponse, error) {
+	// Check if Google authentication is allowed
+	cfg := config.GetOAuthConfig()
+	if cfg.SSOProvider != constants.AuthProviderGoogle {
+		return nil, fmt.Errorf("google SSO is not enabled. This system uses password authentication only")
+	}
+
+	// Validate CSRF state
+	if !ValidateCSRFState(state) {
+		return nil, fmt.Errorf(constants.ErrInvalidCSRFState)
+	}
+
+	// Exchange code for token
+	tokenResp, err := ExchangeGoogleCode(code)
+	if err != nil {
+		return nil, fmt.Errorf("failed to exchange code: %w", err)
+	}
+
+	// Get user info from Google
+	userInfo, err := GetGoogleUserInfo(tokenResp.AccessToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user info: %w", err)
+	}
+
+	// Check if user exists by email
+	var authUser *auth.User
+	var isNewUser bool
+	existingUser, err := a.authRepo.GetUserByEmailId(userInfo.Email)
+	if err == nil {
+		// User exists - allow login
+		authUser = existingUser
+		isNewUser = false
+	} else {
+		// Create new user (Google SSO)
+		names := strings.SplitN(userInfo.Name, " ", 2)
+		firstName := names[0]
+		lastName := ""
+		if len(names) > 1 {
+			lastName = names[1]
+		}
+
+		// Create user without password (empty password hash indicates SSO-only user)
+		newUser := auth.User{
+			FirstName:    firstName,
+			LastName:     lastName,
+			Email:        userInfo.Email,
+			PasswordHash: "", // Empty password hash for SSO-only users
+			Role:         constants.DefaultUserRole,
+			IsActive:     constants.DefaultIsActive,
+		}
+
+		userID, err := a.authRepo.CreateUser(&newUser)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create user: %w", err)
+		}
+
+		authUser, err = a.authRepo.GetUserByID(userID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve created user: %w", err)
+		}
+		isNewUser = true
+	}
+
+	if !authUser.IsActive {
+		return nil, fmt.Errorf("user account is not active")
+	}
+
+	// Generate tokens
+	cfg = config.GetOAuthConfig()
+	accessTokenExpiry := time.Duration(cfg.AccessTokenExpiry) * time.Hour
+	refreshTokenExpiry := time.Duration(cfg.RefreshTokenExpiry) * 24 * time.Hour
+
+	accessToken, refreshToken, err := a.generateTokens(authUser.Email, authUser.Role, accessTokenExpiry, refreshTokenExpiry)
+	if err != nil {
+		return nil, err
+	}
+
+	return &LoginResponse{
+		Email:        authUser.Email,
+		Role:         authUser.Role,
+		Token:        accessToken,
+		RefreshToken: refreshToken,
+		AuthProvider: constants.AuthProviderGoogle,
+		IsNewUser:    isNewUser,
+		IsActive:     authUser.IsActive,
+	}, nil
+}
+
+// RefreshToken refreshes access token using refresh token
+func (a *AuthHandler) RefreshToken(refreshToken string) (*RefreshTokenResponse, error) {
+	// Get refresh token from database
+	tokenRecord, err := a.tokenRepo.GetRefreshToken(refreshToken)
+	if err != nil {
+		return nil, fmt.Errorf(constants.ErrInvalidRefreshToken)
+	}
+
+	// Get user by email
+	authUser, err := a.authRepo.GetUserByEmailId(tokenRecord.UserEmail)
+	if err != nil {
+		return nil, fmt.Errorf(constants.ErrUserNotFound)
+	}
+
+	if !authUser.IsActive {
+		return nil, fmt.Errorf(constants.ErrUserNotActive)
+	}
+
+	// Invalidate old refresh token
+	_ = a.tokenRepo.InvalidateRefreshToken(refreshToken)
+
+	// Generate new tokens
+	cfg := config.GetOAuthConfig()
+	accessTokenExpiry := time.Duration(cfg.AccessTokenExpiry) * time.Hour
+	refreshTokenExpiry := time.Duration(cfg.RefreshTokenExpiry) * 24 * time.Hour
+
+	accessToken, newRefreshToken, err := a.generateTokens(authUser.Email, authUser.Role, accessTokenExpiry, refreshTokenExpiry)
+	if err != nil {
+		return nil, err
+	}
+
+	return &RefreshTokenResponse{
+		Token:        accessToken,
+		RefreshToken: newRefreshToken,
+	}, nil
+}
+
+// UpdateUserRole updates a user's role (super_admin only)
+func (a *AuthHandler) UpdateUserRole(id uint, role string, updatedBy uint) error {
+	// Validate role
+	validRole := false
+	for _, valid := range constants.ValidRoles {
+		if role == valid {
+			validRole = true
+			break
+		}
+	}
+	if !validRole {
+		return fmt.Errorf("%s: %s", constants.ErrInvalidRole, role)
+	}
+
+	// Get user to check current role
+	user, err := a.authRepo.GetUserByID(id)
+	if err != nil {
+		return fmt.Errorf("%s: %w", constants.ErrUserNotFound, err)
+	}
+
+	// Check if trying to change super_admin role
+	if user.Role == constants.RoleSuperAdmin && role != constants.RoleSuperAdmin {
+		// Check if this is the last super_admin
+		allUsers, err := a.authRepo.GetAllUsers()
+		if err != nil {
+			return fmt.Errorf("failed to check super_admin count: %w", err)
+		}
+
+		superAdminCount := 0
+		for _, u := range allUsers {
+			if u.Role == constants.RoleSuperAdmin {
+				superAdminCount++
+			}
+		}
+
+		if superAdminCount <= 1 {
+			return fmt.Errorf(constants.ErrCannotDemoteLastSuperAdmin)
+		}
+	}
+
+	return a.authRepo.UpdateUserRole(id, role, updatedBy)
+}
+
+// GetUserByEmail is a helper method to get user by email (used by controller)
+func (a *AuthHandler) GetUserByEmail(email string) (*auth.User, error) {
+	return a.authRepo.GetUserByEmailId(email)
+}
+
+// UpdateUserStatus updates a user's active status (admin/super_admin)
+func (a *AuthHandler) UpdateUserStatus(id uint, isActive bool, updatedBy uint) error {
+	// Get user to check if trying to deactivate self
+	user, err := a.authRepo.GetUserByID(id)
+	if err != nil {
+		return fmt.Errorf("user not found: %w", err)
+	}
+
+	// Get updater user
+	updater, err := a.authRepo.GetUserByID(updatedBy)
+	if err != nil {
+		return fmt.Errorf("updater not found: %w", err)
+	}
+
+	// Prevent self-deactivation
+	if user.ID == updater.ID && !isActive {
+		return fmt.Errorf(constants.ErrCannotDeactivateSelf)
+	}
+
+	return a.authRepo.UpdateUserStatus(id, isActive, updatedBy)
 }
 
 func (a *AuthHandler) GetPermissionByRole(role string) PermissionResponse {

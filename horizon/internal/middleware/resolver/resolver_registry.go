@@ -13,6 +13,10 @@ func NewHandler() (*Handler, error) {
 	registry := make(map[string]Func)
 	resolverList := []func() (ServiceResolver, error){
 		NewPredatorServiceResolver,
+		NewInferFlowServiceResolver,
+		NewEmbeddingPlatformServiceResolver,
+		NewOnlineFeatureStoreResolver,
+		NewPredatorServiceResolver,
 		NewDeployableServiceResolver,
 		NewInferflowServiceResolver,
 		NewNumerixServiceResolver,

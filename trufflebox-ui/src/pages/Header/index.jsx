@@ -50,6 +50,7 @@ function Header({ onMenuItemClick }) {
       'Numerix': <FolderIcon />,
       'Predator': <BugReportIcon />,
       'UserManagement': <PersonIcon />,
+      'PermissionManagement': <SettingsIcon />,
       'EmbeddingPlatform': <RocketLaunchIcon />,
       'Discovery': <FolderIcon />,
       'FeatureRegistry': <StorageIcon />,
@@ -92,7 +93,7 @@ function Header({ onMenuItemClick }) {
       key: 'FeatureStore',
       label: 'Online Feature Store',
       subItems: null,
-      roles: ['user', 'admin'],
+      roles: ['user', 'admin', 'super_admin'],
       children: [
         {
           key: 'Discovery',
@@ -103,7 +104,7 @@ function Header({ onMenuItemClick }) {
             { key: 'JobDiscovery', label: 'Jobs', path: '/job-discovery' },
             { key: 'ClientDiscovery', label: 'Clients', path: '/client-discovery' },
           ],
-          roles: ['user', 'admin'],
+          roles: ['user', 'admin', 'super_admin'],
         },
         {
           key: 'FeatureRegistry',
@@ -115,7 +116,7 @@ function Header({ onMenuItemClick }) {
             { key: 'FeatureGroupRegistry', label: 'Feature Group', path: '/feature-registry/feature-group' },
             { key: 'FeatureAddition', label: 'Feature', path: '/feature-registry/feature' },
           ],
-          roles: ['user', 'admin'],
+          roles: ['user', 'admin', 'super_admin'],
         },
         {
           key: 'FeatureApproval',
@@ -127,7 +128,7 @@ function Header({ onMenuItemClick }) {
             { key: 'FeatureGroups', label: 'Feature Groups', path: '/feature-approval/feature-group' },
             { key: 'Features', label: 'Features', path: '/feature-approval/features' },
           ],
-          roles: ['admin'],
+          roles: ['admin', 'super_admin'],
         },
       ]
     },
@@ -240,13 +241,15 @@ function Header({ onMenuItemClick }) {
             { key: 'EmbeddingFilterApproval', label: 'Filter', path: '/embedding-platform/approval/filter', screenType: 'filter-approval' },
             { key: 'EmbeddingJobFrequencyApproval', label: 'Job Frequency', path: '/embedding-platform/approval/job-frequency', screenType: 'job-frequency-approval' },
           ],
-          roles: ['admin'],
+          roles: ['admin', 'super_admin'],
         },
         {
           key: 'EmbeddingOperations',
           label: 'Operations',
           subItems: [
             { key: 'DeploymentOperations', label: 'Deployment', path: '/embedding-platform/deployment-operations', screenType: 'deployment-operations' },
+            { key: 'OnboardVariantToDB', label: 'Onboard to DB', path: '/embedding-platform/onboard-variant-to-db', screenType: 'onboard-variant-to-db' },
+            { key: 'OnboardVariantApproval', label: 'DB Approvals', path: '/embedding-platform/onboard-variant-approval', screenType: 'onboard-variant-approval', roles: ['admin', 'super_admin'] },
           ],
           roles: null,
         },
@@ -256,7 +259,13 @@ function Header({ onMenuItemClick }) {
       key: 'UserManagement',
       label: 'User Management',
       path: '/user-management',
-      roles: ['admin'],
+      roles: ['admin', 'super_admin'],
+    },
+    {
+      key: 'PermissionManagement',
+      label: 'Permission Management',
+      path: '/permission-management',
+      roles: ['super_admin'],
     },
   ];
 
@@ -325,7 +334,8 @@ function Header({ onMenuItemClick }) {
     // Find the current active path and set expanded states
     menuItems.forEach((parentItem) => {
       // Check role permissions for parent item
-      if (parentItem.roles && !parentItem.roles.includes(user?.role)) {
+      // Super admin has access to everything, so skip role check for super_admin
+      if (parentItem.roles && user?.role !== 'super_admin' && !parentItem.roles.includes(user?.role)) {
         return;
       }
 
@@ -346,7 +356,8 @@ function Header({ onMenuItemClick }) {
       if (parentItem.children) {
         parentItem.children.forEach((childItem) => {
           // Check role permissions for child item
-          if (childItem.roles && !childItem.roles.includes(user?.role)) {
+          // Super admin has access to everything, so skip role check for super_admin
+          if (childItem.roles && user?.role !== 'super_admin' && !childItem.roles.includes(user?.role)) {
             return;
           }
 
@@ -452,7 +463,8 @@ function Header({ onMenuItemClick }) {
           
           <div className="navigation-creative">
             {menuItems?.map((parentItem) => {
-              if (parentItem.roles && !parentItem.roles.includes(user?.role)) {
+              // Super admin has access to everything, so skip role check for super_admin
+              if (parentItem.roles && user?.role !== 'super_admin' && !parentItem.roles.includes(user?.role)) {
                 return null;
               }
 
@@ -467,7 +479,8 @@ function Header({ onMenuItemClick }) {
 
               if (parentItem.children && !parentItem.path) {
                 const hasAccessibleChildren = parentItem.children.some(childItem => {
-                  if (childItem.roles && !childItem.roles.includes(user?.role)) {
+                  // Super admin has access to everything, so skip role check for super_admin
+                  if (childItem.roles && user?.role !== 'super_admin' && !childItem.roles.includes(user?.role)) {
                     return false;
                   }
                   if (childItem.subItems) {
@@ -540,7 +553,8 @@ function Header({ onMenuItemClick }) {
                             </div>
                           ) : (
                             parentItem.children?.map((childItem) => {
-                              if (childItem.roles && !childItem.roles.includes(user?.role)) {
+                              // Super admin has access to everything, so skip role check for super_admin
+                              if (childItem.roles && user?.role !== 'super_admin' && !childItem.roles.includes(user?.role)) {
                                 return null;
                               }
 

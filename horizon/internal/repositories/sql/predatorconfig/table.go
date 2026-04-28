@@ -21,7 +21,7 @@ type PredatorConfig struct {
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 	TestResults       json.RawMessage
-	HasNilData        bool `gorm:"default:false"` // Tracks if model has nil data issues
+	HasNilData        bool   `gorm:"default:false"` // Tracks if model has nil data issues
 	SourceModelName   string `gorm:"column:source_model_name"`
 }
 

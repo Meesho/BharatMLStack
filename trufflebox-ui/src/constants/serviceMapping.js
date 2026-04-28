@@ -3,6 +3,7 @@ export const SERVICES = {
   InferFlow: 'inferflow',
   NUMERIX: 'numerix',
   EMBEDDING_PLATFORM: 'embedding_platform',
+  ONLINE_FEATURE_STORE: 'online_feature_store',
 };
 
 export const MENU_PERMISSION_MAP = {
@@ -39,6 +40,18 @@ export const MENU_PERMISSION_MAP = {
   'EmbeddingFilterApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'filter-approval' },
   'EmbeddingJobFrequencyApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'job-frequency-approval' },
   'DeploymentOperations': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'deployment-operations' },
+  
+  // Online Feature Store service mappings
+  'FeatureDiscovery': { service: SERVICES.ONLINE_FEATURE_STORE, screenType: 'feature-discovery', requiredParentKey: 'FeatureStore' },
+  'StoreDiscovery': { service: SERVICES.ONLINE_FEATURE_STORE, screenType: 'store-discovery', requiredParentKey: 'FeatureStore' },
+  'JobDiscovery': { service: SERVICES.ONLINE_FEATURE_STORE, screenType: 'job-discovery', requiredParentKey: 'FeatureStore' },
+  'ClientDiscovery': { service: SERVICES.ONLINE_FEATURE_STORE, screenType: 'client-discovery', requiredParentKey: 'FeatureStore' },
+  'StoreRegistry': { service: SERVICES.ONLINE_FEATURE_STORE, screenType: 'store-registry', requiredParentKey: 'FeatureStore' },
+  'JobRegistry': { service: SERVICES.ONLINE_FEATURE_STORE, screenType: 'job-registry', requiredParentKey: 'FeatureStore' },
+  'EntityRegistry': { service: SERVICES.ONLINE_FEATURE_STORE, screenType: 'entity-registry', requiredParentKey: 'FeatureStore' },
+  'FeatureGroupRegistry': { service: SERVICES.ONLINE_FEATURE_STORE, screenType: 'feature-group-registry', requiredParentKey: 'FeatureStore' },
+  'FeatureAddition': { service: SERVICES.ONLINE_FEATURE_STORE, screenType: 'feature-registry', requiredParentKey: 'FeatureStore' },
+  'FeatureApproval': { service: SERVICES.ONLINE_FEATURE_STORE, screenType: 'feature-approval', requiredParentKey: 'FeatureStore' },
 };
 
 export const requiresPermissionCheck = (menuKey, parentKey = null) => {
@@ -84,4 +97,5 @@ export const PERMISSION_CONTROLLED_SERVICES = [
   SERVICES.InferFlow, 
   SERVICES.NUMERIX,
   SERVICES.EMBEDDING_PLATFORM,
+  SERVICES.ONLINE_FEATURE_STORE,
 ]; 

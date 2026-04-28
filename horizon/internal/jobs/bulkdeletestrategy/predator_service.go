@@ -89,7 +89,7 @@ func (p *PredatorService) ProcessBulkDelete(serviceDeployable servicedeployablec
 
 		// Add child models if any
 		if children, found := parentToChildMapping[parentModel.ModelName]; found {
-			for _, childName := range children {	
+			for _, childName := range children {
 				if _, alreadyAdded := addedModels[childName]; alreadyAdded {
 					continue
 				}
@@ -565,4 +565,3 @@ func (p *PredatorService) filterModelsByGCSAge(basePath string, models []ModelIn
 	}
 	return filtered
 }
-

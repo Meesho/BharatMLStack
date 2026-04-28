@@ -249,7 +249,6 @@ func AdaptToDBNumerixComponent(inferflowConfig InferflowConfig) []dbModel.Numeri
 	return NumerixComponents
 }
 
-
 func AdaptToDBFeatureComponent(inferflowConfig InferflowConfig) []dbModel.FeatureComponent {
 	var featureComponents []dbModel.FeatureComponent
 
@@ -577,7 +576,6 @@ func AdaptFromDbToNumerixComponent(dbNumerixComponents []dbModel.NumerixComponen
 	return NumerixComponents
 }
 
-
 func AdaptFromDbToFeatureComponent(dbFeatureComponents []dbModel.FeatureComponent) []FeatureComponent {
 	var featureComponents []FeatureComponent
 	for _, fc := range dbFeatureComponents {
@@ -732,7 +730,6 @@ func AdaptToEtcdNumerixComponent(dbNumerixComponents []dbModel.NumerixComponent)
 	}
 	return NumerixComponents
 }
-
 
 func AdaptToEtcdFeatureComponent(dbFeatureComponents []dbModel.FeatureComponent) []etcdModel.FeatureComponent {
 	var featureComponents []etcdModel.FeatureComponent

@@ -13,11 +13,13 @@ const (
 
 // Token represents the structure of the user_tokens table.
 type Token struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement"`
-	UserEmail string    `gorm:"not null"`
-	Token     string    `gorm:"unique;not null"`
-	CreatedAt time.Time `gorm:"not null"`
-	ExpiresAt time.Time `gorm:"not null"`
+	ID           uint      `gorm:"primaryKey;autoIncrement"`
+	UserEmail    string    `gorm:"not null;index:idx_user_email_token_type"`
+	Token        string    `gorm:"unique;not null"`
+	RefreshToken *string   `gorm:"type:varchar(255);index:idx_refresh_token"`
+	TokenType    string    `gorm:"type:enum('access','refresh');default:'access';index:idx_user_email_token_type"`
+	CreatedAt    time.Time `gorm:"not null"`
+	ExpiresAt    time.Time `gorm:"not null"`
 }
 
 func (Token) TableName() string {
