@@ -19,9 +19,10 @@ from .config import GRPCClientConfig
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# gRPC authentication headers (from Go SDK)
-HEADER_CALLER_ID = "ONLINE-FEATURE-STORE-CALLER-ID"
-HEADER_CALLER_TOKEN = "ONLINE-FEATURE-STORE-AUTH-TOKEN"
+# gRPC authentication headers (lowercase per HTTP/2 spec, matching Go server middleware)
+# Python grpcio rejects non-lowercase metadata keys unlike Go grpc which auto-lowercases
+HEADER_CALLER_ID = "online-feature-store-caller-id"
+HEADER_CALLER_TOKEN = "online-feature-store-auth-token"
 
 try:
     import grpc
