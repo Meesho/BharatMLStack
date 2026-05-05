@@ -1,0 +1,50 @@
+{{- if and .Values.ingress .Values.ingress.enabled -}}
+{{- if .Values.createContourGateway -}}
+{{- if or ( eq "contour-internal" .Values.ingress.ingressClassName ) ( eq "contour-external" .Values.ingress.ingressClassName ) ( eq "contour-internal-0" .Values.ingress.ingressClassName ) ( eq "contour-internal-1" .Values.ingress.ingressClassName ) ( eq "contour-external-0" .Values.ingress.ingressClassName ) ( eq "contour-external-1" .Values.ingress.ingressClassName ) }}
+{{- $servicePortNumber := .Values.ingress.servicePortNumber -}}
+{{- $pathType := .Values.ingress.pathType -}}
+{{- $namespace := .Values.namespace -}}
+{{- $ingressClassName := .Values.ingress.ingressClassName -}}
+{{ $count := 0 | int }}
+{{- range .Values.ingress.hosts }}
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  namespace: {{ $namespace }}
+  name: {{ $namespace }}-{{ $count }}
+  labels:
+{{ include "labels.common" $ | indent 4 }}
+{{ include "labels.chart" $ | indent 4 }}
+  annotations:
+    projectcontour.io/ingress.class: {{ $.Values.ingress.ingressClassName }}
+spec:
+  ingressClassName: {{ $ingressClassName }}
+  virtualhost:
+    fqdn: "{{ .host }}"
+  includes:
+    {{- range .paths }}
+    - conditions:
+      {{- if or ( eq ( lower .pathType ) "prefix" ) ( eq ( lower .pathType ) "implementationspecific") }}
+      - prefix: {{ .path }}
+      {{- end }}
+      {{- if ( eq ( lower .pathType ) "exact" ) }}
+      - header:
+          name: :path
+          exact: {{ .path }}
+      - prefix: {{ .path }}
+      {{- end }}
+      {{- if .targetService }}
+      name: {{ .targetService | replace "/" "-" }}
+      namespace:  {{ (split "/" .targetService)._0 }}
+      {{- else }}
+      name: {{ $namespace }}
+      namespace:  {{ $namespace }}
+      {{- end }}
+    {{- end }}
+    {{ $count = add1 $count }}
+---
+
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

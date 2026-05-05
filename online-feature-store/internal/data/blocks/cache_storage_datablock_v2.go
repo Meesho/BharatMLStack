@@ -219,12 +219,21 @@ func (csdb *CacheStorageDataBlock) GetDeserializedPSDBForFGIds(fgIds ds.Set[int]
 		} else {
 			fgData := csdb.serializedCSDB[startOffSet:endOffSet]
 			ddb, err := DeserializePSDB(fgData)
-			if err == nil && !ddb.Expired {
-				fgIdToDDB[fgId] = ddb
-			} else {
-				//Handle Deserialization error or expired data
+			if err != nil {
 				fgIdToDDB = nil
 				return false
+			}
+			if ddb.Expired {
+				// For storage mode, return negative cache with expired flag (source of truth)
+				// For cache mode, return nil to trigger cache miss and fetch from DB
+				if csdb.cacheType == CacheTypeStorage {
+					fgIdToDDB[fgId] = &DeserializedPSDB{NegativeCache: true, Expired: true}
+				} else {
+					fgIdToDDB = nil
+					return false
+				}
+			} else {
+				fgIdToDDB[fgId] = ddb
 			}
 		}
 		return true

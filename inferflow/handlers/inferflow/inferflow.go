@@ -17,6 +17,7 @@ import (
 	extCache "github.com/Meesho/BharatMLStack/inferflow/dag-topology-executor/pkg/cache"
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/components"
 	"github.com/Meesho/BharatMLStack/inferflow/handlers/config"
+	kafkaLogger "github.com/Meesho/BharatMLStack/inferflow/handlers/external/kafka"
 	"github.com/Meesho/BharatMLStack/inferflow/internal/errors"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/logger"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/utils"
@@ -53,6 +54,11 @@ func InitInferflowHandler(configs *configs.AppConfigs) {
 	InferflowConfig := etcd.Instance().GetConfigInstance().(*config.ModelConfig)
 	config.SetModelConfigMap(InferflowConfig)
 
+	// Build and cache feature schemas for all model configs (needed for V2 logging)
+	if err := config.InitAllFeatureSchema(InferflowConfig); err != nil {
+		logger.Error("Error initializing feature schemas", err)
+	}
+
 	// register components in config map
 	componentProvider.RegisterComponent(config.GetModelConfigMap())
 
@@ -66,13 +72,22 @@ func InitInferflowHandler(configs *configs.AppConfigs) {
 			},
 		},
 	}
-	logger.Info("Model Proxy handler initialized")
+
+	// Initialize Kafka writers for inference logging
+	kafkaLogger.InitKafkaLogger(configs)
+
+	logger.Info("Inferflow handler initialized")
 }
 
 func ReloadModelConfigMapAndRegisterComponents() error {
 	updatedConfig, ok := etcd.Instance().GetConfigInstance().(*config.ModelConfig)
 	if ok {
 		config.SetModelConfigMap(updatedConfig)
+
+		// Rebuild feature schemas on config reload
+		if err := config.InitAllFeatureSchema(updatedConfig); err != nil {
+			logger.Error("Error reinitializing feature schemas on reload", err)
+		}
 
 		// register components in config map
 		componentProvider.RegisterComponent(updatedConfig)
@@ -122,6 +137,22 @@ func (s *Inferflow) RetrieveModelScore(ctx context.Context, req *pb.InferflowReq
 	}
 	executor.Execute(conf.DAGExecutionConfig.ComponentDependency, componentReq)
 	InferflowRes := prepareInferflowResponse(userId, conf, &componentReq)
+
+	// Inference logging: log response features based on config
+	if !utils.IsNilOrEmpty(conf.ResponseConfig) &&
+		utils.IsEnableForUserForToday(userId, conf.ResponseConfig.LoggingPerc) &&
+		InferflowReq.TrackingId != "" {
+		modelConfigMap := config.GetModelConfigMap()
+		// V2 logging: route based on configured format type
+		switch modelConfigMap.ServiceConfig.V2LoggingType {
+		case "proto":
+			go logInferflowResponseBytes(ctx, userId, InferflowReq.TrackingId, conf, &componentReq)
+		case "arrow":
+			go logInferflowResponseArrow(ctx, userId, InferflowReq.TrackingId, conf, &componentReq)
+		case "parquet":
+			go logInferflowResponseParquet(ctx, userId, InferflowReq.TrackingId, conf, &componentReq)
+		}
+	}
 
 	res := processInferflowResponse(InferflowRes, nil)
 

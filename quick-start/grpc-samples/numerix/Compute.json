@@ -1,0 +1,24 @@
+{
+  "entityScoreData": {
+    "schema": ["user_id", "item_id"],
+    "computeId": "dot_product_v1",
+    "dataType": "fp32",
+    "entityScores": [
+      {
+        "stringData": {
+          "values": ["user_001", "item_101"]
+        }
+      },
+      {
+        "stringData": {
+          "values": ["user_001", "item_202"]
+        }
+      },
+      {
+        "stringData": {
+          "values": ["user_002", "item_101"]
+        }
+      }
+    ]
+  }
+}

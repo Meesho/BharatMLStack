@@ -1,6 +1,6 @@
 {
   "label": "Numerix",
-  "position": 6,
+  "position": 7,
   "link": {
       "type": "generated-index",
       "description": "Numerix is a mathematical compute engine for BharatML Stack. It is used to perform mathematical operations on matrices and vectors."

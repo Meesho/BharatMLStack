@@ -1,0 +1,24 @@
+{
+  "entityLabel": "product",
+  "keysSchema": ["product_id"],
+  "featureGroupSchema": [
+    { "label": "product_price_features_v1", "featureLabels": ["price", "rating"] },
+    { "label": "product_inventory_features_v1", "featureLabels": ["stock_count"] }
+  ],
+  "data": [
+    {
+      "keyValues": ["product_101"],
+      "featureValues": [
+        { "values": { "fp64Values": [299.99, 4.5] } },
+        { "values": { "int32Values": [120] } }
+      ]
+    },
+    {
+      "keyValues": ["product_202"],
+      "featureValues": [
+        { "values": { "fp64Values": [149.00, 3.8] } },
+        { "values": { "int32Values": [45] } }
+      ]
+    }
+  ]
+}

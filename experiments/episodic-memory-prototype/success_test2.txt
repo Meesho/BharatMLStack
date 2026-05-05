@@ -1,0 +1,636 @@
+================================================================================
+  EPISODIC MEMORY  vs  FLAT VECTOR RAG
+  Scenario: 9-Round Debugging
+  Decision mode: Claude
+================================================================================
+  Round types:
+    LEARN       -- agent builds memory from failure
+    RED HERRING -- root cause is NOT connection pool
+    TEST        -- root cause IS connection pool
+    SUBTLE      -- connection pool but different symptoms
+    CORRECTION  -- agent gets corrected, then tested on similar case
+================================================================================
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+WARNING:huggingface_hub.utils._http:Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights: 100%|████████████████████████████| 103/103 [00:00<00:00, 5847.34it/s, Materializing param=pooler.dense.weight]
+BertModel LOAD REPORT from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED    :can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+
++------------------------------------------------------------------------------+
+|                                                                              |
+|  ROUND 1  |  api-gateway                                                     |
+|  API returning 500 errors under load.                                        |
+|                                                                              |
++----------------------------------------+-------------------------------------+
+|  EPISODIC AGENT                        |  BASELINE AGENT                       |
++----------------------------------------+-------------------------------------+
+  Retrieved memory:
+  (no prior episodes)                     |  (no prior entries)                    
+  ----------------------------------------+--------------------------------------
+  Reasoning:
+  Without any past episodic memory to     |  Without any relevant past entries to  
+  draw from, I need to apply standard     |  reference, I must rely on fundamental 
+  SRE principles for 500 error            |  SRE principles for 500 errors under   
+  investigations. The most critical       |  load. The most common root cause of   
+  first step is to establish the          |  500 errors appearing specifically     
+  baseline - understanding the current    |  under load (rather than consistently) 
+  error rate, patterns, and system        |  is resource exhaustion - either the   
+  health metrics before diving into       |  application running out of memory,    
+  specific components. This systematic    |  database connections, file            
+  approach prevents tunnel vision and     |  descriptors, or CPU capacity causing  
+  ensures we're addressing the actual     |  timeouts and failures that only       
+  problem scope.                          |  manifest when traffic increases.      
+  ----------------------------------------+--------------------------------------
+  Investigate: Check current error...     |  Investigate: Check application...
+  WRONG                                   |  CORRECT
++------------------------------------------------------------------------------+
+|  Ground truth: Redis connection pool exhaustion under high QPS.              |
++------------------------------------------------------------------------------+
+
++------------------------------------------------------------------------------+
+|                                                                              |
+|  ROUND 2  |  payment-service                                                 |
+|  Timeouts in payment processing during peak hours.                           |
+|                                                                              |
++----------------------------------------+-------------------------------------+
+|  EPISODIC AGENT                        |  BASELINE AGENT                       |
++----------------------------------------+-------------------------------------+
+  Retrieved memory:
+  [FAILURE] Outcome: failure — Redis      |  * Outcome: failure. Root cause: Redis 
+  connection pool exhaustion under hi     |  connection pool exhaustion under high 
+  => Was actually Redis connection pool   |  Q                                     
+  exhaustion, not DB.                     |  * Noticed Redis client throwing 'pool 
+  [FAILURE] The user reported API 500     |  exhausted' exceptions.                
+  errors under load, and the agent i  =>  |  * Database CPU looks normal, queries  
+  Was actually Redis connection pool      |  are fine.                             
+  exhaustion, not DB.                     |  * Correction: Was actually Redis      
+                                          |  connection pool exhaustion, not DB.   
+                                          |  * Checked application logs: seeing    
+                                          |  'connection refused' errors.          
+  Generalized facts:
+  The user reported API 500 errors under  |  (N/A -- no fact extraction)           
+  load, and the agent investigate         |                                        
+  [sup=1]                                 |                                        
+  ----------------------------------------+--------------------------------------
+  Reasoning:
+  Both Episode 1 and Episode 2 show a     |  The past entries show a clear pattern 
+  clear pattern where I initially         |  of Redis connection pool exhaustion   
+  assumed database connection issues but  |  being the root cause of timeouts      
+  the actual root cause was Redis         |  during high load scenarios. Multiple  
+  connection pool exhaustion under high   |  entries (1, 2, 4, 5) point to Redis   
+  QPS. The generalized fact confirms      |  connectivity issues manifesting as    
+  this pattern - API errors under load    |  "pool exhausted" exceptions and       
+  that appear to be database-related are  |  "connection refused" errors, while    
+  actually Redis connection pool          |  database performance remained normal  
+  problems. Given that payment            |  (entry 3). This suggests Redis        
+  processing timeouts during peak hours   |  connection limits are hit before      
+  follow the same load-based pattern, my  |  database bottlenecks occur during peak
+  past experience strongly suggests       |  traffic.                              
+  avoiding the database assumption trap.  |                                        
+  ----------------------------------------+--------------------------------------
+  Investigate: Redis connection pool...   |  Investigate: Check Redis...
+  CORRECT                                 |  CORRECT
++------------------------------------------------------------------------------+
+|  Ground truth: Cache connection pool saturated under peak load.              |
++------------------------------------------------------------------------------+
+
++------------------------------------------------------------------------------+
+|                                                                              |
+|  ROUND 3 [RED HERRING]  |  payment-service                                   |
+|  Payment service returning 504 errors after deployment.                      |
+|                                                                              |
++----------------------------------------+-------------------------------------+
+|  EPISODIC AGENT                        |  BASELINE AGENT                       |
++----------------------------------------+-------------------------------------+
+  Retrieved memory:
+  [FAILURE] The agent investigated two    |  * API returning 500 errors under load.
+  performance issues: API 500 error  =>   |  * Timeouts in payment processing      
+  Connection pool to cache was the        |  during peak hours.                    
+  bottleneck, not network.                |  * Fix attempted: Added retry logic    
+  [FAILURE] The user reported API 500     |  with exponential backoff.             
+  errors under load, and the agent i  =>  |  * Fix attempted: Increased database   
+  Was actually Redis connection pool      |  connection pool size.                 
+  exhaustion, not DB.                     |  * Checked application logs: seeing    
+  [FAILURE] Outcome: failure — Cache      |  'connection refused' errors.          
+  connection pool saturated under pea     |                                        
+  => Connection pool to cache was the     |                                        
+  bottleneck, not network.                |                                        
+  [FAILURE] Outcome: failure — Redis      |                                        
+  connection pool exhaustion under hi     |                                        
+  => Was actually Redis connection pool   |                                        
+  exhaustion, not DB.                     |                                        
+  Generalized facts:
+  The agent investigated two performance  |  (N/A -- no fact extraction)           
+  issues: API 500 errors under lo         |                                        
+  [sup=1]                                 |                                        
+  The user reported API 500 errors under  |                                        
+  load, and the agent investigate         |                                        
+  [sup=1]                                 |                                        
+  ----------------------------------------+--------------------------------------
+  Reasoning:
+  My episodic memory shows a clear        |  The past entries show a clear pattern 
+  pattern of repeated failures where I    |  of connection-related issues during   
+  initially misdiagnosed connection pool  |  high load scenarios, with entry #5    
+  exhaustion issues. In Episodes 1-4, I   |  specifically mentioning "connection   
+  consistently assumed database or        |  refused" errors in logs. The          
+  network problems when the actual root   |  progression from 500 errors to        
+  cause was Redis/cache connection pool   |  timeouts to connection issues suggests
+  saturation. The generalized facts       |  infrastructure-level problems rather  
+  confirm this pattern - connection pool  |  than application logic failures. Since
+  exhaustion (specifically Redis) was     |  504 errors specifically indicate      
+  the true culprit in multiple incidents  |  gateway timeouts, this aligns with the
+  involving 500 errors and timeouts.      |  historical pattern of connection and  
+                                          |  timeout issues seen in entries #2 and 
+                                          |  #5.                                   
+  ----------------------------------------+--------------------------------------
+  Investigate: Check Redis connection...  |  Investigate: Check if the payment...
+  WRONG                                   |  WRONG
+  Keywords: 1/4                           |  Keywords: 2/4
++------------------------------------------------------------------------------+
+|  Ground truth: Bad config change in v2.14.3 — upstream timeout set to 1ms ...|
++------------------------------------------------------------------------------+
+
++------------------------------------------------------------------------------+
+|                                                                              |
+|  ROUND 4  |  search-service                                                  |
+|  Search service 503s during batch indexing.                                  |
+|                                                                              |
++----------------------------------------+-------------------------------------+
+|  EPISODIC AGENT                        |  BASELINE AGENT                       |
++----------------------------------------+-------------------------------------+
+  Retrieved memory:
+  [FAILURE] The user reported API 500     |  * 504s started exactly when v2.14.3   
+  errors under load, and the agent i  =>  |  was deployed.                         
+  Was actually Redis connection pool      |  * Payment service returning 504 errors
+  exhaustion, not DB.                     |  after deployment.                     
+  [FAILURE] Outcome: failure — Cache      |  * Database CPU looks normal, queries  
+  connection pool saturated under pea     |  are fine.                             
+  => Connection pool to cache was the     |  * Fix attempted: Increased database   
+  bottleneck, not network.                |  connection pool size.                 
+  [FAILURE] The agent investigated two    |  * Outcome: failure. Root cause: Cache 
+  performance issues: API 500 error  =>   |  connection pool saturated under peak  
+  Connection pool to cache was the        |  lo                                    
+  bottleneck, not network.                |                                        
+  [SUCCESS] Outcome: success — Bad        |                                        
+  config change in v2.14.3 — upstream t   |                                        
+  [SUCCESS] The agent investigated three  |                                        
+  separate issues: API 500 errors         |                                        
+  Generalized facts:
+  The user reported API 500 errors under  |  (N/A -- no fact extraction)           
+  load, and the agent investigate         |                                        
+  [sup=1]                                 |                                        
+  The agent investigated two performance  |                                        
+  issues: API 500 errors under lo         |                                        
+  [sup=2]                                 |                                        
+  Connection pool exhaustion is a common  |                                        
+  root cause of service degradati         |                                        
+  [sup=1]                                 |                                        
+  ----------------------------------------+--------------------------------------
+  Reasoning:
+  Looking at my past episodes, there's a  |  The past entries show a clear pattern 
+  clear pattern of misdiagnosis around    |  where 504/503 errors occurred         
+  connection pool exhaustion. Episodes    |  immediately after deployments, and the
+  1, 2, and 3 all show that I initially   |  initial investigation focused on      
+  blamed database or network issues when  |  database issues which proved to be a  
+  the actual root cause was connection    |  red herring. The actual root cause was
+  pool saturation (Redis in Episodes      |  connection pool saturation in a       
+  1&3, cache in Episodes 2&3). The        |  different component (cache), not the  
+  generalized facts confirm that          |  database. This suggests that          
+  "connection pool exhaustion is a        |  connection pool exhaustion in non-    
+  common root cause of service            |  obvious services is a common failure  
+  degradation under load" and that I      |  mode during high-load operations like 
+  have a tendency to misdiagnose these    |  batch indexing.                       
+  as other infrastructure problems.       |                                        
+  ----------------------------------------+--------------------------------------
+  Investigate: Check connection pool...   |  Investigate: Check the search...
+  CORRECT                                 |  CORRECT
++------------------------------------------------------------------------------+
+|  Ground truth: Connection pool to Elasticsearch exhausted during indexing ...|
++------------------------------------------------------------------------------+
+
+  >>> TRIGGERING FACT EXTRACTION AFTER ROUND 4 <<<
+     * The user reported API 500 errors under load, and the agent investigated finding 
+     * The agent investigated two performance issues: API 500 errors under load and pay
+     * Connection pool exhaustion is a common root cause of service degradation under l
+     * Database and network connectivity issues are frequently misdiagnosed when the ac
+     * Configuration changes in deployments should be immediately suspected when servic
+     * The agent investigated four separate service outage incidents, all involving con
+     * When multiple infrastructure components exhibit similar symptoms simultaneously,
+
+
++------------------------------------------------------------------------------+
+|                                                                              |
+|  ROUND 5 [TEST]  |  notification-service                                     |
+|  Notification service dropping messages under load.                          |
+|                                                                              |
++----------------------------------------+-------------------------------------+
+|  EPISODIC AGENT                        |  BASELINE AGENT                       |
++----------------------------------------+-------------------------------------+
+  Retrieved memory:
+  [FAILURE] The agent investigated four   |  * Outcome: failure. Root cause: Cache 
+  separate service outage incident  =>    |  connection pool saturated under peak  
+  Connection pool starvation, not         |  lo                                    
+  compute — need bigger pool.             |  * Found misconfigured timeout value in
+  [FAILURE] Outcome: failure — Cache      |  new config: 1ms instead of 1000ms.    
+  connection pool saturated under pea     |  * Outcome: success. Root cause: Bad   
+  => Connection pool to cache was the     |  config change in v2.14.3 — upstream   
+  bottleneck, not network.                |  timeo                                 
+  [SUCCESS] Outcome: success — Bad        |  * API returning 500 errors under load.
+  config change in v2.14.3 — upstream t   |  * Fix attempted: Increased database   
+  [FAILURE] The user reported API 500     |  connection pool size.                 
+  errors under load, and the agent i  =>  |                                        
+  Was actually Redis connection pool      |                                        
+  exhaustion, not DB.                     |                                        
+  [FAILURE] The agent investigated two    |                                        
+  performance issues: API 500 error  =>   |                                        
+  Connection pool to cache was the        |                                        
+  bottleneck, not network.                |                                        
+  Generalized facts:
+  Connection pool exhaustion is a common  |  (N/A -- no fact extraction)           
+  root cause of service degradati         |                                        
+  [sup=2]                                 |                                        
+  The agent investigated four separate    |                                        
+  service outage incidents, all inv       |                                        
+  [sup=1]                                 |                                        
+  Configuration changes in deployments    |                                        
+  should be immediately suspected w       |                                        
+  [sup=2]                                 |                                        
+  ----------------------------------------+--------------------------------------
+  Reasoning:
+  Looking at my past episodes, I see a    |  The retrieved entries show a clear    
+  clear pattern where I repeatedly        |  pattern of configuration issues       
+  misdiagnosed load-related issues by     |  causing production failures,          
+  focusing on compute/network problems    |  specifically timeout misconfigurations
+  when the actual root cause was          |  (entries 2 and 3) where values were   
+  connection pool exhaustion (Episodes    |  set to 1ms instead of 1000ms. Both    
+  1, 2, 4, and 5). However, Episode 3     |  cache connection pool saturation      
+  stands out as my only successful        |  (entry 1) and general load-related API
+  resolution, where I correctly           |  errors (entry 4) appear in the        
+  identified a recent deployment with     |  historical data, but the timeout      
+  misconfigured timeout values. The       |  misconfiguration pattern has a        
+  generalized facts confirm that both     |  documented successful resolution.     
+  connection pool exhaustion and          |  Given that notification services      
+  configuration changes in deployments    |  typically depend on downstream systems
+  are common causes of service            |  and connection timeouts, this         
+  degradation under load.                 |  represents the highest probability    
+                                          |  root cause.                           
+  ----------------------------------------+--------------------------------------
+  Investigate: Check for any recent...    |  Investigate: Check all timeout...
+  CORRECT                                 |  WRONG
+  Keywords: 4/4                           |  Keywords: 3/4
++------------------------------------------------------------------------------+
+|  Ground truth: Connection pool to message broker exhausted.                  |
++------------------------------------------------------------------------------+
+
++------------------------------------------------------------------------------+
+|                                                                              |
+|  ROUND 6 [TEST]  |  auth-service                                             |
+|  Auth service slow during login spike.                                       |
+|                                                                              |
++----------------------------------------+-------------------------------------+
+|  EPISODIC AGENT                        |  BASELINE AGENT                       |
++----------------------------------------+-------------------------------------+
+  Retrieved memory:
+  [FAILURE] The agent investigated two    |  * Found misconfigured timeout value in
+  performance issues: API 500 error  =>   |  new config: 1ms instead of 1000ms.    
+  Connection pool to cache was the        |  * Outcome: success. Root cause: Bad   
+  bottleneck, not network.                |  config change in v2.14.3 — upstream   
+  [SUCCESS] Outcome: success — Bad        |  timeo                                 
+  config change in v2.14.3 — upstream t   |  * Notification service dropping       
+  [FAILURE] The conversation involved     |  messages under load.                  
+  troubleshooting various production      |  * Message broker consumer lag         
+  [FAILURE] The agent investigated four   |  increasing rapidly.                   
+  separate service outage incident  =>    |  * Fix attempted: Scaled up search     
+  Connection pool starvation, not         |  service replicas.                     
+  compute — need bigger pool.             |                                        
+  [FAILURE] Outcome: failure — Cache      |                                        
+  connection pool saturated under pea     |                                        
+  => Connection pool to cache was the     |                                        
+  bottleneck, not network.                |                                        
+  Generalized facts:
+  The agent investigated two performance  |  (N/A -- no fact extraction)           
+  issues: API 500 errors under lo         |                                        
+  [sup=2]                                 |                                        
+  Connection pool exhaustion is a common  |                                        
+  root cause of service degradati         |                                        
+  [sup=2]                                 |                                        
+  The conversation involved               |                                        
+  troubleshooting various production      |                                        
+  issues in [sup=1]                       |                                        
+  ----------------------------------------+--------------------------------------
+  Reasoning:
+  Looking at my past episodes, there's a  |  The past entries show a clear pattern 
+  clear pattern where connection pool     |  of configuration-related issues       
+  exhaustion is the most frequent root    |  causing performance problems,         
+  cause of service slowdowns under load   |  specifically entry #1 and #2 which    
+  spikes. Episodes 1, 3, 4, and 5 all     |  document a timeout misconfiguration   
+  involved connection pool saturation     |  (1ms instead of 1000ms) that was      
+  (Redis, cache, Elasticsearch, message   |  successfully resolved. This type of   
+  broker) being misdiagnosed as network   |  configuration error directly matches  
+  or compute issues. The only successful  |  our current symptom of auth service   
+  resolution (Episode 2) was a            |  slowness during load spikes, as       
+  configuration error, but the            |  inadequate timeouts would cause       
+  overwhelming pattern shows connection   |  cascading failures under increased    
+  pools failing first during traffic      |  traffic.                              
+  spikes.                                 |                                        
+  ----------------------------------------+--------------------------------------
+  Investigate: Check the connection...    |  Investigate: Check all recent...
+  CORRECT                                 |  WRONG
+  Keywords: 4/4                           |  Keywords: 1/4
++------------------------------------------------------------------------------+
+|  Ground truth: Redis connection pool exhaustion during auth spike.           |
++------------------------------------------------------------------------------+
+
++------------------------------------------------------------------------------+
+|                                                                              |
+|  ROUND 7 [SUBTLE]  |  auth-service                                           |
+|  Auth service latency P99 increased from 50ms to 200ms, no errors.           |
+|                                                                              |
++----------------------------------------+-------------------------------------+
+|  EPISODIC AGENT                        |  BASELINE AGENT                       |
++----------------------------------------+-------------------------------------+
+  Retrieved memory:
+  [FAILURE] Outcome: failure — Redis      |  * Login latency p99 jumped from 200ms 
+  connection pool exhaustion during a     |  to 8s.                                
+  [FAILURE] The agent investigated        |  * Auth service slow during login      
+  multiple service performance issues i   |  spike.                                
+  [SUCCESS] Outcome: success — Bad        |  * Found misconfigured timeout value in
+  config change in v2.14.3 — upstream t   |  new config: 1ms instead of 1000ms.    
+  [FAILURE] The agent investigated two    |  * Outcome: failure. Root cause: Redis 
+  performance issues: API 500 error  =>   |  connection pool exhaustion during auth
+  Connection pool to cache was the        |  * Outcome: success. Root cause: Bad   
+  bottleneck, not network.                |  config change in v2.14.3 — upstream   
+  [FAILURE] Outcome: failure —            |  timeo                                 
+  Connection pool to message broker       |                                        
+  exhaust                                 |                                        
+  Generalized facts:
+  The agent investigated two performance  |  (N/A -- no fact extraction)           
+  issues: API 500 errors under lo         |                                        
+  [sup=3]                                 |                                        
+  The conversation involved               |                                        
+  troubleshooting various production      |                                        
+  issues in [sup=1]                       |                                        
+  Connection pool exhaustion is a common  |                                        
+  root cause of service degradati         |                                        
+  [sup=3]                                 |                                        
+  ----------------------------------------+--------------------------------------
+  Reasoning:
+  Based on my episodic memory,            |  The past entries show a clear pattern 
+  connection pool exhaustion is the most  |  where auth service latency issues were
+  frequent root cause of auth service     |  caused by configuration problems,     
+  latency issues, appearing in 4 out of   |  specifically timeout misconfigurations
+  5 past episodes (Episodes 1, 2, 4, and  |  (1ms instead of 1000ms in entry 5) and
+  5). The pattern shows that latency      |  connection pool exhaustion (entry 4). 
+  increases without errors are commonly   |  Entry 5 shows a successful resolution 
+  caused by connection pools hitting      |  where a bad config change in version  
+  limits, forcing requests to queue and   |  2.14.3 set upstream timeouts          
+  wait. Episode 3 shows configuration     |  incorrectly. Since the current        
+  changes can also cause latency, but     |  incident shows no errors but increased
+  the overwhelming pattern points to      |  latency, this points to a             
+  connection pool saturation as the       |  configuration issue rather than a hard
+  primary culprit.                        |  failure.                              
+  ----------------------------------------+--------------------------------------
+  Investigate: Check Redis connection...  |  Investigate: Check recent...
+  CORRECT                                 |  WRONG
+  Keywords: 2/4                           |  Keywords: 2/4
++------------------------------------------------------------------------------+
+|  Ground truth: Connection pool contention — pool sized for average load bu...|
++------------------------------------------------------------------------------+
+
++------------------------------------------------------------------------------+
+|                                                                              |
+|  ROUND 8 [CORRECTION]  |  order-service                                      |
+|  Order service returning 500 errors after deploying v2.4.1. Errors started...|
+|                                                                              |
++----------------------------------------+-------------------------------------+
+|  EPISODIC AGENT                        |  BASELINE AGENT                       |
++----------------------------------------+-------------------------------------+
+  Retrieved memory:
+  [FAILURE] The conversation involved     |  * Payment service returning 504 errors
+  troubleshooting various production      |  after deployment.                     
+  [FAILURE] The user reported API 500     |  * API returning 500 errors under load.
+  errors under load, and the agent i  =>  |  * Found misconfigured timeout value in
+  Was actually Redis connection pool      |  new config: 1ms instead of 1000ms.    
+  exhaustion, not DB.                     |  * Outcome: success. Root cause: Bad   
+  [FAILURE] The agent investigated        |  config change in v2.14.3 — upstream   
+  multiple service performance issues i   |  timeo                                 
+  [FAILURE] The agent investigated four   |  * Outcome: failure. Root cause:       
+  separate service outage incident  =>    |  Connection pool to message broker     
+  Connection pool starvation, not         |  exhausted.                            
+  compute — need bigger pool.             |                                        
+  [FAILURE] The agent interaction         |                                        
+  documented multiple production inciden  |                                        
+  Generalized facts:
+  The conversation involved               |  (N/A -- no fact extraction)           
+  troubleshooting various production      |                                        
+  issues in [sup=1]                       |                                        
+  Configuration changes in deployments    |                                        
+  should be immediately suspected w       |                                        
+  [sup=3]                                 |                                        
+  The agent investigated four separate    |                                        
+  service outage incidents, all inv       |                                        
+  [sup=1]                                 |                                        
+  ----------------------------------------+--------------------------------------
+  Reasoning:
+  Episodes 1, 4, and 5 show a clear       |  The past entries show a clear pattern 
+  pattern where deployment-related 500    |  where deployment-related 500 errors   
+  errors that start exactly at deploy     |  were caused by configuration issues,  
+  time are often caused by configuration  |  specifically timeout misconfigurations
+  changes, particularly timeout values.   |  (entries 3 and 4 show a successful    
+  Episode 4 specifically mentions a       |  resolution where a timeout was set to 
+  successful resolution by "rolling back  |  1ms instead of 1000ms). Since the     
+  a deployment that contained a           |  current incident started exactly at   
+  misconfigured timeout value," and the   |  deploy time with v2.4.1 and not during
+  generalized facts emphasize that        |  traffic spikes, this strongly suggests
+  "configuration changes in deployments   |  a configuration change rather than a  
+  should be immediately suspected when    |  capacity issue. The successful        
+  services fail after releases,           |  resolution pattern from the past      
+  especially timeout-related              |  indicates configuration validation    
+  parameters." While connection pool      |  should be the first step.             
+  exhaustion was the root cause in many   |                                        
+  episodes, those typically occurred      |                                        
+  during traffic spikes, not immediately  |                                        
+  at deploy time like this incident.      |                                        
+  ----------------------------------------+--------------------------------------
+  Investigate: Check the v2.4.1...        |  Investigate: Check all timeout...
+  CORRECT                                 |  CORRECT
+  Keywords: 4/5                           |  Keywords: 3/5
++------------------------------------------------------------------------------+
+|  Ground truth: Missing database index from v2.4.1 migration caused full ta...|
++------------------------------------------------------------------------------+
+
+  >>> TRIGGERING FACT EXTRACTION AFTER ROUND 8 <<<
+     * The user reported API 500 errors under load, and the agent investigated finding 
+     * The agent investigated two performance issues: API 500 errors under load and pay
+     * Connection pool exhaustion is a common root cause of service degradation under l
+     * Database and network connectivity issues are frequently misdiagnosed when the ac
+     * Configuration changes in deployments should be immediately suspected when servic
+     * The agent investigated four separate service outage incidents, all involving con
+     * When multiple infrastructure components exhibit similar symptoms simultaneously,
+     * The conversation involved troubleshooting various production issues including AP
+     * Service outages during peak traffic periods typically stem from resource content
+     * The agent interaction documented multiple production incidents where services ex
+     * Deployment-related issues such as configuration errors and database migration pr
+     * Initial symptom-based diagnosis often leads to misidentifying the root cause, re
+
+
++------------------------------------------------------------------------------+
+|                                                                              |
+|  ROUND 9 [CORRECTION]  |  inventory-service                                  |
+|  Inventory service errors spiking after v3.1.0 release. Started immediatel...|
+|                                                                              |
++----------------------------------------+-------------------------------------+
+|  EPISODIC AGENT                        |  BASELINE AGENT                       |
++----------------------------------------+-------------------------------------+
+  Retrieved memory:
+  [FAILURE] The conversation involved     |  * Order service returning 500 errors  
+  troubleshooting various production      |  after deploying v2.4.1. Errors started
+  [FAILURE] Outcome: failure — Cache      |  e                                     
+  connection pool saturated under pea     |  * Errors started exactly at deploy    
+  => Connection pool to cache was the     |  time, not during load.                
+  bottleneck, not network.                |  * Fix attempted: Rolled back          
+  [FAILURE] The interaction discussed     |  deployment to v2.14.2.                
+  multiple service outages where the  =>  |  * Outcome: success. Root cause: Bad   
+  Not connection pool — errors            |  config change in v2.14.3 — upstream   
+  correlated with deployment time, not    |  timeo                                 
+  load. Root cause was missing DB index   |  * Found misconfigured timeout value in
+  from migration.                         |  new config: 1ms instead of 1000ms.    
+  [FAILURE] The agent investigated        |                                        
+  multiple service performance issues i   |                                        
+  [FAILURE] Outcome: failure —            |                                        
+  Connection pool to message broker       |                                        
+  exhaust                                 |                                        
+  Generalized facts:
+  The conversation involved               |  (N/A -- no fact extraction)           
+  troubleshooting various production      |                                        
+  issues in [sup=1]                       |                                        
+  Service outages during peak traffic     |                                        
+  periods typically stem from resour      |                                        
+  [sup=1]                                 |                                        
+  Configuration changes in deployments    |                                        
+  should be immediately suspected w       |                                        
+  [sup=3]                                 |                                        
+  ----------------------------------------+--------------------------------------
+  Reasoning:
+  Looking at my past episodes, I see a    |  The past entries show a clear pattern 
+  clear pattern where deployment-related  |  of deployment-related incidents caused
+  issues have different root causes than  |  by configuration errors, specifically 
+  load-based failures. Episode 3          |  timeout misconfigurations. In the     
+  specifically shows that when errors     |  previous case, a bad config change set
+  spike "immediately after deployment,    |  an upstream timeout to 1ms instead of 
+  no change in traffic," the issue was    |  1000ms, causing immediate 500 errors  
+  NOT connection pool exhaustion but      |  right at deploy time. The current     
+  rather a missing database index from    |  incident follows the identical pattern
+  the migration. The generalized facts    |  - errors spiking immediately after    
+  confirm that "configuration changes in  |  deployment with no traffic change.    
+  deployments should be immediately       |                                        
+  suspected when services fail after      |                                        
+  releases."                              |                                        
+  ----------------------------------------+--------------------------------------
+  Investigate: Check if the v3.1.0...     |  Investigate: Check the v3.1.0...
+  CORRECT                                 |  CORRECT
+  Keywords: 5/5                           |  Keywords: 3/5
++------------------------------------------------------------------------------+
+|  Ground truth: Bad deployment — v3.1.0 introduced a schema mismatch that c...|
++------------------------------------------------------------------------------+
+
+================================================================================
+  SUMMARY -- Decision Correctness Across All Rounds
+================================================================================
+  Round   Type          Service                Episodic  Baseline   Keywords (E/B)
+  ------------------------------------------------------------------------------
+  1       LEARN         api-gateway               X         OK                  --
+  2       LEARN         payment-service           OK        OK                  --
+  3       RED HERRING   payment-service           X         X             1/4  2/4
+  4       LEARN         search-service            OK        OK                  --
+  5       TEST          notification-service      OK        X             4/4  3/4
+  6       TEST          auth-service              OK        X             4/4  1/4
+  7       SUBTLE        auth-service              OK        X             2/4  2/4
+  8       CORRECTION    order-service             OK        OK            4/5  3/5
+  9       CORRECTION    inventory-service         OK        OK            5/5  3/5
+  ------------------------------------------------------------------------------
+  TOTAL                                           7         5     
+
+================================================================================
+  STRUCTURED RETRIEVAL SCORE
+  (items with explicit outcome labels vs raw outcome mentions)
+================================================================================
+  Round   Type            Episodic (labeled/total)    Baseline (outcome/total)
+  --------------------------------------------------------------------------
+  1       LEARN                                 --                          --
+  2       LEARN                                2/2                         1/5
+  3       RED HERRING                          4/4                         0/5
+  4       LEARN                                5/5                         1/5
+  5       TEST                                 5/5                         2/5
+  6       TEST                                 5/5                         1/5
+  7       SUBTLE                               5/5                         2/5
+  8       CORRECTION                           5/5                         2/5
+  9       CORRECTION                           5/5                         1/5
+  --------------------------------------------------------------------------
+  TOTAL                               36/36 (100%)                 10/40 (25%)
+
+================================================================================
+  PATTERN APPLICATION (Rounds 4-9)
+  Connection pool pattern: correct when IS root cause, FP when NOT
+================================================================================
+  Round   Type          Pool correct?       Episodic        Baseline    
+  --------------------------------------------------------------------
+  4       LEARN         yes                 correct         correct     
+  5       TEST          yes                 correct          missed     
+  6       TEST          yes                 correct          missed     
+  7       SUBTLE        yes                 correct          missed     
+  8       CORRECTION    NO                  avoided         avoided     
+  9       CORRECTION    NO                  avoided         avoided     
+  --------------------------------------------------------------------
+  Correct applies:                             4               1        
+  False positives:                             0               0        
+
+================================================================================
+  ADAPTATION SCORE (Round 8 → 9: did the agent learn from correction?)
+================================================================================
+                                            Episodic        Baseline    
+  --------------------------------------------------------------------
+  Round 8 applied pool pattern:                no              no       
+  Round 9 applied pool pattern:                no              no       
+  Verdict:                              correctly avoidedcorrectly avoided
+
+================================================================================
+  WEIGHTED SCORE
+  Correct decision = 1pt | Avoided false positive = 1pt | Adaptation = 2pt
+================================================================================
+                                            Episodic        Baseline    
+  --------------------------------------------------------------------
+  Correct decisions (×1):                      7               5        
+  Avoided false positives (×1):                2               2        
+  Adaptation bonus (×2):                       0               0        
+  --------------------------------------------------------------------
+  WEIGHTED TOTAL:                              9               7        
+
+  ==>  Episodic memory outperforms flat vector RAG.
+
+================================================================================
+  FINAL EPISODIC MEMORY STATE
+================================================================================
+  Episodes: 18
+  Links:    9
+  Facts:    15
+    * The user reported API 500 errors under load, and the agent investigated   [sup=1 con=0]
+    * The agent investigated two performance issues: API 500 errors under load  [sup=3 con=0]
+    * Connection pool exhaustion is a common root cause of service degradation  [sup=4 con=0]
+    * Database and network connectivity issues are frequently misdiagnosed whe  [sup=1 con=0]
+    * Configuration changes in deployments should be immediately suspected whe  [sup=3 con=0]
+    * The agent investigated four separate service outage incidents, all invol  [sup=2 con=0]
+    * When multiple infrastructure components exhibit similar symptoms simulta  [sup=1 con=0]
+    * The conversation involved troubleshooting various production issues incl  [sup=1 con=0]
+    * Service outages during peak traffic periods typically stem from resource  [sup=1 con=0]
+    * The agent interaction documented multiple production incidents where ser  [sup=2 con=0]
+    * Deployment-related issues such as configuration errors and database migr  [sup=1 con=0]
+    * Initial symptom-based diagnosis often leads to misidentifying the root c  [sup=1 con=0]
+    * When investigating service performance issues under high load, systemati  [sup=1 con=0]
+    * Connection pool issues are common symptoms during high load scenarios, b  [sup=1 con=0]
+    * Verify recent deployments and configuration changes first when troublesh  [sup=1 con=0]

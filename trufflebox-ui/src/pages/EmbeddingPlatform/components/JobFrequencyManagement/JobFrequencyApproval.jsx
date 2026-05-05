@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -19,24 +19,19 @@ import {
   DialogActions,
   Chip,
   IconButton,
-  Popover,
-  List,
-  ListItem,
-  ListItemButton,
-  Checkbox,
-  Divider,
   Snackbar
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
-import FilterListIcon from '@mui/icons-material/FilterList';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import PersonIcon from '@mui/icons-material/Person';
 import { useAuth } from '../../../Auth/AuthContext';
 import embeddingPlatformAPI from '../../../../services/embeddingPlatform/api';
+import { useNotification } from '../shared/hooks/useNotification';
+import { useStatusFilter, useTableFilter, StatusChip, StatusFilterHeader, ViewDetailModal } from '../shared';
 
 const JobFrequencyApproval = () => {
   const [frequencyRequests, setFrequencyRequests] = useState([]);
@@ -45,24 +40,11 @@ const JobFrequencyApproval = () => {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [approvalComments, setApprovalComments] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatuses, setSelectedStatuses] = useState(['PENDING', 'APPROVED', 'REJECTED']);
+  const { selectedStatuses, setSelectedStatuses, handleStatusChange } = useStatusFilter(['PENDING', 'APPROVED', 'REJECTED']);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { user } = useAuth();
-  const [notification, setNotification] = useState({
-    open: false,
-    message: '',
-    severity: 'success'
-  });
-
-  // Filter popover state
-  const [statusAnchorEl, setStatusAnchorEl] = useState(null);
-
-  const statusOptions = [
-    { value: 'PENDING', label: 'Pending', color: '#FFF8E1', textColor: '#F57C00' },
-    { value: 'APPROVED', label: 'Approved', color: '#E7F6E7', textColor: '#2E7D32' },
-    { value: 'REJECTED', label: 'Rejected', color: '#FFEBEE', textColor: '#D32F2F' },
-  ];
+  const { notification, showNotification, closeNotification } = useNotification();
 
   useEffect(() => {
     fetchData();
@@ -103,28 +85,20 @@ const JobFrequencyApproval = () => {
     return `${number === '1' ? unitName.charAt(0).toUpperCase() + unitName.slice(1) : `${number}-${unitName}`} frequency - runs every ${number} ${unitName}`;
   };
 
-  const filteredRequests = useMemo(() => {
-    let filtered = frequencyRequests.filter(request =>
-      selectedStatuses.includes(request.status?.toUpperCase())
-    );
-
-    if (searchQuery) {
-      const searchLower = searchQuery.toLowerCase();
-      filtered = filtered.filter(request => {
-        return (
-          String(request.request_id || '').toLowerCase().includes(searchLower) ||
-          String(request.payload?.job_frequency || '').toLowerCase().includes(searchLower) ||
-          String(request.reason || '').toLowerCase().includes(searchLower) ||
-          String(request.created_by || '').toLowerCase().includes(searchLower) ||
-          (request.status && request.status.toLowerCase().includes(searchLower))
-        );
-      });
-    }
-
-    return filtered.sort((a, b) => {
-      return new Date(b.created_at) - new Date(a.created_at);
-    });
-  }, [frequencyRequests, searchQuery, selectedStatuses]);
+  const filteredRequests = useTableFilter({
+    data: frequencyRequests,
+    searchQuery,
+    selectedStatuses,
+    searchFields: (request) => [
+      request.request_id,
+      request.payload?.job_frequency,
+      request.reason,
+      request.created_by,
+      request.status,
+    ],
+    sortField: 'created_at',
+    sortOrder: 'desc',
+  });
 
   const handleViewRequest = (request) => {
     setSelectedRequest(request);
@@ -174,212 +148,6 @@ const JobFrequencyApproval = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const showNotification = (message, severity) => {
-    setNotification({ open: true, message, severity });
-  };
-
-  const handleCloseNotification = () => {
-    setNotification(prev => ({ ...prev, open: false }));
-  };
-
-  // Status filter functions
-  const handleStatusFilterClick = (event) => {
-    setStatusAnchorEl(event.currentTarget);
-  };
-
-  const handleStatusFilterClose = () => {
-    setStatusAnchorEl(null);
-  };
-
-  const handleStatusToggle = (status) => {
-    setSelectedStatuses(prev =>
-      prev.includes(status)
-        ? prev.filter(s => s !== status)
-        : [...prev, status]
-    );
-  };
-
-  // Status Column Header with filtering (same pattern as ModelRegistry)
-  const StatusColumnHeader = () => {
-    const [anchorEl, setAnchorEl] = useState(null);
-    
-    const handleClick = (event) => {
-      setAnchorEl(event.currentTarget);
-    };
-
-    const handleClose = () => {
-      setAnchorEl(null);
-    };
-
-    const handleStatusToggle = (status) => {
-      setSelectedStatuses(prev => 
-        prev.includes(status) 
-          ? prev.filter(s => s !== status)
-          : [...prev, status]
-      );
-    };
-
-    const handleSelectAll = () => {
-      setSelectedStatuses(statusOptions.map(option => option.value));
-    };
-
-    const handleClearAll = () => {
-      setSelectedStatuses([]);
-    };
-
-    const open = Boolean(anchorEl);
-
-  return (
-      <>
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            flexDirection: 'column',
-            alignItems: 'flex-start',
-            width: '100%'
-          }}
-        >
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              cursor: 'pointer',
-              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
-              borderRadius: 1,
-              p: 0.5
-            }}
-            onClick={handleClick}
-          >
-            <Typography sx={{ fontWeight: 'bold', color: '#031022' }}>
-              Status
-      </Typography>
-            <FilterListIcon 
-              sx={{ 
-                ml: 0.5, 
-                fontSize: 16,
-                color: selectedStatuses.length < statusOptions.length ? '#1976d2' : '#666'
-              }} 
-            />
-            {selectedStatuses.length > 0 && selectedStatuses.length < statusOptions.length && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: 2,
-                  right: 2,
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  backgroundColor: '#1976d2',
-                }}
-              />
-            )}
-          </Box>
-
-          {selectedStatuses.length > 0 && (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5, maxWidth: '100%' }}>
-              {selectedStatuses.slice(0, 2).map((status) => {
-                const option = statusOptions.find(opt => opt.value === status);
-                return option ? (
-                  <Chip
-                    key={status}
-                    label={option.label}
-                    size="small"
-                    sx={{
-                      backgroundColor: option.color,
-                      color: option.textColor,
-                      fontWeight: 'bold',
-                      fontSize: '0.65rem',
-                      height: 18,
-                      '& .MuiChip-label': { px: 0.5 }
-                    }}
-                  />
-                ) : null;
-              })}
-              {selectedStatuses.length > 2 && (
-                <Chip
-                  label={`+${selectedStatuses.length - 2}`}
-                  size="small"
-                  sx={{
-                    backgroundColor: '#f5f5f5',
-                    color: '#666',
-                    fontWeight: 'bold',
-                    fontSize: '0.65rem',
-                    height: 18,
-                    '& .MuiChip-label': { px: 0.5 }
-                  }}
-                />
-              )}
-            </Box>
-          )}
-        </Box>
-        <Popover
-          open={open}
-          anchorEl={anchorEl}
-          onClose={handleClose}
-          anchorOrigin={{
-            vertical: 'bottom',
-            horizontal: 'left',
-          }}
-          transformOrigin={{
-            vertical: 'top',
-            horizontal: 'left',
-          }}
-          PaperProps={{
-            sx: {
-              width: 200,
-              maxHeight: 300,
-              overflow: 'auto'
-            }
-          }}
-        >
-          <Box sx={{ p: 1 }}>
-            <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-              <Button 
-                size="small" 
-                onClick={handleSelectAll}
-                sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 'auto' }}
-              >
-                All
-              </Button>
-              <Button 
-                size="small" 
-                onClick={handleClearAll}
-                sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 'auto' }}
-              >
-                Clear
-              </Button>
-            </Box>
-            <Divider sx={{ mb: 1 }} />
-            <List dense>
-              {statusOptions.map((option) => (
-                <ListItem key={option.value} disablePadding>
-                  <ListItemButton onClick={() => handleStatusToggle(option.value)} sx={{ py: 0.5 }}>
-                    <Checkbox
-                      edge="start"
-                      checked={selectedStatuses.includes(option.value)}
-                      size="small"
-                      sx={{ mr: 1 }}
-                    />
-                    <Chip
-                      label={option.label}
-                      size="small"
-                      sx={{
-                        backgroundColor: option.color,
-                        color: option.textColor,
-                        fontWeight: 'bold',
-                        minWidth: '80px'
-                      }}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          </Box>
-        </Popover>
-      </>
-    );
   };
 
   if (loading) {
@@ -466,7 +234,7 @@ const JobFrequencyApproval = () => {
                   position: 'relative'
                 }}
               >
-                <StatusColumnHeader />
+                <StatusFilterHeader selectedStatuses={selectedStatuses} onStatusChange={handleStatusChange} />
               </TableCell>
               <TableCell sx={{ backgroundColor: '#E6EBF2', fontWeight: 'bold', color: '#031022' }}>
                 Actions
@@ -523,15 +291,7 @@ const JobFrequencyApproval = () => {
                     {request.created_by || 'N/A'}
                   </TableCell>
                   <TableCell sx={{ borderRight: '1px solid rgba(224, 224, 224, 1)' }}>
-                    <Chip
-                      label={request.status || 'PENDING'}
-                      size="small"
-                      sx={{
-                        backgroundColor: request.status === 'APPROVED' ? '#E7F6E7' : request.status === 'REJECTED' ? '#FFEBEE' : '#FFF8E1',
-                        color: request.status === 'APPROVED' ? '#2E7D32' : request.status === 'REJECTED' ? '#D32F2F' : '#F57C00',
-                        fontWeight: 600
-                      }}
-                    />
+                    <StatusChip status={request.status} />
                   </TableCell>
                   <TableCell>
                     <IconButton
@@ -550,178 +310,102 @@ const JobFrequencyApproval = () => {
       </TableContainer>
 
       {/* View Job Frequency Request Details Modal */}
-      <Dialog open={showViewModal} onClose={handleCloseViewModal} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <ScheduleIcon sx={{ color: '#522b4a' }} />
-            Job Frequency Request Details
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          {selectedRequest && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 2 }}>
-              {/* Request Information Section */}
-              <Box sx={{ p: 2, backgroundColor: 'rgba(82, 43, 74, 0.02)', borderRadius: 1, border: '1px solid rgba(82, 43, 74, 0.1)' }}>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <PersonIcon fontSize="small" sx={{ color: '#522b4a' }} />
-                  Request Information
-                </Typography>
-
+      <ViewDetailModal
+        open={showViewModal}
+        onClose={handleCloseViewModal}
+        data={selectedRequest}
+        config={{
+          title: 'Job Frequency Request Details',
+          icon: ScheduleIcon,
+          sections: [
+            {
+              title: 'Request Information',
+              icon: PersonIcon,
+              layout: 'grid',
+              fields: [
+                { label: 'Request ID', key: 'request_id', type: 'monospace' },
+                { label: 'Status', key: 'status', type: 'status' },
+                { label: 'Created By', key: 'created_by' },
+                { label: 'Created At', key: 'created_at', type: 'date' }
+              ]
+            },
+            {
+              title: 'Job Frequency Configuration',
+              icon: ScheduleIcon,
+              backgroundColor: 'rgba(33, 150, 243, 0.02)',
+              borderColor: 'rgba(33, 150, 243, 0.1)',
+              render: (data) => (
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                   <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Request ID
-                    </Typography>
-                    <Typography variant="body1" sx={{ fontFamily: 'monospace' }}>
-                      {selectedRequest.request_id}
+                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>Frequency ID</Typography>
+                    <Typography variant="body1" sx={{ fontFamily: 'monospace', backgroundColor: '#e3f2fd', padding: '4px 8px', borderRadius: '4px', color: '#1976d2', display: 'inline-block', mt: 0.5 }}>
+                      {data?.payload?.job_frequency || 'N/A'}
                     </Typography>
                   </Box>
-
                   <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Created By
-                    </Typography>
-                    <Typography variant="body1">
-                      {selectedRequest.created_by || 'N/A'}
-                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>Description</Typography>
+                    <Typography variant="body1" sx={{ mt: 0.5 }}>{generateDescription(data?.payload?.job_frequency)}</Typography>
                   </Box>
-
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Status
-                    </Typography>
-                    <Typography variant="body1">
-                      <Chip
-                        label={selectedRequest.status || 'PENDING'}
-                        size="small"
-                        sx={{
-                          backgroundColor: selectedRequest.status === 'APPROVED' ? '#E7F6E7' : selectedRequest.status === 'REJECTED' ? '#FFEBEE' : '#FFF8E1',
-                          color: selectedRequest.status === 'APPROVED' ? '#2E7D32' : selectedRequest.status === 'REJECTED' ? '#D32F2F' : '#F57C00',
-                          fontWeight: 600
-                        }}
-                      />
-                    </Typography>
-                  </Box>
-                  
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Created At
-                    </Typography>
-                    <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                      <AccessTimeIcon fontSize="small" sx={{ color: '#1976d2' }} />
-                      {selectedRequest.created_at ? new Date(selectedRequest.created_at).toLocaleString() : 'N/A'}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Box>
-
-              {/* Job Frequency Details Section */}
-              <Box sx={{ p: 2, backgroundColor: 'rgba(33, 150, 243, 0.02)', borderRadius: 1, border: '1px solid rgba(33, 150, 243, 0.1)' }}>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <ScheduleIcon fontSize="small" sx={{ color: '#1976d2' }} />
-                  Job Frequency Configuration
-                </Typography>
-
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Frequency ID
-                    </Typography>
-                    <Typography variant="body1" sx={{ 
-                      fontFamily: 'monospace',
-                      backgroundColor: '#e3f2fd',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      color: '#1976d2',
-                      display: 'inline-block',
-                      mt: 0.5
-                    }}>
-                      {selectedRequest.payload?.job_frequency}
-                    </Typography>
-                  </Box>
-
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Description
-                    </Typography>
-                    <Typography variant="body1" sx={{ mt: 0.5 }}>
-                      {generateDescription(selectedRequest.payload?.job_frequency)}
-                    </Typography>
-                  </Box>
-
                   <Box sx={{ gridColumn: 'span 2' }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Reason
-                    </Typography>
-                    <Typography variant="body1" sx={{ mt: 0.5 }}>
-                      {selectedRequest.reason || 'N/A'}
-                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>Reason</Typography>
+                    <Typography variant="body1" sx={{ mt: 0.5 }}>{data?.reason || 'N/A'}</Typography>
                   </Box>
                 </Box>
-              </Box>
-
-              {/* Approval Section */}
-              {selectedRequest.status === 'PENDING' && (
-                <Box sx={{ p: 2, backgroundColor: 'rgba(76, 175, 80, 0.02)', borderRadius: 1, border: '1px solid rgba(76, 175, 80, 0.1)' }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <CheckCircleIcon fontSize="small" sx={{ color: '#4caf50' }} />
-                    Approval Decision
-                  </Typography>
-                <TextField
+              )
+            },
+            {
+              title: 'Approval Decision',
+              icon: CheckCircleIcon,
+              backgroundColor: 'rgba(76, 175, 80, 0.02)',
+              borderColor: 'rgba(76, 175, 80, 0.1)',
+              render: (data) => {
+                if (data?.status !== 'PENDING') return null;
+                return (
+                  <TextField
                     label="Approval/Rejection Comments"
-                  multiline
-                  rows={3}
+                    multiline
+                    rows={3}
                     value={approvalComments}
                     onChange={(e) => setApprovalComments(e.target.value)}
-                  variant="outlined"
-                  fullWidth
+                    variant="outlined"
+                    fullWidth
                     placeholder="Enter comments for your decision (required for rejection)..."
-                />
-                </Box>
-                )}
-              </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2, backgroundColor: '#fafafa', borderTop: '1px solid #e0e0e0' }}>
-          <Button 
-            onClick={handleCloseViewModal}
-            sx={{ 
-              color: '#522b4a',
-              '&:hover': { backgroundColor: 'rgba(82, 43, 74, 0.04)' }
-            }}
-          >
-            Close
-          </Button>
-          {selectedRequest?.status === 'PENDING' && (
+                  />
+                );
+              }
+            }
+          ],
+          actions: (request, onClose) => (
             <>
-              <Button 
-                onClick={() => handleApprovalSubmit('APPROVED')}
-                variant="contained"
-                startIcon={<CheckCircleIcon />}
-                disabled={loading}
-                sx={{
-                  backgroundColor: '#2e7d32',
-                  '&:hover': { backgroundColor: '#1b5e20' }
-                }}
-              >
-                {loading ? 'Processing...' : 'Approve'}
+              <Button onClick={onClose} sx={{ color: '#522b4a', '&:hover': { backgroundColor: 'rgba(82, 43, 74, 0.04)' } }}>
+                Close
               </Button>
-              <Button 
-                onClick={handleRejectModalOpen}
-                variant="contained"
-                startIcon={<CancelIcon />}
-                disabled={loading}
-                sx={{
-                  backgroundColor: '#d32f2f',
-                  '&:hover': { backgroundColor: '#b71c1c' }
-                }}
-              >
-                Reject
-              </Button>
+              {request?.status === 'PENDING' && (
+                <>
+                  <Button
+                    onClick={() => handleApprovalSubmit('APPROVED')}
+                    variant="contained"
+                    startIcon={<CheckCircleIcon />}
+                    disabled={loading}
+                    sx={{ backgroundColor: '#2e7d32', '&:hover': { backgroundColor: '#1b5e20' } }}
+                  >
+                    {loading ? 'Processing...' : 'Approve'}
+                  </Button>
+                  <Button
+                    onClick={handleRejectModalOpen}
+                    variant="contained"
+                    startIcon={<CancelIcon />}
+                    disabled={loading}
+                    sx={{ backgroundColor: '#d32f2f', '&:hover': { backgroundColor: '#b71c1c' } }}
+                  >
+                    Reject
+                  </Button>
+                </>
+              )}
             </>
-          )}
-        </DialogActions>
-      </Dialog>
+          )
+        }}
+      />
 
       {/* Reject Confirmation Modal */}
       <Dialog open={showRejectModal} onClose={handleRejectModalClose} maxWidth="sm" fullWidth>
@@ -780,11 +464,11 @@ const JobFrequencyApproval = () => {
       <Snackbar
         open={notification.open}
         autoHideDuration={6000}
-        onClose={handleCloseNotification}
+        onClose={closeNotification}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
         <Alert
-          onClose={handleCloseNotification}
+          onClose={closeNotification}
           severity={notification.severity}
           sx={{ width: '100%' }}
         >

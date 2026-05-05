@@ -9,7 +9,7 @@ import (
 var timeNow = time.Now
 
 const (
-	yearBits = 14  // Current year (when data is persisted)
+	yearBits = 14  // Expiry year
 	dayBits  = 9   // Days (0-512)
 	secsBits = 17  // Seconds in day
 	maxDays  = 513 // Maximum days allowed
@@ -19,7 +19,7 @@ const (
 )
 
 // EncodeExpiry encodes expiry timestamp into 5 bytes following format:
-// [14 bits persistence year][9 bits days][17 bits seconds]
+// [14 bits expiry year][9 bits days][17 bits seconds]
 func EncodeExpiry(expiryEpoch uint64) ([]byte, error) {
 	if expiryEpoch == 0 {
 		// set expiry to 0 (lifetime ttl)
@@ -27,10 +27,6 @@ func EncodeExpiry(expiryEpoch uint64) ([]byte, error) {
 		return result, nil
 	}
 	now := timeNow().UTC()
-	currentYear := now.Year()
-
-	// Get start of current year in epoch seconds
-	startOfYear := time.Date(currentYear, 1, 1, 0, 0, 0, 0, time.UTC).Unix()
 
 	// Validate expiry time
 	if expiryEpoch <= uint64(now.Unix()) {
@@ -42,22 +38,31 @@ func EncodeExpiry(expiryEpoch uint64) ([]byte, error) {
 		return nil, fmt.Errorf("expiry time cannot be more than 513 days from now")
 	}
 
-	// Calculate rest epoch
+	// Get the expiry year from the expiry timestamp
+	expiryTime := time.Unix(int64(expiryEpoch), 0).UTC()
+	expiryYear := expiryTime.Year()
+
+	// Get start of expiry year in epoch seconds
+	startOfYear := time.Date(expiryYear, 1, 1, 0, 0, 0, 0, time.UTC).Unix()
+
+	// Calculate rest epoch relative to start of expiry year
+	// Note: expiryYear may be the same as current year or a future year.
+	// In both cases, we use expiryYear as the reference point (not currentYear),
+	// ensuring restEpoch is always >= 0 since expiryEpoch falls within expiryYear.
 	restEpoch := int64(expiryEpoch) - startOfYear
 
-	// Calculate complete days and remaining seconds
-	completeDays := uint64(0)
-	remainingSecs := uint64(0)
-
-	if restEpoch > 0 {
-		completeDays = uint64(restEpoch) / (24 * 60 * 60)
-		remainingSecs = uint64(restEpoch) % (24 * 60 * 60)
-	} else {
-		remainingSecs = uint64(-restEpoch)
+	// Defensive check: restEpoch should always be >= 0 since expiryEpoch is in expiryYear
+	// and startOfYear is the start of that same year.
+	if restEpoch < 0 {
+		return nil, fmt.Errorf("invalid expiry calculation: restEpoch is negative")
 	}
 
+	// Calculate complete days and remaining seconds
+	completeDays := uint64(restEpoch) / (24 * 60 * 60)
+	remainingSecs := uint64(restEpoch) % (24 * 60 * 60)
+
 	// Pack the values
-	yearPart := uint64(currentYear) << (dayBits + secsBits)
+	yearPart := uint64(expiryYear) << (dayBits + secsBits)
 	dayPart := (completeDays & dayMask) << secsBits
 	secsPart := remainingSecs & secsMask
 

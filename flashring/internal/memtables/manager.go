@@ -3,6 +3,7 @@ package memtables
 import (
 	"github.com/Meesho/BharatMLStack/flashring/internal/allocators"
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
+	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
 	"github.com/rs/zerolog/log"
 )
 
@@ -16,14 +17,13 @@ type MemtableManager struct {
 	nextFileOffset int64
 	nextId         uint32
 	semaphore      chan int
-	stats          Stats
 }
 
-type Stats struct {
-	Flushes int64
-}
-
-func NewMemtableManager(file *fs.WrapAppendFile, capacity int32) (*MemtableManager, error) {
+// NewMemtableManager creates a double-buffered memtable pair.
+// flushStaggerOffset advances the active memtable's write position so that
+// different shards fill (and therefore flush) at staggered times, avoiding
+// synchronized flush storms that compete with reads for NVMe bandwidth.
+func NewMemtableManager(file *fs.WrapAppendFile, capacity int32, flushStaggerOffset int) (*MemtableManager, error) {
 	allocatorConfig := allocators.SlabAlignedPageAllocatorConfig{
 		SizeClasses: []allocators.SizeClass{
 			{Size: int(capacity), MinCount: 2},
@@ -53,6 +53,11 @@ func NewMemtableManager(file *fs.WrapAppendFile, capacity int32) (*MemtableManag
 	if err != nil {
 		return nil, err
 	}
+	// Pre-advance the active memtable so this shard's first flush happens
+	// earlier/later than its peers, spreading flush I/O over time.
+	memtable1.currentOffset = flushStaggerOffset
+	memtable1.flushStartOffset = flushStaggerOffset
+
 	memtableManager := &MemtableManager{
 		file:           file,
 		Capacity:       capacity,
@@ -62,7 +67,6 @@ func NewMemtableManager(file *fs.WrapAppendFile, capacity int32) (*MemtableManag
 		nextFileOffset: 2 * int64(capacity),
 		nextId:         2,
 		semaphore:      make(chan int, 1),
-		stats:          Stats{},
 	}
 	return memtableManager, nil
 }
@@ -92,7 +96,7 @@ func (mm *MemtableManager) flushConsumer(memtable *Memtable) {
 	memtable.Id = mm.nextId
 	mm.nextId++
 	mm.nextFileOffset += int64(n)
-	mm.stats.Flushes++
+	metrics.Incr(metrics.KEY_MEMTABLE_FLUSH_COUNT, append(metrics.GetShardTag(memtable.ShardIdx), metrics.GetMemtableTag(memtable.Id)...))
 }
 func (mm *MemtableManager) Flush() error {
 

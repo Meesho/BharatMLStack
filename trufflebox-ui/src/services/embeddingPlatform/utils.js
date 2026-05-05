@@ -7,13 +7,108 @@ import {
 } from './constants';
 
 /**
- * Utility functions for Embedding Platform (Skye)
- * Validation, formatting, and helper functions
+ * Parse payload field: if string, JSON.parse; otherwise return object or {}.
  */
+export function parsePayloadIfString(payload) {
+  if (payload == null) return {};
+  if (typeof payload === 'object') return payload;
+  if (typeof payload !== 'string') return {};
+  try {
+    return JSON.parse(payload);
+  } catch {
+    return {};
+  }
+}
 
-// =============================================================================
-// BUSINESS RULE VALIDATIONS
-// =============================================================================
+/**
+ * Ensure value is an array (handles undefined, null, non-arrays, iterables).
+ */
+export function ensureArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value == null) return [];
+  if (typeof value === 'object' && typeof value[Symbol.iterator] === 'function') return [...value];
+  return [];
+}
+
+/**
+ * Generic normalizer for *-requests API responses.
+ * Ensures the list is an array, parses string payloads, optionally flattens fields or normalizes variant filter_config.
+ *
+ * @param {Object} response - Raw API response (e.g. { entity_requests: [...], total_count?: N })
+ * @param {Object} options
+ * @param {string} options.listKey - Key holding the list (e.g. 'entity_requests', 'model_requests', 'variant_requests')
+ * @param {string} [options.fallbackListKey] - Fallback key if listKey missing (e.g. 'entities', 'models')
+ * @param {string} [options.totalCountKey] - Key for total count in output (e.g. 'total_count')
+ * @param {string[]} [options.flattenFromPayload] - Field names to copy from payload onto each item (e.g. ['entity', 'model', 'model_type'])
+ * @param {boolean} [options.normalizeVariantFilterConfig] - If true, normalize payload.filter_configuration: column_names -> criteria for UI
+ * @returns {Object} Response with [listKey] as array and parsed payloads; totalCountKey preserved if provided
+ */
+export function normalizeRequestList(response, options) {
+  const {
+    listKey,
+    fallbackListKey,
+    totalCountKey,
+    flattenFromPayload = [],
+    normalizeVariantFilterConfig = false,
+  } = options;
+
+  const rawList = response?.[listKey] ?? response?.[fallbackListKey];
+  const list = ensureArray(rawList);
+
+  const normalizedList = list.map((item) => {
+    let payload = parsePayloadIfString(item.payload);
+    if (normalizeVariantFilterConfig && payload?.filter_configuration) {
+      const fc = payload.filter_configuration;
+      const criteria = Array.isArray(fc.criteria) ? fc.criteria : [];
+      const fromColumnNames = Array.isArray(fc.column_names)
+        ? fc.column_names.map((col) => ({ column_name: col, condition: 'EQUALS' }))
+        : [];
+      payload = { ...payload, filter_configuration: { ...fc, criteria: criteria.length ? criteria : fromColumnNames } };
+    }
+    const out = { ...item, payload };
+    flattenFromPayload.forEach((field) => {
+      if (out[field] == null && payload?.[field] != null) {
+        out[field] = payload[field];
+      }
+    });
+    return out;
+  });
+
+  const out = { ...response, [listKey]: normalizedList };
+  if (totalCountKey != null) {
+    out[totalCountKey] = response?.[totalCountKey] ?? normalizedList.length;
+  }
+  return out;
+}
+
+/**
+ * Flatten getModels API response to a flat array.
+ * New API shape: { models: { entityKey: { StoreId, Models: { modelName: config }, Filters } } }
+ * Returns array of { entity, model, ...modelData } for each model.
+ *
+ * @param {Object} rawResponse - Raw response from getModels (e.g. { models: { catalog: { Models: {...} }, ... } })
+ * @returns {Array<{ entity: string, model: string, ... }>}
+ */
+export function flattenModelsResponse(rawResponse) {
+  const modelsObj = rawResponse?.models ?? rawResponse?.Models ?? rawResponse;
+  if (!modelsObj || typeof modelsObj !== 'object') return [];
+  if (Array.isArray(modelsObj)) return modelsObj;
+  const out = [];
+  for (const [entity, entityData] of Object.entries(modelsObj)) {
+    if (!entityData || typeof entityData !== 'object') continue;
+    const models = entityData?.Models ?? entityData?.models ?? entityData;
+    if (typeof models !== 'object' || models === null) continue;
+    for (const [modelName, modelData] of Object.entries(models)) {
+      out.push({
+        entity,
+        model: modelName,
+        ...(typeof modelData === 'object' && modelData !== null ? modelData : {}),
+      });
+    }
+  }
+  return out;
+}
+
 
 /**
  * Validate store registration payload
@@ -21,11 +116,15 @@ import {
 export const validateStorePayload = (payload) => {
   const errors = {};
 
-  // Validate conf_id (must be 2)
+  // Validate conf_id (must be 1)
+  // Convert to number for comparison to handle both string and number types
   if (!payload.conf_id) {
     errors.conf_id = ERROR_MESSAGES.REQUIRED_FIELD;
-  } else if (payload.conf_id !== BUSINESS_RULES.STORE.REQUIRED_CONF_ID) {
-    errors.conf_id = ERROR_MESSAGES.CONF_ID_FIXED;
+  } else {
+    const confIdNum = Number(payload.conf_id);
+    if (isNaN(confIdNum) || confIdNum !== BUSINESS_RULES.STORE.REQUIRED_CONF_ID) {
+      errors.conf_id = ERROR_MESSAGES.CONF_ID_FIXED;
+    }
   }
 
   // Validate database type
@@ -103,18 +202,6 @@ export const validateModelPayload = (payload) => {
     errors.number_of_partitions = ERROR_MESSAGES.PARTITIONS_FIXED;
   }
 
-  // Validate MQ ID
-  if (!payload.mq_id && payload.mq_id !== 0) {
-    errors.mq_id = 'MQ ID is required';
-  } else {
-    const num = Number(payload.mq_id);
-    if (isNaN(num)) {
-      errors.mq_id = 'MQ ID must be a valid number';
-    } else if (num <= 0) {
-      errors.mq_id = 'MQ ID must be greater than 0';
-    }
-  }
-
   // Validate job frequency
   if (!payload.job_frequency) {
     errors.job_frequency = 'Job frequency is required';
@@ -123,13 +210,6 @@ export const validateModelPayload = (payload) => {
   // Validate training data path
   if (!payload.training_data_path) {
     errors.training_data_path = 'Training data path is required';
-  }
-
-  // Validate topic name
-  if (!payload.topic_name) {
-    errors.topic_name = ERROR_MESSAGES.REQUIRED_FIELD;
-  } else if (!VALIDATION_PATTERNS.TOPIC_NAME.test(payload.topic_name)) {
-    errors.topic_name = 'Topic name must contain only alphanumeric characters, underscores, and hyphens';
   }
 
   // Validate model config
@@ -158,10 +238,6 @@ export const validateModelPayload = (payload) => {
 };
 
 
-// =============================================================================
-// FORMATTING UTILITIES
-// =============================================================================
-
 /**
  * Format date for display
  */
@@ -174,9 +250,6 @@ export const formatDate = (dateString) => {
   }
 };
 
-// =============================================================================
-// DATA TRANSFORMATION UTILITIES
-// =============================================================================
 
 /**
  * Transform API response to table format
@@ -199,9 +272,6 @@ export const transformToTableData = (data, type = 'requests') => {
   }));
 };
 
-// =============================================================================
-// BUSINESS LOGIC UTILITIES
-// =============================================================================
 
 
 /**
@@ -241,6 +311,7 @@ export const getDefaultFormValues = (type) => {
       entity: '',
       model: '',
       variant: '',
+      otd_training_data_path: '',
       vector_db_type: BUSINESS_RULES.VARIANT.FORCED_VECTOR_DB_TYPE,
       type: BUSINESS_RULES.VARIANT.FORCED_TYPE,
       caching_configuration: {
@@ -285,10 +356,6 @@ export const getDefaultFormValues = (type) => {
 
   return defaults[type] || {};
 };
-
-// =============================================================================
-// EXPORT ALL UTILITIES
-// =============================================================================
 
 export default {
   // Business Rules

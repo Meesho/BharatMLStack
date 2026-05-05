@@ -16,4 +16,5 @@ type Authenticator interface {
 	Logout(token string) error
 	GetAllUsers() ([]UserListingResponse, error)
 	UpdateUserAccessAndRole(email string, isActive bool, role string) error
+	GetPermissionByRole(role string) PermissionResponse
 }

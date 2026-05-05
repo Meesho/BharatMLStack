@@ -35,4 +35,5 @@ COPY --from=builder /app/target/release/numerix .
 
 EXPOSE 8082
 
+
 ENTRYPOINT ["/numerix"]

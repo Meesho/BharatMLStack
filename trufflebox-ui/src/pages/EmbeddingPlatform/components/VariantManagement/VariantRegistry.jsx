@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -19,83 +19,63 @@ import {
   DialogActions,
   Chip,
   IconButton,
-  Popover,
-  List,
-  ListItem,
-  ListItemButton,
-  Checkbox,
-  Divider,
   FormControl,
   FormHelperText,
   InputLabel,
   Select,
   MenuItem,
   Grid,
-  Switch,
-  FormControlLabel,
   Snackbar,
+  Collapse,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import FilterListIcon from '@mui/icons-material/FilterList';
 import ExperimentIcon from '@mui/icons-material/Science';
+import InfoIcon from '@mui/icons-material/Info';
 import LockIcon from '@mui/icons-material/Lock';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useAuth } from '../../../Auth/AuthContext';
 import embeddingPlatformAPI from '../../../../services/embeddingPlatform/api';
+import { useNotification } from '../shared/hooks/useNotification';
+import { useStatusFilter, useTableFilter, StatusChip, StatusFilterHeader, ViewDetailModal } from '../shared';
 
 const VariantRegistry = () => {
   const [variantRequests, setVariantRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatuses, setSelectedStatuses] = useState(['APPROVED', 'PENDING', 'REJECTED']);
+  const { selectedStatuses, setSelectedStatuses, handleStatusChange } = useStatusFilter(['APPROVED', 'PENDING', 'REJECTED']);
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [showRawJsonInViewModal, setShowRawJsonInViewModal] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [entities, setEntities] = useState([]);
   const [models, setModels] = useState([]);
   const [filters, setFilters] = useState([]);
+  const [variantsList, setVariantsList] = useState([]);
   const { user } = useAuth();
-  const [notification, setNotification] = useState({ open: false, message: "", severity: "success" });
+  const { notification, showNotification, closeNotification } = useNotification();
   
-  // Simplified variant data structure
   const [variantData, setVariantData] = useState({
     entity: '',
     model: '',
     variant: '',
     reason: '',
+    otd_training_data_path: '',
     vector_db_type: 'QDRANT',
     type: 'EXPERIMENT',
-    caching_configuration: {
-      in_memory_caching_enabled: true,
-      in_memory_cache_ttl_seconds: 300,
-      distributed_caching_enabled: false,
-      distributed_cache_ttl_seconds: 600,
-      embedding_retrieval_in_memory_config: { enabled: true, ttl: 60 },
-      embedding_retrieval_distributed_config: { enabled: false, ttl: 300 },
-      dot_product_in_memory_config: { enabled: true, ttl: 30 },
-      dot_product_distributed_config: { enabled: false, ttl: 120 },
-    },
     filter_configuration: {
-      criteria: [],
-      enabled: false,
-      selected_filters: []
+      criteria: [], // [{ column_name, condition: 'EQUALS' | 'NOT_EQUALS' }]
     },
     vector_db_config: {},
-    rate_limiter: { rate_limit: 0, burst_limit: 0 },
-    rt_partition: 0
   });
-
-  const statusOptions = [
-    { value: 'PENDING', label: 'Pending', color: '#FFF8E1', textColor: '#F57C00' },
-    { value: 'APPROVED', label: 'Approved', color: '#E7F6E7', textColor: '#2E7D32' },
-    { value: 'REJECTED', label: 'Rejected', color: '#FFEBEE', textColor: '#D32F2F' },
-  ];
+  const [filterAddColumnName, setFilterAddColumnName] = useState('');
+  const [filterAddCondition, setFilterAddCondition] = useState('EQUALS');
 
   useEffect(() => {
     fetchData();
-    fetchFilters();
+    fetchVariantsList();
   }, []);
 
   useEffect(() => {
@@ -104,6 +84,7 @@ const VariantRegistry = () => {
       fetchFiltersForEntity(variantData.entity);
     } else {
       setModels([]);
+      setFilters([]);
       setVariantData(prev => ({ ...prev, model: '' }));
     }
   }, [variantData.entity]);
@@ -127,7 +108,7 @@ const VariantRegistry = () => {
         const availableEntities = entitiesResponse.entities?.map(entity => ({
           name: entity.name,
           store_id: entity.store_id,
-          label: `${entity.name} (Store ${entity.store_id})`
+          label: entity.name
         })) || [];
         setEntities(availableEntities);
       }
@@ -139,14 +120,48 @@ const VariantRegistry = () => {
     }
   };
 
+  const fetchVariantsList = async () => {
+    try {
+      const response = await embeddingPlatformAPI.getVariantsList();
+      if (response.variants) {
+        setVariantsList(response.variants);
+      } else {
+        setVariantsList([]);
+      }
+    } catch (error) {
+      console.error('Error fetching variants list:', error);
+      setVariantsList([]);
+    }
+  };
+
   const fetchModelsForEntity = async (entityName) => {
     try {
       const response = await embeddingPlatformAPI.getModels({ entity: entityName });
-      if (response.models) {
-        const approvedModels = response.models.filter(model => 
-          (model.status || '') === 'active'
-        );
-        setModels(approvedModels);
+      if (response.models && typeof response.models === 'object' && !Array.isArray(response.models)) {
+        const modelsArray = [];
+        Object.entries(response.models).forEach(([entity, entityData]) => {
+          if (entityName && entity !== entityName) return;
+          const modelsObj = entityData?.Models ?? entityData?.models;
+          if (modelsObj) {
+            Object.entries(modelsObj).forEach(([modelName, modelData]) => {
+              const modelType = modelData.model_type ?? modelData.ModelType ?? '';
+              modelsArray.push({
+                model: modelName,
+                name: modelName,
+                entity,
+                model_type: modelType,
+                ModelType: modelType,
+                ...modelData,
+              });
+            });
+          }
+        });
+        setModels(modelsArray);
+      } else if (Array.isArray(response.models)) {
+        // Fallback for array format
+        setModels(response.models);
+      } else {
+        setModels([]);
       }
     } catch (error) {
       console.error('Error fetching models for entity:', error);
@@ -154,245 +169,50 @@ const VariantRegistry = () => {
     }
   };
 
-  const fetchFilters = async () => {
+  const fetchFiltersForEntity = async (entityName) => {
     try {
-      const response = await embeddingPlatformAPI.getFilters();
-      if (response.filters) {
-        setFilters(response.filters);
+      const response = await embeddingPlatformAPI.getFilters({ entity: entityName });
+      
+      if (response.filters && typeof response.filters === 'object') {
+        const filtersArray = Object.entries(response.filters).map(([filterName, filterData], index) => ({
+          id: `${entityName}_${filterName}_${index}`,
+          filter_id: `${entityName}_${filterName}_${index}`,
+          entity: entityName,
+          column_name: filterData.column_name || filterName,
+          filter_value: filterData.filter_value || '',
+          default_value: filterData.default_value || '',
+          filter: {
+            column_name: filterData.column_name || filterName,
+            filter_value: filterData.filter_value || '',
+            default_value: filterData.default_value || ''
+          }
+        }));
+        
+        setFilters(filtersArray);
+      } else {
+        setModels([]);
       }
     } catch (error) {
-      console.error('Error fetching filters:', error);
+      console.error('Error fetching filters for entity:', error);
       setFilters([]);
     }
   };
 
-  const fetchFiltersForEntity = async (entityName) => {
-    try {
-      const response = await embeddingPlatformAPI.getFilters({ entity: entityName });
-      if (response.filters) {
-        // Store entity-specific filters separately or filter existing ones
-        setFilters(prevFilters => [
-          ...prevFilters.filter(f => f.entity !== entityName),
-          ...response.filters
-        ]);
-      }
-    } catch (error) {
-      console.error('Error fetching filters for entity:', error);
-    }
-  };
-
-  const filteredRequests = useMemo(() => {
-    let filtered = variantRequests.filter(request => 
-      selectedStatuses.includes((request.status || 'PENDING').toUpperCase())
-    );
-
-    if (searchQuery) {
-      const searchLower = searchQuery.toLowerCase();
-      filtered = filtered.filter(request => {
-        return (
-          String(request.request_id || '').toLowerCase().includes(searchLower) ||
-          String(request.payload?.entity || '').toLowerCase().includes(searchLower) ||
-          String(request.payload?.model || '').toLowerCase().includes(searchLower) ||
-          String(request.payload?.variant || '').toLowerCase().includes(searchLower) ||
-          String(request.created_by || '').toLowerCase().includes(searchLower)
-        );
-      });
-    }
-    
-    return filtered.sort((a, b) => {
-      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-    });
-  }, [variantRequests, searchQuery, selectedStatuses]);
-
-  const getStatusChip = (status) => {
-    const statusUpper = (status || 'PENDING').toUpperCase();
-    let bgcolor = '#FFF8E1';
-    let textColor = '#F57C00';
-
-    switch (statusUpper) {
-      case 'PENDING':
-        bgcolor = '#FFF8E1';
-        textColor = '#F57C00';
-        break;
-      case 'APPROVED':
-        bgcolor = '#E7F6E7';
-        textColor = '#2E7D32';
-        break;
-      case 'REJECTED':
-        bgcolor = '#FFEBEE';
-        textColor = '#D32F2F';
-        break;
-    }
-
-    return (
-      <Chip
-        label={statusUpper}
-        size="small"
-        sx={{ backgroundColor: bgcolor, color: textColor, fontWeight: 'bold', minWidth: '80px' }}
-      />
-    );
-  };
-
-  // Status Column Header with filtering
-  const StatusColumnHeader = () => {
-    const [anchorEl, setAnchorEl] = useState(null);
-    
-    const handleClick = (event) => {
-      setAnchorEl(event.currentTarget);
-  };
-
-  const handleClose = () => {
-      setAnchorEl(null);
-    };
-
-    const handleStatusToggle = (status) => {
-      setSelectedStatuses(prev => 
-        prev.includes(status) 
-          ? prev.filter(s => s !== status)
-          : [...prev, status]
-      );
-    };
-
-    const handleSelectAll = () => {
-      setSelectedStatuses(statusOptions.map(option => option.value));
-    };
-
-    const handleClearAll = () => {
-      setSelectedStatuses([]);
-    };
-
-    const open = Boolean(anchorEl);
-
-    return (
-      <>
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            flexDirection: 'column',
-            alignItems: 'flex-start',
-            width: '100%'
-          }}
-        >
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              cursor: 'pointer',
-              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
-              borderRadius: 1,
-              p: 0.5
-            }}
-            onClick={handleClick}
-          >
-            <Typography sx={{ fontWeight: 'bold', color: '#031022' }}>
-              Status
-            </Typography>
-            <FilterListIcon 
-              sx={{ 
-                ml: 0.5, 
-                fontSize: 16,
-                color: selectedStatuses.length < statusOptions.length ? '#1976d2' : '#666'
-              }} 
-            />
-            {selectedStatuses.length > 0 && selectedStatuses.length < statusOptions.length && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: 2,
-                  right: 2,
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  backgroundColor: '#1976d2',
-                }}
-              />
-            )}
-          </Box>
-
-          {selectedStatuses.length > 0 && (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5, maxWidth: '100%' }}>
-              {selectedStatuses.slice(0, 2).map((status) => {
-                const option = statusOptions.find(opt => opt.value === status);
-                return option ? (
-                  <Chip
-                    key={status}
-                    label={option.label}
-                    size="small"
-                    sx={{
-                      backgroundColor: option.color,
-                      color: option.textColor,
-                      fontWeight: 'bold',
-                      fontSize: '0.65rem',
-                      height: 18,
-                      '& .MuiChip-label': { px: 0.5 }
-                    }}
-                  />
-                ) : null;
-              })}
-              {selectedStatuses.length > 2 && (
-                <Chip
-                  label={`+${selectedStatuses.length - 2}`}
-                  size="small"
-                  sx={{
-                    backgroundColor: '#f5f5f5',
-                    color: '#666',
-                    fontWeight: 'bold',
-                    fontSize: '0.65rem',
-                    height: 18,
-                    '& .MuiChip-label': { px: 0.5 }
-                  }}
-                />
-              )}
-            </Box>
-          )}
-        </Box>
-        <Popover
-          open={open}
-          anchorEl={anchorEl}
-          onClose={handleClose}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-          transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-          PaperProps={{ sx: { width: 200, maxHeight: 300, overflow: 'auto' } }}
-        >
-          <Box sx={{ p: 1 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Button size="small" onClick={handleSelectAll} sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 'auto' }}>
-                All
-              </Button>
-              <Button size="small" onClick={handleClearAll} sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 'auto' }}>
-                Clear
-              </Button>
-            </Box>
-            <Divider sx={{ mb: 1 }} />
-            <List dense>
-              {statusOptions.map((option) => (
-                <ListItem key={option.value} disablePadding>
-                  <ListItemButton onClick={() => handleStatusToggle(option.value)} sx={{ py: 0.5 }}>
-                    <Checkbox
-                      edge="start"
-                      checked={selectedStatuses.includes(option.value)}
-                      size="small"
-                      sx={{ mr: 1 }}
-                    />
-                    <Chip
-                      label={option.label}
-                      size="small"
-                      sx={{
-                        backgroundColor: option.color,
-                        color: option.textColor,
-                        fontWeight: 'bold',
-                        minWidth: '80px'
-                      }}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          </Box>
-        </Popover>
-      </>
-    );
-  };
+  const filteredRequests = useTableFilter({
+    data: variantRequests,
+    searchQuery,
+    selectedStatuses,
+    searchFields: (request) => [
+      request.request_id,
+      request.payload?.entity,
+      request.payload?.model,
+      request.payload?.variant,
+      request.created_by,
+      request.status,
+    ],
+    sortField: 'created_at',
+    sortOrder: 'desc',
+  });
 
   const handleViewRequest = (variant) => {
     setSelectedVariant(variant);
@@ -401,36 +221,24 @@ const VariantRegistry = () => {
 
   const handleCloseViewModal = () => {
     setShowViewModal(false);
+    setShowRawJsonInViewModal(false);
     setSelectedVariant(null);
   };
 
   const handleOpen = () => {
     setOpen(true);
+    setFilterAddColumnName('');
+    setFilterAddCondition('EQUALS');
     setVariantData({
       entity: '',
       model: '',
       variant: '',
       reason: '',
+      otd_training_data_path: '',
       vector_db_type: 'QDRANT',
       type: 'EXPERIMENT',
-      caching_configuration: {
-        in_memory_caching_enabled: true,
-        in_memory_cache_ttl_seconds: 300,
-        distributed_caching_enabled: false,
-        distributed_cache_ttl_seconds: 600,
-        embedding_retrieval_in_memory_config: { enabled: true, ttl: 60 },
-        embedding_retrieval_distributed_config: { enabled: false, ttl: 300 },
-        dot_product_in_memory_config: { enabled: true, ttl: 30 },
-        dot_product_distributed_config: { enabled: false, ttl: 120 },
-      },
-      filter_configuration: {
-        criteria: [],
-        enabled: false,
-        selected_filters: []
-      },
+      filter_configuration: { criteria: [] },
       vector_db_config: {},
-      rate_limiter: { rate_limit: 0, burst_limit: 0 },
-      rt_partition: 0
     });
   };
 
@@ -440,47 +248,46 @@ const VariantRegistry = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    
-    if (name.startsWith('caching_configuration.')) {
-      const configField = name.replace('caching_configuration.', '');
-      
-      // Handle nested config objects
-      if (configField.includes('.')) {
-        const [configType, field] = configField.split('.');
-    setVariantData(prev => ({
-      ...prev,
-          caching_configuration: {
-            ...prev.caching_configuration,
-            [configType]: {
-              ...prev.caching_configuration[configType],
-              [field]: type === 'checkbox' ? checked : (type === 'number' ? parseInt(value, 10) || 0 : value)
-            }
-      }
-    }));
-      } else {
-    setVariantData(prev => ({
-      ...prev,
-          caching_configuration: {
-            ...prev.caching_configuration,
-            [configField]: type === 'checkbox' ? checked : (type === 'number' ? parseInt(value, 10) || 0 : value)
-      }
-    }));
-      }
-    } else if (name.startsWith('filter_configuration.')) {
+    if (name.startsWith('filter_configuration.')) {
       const configField = name.replace('filter_configuration.', '');
+      setVariantData(prev => ({
+        ...prev,
+        filter_configuration: {
+          ...prev.filter_configuration,
+          [configField]: type === 'array' ? value : (type === 'number' ? parseInt(value, 10) || 0 : value),
+        },
+      }));
+    } else {
+      setVariantData(prev => ({
+        ...prev,
+        [name]: type === 'checkbox' ? checked : (type === 'number' ? parseInt(value, 10) || 0 : value),
+      }));
+    }
+  };
+
+  const handleAddFilterCriterion = () => {
+    if (!filterAddColumnName) return;
+    const columnName = filterAddColumnName;
+    const condition = filterAddCondition;
     setVariantData(prev => ({
       ...prev,
       filter_configuration: {
         ...prev.filter_configuration,
-          [configField]: type === 'checkbox' ? checked : (type === 'array' ? value : (type === 'number' ? parseInt(value, 10) || 0 : value))
-      }
+        criteria: [...(prev.filter_configuration.criteria || []), { column_name: columnName, condition }],
+      },
     }));
-    } else {
-      setVariantData(prev => ({
-        ...prev,
-        [name]: type === 'checkbox' ? checked : (type === 'number' ? parseInt(value, 10) || 0 : value)
-      }));
-    }
+    setFilterAddColumnName('');
+    setFilterAddCondition('EQUALS');
+  };
+
+  const handleRemoveFilterCriterion = (index) => {
+    setVariantData(prev => ({
+      ...prev,
+      filter_configuration: {
+        ...prev.filter_configuration,
+        criteria: prev.filter_configuration.criteria.filter((_, i) => i !== index),
+      },
+    }));
   };
 
   const handleSubmit = async () => {
@@ -501,13 +308,24 @@ const VariantRegistry = () => {
 
     try {
       setLoading(true);
-      // Extract reason from variantData for the top-level payload
-      const { reason, ...variantPayload } = variantData;
-      
+      const selectedModel = models.find((m) => (m.model || m.name) === variantData.model);
+      const modelType = selectedModel?.model_type ?? selectedModel?.ModelType ?? '';
+      const isDeltaModel = String(modelType).toUpperCase() === 'DELTA';
+
+      const { reason, ...rest } = variantData;
+      const variantPayload = {
+        ...rest,
+        model_type: modelType,
+        otd_training_data_path: isDeltaModel ? (variantData.otd_training_data_path ?? '') : '',
+        filter_configuration: { criteria: variantData.filter_configuration?.criteria ?? [] },
+        vector_db_config: variantData.vector_db_config ?? {},
+        rate_limiter: { rate_limit: 0, burst_limit: 0 },
+      };
+
       const payload = {
         requestor: user?.email || 'user@example.com',
-        reason: reason,
-        payload: variantPayload
+        reason,
+        payload: variantPayload,
       };
 
       const response = await embeddingPlatformAPI.registerVariant(payload);
@@ -523,14 +341,6 @@ const VariantRegistry = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const showNotification = (message, severity) => {
-    setNotification({ open: true, message, severity });
-  };
-
-  const handleCloseNotification = () => {
-    setNotification(prev => ({ ...prev, open: false }));
   };
 
   if (loading) {
@@ -629,7 +439,10 @@ const VariantRegistry = () => {
                 Created By
               </TableCell>
               <TableCell sx={{ backgroundColor: '#E6EBF2', borderRight: '1px solid rgba(224, 224, 224, 1)', position: 'relative' }}>
-                <StatusColumnHeader />
+                <StatusFilterHeader
+                  selectedStatuses={selectedStatuses}
+                  onStatusChange={handleStatusChange}
+                />
               </TableCell>
               <TableCell sx={{ backgroundColor: '#E6EBF2', fontWeight: 'bold', color: '#031022' }}>
                 Actions
@@ -690,7 +503,7 @@ const VariantRegistry = () => {
                     {request.created_by || 'N/A'}
                   </TableCell>
                   <TableCell sx={{ borderRight: '1px solid rgba(224, 224, 224, 1)' }}>
-                    {getStatusChip(request.status)}
+                    <StatusChip status={request.status} />
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -745,18 +558,23 @@ const VariantRegistry = () => {
                 </Grid>
 
               <Grid item xs={6}>
-                  <TextField
-                  fullWidth
-                  required
-                  size="small"
+                <FormControl fullWidth required size="small">
+                  <InputLabel>Variant Name</InputLabel>
+                  <Select
                     name="variant"
-                  label="Variant Name"
                     value={variantData.variant}
                     onChange={handleChange}
-                  helperText="e.g., experiment_v1"
-                  placeholder="experiment_v1"
-                  />
-                </Grid>
+                    label="Variant Name"
+                  >
+                    {variantsList.map((variant) => (
+                      <MenuItem key={variant} value={variant}>
+                        {variant}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  <FormHelperText>Select a variant from the available list</FormHelperText>
+                </FormControl>
+              </Grid>
 
               <Grid item xs={6}>
                 <FormControl fullWidth required size="small">
@@ -773,6 +591,25 @@ const VariantRegistry = () => {
                   <FormHelperText>Automatically set to EXPERIMENT</FormHelperText>
                 </FormControl>
                 </Grid>
+
+              {(() => {
+                const selectedModel = models.find((m) => (m.model || m.name) === variantData.model);
+                const isDeltaModel = String(selectedModel?.model_type ?? selectedModel?.ModelType ?? '').toUpperCase() === 'DELTA';
+                return isDeltaModel ? (
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      name="otd_training_data_path"
+                      label="OTD Training Data Path"
+                      value={variantData.otd_training_data_path ?? ''}
+                      onChange={handleChange}
+                      placeholder="gs://bucket/path/to/otd-training-data"
+                      helperText="Required for DELTA model type"
+                    />
+                  </Grid>
+                ) : null;
+              })()}
 
               <Grid item xs={12}>
                   <TextField
@@ -805,278 +642,110 @@ const VariantRegistry = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12}>
-                <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, color: '#1976d2' }}>
-                  Caching Configuration
-                  </Typography>
-              </Grid>
-
-              <Grid item xs={6}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                      checked={variantData.caching_configuration.in_memory_caching_enabled}
-                        onChange={handleChange}
-                        name="caching_configuration.in_memory_caching_enabled"
-                    />
-                  }
-                  label="In-Memory Caching"
-                />
-              </Grid>
-              <Grid item xs={6}>
-                    <TextField
-                      fullWidth
-                  type="number"
-                      size="small"
-                  name="caching_configuration.in_memory_cache_ttl_seconds"
-                  label="In-Memory TTL (seconds)"
-                  value={variantData.caching_configuration.in_memory_cache_ttl_seconds}
-                  onChange={handleChange}
-                  disabled={!variantData.caching_configuration.in_memory_caching_enabled}
-                  />
-                </Grid>
-
-              <Grid item xs={6}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                      checked={variantData.caching_configuration.distributed_caching_enabled}
-                        onChange={handleChange}
-                        name="caching_configuration.distributed_caching_enabled"
-                      />
-                    }
-                  label="Distributed Caching"
-                  />
-                </Grid>
-              <Grid item xs={6}>
-                    <TextField
-                  fullWidth
-                      type="number"
-                  size="small"
-                  name="caching_configuration.distributed_cache_ttl_seconds"
-                  label="Distributed TTL (seconds)"
-                  value={variantData.caching_configuration.distributed_cache_ttl_seconds}
-                      onChange={handleChange}
-                  disabled={!variantData.caching_configuration.distributed_caching_enabled}
-                    />
-                  </Grid>
-
-              {/* Embedding Retrieval Caching */}
-              <Grid item xs={12}>
-                <Typography variant="body2" sx={{ mt: 1, mb: 1, color: '#1976d2', fontWeight: 500 }}>
-                  Embedding Retrieval Caching
-                </Typography>
-              </Grid>
-              
-              <Grid item xs={3}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={variantData.caching_configuration.embedding_retrieval_in_memory_config.enabled}
-                      onChange={handleChange}
-                      name="caching_configuration.embedding_retrieval_in_memory_config.enabled"
-                    />
-                  }
-                  label="In-Memory"
-                />
-              </Grid>
-              <Grid item xs={3}>
-                    <TextField
-                  fullWidth
-                      type="number"
-                  size="small"
-                  name="caching_configuration.embedding_retrieval_in_memory_config.ttl"
-                  label="TTL (seconds)"
-                  value={variantData.caching_configuration.embedding_retrieval_in_memory_config.ttl}
-                      onChange={handleChange}
-                  disabled={!variantData.caching_configuration.embedding_retrieval_in_memory_config.enabled}
-                />
-              </Grid>
-              <Grid item xs={3}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={variantData.caching_configuration.embedding_retrieval_distributed_config.enabled}
-                      onChange={handleChange}
-                      name="caching_configuration.embedding_retrieval_distributed_config.enabled"
-                    />
-                  }
-                  label="Distributed"
-                />
-              </Grid>
-              <Grid item xs={3}>
-                <TextField
-                      fullWidth
-                  type="number"
-                  size="small"
-                  name="caching_configuration.embedding_retrieval_distributed_config.ttl"
-                  label="TTL (seconds)"
-                  value={variantData.caching_configuration.embedding_retrieval_distributed_config.ttl}
-                  onChange={handleChange}
-                  disabled={!variantData.caching_configuration.embedding_retrieval_distributed_config.enabled}
-                    />
-                  </Grid>
-
-              {/* Dot Product Caching */}
-                <Grid item xs={12}>
-                <Typography variant="body2" sx={{ mt: 1, mb: 1, color: '#1976d2', fontWeight: 500 }}>
-                  Dot Product Caching
-                  </Typography>
-                </Grid>
-
-              <Grid item xs={3}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                      checked={variantData.caching_configuration.dot_product_in_memory_config.enabled}
-                      onChange={handleChange}
-                      name="caching_configuration.dot_product_in_memory_config.enabled"
-                    />
-                  }
-                  label="In-Memory"
-                />
-              </Grid>
-              <Grid item xs={3}>
-                    <TextField
-                      fullWidth
-                  type="number"
-                      size="small"
-                  name="caching_configuration.dot_product_in_memory_config.ttl"
-                  label="TTL (seconds)"
-                  value={variantData.caching_configuration.dot_product_in_memory_config.ttl}
-                  onChange={handleChange}
-                  disabled={!variantData.caching_configuration.dot_product_in_memory_config.enabled}
-                />
-                </Grid>
-              <Grid item xs={3}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                      checked={variantData.caching_configuration.dot_product_distributed_config.enabled}
-                      onChange={handleChange}
-                      name="caching_configuration.dot_product_distributed_config.enabled"
-                    />
-                  }
-                  label="Distributed"
-                />
-              </Grid>
-              <Grid item xs={3}>
-                    <TextField
-                      fullWidth
-                  type="number"
-                      size="small"
-                  name="caching_configuration.dot_product_distributed_config.ttl"
-                  label="TTL (seconds)"
-                  value={variantData.caching_configuration.dot_product_distributed_config.ttl}
-                  onChange={handleChange}
-                  disabled={!variantData.caching_configuration.dot_product_distributed_config.enabled}
-                />
-                </Grid>
-
-          {/* Filter Configuration */}
+                {/* Filter Configuration: select filter + EQUALS/NOT_EQUALS per criterion */}
               <Grid item xs={12}>
                 <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, color: '#1976d2' }}>
                   Filter Configuration
                 </Typography>
+                <FormHelperText sx={{ mb: 1 }}>
+                  Add filters; for each filter choose EQUALS or NOT_EQUALS. Caching and Vector DB config are set by admin during approval.
+                </FormHelperText>
               </Grid>
-              
-              <Grid item xs={6}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={variantData.filter_configuration.enabled}
-                      onChange={handleChange}
-                      name="filter_configuration.enabled"
-                    />
-                  }
-                  label="Enable Filtering"
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth size="small" disabled={!variantData.filter_configuration.enabled}>
-                  <InputLabel>Available Filters</InputLabel>
+              <Grid item xs={12} sm={5}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Filter (column)</InputLabel>
                   <Select
-                    multiple
-                    name="filter_configuration.selected_filters"
-                    value={variantData.filter_configuration.selected_filters}
-                    onChange={(e) => {
-                      const selectedFilters = e.target.value;
-                      // Update selected filters
-                      handleChange({
-                        target: {
-                          name: 'filter_configuration.selected_filters',
-                          value: selectedFilters,
-                          type: 'array'
-                        }
-                      });
-                      
-                      // Convert selected filters to criteria format
-                      const criteria = selectedFilters.map(filterId => {
-                        const filter = filters.find(f => f.id === filterId || f.filter_id === filterId);
-                        return filter ? {
-                          column: filter.filter?.column_name || filter.column_name,
-                          operator: 'equals',
-                          value: filter.filter?.filter_value || filter.filter_value,
-                          default_value: filter.filter?.default_value || filter.default_value
-                        } : null;
-                      }).filter(Boolean);
-                      
-                      // Update criteria as well
-                      handleChange({
-                        target: {
-                          name: 'filter_configuration.criteria',
-                          value: criteria,
-                          type: 'array'
-                        }
-                      });
-                    }}
-                    label="Available Filters"
-                    renderValue={(selected) => (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {selected.map((filterId) => {
-                          const filter = filters.find(f => f.id === filterId || f.filter_id === filterId);
-                          return (
-                            <Chip 
-                              key={filterId} 
-                              label={filter ? `${filter.entity}: ${filter.filter?.column_name || filter.column_name}` : filterId}
-                      size="small"
-                            />
-                          );
-                        })}
-                  </Box>
-                    )}
+                    value={filterAddColumnName}
+                    onChange={(e) => setFilterAddColumnName(e.target.value)}
+                    label="Filter (column)"
                   >
-                    {filters
-                      .filter(filter => !variantData.entity || filter.entity === variantData.entity)
-                      .map((filter) => (
-                        <MenuItem 
-                          key={filter.id || filter.filter_id} 
-                          value={filter.id || filter.filter_id}
+                    <MenuItem value="">
+                      <em>Select a filter</em>
+                    </MenuItem>
+                    {(Array.isArray(filters) ? filters : [])
+                      .filter((f) => !variantData.entity || f.entity === variantData.entity)
+                      .map((filter) => {
+                        const col = filter.filter?.column_name || filter.column_name;
+                        return (
+                          <MenuItem key={filter.id || filter.filter_id} value={col}>
+                            {col}
+                            {filter.filter?.filter_value != null && (
+                              <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                                (value: {filter.filter.filter_value})
+                              </Typography>
+                            )}
+                          </MenuItem>
+                        );
+                      })}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Condition</InputLabel>
+                  <Select
+                    value={filterAddCondition}
+                    onChange={(e) => setFilterAddCondition(e.target.value)}
+                    label="Condition"
+                  >
+                    <MenuItem value="EQUALS">EQUALS</MenuItem>
+                    <MenuItem value="NOT_EQUALS">NOT_EQUALS</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={3}>
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={handleAddFilterCriterion}
+                  disabled={!filterAddColumnName}
+                  fullWidth
+                  sx={{ height: 40, borderColor: '#522b4a', color: '#522b4a', '&:hover': { borderColor: '#613a5c', backgroundColor: 'rgba(82, 43, 74, 0.04)' } }}
+                >
+                  Add filter
+                </Button>
+              </Grid>
+              {variantData.filter_configuration?.criteria?.length > 0 && (
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 1 }}>
+                    Added criteria
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    {variantData.filter_configuration.criteria.map((c, index) => (
+                      <Box
+                        key={`${c.column_name}-${index}`}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          py: 0.75,
+                          px: 1.5,
+                          backgroundColor: 'action.hover',
+                          borderRadius: 1,
+                        }}
+                      >
+                        <Typography variant="body2">
+                          <strong>{c.column_name}</strong> — {c.condition}
+                        </Typography>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleRemoveFilterCriterion(index)}
+                          aria-label="Remove filter"
+                          sx={{ color: 'error.main' }}
                         >
-                          <Box>
-                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                              {filter.entity}: {filter.filter?.column_name || filter.column_name}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              Value: {filter.filter?.filter_value || filter.filter_value} 
-                              (Default: {filter.filter?.default_value || filter.default_value})
-                            </Typography>
-                          </Box>
-                            </MenuItem>
-                          ))}
-                        </Select>
-                  <FormHelperText>
-                    Select filters to apply to this variant
-                    {variantData.entity && ` (showing filters for ${variantData.entity})`}
-                  </FormHelperText>
-                      </FormControl>
-                    </Grid>
+                          <DeleteOutlineIcon />
+                        </IconButton>
+                      </Box>
+                    ))}
+                  </Box>
+                </Grid>
+              )}
 
               <Grid item xs={12}>
                 <Alert severity="info" sx={{ mt: 2 }}>
-                  Rate limiting, RT partition, and Vector DB configuration will be set by admin during approval.
+                  Caching configuration, rate limiting, RT partition, and Vector DB configuration will be set by admin during approval.
                 </Alert>
-                    </Grid>
+              </Grid>
                   </Grid>
                 </Box>
         </DialogContent>
@@ -1100,50 +769,195 @@ const VariantRegistry = () => {
       </Dialog>
 
       {/* View Variant Details Modal */}
-      <Dialog open={showViewModal} onClose={handleCloseViewModal} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <ExperimentIcon sx={{ color: '#522b4a' }} />
-            Variant Request Details
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          {selectedVariant && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-              <TextField
-                multiline
-                rows={12}
-                value={selectedVariant.payload ? JSON.stringify(selectedVariant.payload, null, 2) : '{}'}
-                variant="outlined"
-                fullWidth
-                InputProps={{ 
-                  readOnly: true,
-                  style: { fontFamily: 'monospace', fontSize: '0.875rem' }
-                }}
-                sx={{ backgroundColor: '#fafafa' }}
-              />
-          </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2, backgroundColor: '#fafafa', borderTop: '1px solid #e0e0e0' }}>
-          <Button 
-            onClick={handleCloseViewModal}
-            sx={{ color: '#522b4a', '&:hover': { backgroundColor: 'rgba(82, 43, 74, 0.04)' } }}
-          >
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
-    
+      <ViewDetailModal
+        open={showViewModal}
+        onClose={handleCloseViewModal}
+        data={selectedVariant}
+        config={{
+          title: 'Variant Request Details',
+          icon: ExperimentIcon,
+          sections: [
+            {
+              title: 'Request Information',
+              icon: InfoIcon,
+              layout: 'grid',
+              fields: [
+                { label: 'Request ID', key: 'request_id', type: 'monospace' },
+                { label: 'Status', key: 'status', type: 'status' },
+                { label: 'Created By', key: 'created_by' },
+                { label: 'Created At', key: 'created_at', type: 'date' }
+              ]
+            },
+            {
+              title: 'Variant Configuration',
+              icon: ExperimentIcon,
+              backgroundColor: 'rgba(25, 118, 210, 0.02)',
+              borderColor: 'rgba(25, 118, 210, 0.1)',
+              render: (data) => {
+                const p = data?.payload ?? {};
+                const modelType = String(p.model_type ?? '').toUpperCase();
+                const isDelta = modelType === 'DELTA';
+                return (
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="caption" color="text.secondary" display="block">Entity</Typography>
+                      <Typography variant="body2">{p.entity ?? '—'}</Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="caption" color="text.secondary" display="block">Model</Typography>
+                      <Typography variant="body2">{p.model ?? '—'}</Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="caption" color="text.secondary" display="block">Variant</Typography>
+                      <Typography variant="body2">{p.variant ?? '—'}</Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="caption" color="text.secondary" display="block">Type</Typography>
+                      <Typography variant="body2">{p.type ?? '—'}</Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="caption" color="text.secondary" display="block">Vector DB type</Typography>
+                      <Typography variant="body2">{p.vector_db_type ?? '—'}</Typography>
+                    </Grid>
+                    {isDelta && (
+                      <Grid item xs={12}>
+                        <Typography variant="caption" color="text.secondary" display="block">OTD Training Data Path</Typography>
+                        <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                          {p.otd_training_data_path || '—'}
+                        </Typography>
+                      </Grid>
+                    )}
+                  </Grid>
+                );
+              }
+            },
+            {
+              title: 'Filter criteria',
+              icon: ExperimentIcon,
+              backgroundColor: 'rgba(25, 118, 210, 0.02)',
+              borderColor: 'rgba(25, 118, 210, 0.1)',
+              render: (data) => {
+                const criteria = data?.payload?.filter_configuration?.criteria;
+                if (!criteria?.length) return null;
+                return (
+                  <TableContainer component={Paper} variant="outlined" sx={{ maxWidth: 400 }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 600 }}>Column</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Condition</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {criteria.map((c, i) => (
+                          <TableRow key={i}>
+                            <TableCell>{c.column_name ?? '—'}</TableCell>
+                            <TableCell>{c.condition ?? '—'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                );
+              }
+            },
+            {
+              title: 'Reason',
+              icon: ExperimentIcon,
+              render: (data) => {
+                const reason = data?.payload?.reason;
+                if (reason == null || String(reason).trim() === '') return null;
+                return (
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{reason}</Typography>
+                );
+              }
+            },
+            {
+              title: 'Vector DB configuration',
+              icon: ExperimentIcon,
+              backgroundColor: 'rgba(25, 118, 210, 0.04)',
+              borderColor: 'rgba(25, 118, 210, 0.15)',
+              render: (data) => {
+                const vdb = data?.payload?.vector_db_config;
+                if (vdb == null || typeof vdb !== 'object' || Object.keys(vdb).length === 0) return null;
+                return (
+                  <Grid container spacing={2}>
+                    {Object.entries(vdb).map(([key, val]) => (
+                      <Grid item xs={12} sm={6} key={key}>
+                        <Typography variant="caption" color="text.secondary" display="block">{key.replace(/_/g, ' ')}</Typography>
+                        <Typography variant="body2" sx={{ fontFamily: typeof val === 'object' ? 'monospace' : 'inherit' }}>
+                          {typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                        </Typography>
+                      </Grid>
+                    ))}
+                  </Grid>
+                );
+              }
+            },
+            {
+              title: 'Rate limiter',
+              icon: ExperimentIcon,
+              render: (data) => {
+                const rl = data?.payload?.rate_limiter;
+                if (rl == null || typeof rl !== 'object') return null;
+                return (
+                  <Grid container spacing={2}>
+                    {rl.rate_limit != null && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="caption" color="text.secondary" display="block">Rate limit (req/sec)</Typography>
+                        <Typography variant="body2">{rl.rate_limit}</Typography>
+                      </Grid>
+                    )}
+                    {rl.burst_limit != null && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="caption" color="text.secondary" display="block">Burst limit</Typography>
+                        <Typography variant="body2">{rl.burst_limit}</Typography>
+                      </Grid>
+                    )}
+                  </Grid>
+                );
+              }
+            },
+            {
+              title: 'Raw payload',
+              icon: ExperimentIcon,
+              render: (data) => (
+                <Box>
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={() => setShowRawJsonInViewModal((p) => !p)}
+                    sx={{ textTransform: 'none', color: '#1976d2' }}
+                  >
+                    {showRawJsonInViewModal ? 'Hide raw JSON' : 'Show raw JSON'}
+                  </Button>
+                  <Collapse in={showRawJsonInViewModal}>
+                    <TextField
+                      multiline
+                      rows={10}
+                      value={data?.payload ? JSON.stringify(data.payload, null, 2) : '{}'}
+                      variant="outlined"
+                      fullWidth
+                      InputProps={{ readOnly: true, style: { fontFamily: 'monospace', fontSize: '0.875rem' } }}
+                      sx={{ mt: 1, backgroundColor: '#fafafa' }}
+                    />
+                  </Collapse>
+                </Box>
+              )
+            }
+          ]
+        }}
+      />
+
       {/* Notification Snackbar */}
         <Snackbar
           open={notification.open}
           autoHideDuration={6000}
-          onClose={handleCloseNotification}
+          onClose={closeNotification}
           anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         >
           <Alert
-            onClose={handleCloseNotification}
+            onClose={closeNotification}
             severity={notification.severity}
             sx={{ width: '100%' }}
           >

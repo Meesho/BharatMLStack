@@ -18,53 +18,52 @@ type SlabAlignedPageAllocatorConfig struct {
 	SizeClasses []SizeClass
 }
 
-type Meta struct {
-	Size int
-	Name string
-}
-
 type SlabAlignedPageAllocator struct {
 	config SlabAlignedPageAllocatorConfig
-	pools  []*pools.LeakyPool
+	pools  []*pools.LeakyPool[*fs.AlignedPage]
+	sizes  []int
 }
 
 func NewSlabAlignedPageAllocator(config SlabAlignedPageAllocatorConfig) (*SlabAlignedPageAllocator, error) {
-	poolList := make([]*pools.LeakyPool, len(config.SizeClasses))
 	sort.Slice(config.SizeClasses, func(i, j int) bool {
 		return config.SizeClasses[i].Size < config.SizeClasses[j].Size
 	})
-	for i, sizeClass := range config.SizeClasses {
-		if sizeClass.Size%fs.BLOCK_SIZE != 0 {
+
+	poolList := make([]*pools.LeakyPool[*fs.AlignedPage], len(config.SizeClasses))
+	sizes := make([]int, len(config.SizeClasses))
+
+	for i, sc := range config.SizeClasses {
+		if sc.Size%fs.BLOCK_SIZE != 0 {
 			return nil, ErrSizeNotAligned
 		}
-		poolConfig := pools.LeakyPoolConfig{
-			Capacity:   sizeClass.MinCount,
-			Meta:       Meta{Size: sizeClass.Size, Name: fmt.Sprintf("SlabAlignedPagePool-%dBytes", sizeClass.Size)},
-			CreateFunc: func() interface{} { return fs.NewAlignedPage(sizeClass.Size) },
-		}
-		poolList[i] = pools.NewLeakyPool(poolConfig)
-		poolList[i].RegisterPreDrefHook(func(obj interface{}) {
-			fs.Unmap(obj.(*fs.AlignedPage))
+		sizes[i] = sc.Size
+		size := sc.Size
+		poolList[i] = pools.NewLeakyPool(pools.LeakyPoolConfig[*fs.AlignedPage]{
+			Capacity:   sc.MinCount,
+			Meta:       Meta{Size: sc.Size, Name: fmt.Sprintf("SlabAlignedPagePool-%dBytes", sc.Size)},
+			CreateFunc: func() *fs.AlignedPage { return fs.NewAlignedPage(size) },
 		})
-		log.Debug().Msgf("SlabAlignedPageAllocator: size class - %d | min count - %d", sizeClass.Size, sizeClass.MinCount)
+		poolList[i].RegisterPreDrefHook(func(p *fs.AlignedPage) {
+			fs.Unmap(p)
+		})
+		log.Debug().Msgf("SlabAlignedPageAllocator: size class - %d | min count - %d", sc.Size, sc.MinCount)
 	}
-	return &SlabAlignedPageAllocator{config: config, pools: poolList}, nil
+	return &SlabAlignedPageAllocator{config: config, pools: poolList, sizes: sizes}, nil
 }
 
 func (a *SlabAlignedPageAllocator) Get(size int) *fs.AlignedPage {
-	for _, pool := range a.pools {
-		if size <= pool.Meta.(Meta).Size {
-			page := pool.Get()
-			return page.(*fs.AlignedPage)
+	for i, s := range a.sizes {
+		if size <= s {
+			return a.pools[i].Get()
 		}
 	}
 	return nil
 }
 
 func (a *SlabAlignedPageAllocator) Put(p *fs.AlignedPage) {
-	for _, pool := range a.pools {
-		if len(p.Buf) <= pool.Meta.(Meta).Size {
-			pool.Put(p)
+	for i, s := range a.sizes {
+		if len(p.Buf) <= s {
+			a.pools[i].Put(p)
 			return
 		}
 	}

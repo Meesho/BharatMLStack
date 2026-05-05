@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -20,13 +20,6 @@ import {
   FormHelperText,
   Chip,
   IconButton,
-  Tooltip,
-  Popover,
-  List,
-  ListItem,
-  ListItemButton,
-  Checkbox,
-  Divider,
   FormControl,
   InputLabel,
   Select,
@@ -39,7 +32,6 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import FilterListIcon from '@mui/icons-material/FilterList';
 import ModelTrainingIcon from '@mui/icons-material/ModelTraining';
 import InfoIcon from '@mui/icons-material/Info';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -53,16 +45,48 @@ import {
   validateModelPayload, 
   getDefaultFormValues,
 } from '../../../../services/embeddingPlatform/utils';
-import { 
-  BUSINESS_RULES, 
-  DISTANCE_FUNCTIONS 
-} from '../../../../services/embeddingPlatform/constants';
+import { DISTANCE_FUNCTIONS } from '../../../../services/embeddingPlatform/constants';
+import { useNotification } from '../shared/hooks/useNotification';
+import { useStatusFilter, useTableFilter, StatusChip, StatusFilterHeader, ViewDetailModal } from '../shared';
+
+const formatTtlReadable = (seconds) => {
+  const n = Number(seconds);
+  if (!Number.isFinite(n) || n < 0) return '';
+  if (n === 0) return '0 sec';
+  const MIN = 60;
+  const HOUR = 3600;
+  const DAY = 86400;
+  const MONTH = 30 * DAY;
+  const YEAR = 365 * DAY;
+  if (n >= YEAR) {
+    const v = Math.round(n / YEAR);
+    return `${v} year${v !== 1 ? 's' : ''}`;
+  }
+  if (n >= MONTH) {
+    const v = Math.round(n / MONTH);
+    return `${v} month${v !== 1 ? 's' : ''}`;
+  }
+  if (n >= DAY) {
+    const v = Math.round(n / DAY);
+    return `${v} day${v !== 1 ? 's' : ''}`;
+  }
+  if (n >= HOUR) {
+    const v = Math.round(n / HOUR);
+    return `${v} hour${v !== 1 ? 's' : ''}`;
+  }
+  if (n >= MIN) {
+    const v = Math.round(n / MIN);
+    return `${v} min${v !== 1 ? 's' : ''}`;
+  }
+  const v = Math.round(n);
+  return `${v} sec${v !== 1 ? 's' : ''}`;
+};
 
 const ModelRegistry = () => {
   const [models, setModels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatuses, setSelectedStatuses] = useState(['active', 'inactive']);
+  const { selectedStatuses, setSelectedStatuses, handleStatusChange } = useStatusFilter(['APPROVED', 'PENDING', 'REJECTED']);
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -72,15 +96,9 @@ const ModelRegistry = () => {
   const [jobFrequencies, setJobFrequencies] = useState([]);
   const [isEditMode, setIsEditMode] = useState(false);
   const { user } = useAuth();
-  const [notification, setNotification] = useState({ open: false, message: "", severity: "success" });
+  const { notification, showNotification, closeNotification } = useNotification();
   const [modalMessage, setModalMessage] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
-
-  const statusOptions = [
-    { value: 'PENDING', label: 'Pending', color: '#FFF8E1', textColor: '#F57C00' },
-    { value: 'APPROVED', label: 'Approved', color: '#E7F6E7', textColor: '#2E7D32' },
-    { value: 'REJECTED', label: 'Rejected', color: '#FFEBEE', textColor: '#D32F2F' },
-  ];
 
   useEffect(() => {
     fetchData();
@@ -90,14 +108,14 @@ const ModelRegistry = () => {
     try {
       setLoading(true);
       setError('');
-      const [modelsResponse, entitiesResponse, jobFrequenciesResponse] = await Promise.all([
-        embeddingPlatformAPI.getModels(),
+      const [modelRequestsResponse, entitiesResponse, jobFrequenciesResponse] = await Promise.all([
+        embeddingPlatformAPI.getModelRequests(),
         embeddingPlatformAPI.getEntities(),
         embeddingPlatformAPI.getJobFrequencies()
       ]);
 
-      if (modelsResponse.models) {
-        setModels(modelsResponse.models);
+      if (modelRequestsResponse.model_requests) {
+        setModels(modelRequestsResponse.model_requests);
       } else {
         setModels([]);
       }
@@ -106,13 +124,14 @@ const ModelRegistry = () => {
         const availableEntities = entitiesResponse.entities?.map(entity => ({
           name: entity.name,
           store_id: entity.store_id,
-          label: `${entity.name} (Store ${entity.store_id})`
+          label: entity.name
         })) || [];
         setEntities(availableEntities);
       }
 
-      if (jobFrequenciesResponse.job_frequencies) {
-        setJobFrequencies(jobFrequenciesResponse.job_frequencies);
+      if (jobFrequenciesResponse.frequencies) {
+        const frequenciesArray = Object.values(jobFrequenciesResponse.frequencies);
+        setJobFrequencies(frequenciesArray);
       } else {
         setJobFrequencies([]);
       }
@@ -124,253 +143,21 @@ const ModelRegistry = () => {
     }
   };
 
-  const filteredModels = useMemo(() => {
-    let filtered = [...models];
-    
-    // Status filtering
-    // To-do: check status thing, rn its aactive
-    if (selectedStatuses.length > 0) {
-      filtered = filtered.filter(model => 
-        selectedStatuses.includes(model.status)
-      );
-    }
-
-    if (searchQuery) {
-      const searchLower = searchQuery.toLowerCase();
-      filtered = filtered.filter(model => {
-        return (
-          String(model.request_id || '').toLowerCase().includes(searchLower) ||
-          String(model.model || '').toLowerCase().includes(searchLower) ||
-          String(model.entity || '').toLowerCase().includes(searchLower) ||
-          String(model.model_type || '').toLowerCase().includes(searchLower) ||
-          String(model.created_by || '').toLowerCase().includes(searchLower) ||
-          (model.status && model.status.toLowerCase().includes(searchLower))
-        );
-      });
-    }
-    
-    return filtered.sort((a, b) => {
-      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-    });
-  }, [models, searchQuery, selectedStatuses]);
-
-  const getStatusChip = (status) => {
-    const statusUpper = (status || 'APPROVED').toUpperCase();
-    let bgcolor = '#E7F6E7';
-    let textColor = '#2E7D32';
-
-    switch (statusUpper) {
-      case 'PENDING':
-        bgcolor = '#FFF8E1';
-        textColor = '#F57C00';
-        break;
-      case 'APPROVED':
-        bgcolor = '#E7F6E7';
-        textColor = '#2E7D32';
-        break;
-      case 'REJECTED':
-        bgcolor = '#FFEBEE';
-        textColor = '#D32F2F';
-        break;
-      default:
-        bgcolor = '#E7F6E7';
-        textColor = '#2E7D32';
-    }
-
-    return (
-      <Chip
-        label={statusUpper}
-        size="small"
-        sx={{
-          backgroundColor: bgcolor,
-          color: textColor,
-          fontWeight: 'bold',
-          minWidth: '80px',
-        }}
-      />
-    );
-  };
-
-  // Status Column Header with filtering
-  const StatusColumnHeader = () => {
-    const [anchorEl, setAnchorEl] = useState(null);
-    
-    const handleClick = (event) => {
-      setAnchorEl(event.currentTarget);
-    };
-
-    const handleClose = () => {
-      setAnchorEl(null);
-    };
-
-    const handleStatusToggle = (status) => {
-      setSelectedStatuses(prev => 
-        prev.includes(status) 
-          ? prev.filter(s => s !== status)
-          : [...prev, status]
-      );
-    };
-
-    const handleSelectAll = () => {
-      setSelectedStatuses(statusOptions.map(option => option.value));
-    };
-
-    const handleClearAll = () => {
-      setSelectedStatuses([]);
-    };
-
-    const open = Boolean(anchorEl);
-
-    return (
-      <>
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            flexDirection: 'column',
-            alignItems: 'flex-start',
-            width: '100%'
-          }}
-        >
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              cursor: 'pointer',
-              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
-              borderRadius: 1,
-              p: 0.5
-            }}
-            onClick={handleClick}
-          >
-            <Typography sx={{ fontWeight: 'bold', color: '#031022' }}>
-              Status
-            </Typography>
-            <FilterListIcon 
-              sx={{ 
-                ml: 0.5, 
-                fontSize: 16,
-                color: selectedStatuses.length < statusOptions.length ? '#1976d2' : '#666'
-              }} 
-            />
-            {selectedStatuses.length > 0 && selectedStatuses.length < statusOptions.length && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: 2,
-                  right: 2,
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  backgroundColor: '#1976d2',
-                }}
-              />
-            )}
-          </Box>
-
-          {selectedStatuses.length > 0 && (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5, maxWidth: '100%' }}>
-              {selectedStatuses.slice(0, 2).map((status) => {
-                const option = statusOptions.find(opt => opt.value === status);
-                return option ? (
-                  <Chip
-                    key={status}
-                    label={option.label}
-                    size="small"
-                    sx={{
-                      backgroundColor: option.color,
-                      color: option.textColor,
-                      fontWeight: 'bold',
-                      fontSize: '0.65rem',
-                      height: 18,
-                      '& .MuiChip-label': { px: 0.5 }
-                    }}
-                  />
-                ) : null;
-              })}
-              {selectedStatuses.length > 2 && (
-                <Chip
-                  label={`+${selectedStatuses.length - 2}`}
-                  size="small"
-                  sx={{
-                    backgroundColor: '#f5f5f5',
-                    color: '#666',
-                    fontWeight: 'bold',
-                    fontSize: '0.65rem',
-                    height: 18,
-                    '& .MuiChip-label': { px: 0.5 }
-                  }}
-                />
-              )}
-            </Box>
-          )}
-        </Box>
-        <Popover
-          open={open}
-          anchorEl={anchorEl}
-          onClose={handleClose}
-          anchorOrigin={{
-            vertical: 'bottom',
-            horizontal: 'left',
-          }}
-          transformOrigin={{
-            vertical: 'top',
-            horizontal: 'left',
-          }}
-          PaperProps={{
-            sx: {
-              width: 200,
-              maxHeight: 300,
-              overflow: 'auto'
-            }
-          }}
-        >
-          <Box sx={{ p: 1 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Button 
-                size="small" 
-                onClick={handleSelectAll}
-                sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 'auto' }}
-              >
-                All
-              </Button>
-              <Button 
-                size="small" 
-                onClick={handleClearAll}
-                sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 'auto' }}
-              >
-                Clear
-              </Button>
-            </Box>
-            <Divider sx={{ mb: 1 }} />
-            <List dense>
-              {statusOptions.map((option) => (
-                <ListItem key={option.value} disablePadding>
-                  <ListItemButton onClick={() => handleStatusToggle(option.value)} sx={{ py: 0.5 }}>
-                    <Checkbox
-                      edge="start"
-                      checked={selectedStatuses.includes(option.value)}
-                      size="small"
-                      sx={{ mr: 1 }}
-                    />
-                    <Chip
-                      label={option.label}
-                      size="small"
-                      sx={{
-                        backgroundColor: option.color,
-                        color: option.textColor,
-                        fontWeight: 'bold',
-                        minWidth: '80px'
-                      }}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          </Box>
-        </Popover>
-      </>
-    );
-  };
+  const filteredModels = useTableFilter({
+    data: models,
+    searchQuery,
+    selectedStatuses,
+    searchFields: (model) => [
+      model.request_id,
+      model.model,
+      model.entity,
+      model.model_type,
+      model.created_by,
+      model.status,
+    ],
+    sortField: 'created_at',
+    sortOrder: 'desc',
+  });
 
   const handleViewRequest = (model) => {
     setSelectedModel(model);
@@ -440,10 +227,30 @@ const ModelRegistry = () => {
 
     try {
       setLoading(true);
+      
+      // Parse metadata if it's a string
+      let parsedMetadata = modelData.metadata;
+      if (typeof modelData.metadata === 'string' && modelData.metadata.trim()) {
+        try {
+          parsedMetadata = JSON.parse(modelData.metadata);
+        } catch (parseError) {
+          setValidationErrors({ metadata: 'Invalid JSON format. Please provide valid JSON.' });
+          setModalMessage('Metadata must be valid JSON format.');
+          showNotification("Validation failed", "error");
+          setLoading(false);
+          return;
+        }
+      } else if (!modelData.metadata || (typeof modelData.metadata === 'string' && !modelData.metadata.trim())) {
+        parsedMetadata = {};
+      }
+      
       const payload = {
-        requestor: user?.email || 'user@example.com',
+        requestor: user?.email,
         reason: isEditMode ? 'Updating model configuration' : 'Registering new ML model',
-        payload: modelData
+        payload: {
+          ...modelData,
+          metadata: parsedMetadata
+        }
       };
       
       const response = isEditMode 
@@ -466,20 +273,6 @@ const ModelRegistry = () => {
   };
 
 
-  const showNotification = (message, severity) => {
-    setNotification({
-      open: true,
-      message,
-      severity
-    });
-  };
-
-  const handleCloseNotification = () => {
-    setNotification(prev => ({
-      ...prev,
-      open: false
-    }));
-  };
 
   if (loading) {
     return (
@@ -629,7 +422,10 @@ const ModelRegistry = () => {
                   position: 'relative'
                 }}
               >
-                <StatusColumnHeader />
+                <StatusFilterHeader
+                  selectedStatuses={selectedStatuses}
+                  onStatusChange={handleStatusChange}
+                />
               </TableCell>
               <TableCell
                 sx={{
@@ -678,7 +474,7 @@ const ModelRegistry = () => {
                     {model.created_by || 'N/A'}
                   </TableCell>
                   <TableCell sx={{ borderRight: '1px solid rgba(224, 224, 224, 1)' }}>
-                    {getStatusChip(model.status)}
+                    <StatusChip status={model.status} />
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -778,8 +574,8 @@ const ModelRegistry = () => {
                     onChange={handleChange}
                     label="Job Frequency"
                   >
-                    {jobFrequencies && jobFrequencies.map((freq) => (
-                      <MenuItem key={freq.id} value={freq.frequency}>{freq.frequency}</MenuItem>
+                    {jobFrequencies && jobFrequencies.map((freq, index) => (
+                      <MenuItem key={freq || index} value={freq}>{freq}</MenuItem>
                     ))}
                   </Select>
                   {validationErrors.job_frequency && (
@@ -824,38 +620,6 @@ const ModelRegistry = () => {
                 />
               </Grid>
 
-              {/* Row 4 */}
-              <Grid item xs={6}>
-                <TextField
-                  fullWidth
-                  required
-                  type="number"
-                  size="small"
-                  name="mq_id"
-                  label="MQ ID"
-                  value={modelData.mq_id}
-                  onChange={handleChange}
-                  error={!!validationErrors.mq_id}
-                  helperText={validationErrors.mq_id || (isEditMode ? "Cannot be changed" : "")}
-                  disabled={isEditMode}
-                />
-              </Grid>
-
-              <Grid item xs={6}>
-                <TextField
-                  fullWidth
-                  required
-                  size="small"
-                  name="topic_name"
-                  label="Topic Name"
-                  value={modelData.topic_name}
-                  onChange={handleChange}
-                  error={!!validationErrors.topic_name}
-                  helperText={validationErrors.topic_name || (isEditMode ? "Cannot be changed" : "")}
-                  disabled={isEditMode}
-                />
-              </Grid>
-
               {/* Row 5 */}
               <Grid item xs={6}>
                 <TextField
@@ -867,20 +631,6 @@ const ModelRegistry = () => {
                   value={24}
                   disabled
                   helperText="Auto-set to 24"
-                />
-              </Grid>
-
-              <Grid item xs={6}>
-                <TextField
-                  fullWidth
-                  type="number"
-                  size="small"
-                  name="failure_producer_mq_id"
-                  label="Failure Producer MQ ID"
-                  value={modelData.failure_producer_mq_id}
-                  onChange={handleChange}
-                  error={!!validationErrors.failure_producer_mq_id}
-                  helperText={validationErrors.failure_producer_mq_id}
                 />
               </Grid>
 
@@ -910,7 +660,12 @@ const ModelRegistry = () => {
                     value={modelData.embedding_store_ttl}
                     onChange={handleChange}
                     error={!!validationErrors.embedding_store_ttl}
-                    helperText={validationErrors.embedding_store_ttl}
+                    helperText={(() => {
+                      if (validationErrors.embedding_store_ttl) return validationErrors.embedding_store_ttl;
+                      const sec = Number(modelData.embedding_store_ttl);
+                      if (modelData.embedding_store_ttl != null && modelData.embedding_store_ttl !== '' && Number.isFinite(sec)) return '≈ ' + formatTtlReadable(sec);
+                      return undefined;
+                    })()}
                   />
                 </Grid>
               )}
@@ -935,15 +690,15 @@ const ModelRegistry = () => {
                 <TextField
                   fullWidth
                   multiline
-                  rows={2}
+                  rows={4}
                   size="small"
                   name="metadata"
                   label="Metadata (JSON)"
-                  value={modelData.metadata}
+                  value={typeof modelData.metadata === 'string' ? modelData.metadata : JSON.stringify(modelData.metadata || {}, null, 2)}
                   onChange={handleChange}
                   error={!!validationErrors.metadata}
-                  helperText={validationErrors.metadata}
-                  placeholder='{"key": "value"}'
+                  helperText={validationErrors.metadata || 'Expected format: {"entity": "string", "key-type": "string", "details": {"catalog_id": {"feature-group": "string", "feature": "string"}}}'}
+                  placeholder='{"entity": "catalog", "key-type": "catalog_id", "details": {"catalog_id": {"feature-group": "catalog_features", "feature": "catalog_id"}}}'
                 />
               </Grid>
             </Grid>
@@ -985,175 +740,90 @@ const ModelRegistry = () => {
       </Dialog>
 
       {/* View Model Details Modal */}
-      <Dialog open={showViewModal} onClose={handleCloseViewModal} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <ModelTrainingIcon sx={{ color: '#522b4a' }} />
-            Model Details
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          {selectedModel && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 2 }}>
-              {/* Model Information Section */}
-              <Box sx={{ p: 2, backgroundColor: 'rgba(82, 43, 74, 0.02)', borderRadius: 1, border: '1px solid rgba(82, 43, 74, 0.1)' }}>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <InfoIcon fontSize="small" sx={{ color: '#522b4a' }} />
-                  Model Information
-                </Typography>
-                
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Request ID
-                    </Typography>
-                    <Typography variant="body1" sx={{ fontFamily: 'monospace', color: '#522b4a' }}>
-                      {selectedModel.request_id || 'N/A'}
-                    </Typography>
-                  </Box>
-                  
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Status
-                    </Typography>
-                    <Box sx={{ mt: 0.5 }}>
-                      {getStatusChip(selectedModel.status)}
-                    </Box>
-                  </Box>
-                  
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Model Name
-                    </Typography>
-                    <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <SmartToyIcon fontSize="small" sx={{ color: '#ff9800' }} />
-                      {selectedModel.model || 'N/A'}
-                    </Typography>
-                  </Box>
-                  
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Entity
-                    </Typography>
-                    <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <StorageIcon fontSize="small" sx={{ color: '#1976d2' }} />
-                      {selectedModel.entity || 'N/A'}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Box>
-
-              {/* Model Configuration Section */}
-              <Box sx={{ p: 2, backgroundColor: 'rgba(25, 118, 210, 0.02)', borderRadius: 1, border: '1px solid rgba(25, 118, 210, 0.1)' }}>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <SettingsIcon fontSize="small" sx={{ color: '#1976d2' }} />
-                  Model Configuration
-                </Typography>
-                
+      <ViewDetailModal
+        open={showViewModal}
+        onClose={handleCloseViewModal}
+        data={selectedModel}
+        config={{
+          title: 'Model Details',
+          icon: ModelTrainingIcon,
+          sections: [
+            {
+              title: 'Model Information',
+              icon: InfoIcon,
+              layout: 'grid',
+              fields: [
+                { label: 'Request ID', key: 'request_id', type: 'monospace' },
+                { label: 'Status', key: 'status', type: 'status' },
+                { label: 'Model Name', key: 'model' },
+                { label: 'Entity', key: 'entity' }
+              ]
+            },
+            {
+              title: 'Model Configuration',
+              icon: SettingsIcon,
+              backgroundColor: 'rgba(25, 118, 210, 0.02)',
+              borderColor: 'rgba(25, 118, 210, 0.1)',
+              render: (data) => (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                     <Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                        Model Type
-                      </Typography>
-                      <Chip 
-                        label={selectedModel.model_type || 'N/A'}
+                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>Model Type</Typography>
+                      <Chip
+                        label={data?.model_type || 'N/A'}
                         size="small"
-                        sx={{ 
-                          backgroundColor: selectedModel.model_type === 'DELTA' ? '#e8f5e8' : '#fff3e0',
-                          color: selectedModel.model_type === 'DELTA' ? '#2e7d32' : '#f57c00',
+                        sx={{
+                          backgroundColor: data?.model_type === 'DELTA' ? '#e8f5e8' : '#fff3e0',
+                          color: data?.model_type === 'DELTA' ? '#2e7d32' : '#f57c00',
                           fontWeight: 600,
                           mt: 0.5
                         }}
                       />
                     </Box>
-                    
                     <Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                        Job Frequency
-                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>Job Frequency</Typography>
                       <Typography variant="body1" sx={{ fontFamily: 'monospace', backgroundColor: '#f5f5f5', p: 1, borderRadius: 0.5, mt: 0.5 }}>
-                        {selectedModel.job_frequency || 'N/A'}
+                        {data?.job_frequency || 'N/A'}
                       </Typography>
                     </Box>
                   </Box>
-
                   <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                     <Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                        Vector Dimension
-                      </Typography>
-                      <Typography variant="body1">
-                        {selectedModel.vector_dimension || selectedModel.model_config?.vector_dimension || 'N/A'}
-                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>Vector Dimension</Typography>
+                      <Typography variant="body1">{data?.vector_dimension || data?.model_config?.vector_dimension || 'N/A'}</Typography>
                     </Box>
-                    
                     <Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                        Distance Function
-                      </Typography>
-                      <Typography variant="body1">
-                        {selectedModel.distance_function || selectedModel.model_config?.distance_function || 'N/A'}
-                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>Distance Function</Typography>
+                      <Typography variant="body1">{data?.distance_function || data?.model_config?.distance_function || 'N/A'}</Typography>
                     </Box>
                   </Box>
                 </Box>
-              </Box>
-
-              {/* Metadata Section */}
-              <Box sx={{ p: 2, backgroundColor: 'rgba(158, 158, 158, 0.02)', borderRadius: 1, border: '1px solid rgba(158, 158, 158, 0.1)' }}>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <PersonIcon fontSize="small" sx={{ color: '#757575' }} />
-                  Request Metadata
-                </Typography>
-                
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Created By
-                    </Typography>
-                    <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                      <PersonIcon fontSize="small" sx={{ color: '#522b4a' }} />
-                      {selectedModel.created_by || 'N/A'}
-                    </Typography>
-                  </Box>
-                  
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Created At
-                    </Typography>
-                    <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                      <AccessTimeIcon fontSize="small" sx={{ color: '#1976d2' }} />
-                      {selectedModel.created_at ? new Date(selectedModel.created_at).toLocaleString() : 'N/A'}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Box>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2, backgroundColor: '#fafafa', borderTop: '1px solid #e0e0e0' }}>
-          <Button 
-            onClick={handleCloseViewModal}
-            sx={{ 
-              color: '#522b4a',
-              '&:hover': { backgroundColor: 'rgba(82, 43, 74, 0.04)' }
-            }}
-          >
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
+              )
+            },
+            {
+              title: 'Request Metadata',
+              icon: PersonIcon,
+              backgroundColor: 'rgba(158, 158, 158, 0.02)',
+              borderColor: 'rgba(158, 158, 158, 0.1)',
+              layout: 'grid',
+              fields: [
+                { label: 'Created By', key: 'created_by' },
+                { label: 'Created At', key: 'created_at', type: 'date' }
+              ]
+            }
+          ]
+        }}
+      />
 
       {/* Notification Snackbar */}
       <Snackbar
         open={notification.open}
         autoHideDuration={6000}
-        onClose={handleCloseNotification}
+        onClose={closeNotification}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
         <Alert
-          onClose={handleCloseNotification}
+          onClose={closeNotification}
           severity={notification.severity}
           sx={{ width: '100%' }}
         >

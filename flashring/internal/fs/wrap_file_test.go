@@ -112,8 +112,8 @@ func TestWrapAppendFile_Pwrite_Success(t *testing.T) {
 		t.Errorf("Expected LogicalCurrentOffset %d, got %d", len(data), waf.LogicalCurrentOffset)
 	}
 
-	if waf.Stat.WriteCount != 1 {
-		t.Errorf("Expected WriteCount 1, got %d", waf.Stat.WriteCount)
+	if waf.Stat.WriteCount.Load() != 1 {
+		t.Errorf("Expected WriteCount 1, got %d", waf.Stat.WriteCount.Load())
 	}
 
 	if waf.wrapped {
@@ -257,8 +257,8 @@ func TestPread_Success_NoWrap(t *testing.T) {
 		}
 	}
 
-	if waf.Stat.ReadCount != 1 {
-		t.Errorf("Expected ReadCount 1, got %d", waf.Stat.ReadCount)
+	if waf.Stat.ReadCount.Load() != 1 {
+		t.Errorf("Expected ReadCount 1, got %d", waf.Stat.ReadCount.Load())
 	}
 }
 
@@ -268,7 +268,7 @@ func TestPread_Success_WithWrap(t *testing.T) {
 
 	config := FileConfig{
 		Filename:          filename,
-		MaxFileSize:       8192, // Small for easy wrapping
+		MaxFileSize:       8192,
 		FilePunchHoleSize: 4096,
 		BlockSize:         4096,
 	}
@@ -279,13 +279,12 @@ func TestPread_Success_WithWrap(t *testing.T) {
 	}
 	defer cleanupWrapFile(waf)
 
-	// Fill the file to cause wrapping
+	// Fill the file: data1 at [0,4096), data2 at [4096,8192).
 	data1 := createAlignedBuffer(4096, 4096)
 	for i := range data1 {
 		data1[i] = byte(1)
 	}
-	_, err = waf.Pwrite(data1)
-	if err != nil {
+	if _, err = waf.Pwrite(data1); err != nil {
 		t.Fatalf("First Pwrite failed: %v", err)
 	}
 
@@ -293,50 +292,91 @@ func TestPread_Success_WithWrap(t *testing.T) {
 	for i := range data2 {
 		data2[i] = byte(2)
 	}
-	_, err = waf.Pwrite(data2)
-	if err != nil {
+	if _, err = waf.Pwrite(data2); err != nil {
 		t.Fatalf("Second Pwrite failed: %v", err)
 	}
 
-	// Now write more to wrap around
+	// Second Pwrite reaches MaxFileSize → writer wraps to 0.
+	if !waf.wrapped {
+		t.Fatalf("Expected wrapped to be true after filling file")
+	}
+	if waf.PhysicalWriteOffset != 0 {
+		t.Fatalf("Expected PhysicalWriteOffset=0 after wrap, got %d", waf.PhysicalWriteOffset)
+	}
+
+	// W == S == 0 (full ring): both regions are readable.
+	readData := createAlignedBuffer(4096, 4096)
+	if _, err = waf.Pread(0, readData); err != nil {
+		t.Fatalf("Pread [0,4096) in full ring failed: %v", err)
+	}
+	if _, err = waf.Pread(4096, readData); err != nil {
+		t.Fatalf("Pread [4096,8192) in full ring failed: %v", err)
+	}
+
+	// TrimHead: punch [0,4096), S advances to 4096.
+	if err = waf.TrimHead(); err != nil {
+		t.Fatalf("TrimHead failed: %v", err)
+	}
+	if waf.PhysicalStartOffset != 4096 {
+		t.Fatalf("Expected PhysicalStartOffset=4096 after trim, got %d", waf.PhysicalStartOffset)
+	}
+
+	// Now W(0) < S(4096). Valid region: [4096, 8192).
+	// Punched region [0,4096) must be rejected.
+	if _, err = waf.Pread(0, readData); err != ErrFileOffsetOutOfRange {
+		t.Errorf("Pread from punched region should fail, got %v", err)
+	}
+	n, err := waf.Pread(4096, readData)
+	if err != nil {
+		t.Fatalf("Pread from old tail failed: %v", err)
+	}
+	if n != 4096 {
+		t.Errorf("Expected read length 4096, got %d", n)
+	}
+	for i := range readData {
+		if readData[i] != byte(2) {
+			t.Errorf("Old tail data mismatch at %d: expected 2, got %d", i, readData[i])
+			break
+		}
+	}
+
+	// Write data3 into the freed region [0,4096). W advances to 4096.
 	data3 := createAlignedBuffer(4096, 4096)
 	for i := range data3 {
 		data3[i] = byte(3)
 	}
-	_, err = waf.Pwrite(data3)
-	if err != nil {
+	if _, err = waf.Pwrite(data3); err != nil {
 		t.Fatalf("Third Pwrite failed: %v", err)
 	}
 
-	if !waf.wrapped {
-		t.Errorf("Expected wrapped to be true")
-	}
-
-	// Read from valid regions after wrap
-	// Region 1: [PhysicalStartOffset, MaxFileSize) - should contain data2
-	readData := createAlignedBuffer(4096, 4096)
-	n, err := waf.Pread(4096, readData)
+	// W == S == 4096 (full ring again): both regions readable.
+	readOld := createAlignedBuffer(4096, 4096)
+	n, err = waf.Pread(4096, readOld)
 	if err != nil {
-		t.Fatalf("Pread from high region failed: %v", err)
+		t.Fatalf("Pread old tail [4096,8192) after refill failed: %v", err)
 	}
 	if n != 4096 {
-		t.Errorf("Expected read length 4096, got %d", n)
+		t.Errorf("Expected 4096 bytes, got %d", n)
+	}
+	for i := range readOld {
+		if readOld[i] != byte(2) {
+			t.Errorf("Old tail mismatch at %d: expected 2, got %d", i, readOld[i])
+			break
+		}
 	}
 
-	// Region 2: [0, PhysicalWriteOffset) - should contain data3
-	readData2 := createAlignedBuffer(4096, 4096)
-	n, err = waf.Pread(0, readData2)
+	readNew := createAlignedBuffer(4096, 4096)
+	n, err = waf.Pread(0, readNew)
 	if err != nil {
-		t.Fatalf("Pread from low region failed: %v", err)
+		t.Fatalf("Pread new data [0,4096) after refill failed: %v", err)
 	}
 	if n != 4096 {
-		t.Errorf("Expected read length 4096, got %d", n)
+		t.Errorf("Expected 4096 bytes, got %d", n)
 	}
-
-	// Verify data3 in wrapped position
-	for i := range readData2 {
-		if readData2[i] != byte(3) {
-			t.Errorf("Data mismatch in wrapped region at index %d: expected %d, got %d", i, 3, readData2[i])
+	for i := range readNew {
+		if readNew[i] != byte(3) {
+			t.Errorf("New data mismatch at %d: expected 3, got %d", i, readNew[i])
+			break
 		}
 	}
 }
@@ -396,8 +436,8 @@ func TestPread_FileOffsetOutOfRange_WithWrap(t *testing.T) {
 	}
 	defer cleanupWrapFile(waf)
 
-	// Cause wrapping
-	for i := 0; i < 3; i++ {
+	// Write 2 blocks to cause wrapping (MaxFileSize=8192, block=4096)
+	for i := 0; i < 2; i++ {
 		data := createAlignedBuffer(4096, 4096)
 		_, err = waf.Pwrite(data)
 		if err != nil {
@@ -409,15 +449,18 @@ func TestPread_FileOffsetOutOfRange_WithWrap(t *testing.T) {
 		t.Errorf("Expected wrapped to be true")
 	}
 
-	// Try to read from invalid gap between PhysicalWriteOffset and PhysicalStartOffset
-	// After 3 writes with wrapping, valid regions are [PhysicalStartOffset, MaxFileSize) and [0, PhysicalWriteOffset)
-	// Try reading from an aligned offset that should be invalid
-	readData := createAlignedBuffer(4096, 4096)
+	// After 2 writes: PhysicalStartOffset=0, PhysicalWriteOffset=0 (wrapped).
+	// TrimHead to advance PhysicalStartOffset to 4096, creating a gap at [0, 4096).
+	err = waf.TrimHead()
+	if err != nil {
+		t.Fatalf("TrimHead failed: %v", err)
+	}
 
-	// Try reading from aligned offset that's out of valid range
-	// Since PhysicalStartOffset=0 after auto-trim and PhysicalWriteOffset=4096,
-	// reading from offset 8192 should be out of range (beyond MaxFileSize for wrapped file)
-	_, err = waf.Pread(8192, readData) // Should be out of range - beyond MaxFileSize
+	// State: PhysicalStartOffset=4096, PhysicalWriteOffset=0, wrapped=true
+	// Valid regions: [4096, 8192) and [0, 0) (empty).
+	// Gap: [0, 4096) — reading from offset 0 should fail.
+	readData := createAlignedBuffer(4096, 4096)
+	_, err = waf.Pread(0, readData)
 	if err != ErrFileOffsetOutOfRange {
 		t.Errorf("Expected ErrFileOffsetOutOfRange for gap read, got %v", err)
 	}
@@ -531,8 +574,8 @@ func TestWrapAppendFile_TrimHead_Success(t *testing.T) {
 		t.Errorf("Expected PhysicalStartOffset %d, got %d", expectedStartOffset, waf.PhysicalStartOffset)
 	}
 
-	if waf.Stat.PunchHoleCount != 1 {
-		t.Errorf("Expected PunchHoleCount 1, got %d", waf.Stat.PunchHoleCount)
+	if waf.Stat.PunchHoleCount.Load() != 1 {
+		t.Errorf("Expected PunchHoleCount 1, got %d", waf.Stat.PunchHoleCount.Load())
 	}
 }
 
@@ -597,7 +640,7 @@ func TestTrimHead_OffsetNotAligned(t *testing.T) {
 	}
 }
 
-func TestPwrite_AutoTrimAfterWrap(t *testing.T) {
+func TestPwrite_WrapAndContinue(t *testing.T) {
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
@@ -614,7 +657,6 @@ func TestPwrite_AutoTrimAfterWrap(t *testing.T) {
 	}
 	defer cleanupWrapFile(waf)
 
-	// Write to cause wrap
 	for i := 0; i < 2; i++ {
 		data := createAlignedBuffer(4096, 4096)
 		_, err = waf.Pwrite(data)
@@ -627,18 +669,24 @@ func TestPwrite_AutoTrimAfterWrap(t *testing.T) {
 		t.Errorf("Expected wrapped to be true")
 	}
 
-	initialPunchHoleCount := waf.Stat.PunchHoleCount
-
-	// Write again - should trigger auto trim since wrapped && PhysicalWriteOffset == PhysicalStartOffset
+	// After wrapping, PhysicalWriteOffset resets to PhysicalStartOffset.
+	// A subsequent write overwrites at that position (trim is done at
+	// the shard level via DeleteManager, not by Pwrite itself).
 	data := createAlignedBuffer(4096, 4096)
+	for i := range data {
+		data[i] = 0xAB
+	}
 	_, err = waf.Pwrite(data)
 	if err != nil {
-		t.Fatalf("Auto-trim Pwrite failed: %v", err)
+		t.Fatalf("Post-wrap Pwrite failed: %v", err)
 	}
 
-	// Should have called TrimHead automatically
-	if waf.Stat.PunchHoleCount <= initialPunchHoleCount {
-		t.Errorf("Expected PunchHoleCount to increase due to auto-trim, got %d", waf.Stat.PunchHoleCount)
+	if waf.Stat.WriteCount.Load() != 3 {
+		t.Errorf("Expected WriteCount 3, got %d", waf.Stat.WriteCount.Load())
+	}
+
+	if waf.LogicalCurrentOffset != int64(3*4096) {
+		t.Errorf("Expected LogicalCurrentOffset %d, got %d", 3*4096, waf.LogicalCurrentOffset)
 	}
 }
 
@@ -714,8 +762,8 @@ func TestWrapAppendFile_MultipleOperations(t *testing.T) {
 	}
 
 	// Verify statistics
-	if waf.Stat.WriteCount != 6 {
-		t.Errorf("Expected WriteCount 6, got %d", waf.Stat.WriteCount)
+	if waf.Stat.WriteCount.Load() != 6 {
+		t.Errorf("Expected WriteCount 6, got %d", waf.Stat.WriteCount.Load())
 	}
 }
 
@@ -737,14 +785,14 @@ func TestWrapAppendFile_Statistics(t *testing.T) {
 	defer cleanupWrapFile(waf)
 
 	// Initial state
-	if waf.Stat.WriteCount != 0 {
-		t.Errorf("Expected initial WriteCount 0, got %d", waf.Stat.WriteCount)
+	if waf.Stat.WriteCount.Load() != 0 {
+		t.Errorf("Expected initial WriteCount 0, got %d", waf.Stat.WriteCount.Load())
 	}
-	if waf.Stat.ReadCount != 0 {
-		t.Errorf("Expected initial ReadCount 0, got %d", waf.Stat.ReadCount)
+	if waf.Stat.ReadCount.Load() != 0 {
+		t.Errorf("Expected initial ReadCount 0, got %d", waf.Stat.ReadCount.Load())
 	}
-	if waf.Stat.PunchHoleCount != 0 {
-		t.Errorf("Expected initial PunchHoleCount 0, got %d", waf.Stat.PunchHoleCount)
+	if waf.Stat.PunchHoleCount.Load() != 0 {
+		t.Errorf("Expected initial PunchHoleCount 0, got %d", waf.Stat.PunchHoleCount.Load())
 	}
 
 	// Perform operations and verify statistics
@@ -755,8 +803,8 @@ func TestWrapAppendFile_Statistics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Pwrite failed: %v", err)
 	}
-	if waf.Stat.WriteCount != 1 {
-		t.Errorf("Expected WriteCount 1, got %d", waf.Stat.WriteCount)
+	if waf.Stat.WriteCount.Load() != 1 {
+		t.Errorf("Expected WriteCount 1, got %d", waf.Stat.WriteCount.Load())
 	}
 
 	// Read operation
@@ -764,8 +812,8 @@ func TestWrapAppendFile_Statistics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Pread failed: %v", err)
 	}
-	if waf.Stat.ReadCount != 1 {
-		t.Errorf("Expected ReadCount 1, got %d", waf.Stat.ReadCount)
+	if waf.Stat.ReadCount.Load() != 1 {
+		t.Errorf("Expected ReadCount 1, got %d", waf.Stat.ReadCount.Load())
 	}
 
 	// Trim operation
@@ -773,8 +821,8 @@ func TestWrapAppendFile_Statistics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TrimHead failed: %v", err)
 	}
-	if waf.Stat.PunchHoleCount != 1 {
-		t.Errorf("Expected PunchHoleCount 1, got %d", waf.Stat.PunchHoleCount)
+	if waf.Stat.PunchHoleCount.Load() != 1 {
+		t.Errorf("Expected PunchHoleCount 1, got %d", waf.Stat.PunchHoleCount.Load())
 	}
 }
 

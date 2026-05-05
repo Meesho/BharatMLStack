@@ -1,0 +1,31 @@
+{
+  "modelConfigId": "pairwise_ranking_v1",
+  "trackingId": "tracking_test_003",
+  "contextFeatures": [
+    {
+      "name": "user_id",
+      "dataType": "DataTypeString",
+      "value": "dXNlcl8wMDE=",
+      "vectorDim": 0
+    }
+  ],
+  "targetInputSchema": [
+    { "name": "price",  "dataType": "DataTypeFP32", "vectorDim": 0 },
+    { "name": "rating", "dataType": "DataTypeFP32", "vectorDim": 0 }
+  ],
+  "pairInputSchema": [
+    { "name": "pair_affinity", "dataType": "DataTypeFP32", "vectorDim": 0 }
+  ],
+  "targets": [
+    { "id": "product_101", "featureValues": ["AAAAAA==", "AAAAAA=="] },
+    { "id": "product_202", "featureValues": ["AAAAAA==", "AAAAAA=="] }
+  ],
+  "pairs": [
+    {
+      "firstTargetIndex": 0,
+      "secondTargetIndex": 1,
+      "featureValues": ["AAAAAA=="]
+    }
+  ],
+  "tenantId": "tenant_test"
+}

@@ -1,0 +1,324 @@
+# Default values for horizon helm chart
+
+namespace: prd-horizon
+applicationName: horizon
+replicaCount: 2
+
+labels:
+  env: prd
+  team: bharatml
+  bu: ml
+  priority: p1
+  priority_v2: cp3
+  service_type: ""
+
+priorityClassName: ""
+
+telegraf:
+  enabled: false
+
+otel_enabled: false
+
+infrastructure:
+  secretStore:
+    name: vault-backend
+    kind: ClusterSecretStore
+  vault:
+    basePath: ""
+    otelTokenPath: ""
+
+deployment:
+  enabled: true
+  replicaCount: 2
+  revisionHistoryLimit: 3
+  image:
+    repository: ghcr.io/meesho/horizon
+    tag: latest
+    pullPolicy: IfNotPresent
+  ports:
+    - containerPort: 8082
+      name: http
+      protocol: TCP
+  probes:
+    liveness:
+      path: /health
+      port: 8082
+      scheme: HTTP
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 5
+    readiness:
+      path: /health
+      port: 8082
+      scheme: HTTP
+      initialDelaySeconds: 20
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 5
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  env:
+    # Application
+    - name: APP_NAME
+      value: "horizon"
+    - name: APP_ENV
+      value: "PROD"
+    - name: APP_PORT
+      value: "8082"
+    - name: APP_LOG_LEVEL
+      value: "DEBUG"
+    - name: APP_METRIC_SAMPLING_RATE
+      value: "1"
+    - name: APP_GC_PERCENTAGE
+      value: "1"
+    # MySQL master
+    - name: MYSQL_MASTER_MAX_POOL_SIZE
+      value: "5"
+    - name: MYSQL_MASTER_MIN_POOL_SIZE
+      value: "2"
+    - name: MYSQL_MASTER_PASSWORD
+      value: "root"
+    - name: MYSQL_MASTER_HOST
+      value: "mysql"
+    - name: MYSQL_MASTER_PORT
+      value: "3306"
+    - name: MYSQL_DB_NAME
+      value: "testdb"
+    - name: MYSQL_MASTER_USERNAME
+      value: "root"
+    # MySQL slave
+    - name: MYSQL_SLAVE_MAX_POOL_SIZE
+      value: "5"
+    - name: MYSQL_SLAVE_MIN_POOL_SIZE
+      value: "2"
+    - name: MYSQL_SLAVE_PASSWORD
+      value: "root"
+    - name: MYSQL_SLAVE_HOST
+      value: "mysql"
+    - name: MYSQL_SLAVE_PORT
+      value: "3306"
+    - name: MYSQL_SLAVE_USERNAME
+      value: "root"
+    - name: MYSQL_ACTIVE_CONFIG_IDS
+      value: "2"
+    # Etcd
+    - name: ETCD_WATCHER_ENABLED
+      value: "true"
+    - name: ETCD_SERVER
+      value: "etcd:2379"
+    # ONFS
+    - name: ONLINE_FEATURE_STORE_APP_NAME
+      value: "onfs"
+    # Redis
+    - name: REDIS_FAILOVER_ACTIVE_CONFIG_IDS
+      value: "4"
+    # ScyllaDB (primary)
+    - name: SCYLLA_1_CONTACT_POINTS
+      value: "scylla"
+    - name: SCYLLA_1_KEYSPACE
+      value: "onfs"
+    - name: SCYLLA_1_NUM_CONNS
+      value: "1"
+    - name: SCYLLA_1_PORT
+      value: "9042"
+    - name: SCYLLA_1_TIMEOUT_IN_MS
+      value: "300000"
+    - name: SCYLLA_1_PASSWORD
+      value: ""
+    - name: SCYLLA_1_USERNAME
+      value: ""
+    - name: SCYLLA_ACTIVE_CONFIG_IDS
+      value: "1"
+    # Caching
+    - name: DISTRIBUTED_CACHE_ACTIVE_CONFIG_IDS
+      value: "2"
+    - name: IN_MEMORY_CACHE_ACTIVE_CONFIG_IDS
+      value: "3"
+    # CORS
+    - name: CORS_ORIGINS
+      value: "http://localhost:3000,http://localhost:8080"
+    # Service names
+    - name: HORIZON_APP_NAME
+      value: "horizon"
+    - name: NUMERIX_APP_NAME
+      value: "numerix"
+    - name: INFERFLOW_APP_NAME
+      value: "inferflow"
+    - name: IS_DUMMY_MODEL_ENABLED
+      value: "true"
+    # ArgoCD
+    - name: ARGOCD_API
+      value: "http://host.docker.internal:8087"
+    - name: ARGOCD_TOKEN
+      value: ""
+    - name: ARGOCD_NAMESPACE
+      value: "argocd"
+    - name: ARGOCD_DESTINATION_NAME
+      value: "in-cluster"
+    - name: ARGOCD_PROJECT
+      value: "default"
+    - name: ARGOCD_HELMCHART_PATH
+      value: "1.0.0"
+    - name: ARGOCD_SYNC_POLICY_OPTIONS
+      value: "CreateNamespace=true"
+    - name: ARGOCD_INSECURE
+      value: "true"
+    # Model path
+    - name: LOCAL_MODEL_PATH
+      value: "/tmp/models"
+    # Environments
+    - name: SUPPORTED_ENVIRONMENTS
+      value: "prd,stg,int"
+    - name: WORKING_ENV
+      value: "prd"
+    # Service config
+    - name: SERVICE_CONFIG_SOURCE
+      value: "local"
+    - name: SERVICE_CONFIG_REPO
+      value: "BharatMLStack-configs"
+    - name: SERVICE_CONFIG_PATH
+      value: "/app/configs"
+    # GitHub
+    - name: REPOSITORY_NAME
+      value: ""
+    - name: BRANCH_NAME
+      value: "main"
+    - name: GITHUB_APP_ID
+      value: ""
+    - name: GITHUB_INSTALLATION_ID
+      value: ""
+    - name: GITHUB_PRIVATE_KEY
+      value: "/app/configs/github.pem"
+    - name: GITHUB_OWNER
+      value: ""
+    - name: GITHUB_COMMIT_AUTHOR
+      value: "horizon-bot"
+    - name: GITHUB_COMMIT_EMAIL
+      value: "devops@example.com"
+    # GCP
+    - name: GCP_PROJECT_ID
+      value: ""
+    - name: GCS_ENABLED
+      value: "true"
+    - name: GCS_MODEL_BUCKET
+      value: ""
+    - name: GCS_MODEL_BASE_PATH
+      value: ""
+    - name: CLOUDSDK_CONFIG
+      value: "/home/nonroot/.config/gcloud"
+    # Skye
+    - name: SKYE_APP_NAME
+      value: "skye"
+    - name: SKYE_SCYLLA_ACTIVE_CONFIG_IDS
+      value: "2"
+    - name: SKYE_HOST
+      value: "scylla"
+    - name: SKYE_PORT
+      value: "9042"
+    - name: SKYE_AUTH_TOKEN
+      value: ""
+    - name: SKYE_DEADLINE_EXCEED_MS
+      value: "2000"
+    # ScyllaDB (Skye)
+    - name: SCYLLA_2_CONTACT_POINTS
+      value: "scylla"
+    - name: SCYLLA_2_PORT
+      value: "9042"
+    - name: SCYLLA_2_KEYSPACE
+      value: "skye"
+    - name: SCYLLA_2_USERNAME
+      value: ""
+    - name: SCYLLA_2_PASSWORD
+      value: ""
+    - name: HORIZON_TO_SKYE_SCYLLA_CONF_ID_MAP
+      value: "2:1"
+    # Skye trigger (OSS replacement for Airflow)
+    - name: USE_SKYE_TRIGGER_INSTEAD_OF_AIRFLOW
+      value: "true"
+    - name: SKYE_TRIGGER_URL
+      value: "http://skye-trigger:8080"
+  volumes:
+    - name: configs
+      configMap:
+        name: horizon-configs
+  volumeMounts:
+    - name: configs
+      mountPath: /app/configs
+      readOnly: true
+  serviceAccount:
+    enabled: false
+    annotations: {}
+  updateStrategy:
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+  terminationGracePeriodSeconds: 30
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8082
+      protocol: TCP
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  pollingInterval: 30
+  scaledown:
+    stabilizationWindowSeconds: 300
+    policies:
+      - type: Percent
+        value: 10
+        periodseconds: 60
+    selectpolicy: Min
+  scaleup:
+    stabilizationWindowSeconds: 0
+    policies:
+      - type: Percent
+        value: 50
+        periodseconds: 60
+    selectpolicy: Max
+  triggers:
+    - type: cpu
+      metadata:
+        value: "70"
+      metricType: Utilization
+
+ingress:
+  enabled: false
+  ingressClassName: contour-internal
+createContourGateway: false
+
+externalSecret:
+  enabled: false
+  path: ""
+
+configMap:
+  enabled: false
+
+canary:
+  enabled: false
+  promURL: ""
+  slackChannel: ""
+  slackWebhookURL: ""
+
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: "10%"
+
+disasterRecovery:
+  enabled: false

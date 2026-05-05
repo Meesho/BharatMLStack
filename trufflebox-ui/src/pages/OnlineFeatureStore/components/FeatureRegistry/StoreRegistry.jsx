@@ -77,8 +77,12 @@ const StoreRegistry = () => {
         }
 
         const data = await response.json();
-        const configIds = Object.keys(data).map(id => parseInt(id, 10));
-        setConfigOptions(configIds);
+        // Create options array with id and dbType for display
+        const configOptions = Object.keys(data).map(id => ({
+          id: parseInt(id, 10),
+          dbType: data[id]
+        }));
+        setConfigOptions(configOptions);
         setConfigDbTypeMap(data);
       } catch (error) {
         console.error('Error fetching config options:', error);
@@ -100,7 +104,8 @@ const StoreRegistry = () => {
       
       // Auto-fill db-type when conf-id changes
       if (name === "conf-id" && value) {
-        updates["db-type"] = configDbTypeMap[value] || "";
+        // Convert to string for map lookup since API returns string keys
+        updates["db-type"] = configDbTypeMap[value.toString()] || "";
       }
       
       return {
@@ -272,12 +277,13 @@ const StoreRegistry = () => {
         <DialogContent>
           <Autocomplete
             options={configOptions}
-            value={storeData["conf-id"]}
+            getOptionLabel={(option) => `${option.id} - ${option.dbType}`}
+            value={configOptions.find(opt => opt.id === storeData["conf-id"]) || null}
             onChange={(event, newValue) => {
               const syntheticEvent = {
                 target: {
                   name: 'conf-id',
-                  value: newValue || ''
+                  value: newValue ? newValue.id : ''
                 }
               };
               handleChange(syntheticEvent);
@@ -293,6 +299,7 @@ const StoreRegistry = () => {
                 helperText={validationErrors["conf-id"]}
               />
             )}
+            isOptionEqualToValue={(option, value) => option.id === value.id}
           />
           <Autocomplete
             options={[storeData["db-type"]]}

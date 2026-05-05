@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
-	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -25,6 +24,13 @@ type Memtable struct {
 	readyForFlush bool
 	next          *Memtable
 	prev          *Memtable
+	ShardIdx      uint32
+
+	// flushStartOffset is the byte offset within the page where real data
+	// begins. On the first (staggered) memtable this equals the stagger
+	// offset so Flush() skips the uninitialized region. Reset to 0 after
+	// the first flush.
+	flushStartOffset int
 }
 
 type MemtableConfig struct {
@@ -32,6 +38,7 @@ type MemtableConfig struct {
 	id       uint32
 	page     *fs.AlignedPage
 	file     *fs.WrapAppendFile
+	shardIdx uint32
 }
 
 func NewMemtable(config MemtableConfig) (*Memtable, error) {
@@ -49,6 +56,7 @@ func NewMemtable(config MemtableConfig) (*Memtable, error) {
 	}
 	return &Memtable{
 		Id:            config.id,
+		ShardIdx:      config.shardIdx,
 		capacity:      config.capacity,
 		currentOffset: 0,
 		file:          config.file,
@@ -98,15 +106,30 @@ func (m *Memtable) Flush() (n int, fileOffset int64, err error) {
 	if !m.readyForFlush {
 		return 0, 0, ErrMemtableNotReadyForFlush
 	}
-	fileOffset, err = m.file.Pwrite(m.page.Buf)
+
+	chunkSize := fs.BLOCK_SIZE
+
+	// When the memtable has a stagger offset (first cycle only), skip the
+	// uninitialized region: advance the file's write pointer past it, then
+	// write only the real data. Total file advancement = flushStartOffset +
+	// len(usedBuf) = capacity, preserving the memId*capacity layout.
+	startOff := m.flushStartOffset
+	if startOff > 0 {
+		m.file.AdvanceWriteOffset(int64(startOff))
+	}
+
+	buf := m.page.Buf[startOff:]
+
+	// PwriteBatch submits all chunks via io_uring.
+	totalWritten, fileOffset, err := m.file.PwriteBatch(buf, chunkSize)
 	if err != nil {
 		return 0, 0, err
-	} else {
-		log.Debug().Msgf("Flushed memtable %d to file %d", m.Id, fileOffset)
 	}
+
 	m.currentOffset = 0
 	m.readyForFlush = false
-	return len(m.page.Buf), fileOffset, nil
+	m.flushStartOffset = 0 // subsequent flushes write the full page
+	return startOff + totalWritten, fileOffset, nil
 }
 
 func (m *Memtable) Discard() {

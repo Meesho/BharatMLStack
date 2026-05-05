@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/auth/handler"
+	"github.com/Meesho/BharatMLStack/horizon/internal/constant"
 	"github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/controller"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/api"
 	"github.com/gin-gonic/gin"
@@ -19,6 +20,7 @@ type Auth interface {
 	Logout(ctx *gin.Context)
 	GetAllUsers(ctx *gin.Context)
 	UpdateUserAccessAndRole(ctx *gin.Context)
+	GetPermissionByRole(ctx *gin.Context)
 }
 
 var (
@@ -137,4 +139,14 @@ func (a *AuthController) UpdateUserAccessAndRole(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"message": "User info updated successfully"})
+}
+
+func (a *AuthController) GetPermissionByRole(ctx *gin.Context) {
+	role := ctx.GetString("role")
+	if role == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{constant.Error: "Role is required"})
+		return
+	}
+	rolePermission := a.Authenticator.GetPermissionByRole(role)
+	ctx.JSON(http.StatusOK, rolePermission)
 }

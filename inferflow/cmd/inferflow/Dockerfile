@@ -1,5 +1,5 @@
 # Stage 1: Build the Go binary
-FROM golang:1.24.4-bullseye AS builder
+FROM golang:1.24.9-bookworm AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
