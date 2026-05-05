@@ -1,0 +1,207 @@
+# Default values for inferflow helm chart
+
+namespace: prd-inferflow
+applicationName: inferflow
+replicaCount: 2
+
+labels:
+  env: prd
+  team: bharatml
+  bu: ml
+  priority: p1
+  priority_v2: cp3
+  service_type: ""
+
+priorityClassName: ""
+
+telegraf:
+  enabled: false
+
+otel_enabled: false
+
+infrastructure:
+  secretStore:
+    name: vault-backend
+    kind: ClusterSecretStore
+  vault:
+    basePath: ""
+    otelTokenPath: ""
+
+deployment:
+  enabled: true
+  replicaCount: 2
+  revisionHistoryLimit: 3
+  image:
+    repository: ghcr.io/meesho/inferflow
+    tag: latest
+    pullPolicy: IfNotPresent
+  ports:
+    - containerPort: 8085
+      name: http
+      protocol: TCP
+  probes:
+    liveness:
+      path: /health/self
+      port: 8085
+      scheme: HTTP
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 5
+    readiness:
+      path: /health/self
+      port: 8085
+      scheme: HTTP
+      initialDelaySeconds: 20
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 5
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  env:
+    - name: APP_ENV
+      value: "prod"
+    - name: APP_LOG_LEVEL
+      value: "INFO"
+    - name: APP_NAME
+      value: "inferflow"
+    - name: APP_PORT
+      value: "8085"
+    - name: APP_GC_PERCENTAGE
+      value: "1"
+    # Etcd
+    - name: ETCD_SERVER
+      value: "http://etcd:2379"
+    - name: ETCD_WATCHER_ENABLED
+      value: "true"
+    # In-memory cache
+    - name: IN_MEMORY_CACHE_SIZE_IN_BYTES
+      value: "6000000000"
+    # DAG topology
+    - name: DAG_TOPOLOGY_CACHE_SIZE
+      value: "500"
+    - name: DAG_TOPOLOGY_CACHE_TTL_SEC
+      value: "300"
+    # Numerix client
+    - name: NUMERIX_CLIENT_V1_AUTHTOKEN
+      value: "numerix"
+    - name: NUMERIX_CLIENT_V1_BATCHSIZE
+      value: "100"
+    - name: NUMERIX_CLIENT_V1_DEADLINE_MS
+      value: "5000"
+    - name: NUMERIX_CLIENT_V1_HOST
+      value: "numerix"
+    - name: NUMERIX_CLIENT_V1_PLAINTEXT
+      value: "true"
+    - name: NUMERIX_CLIENT_V1_PORT
+      value: "8083"
+    # ONFS client
+    - name: EXTERNAL_SERVICE_ONFS_FS_BATCH_SIZE
+      value: "50"
+    - name: EXTERNAL_SERVICE_ONFS_FS_CALLER_ID
+      value: "inferflow"
+    - name: EXTERNAL_SERVICE_ONFS_FS_CALLER_TOKEN
+      value: "inferflow"
+    - name: EXTERNAL_SERVICE_ONFS_FS_GRPC_PLAIN_TEXT
+      value: "true"
+    - name: EXTERNAL_SERVICE_ONFS_FS_HOST
+      value: "onfs-api-server"
+    - name: EXTERNAL_SERVICE_ONFS_FS_PORT
+      value: "8089"
+    - name: EXTERNAL_SERVICE_ONFS_FS_DEAD_LINE
+      value: "200"
+    # Predator client
+    - name: EXTERNAL_SERVICE_PREDATOR_PORT
+      value: "8090"
+    - name: EXTERNAL_SERVICE_PREDATOR_GRPC_PLAIN_TEXT
+      value: "true"
+    - name: EXTERNAL_SERVICE_PREDATOR_CALLER_ID
+      value: "inferflow"
+    - name: EXTERNAL_SERVICE_PREDATOR_CALLER_TOKEN
+      value: "inferflow"
+    - name: EXTERNAL_SERVICE_PREDATOR_DEADLINE
+      value: "200"
+    # Metrics
+    - name: METRIC_SAMPLING_RATE
+      value: "1"
+    # Kafka logging
+    - name: KAFKA_BOOTSTRAP_SERVERS
+      value: "broker:29092"
+    - name: KAFKA_LOGGING_TOPIC
+      value: "inferflow_inference_logs"
+  serviceAccount:
+    enabled: false
+    annotations: {}
+  updateStrategy:
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+  terminationGracePeriodSeconds: 30
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8085
+      protocol: TCP
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  pollingInterval: 30
+  scaledown:
+    stabilizationWindowSeconds: 300
+    policies:
+      - type: Percent
+        value: 10
+        periodseconds: 60
+    selectpolicy: Min
+  scaleup:
+    stabilizationWindowSeconds: 0
+    policies:
+      - type: Percent
+        value: 50
+        periodseconds: 60
+    selectpolicy: Max
+  triggers:
+    - type: cpu
+      metadata:
+        value: "70"
+      metricType: Utilization
+
+ingress:
+  enabled: false
+  ingressClassName: contour-internal
+createContourGateway: false
+
+externalSecret:
+  enabled: false
+  path: ""
+
+configMap:
+  enabled: false
+
+canary:
+  enabled: false
+  promURL: ""
+  slackChannel: ""
+  slackWebhookURL: ""
+
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: "10%"
+
+disasterRecovery:
+  enabled: false

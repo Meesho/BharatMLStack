@@ -4,7 +4,7 @@
 // - protoc             v5.29.3
 // source: numerix.proto
 
-package proto
+package protogen
 
 import (
 	context "context"

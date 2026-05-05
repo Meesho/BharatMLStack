@@ -7,6 +7,7 @@ import (
 
 type ComponentRequest struct {
 	ComponentData   *matrix.ComponentMatrix
+	SlateData       *matrix.ComponentMatrix // Slate-level matrix (one row per slate); nil when no slate components
 	Entities        *[]string
 	EntityIds       *[][]string
 	ComponentConfig *config.ComponentConfig

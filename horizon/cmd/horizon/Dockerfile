@@ -1,5 +1,5 @@
 # Stage 1: Build the Go binary
-FROM golang:1.22-bullseye AS builder
+FROM golang:1.24-bullseye AS builder
 
 ARG TARGETOS
 ARG TARGETARCH

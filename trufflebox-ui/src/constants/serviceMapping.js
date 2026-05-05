@@ -23,9 +23,7 @@ export const MENU_PERMISSION_MAP = {
   // Note: StoreDiscovery, StoreRegistry, and EntityRegistry also exist in Online Feature Store
   // They only require permission check when under EmbeddingPlatform parent
   'StoreDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'store-discovery', requiredParentKey: 'EmbeddingPlatform' },
-  'EntityDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'entity-discovery' },
-  'ModelDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'model-discovery' },
-  'VariantDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'variant-discovery' },
+  'HierarchicalDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'hierarchical-discovery' },
   'FilterDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'filter-discovery' },
   'JobFrequencyDiscovery': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'job-frequency-discovery' },
   'StoreRegistry': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'store-registry', requiredParentKey: 'EmbeddingPlatform' },
@@ -41,8 +39,6 @@ export const MENU_PERMISSION_MAP = {
   'EmbeddingFilterApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'filter-approval' },
   'EmbeddingJobFrequencyApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'job-frequency-approval' },
   'DeploymentOperations': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'deployment-operations' },
-  'OnboardVariantToDB': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'onboard-variant-to-db' },
-  'OnboardVariantApproval': { service: SERVICES.EMBEDDING_PLATFORM, screenType: 'onboard-variant-approval' },
 };
 
 export const requiresPermissionCheck = (menuKey, parentKey = null) => {

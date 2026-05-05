@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
 	"github.com/rs/zerolog/log"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -66,11 +67,11 @@ func (c *SQLConnection) IsLive() bool {
 	return c.Master != nil && c.Slave != nil
 }
 
-// initSQLConns initializes all SQL connections based on environment configuration
-func initSQLConns() {
+// initSQLConns initializes all SQL connections based on application configuration
+func initSQLConns(config configs.Configs) {
 
 	// Create master and slave connections from config
-	masterConfig, slaveConfig, err := BuildSQLConfigFromEnv()
+	masterConfig, slaveConfig, err := BuildSQLConfigFromConfig(config)
 	if err != nil {
 		log.Panic().Msg(err.Error())
 	}

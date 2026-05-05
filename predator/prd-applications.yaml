@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prd-applications
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Adit2607/onboarding-test.git
+    targetRevision: main
+    path: prd/applications
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

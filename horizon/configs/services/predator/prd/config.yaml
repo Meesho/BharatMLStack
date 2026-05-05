@@ -1,0 +1,106 @@
+# Service Configuration for Predator (Staging Environment)
+# This is an example config file. Copy this to services/predator/stg/config.yaml in your config repository
+
+# Mandatory fields (must be provided)
+repo_name: "predator"              # GitHub repository name
+app_port: 8001                     # Application port
+ingress_class: "contour-internal"          # Ingress class
+domain: "prd.meesho.int"               # Domain name for host generation (format: <appname>.<domain>)
+
+# Optional fields (with defaults)
+health_check: "/self/health"       # Health check endpoint (default: /health)
+module: "controlplane"             # Module name
+app_type: "python"                 # Application type (python, java, go, etc.)
+build_no: "latest"                 # Build number/tag (default: latest) # Container registry URL (required)
+triton_repository: "nvcr.io/nvidia/tritonserver"  # Triton inference server image repository path without tag (required, tag comes from payload triton_image_tag) - Public NVIDIA image
+telegraf_image: "docker.io/telegraf:1.24.4"  # Complete Telegraf image path with tag (optional, used for ARM64 nodes) - Public InfluxData image
+init_container_image: "gcr.io/google.com/cloudsdktool/cloud-sdk:latest"  # Complete init container image path with tag for GCS operations (required if gcs_triton_path is enabled) - Public BusyBox image (lightweight alternative)
+
+# Labels section (optional, vendor-agnostic)
+# If provided, these values drive directory structure, file names, and ArgoCD labels
+# If absent, defaults are used (bu: "default", team: "default", priority_v2: "p2")
+# Note: ArgoCD has filename length constraints (Kubernetes resource names: 63 chars max)
+# Keep bu, team, and other label values concise to avoid exceeding limits
+# Recommended max lengths: bu (20 chars), team (20 chars), priority_v2 (10 chars)
+labels:
+  bu: "datascience"                   # Business unit (used as-is, no normalization)
+  team: "ml-platform"                 # Team name (used as-is, no normalization)
+  primary_owner: "aditya.garg@meesho.com"      # Primary owner email (username extracted for labels)
+  secondary_owner: "ansh.agarwal@meesho.com" # Secondary owner email (username extracted for labels)
+  priority_v2: "up0"                  # Priority level (e.g., "cp1", "p0", "p1")
+  # custom_labels:                    # Optional: Custom labels for vendor extensibility
+  #   example_key: "example_value"
+
+# Legacy fields (deprecated, kept for backward compatibility)
+# These are now read from labels section if present
+# primary_owner: "jigar.dave@meesho.com"      # Deprecated: Use labels.primary_owner
+# secondary_owner: "tushar.rohilla@meesho.com" # Deprecated: Use labels.secondary_owner
+# team: "ml-platform"                # Deprecated: Use labels.team
+# bu: "datascience"                   # Deprecated: Use labels.bu
+# priority_v2: "cp1"                  # Deprecated: Use labels.priority_v2
+
+# Service type flags (Meesho-specific, optional)
+service_type:
+  web: false
+  grpc: true
+  cache: false
+  worker: false
+  consumer: true
+  database: false
+  producer: true
+  scheduler: false
+  websocket: false
+  httpstateless: true
+
+# Custom labels (for vendor extensibility)
+custom_labels:
+  # Add your custom key-value pairs here
+  # example_key: "example_value"
+
+# Probe configuration (optional, with defaults)
+# These values control Kubernetes liveness and readiness probes
+liveness_failure_threshold: "5"    # Number of consecutive failures before restart (default: "5")
+liveness_period_seconds: "10"      # How often to perform the probe (default: "10")
+liveness_success_threshold: "1"    # Minimum consecutive successes (default: "1")
+liveness_timeout_seconds: "2"     # Probe timeout in seconds (default: "2")
+readiness_failure_threshold: "5"   # Number of consecutive failures before marking not ready (default: "5")
+readiness_period_seconds: "10"    # How often to perform the probe (default: "10")
+readiness_success_threshold: "1"   # Minimum consecutive successes (default: "1")
+readiness_timeout_seconds: "2"     # Probe timeout in seconds (default: "2")
+
+# Node selector configuration (optional, with environment-based defaults)
+# nodeSelector is the Kubernetes node selector key
+# Default: "dedicated" for most environments, "cloud.google.com/compute-class" for int environment
+# nodeSelectorValue (the actual value like "gpu-node") is provided in the API request
+node_selector: "dedicated"  # Override default if needed (default: "dedicated" for stg/prd, "cloud.google.com/compute-class" for int)
+
+# Autoscaling configuration (optional, with defaults)
+as_enabled: "true"              # Enable autoscaling (default: "true")
+as_poll: "30"                   # Autoscaling polling interval in seconds (default: "30")
+as_down_period: "300"           # Autoscaling down period in seconds (default: "300")
+as_up_period: "60"              # Autoscaling up period in seconds (default: "60")
+as_up_stable_window: "300"      # Autoscaling up stable window in seconds (default: "300")
+as_down_stable_window: "1800"   # Autoscaling down stable window in seconds (default: "1800")
+as_trigger_type: "AverageValue" # Autoscaling trigger type (default: "AverageValue")
+as_trigger_metric: "cpu"       # Autoscaling trigger metric (default: "cpu")
+as_trigger_value: "50"          # Autoscaling trigger value (default: "50")
+as_down_pod_count: "2"          # Autoscaling down pod count (default: "2")
+as_up_pod_count: "2"           # Autoscaling up pod count (default: "2")
+as_up_pod_percentage: "10"     # Autoscaling up pod percentage (default: "10")
+cpu_threshold: "50"             # CPU threshold for autoscaling (default: "50")
+
+# Deployment configuration (optional, with defaults)
+max_surge: "50"                         # Max surge percentage for rolling update (default: "50")
+termination_grace_period_seconds: "300" # Termination grace period in seconds (default: "300")
+contour_response_timeout: "false"       # Contour response timeout (default: "false")
+pod_distribution_skew: "false"          # Pod distribution skew (default: "false")
+enable_websocket: "false"               # Enable websocket (default: "false")
+add_headless: "false"                   # Add headless service (default: "false")
+create_contour_gateway: "true"         # Create contour gateway (default: "false")
+pdb_min_available: ""                  # PDB min available (default: "")
+pdb_max_unavailable: "10%"             # PDB max unavailable (default: "10%")
+pod_annotations:
+    telegraf.influxdata.com/limits-cpu: 500m
+    telegraf.influxdata.com/limits-memory: 500Mi
+    telegraf.influxdata.com/requests-cpu: 200m
+    telegraf.influxdata.com/requests-memory: 200Mi

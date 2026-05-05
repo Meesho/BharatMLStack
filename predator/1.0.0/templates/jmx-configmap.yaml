@@ -1,0 +1,21 @@
+{{- if and .Values.jmxconfig .Values.jmxconfig.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.namespace }}-jmx
+  labels:
+{{ include "labels.common" . | indent 4 }}
+{{ include "labels.chart" . | indent 4 }}
+data:
+  jmx-config.yaml: |
+    ---
+    startDelaySeconds: 0
+    username:
+    password:
+    ssl: false
+    lowercaseOutputName: false
+    lowercaseOutputLabelNames: false
+    rules:
+    - pattern: ".*"
+{{- end -}}

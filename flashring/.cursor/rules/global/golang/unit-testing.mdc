@@ -1,0 +1,108 @@
+---
+description: "Go testing patterns including test structure, mocking, test data, assertions and more"
+globs: *.go
+alwaysApply: false
+---
+
+# Go Testing Patterns
+
+## Instructions
+
+### Test Plan Creation
+
+When writing unit tests, get clarity on the system under test and come up with a list of what all cases can be possible within that system. Generate the unit test for all those cases
+
+### Coverage Guidelines
+- MUST run `go test -cover` to measure coverage, instead of calculating yourself and aim for 80%+ code coverage for critical business logic
+- Focus on testing behavior, not just coverage percentage
+- Test error paths and edge cases
+
+## Test Structure and Organization
+
+### Test File Organization
+- Group related tests using subtests with `t.Run()`
+- If there is a single test, then don't use `t.Run()`
+- Generate Go tests using testify's suite package for structure wherever applicable
+
+### Test Naming Conventions
+Use descriptive test names that clearly indicate the scenario:
+
+```go
+// ✅ Good - Clear scenario description
+func TestConfigService_GetConfig_ReturnsConfigWhenFound(t *testing.T) {}
+func TestConfigService_GetConfig_ReturnsErrorWhenNotFound(t *testing.T) {}
+func TestConfigService_ValidateConfig_ReturnsErrorOnInvalidData(t *testing.T) {}
+
+// ❌ Avoid - Vague test names
+func TestGetConfig(t *testing.T) {}
+func TestValidation(t *testing.T) {}
+```
+
+## Mocking and Dependencies
+
+### Interface-Based Mocking
+Use interfaces for dependencies to enable easy mocking
+
+### Mock Setup Patterns
+mockRepo := mocks.NewMockRepository(ctrl)
+mockRepo.EXPECT().
+    GetConfig("test-id").
+    Return(&Config{ID: "test-id"}, nil).
+    Times(1)
+
+## Test Data and Fixtures
+
+### Test Data Creation
+Create helper functions for building test data where the test data is common
+
+### Table-Driven Tests
+Use table-driven tests for testing multiple scenarios
+
+## Assertion Patterns
+
+### Using testify/assert
+Prefer testify/assert for better error messages
+
+```go
+// ✅ Good - Clear assertions with testify
+assert.NoError(t, err)
+assert.Equal(t, expectedValue, actualValue)
+assert.Contains(t, slice, element)
+assert.Len(t, collection, expectedLength)
+
+// ❌ Avoid - Basic Go testing with poor error messages
+if err != nil {
+    t.Errorf("expected no error, got %v", err)
+}
+```
+
+### Error Testing
+```go
+// Testing specific error types
+assert.ErrorIs(t, err, ErrConfigNotFound)
+assert.ErrorAs(t, err, &validationErr)
+assert.NoError(t, err)
+
+// Testing error messages
+assert.EqualError(t, err, "expected error message")
+assert.Contains(t, err.Error(), "partial error message")
+```
+
+## HTTP Handler Testing
+
+### Testing HTTP Handlers
+Use `httptest` for testing HTTP handlers
+
+## Test Quality
+
+### Test Organization
+- Use setup/teardown functions for complex test scenarios
+- Keep tests independent - one test should not depend on another
+- Use parallel tests where appropriate: `t.Parallel()`
+
+### Common Pitfalls to Avoid
+1. **Testing Implementation Details**: Focus on behavior, not internal implementation
+2. **Ignoring Error Cases**: Always test both success and error scenarios  
+3. **Flaky Tests**: Avoid time-dependent tests, use deterministic test data
+4. **Over-Mocking**: Don't mock everything, test real integrations where valuable
+5. **Poor Test Data**: Use realistic test data that reflects production scenarios

@@ -4,10 +4,14 @@ trufflebox-ui/node_modules/
 dist/
 .env*
 .idea/
+.vscode/
 workspace/
 .vscode/
 .cursor/
 __pycache__/
+java-sdk/onfs/feature-store-client/target/
+java-sdk/onfs/feature-store-flink-connector-sdk-flink1x/target/
+java-sdk/onfs/feature-store-core/target/
 
 # Dev toggle script artifacts
 .internal-configs/
@@ -19,3 +23,11 @@ flashring/performance_results.csv
 flashring/mem.prof
 flashring/flashring
 flashring/flashringtest
+
+
+
+horizon/pem/*.pem
+horizon/pem/*.key
+horizon/configs/*.pem
+go.work
+go.work.sum

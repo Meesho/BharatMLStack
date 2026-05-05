@@ -24,6 +24,7 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/proto/retrieve"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/grpc/metadata"
 )
 
 var (
@@ -34,6 +35,7 @@ var (
 const (
 	featurePartsSeparator = "@"
 	distributedCacheCBKey = "distributed_cache_retrieval"
+	callerIdHeader        = "online-feature-store-caller-id"
 )
 
 type FGData struct {
@@ -78,13 +80,20 @@ func getKeyString(key *retrieve.Keys) string {
 	return strings.Join(key.Cols, "|")
 }
 
+func extractCallerIdFromContext(ctx context.Context) string {
+	md, _ := metadata.FromIncomingContext(ctx)
+	return md[callerIdHeader][0]
+}
+
 func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.Query) (*retrieve.Result, error) {
 	log.Debug().Msgf("Retrieving features for query: %v", query)
 	retrieveData := &RetrieveData{
-		Query: query,
+		Query:    query,
+		CallerId: extractCallerIdFromContext(ctx),
 	}
 	err := preProcessRequest(retrieveData, h.config)
 	if err != nil {
+		log.Error().Err(err).Msgf("Error while pre-processing request for query: %v", query)
 		return nil, err
 	}
 	fgDataChan := make(chan *FGData)
@@ -112,14 +121,14 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		_, err = h.retrieveFromDB(allKeys, retrieveData, reqDbFGIds, fgDataChan)
 		h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
 		if err != nil {
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		return retrieveData.Result, nil
 	} else if ReqInMemEmpty && !ReqDistEmpty {
 		missingDistKeys, err := h.retrieveFromDistributedCache(allKeys, retrieveData, reqDistCachedFGIds, fgDataChan)
 		if err != nil {
 			h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		missingKeyExists := len(missingDistKeys) > 0
 		reqDbFGIdsExists := !reqDbFGIds.IsEmpty()
@@ -142,7 +151,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		}
 		h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
 		if err != nil {
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		if len(missingDistKeys) > 0 {
 			go h.persistToDistributedCache(retrieveData.EntityLabel, retrieveData, allDistFGIds, missingDistKeys)
@@ -152,7 +161,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		missingInMemKeys, err := h.retrieveFromInMemoryCache(allKeys, retrieveData, retrieveData.ReqInMemCachedFGIds, fgDataChan, isP2PEnabled)
 		if err != nil {
 			h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		missingKeyExists := len(missingInMemKeys) > 0
 		reqDbFGIdsExists := !reqDbFGIds.IsEmpty()
@@ -174,7 +183,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		}
 		h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
 		if err != nil {
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		if len(missingInMemKeys) > 0 {
 			go h.persistToInMemoryCache(retrieveData.EntityLabel, retrieveData, retrieveData.ReqInMemCachedFGIds, missingInMemKeys, isP2PEnabled)
@@ -185,7 +194,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		missingInMemKeys, err := h.retrieveFromInMemoryCache(allKeys, retrieveData, retrieveData.ReqInMemCachedFGIds, fgDataChan, isP2PEnabled)
 		if err != nil {
 			h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		missingInMemKeyExists := len(missingInMemKeys) > 0
 		exclusiveDistFGIds := reqDistCachedFGIds.Difference(retrieveData.ReqInMemCachedFGIds)
@@ -207,7 +216,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		}
 		if err != nil {
 			h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		missingDistKeyExists := len(missingDistKeys) > 0
 		if !missingDistKeyExists && !reqDbFGIdsExists && !exclusiveInMemExists {
@@ -240,7 +249,7 @@ func (h *RetrieveHandler) RetrieveFeatures(ctx context.Context, query *retrieve.
 		}
 		h.closeFeatureDataChannel(fgDataChan, retrieveData, &wg)
 		if err != nil {
-			return nil, err
+			return retrieveData.Result, nil
 		}
 		if len(missingInMemKeys) > 0 {
 			go h.persistToInMemoryCache(retrieveData.EntityLabel, retrieveData, retrieveData.ReqInMemCachedFGIds, missingInMemKeys, isP2PEnabled)
@@ -270,6 +279,7 @@ func (h *RetrieveHandler) retrieveFromInMemoryCache(keys []*retrieve.Keys, retri
 		return h.retrieveFromP2PCache(keys, retrieveData, fgIds, fgDataChan)
 	}
 	entityLabel := retrieveData.EntityLabel
+	metric.Count("feature.retrieve.cache.requests.total", 1, []string{"entity_name", entityLabel, "cache_type", "in_memory"})
 	cache, err := h.imcProvider.GetCache(entityLabel)
 	if err != nil {
 		return nil, err
@@ -351,6 +361,8 @@ func (h *RetrieveHandler) retrieveFromP2PCache(keys []*retrieve.Keys, retrieveDa
 func (h *RetrieveHandler) retrieveFromDistributedCache(keys []*retrieve.Keys, retrieveData *RetrieveData, fgIds ds.Set[int], fgDataChan chan *FGData) ([]*retrieve.Keys, error) {
 	log.Debug().Msgf("Retrieving features from distributed cache for keys %v and fgIds %v", keys, fgIds)
 	entityLabel := retrieveData.EntityLabel
+	metric.Count("feature.retrieve.cache.requests.total", 1, []string{"entity_name", entityLabel, "cache_type", "distributed"})
+	metric.Count("feature.retrieve.cache.requests.caller", 1, []string{"caller_id", retrieveData.CallerId})
 	cache, err := h.dcProvider.GetCache(entityLabel)
 	if err != nil {
 		return nil, err
@@ -446,13 +458,21 @@ func (h *RetrieveHandler) retrieveFromDB(keys []*retrieve.Keys, retrieveData *Re
 		log.Debug().Msgf("Retrieving features from DB for store: %s and fgIds: %v", storeId, storeFgIds)
 		store, err := h.dbProvider.GetStore(storeId)
 		if err != nil {
+			wg.Wait()
 			return nil, err
 		}
+
+		metricTags := []string{"caller_id", retrieveData.CallerId}
+		if storeConfig, err := h.config.GetStore(storeId); err == nil {
+			metricTags = append(metricTags, "conf_id", strconv.Itoa(storeConfig.ConfId))
+		}
+		metric.Count("feature.retrieve.db.caller.requests", int64(len(pkMaps)), metricTags)
 
 		if store.Type() == stores.StoreTypeRedis {
 			// Use BatchRetrieveV2 for Redis
 			results, err := store.BatchRetrieveV2(entityLabel, pkMaps, storeFgIds)
 			if err != nil {
+				wg.Wait()
 				return nil, err
 			}
 
@@ -556,7 +576,7 @@ func preProcessEntity(retrieveData *RetrieveData, configManager config.Manager) 
 		// Parse and store data type
 		dataType, err := types.ParseDataType(fg.DataType.String())
 		if err != nil {
-			return fmt.Errorf("invalid data type for feature group %s: %w", fgLabel, err)
+			return fmt.Errorf("invalid data type for feature group %s, in entity %s: %w", fgLabel, entityLabel, err)
 		}
 		retrieveData.AllFGIdToDataType[fg.Id] = dataType
 
@@ -648,18 +668,18 @@ func preProcessForKeys(retrieveData *RetrieveData, configManager config.Manager)
 			// Get active schema version
 			fgConfig, err := configManager.GetFeatureGroup(retrieveData.EntityLabel, fg.FeatureGroupLabel)
 			if err != nil {
-				return fmt.Errorf("failed to get active schema: %w", err)
+				return fmt.Errorf("failed to get active schema for feature group %s, in entity %s: %w", fg.FeatureGroupLabel, retrieveData.EntityLabel, err)
 			}
 			version, err := strconv.Atoi(fgConfig.ActiveVersion)
 			if err != nil {
-				return fmt.Errorf("invalid version number: %w", err)
+				return fmt.Errorf("invalid version number for feature group %s, in entity %s: %w", fg.FeatureGroupLabel, retrieveData.EntityLabel, err)
 			}
 
 			// Get default values for each feature
 			for _, f := range fg.Features {
 				defaultValue, err := configManager.GetDefaultValueByte(retrieveData.EntityLabel, fgProp.id, version, f.Label)
 				if err != nil {
-					return fmt.Errorf("failed to get default value for feature %s: %w", f.Label, err)
+					return fmt.Errorf("failed to get default value for feature %s, in feature group %s, in entity %s: %w", f.Label, fg.FeatureGroupLabel, retrieveData.EntityLabel, err)
 				}
 				rows[i].Columns[f.ColumnIdx] = defaultValue
 			}
@@ -696,19 +716,19 @@ func preProcessFGs(retrieveData *RetrieveData, configManager config.Manager) err
 		// Get active schema first to validate features
 		activeSchema, err := configManager.GetActiveFeatureSchema(entityLabel, fg.Label)
 		if err != nil {
-			return fmt.Errorf("failed to get active schema for feature group %s: %w", fg.Label, err)
+			return fmt.Errorf("failed to get active schema for feature group %s, in entity %s: %w", fg.Label, entityLabel, err)
 		}
 
 		// Get feature group properties
 		fgProp, err := configManager.GetFeatureGroup(entityLabel, fg.Label)
 		if err != nil {
-			return fmt.Errorf("failed to get feature group %s: %w", fg.Label, err)
+			return fmt.Errorf("failed to get feature group %s, in entity %s: %w", fg.Label, entityLabel, err)
 		}
 
 		// Get feature group data type
 		dataType, err := types.ParseDataType(fgProp.DataType.String())
 		if err != nil {
-			return fmt.Errorf("invalid data type for feature group %s: %w", fg.Label, err)
+			return fmt.Errorf("invalid data type for feature group %s, in entity %s: %w", fg.Label, entityLabel, err)
 		}
 
 		// Create feature set with known capacity
@@ -721,11 +741,11 @@ func preProcessFGs(retrieveData *RetrieveData, configManager config.Manager) err
 			// Parse feature label to handle quantization
 			baseFeatureLabel, quantType, err := ParseFeatureLabel(featureLabel, dataType)
 			if err != nil {
-				return fmt.Errorf("failed to parse feature label %s: %w", featureLabel, err)
+				return fmt.Errorf("failed to parse feature label %s, in feature group %s, in entity %s: %w", featureLabel, fg.Label, entityLabel, err)
 			}
 			if _, ok := activeSchema.FeatureMeta[baseFeatureLabel]; !ok {
-				return fmt.Errorf("feature %s not found in active schema of feature group %s",
-					baseFeatureLabel, fg.Label)
+				return fmt.Errorf("feature %s not found in active schema of feature group %s, in entity %s",
+					baseFeatureLabel, fg.Label, entityLabel)
 			}
 
 			// If quantization is requested, validate it's supported
@@ -779,6 +799,11 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 		if _, exists := data.ReqFGIdToFeatureLabels[fgId]; !exists {
 			continue
 		}
+
+		// Validity metrics: check Expired before NegativeCache because expired data has both flags set.
+		// - Expired=true (from DB): validity="expired" (first fetch, data was in DB but expired)
+		// - NegativeCache=true only: validity="negative_cache" (data never existed or cached expired)
+		// - Neither: validity="valid"
 		if ddb.Expired {
 			metric.Count("online.feature.store.retrieve.validity", 1, []string{"feature_group", data.AllFGIdToFGLabel[fgId], "entity", data.EntityLabel, "validity", "expired"})
 		} else if ddb.NegativeCache {
@@ -794,7 +819,7 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			if ddb.NegativeCache || ddb.Expired {
 				version, err = h.config.GetActiveVersion(data.EntityLabel, fgId)
 				if err != nil {
-					log.Error().Err(err).Msgf("Error while getting active version for feature %s", featureLabel)
+					log.Error().Err(err).Msgf("Error while getting active version for feature %s in entity %s, fg %d", featureLabel, data.EntityLabel, fgId)
 					return
 				}
 			} else {
@@ -802,7 +827,7 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 			}
 			seq, err := h.config.GetSequenceNo(data.EntityLabel, fgId, int(version), featureLabel)
 			if err != nil {
-				log.Error().Err(err).Msgf("Error while getting sequence no for feature %s", featureLabel)
+				log.Error().Err(err).Msgf("Error while getting sequence no for feature %s in entity %s, fg %d", featureLabel, data.EntityLabel, fgId)
 				return
 			}
 			// Handle missing features (seq = -1)
@@ -812,18 +837,18 @@ func (h *RetrieveHandler) fillMatrix(data *RetrieveData, fgToDDB map[int]*blocks
 				// Get active version
 				version, err = h.config.GetActiveVersion(data.EntityLabel, fgId)
 				if err != nil {
-					log.Error().Err(err).Msgf("Error while getting active version for missing feature %s", featureLabel)
+					log.Error().Err(err).Msgf("Error while getting active version for missing feature %s in entity %s, fg %d", featureLabel, data.EntityLabel, fgId)
 					return
 				}
 				// Try to get sequence from active version
 				activeSeq, err := h.config.GetSequenceNo(data.EntityLabel, fgId, version, featureLabel)
 				if err != nil {
-					log.Error().Err(err).Msgf("Error while getting sequence no from active version for feature %s", featureLabel)
+					log.Error().Err(err).Msgf("Error while getting sequence no from active version for feature %s in entity %s, fg %d", featureLabel, data.EntityLabel, fgId)
 					return
 				}
 				// if feature is not present in active version just return
 				if activeSeq == -1 {
-					log.Warn().Msgf("Feature %s is not available in active version", featureLabel)
+					log.Error().Msgf("Feature %s is not available in active version for entity %s, fg %d", featureLabel, data.EntityLabel, fgId)
 					return
 				}
 				// Feature exists in active version

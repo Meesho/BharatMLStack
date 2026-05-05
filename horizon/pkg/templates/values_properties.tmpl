@@ -1,0 +1,47 @@
+as_poll: {{ .as_poll }}
+as_min: {{ .minReplica }}
+as_max: {{ .maxReplica }}
+as_down_period: {{ .as_down_period }}
+as_up_period: {{ .as_up_period }}
+as_up_stable_window: {{ .as_up_stable_window }}
+ingress_class: {{ .ingress_class }}
+host: {{ .host }}
+hostAliases: false
+{{ if .serviceAccount }}
+serviceAccount:
+    enabled: true
+    annotations:
+      iam.gke.io/gcp-service-account: {{ .serviceAccount }}
+{{ else }}
+serviceAccount:
+  enabled: false
+  annotations: null
+{{ end }}
+{{ if .triggers }}
+triggers: {{ .triggers | toYAML | nindent 2 }}
+{{ else }}
+triggers:
+  - metadata:
+      value: "{{ .cpuThreshold }}"
+    metricType: {{ .as_trigger_type }}
+    type: {{ .as_trigger_metric }}
+{{ end }}
+canary:
+  progressDeadlineSeconds: 300
+  analysisInterval: 120s
+  analysisThreshold: 5
+  analysisMaxWeight: 5
+  analysisStepWeight: 5
+  analysisMetrics:
+    thresholdRangeMin: 0.99
+    interval: 1m
+  skipAnalysis: false
+createContourGateway: true
+{{ if eq .isGrpc "true" }}
+service_annotations:
+  projectcontour.io/upstream-protocol.h2c: "80"
+{{ end }}
+{{ if .nodeSelectorValue }}
+nodeSelectorValue: {{ .nodeSelectorValue }}
+{{ end }}
+

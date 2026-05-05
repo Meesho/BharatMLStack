@@ -9,7 +9,19 @@ import (
 )
 
 type ModelConfig struct {
-	ConfigMap map[string]Config `json:"model_config_map"`
+	ConfigMap     map[string]Config `json:"model_config_map"`
+	ServiceConfig ServiceConfig     `json:"service-config"`
+}
+
+type ServiceConfig struct {
+	V2LoggingType      string       `json:"v2-logging-type"`
+	CompressionEnabled bool         `json:"compression-enabled"`
+}
+
+type SchemaComponents struct {
+	FeatureName string `json:"feature_name"`
+	FeatureType string `json:"feature_type"`
+	FeatureSize any    `json:"feature_size"`
 }
 
 type Config struct {
@@ -79,6 +91,7 @@ type PredatorComponentConfig struct {
 	Calibration    string          `json:"calibration"`
 	Inputs         []ModelInput    `json:"inputs"`
 	Outputs        []ModelOutput   `json:"outputs"`
+	SlateComponent bool            `json:"slate_component"` // When true, outputs go to SlateData and inputs are gathered per-slate from the target matrix
 }
 
 type ModelEndpoint struct {
@@ -101,12 +114,13 @@ type ModelOutput struct {
 }
 
 type NumerixComponentConfig struct {
-	Component    string            `json:"component"`
-	ComponentId  string            `json:"component_id"`
-	ScoreColumn  string            `json:"score_col"`
-	DataType     string            `json:"data_type"`
-	ScoreMapping map[string]string `json:"score_mapping"`
-	ComputeId    string            `json:"compute_id"`
+	Component      string            `json:"component"`
+	ComponentId    string            `json:"component_id"`
+	ScoreColumn    string            `json:"score_col"`
+	DataType       string            `json:"data_type"`
+	ScoreMapping   map[string]string `json:"score_mapping"`
+	ComputeId      string            `json:"compute_id"`
+	SlateComponent bool              `json:"slate_component"` // When true, outputs go to SlateData and inputs are gathered per-slate from the target matrix
 }
 
 func (c *ComponentConfig) UnmarshalJSON(data []byte) error {

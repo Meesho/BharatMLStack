@@ -16,6 +16,7 @@ func Init() {
 		api.GET("/users", controller.NewController().GetAllUsers)
 		api.PUT("/update-user", controller.NewController().UpdateUserAccessAndRole)
 		api.GET("/health", Health)
+		api.GET("/api/v1/horizon/permission-by-role", controller.NewController().GetPermissionByRole)
 	}
 }
 

@@ -2,14 +2,15 @@ package logger
 
 import (
 	"fmt"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/Meesho/BharatMLStack/horizon/internal/configs"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -18,14 +19,14 @@ var (
 	appName     = ""
 )
 
-// Init initializes the logger by fetching the log level and app name from the viper configuration
-func Init() {
+// Init initializes the logger by fetching the log level and app name from the app configuration
+func Init(config configs.Configs) {
 
-	appName = viper.GetString("APP_NAME")
-	logLevel := viper.GetString("APP_LOG_LEVEL")
+	appName = config.AppName
+	logLevel := config.AppLogLevel
 
 	if len(appName) == 0 {
-		panic("APP_NAME is not set!")
+		panic("App name is not set!")
 	}
 	if len(logLevel) == 0 {
 		log.Warn().Msg("Log level not set, defaulting to WARN")

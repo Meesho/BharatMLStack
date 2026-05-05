@@ -1,0 +1,151 @@
+syntax = "proto3";
+
+option go_package = "../grpc/predict";
+
+enum DataType {
+    DataTypeUnknown = 0;
+    DataTypeFP8E5M2 = 1;
+    DataTypeFP8E4M3 = 2;
+    DataTypeFP16 = 3;
+    DataTypeFP32 = 4;
+    DataTypeFP64 = 5;
+    DataTypeInt8 = 6;
+    DataTypeInt16 = 7;
+    DataTypeInt32 = 8;
+    DataTypeInt64 = 9;
+    DataTypeUint8 = 10;
+    DataTypeUint16 = 11;
+    DataTypeUint32 = 12;
+    DataTypeUint64 = 13;
+    DataTypeString = 14;
+    DataTypeBool = 15;
+    DataTypeFP8E5M2Vector = 16;
+    DataTypeFP8E4M3Vector = 17;
+    DataTypeFP16Vector = 18;
+    DataTypeFP32Vector = 19;
+    DataTypeFP64Vector = 20;
+    DataTypeInt8Vector = 21;
+    DataTypeInt16Vector = 22;
+    DataTypeInt32Vector = 23;
+    DataTypeInt64Vector = 24;
+    DataTypeUint8Vector = 25;
+    DataTypeUint16Vector = 26;
+    DataTypeUint32Vector = 27;
+    DataTypeUint64Vector = 28;
+    DataTypeStringVector = 29;
+    DataTypeBoolVector = 30;
+}
+
+// Schema definition for a feature column
+message FeatureSchema {
+    string name = 1;
+    DataType data_type = 2;
+    int32 vector_dim = 3; // 0 = scalar, >0 = fixed vector length
+}
+
+// A request-level context feature (user, session, device, etc.)
+message ContextFeature {
+    string name = 1;
+    bytes value = 2;
+    DataType data_type = 3;
+    int32 vector_dim = 4; // 0 = scalar, >0 = fixed vector length
+}
+
+// A single entity to be scored/ranked
+message Target {
+    string id = 1;
+    repeated bytes feature_values = 2; // aligned with target_input_schema
+}
+
+// --- PointWise ---
+
+message TargetScore {
+    string error = 1;
+    repeated bytes output_values = 2; // aligned with target_output_schema
+}
+
+message PointWiseRequest {
+    string model_config_id = 1;
+    string tracking_id = 2;
+    repeated ContextFeature context_features = 3;
+    repeated FeatureSchema target_input_schema = 4;
+    repeated Target targets = 5;
+    string tenant_id = 6;
+}
+
+message PointWiseResponse {
+    repeated FeatureSchema target_output_schema = 1;
+    repeated TargetScore target_scores = 2;
+    string request_error = 3;
+}
+
+// --- PairWise ---
+
+message TargetPair {
+    int32 first_target_index = 1;
+    int32 second_target_index = 2;
+    repeated bytes feature_values = 3; // aligned with pair_input_schema
+}
+
+message PairWiseRequest {
+    string model_config_id = 1;
+    string tracking_id = 2;
+    repeated ContextFeature context_features = 3;
+    repeated FeatureSchema target_input_schema = 4;
+    repeated FeatureSchema pair_input_schema = 5;
+    repeated TargetPair pairs = 6;
+    repeated Target targets = 7;
+    string tenant_id = 8;
+}
+
+message PairScore {
+    string error = 1;
+    repeated bytes output_values = 2; // aligned with pair_output_schema
+}
+
+message PairWiseResponse {
+    repeated PairScore pair_scores = 1;
+    repeated TargetScore target_scores = 2;
+    repeated FeatureSchema target_output_schema = 3;
+    repeated FeatureSchema pair_output_schema = 4;
+    string request_error = 5;
+}
+
+// --- SlateWise ---
+
+message TargetSlate {
+    repeated int32 target_indices = 1;
+    repeated bytes feature_values = 2; // aligned with slate_input_schema
+}
+
+message SlateScore {
+    string error = 1;
+    repeated bytes output_values = 2; // aligned with slate_output_schema
+}
+
+message SlateWiseRequest {
+    string model_config_id = 1;
+    string tracking_id = 2;
+    repeated ContextFeature context_features = 3;
+    repeated FeatureSchema target_input_schema = 4;
+    repeated FeatureSchema slate_input_schema = 5;
+    repeated TargetSlate slates = 6;
+    repeated Target targets = 7;
+    string tenant_id = 8;
+}
+
+message SlateWiseResponse {
+    repeated SlateScore slate_scores = 1;
+    repeated TargetScore target_scores = 2;
+    repeated FeatureSchema target_output_schema = 3;
+    repeated FeatureSchema slate_output_schema = 4;
+    string request_error = 5;
+}
+
+// --- Service ---
+
+service Predict {
+    rpc InferPointWise(PointWiseRequest) returns (PointWiseResponse) {};
+    rpc InferPairWise(PairWiseRequest) returns (PairWiseResponse) {};
+    rpc InferSlateWise(SlateWiseRequest) returns (SlateWiseResponse) {};
+}
