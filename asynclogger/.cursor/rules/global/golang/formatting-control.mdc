@@ -1,0 +1,34 @@
+---
+description: These rules focus on the places where AI often drifts from idiomatic Go,, naming that avoids stutter, brace placement, early-returns, and minimalistic control flow. Follow these to produce idiomatic, readable Go.
+alwaysApply: false
+globs: *.go
+---
+
+### Effective Go Rules: Formatting, Comments, Naming, Semicolons, Control Flow
+
+These rules focus on the places where AI often drifts from idiomatic Go: formatting handled by tools, naming that avoids stutter, brace placement, early-returns, and minimalistic control flow. Follow these to produce idiomatic, readable Go.
+
+
+## Naming
+- Do not prefix getters with `Get`; prefer `Owner()` over `GetOwner()`; setters as `SetOwner(x)`.
+
+## Control Flow Essentials
+- Prefer early returns for errors; let the success path flow downward.
+- Omit `else` when the `if` body ends in `return/break/continue`.
+- Use `if`/`switch` init statements to scope locals.
+- Prefer `switch` over long `if-else` chains; avoid implicit fallthrough.
+
+## `defer` and Resources
+- Place `defer` immediately after acquiring a resource; args evaluated at `defer` time.
+- Deferred calls run LIFO. Avoid deferring inside hot loops.
+
+## Printing and Diagnostics
+- Prefer `%v` for values, `%+v` to include field names, `%#v` for Go syntax, `%T` for type.
+
+## Shadowing and Short Decls
+- Reuse `err` with `:=` when at least one new variable exists; avoid accidental shadowing across scopes.
+- Declare variables at first use; avoid predeclaring far from usage.
+
+
+## Extra
+- Prefer `const` for stable magic numbers; otherwise localize and comment literals.
