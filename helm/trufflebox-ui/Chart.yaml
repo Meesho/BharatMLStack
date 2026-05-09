@@ -1,0 +1,21 @@
+apiVersion: v2
+name: trufflebox-ui
+description: BharatMLStack TruffleBox UI - Management console for the feature store ecosystem
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/AbhijithGanesh/BharatMLStack
+sources:
+  - https://github.com/AbhijithGanesh/BharatMLStack/tree/main/trufflebox-ui
+maintainers:
+  - name: BharatMLStack Team
+    email: contact@bharatmlstack.dev
+keywords:
+  - machine-learning
+  - feature-store
+  - web-ui
+  - management-console
+  - bharatmlstack
+annotations:
+  category: Machine Learning
+  licenses: MIT

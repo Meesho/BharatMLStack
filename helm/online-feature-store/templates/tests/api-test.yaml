@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "online-feature-store.fullname" . }}-api-test"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "online-feature-store.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "2"
+spec:
+  restartPolicy: Never
+  containers:
+  - name: api-test
+    image: curlimages/curl:latest
+    command: ['sh', '-c']
+    args:
+      - |
+        set -e
+        echo "Testing Online Feature Store API endpoints..."
+        
+        SERVICE_URL="http://{{ include "online-feature-store.fullname" . }}:{{ .Values.service.port }}"
+        HEALTH_ENDPOINT="$SERVICE_URL/health/self"
+        METRICS_ENDPOINT="http://{{ include "online-feature-store.fullname" . }}:8080/metrics"
+        
+        echo "Testing health endpoint: $HEALTH_ENDPOINT"
+        curl -f $HEALTH_ENDPOINT
+        echo "✅ Health endpoint test PASSED"
+        
+        echo "Testing metrics endpoint: $METRICS_ENDPOINT"
+        curl -f $METRICS_ENDPOINT | head -10
+        echo "✅ Metrics endpoint test PASSED"
+        
+        echo "✅ All API tests passed!"
+    resources:
+      limits:
+        cpu: 100m
+        memory: 64Mi
+      requests:
+        cpu: 10m
+        memory: 32Mi

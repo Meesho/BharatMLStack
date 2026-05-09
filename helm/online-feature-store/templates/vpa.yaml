@@ -1,0 +1,29 @@
+{{- if .Values.verticalPodAutoscaler.enabled }}
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ include "online-feature-store.vpaName" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "online-feature-store.labels" . | nindent 4 }}
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "online-feature-store.fullname" . }}
+  updatePolicy:
+    updateMode: {{ .Values.verticalPodAutoscaler.updateMode }}
+  resourcePolicy:
+    containerPolicies:
+    - containerName: online-feature-store
+      {{- if .Values.verticalPodAutoscaler.minAllowed }}
+      minAllowed:
+        {{- toYaml .Values.verticalPodAutoscaler.minAllowed | nindent 8 }}
+      {{- end }}
+      {{- if .Values.verticalPodAutoscaler.maxAllowed }}
+      maxAllowed:
+        {{- toYaml .Values.verticalPodAutoscaler.maxAllowed | nindent 8 }}
+      {{- end }}
+      controlledResources: ["cpu", "memory"]
+      controlledValues: RequestsAndLimits
+{{- end }}

@@ -1,0 +1,334 @@
+# Default values for horizon
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global settings
+global:
+  imageRegistry: "ghcr.io/meesho"
+  imagePullSecrets: []
+  storageClass: ""
+  
+# Container image settings
+image:
+  registry: ""
+  repository: "horizon"
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Service account settings
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+# Pod Security Context
+podSecurityContext:
+  fsGroup: 65532
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+
+# Container Security Context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+
+# Deployment settings
+replicaCount: 2
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Vertical Pod Autoscaler
+verticalPodAutoscaler:
+  enabled: false
+  updateMode: "Auto"
+  minAllowed:
+    cpu: 50m
+    memory: 128Mi
+  maxAllowed:
+    cpu: 1
+    memory: 2Gi
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Service settings
+service:
+  type: ClusterIP
+  port: 8082
+  targetPort: 8082
+  annotations: {}
+
+# Ingress settings (NGINX default)
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: horizon.bharatmlstack.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: horizon-tls
+      hosts:
+        - horizon.bharatmlstack.local
+
+# Gateway API support (production-ready routing)
+gateway:
+  enabled: false
+  className: "istio"
+  gatewayName: "bharatmlstack-gateway"
+  namespace: "bharatml-system"
+  hosts:
+    - "horizon.bharatml.prod.com"
+  tls:
+    enabled: true
+    certificateRefs:
+      - name: "bharatml-tls"
+        namespace: "bharatml-system"
+
+# HTTP Route for Gateway API
+httpRoute:
+  enabled: false
+  parentRefs:
+    - name: "bharatmlstack-gateway"
+      namespace: "bharatml-system"
+  hostnames:
+    - "horizon.bharatml.prod.com"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: "horizon"
+          port: 8082
+
+# Network Policies
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: bharatml-system
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: trufflebox-ui
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: online-feature-store
+      ports:
+        - protocol: TCP
+          port: 8082
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: bharatml-infra
+      ports:
+        - protocol: TCP
+          port: 3306  # MySQL
+        - protocol: TCP
+          port: 9042  # ScyllaDB
+        - protocol: TCP
+          port: 2379  # etcd
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+
+# Service Monitor for Prometheus
+serviceMonitor:
+  enabled: true
+  namespace: ""
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+  annotations: {}
+  path: /metrics
+  honorLabels: false
+
+# Liveness and readiness probes
+probes:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+    httpGet:
+      path: /health
+      port: http
+  readiness:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+    httpGet:
+      path: /health
+      port: http
+
+# Application configuration
+config:
+  # Application settings
+  app:
+    name: "horizon"
+    environment: "PROD"
+    env: "production"
+    port: 8082
+    logLevel: "INFO"
+    metricSamplingRate: 1
+    gcPercentage: 1
+  
+  # MySQL database configuration
+  mysql:
+    master:
+      host: "mysql.bharatml-infra.svc.cluster.local"
+      port: 3306
+      username: "root"
+      password: ""  # Set via secret
+      dbName: "testdb"
+      maxPoolSize: 10
+      minPoolSize: 2
+    slave:
+      host: "mysql.bharatml-infra.svc.cluster.local"
+      port: 3306
+      username: "root"
+      password: ""  # Set via secret
+      maxPoolSize: 10
+      minPoolSize: 2
+    activeConfigIds: "2"
+  
+  # etcd configuration
+  etcd:
+    server: "etcd.bharatml-infra.svc.cluster.local:2379"
+    watcherEnabled: true
+  
+  # CORS configuration
+  cors:
+    origins: "http://localhost:3000,http://localhost:8080"
+  
+  # Online Feature Store integration
+  onlineFeatureStore:
+    appName: "onfs"
+  
+  # ScyllaDB configuration (for metadata)
+  scylla:
+    contactPoints: "scylla.bharatml-infra.svc.cluster.local"
+    keyspace: "onfs"
+    port: 9042
+    numConns: 5
+    timeoutMs: 10000
+    username: ""
+    password: ""
+    activeConfigIds: "1"
+  
+  # Redis configuration (for caching)
+  redis:
+    failover:
+      activeConfigIds: "4"
+
+# Secrets (externally managed)
+secrets:
+  # Database credentials
+  database:
+    secretName: "horizon-db-credentials"
+    mysqlPasswordKey: "mysql-password"
+    scyllaUsernameKey: "scylla-username"
+    scyllaPasswordKey: "scylla-password"
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity and anti-affinity
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - horizon
+          topologyKey: kubernetes.io/hostname
+
+# Additional labels
+labels: {}
+
+# Additional annotations
+annotations: {}
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod labels
+podLabels: {}
+
+# Volume mounts for temporary storage
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+  - name: var-run
+    mountPath: /var/run
+
+# Volumes
+volumes:
+  - name: tmp
+    emptyDir: {}
+  - name: var-run
+    emptyDir: {}
+
+# Extra environment variables
+extraEnvVars: []
+
+# Extra environment variables from ConfigMaps/Secrets
+extraEnvVarsFrom: []
+
+# Init containers
+initContainers: []
+
+# Sidecar containers
+sidecars: []
+
+# Additional volumes
+extraVolumes: []
+
+# Additional volume mounts
+extraVolumeMounts: []

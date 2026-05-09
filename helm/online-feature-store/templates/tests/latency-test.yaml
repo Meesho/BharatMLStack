@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "online-feature-store.fullname" . }}-latency-test"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "online-feature-store.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "1"
+spec:
+  restartPolicy: Never
+  containers:
+  - name: latency-test
+    image: curlimages/curl:latest
+    command: ['sh', '-c']
+    args:
+      - |
+        set -e
+        echo "Testing Online Feature Store latency..."
+        
+        SERVICE_URL="http://{{ include "online-feature-store.fullname" . }}:{{ .Values.service.port }}"
+        HEALTH_ENDPOINT="$SERVICE_URL/health/self"
+        
+        echo "Testing health endpoint: $HEALTH_ENDPOINT"
+        
+        # Test health endpoint response time
+        RESPONSE_TIME=$(curl -w "%{time_total}" -s -o /dev/null $HEALTH_ENDPOINT || echo "999")
+        echo "Health endpoint response time: ${RESPONSE_TIME}s"
+        
+        # Check if response time is acceptable (< 1 second)
+        if [ $(echo "$RESPONSE_TIME < 1.0" | bc -l) -eq 1 ]; then
+          echo "✅ Latency test PASSED: Response time is acceptable ($RESPONSE_TIME seconds)"
+        else
+          echo "❌ Latency test FAILED: Response time too high ($RESPONSE_TIME seconds)"
+          exit 1
+        fi
+        
+        echo "✅ All latency tests passed!"
+    resources:
+      limits:
+        cpu: 100m
+        memory: 64Mi
+      requests:
+        cpu: 10m
+        memory: 32Mi
