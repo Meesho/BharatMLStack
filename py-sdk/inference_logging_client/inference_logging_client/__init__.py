@@ -48,7 +48,7 @@ from .io import clear_schema_cache, get_feature_schema, get_mplog_metadata, pars
 from .types import FORMAT_TYPE_MAP, DecodedMPLog, FeatureInfo, Format
 from .utils import format_dataframe_floats, get_format_name, unpack_metadata_byte
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 # Maximum supported schema version (4 bits = 0-15)
 _MAX_SCHEMA_VERSION = 15
@@ -295,8 +295,9 @@ def decode_mplog_dataframe(
         mp_config_id_column: Name of the column containing model proxy config ID (default: "mp_config_id")
         num_partitions: Number of partitions for distributed decode. Default 10000 to keep
             partition size small when rows are large (3-5 MB each). Increase if rows are small.
-        max_records_per_batch: Max rows per Arrow batch in mapInPandas. When set (default 200),
-            applied temporarily during this call to limit memory per batch when rows are large.
+        max_records_per_batch: Max rows per Arrow batch in mapInPandas. Default 50 to keep each
+            batch well under Arrow's 2 GiB per-column limit when rows carry multi-MB payloads
+            (features column can be several MB each). Raise it if your rows are small.
         needed_columns: Optional set or list of feature names to include. If provided, only these
             columns are decoded and returned (reduces memory and output size). If None, all schema columns are returned.
 
@@ -522,10 +523,25 @@ def decode_mplog_dataframe(
                 out_pdf = pd.DataFrame(out_rows, columns=all_columns_ordered)
                 yield out_pdf
 
-    n_partitions = num_partitions if num_partitions is not None else 10000
-    df_repart = df.repartition(n_partitions)
+    # Project to only the columns _decode_batch actually reads, so Arrow batches
+    # don't carry unused giant columns into the Python worker. This keeps each
+    # mapInPandas batch well under Arrow's 2 GiB per-column limit.
+    projected_cols = [
+        c for c in (
+            [features_column, metadata_column, mp_config_id_column, "entities"]
+            + row_metadata_columns
+        )
+        if c in df_columns
+    ]
+    # Preserve original column order and drop duplicates
+    seen = set()
+    projected_cols = [c for c in projected_cols if not (c in seen or seen.add(c))]
+    df_projected = df.select(*projected_cols)
 
-    batch_limit = max_records_per_batch if max_records_per_batch is not None else 200
+    n_partitions = num_partitions if num_partitions is not None else 10000
+    df_repart = df_projected.repartition(n_partitions)
+
+    batch_limit = max_records_per_batch if max_records_per_batch is not None else 50
     prev_max_records = spark.conf.get("spark.sql.execution.arrow.maxRecordsPerBatch")
     spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", str(batch_limit))
     try:
