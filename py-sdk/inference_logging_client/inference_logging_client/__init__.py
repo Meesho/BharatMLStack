@@ -48,7 +48,7 @@ from .io import clear_schema_cache, get_feature_schema, get_mplog_metadata, pars
 from .types import FORMAT_TYPE_MAP, DecodedMPLog, FeatureInfo, Format
 from .utils import format_dataframe_floats, get_format_name, unpack_metadata_byte
 
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 
 # Maximum supported schema version (4 bits = 0-15)
 _MAX_SCHEMA_VERSION = 15
@@ -56,6 +56,7 @@ _MAX_SCHEMA_VERSION = 15
 __all__ = [
     "decode_mplog",
     "decode_mplog_dataframe",
+    "decode_mplog_proto_dataframe",
     "get_mplog_metadata",
     "get_feature_schema",
     "clear_schema_cache",
@@ -549,6 +550,252 @@ def decode_mplog_dataframe(
         "day",
         "hour",
     ]:
+        if col in result_columns:
+            metadata_cols.append(col)
+    feature_cols = [c for c in result_columns if c not in metadata_cols]
+    column_order = metadata_cols + feature_cols
+    return result_df.select(column_order)
+
+
+def decode_mplog_proto_dataframe(
+    df: "SparkDataFrame",
+    spark: "SparkSession",
+    schema: list,
+    decompress: bool = True,
+    features_column: str = "features",
+    mp_config_id_column: str = "mp_config_id",
+    num_partitions: Optional[int] = None,
+    max_records_per_batch: Optional[int] = None,
+    needed_columns: Optional[Collection[str]] = None,
+) -> "SparkDataFrame":
+    """
+    Decode MPLog features from a Spark DataFrame using a caller-supplied schema.
+
+    Format is always PROTO. No schema fetch is performed and no inference service
+    is contacted. The caller is responsible for passing the correct schema for the
+    encoded payloads in the DataFrame; all rows are decoded against the same schema.
+
+    Expected DataFrame columns:
+    - features (encoded payloads; JSON-array-of-base64 strings or pre-parsed list of dicts)
+    - mp_config_id
+    - optional: entities, parent_entity
+    - optional row-metadata: prism_ingested_at, prism_extracted_at, created_at,
+      tracking_id, user_id, year, month, day, hour
+
+    Args:
+        df: Input Spark DataFrame.
+        spark: The SparkSession to use for creating the result DataFrame.
+        schema: Pre-fetched schema (list of FeatureInfo) applied to all rows.
+        decompress: Whether to attempt zstd decompression on each encoded payload.
+        features_column: Name of the column containing encoded features (default: "features").
+        mp_config_id_column: Name of the column containing model proxy config ID
+            (default: "mp_config_id"). Pass-through column; not used to look up schema.
+        num_partitions: Number of partitions for distributed decode. Default 10000.
+        max_records_per_batch: Max rows per Arrow batch in mapInPandas. Default 50.
+        needed_columns: Optional set or list of feature names to include. If provided,
+            only these columns are decoded and returned.
+
+    Returns:
+        Spark DataFrame with entity_id as first column, followed by available row-metadata
+        columns, followed by feature columns.
+
+    Example:
+        >>> from pyspark.sql import SparkSession
+        >>> from inference_logging_client import (
+        ...     decode_mplog_proto_dataframe, get_feature_schema,
+        ... )
+        >>> spark = SparkSession.builder.appName("decode").getOrCreate()
+        >>> df = spark.read.parquet("logs.parquet")
+        >>> schema = get_feature_schema("my-model", 1)
+        >>> decoded_df = decode_mplog_proto_dataframe(df, spark, schema=schema)
+        >>> decoded_df.show()
+    """
+    import base64
+    import json
+
+    if not isinstance(schema, list) or not schema:
+        raise ValueError("schema must be a non-empty list of FeatureInfo")
+
+    # Check if DataFrame is empty (avoid full count: use limit(1))
+    if df.limit(1).count() == 0:
+        from pyspark.sql.types import StructType
+        return spark.createDataFrame([], StructType([]))
+
+    # Validate required columns
+    df_columns = df.columns
+    required_columns = [features_column, mp_config_id_column]
+    missing_columns = [c for c in required_columns if c not in df_columns]
+    if missing_columns:
+        raise ValueError(f"Missing required columns: {missing_columns}")
+
+    row_metadata_columns = [
+        "prism_ingested_at",
+        "prism_extracted_at",
+        "created_at",
+        "mp_config_id",
+        "parent_entity",
+        "tracking_id",
+        "user_id",
+        "year",
+        "month",
+        "day",
+        "hour",
+    ]
+    _reserved_columns = {"entity_id"} | {c for c in row_metadata_columns if c in df_columns}
+
+    # Build output schema: entity_id + available metadata cols + feature names
+    all_feature_names = {f.name for f in schema}
+    if needed_columns is not None:
+        all_feature_names = all_feature_names & set(needed_columns)
+    metadata_cols_in_schema = [c for c in row_metadata_columns if c in df_columns]
+
+    from pyspark.sql.types import StringType, StructField, StructType
+    input_field_map = {field.name: field.dataType for field in df.schema.fields}
+    schema_fields = [StructField("entity_id", StringType(), True)]
+    for c in metadata_cols_in_schema:
+        original_type = input_field_map.get(c, StringType())
+        schema_fields.append(StructField(c, original_type, True))
+    for c in sorted(all_feature_names):
+        schema_fields.append(StructField(c, StringType(), True))
+    full_schema = StructType(schema_fields)
+    all_columns_ordered = ["entity_id"] + metadata_cols_in_schema + sorted(all_feature_names)
+
+    # Project to only the columns we actually need on workers
+    projected_cols = [
+        c for c in (
+            [features_column, mp_config_id_column, "entities"] + row_metadata_columns
+        )
+        if c in df_columns
+    ]
+    seen = set()
+    projected_cols = [c for c in projected_cols if not (c in seen or seen.add(c))]
+    df_projected = df.select(*projected_cols)
+
+    # Capture for closure
+    feature_schema = schema
+
+    def _safe_get(row, col, default=None):
+        try:
+            val = row[col] if col in row.index else getattr(row, col, default)
+            if hasattr(val, "isna") and val.isna():
+                return default
+            return val
+        except (KeyError, AttributeError):
+            return default
+
+    def _decode_batch(iterator):
+        import pandas as pd
+        for pdf in iterator:
+            out_rows = []
+            for idx, row in pdf.iterrows():
+                features_data = _safe_get(row, features_column)
+                if features_data is None:
+                    continue
+                if isinstance(features_data, str):
+                    try:
+                        features_list = json.loads(features_data)
+                    except (json.JSONDecodeError, ValueError, TypeError):
+                        continue
+                else:
+                    features_list = features_data
+                if not isinstance(features_list, list):
+                    continue
+                entities_val = None
+                if "entities" in df_columns:
+                    entities_raw = _safe_get(row, "entities")
+                    if entities_raw is not None:
+                        if isinstance(entities_raw, str):
+                            try:
+                                entities_val = json.loads(entities_raw)
+                            except (json.JSONDecodeError, ValueError):
+                                entities_val = [entities_raw]
+                        elif isinstance(entities_raw, list):
+                            entities_val = entities_raw
+                        else:
+                            entities_val = [entities_raw]
+                parent_entity_val = None
+                if "parent_entity" in df_columns:
+                    parent_val = _safe_get(row, "parent_entity")
+                    if parent_val is not None:
+                        if isinstance(parent_val, str):
+                            try:
+                                parent_val = json.loads(parent_val)
+                            except (json.JSONDecodeError, ValueError):
+                                parent_val = [parent_val]
+                        if isinstance(parent_val, list):
+                            parent_entity_val = (
+                                parent_val[0] if len(parent_val) == 1
+                                else str(parent_val) if len(parent_val) > 1
+                                else None
+                            )
+                        else:
+                            parent_entity_val = parent_val
+                for i, feature_item in enumerate(features_list):
+                    if not isinstance(feature_item, dict):
+                        continue
+                    entity_id = (
+                        str(entities_val[i])
+                        if entities_val and i < len(entities_val)
+                        else f"entity_{i}"
+                    )
+                    encoded_features_b64 = feature_item.get("encoded_features", "")
+                    if not encoded_features_b64:
+                        continue
+                    try:
+                        encoded_bytes = base64.b64decode(encoded_features_b64)
+                    except (ValueError, TypeError):
+                        continue
+                    if len(encoded_bytes) == 0:
+                        continue
+                    working_data = encoded_bytes
+                    if decompress:
+                        working_data = _decompress_zstd(encoded_bytes)
+                    try:
+                        decoded_features = decode_proto_features(
+                            working_data, feature_schema, needed_columns=needed_columns
+                        )
+                    except Exception:
+                        continue
+                    result_row = {"entity_id": entity_id}
+                    for k, v in decoded_features.items():
+                        if k in _reserved_columns:
+                            continue
+                        if v is None:
+                            result_row[k] = None
+                        elif isinstance(v, (list, tuple)):
+                            result_row[k] = str(v)
+                        elif isinstance(v, bytes):
+                            result_row[k] = v.hex()
+                        else:
+                            result_row[k] = str(v)
+                    for col in row_metadata_columns:
+                        if col in df_columns:
+                            result_row[col] = _safe_get(row, col)
+                    if parent_entity_val is not None:
+                        result_row["parent_entity"] = parent_entity_val
+                    for col in all_columns_ordered:
+                        if col not in result_row:
+                            result_row[col] = None
+                    out_rows.append(result_row)
+            if out_rows:
+                out_pdf = pd.DataFrame(out_rows, columns=all_columns_ordered)
+                yield out_pdf
+
+    n_partitions = num_partitions if num_partitions is not None else 10000
+    df_repart = df_projected.repartition(n_partitions)
+
+    batch_limit = max_records_per_batch if max_records_per_batch is not None else 50
+    prev_max_records = spark.conf.get("spark.sql.execution.arrow.maxRecordsPerBatch")
+    spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", str(batch_limit))
+    try:
+        result_df = df_repart.mapInPandas(_decode_batch, full_schema)
+    finally:
+        spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", prev_max_records or "10000")
+
+    # Reorder columns: entity_id first, then metadata, then features
+    result_columns = result_df.columns
+    metadata_cols = ["entity_id"]
+    for col in row_metadata_columns:
         if col in result_columns:
             metadata_cols.append(col)
     feature_cols = [c for c in result_columns if c not in metadata_cols]

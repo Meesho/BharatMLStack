@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "inference-logging-client"
-version = "0.3.1"
+version = "0.4.0"
 description = "Decode MPLog feature logs from proto, arrow, or parquet format"
 readme = "readme.md"
 requires-python = ">=3.8"
