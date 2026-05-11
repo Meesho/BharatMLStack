@@ -23,6 +23,14 @@ _schema_cache: OrderedDict[tuple[str, int], list[FeatureInfo]] = OrderedDict()
 _schema_cache_lock = threading.Lock()
 _SCHEMA_CACHE_MAX_SIZE = 100  # Maximum number of cached schemas
 
+# Thread-safe LRU negative cache for schemas. Only HTTP 400 responses are
+# negative-cached; transient failures (5xx, network errors, 401/403/429, etc.)
+# are intentionally excluded so they can be retried on subsequent calls.
+# Values are the error message at the time of the 400, returned on cache hit.
+_schema_neg_cache: OrderedDict[tuple[str, int], str] = OrderedDict()
+_schema_neg_cache_lock = threading.Lock()
+_SCHEMA_NEG_CACHE_MAX_SIZE = 100
+
 # Retry configuration
 _MAX_RETRIES = 3
 _RETRY_BACKOFF_BASE = 0.5  # seconds
@@ -58,9 +66,13 @@ def _fetch_schema_with_retry(url: str, max_retries: int = _MAX_RETRIES) -> dict:
             error_body = e.read().decode("utf-8") if e.fp else str(e)
             # Don't retry on client errors (4xx)
             if 400 <= e.code < 500:
-                raise SchemaFetchError(f"HTTP Error {e.code} from inference service: {error_body}")
+                raise SchemaFetchError(
+                    f"HTTP Error {e.code} from inference service: {error_body}",
+                    status_code=e.code,
+                )
             last_exception = SchemaFetchError(
-                f"HTTP Error {e.code} from inference service: {error_body}"
+                f"HTTP Error {e.code} from inference service: {error_body}",
+                status_code=e.code,
             )
         except urllib.error.URLError as e:
             last_exception = SchemaFetchError(
@@ -125,12 +137,27 @@ def get_feature_schema(
             _schema_cache.move_to_end(cache_key)
             return _schema_cache[cache_key]
 
+    # Thread-safe negative cache lookup (HTTP 400 only). Replay the error
+    # without hitting the network. Same LRU shape as the positive cache.
+    with _schema_neg_cache_lock:
+        if cache_key in _schema_neg_cache:
+            _schema_neg_cache.move_to_end(cache_key)
+            raise SchemaFetchError(_schema_neg_cache[cache_key], status_code=400)
+
     base_url = f"{inference_host}{api_path}"
     params = urllib.parse.urlencode({"model_config_id": model_config_id, "version": str(version)})
     url = f"{base_url}?{params}"
 
-    # Fetch with retry
-    data = _fetch_schema_with_retry(url)
+    # Fetch with retry. Negative-cache HTTP 400 only.
+    try:
+        data = _fetch_schema_with_retry(url)
+    except SchemaFetchError as e:
+        if getattr(e, "status_code", None) == 400:
+            with _schema_neg_cache_lock:
+                while len(_schema_neg_cache) >= _SCHEMA_NEG_CACHE_MAX_SIZE:
+                    _schema_neg_cache.popitem(last=False)
+                _schema_neg_cache[cache_key] = str(e)
+        raise
 
     features = []
     for idx, component in enumerate(data.get("data", [])):
@@ -158,9 +185,15 @@ def get_feature_schema(
 
 
 def clear_schema_cache() -> None:
-    """Clear the schema cache. Useful for testing or when schemas have changed."""
+    """Clear both positive and negative schema caches.
+
+    Useful for testing, or when schemas have changed on the inference service
+    and the negative cache should be reset to allow a fresh fetch.
+    """
     with _schema_cache_lock:
         _schema_cache.clear()
+    with _schema_neg_cache_lock:
+        _schema_neg_cache.clear()
 
 
 def parse_mplog_protobuf(data: bytes) -> DecodedMPLog:
