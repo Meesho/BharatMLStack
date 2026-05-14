@@ -557,10 +557,56 @@ def decode_mplog_dataframe(
     return result_df.select(column_order)
 
 
+def _normalize_schema(schema) -> "list[FeatureInfo]":
+    """Accept either a list[FeatureInfo], a list of raw dicts, or the
+    inference-service JSON shape ``{"data": [...]}`` and return list[FeatureInfo].
+
+    Raw dict items must carry ``feature_name`` and ``feature_type`` keys
+    (matching the inference service response). Order is preserved and used
+    to assign the ``index`` of each FeatureInfo, which is the proto field
+    position used by the decoder.
+    """
+    if schema is None:
+        raise ValueError("schema must not be None")
+
+    # Unwrap {"data": [...]} JSON shape
+    if isinstance(schema, dict):
+        if "data" not in schema:
+            raise ValueError("schema dict must contain a 'data' key")
+        items = schema["data"]
+    else:
+        items = schema
+
+    if not isinstance(items, list) or not items:
+        raise ValueError("schema must be a non-empty list (or dict with non-empty 'data')")
+
+    # Already FeatureInfo objects
+    if all(isinstance(it, FeatureInfo) for it in items):
+        return items
+
+    normalized: list[FeatureInfo] = []
+    for idx, item in enumerate(items):
+        if isinstance(item, FeatureInfo):
+            normalized.append(item)
+            continue
+        if not isinstance(item, dict):
+            raise ValueError(
+                f"schema item at index {idx} must be FeatureInfo or dict, got {type(item).__name__}"
+            )
+        name = item.get("feature_name") or item.get("name")
+        feature_type = item.get("feature_type")
+        if not name or not feature_type:
+            raise ValueError(
+                f"schema item at index {idx} missing 'feature_name'/'name' or 'feature_type'"
+            )
+        normalized.append(FeatureInfo(name=name, feature_type=feature_type, index=idx))
+    return normalized
+
+
 def decode_mplog_proto_dataframe(
     df: "SparkDataFrame",
     spark: "SparkSession",
-    schema: list,
+    schema,
     decompress: bool = True,
     features_column: str = "features",
     mp_config_id_column: str = "mp_config_id",
@@ -585,7 +631,11 @@ def decode_mplog_proto_dataframe(
     Args:
         df: Input Spark DataFrame.
         spark: The SparkSession to use for creating the result DataFrame.
-        schema: Pre-fetched schema (list of FeatureInfo) applied to all rows.
+        schema: Schema applied to all rows. Accepted shapes:
+            - list[FeatureInfo]
+            - list[dict] with keys 'feature_name' (or 'name') and 'feature_type'
+            - dict {"data": [...]} matching the inference service JSON response
+            Order is used to assign the proto field index; do not reorder.
         decompress: Whether to attempt zstd decompression on each encoded payload.
         features_column: Name of the column containing encoded features (default: "features").
         mp_config_id_column: Name of the column containing model proxy config ID
@@ -613,8 +663,7 @@ def decode_mplog_proto_dataframe(
     import base64
     import json
 
-    if not isinstance(schema, list) or not schema:
-        raise ValueError("schema must be a non-empty list of FeatureInfo")
+    schema = _normalize_schema(schema)
 
     # Check if DataFrame is empty (avoid full count: use limit(1))
     if df.limit(1).count() == 0:
