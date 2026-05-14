@@ -57,6 +57,7 @@ __all__ = [
     "decode_mplog",
     "decode_mplog_dataframe",
     "decode_mplog_proto_dataframe",
+    "decode_mplog_proto_csv",
     "get_mplog_metadata",
     "get_feature_schema",
     "clear_schema_cache",
@@ -850,3 +851,178 @@ def decode_mplog_proto_dataframe(
     feature_cols = [c for c in result_columns if c not in metadata_cols]
     column_order = metadata_cols + feature_cols
     return result_df.select(column_order)
+
+
+def decode_mplog_proto_csv(
+    input_csv: str,
+    output_csv: str,
+    schema,
+    decompress: bool = True,
+    features_column: str = "features",
+    mp_config_id_column: str = "mp_config_id",
+    needed_columns: Optional[Collection[str]] = None,
+) -> int:
+    """
+    Decode an MPLog CSV file directly to another CSV, without Spark.
+
+    Reads the input CSV row-by-row, decodes each row's encoded entities using
+    the caller-supplied PROTO schema, and writes one decoded row per entity to
+    output_csv. Pure-Python; uses only csv/json/base64 + decode_proto_features.
+
+    Expected input columns: features, mp_config_id, optionally entities,
+    parent_entity, and the row-metadata columns (prism_ingested_at, etc).
+
+    Args:
+        input_csv: Path to the input CSV.
+        output_csv: Path where the decoded CSV will be written.
+        schema: Same shapes accepted by decode_mplog_proto_dataframe:
+            list[FeatureInfo], list[dict], or {"data": [...]}.
+        decompress: Attempt zstd decompression per encoded payload.
+        features_column: Column with the encoded features JSON.
+        mp_config_id_column: Pass-through column name.
+        needed_columns: Optional set of feature names to keep.
+
+    Returns:
+        Number of decoded rows written.
+    """
+    import base64
+    import csv as _csv
+    import json
+    import sys as _sys
+
+    # MPLog features cells can be multi-MB; lift the csv field-size cap.
+    try:
+        _csv.field_size_limit(_sys.maxsize)
+    except OverflowError:
+        _csv.field_size_limit(2**31 - 1)
+
+    schema_list = _normalize_schema(schema)
+    needed_set = set(needed_columns) if needed_columns is not None else None
+
+    feature_names = [f.name for f in schema_list]
+    if needed_set is not None:
+        feature_names = [n for n in feature_names if n in needed_set]
+
+    row_metadata_columns = [
+        "prism_ingested_at",
+        "prism_extracted_at",
+        "created_at",
+        "mp_config_id",
+        "parent_entity",
+        "tracking_id",
+        "user_id",
+        "year",
+        "month",
+        "day",
+        "hour",
+    ]
+
+    with open(input_csv, "r", newline="", encoding="utf-8") as f_in:
+        reader = _csv.DictReader(f_in)
+        if reader.fieldnames is None:
+            raise ValueError(f"Input CSV {input_csv} has no header row")
+        input_columns = set(reader.fieldnames)
+
+        if features_column not in input_columns:
+            raise ValueError(f"Missing required column: {features_column}")
+
+        present_metadata_cols = [c for c in row_metadata_columns if c in input_columns]
+        out_columns = ["entity_id"] + present_metadata_cols + sorted(feature_names)
+
+        n_written = 0
+        with open(output_csv, "w", newline="", encoding="utf-8") as f_out:
+            writer = _csv.DictWriter(f_out, fieldnames=out_columns, extrasaction="ignore")
+            writer.writeheader()
+
+            for row in reader:
+                features_data = row.get(features_column)
+                if not features_data:
+                    continue
+                try:
+                    features_list = json.loads(features_data)
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    continue
+                if not isinstance(features_list, list):
+                    continue
+
+                entities_val = None
+                if "entities" in input_columns:
+                    entities_raw = row.get("entities")
+                    if entities_raw:
+                        try:
+                            parsed = json.loads(entities_raw)
+                            entities_val = parsed if isinstance(parsed, list) else [parsed]
+                        except (json.JSONDecodeError, ValueError):
+                            entities_val = [entities_raw]
+
+                parent_entity_val = None
+                if "parent_entity" in input_columns:
+                    parent_raw = row.get("parent_entity")
+                    if parent_raw:
+                        try:
+                            parsed = json.loads(parent_raw)
+                            if isinstance(parsed, list):
+                                parent_entity_val = (
+                                    parsed[0] if len(parsed) == 1
+                                    else str(parsed) if len(parsed) > 1
+                                    else None
+                                )
+                            else:
+                                parent_entity_val = parsed
+                        except (json.JSONDecodeError, ValueError):
+                            parent_entity_val = parent_raw
+
+                base_metadata = {c: row.get(c) for c in present_metadata_cols}
+
+                for i, feature_item in enumerate(features_list):
+                    if not isinstance(feature_item, dict):
+                        continue
+                    encoded_b64 = feature_item.get("encoded_features", "")
+                    if not encoded_b64:
+                        continue
+                    try:
+                        encoded_bytes = base64.b64decode(encoded_b64)
+                    except (ValueError, TypeError):
+                        continue
+                    if not encoded_bytes:
+                        continue
+
+                    working_data = encoded_bytes
+                    if decompress:
+                        try:
+                            working_data = _decompress_zstd(encoded_bytes)
+                        except Exception:
+                            continue
+
+                    try:
+                        decoded = decode_proto_features(
+                            working_data, schema_list, needed_columns=needed_set
+                        )
+                    except Exception:
+                        continue
+
+                    entity_id = (
+                        str(entities_val[i])
+                        if entities_val and i < len(entities_val)
+                        else f"entity_{i}"
+                    )
+
+                    out_row = {"entity_id": entity_id}
+                    out_row.update(base_metadata)
+                    if parent_entity_val is not None and "parent_entity" in present_metadata_cols:
+                        out_row["parent_entity"] = parent_entity_val
+                    for k, v in decoded.items():
+                        if needed_set is not None and k not in needed_set:
+                            continue
+                        if v is None:
+                            out_row[k] = ""
+                        elif isinstance(v, (list, tuple)):
+                            out_row[k] = str(v)
+                        elif isinstance(v, bytes):
+                            out_row[k] = v.hex()
+                        else:
+                            out_row[k] = v
+                    writer.writerow(out_row)
+                    n_written += 1
+
+    return n_written
