@@ -1,107 +1,33 @@
 """
-Standalone script that decodes ONE inference-log row using
-`decode_mplog_proto_dataframe` with the full 256-feature schema.
+Standalone script that decodes inference-log rows from a local CSV using
+`decode_mplog_proto_dataframe` with the full 256-feature schema for
+`clp-organic-l2-ranker-v1-0` (version=1, PROTO format).
 
-Run on Databricks (or any pyspark environment with the package installed):
+Run locally:
 
     pip install inference-logging-client==0.3.4 zstandard pyspark
-    python decode_single_row.py
+    python decode_single_row.py [path/to/logs.csv]
 
-The script:
-  1. Builds a one-row Spark DataFrame with the exact `entities`, `features`,
-     and `metadata` strings provided.
-  2. Calls `decode_mplog_proto_dataframe(df, spark, schema=SCHEMA)`.
-  3. Prints the decoded DataFrame (one row per entity) and writes parquet
-     to `/tmp/decoded_single_row/`.
+If no path is given, defaults to /Users/dheerajchouhan/Downloads/test_new.csv.
 
-If the `features` JSON or `entities` JSON is very long, paste the full
-strings into the two placeholders below (FEATURES_JSON and ENTITIES_JSON).
+Output:
+  - prints schema, row counts, and a sample of score columns
+  - writes parquet to /tmp/decoded_single_row/
 """
 
-from pyspark.sql import Row, SparkSession
+import sys
+
+from pyspark.sql import SparkSession
+from pyspark.sql.types import LongType, StringType, StructField, StructType
 
 from inference_logging_client import decode_mplog_proto_dataframe
 
 
 # ---------------------------------------------------------------------------
-# 1. Row data
+# 1. Input CSV path
 # ---------------------------------------------------------------------------
 
-PRISM_INGESTED_AT = 1778093134932
-PRISM_EXTRACTED_AT = 1778093172000
-CREATED_AT = "2026-05-07T00:15:34.000+05:30"
-
-# Fill in the actual mp_config_id for this row (pass-through column).
-MP_CONFIG_ID = "clp-organic-l2-ranker-v1-0"
-
-YEAR, MONTH, DAY, HOUR = "2026", "05", "07", "00"
-
-# Metadata byte = 0x04 -> compression=False, version=1, format=PROTO
-METADATA_JSON = '["BA=="]'
-
-# Paste the full entities JSON-array string from the row here (300 entity ids).
-ENTITIES_JSON = (
-    '["129858133","172683451","40159726","163432064","157307877","127153263",'
-    '"150494430","91634625","105262423","143362971","152885639","141723254",'
-    '"67612028","90190259","90799634","37254681","69442240","12704667",'
-    '"182883452","101545685","92571270","109083227","122270821","189312092",'
-    '"147408625","88849258","105146149","157307878","178517767","68884198",'
-    '"124324363","183029599","101509512","187296531","185250355","105290811",'
-    '"94130043","110902288","162834270","46188585","193161","187058552",'
-    '"143662941","182577489","178489609","78387570","165354806","23923038",'
-    '"124383285","102178839","187855725","67999990","112389083","53622608",'
-    '"157307876","40322544","193681","87261452","91976737","58163190",'
-    '"182561787","159505400","174790442","162708871","125787271","189130322",'
-    '"133152244","154338081","78656868","18307540","185845733","165178985",'
-    '"105045470","115278211","168328734","127711153","47093013","173028789",'
-    '"152891706","150483687","119108032","148530689","137907125","189735602",'
-    '"140606894","55894553","113416713","134191955","137961683","108117958",'
-    '"126322517","81413078","88758009","76830400","188805968","162409042",'
-    '"101610920","129403638","14712806","114253030","188269192","15729965",'
-    '"77084232","123680130","105910520","133951061","116614716","182882195",'
-    '"81376971","150810651","148564784","138414869","11645744","32447000",'
-    '"114509225","110751353","60133034","95408000","100316387","125457803",'
-    '"105186243","138102163","87461454","110808182","187527955","174901426",'
-    '"112985436","158026050","176144041","125544584","90201083","9105405",'
-    '"57338961","23055087","90191915","178738841","125250712","151895413",'
-    '"112335263","163340375","161219586","182447297","124901483","182847433",'
-    '"149289846","108108708","96851092","116066124","148109044","92858017",'
-    '"81310699","80426512","123293294","105146150","130108227","166968286",'
-    '"189302536","120632248","181328675","162162514","55835366","120336101",'
-    '"164118551","169249718","96818909","119434054","113454362","156102338",'
-    '"124943412","184408554","99651509","120571620","124904974","161748042",'
-    '"92858620","40159729","14770797","136077639","67658808","90035215",'
-    '"72921911","118273836","133708453","137496876","106377352","81906055",'
-    '"158064774","22371023","131621161","132315814","160010257","9640992",'
-    '"75121762","55205272","105838887","127970505","96546979","184455344",'
-    '"178084048","42691306","117911911","154907429","101610459","120345620",'
-    '"187298515","90519128","182727359","101497968","13157465","80803175",'
-    '"188408895","67656425","91403106","155610407","142739602","185836448",'
-    '"159831050","138611069","103394964","134702173","144832430","645632",'
-    '"166130025","174766204","123236695","18745107","62959962","127979490",'
-    '"101508311","103660271","177931974","67610484","181645149","137370294",'
-    '"40159730","129572066","127117824","127212003","43596020","70468712",'
-    '"129395854","78664565","161719437","134874694","180101337","113065467",'
-    '"117541611","67655129","99498602","536757","45502433","114285885",'
-    '"77234578","40964091","183387920","90519125","73522956","139548067",'
-    '"115084443","108526129","40322281","172987169","138291358","125458478",'
-    '"129140995","175694187","40988876","187451321","41704353","90930750",'
-    '"117304498","112026524","120715082","181587439","129737618","120534472",'
-    '"123654440","156204061","95892707","186627409","89870249","156174988",'
-    '"158606418","73774749","184531000","41005967","151464858","123351724",'
-    '"129180516","134941738","50414200","12805166","156839738","151884108",'
-    '"92552214","118409718","49832509","161418189","108108982","97081458"]'
-)
-
-# Paste the full features JSON-array string here. This is the cell content
-# from the `features` column, exactly as stored. Truncated here for brevity;
-# replace with the full value when running.
-FEATURES_JSON = (
-    '[{"encoded_features":"<PASTE_FULL_BASE64_FOR_ENTITY_0_HERE>"},'
-    ' {"encoded_features":"<PASTE_FULL_BASE64_FOR_ENTITY_1_HERE>"},'
-    ' ... 300 entries total ...'
-    ']'
-)
+DEFAULT_CSV_PATH = "/Users/dheerajchouhan/Downloads/test_new.csv"
 
 
 # ---------------------------------------------------------------------------
@@ -437,36 +363,55 @@ SCHEMA = {
 
 
 # ---------------------------------------------------------------------------
-# 3. Build the DataFrame and decode
+# 3. Build the DataFrame from CSV and decode
 # ---------------------------------------------------------------------------
 
+CSV_SCHEMA = StructType([
+    StructField("prism_ingested_at", LongType(), True),
+    StructField("prism_extracted_at", LongType(), True),
+    StructField("created_at", StringType(), True),
+    StructField("entities", StringType(), True),
+    StructField("features", StringType(), True),
+    StructField("metadata", StringType(), True),
+    StructField("mp_config_id", StringType(), True),
+    StructField("parent_entity", StringType(), True),
+    StructField("tracking_id", StringType(), True),
+    StructField("user_id", StringType(), True),
+    StructField("year", StringType(), True),
+    StructField("month", StringType(), True),
+    StructField("day", StringType(), True),
+    StructField("hour", StringType(), True),
+])
+
+
 def main():
+    csv_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_CSV_PATH
+
     spark = (
         SparkSession.builder
         .appName("decode_single_row")
+        .config("spark.sql.execution.arrow.pyspark.enabled", "true")
         .getOrCreate()
     )
 
-    row = Row(
-        prism_ingested_at=PRISM_INGESTED_AT,
-        prism_extracted_at=PRISM_EXTRACTED_AT,
-        created_at=CREATED_AT,
-        entities=ENTITIES_JSON,
-        features=FEATURES_JSON,
-        metadata=METADATA_JSON,
-        mp_config_id=MP_CONFIG_ID,
-        parent_entity=None,
-        tracking_id=None,
-        user_id=None,
-        year=YEAR,
-        month=MONTH,
-        day=DAY,
-        hour=HOUR,
+    # multiLine=true because the JSON cells contain embedded commas/quotes.
+    df = (
+        spark.read
+        .option("header", "true")
+        .option("multiLine", "true")
+        .option("escape", '"')
+        .schema(CSV_SCHEMA)
+        .csv(csv_path)
     )
-    df = spark.createDataFrame([row])
 
-    print(f"input rows: {df.count()}")
+    n_in = df.count()
+    print(f"input csv: {csv_path}")
+    print(f"input rows: {n_in}")
     print(f"schema features: {len(SCHEMA['data'])}")
+
+    if n_in == 0:
+        print("no rows in csv, exiting")
+        return
 
     decoded = decode_mplog_proto_dataframe(df, spark, schema=SCHEMA)
 
@@ -474,7 +419,6 @@ def main():
     decoded.printSchema()
     print(f"decoded rows: {decoded.count()}")
 
-    # Quick look at the most interesting score columns
     quick_cols = [
         c for c in [
             "entity_id",
