@@ -48,7 +48,7 @@ from .io import clear_schema_cache, get_feature_schema, get_mplog_metadata, pars
 from .types import FORMAT_TYPE_MAP, DecodedMPLog, FeatureInfo, Format
 from .utils import format_dataframe_floats, get_format_name, unpack_metadata_byte
 
-__version__ = "0.3.4"
+__version__ = "0.3.5"
 
 # Maximum supported schema version (4 bits = 0-15)
 _MAX_SCHEMA_VERSION = 15
@@ -724,112 +724,153 @@ def decode_mplog_proto_dataframe(
     # Capture for closure
     feature_schema = schema
 
-    def _safe_get(row, col, default=None):
-        try:
-            val = row[col] if col in row.index else getattr(row, col, default)
-            if hasattr(val, "isna") and val.isna():
-                return default
-            return val
-        except (KeyError, AttributeError):
-            return default
+    # --- Hot-path precomputation (runs once per call, used by every worker
+    # invocation of _decode_batch). Avoids redoing this work per row/entity. ---
+    has_entities_col = "entities" in df_columns
+    has_parent_entity_col = "parent_entity" in df_columns
+    metadata_cols_present = [c for c in row_metadata_columns if c in df_columns]
+    # Pre-built template dict avoids the "fill missing columns with None"
+    # loop per entity. We copy it per output row and overwrite the cells
+    # we actually have values for.
+    row_template = {c: None for c in all_columns_ordered}
 
     def _decode_batch(iterator):
+        # Imports inside the worker function — pyspark needs the function to
+        # be self-contained for cloudpickle, and free-variable callable refs
+        # tend to break pickling on some pyspark builds.
+        import base64 as _base64
+        import json as _json
         import pandas as pd
+
+        _b64decode = _base64.b64decode
+        _json_loads = _json.loads
+        _decode_proto = decode_proto_features
+        _decompress = _decompress_zstd
+
         for pdf in iterator:
+            # Single conversion to list-of-dicts is dramatically faster than
+            # pandas.iterrows() for wide+long DataFrames. iterrows materializes
+            # a Series per row with per-cell type lookups; to_dict("records")
+            # walks the underlying numpy arrays once.
+            records = pdf.to_dict(orient="records")
             out_rows = []
-            for idx, row in pdf.iterrows():
-                features_data = _safe_get(row, features_column)
-                if features_data is None:
+            out_rows_append = out_rows.append  # local-bind for speed
+
+            for row in records:
+                features_data = row.get(features_column)
+                # `pandas.NA` / `nan` slip through .get() as truthy-but-broken
+                # objects. Cheap str check covers the common JSON-cell case.
+                if not features_data or not isinstance(features_data, str):
                     continue
-                if isinstance(features_data, str):
-                    try:
-                        features_list = json.loads(features_data)
-                    except (json.JSONDecodeError, ValueError, TypeError):
-                        continue
-                else:
-                    features_list = features_data
+                try:
+                    features_list = _json_loads(features_data)
+                except (ValueError, TypeError):
+                    continue
                 if not isinstance(features_list, list):
                     continue
+
                 entities_val = None
-                if "entities" in df_columns:
-                    entities_raw = _safe_get(row, "entities")
-                    if entities_raw is not None:
+                if has_entities_col:
+                    entities_raw = row.get("entities")
+                    if entities_raw:
                         if isinstance(entities_raw, str):
                             try:
-                                entities_val = json.loads(entities_raw)
-                            except (json.JSONDecodeError, ValueError):
+                                parsed = _json_loads(entities_raw)
+                                entities_val = parsed if isinstance(parsed, list) else [entities_raw]
+                            except (ValueError, TypeError):
                                 entities_val = [entities_raw]
                         elif isinstance(entities_raw, list):
                             entities_val = entities_raw
                         else:
                             entities_val = [entities_raw]
+
                 parent_entity_val = None
-                if "parent_entity" in df_columns:
-                    parent_val = _safe_get(row, "parent_entity")
-                    if parent_val is not None:
+                if has_parent_entity_col:
+                    parent_val = row.get("parent_entity")
+                    if parent_val:
                         if isinstance(parent_val, str):
                             try:
-                                parent_val = json.loads(parent_val)
-                            except (json.JSONDecodeError, ValueError):
+                                parent_val = _json_loads(parent_val)
+                            except (ValueError, TypeError):
                                 parent_val = [parent_val]
                         if isinstance(parent_val, list):
-                            parent_entity_val = (
-                                parent_val[0] if len(parent_val) == 1
-                                else str(parent_val) if len(parent_val) > 1
-                                else None
-                            )
+                            n_parents = len(parent_val)
+                            if n_parents == 1:
+                                parent_entity_val = parent_val[0]
+                            elif n_parents > 1:
+                                parent_entity_val = str(parent_val)
                         else:
                             parent_entity_val = parent_val
+
+                # Precompute the row-metadata snapshot once per input row —
+                # every entity expansion below shares the same values.
+                base_metadata = {c: row.get(c) for c in metadata_cols_present}
+                if parent_entity_val is not None and "parent_entity" in metadata_cols_present:
+                    base_metadata["parent_entity"] = parent_entity_val
+
+                entities_len = len(entities_val) if entities_val else 0
+
                 for i, feature_item in enumerate(features_list):
                     if not isinstance(feature_item, dict):
                         continue
-                    entity_id = (
-                        str(entities_val[i])
-                        if entities_val and i < len(entities_val)
-                        else f"entity_{i}"
-                    )
-                    encoded_features_b64 = feature_item.get("encoded_features", "")
+                    encoded_features_b64 = feature_item.get("encoded_features")
                     if not encoded_features_b64:
                         continue
                     try:
-                        encoded_bytes = base64.b64decode(encoded_features_b64)
+                        encoded_bytes = _b64decode(encoded_features_b64)
                     except (ValueError, TypeError):
                         continue
-                    if len(encoded_bytes) == 0:
+                    if not encoded_bytes:
                         continue
-                    working_data = encoded_bytes
+
                     if decompress:
-                        working_data = _decompress_zstd(encoded_bytes)
+                        try:
+                            working_data = _decompress(encoded_bytes)
+                        except Exception:
+                            continue
+                    else:
+                        working_data = encoded_bytes
+
                     try:
-                        decoded_features = decode_proto_features(
+                        decoded_features = _decode_proto(
                             working_data, feature_schema, needed_columns=needed_columns
                         )
                     except Exception:
                         continue
-                    result_row = {"entity_id": entity_id}
+
+                    entity_id = (
+                        str(entities_val[i])
+                        if i < entities_len
+                        else f"entity_{i}"
+                    )
+
+                    # Copy the prebuilt template instead of building a fresh
+                    # dict and then filling all 322 missing keys.
+                    result_row = row_template.copy()
+                    result_row["entity_id"] = entity_id
+                    if base_metadata:
+                        result_row.update(base_metadata)
+
+                    # Stringify decoded values for output (output schema is
+                    # all StringType for feature cols). Skip reserved cols.
                     for k, v in decoded_features.items():
                         if k in _reserved_columns:
                             continue
                         if v is None:
                             result_row[k] = None
+                        elif type(v) is str:
+                            result_row[k] = v
                         elif isinstance(v, (list, tuple)):
                             result_row[k] = str(v)
                         elif isinstance(v, bytes):
                             result_row[k] = v.hex()
                         else:
                             result_row[k] = str(v)
-                    for col in row_metadata_columns:
-                        if col in df_columns:
-                            result_row[col] = _safe_get(row, col)
-                    if parent_entity_val is not None:
-                        result_row["parent_entity"] = parent_entity_val
-                    for col in all_columns_ordered:
-                        if col not in result_row:
-                            result_row[col] = None
-                    out_rows.append(result_row)
+
+                    out_rows_append(result_row)
+
             if out_rows:
-                out_pdf = pd.DataFrame(out_rows, columns=all_columns_ordered)
-                yield out_pdf
+                yield pd.DataFrame(out_rows, columns=all_columns_ordered)
 
     n_partitions = num_partitions if num_partitions is not None else 10000
     df_repart = df_projected.repartition(n_partitions)
