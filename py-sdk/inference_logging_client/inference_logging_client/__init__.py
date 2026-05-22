@@ -237,6 +237,11 @@ def _extract_metadata_byte(metadata_data, json_module, base64_module) -> int:
             return 0
     except (TypeError, ValueError):
         pass
+    if isinstance(metadata_data, (bytes, bytearray)):
+        try:
+            metadata_data = metadata_data.decode("utf-8")
+        except (UnicodeDecodeError, ValueError):
+            return 0
     if isinstance(metadata_data, str):
         try:
             parsed = json_module.loads(metadata_data)
@@ -425,7 +430,12 @@ def decode_mplog_dataframe(
                         feature_schema = get_feature_schema(mp_config_id, version, inference_host)
                     except Exception:
                         continue
-                if isinstance(features_data, str):
+                if isinstance(features_data, (bytes, bytearray)):
+                    try:
+                        features_list = json.loads(features_data.decode("utf-8"))
+                    except (json.JSONDecodeError, ValueError, TypeError, UnicodeDecodeError):
+                        continue
+                elif isinstance(features_data, str):
                     try:
                         features_list = json.loads(features_data)
                     except (json.JSONDecodeError, ValueError, TypeError):
@@ -521,6 +531,14 @@ def decode_mplog_dataframe(
             if out_rows:
                 out_pdf = pd.DataFrame(out_rows, columns=all_columns_ordered)
                 yield out_pdf
+
+    # Cast binary-payload columns to BinaryType so Arrow serializes them as raw
+    # bytes instead of attempting UTF-8 string decoding (which fails on binary payloads)
+    from pyspark.sql.types import BinaryType as _BinaryType
+    from pyspark.sql import functions as F
+    for _col_name in (features_column, metadata_column):
+        if not isinstance(df.schema[_col_name].dataType, _BinaryType):
+            df = df.withColumn(_col_name, F.col(_col_name).cast(_BinaryType()))
 
     n_partitions = num_partitions if num_partitions is not None else 10000
     df_repart = df.repartition(n_partitions)
