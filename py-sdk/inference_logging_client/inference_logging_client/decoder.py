@@ -2,6 +2,7 @@
 
 import struct
 import json
+import base64
 from typing import Any
 
 from .utils import (
@@ -159,6 +160,23 @@ def decode_ieee754_fp16(value_bytes: bytes) -> float:
         return format_float(result)
 
 
+def decode_bfloat16(value_bytes: bytes) -> float:
+    """
+    Decode a Go-encoded FP16 *scalar* to float.
+
+    The Go encoder writes FP16 scalars as the top 16 bits of a float32
+    (bfloat16): uint16(math.Float32bits(v) >> 16), little-endian. This is NOT
+    IEEE-754 half precision. To invert, place these 2 bytes as the high half of
+    a little-endian float32 (low half = 0) and read it back as float32.
+
+    NOTE: binary FP16 *vector* elements coming from the feature store are true
+    IEEE-754 half precision and must still be decoded with decode_ieee754_fp16.
+    """
+    if len(value_bytes) != 2:
+        return 0.0
+    return format_float(struct.unpack("<f", b"\x00\x00" + value_bytes)[0])
+
+
 def decode_scalar_value(value_bytes: bytes, feature_type: str) -> Any:
     """Decode a scalar value from bytes based on feature type."""
     normalized = normalize_type(feature_type)
@@ -186,9 +204,10 @@ def decode_scalar_value(value_bytes: bytes, feature_type: str) -> Any:
         elif normalized in {"FP8E5M2", "FP8E4M3"}:
             return value_bytes[0]  # Return raw byte
         elif normalized in {"FP16", "FLOAT16", "F16"}:
-            # IEEE 754 half-precision (FP16)
+            # Go encodes FP16 scalars as bfloat16 (top 16 bits of float32),
+            # not IEEE-754 half precision. See decode_bfloat16.
             if len(value_bytes) == 2:
-                return decode_ieee754_fp16(value_bytes)
+                return decode_bfloat16(value_bytes)
             return None
         elif normalized in {"FP32", "FLOAT32", "F32", "FLOAT"}:
             result = struct.unpack("<f", value_bytes)[0]
@@ -346,6 +365,19 @@ def decode_vector_or_string(value_bytes: bytes, feature_type: str) -> Any:
         except UnicodeDecodeError:
             # Fallback to hex if not valid UTF-8
             return actual_bytes.hex()
+
+    # UINT8 vector: Go's json.Marshal([]uint8) emits a base64 JSON *string*
+    # (e.g. "AQI="), not a JSON array. Byte-sourced uint8 vectors instead arrive
+    # as raw bytes. Distinguish by the leading quote of the JSON string form.
+    if normalized == "UINT8VECTOR":
+        if len(value_bytes) == 0:
+            return []
+        if value_bytes[0] == 0x22:  # '"' => base64 JSON string form
+            try:
+                return list(base64.b64decode(json.loads(value_bytes.decode("utf-8"))))
+            except Exception:
+                pass
+        return list(value_bytes)  # raw binary uint8 elements
 
     # Check if this is a vector type
     is_vector = "VECTOR" in normalized
