@@ -68,3 +68,36 @@ def test_go_shortest_float_formatting():
     }
     for v, exp in cases64.items():
         assert go_format_float(float(v), 64) == exp, (v, go_format_float(float(v), 64), exp)
+
+
+COVERAGE_FIXTURES = [
+    ('DataTypeFP16', '003e', '1.5'),
+    ('DataTypeFP16', '662e', '0.099975586'),
+    ('DataTypeFP16', '00c1', '-2.5'),
+    ('DataTypeFP16', '0000', '0'),
+    ('DataTypeFP16', 'ef7b', '64992'),
+    ('DataTypeFP32', '17b7d1b8', '-0.0001'),
+    ('DataTypeFP32', '6420f147', '123456.78'),
+    ('DataTypeFP64', '48afbc9af2d77a3e', '1e-07'),
+    ('DataTypeBoolVector', '01000101', 'true,false,true,true'),
+    ('DataTypeInt8Vector', '80007f', '-128,0,127'),
+    ('DataTypeInt16Vector', '00800000ff7f', '-32768,0,32767'),
+    ('DataTypeInt32Vector', 'ffffffff0000000040e20100', '-1,0,123456'),
+    ('DataTypeInt64Vector', '0000000000000080ffffffffffffff7f', '-9223372036854775808,9223372036854775807'),
+    ('DataTypeUint8Vector', '0001ff', '0,1,255'),
+    ('DataTypeUint16Vector', '0000ffff', '0,65535'),
+    ('DataTypeUint32Vector', '00000000ffffffff', '0,4294967295'),
+    ('DataTypeUint64Vector', '0000000000000000ffffffffffffffff', '0,18446744073709551615'),
+    ('DataTypeFP16Vector', '003e00c1662e0000', '1.5,-2.5,0.099975586,0'),
+    ('DataTypeFP32Vector', '0000c03f000000bf20bcbe4c95bfd63300000000', '1.5,-0.5,1e+08,1e-07,0'),
+    ('DataTypeFP64Vector', '9a9999999999f13f9a999999999901c048afbc9af2d77a3e', '1.1,-2.2,1e-07'),
+    ('DataTypeFP8E4M3Vector', '3cb830', '1.5,-1,0.5'),
+    ('DataTypeFP8E5M2Vector', '4038c4', '2,0.5,-4'),
+]
+
+
+def test_full_coverage_all_vector_and_fp16_types():
+    """Every vector element type + FS FP16 scalars, byte-path go-core binary."""
+    for dtype, hexb, expected in COVERAGE_FIXTURES:
+        got = bytes_to_string(bytes.fromhex(hexb), dtype)
+        assert got == expected, f"{dtype} {hexb}: got {got!r}, expected {expected!r}"
