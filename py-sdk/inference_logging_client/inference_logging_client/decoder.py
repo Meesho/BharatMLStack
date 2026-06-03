@@ -13,6 +13,7 @@ from .utils import (
     SCALAR_TYPE_SIZES,
     SIZED_TYPES,
 )
+from .go_datatypeconverter import bytes_to_string, go_format_float
 
 
 class ByteReader:
@@ -479,3 +480,50 @@ def decode_feature_value(value_bytes: bytes, feature_type: str) -> Any:
         return None
 
     return decode_scalar_value(value_bytes, feature_type)
+
+
+def _go_render(val: Any, feature_type: str) -> str:
+    """Render a Python value into go-core's canonical string form."""
+    norm = normalize_type(feature_type)
+    bits = 64 if ("FP64" in norm or "FLOAT64" in norm) else 32
+
+    def one(x: Any) -> str:
+        if isinstance(x, bool):
+            return "true" if x else "false"
+        if isinstance(x, float):
+            return go_format_float(x, bits)
+        if isinstance(x, int):
+            return str(x)
+        return str(x)
+
+    if val is None:
+        return ""
+    if isinstance(val, list):
+        return ",".join(one(x) for x in val)
+    return one(val)
+
+
+def decode_feature_to_go_string(value_bytes: bytes, feature_type: str) -> str:
+    """Decode a feature's bytes to the exact string go-core BytesToString emits.
+
+    Byte-for-byte Go parity for go-core/binary (byte-column / feature-store)
+    values. String-path values produced by model-proxy ConvertStringToType
+    (JSON vectors, base64 uint8 vectors) are detected by their leading byte and
+    reformatted into the same Go-canonical string.
+
+    Note: an FP16 *scalar* on the wire is 2 indistinguishable bytes; this treats
+    it as canonical IEEE-754 half (go-core). String-path bfloat16 FP16 scalars
+    require the encoder to emit canonical IEEE-754 to decode exactly.
+    """
+    if value_bytes is None or len(value_bytes) == 0:
+        return ""
+    head = value_bytes[:1]
+    norm = normalize_type(feature_type)
+    # string-path: JSON array/object, or base64 JSON string for uint8 vectors
+    if head in (b"[", b"{") or (head == b'"' and norm == "UINT8VECTOR"):
+        return _go_render(decode_vector_or_string(value_bytes, feature_type), feature_type)
+    # byte-path: go-core canonical binary
+    try:
+        return bytes_to_string(value_bytes, feature_type)
+    except Exception:
+        return value_bytes.hex()

@@ -11,7 +11,13 @@ import pyarrow.parquet as pq
 
 from .types import Format, FeatureInfo
 from .io import parse_mplog_protobuf
-from .decoder import ByteReader, decode_scalar_value, decode_vector_or_string, decode_feature_value
+from .decoder import (
+    ByteReader,
+    decode_scalar_value,
+    decode_vector_or_string,
+    decode_feature_value,
+    decode_feature_to_go_string,
+)
 from .utils import is_sized_type, get_scalar_size
 from .exceptions import FormatError
 
@@ -174,6 +180,7 @@ def decode_proto_features(
     encoded_bytes: bytes,
     schema: list[FeatureInfo],
     needed_columns: Optional[Collection[str]] = None,
+    go_string: bool = False,
 ) -> dict[str, Any]:
     """
     Decode proto-encoded features for a single entity.
@@ -245,7 +252,11 @@ def decode_proto_features(
                     continue
 
                 value_bytes = reader.read(size)
-                result[feature.name] = decode_vector_or_string(value_bytes, feature.feature_type)
+                result[feature.name] = (
+                    decode_feature_to_go_string(value_bytes, feature.feature_type)
+                    if go_string
+                    else decode_vector_or_string(value_bytes, feature.feature_type)
+                )
             else:
                 size = get_scalar_size(feature.feature_type)
                 if size is None:
@@ -257,7 +268,11 @@ def decode_proto_features(
                     continue
 
                 value_bytes = reader.read(size)
-                result[feature.name] = decode_scalar_value(value_bytes, feature.feature_type)
+                result[feature.name] = (
+                    decode_feature_to_go_string(value_bytes, feature.feature_type)
+                    if go_string
+                    else decode_scalar_value(value_bytes, feature.feature_type)
+                )
         except Exception as e:
             result[feature.name] = f"<decode_error: {e}>"
 
@@ -268,6 +283,7 @@ def decode_proto_format(
     mplog_data: bytes,
     schema: list[FeatureInfo],
     needed_columns: Optional[Collection[str]] = None,
+    go_string: bool = False,
 ) -> tuple[list[str], list[dict[str, Any]]]:
     """
     Decode proto format MPLog.
@@ -281,7 +297,9 @@ def decode_proto_format(
 
     decoded_rows = []
     for encoded_bytes in encoded_features_list:
-        decoded = decode_proto_features(encoded_bytes, schema, needed_columns=needed_columns)
+        decoded = decode_proto_features(
+            encoded_bytes, schema, needed_columns=needed_columns, go_string=go_string
+        )
         decoded_rows.append(decoded)
 
     # Ensure entity_ids matches decoded_rows count
