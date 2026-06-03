@@ -1,0 +1,246 @@
+name: mNemo CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths: ['mnemo/**']
+  push:
+    branches: [main, develop]
+    paths: ['mnemo/**']
+
+jobs:
+  # ── Schema (Go) ─────────────────────────────────────────────────────────────
+  go-schema:
+    name: Schema (Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./mnemo/schema
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-mnemo-schema-${{ hashFiles('mnemo/schema/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-mnemo-schema-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests with race detector
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Enforce 100% coverage
+        run: |
+          TOTAL=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}')
+          echo "Coverage: $TOTAL"
+          [ "$TOTAL" = "100.0%" ] || { echo "ERROR: coverage is $TOTAL, want 100.0%"; exit 1; }
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Install and run staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          staticcheck ./...
+
+  # ── Control Plane (Go) ──────────────────────────────────────────────────────
+  go-controlplane:
+    name: Control Plane (Go)
+    runs-on: ubuntu-latest
+    if: hashFiles('mnemo/controlplane/go.mod') != ''
+    defaults:
+      run:
+        working-directory: ./mnemo/controlplane
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+          cache: false
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-mnemo-cp-${{ hashFiles('mnemo/controlplane/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-mnemo-cp-
+      - run: go mod download
+      - name: Run tests with race detector
+        run: go test -v -race -coverprofile=coverage.out ./...
+      - name: Enforce 100% coverage
+        run: |
+          TOTAL=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}')
+          echo "Coverage: $TOTAL"
+          [ "$TOTAL" = "100.0%" ] || { echo "ERROR: coverage is $TOTAL, want 100.0%"; exit 1; }
+      - run: go vet ./...
+      - run: go install honnef.co/go/tools/cmd/staticcheck@latest && staticcheck ./...
+      - name: Build binary
+        run: go build -v ./cmd/controlplane
+
+  # ── Data Loader (Go) ────────────────────────────────────────────────────────
+  go-dataloader:
+    name: Data Loader (Go)
+    runs-on: ubuntu-latest
+    if: hashFiles('mnemo/dataplane/dataloader/go.mod') != ''
+    defaults:
+      run:
+        working-directory: ./mnemo/dataplane/dataloader
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+          cache: false
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-mnemo-dl-${{ hashFiles('mnemo/dataplane/dataloader/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-mnemo-dl-
+      - run: go mod download
+      - name: Run tests with race detector
+        run: go test -v -race -coverprofile=coverage.out ./...
+      - name: Enforce 100% coverage
+        run: |
+          TOTAL=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}')
+          echo "Coverage: $TOTAL"
+          [ "$TOTAL" = "100.0%" ] || { echo "ERROR: coverage is $TOTAL, want 100.0%"; exit 1; }
+      - run: go vet ./...
+      - name: Build binary
+        run: go build -v ./cmd/dataloader
+
+  # ── Client SDK (Go) ─────────────────────────────────────────────────────────
+  go-sdk:
+    name: Client SDK (Go)
+    runs-on: ubuntu-latest
+    if: hashFiles('mnemo/sdk/go.mod') != ''
+    defaults:
+      run:
+        working-directory: ./mnemo/sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+          cache: false
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-mnemo-sdk-${{ hashFiles('mnemo/sdk/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-mnemo-sdk-
+      - run: go mod download
+      - name: Run tests with race detector
+        run: go test -v -race -coverprofile=coverage.out ./...
+      - name: Enforce 100% coverage
+        run: |
+          TOTAL=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}')
+          echo "Coverage: $TOTAL"
+          [ "$TOTAL" = "100.0%" ] || { echo "ERROR: coverage is $TOTAL, want 100.0%"; exit 1; }
+      - run: go vet ./...
+
+  # ── Read Server (Rust) ──────────────────────────────────────────────────────
+  rust-readserver:
+    name: Read Server (Rust)
+    runs-on: ubuntu-latest
+    if: hashFiles('mnemo/dataplane/readserver/Cargo.toml') != ''
+    defaults:
+      run:
+        working-directory: ./mnemo/dataplane/readserver
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.80'
+          components: rustfmt, clippy
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            mnemo/dataplane/readserver/target
+          key: ${{ runner.os }}-cargo-mnemo-rs-${{ hashFiles('mnemo/dataplane/readserver/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-mnemo-rs-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Build release binary
+        run: cargo build --release --verbose
+
+      - name: Run security audit
+        run: |
+          cargo install cargo-audit
+          cargo audit
+
+      - name: Check coverage (tarpaulin)
+        run: |
+          cargo install cargo-tarpaulin
+          cargo tarpaulin --out Xml --timeout 120 --fail-under 100
+
+  # ── Python Producer ─────────────────────────────────────────────────────────
+  python-producer:
+    name: Python Producer
+    runs-on: ubuntu-latest
+    if: hashFiles('mnemo/py-producer/pyproject.toml') != ''
+    defaults:
+      run:
+        working-directory: ./mnemo/py-producer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      - name: Check formatting
+        run: black --check --line-length 100 .
+      - name: Run ruff
+        run: ruff check .
+      - name: Run tests with 100% coverage
+        run: pytest tests/ --cov=mnemo_producer --cov-report=term-missing --cov-fail-under=100
+
+  # ── Integration (smoke test) ─────────────────────────────────────────────────
+  integration:
+    name: Integration (smoke test)
+    runs-on: ubuntu-latest
+    if: |
+      hashFiles('mnemo/tools/smoke-test/main.go') != '' &&
+      hashFiles('mnemo/dataplane/readserver/Cargo.toml') != ''
+    needs: [go-schema, rust-readserver]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.80'
+      - name: Build gen-sst tool
+        working-directory: ./mnemo/tools/gen-sst
+        run: cargo build --release
+      - name: Build read server
+        working-directory: ./mnemo/dataplane/readserver
+        run: cargo build --release
+      - name: Run smoke test
+        working-directory: ./mnemo/tools/smoke-test
+        run: go run .
