@@ -10,11 +10,11 @@ Basic usage::
 
     df = parse_log_file("/path/to/file.log")
 
-With explicit Custodian host::
+With explicit Horizon-v2 host::
 
     df = parse_log_file(
         "/path/to/file.log",
-        inference_host="http://custodian.prd.meesho.int",
+        inference_host="http://horizon-v2.prd.meesho.int",
     )
 
 Decode only a subset of features::
@@ -23,7 +23,7 @@ Decode only a subset of features::
 
 Environment variables (same as ``inference-logging-client``):
 
-* ``INFERENCE_HOST``  — Custodian API base URL
+* ``INFERENCE_HOST``  — Horizon-v2 API base URL
 * ``INFERENCE_PATH``  — schema API path
 """
 
@@ -71,8 +71,8 @@ def parse_log_file(
 
     Args:
         path: Path to the ``.log`` file on local disk.
-        inference_host: Custodian API host used to fetch feature schemas,
-            e.g. ``"http://custodian.prd.meesho.int"``.  When ``None`` the
+        inference_host: Horizon-v2 API host used to fetch feature schemas,
+            e.g. ``"http://horizon-v2.prd.meesho.int"``.  When ``None`` the
             value of the ``INFERENCE_HOST`` environment variable is used;
             if that is also unset it falls back to ``"http://localhost:8082"``.
         api_path: Schema API path.  When ``None`` the value of the

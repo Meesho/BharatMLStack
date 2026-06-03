@@ -472,8 +472,8 @@ def fetch_feature_schema(model_config_id, version=1):
     if cache_key in fetch_feature_schema._cache:
         return fetch_feature_schema._cache[cache_key]
     
-    inference_host = os.getenv("INFERENCE_HOST", "http://custodian.prd.meesho.int")
-    inference_path = os.getenv("INFERENCE_PATH", "/api/v1/custodian/mp-config-registry/get_feature_schema")
+    inference_host = os.getenv("INFERENCE_HOST", "http://horizon-v2.prd.meesho.int")
+    inference_path = os.getenv("INFERENCE_PATH", "/api/v1/horizon/inferflow-config-registry/get_feature_schema")
     
     # Build URL with query parameters
     params = urllib.parse.urlencode({'model_config_id': model_config_id, 'version': version})

@@ -59,7 +59,7 @@ def build_dataframe(
 
     Args:
         records: ``(timestamp_ns, proto_bytes)`` pairs from the deframer.
-        inference_host: Custodian API host passed to ``get_feature_schema``.
+        inference_host: Horizon-v2 API host passed to ``get_feature_schema``.
         api_path: API path passed to ``get_feature_schema``.
         needed_columns: Feature names to decode; ``None`` decodes everything.
 
@@ -83,6 +83,14 @@ def build_dataframe(
         encoded_features: list[bytes] = getattr(mplog, "_encoded_features", [])
         entities = mplog.entities
         parent_entities = mplog.parent_entity
+
+        # Fix short parent_entity list: if writer sent fewer parent_entities
+        # than entities, broadcast the single value or pad with empty strings.
+        num_items = max(len(entities), len(encoded_features), 1)
+        if len(parent_entities) < num_items and len(parent_entities) == 1:
+            parent_entities = parent_entities * num_items
+        elif len(parent_entities) < num_items:
+            parent_entities = list(parent_entities) + [""] * (num_items - len(parent_entities))
         model_config_id = mplog.model_proxy_config_id
         version = mplog.version
         format_type = mplog.format_type
