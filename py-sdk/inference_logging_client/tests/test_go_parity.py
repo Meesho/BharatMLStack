@@ -82,6 +82,24 @@ def test_fp16_scalar_is_bfloat16():
     assert _equal(decode_scalar_value(bytes.fromhex("c03f"), "DataTypeFP16"), 1.5)
 
 
+def test_fp8_decode_matches_go():
+    # Ported from go-core float8.FP8E4M3ToFP32Value / FP8E5M2ToFP32Value.
+    assert _equal(decode_scalar_value(bytes([0x38]), "DataTypeFP8E4M3"), 1.0)
+    assert _equal(decode_scalar_value(bytes([0x3C]), "DataTypeFP8E4M3"), 1.5)
+    assert _equal(decode_scalar_value(bytes([0x3C]), "DataTypeFP8E5M2"), 1.0)
+    assert _equal(decode_scalar_value(bytes([0x40]), "DataTypeFP8E5M2"), 2.0)
+    # vector form
+    assert _equal(
+        decode_vector_or_string(bytes([0x38, 0x3C]), "DataTypeFP8E4M3Vector"), [1.0, 1.5]
+    )
+
+
+def test_float_values_are_full_precision():
+    # Go keeps the exact float32 value; we must not round to 6 decimals.
+    v = decode_scalar_value(bytes.fromhex("d00f4940"), "DataTypeFP32")
+    assert abs(v - 3.1415901184) < 1e-9, v
+
+
 def test_binary_byte_column_path_no_regression():
     # Feature-store / byte-column vectors are packed binary, NOT JSON.
     # FP16 elements are true IEEE-754 half: 1.5 -> 0x3E00, 2.5 -> 0x4100 (LE).

@@ -177,6 +177,50 @@ def decode_bfloat16(value_bytes: bytes) -> float:
     return format_float(struct.unpack("<f", b"\x00\x00" + value_bytes)[0])
 
 
+def _u32_to_f32(bits: int) -> float:
+    """Reinterpret a 32-bit pattern as float32 (Go's math.Float32frombits)."""
+    return struct.unpack("<f", struct.pack("<I", bits & 0xFFFFFFFF))[0]
+
+
+def decode_fp8_e4m3(byte_val: int) -> float:
+    """
+    Port of go-core float8.FP8E4M3ToFP32Value (E4M3FN: 1 sign, 4 exp, 3 mantissa).
+
+    Mirrors the Go bit-manipulation exactly so values match the feature-store
+    encoding rather than Python-approximating the format.
+    """
+    if (byte_val & 0x7F) == 0x7F:
+        return float("nan")
+    w = (byte_val << 24) & 0xFFFFFFFF
+    sign = w & 0x80000000
+    non_sign = w & 0x7FFFFFFF
+    if non_sign == 0:
+        return _u32_to_f32(sign)  # preserve sign for +/-0
+    # leading zeros of the 32-bit non_sign
+    renorm = 32 - non_sign.bit_length()
+    renorm = renorm - 4 if renorm > 4 else 0
+    result = sign | ((((non_sign << renorm) & 0xFFFFFFFF) >> 4) + (((0x78 - renorm) << 23) & 0xFFFFFFFF))
+    return format_float(_u32_to_f32(result))
+
+
+def decode_fp8_e5m2(byte_val: int) -> float:
+    """Port of go-core float8.FP8E5M2ToFP32Value (E5M2: 1 sign, 5 exp, 2 mantissa)."""
+    sign = (byte_val >> 7) & 0x1
+    exponent = (byte_val >> 2) & 0x1F
+    mantissa = byte_val & 0x3
+    if exponent == 0x1F:
+        if mantissa == 0:
+            return float("-inf") if sign else float("inf")
+        return float("nan")
+    if exponent == 0:
+        value = (mantissa / 4.0) * (2.0 ** -14)
+    else:
+        value = (1.0 + mantissa / 4.0) * (2.0 ** (exponent - 15))
+    if sign:
+        value = -value
+    return format_float(value)
+
+
 def decode_scalar_value(value_bytes: bytes, feature_type: str) -> Any:
     """Decode a scalar value from bytes based on feature type."""
     normalized = normalize_type(feature_type)
@@ -201,8 +245,10 @@ def decode_scalar_value(value_bytes: bytes, feature_type: str) -> Any:
             return struct.unpack("<I", value_bytes)[0]
         elif normalized in {"UINT64", "U64"}:
             return struct.unpack("<Q", value_bytes)[0]
-        elif normalized in {"FP8E5M2", "FP8E4M3"}:
-            return value_bytes[0]  # Return raw byte
+        elif normalized in {"FP8E5M2"}:
+            return decode_fp8_e5m2(value_bytes[0])
+        elif normalized in {"FP8E4M3"}:
+            return decode_fp8_e4m3(value_bytes[0])
         elif normalized in {"FP16", "FLOAT16", "F16"}:
             # Go encodes FP16 scalars as bfloat16 (top 16 bits of float32),
             # not IEEE-754 half precision. See decode_bfloat16.
@@ -318,9 +364,13 @@ def decode_binary_vector(value_bytes: bytes, feature_type: str) -> list | None:
         # Bool vector: 1 byte per element
         result = [b != 0 for b in value_bytes]
 
-    elif "FP8" in normalized:
-        # FP8 vector: 1 byte per element (return raw bytes, no standard decoding)
-        result = list(value_bytes)
+    elif "FP8E4M3" in normalized:
+        # FP8 E4M3 vector: 1 byte per element, decoded to float (go-core parity)
+        result = [decode_fp8_e4m3(b) for b in value_bytes]
+
+    elif "FP8E5M2" in normalized or "FP8" in normalized:
+        # FP8 E5M2 vector: 1 byte per element, decoded to float (go-core parity)
+        result = [decode_fp8_e5m2(b) for b in value_bytes]
 
     else:
         # Unknown vector type, return None to signal unsupported type
