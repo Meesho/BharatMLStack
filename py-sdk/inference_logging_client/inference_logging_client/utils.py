@@ -137,18 +137,15 @@ def get_scalar_size(feature_type: str) -> Optional[int]:
 
 def format_float(value: float) -> float:
     """
-    Format float to 6 decimal places without scientific notation.
+    Return the float value at full precision (Go value-parity).
 
-    Returns the float value formatted to 6 decimal places. For special values
-    (inf, -inf, nan), returns them as-is. For regular floats, rounds to 6 decimals.
+    Go's BytesToString preserves the exact float32/float64 value (e.g. FP16
+    0.1 -> 0.0999755859375). The previous behaviour rounded to 6 decimals,
+    which silently changed the value and diverged from Go. We now return the
+    value unchanged so decoded numbers match Go exactly; display-level rounding
+    (if desired) is handled separately by format_dataframe_floats.
     """
-    import math
-
-    if math.isnan(value) or math.isinf(value):
-        return value
-    # Round to 6 decimal places and convert back to float
-    # This ensures no scientific notation in string representation
-    return round(value, 6)
+    return value
 
 
 def format_dataframe_floats(df):

@@ -48,7 +48,7 @@ from .io import clear_schema_cache, get_feature_schema, get_mplog_metadata, pars
 from .types import FORMAT_TYPE_MAP, DecodedMPLog, FeatureInfo, Format
 from .utils import format_dataframe_floats, get_format_name, unpack_metadata_byte
 
-__version__ = "0.3.9"
+__version__ = "0.3.10"
 
 # Maximum supported schema version (4 bits = 0-15)
 _MAX_SCHEMA_VERSION = 15
@@ -163,6 +163,7 @@ def decode_mplog(
     decompress: bool = True,
     schema: Optional[list] = None,
     needed_columns: Optional[Collection[str]] = None,
+    go_string: bool = True,
 ) -> "SparkDataFrame":
     """
     Main function to decode MPLog bytes to a Spark DataFrame.
@@ -234,10 +235,13 @@ def decode_mplog(
     if schema is None:
         schema = get_feature_schema(model_proxy_id, version, inference_host)
 
+    # go_string=True (default) yields exact go-core BytesToString output for
+    # every format: proto threads the flag; arrow/parquet go through
+    # decode_feature_value which defaults to the same go-core port.
     # Decode based on format
     if detected_format == Format.PROTO:
         entity_ids, decoded_rows = decode_proto_format(
-            working_data, schema, needed_columns=needed_columns
+            working_data, schema, needed_columns=needed_columns, go_string=go_string
         )
     elif detected_format == Format.ARROW:
         entity_ids, decoded_rows = decode_arrow_format(
