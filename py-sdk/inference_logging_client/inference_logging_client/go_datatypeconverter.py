@@ -55,7 +55,8 @@ def go_format_float(f, bits):
         return "+Inf" if f > 0 else "-Inf"
     neg, digits, dp = _shortest(f, bits)
     if digits == "0":
-        return "0"
+        # Go's strconv prints negative zero as "-0" (sign bit preserved).
+        return "-0" if neg else "0"
     sign = "-" if neg else ""
     exp = dp - 1
     # Go shortest-'g' (fmt.Sprint): exponential when exp < -4 or exp >= 6

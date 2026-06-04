@@ -101,3 +101,71 @@ def test_full_coverage_all_vector_and_fp16_types():
     for dtype, hexb, expected in COVERAGE_FIXTURES:
         got = bytes_to_string(bytes.fromhex(hexb), dtype)
         assert got == expected, f"{dtype} {hexb}: got {got!r}, expected {expected!r}"
+
+
+EDGE_FIXTURES = [
+    ('DataTypeFP16', '0100', '5.9604645e-08'),
+    ('DataTypeFP16', '0200', '1.1920929e-07'),
+    ('DataTypeFP16', '0300', '1.7881393e-07'),
+    ('DataTypeFP16', '007c', '+Inf'),
+    ('DataTypeFP16', '017c', 'NaN'),
+    ('DataTypeFP16', '0080', '-0'),
+    ('DataTypeFP16', '00fc', '-Inf'),
+    ('DataTypeFP8E5M2', '01', '1.5258789e-05'),
+    ('DataTypeFP8E5M2', '02', '3.0517578e-05'),
+    ('DataTypeFP8E5M2', '03', '4.5776367e-05'),
+    ('DataTypeFP8E5M2', '7c', '+Inf'),
+    ('DataTypeFP8E5M2', '7d', 'NaN'),
+    ('DataTypeFP8E4M3', '7f', 'NaN'),
+    ('DataTypeFP8E4M3', '80', '-0'),
+    ('DataTypeFP8E5M2', '80', '-0'),
+    ('DataTypeFP8E5M2', 'fc', '-Inf'),
+    ('DataTypeFP32', '1e429e18', '4.0908804e-24'),
+    ('DataTypeFP32', '2215aaee', '-2.6319e+28'),
+    ('DataTypeFP32', '06a2d64b', '2.8132364e+07'),
+    ('DataTypeFP32', '5da1e0ff', 'NaN'),
+    ('DataTypeFP64', '8639235afdf3c731', '6.941166305652727e-69'),
+    ('DataTypeFP64', '96893dd4ed57b784', '-6.132105145909716e-286'),
+    ('DataTypeFP64', 'c5605185d954149a', '-4.7848780304174145e-183'),
+    ('DataTypeFP64', 'e458e08a901ff5ff', 'NaN'),
+    ('DataTypeFP16Vector', '261b9393091613867cc0', '0.003490448,-0.00092458725,0.0014734268,-9.268522e-05,-2.2421875'),
+    ('DataTypeFP16Vector', '8c113a3e4b81b6c0f143', '0.00067710876,1.5566406,-1.9729137e-05,-2.3554688,3.9707031'),
+    ('DataTypeFP16Vector', '668104426a6c9496', '-2.1338463e-05,3.0078125,4520,-0.0016059875'),
+    ('DataTypeFP16Vector', '907d', 'NaN'),
+    ('DataTypeFP32Vector', '0b9dd7eccb803dcc', '-2.0852853e+27,-4.96771e+07'),
+    ('DataTypeFP32Vector', '28517e63a473a6fd9a9701f8', '4.691321e+21,-2.7656536e+37,-1.0513768e+34'),
+    ('DataTypeFP32Vector', 'dabfbd8a', '-1.8272205e-32'),
+    ('DataTypeFP32Vector', '1a03857f', 'NaN'),
+    ('DataTypeFP64Vector', '5b9dc8b8e0c78a44824a97c4420ebd28b84c9ae9f4a93d4f57174dbe88460eaf87b370da561bb8f9', '1.5808577942289669e+22,1.8877873312250154e-112,5.24115628394067e+73,-4.9870401132054686e-82,-2.1366602376534176e+278'),
+    ('DataTypeFP64Vector', 'be0f3a63644fb57f4d9b06fb00e3575b5f6a12edcbadf202', '1.4964479059459674e+307,1.0596803624902316e+132,1.827912411121787e-294'),
+    ('DataTypeFP64Vector', '84327d49cf43fde8', '-5.468949910989888e+197'),
+    ('DataTypeFP64Vector', '11521d29d9acfd7f', 'NaN'),
+    ('DataTypeFP8E4M3Vector', '80', '-0'),
+    ('DataTypeFP8E4M3Vector', 'ff', 'NaN'),
+    ('DataTypeFP8E5M2Vector', '82ecfffb58a6', '-3.0517578e-05,-4096,NaN,-57344,128,-0.0234375'),
+    ('DataTypeFP8E5M2Vector', '82974964ff', '-3.0517578e-05,-0.0017089844,10,1024,NaN'),
+    ('DataTypeFP8E5M2Vector', '03', '4.5776367e-05'),
+    ('DataTypeFP8E5M2Vector', '80', '-0'),
+    ('DataTypeFP8E5M2Vector', '7c', '+Inf'),
+    ('DataTypeFP8E5M2Vector', 'ff', 'NaN'),
+    ('DataTypeFP8E5M2Vector', 'fc', '-Inf'),
+    ('DataTypeFP8E5M2', '7c', '+Inf'),
+    ('DataTypeFP8E5M2', '7d', 'NaN'),
+    ('DataTypeFP8E5M2', '7e', 'NaN'),
+    ('DataTypeFP8E4M3', '7f', 'NaN'),
+    ('DataTypeFP8E5M2', '7f', 'NaN'),
+    ('DataTypeFP8E4M3', '80', '-0'),
+    ('DataTypeFP8E5M2', '80', '-0'),
+    ('DataTypeFP8E5M2', 'fc', '-Inf'),
+    ('DataTypeFP8E5M2', 'fd', 'NaN'),
+    ('DataTypeFP8E5M2', 'fe', 'NaN'),
+    ('DataTypeFP8E4M3', 'ff', 'NaN'),
+    ('DataTypeFP8E5M2', 'ff', 'NaN'),
+]
+
+
+def test_float_edge_cases_match_go():
+    """NaN, +/-Inf, negative zero, subnormals, scientific boundaries -- byte-for-byte."""
+    for dtype, hexb, expected in EDGE_FIXTURES:
+        got = bytes_to_string(bytes.fromhex(hexb), dtype)
+        assert got == expected, f"{dtype} {hexb}: got {got!r}, expected {expected!r}"
