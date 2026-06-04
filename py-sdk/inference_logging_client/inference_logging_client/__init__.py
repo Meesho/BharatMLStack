@@ -48,7 +48,7 @@ from .io import clear_schema_cache, get_feature_schema, get_mplog_metadata, pars
 from .types import FORMAT_TYPE_MAP, DecodedMPLog, FeatureInfo, Format
 from .utils import format_dataframe_floats, get_format_name, unpack_metadata_byte
 
-__version__ = "0.4.0"
+__version__ = "0.3.10"
 
 # Maximum supported schema version (4 bits = 0-15)
 _MAX_SCHEMA_VERSION = 15
