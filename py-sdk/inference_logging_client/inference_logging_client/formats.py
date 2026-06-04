@@ -180,7 +180,7 @@ def decode_proto_features(
     encoded_bytes: bytes,
     schema: list[FeatureInfo],
     needed_columns: Optional[Collection[str]] = None,
-    go_string: bool = False,
+    go_string: bool = True,
 ) -> dict[str, Any]:
     """
     Decode proto-encoded features for a single entity.
@@ -283,7 +283,7 @@ def decode_proto_format(
     mplog_data: bytes,
     schema: list[FeatureInfo],
     needed_columns: Optional[Collection[str]] = None,
-    go_string: bool = False,
+    go_string: bool = True,
 ) -> tuple[list[str], list[dict[str, Any]]]:
     """
     Decode proto format MPLog.

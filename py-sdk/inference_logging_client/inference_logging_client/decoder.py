@@ -465,11 +465,20 @@ def decode_vector_or_string(value_bytes: bytes, feature_type: str) -> Any:
     return value_bytes.hex()
 
 
-def decode_feature_value(value_bytes: bytes, feature_type: str) -> Any:
-    """Decode a feature value based on its type."""
+def decode_feature_value(value_bytes: bytes, feature_type: str, go_string: bool = True) -> Any:
+    """Decode a feature value based on its type.
+
+    By default (go_string=True) returns the exact string go-core BytesToString
+    emits -- byte-for-byte Go parity, validated exhaustively. Pass
+    go_string=False for the legacy typed (int / float / list) output.
+    """
     if value_bytes is None:
         return None
 
+    if go_string:
+        return decode_feature_to_go_string(value_bytes, feature_type)
+
+    # ---- legacy typed output ----
     # For sized types (VECTOR/STRING), delegate even for empty bytes
     # decode_vector_or_string handles empty bytes appropriately per type
     if is_sized_type(feature_type):
