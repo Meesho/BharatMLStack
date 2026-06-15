@@ -16,6 +16,9 @@ type Config struct {
 	// before. When set, the client sends an HTTP/2 keepalive PING every KeepaliveTimeMs
 	// and waits KeepaliveTimeoutMs for the ack before treating the connection as dead.
 	// KeepalivePermitWithoutStream allows pings on a connection that has no active RPCs.
+	// When keepalive is enabled, KeepaliveTimeoutMs must be > 0; a zero or negative
+	// timeout is rejected at client construction (it would otherwise be passed to gRPC
+	// as a non-positive timer and fail keepalive immediately).
 	//
 	// Callers MUST keep KeepaliveTimeMs at or above the server's keepalive
 	// EnforcementPolicy MinTime; pinging more frequently than the server permits causes
