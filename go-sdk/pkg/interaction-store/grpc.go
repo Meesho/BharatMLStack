@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/status"
 )
@@ -42,23 +43,45 @@ func NewConnFromConfig(config *Config, externalServiceName string, timing func(n
 
 func getGRPCConnections(config Config) (*GRPCClient, error) {
 	resolver.SetDefaultScheme(ResolverDefaultScheme)
-	var gConn *grpc.ClientConn
-	var err error
-	if config.PlainText {
-		gConn, err = grpc.NewClient(config.Host+":"+config.Port,
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
-		)
-	} else {
-		creds := credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})
-		gConn, err = grpc.NewClient(config.Host+":"+config.Port,
-			grpc.WithTransportCredentials(creds),
-			grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`))
-	}
+	gConn, err := grpc.NewClient(config.Host+":"+config.Port, dialOptions(config)...)
 	if err != nil {
 		return nil, err
 	}
 	return &GRPCClient{Conn: gConn, DeadLine: int64(config.DeadLine)}, nil
+}
+
+// dialOptions assembles the gRPC dial options for the connection: transport
+// credentials (plaintext vs TLS) and the round-robin service config, plus an
+// optional client keepalive that is appended only when configured (see
+// keepaliveParamsFromConfig). When keepalive is not configured the option set is
+// identical to the pre-keepalive behaviour, so existing callers are unaffected.
+func dialOptions(config Config) []grpc.DialOption {
+	var opts []grpc.DialOption
+	if config.PlainText {
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	} else {
+		creds := credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	}
+	opts = append(opts, grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`))
+	if params, ok := keepaliveParamsFromConfig(config); ok {
+		opts = append(opts, grpc.WithKeepaliveParams(params))
+	}
+	return opts
+}
+
+// keepaliveParamsFromConfig derives the client keepalive parameters from config.
+// Keepalive is opt-in: ok is false when KeepaliveTimeMs <= 0, and callers must not
+// apply a keepalive dial option in that case (preserving the prior behaviour).
+func keepaliveParamsFromConfig(config Config) (keepalive.ClientParameters, bool) {
+	if config.KeepaliveTimeMs <= 0 {
+		return keepalive.ClientParameters{}, false
+	}
+	return keepalive.ClientParameters{
+		Time:                time.Duration(config.KeepaliveTimeMs) * time.Millisecond,
+		Timeout:             time.Duration(config.KeepaliveTimeoutMs) * time.Millisecond,
+		PermitWithoutStream: config.KeepalivePermitWithoutStream,
+	}, true
 }
 
 // Invoke is a wrapper around grpc.ClientConn.Invoke with metrics support

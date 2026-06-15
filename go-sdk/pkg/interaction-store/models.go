@@ -10,6 +10,19 @@ type Config struct {
 	DeadLine  int
 	PlainText bool
 	CallerId  string
+
+	// Optional client-side gRPC keepalive. Keepalive is opt-in: when KeepaliveTimeMs
+	// is <= 0 (the zero value) it stays disabled and the connection behaves exactly as
+	// before. When set, the client sends an HTTP/2 keepalive PING every KeepaliveTimeMs
+	// and waits KeepaliveTimeoutMs for the ack before treating the connection as dead.
+	// KeepalivePermitWithoutStream allows pings on a connection that has no active RPCs.
+	//
+	// Callers MUST keep KeepaliveTimeMs at or above the server's keepalive
+	// EnforcementPolicy MinTime; pinging more frequently than the server permits causes
+	// the server to close the connection with a GOAWAY "too_many_pings".
+	KeepaliveTimeMs              int
+	KeepaliveTimeoutMs           int
+	KeepalivePermitWithoutStream bool
 }
 
 type InteractionType int

@@ -71,6 +71,19 @@ func TestNewClientV1(t *testing.T) {
 				CallerId:  "test-caller",
 			},
 		},
+		{
+			name: "success with keepalive enabled",
+			config: &Config{
+				Host:                         "localhost",
+				Port:                         "50051",
+				DeadLine:                     1000,
+				PlainText:                    true,
+				CallerId:                     "test-caller",
+				KeepaliveTimeMs:              20000,
+				KeepaliveTimeoutMs:           5000,
+				KeepalivePermitWithoutStream: true,
+			},
+		},
 	}
 
 	for _, tt := range tests {
