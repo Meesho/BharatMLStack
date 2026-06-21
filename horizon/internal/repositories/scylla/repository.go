@@ -43,6 +43,9 @@ func (s *Scylla) CreateTable(tableName string, pkColumns []string, defaultTimeTo
 
 	// Validate every identifier before it is interpolated into the DDL.
 	// gocql cannot bind identifiers, so this is the guard against CQL injection.
+	if err := cqlident.Validate("keyspace", s.keySpace); err != nil {
+		return err
+	}
 	if err := cqlident.Validate("table", tableName); err != nil {
 		return err
 	}
@@ -100,10 +103,13 @@ func (s *Scylla) CreateTable(tableName string, pkColumns []string, defaultTimeTo
 func (s *Scylla) AddColumn(tableName string, column string) error {
 	log.Info().Msgf("Adding column %s to Scylla table: %s.%s", column, s.keySpace, tableName)
 
+	if err := cqlident.Validate("keyspace", s.keySpace); err != nil {
+		return err
+	}
 	if err := cqlident.Validate("table", tableName); err != nil {
 		return err
 	}
-	if err := cqlident.Validate("column", column); err != nil {
+	if err := cqlident.ValidateColumn(column); err != nil {
 		return err
 	}
 

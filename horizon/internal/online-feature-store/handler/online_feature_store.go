@@ -155,6 +155,9 @@ func (o *OnlineFeatureStore) RegisterStore(request *RegisterStoreRequest) (uint,
 		if err := cqlident.Validate("table", request.Table); err != nil {
 			return 0, err
 		}
+		if len(request.PrimaryKeys) == 0 {
+			return 0, fmt.Errorf("at least one primary key is required for scylla store %q", request.Table)
+		}
 		if err := cqlident.ValidateAll("primary key", request.PrimaryKeys); err != nil {
 			return 0, err
 		}
@@ -193,7 +196,26 @@ func (o *OnlineFeatureStore) ProcessStore(request *ProcessStoreRequest) error {
 	}
 	var payload RegisterStoreRequest
 	if request.Status != "REJECTED" {
-		json.Unmarshal([]byte(e.Payload), &payload)
+		if err := json.Unmarshal([]byte(e.Payload), &payload); err != nil {
+			log.Error().Msgf("Error unmarshalling store payload for %d: %v", request.RequestId, err)
+			return err
+		}
+
+		// Re-validate identifiers before they reach the DDL. RegisterStore is the
+		// primary guard, but rows persisted before that check existed (or via any
+		// other code path) must not be trusted blindly here.
+		if payload.DbType == "scylla" {
+			if err := cqlident.Validate("table", payload.Table); err != nil {
+				return err
+			}
+			if len(payload.PrimaryKeys) == 0 {
+				return fmt.Errorf("at least one primary key is required for scylla store %q", payload.Table)
+			}
+			if err := cqlident.ValidateAll("primary key", payload.PrimaryKeys); err != nil {
+				return err
+			}
+		}
+
 		storeMap, err := o.Config.RegisterStore(payload.ConfId, payload.DbType, payload.Table, payload.PrimaryKeys, payload.TableTtl)
 		if err != nil {
 			log.Error().Msgf("Error Registering Store for %s , %s", payload.DbType, payload.Table)

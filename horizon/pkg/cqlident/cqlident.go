@@ -14,10 +14,17 @@ import (
 	"regexp"
 )
 
-// maxIdentLen is a defensive upper bound. Cassandra/Scylla limit unquoted
-// keyspace and table names to 48 characters; we allow a little more headroom
-// for generated column names while still bounding the value.
-const maxIdentLen = 64
+const (
+	// maxIdentLen bounds keyspace / table / primary-key names. Cassandra and
+	// Scylla limit these unquoted identifiers to 48 characters; we allow a
+	// little headroom while still bounding the value.
+	maxIdentLen = 64
+
+	// maxColumnLen bounds column names. Feature-store and Skye column names are
+	// generated from feature labels / variants and can legitimately be longer
+	// than a table name, so they get a larger (but still finite) cap.
+	maxColumnLen = 128
+)
 
 // identRe matches an unquoted CQL identifier: a letter or underscore followed
 // by letters, digits or underscores. This intentionally rejects whitespace,
@@ -25,15 +32,26 @@ const maxIdentLen = 64
 // to break out of the intended statement.
 var identRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
-// Validate returns an error if name is not a safe, unquoted CQL identifier.
-// kind is used only to produce a helpful error message (e.g. "table",
-// "column", "primary key").
+// Validate returns an error if name is not a safe, unquoted CQL identifier
+// suitable for a keyspace, table or primary-key name. kind is used only to
+// produce a helpful error message (e.g. "table", "primary key").
 func Validate(kind, name string) error {
+	return validate(kind, name, maxIdentLen)
+}
+
+// ValidateColumn validates a column identifier, allowing the larger column
+// length cap. Use this for column names (including generated ones) rather than
+// Validate, which uses the stricter table/keyspace cap.
+func ValidateColumn(name string) error {
+	return validate("column", name, maxColumnLen)
+}
+
+func validate(kind, name string, maxLen int) error {
 	if name == "" {
 		return fmt.Errorf("invalid %s identifier: must not be empty", kind)
 	}
-	if len(name) > maxIdentLen {
-		return fmt.Errorf("invalid %s identifier %q: must be at most %d characters", kind, name, maxIdentLen)
+	if len(name) > maxLen {
+		return fmt.Errorf("invalid %s identifier %q: must be at most %d characters", kind, name, maxLen)
 	}
 	if !identRe.MatchString(name) {
 		return fmt.Errorf("invalid %s identifier %q: must match [a-zA-Z_][a-zA-Z0-9_]*", kind, name)

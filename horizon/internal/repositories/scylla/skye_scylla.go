@@ -78,12 +78,27 @@ func (s *SkyeScylla) tableExists(tableName string) (bool, error) {
 
 func (s *SkyeScylla) CreateEmbeddingTable(tableName string, defaultTimeToLive int, variantsList []string) error {
 	// Validate identifiers before interpolating them into the DDL.
+	if err := cqlident.Validate("keyspace", s.keySpace); err != nil {
+		return err
+	}
 	if err := cqlident.Validate("table", tableName); err != nil {
 		return err
 	}
-	if err := cqlident.ValidateAll("variant", variantsList); err != nil {
-		return err
+	// Build and validate variant column definitions up front, before any DB
+	// roundtrip, so an invalid identifier is rejected without side effects.
+	var variantColumns strings.Builder
+	for _, variant := range variantsList {
+		// Convert variant name to snake_case and append _to_be_indexed. The
+		// *generated* column name is what gets interpolated into the DDL, so we
+		// validate that (not the raw variant) — this still rejects injection
+		// while allowing supported variants such as "model-v1".
+		variantColumnName := strings.ToLower(strings.ReplaceAll(variant, "-", "_")) + "_to_be_indexed"
+		if err := cqlident.ValidateColumn(variantColumnName); err != nil {
+			return fmt.Errorf("invalid variant %q: %w", variant, err)
+		}
+		variantColumns.WriteString(fmt.Sprintf(",\n\t\t%s boolean", variantColumnName))
 	}
+
 	// Check if table already exists
 	exists, err := s.tableExists(tableName)
 	if err != nil {
@@ -95,13 +110,6 @@ func (s *SkyeScylla) CreateEmbeddingTable(tableName string, defaultTimeToLive in
 		log.Error().Str("keyspace", s.keySpace).Str("table", tableName).
 			Msg("Embedding table already exists, skipping creation")
 		return nil
-	}
-	// Build variant column definitions
-	var variantColumns strings.Builder
-	for _, variant := range variantsList {
-		// Convert variant name to snake_case and append _to_be_indexed
-		variantColumnName := strings.ToLower(strings.ReplaceAll(variant, "-", "_")) + "_to_be_indexed"
-		variantColumns.WriteString(fmt.Sprintf(",\n\t\t%s boolean", variantColumnName))
 	}
 
 	query := fmt.Sprintf(createEmbeddingTableQueryBase, s.keySpace, tableName, variantColumns.String(), defaultTimeToLive)
@@ -119,10 +127,13 @@ func (s *SkyeScylla) CreateEmbeddingTable(tableName string, defaultTimeToLive in
 }
 
 func (s *SkyeScylla) AddEmbeddingColumn(tableName string, columnName string) error {
+	if err := cqlident.Validate("keyspace", s.keySpace); err != nil {
+		return err
+	}
 	if err := cqlident.Validate("table", tableName); err != nil {
 		return err
 	}
-	if err := cqlident.Validate("column", columnName); err != nil {
+	if err := cqlident.ValidateColumn(columnName); err != nil {
 		return err
 	}
 	query := fmt.Sprintf(addBoolColumnQuery, s.keySpace, tableName, columnName)
@@ -145,6 +156,9 @@ func (s *SkyeScylla) AddEmbeddingColumn(tableName string, columnName string) err
 }
 
 func (s *SkyeScylla) CreateAggregatorTable(tableName string, defaultTimeToLive int) error {
+	if err := cqlident.Validate("keyspace", s.keySpace); err != nil {
+		return err
+	}
 	if err := cqlident.Validate("table", tableName); err != nil {
 		return err
 	}
@@ -176,10 +190,13 @@ func (s *SkyeScylla) CreateAggregatorTable(tableName string, defaultTimeToLive i
 }
 
 func (s *SkyeScylla) AddAggregatorColumn(tableName string, columnName string) error {
+	if err := cqlident.Validate("keyspace", s.keySpace); err != nil {
+		return err
+	}
 	if err := cqlident.Validate("table", tableName); err != nil {
 		return err
 	}
-	if err := cqlident.Validate("column", columnName); err != nil {
+	if err := cqlident.ValidateColumn(columnName); err != nil {
 		return err
 	}
 	query := fmt.Sprintf(addTextColumnQuery, s.keySpace, tableName, columnName)
