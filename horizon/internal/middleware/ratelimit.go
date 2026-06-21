@@ -18,6 +18,7 @@ type IPRateLimiter struct {
 	r       rate.Limit
 	burst   int
 	ttl     time.Duration
+	stop    chan struct{}
 }
 
 type clientLimiter struct {
@@ -26,29 +27,46 @@ type clientLimiter struct {
 }
 
 // NewIPRateLimiter creates a limiter allowing r events/second with the given
-// burst. Idle per-IP entries are evicted after ttl to bound memory usage.
+// burst. Idle per-IP entries are evicted after ttl to bound memory usage. A
+// non-positive ttl disables the background eviction loop (entries then live for
+// the lifetime of the limiter), which keeps time.NewTicker from panicking.
 func NewIPRateLimiter(r rate.Limit, burst int, ttl time.Duration) *IPRateLimiter {
 	l := &IPRateLimiter{
 		clients: make(map[string]*clientLimiter),
 		r:       r,
 		burst:   burst,
 		ttl:     ttl,
+		stop:    make(chan struct{}),
 	}
-	go l.cleanupLoop()
+	if ttl > 0 {
+		go l.cleanupLoop()
+	}
 	return l
+}
+
+// Stop terminates the background eviction goroutine. It is safe to call once;
+// calling it more than once will panic (close of closed channel), matching the
+// usual lifecycle expectation for a long-lived limiter.
+func (l *IPRateLimiter) Stop() {
+	close(l.stop)
 }
 
 func (l *IPRateLimiter) cleanupLoop() {
 	ticker := time.NewTicker(l.ttl)
 	defer ticker.Stop()
-	for range ticker.C {
-		l.mu.Lock()
-		for ip, cl := range l.clients {
-			if time.Since(cl.lastSeen) > l.ttl {
-				delete(l.clients, ip)
+	for {
+		select {
+		case <-l.stop:
+			return
+		case <-ticker.C:
+			l.mu.Lock()
+			for ip, cl := range l.clients {
+				if time.Since(cl.lastSeen) > l.ttl {
+					delete(l.clients, ip)
+				}
 			}
+			l.mu.Unlock()
 		}
-		l.mu.Unlock()
 	}
 }
 

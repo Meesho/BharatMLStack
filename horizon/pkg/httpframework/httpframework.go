@@ -1,11 +1,13 @@
 package httpframework
 
 import (
+	"os"
+	"strings"
+	"sync"
+
 	"github.com/Meesho/BharatMLStack/horizon/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
-	"os"
-	"sync"
 )
 
 var (
@@ -22,6 +24,24 @@ func Init(middlewares ...gin.HandlerFunc) {
 			gin.SetMode(gin.ReleaseMode)
 		}
 		router = gin.New()
+		// By default gin trusts all proxies, which makes c.ClientIP() honour a
+		// client-supplied X-Forwarded-For header. That lets a caller spoof their
+		// IP and bypass per-IP protections such as the /login rate limiter. Only
+		// trust the proxies explicitly listed in TRUSTED_PROXIES (comma
+		// separated CIDRs/IPs); if unset, trust none so ClientIP() falls back to
+		// the real remote address.
+		var trusted []string
+		if tp := strings.TrimSpace(os.Getenv("TRUSTED_PROXIES")); tp != "" {
+			for _, p := range strings.Split(tp, ",") {
+				if p = strings.TrimSpace(p); p != "" {
+					trusted = append(trusted, p)
+				}
+			}
+		}
+		if err := router.SetTrustedProxies(trusted); err != nil {
+			log.Error().Err(err).Msg("Failed to set trusted proxies; defaulting to trust none")
+			_ = router.SetTrustedProxies(nil)
+		}
 		middlewares = append(middlewares, middleware.HTTPLogger(), middleware.HTTPRecovery())
 		router.Use(middlewares...)
 	})

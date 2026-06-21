@@ -52,3 +52,37 @@ func TestIPRateLimiter_Middleware(t *testing.T) {
 		t.Fatalf("second request: got %d, want 429", code)
 	}
 }
+
+// TestIPRateLimiter_Refill verifies that the bucket refills over time: once
+// enough time has elapsed for a token to be replenished, a previously
+// rate-limited client is allowed again.
+func TestIPRateLimiter_Refill(t *testing.T) {
+	// 100 events/sec (one token every 10ms), burst 1.
+	l := NewIPRateLimiter(rate.Every(10*time.Millisecond), 1, time.Minute)
+	defer l.Stop()
+
+	const ip = "10.0.0.1"
+	if !l.Allow(ip) {
+		t.Fatal("first call should be allowed")
+	}
+	if l.Allow(ip) {
+		t.Fatal("second immediate call should be limited")
+	}
+
+	// Wait for the bucket to refill, then it should pass again.
+	time.Sleep(30 * time.Millisecond)
+	if !l.Allow(ip) {
+		t.Fatal("call after refill window should be allowed")
+	}
+}
+
+// TestNewIPRateLimiter_NonPositiveTTL ensures a non-positive ttl does not panic
+// (time.NewTicker panics on <= 0) and that the limiter is still usable.
+func TestNewIPRateLimiter_NonPositiveTTL(t *testing.T) {
+	for _, ttl := range []time.Duration{0, -time.Second} {
+		l := NewIPRateLimiter(rate.Every(time.Second), 1, ttl)
+		if !l.Allow("1.1.1.1") {
+			t.Fatalf("ttl=%v: limiter should allow the first call", ttl)
+		}
+	}
+}

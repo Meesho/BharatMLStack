@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 const (
@@ -23,6 +25,11 @@ const (
 	// loginLockDuration is how long an account stays locked after hitting the
 	// failure threshold.
 	loginLockDuration = 15 * time.Minute
+	// loginFailureRetention bounds how long an idle failure-tracking entry is
+	// kept. Entries not touched within this window are evicted so that an
+	// attacker spraying many distinct (often non-existent) emails cannot grow
+	// the in-memory map without bound.
+	loginFailureRetention = loginLockDuration
 )
 
 // loginLockState tracks consecutive login failures for an account.
@@ -31,12 +38,21 @@ const (
 // deployment move this counter to a shared store (Redis/DB) so the lockout is
 // enforced globally. It is still a useful defence-in-depth layer alongside the
 // per-IP rate limiter on the /login route.
+//
+// All fields are guarded by the package-level loginFailuresMu. They are read
+// and written from concurrent request goroutines, so the mutex is required to
+// avoid a data race.
 type loginLockState struct {
 	failures int
 	until    time.Time
+	// updatedAt is the last time this entry was modified; used for eviction.
+	updatedAt time.Time
 }
 
-var loginFailures sync.Map // email -> *loginLockState
+var (
+	loginFailuresMu sync.Mutex
+	loginFailures   = make(map[string]*loginLockState) // email -> state
+)
 
 type AuthHandler struct {
 	authRepo       auth.Repository
@@ -162,15 +178,29 @@ func (a *AuthHandler) Login(user *Login) (*LoginResponse, error) {
 	// Enforce per-account lockout before doing any expensive work.
 	if locked, retryAfter := isAccountLocked(user.Email); locked {
 		log.Warn().Msgf("Login blocked for %s: account temporarily locked", user.Email)
-		return nil, fmt.Errorf("account temporarily locked due to too many failed attempts, try again in %s", retryAfter.Round(time.Second))
+		// Round up to whole seconds so a sub-second remainder is never reported
+		// as "0s" (which would be a confusing instruction to the user).
+		wait := retryAfter.Round(time.Second)
+		if wait < time.Second {
+			wait = time.Second
+		}
+		return nil, fmt.Errorf("account temporarily locked due to too many failed attempts, try again in %s", wait)
 	}
 
 	// Fetch user from the repository using email
 	authUser, err := a.authRepo.GetUserByEmailId(user.Email)
 	if err != nil {
-		recordLoginFailure(user.Email)
-		log.Error().Msgf("User not found with email: %s", user.Email)
-		return nil, fmt.Errorf("invalid email or password")
+		// Only count *authentication* failures (no such user) toward the
+		// lockout. A transient backend error (DB down, timeout, etc.) is not an
+		// attacker's failed guess, so locking on it would let infra blips lock
+		// out legitimate users and would surface as a confusing error.
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			recordLoginFailure(user.Email)
+			log.Error().Msgf("User not found with email: %s", user.Email)
+			return nil, fmt.Errorf("invalid email or password")
+		}
+		log.Error().Err(err).Msgf("Error looking up user %s", user.Email)
+		return nil, fmt.Errorf("login temporarily unavailable, please try again")
 	}
 
 	// Compare the provided password with the stored password hash
@@ -228,11 +258,13 @@ func (a *AuthHandler) Logout(token string) error {
 // isAccountLocked reports whether the account is currently locked out and, if
 // so, how long until it is unlocked.
 func isAccountLocked(email string) (bool, time.Duration) {
-	v, ok := loginFailures.Load(email)
+	loginFailuresMu.Lock()
+	defer loginFailuresMu.Unlock()
+
+	st, ok := loginFailures[email]
 	if !ok {
 		return false, 0
 	}
-	st := v.(*loginLockState)
 	if st.until.IsZero() || time.Now().After(st.until) {
 		return false, 0
 	}
@@ -241,10 +273,25 @@ func isAccountLocked(email string) (bool, time.Duration) {
 
 // recordLoginFailure increments the failure counter for the account and locks
 // it once the threshold is reached.
+//
+// Unknown/non-existent emails are recorded exactly like real ones. This is
+// deliberate: the lockout check short-circuits before the user lookup, so a
+// known and an unknown email that cross the threshold produce the identical
+// "locked" response. Recording both keeps that behaviour symmetric and avoids
+// turning the lockout into an account-existence oracle.
 func recordLoginFailure(email string) {
-	v, _ := loginFailures.LoadOrStore(email, &loginLockState{})
-	st := v.(*loginLockState)
+	loginFailuresMu.Lock()
+	defer loginFailuresMu.Unlock()
+
+	evictExpiredLocked()
+
+	st, ok := loginFailures[email]
+	if !ok {
+		st = &loginLockState{}
+		loginFailures[email] = st
+	}
 	st.failures++
+	st.updatedAt = time.Now()
 	if st.failures >= maxLoginFailures {
 		st.until = time.Now().Add(loginLockDuration)
 		st.failures = 0
@@ -253,7 +300,26 @@ func recordLoginFailure(email string) {
 
 // resetLoginFailures clears any failure/lock state for the account.
 func resetLoginFailures(email string) {
-	loginFailures.Delete(email)
+	loginFailuresMu.Lock()
+	defer loginFailuresMu.Unlock()
+	delete(loginFailures, email)
+}
+
+// evictExpiredLocked removes stale entries to bound memory growth from an
+// attacker spraying many distinct emails. An entry is safe to drop once it is
+// not actively locked and has not been touched within the retention window.
+// Caller must hold loginFailuresMu.
+func evictExpiredLocked() {
+	now := time.Now()
+	for email, st := range loginFailures {
+		locked := !st.until.IsZero() && now.Before(st.until)
+		if locked {
+			continue
+		}
+		if now.Sub(st.updatedAt) >= loginFailureRetention {
+			delete(loginFailures, email)
+		}
+	}
 }
 
 func (a *AuthHandler) saveToken(email, token string, expiration time.Time) error {
