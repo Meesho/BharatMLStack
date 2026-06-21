@@ -10,6 +10,7 @@ import (
 
 	onlinefeaturestore "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store"
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/scylla"
+	"github.com/Meesho/BharatMLStack/horizon/pkg/cqlident"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 
 	config2 "github.com/Meesho/BharatMLStack/horizon/internal/online-feature-store/config"
@@ -145,6 +146,18 @@ func (o *OnlineFeatureStore) RegisterStore(request *RegisterStoreRequest) (uint,
 	//check if dbType is valid
 	if confIdToDbTypeMap[strconv.Itoa(request.ConfId)] != request.DbType {
 		return 0, fmt.Errorf("invalid db type %s for conf id %d", request.DbType, request.ConfId)
+	}
+
+	// For scylla-backed stores the table/primary-key names end up in DDL that
+	// cannot be parameterized. Reject unsafe identifiers up front so a bad
+	// request is never even persisted as PENDING APPROVAL.
+	if request.DbType == "scylla" {
+		if err := cqlident.Validate("table", request.Table); err != nil {
+			return 0, err
+		}
+		if err := cqlident.ValidateAll("primary key", request.PrimaryKeys); err != nil {
+			return 0, err
+		}
 	}
 
 	payload, err := json.Marshal(request)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Meesho/BharatMLStack/horizon/pkg/cqlident"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/gocql/gocql"
 	"github.com/rs/zerolog/log"
@@ -39,6 +40,15 @@ func NewRepository(connection *infra.ScyllaClusterConnection) (Store, error) {
 // CreateTable implements the Store interface method to create a table
 func (s *Scylla) CreateTable(tableName string, pkColumns []string, defaultTimeToLive int) error {
 	log.Info().Msgf("Creating Scylla table: %s in keyspace: %s", tableName, s.keySpace)
+
+	// Validate every identifier before it is interpolated into the DDL.
+	// gocql cannot bind identifiers, so this is the guard against CQL injection.
+	if err := cqlident.Validate("table", tableName); err != nil {
+		return err
+	}
+	if err := cqlident.ValidateAll("primary key", pkColumns); err != nil {
+		return err
+	}
 
 	// Build the column definitions
 	var columnDefs []string
@@ -89,6 +99,13 @@ func (s *Scylla) CreateTable(tableName string, pkColumns []string, defaultTimeTo
 // AddColumn implements the Store interface method to add a column to the table
 func (s *Scylla) AddColumn(tableName string, column string) error {
 	log.Info().Msgf("Adding column %s to Scylla table: %s.%s", column, s.keySpace, tableName)
+
+	if err := cqlident.Validate("table", tableName); err != nil {
+		return err
+	}
+	if err := cqlident.Validate("column", column); err != nil {
+		return err
+	}
 
 	query := fmt.Sprintf(addColumnQuery, s.keySpace, tableName, column)
 	log.Info().Msgf("Executing Scylla add column query: %s", query)

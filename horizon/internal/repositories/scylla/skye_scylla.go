@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Meesho/BharatMLStack/horizon/pkg/cqlident"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/gocql/gocql"
 	"github.com/rs/zerolog/log"
@@ -76,6 +77,13 @@ func (s *SkyeScylla) tableExists(tableName string) (bool, error) {
 }
 
 func (s *SkyeScylla) CreateEmbeddingTable(tableName string, defaultTimeToLive int, variantsList []string) error {
+	// Validate identifiers before interpolating them into the DDL.
+	if err := cqlident.Validate("table", tableName); err != nil {
+		return err
+	}
+	if err := cqlident.ValidateAll("variant", variantsList); err != nil {
+		return err
+	}
 	// Check if table already exists
 	exists, err := s.tableExists(tableName)
 	if err != nil {
@@ -111,6 +119,12 @@ func (s *SkyeScylla) CreateEmbeddingTable(tableName string, defaultTimeToLive in
 }
 
 func (s *SkyeScylla) AddEmbeddingColumn(tableName string, columnName string) error {
+	if err := cqlident.Validate("table", tableName); err != nil {
+		return err
+	}
+	if err := cqlident.Validate("column", columnName); err != nil {
+		return err
+	}
 	query := fmt.Sprintf(addBoolColumnQuery, s.keySpace, tableName, columnName)
 
 	err := s.session.Query(query).Exec()
@@ -131,6 +145,9 @@ func (s *SkyeScylla) AddEmbeddingColumn(tableName string, columnName string) err
 }
 
 func (s *SkyeScylla) CreateAggregatorTable(tableName string, defaultTimeToLive int) error {
+	if err := cqlident.Validate("table", tableName); err != nil {
+		return err
+	}
 	// Check if table already exists
 	exists, err := s.tableExists(tableName)
 	if err != nil {
@@ -159,6 +176,12 @@ func (s *SkyeScylla) CreateAggregatorTable(tableName string, defaultTimeToLive i
 }
 
 func (s *SkyeScylla) AddAggregatorColumn(tableName string, columnName string) error {
+	if err := cqlident.Validate("table", tableName); err != nil {
+		return err
+	}
+	if err := cqlident.Validate("column", columnName); err != nil {
+		return err
+	}
 	query := fmt.Sprintf(addTextColumnQuery, s.keySpace, tableName, columnName)
 
 	err := s.session.Query(query).Exec()
