@@ -16,9 +16,11 @@ import (
 
 const (
 	// maxIdentLen bounds keyspace / table / primary-key names. Cassandra and
-	// Scylla limit these unquoted identifiers to 48 characters; we allow a
-	// little headroom while still bounding the value.
-	maxIdentLen = 64
+	// Scylla cap these unquoted identifiers at 48 characters, so we use the
+	// same limit: a longer name would only pass this check and then fail at
+	// DDL time, which is exactly the late failure this validator exists to
+	// prevent.
+	maxIdentLen = 48
 
 	// maxColumnLen bounds column names. Feature-store and Skye column names are
 	// generated from feature labels / variants and can legitimately be longer

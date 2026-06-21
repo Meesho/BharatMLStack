@@ -54,21 +54,40 @@ func TestScylla_AddColumn_RejectsInjection(t *testing.T) {
 }
 
 func TestSkyeScylla_RejectsInjection(t *testing.T) {
-	s := &SkyeScylla{keySpace: "ks"}
+	s := &SkyeScylla{keySpace: "ks"} // session intentionally nil
 
-	if err := s.AddEmbeddingColumn("good_table", "c boolean; DROP TABLE x; --"); err == nil {
-		t.Error("AddEmbeddingColumn with injected column = nil, want error")
+	cases := []struct {
+		name string
+		// fn invokes one Skye helper with an unsafe input; it must return a
+		// validation error before touching the nil session.
+		fn func() error
+	}{
+		{
+			"embedding column injection",
+			func() error { return s.AddEmbeddingColumn("good_table", "c boolean; DROP TABLE x; --") },
+		},
+		{
+			"aggregator column injection",
+			func() error { return s.AddAggregatorColumn("good_table", "bad;col") },
+		},
+		{
+			"embedding table injection",
+			func() error { return s.CreateEmbeddingTable("t)", 0, []string{"v1"}) },
+		},
+		// NOTE: variant-identifier validation now happens on the table-creation
+		// path (after the "already exists" check), so it can't be exercised here
+		// with a nil session. That path is unit-tested in
+		// pkg/cqlident: TestValidateColumn_NormalizedVariant.
+		{
+			"aggregator over-long table",
+			func() error { return s.CreateAggregatorTable(strings.Repeat("a", 200), 0) },
+		},
 	}
-	if err := s.AddAggregatorColumn("good_table", "bad;col"); err == nil {
-		t.Error("AddAggregatorColumn with injected column = nil, want error")
-	}
-	if err := s.CreateEmbeddingTable("t)", 0, []string{"v1"}); err == nil {
-		t.Error("CreateEmbeddingTable with injected table = nil, want error")
-	}
-	if err := s.CreateEmbeddingTable("good_table", 0, []string{"v1; DROP"}); err == nil {
-		t.Error("CreateEmbeddingTable with injected variant = nil, want error")
-	}
-	if err := s.CreateAggregatorTable(strings.Repeat("a", 200), 0); err == nil {
-		t.Error("CreateAggregatorTable with over-long table = nil, want error")
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if err := c.fn(); err == nil {
+				t.Fatalf("%s: got nil, want validation error", c.name)
+			}
+		})
 	}
 }

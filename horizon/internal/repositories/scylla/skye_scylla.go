@@ -84,8 +84,23 @@ func (s *SkyeScylla) CreateEmbeddingTable(tableName string, defaultTimeToLive in
 	if err := cqlident.Validate("table", tableName); err != nil {
 		return err
 	}
-	// Build and validate variant column definitions up front, before any DB
-	// roundtrip, so an invalid identifier is rejected without side effects.
+
+	// Check if table already exists before doing any per-variant work, so the
+	// idempotent reconciliation fast path (table already present) stays cheap.
+	exists, err := s.tableExists(tableName)
+	if err != nil {
+		log.Error().Err(err).Str("keyspace", s.keySpace).Str("table", tableName).
+			Msg("Failed to check if embedding table exists")
+		return fmt.Errorf("failed to check if table exists: %w", err)
+	}
+	if exists {
+		log.Error().Str("keyspace", s.keySpace).Str("table", tableName).
+			Msg("Embedding table already exists, skipping creation")
+		return nil
+	}
+
+	// Build and validate variant column definitions only once we know the table
+	// needs to be created.
 	var variantColumns strings.Builder
 	for _, variant := range variantsList {
 		// Convert variant name to snake_case and append _to_be_indexed. The
@@ -97,19 +112,6 @@ func (s *SkyeScylla) CreateEmbeddingTable(tableName string, defaultTimeToLive in
 			return fmt.Errorf("invalid variant %q: %w", variant, err)
 		}
 		variantColumns.WriteString(fmt.Sprintf(",\n\t\t%s boolean", variantColumnName))
-	}
-
-	// Check if table already exists
-	exists, err := s.tableExists(tableName)
-	if err != nil {
-		log.Error().Err(err).Str("keyspace", s.keySpace).Str("table", tableName).
-			Msg("Failed to check if embedding table exists")
-		return fmt.Errorf("failed to check if table exists: %w", err)
-	}
-	if exists {
-		log.Error().Str("keyspace", s.keySpace).Str("table", tableName).
-			Msg("Embedding table already exists, skipping creation")
-		return nil
 	}
 
 	query := fmt.Sprintf(createEmbeddingTableQueryBase, s.keySpace, tableName, variantColumns.String(), defaultTimeToLive)
