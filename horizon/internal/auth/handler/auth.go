@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/horizon/internal/repositories/sql/auth"
@@ -14,6 +15,28 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 )
+
+const (
+	// maxLoginFailures is the number of consecutive failed logins for a single
+	// account before it is temporarily locked.
+	maxLoginFailures = 5
+	// loginLockDuration is how long an account stays locked after hitting the
+	// failure threshold.
+	loginLockDuration = 15 * time.Minute
+)
+
+// loginLockState tracks consecutive login failures for an account.
+//
+// NOTE: this is in-memory and therefore per-replica. For a multi-replica
+// deployment move this counter to a shared store (Redis/DB) so the lockout is
+// enforced globally. It is still a useful defence-in-depth layer alongside the
+// per-IP rate limiter on the /login route.
+type loginLockState struct {
+	failures int
+	until    time.Time
+}
+
+var loginFailures sync.Map // email -> *loginLockState
 
 type AuthHandler struct {
 	authRepo       auth.Repository
@@ -136,9 +159,16 @@ func (a *AuthHandler) Register(user *User) error {
 
 // Login method
 func (a *AuthHandler) Login(user *Login) (*LoginResponse, error) {
+	// Enforce per-account lockout before doing any expensive work.
+	if locked, retryAfter := isAccountLocked(user.Email); locked {
+		log.Warn().Msgf("Login blocked for %s: account temporarily locked", user.Email)
+		return nil, fmt.Errorf("account temporarily locked due to too many failed attempts, try again in %s", retryAfter.Round(time.Second))
+	}
+
 	// Fetch user from the repository using email
 	authUser, err := a.authRepo.GetUserByEmailId(user.Email)
 	if err != nil {
+		recordLoginFailure(user.Email)
 		log.Error().Msgf("User not found with email: %s", user.Email)
 		return nil, fmt.Errorf("invalid email or password")
 	}
@@ -146,6 +176,7 @@ func (a *AuthHandler) Login(user *Login) (*LoginResponse, error) {
 	// Compare the provided password with the stored password hash
 	err = bcrypt.CompareHashAndPassword([]byte(authUser.PasswordHash), []byte(user.Password))
 	if err != nil {
+		recordLoginFailure(user.Email)
 		log.Error().Msg("Password mismatch")
 		return nil, fmt.Errorf("invalid email or password")
 	}
@@ -153,6 +184,9 @@ func (a *AuthHandler) Login(user *Login) (*LoginResponse, error) {
 		log.Error().Msgf("User %s is not active, Please contact admin to activate your account", authUser.Email)
 		return nil, fmt.Errorf("User is not active, Please contact admin to activate your account")
 	}
+
+	// Successful authentication resets the failure counter.
+	resetLoginFailures(user.Email)
 
 	// Generate JWT token
 	expirationTime := time.Now().Add(24 * time.Hour)
@@ -189,6 +223,37 @@ func (a *AuthHandler) Logout(token string) error {
 		return err
 	}
 	return err
+}
+
+// isAccountLocked reports whether the account is currently locked out and, if
+// so, how long until it is unlocked.
+func isAccountLocked(email string) (bool, time.Duration) {
+	v, ok := loginFailures.Load(email)
+	if !ok {
+		return false, 0
+	}
+	st := v.(*loginLockState)
+	if st.until.IsZero() || time.Now().After(st.until) {
+		return false, 0
+	}
+	return true, time.Until(st.until)
+}
+
+// recordLoginFailure increments the failure counter for the account and locks
+// it once the threshold is reached.
+func recordLoginFailure(email string) {
+	v, _ := loginFailures.LoadOrStore(email, &loginLockState{})
+	st := v.(*loginLockState)
+	st.failures++
+	if st.failures >= maxLoginFailures {
+		st.until = time.Now().Add(loginLockDuration)
+		st.failures = 0
+	}
+}
+
+// resetLoginFailures clears any failure/lock state for the account.
+func resetLoginFailures(email string) {
+	loginFailures.Delete(email)
 }
 
 func (a *AuthHandler) saveToken(email, token string, expiration time.Time) error {
