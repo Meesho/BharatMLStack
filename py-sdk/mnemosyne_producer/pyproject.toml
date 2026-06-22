@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mnemosyne_producer"
+version = "0.1.0"
+description = "Mnemosyne WORM platform — Producer: Spark batch job that shards a parquet dataset by crc32(key) and emits per-shard RocksDB SST files."
+requires-python = ">=3.9"
+dependencies = [
+    "pyspark>=3.4",
+    "protobuf>=4.21",
+    "rocksdict>=0.3",
+    "bharatml_commons",
+]
+
+[project.scripts]
+mnemosyne-producer = "mnemosyne_producer.job:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mnemosyne_producer*"]
