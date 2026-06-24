@@ -1,0 +1,66 @@
+[
+  {
+    "entity_label": "catalog__user_geohash_1_3",
+    "pk_values": [105959719, 4236],
+    "expected_key_utf8": "catalog__user_geohash_1_3:105959719|4236",
+    "expected_key_hex": "636174616c6f675f5f757365725f67656f686173685f315f333a3130353935393731397c34323336",
+    "expected_shard_3": 2,
+    "expected_shard_64": 63
+  },
+  {
+    "entity_label": "catalog__user_geohash_1_3",
+    "pk_values": [136588307, 4205],
+    "expected_key_utf8": "catalog__user_geohash_1_3:136588307|4205",
+    "expected_key_hex": "636174616c6f675f5f757365725f67656f686173685f315f333a3133363538383330377c34323035",
+    "expected_shard_3": 1,
+    "expected_shard_64": 50
+  },
+  {
+    "entity_label": "catalog__user_geohash_1_3",
+    "pk_values": [195652532, 4999],
+    "expected_key_utf8": "catalog__user_geohash_1_3:195652532|4999",
+    "expected_key_hex": "636174616c6f675f5f757365725f67656f686173685f315f333a3139353635323533327c34393939",
+    "expected_shard_3": 0,
+    "expected_shard_64": 33
+  },
+  {
+    "entity_label": "catalog__user_geohash_1_3",
+    "pk_values": [0, 0],
+    "expected_key_utf8": "catalog__user_geohash_1_3:0|0",
+    "expected_key_hex": "636174616c6f675f5f757365725f67656f686173685f315f333a307c30",
+    "expected_shard_3": 2,
+    "expected_shard_64": 60
+  },
+  {
+    "entity_label": "catalog__user_geohash_1_3",
+    "pk_values": [999999999, 1],
+    "expected_key_utf8": "catalog__user_geohash_1_3:999999999|1",
+    "expected_key_hex": "636174616c6f675f5f757365725f67656f686173685f315f333a3939393939393939397c31",
+    "expected_shard_3": 1,
+    "expected_shard_64": 14
+  },
+  {
+    "entity_label": "catalog__user_geohash_1_3",
+    "pk_values": [10000001, 4208],
+    "expected_key_utf8": "catalog__user_geohash_1_3:10000001|4208",
+    "expected_key_hex": "636174616c6f675f5f757365725f67656f686173685f315f333a31303030303030317c34323038",
+    "expected_shard_3": 0,
+    "expected_shard_64": 9
+  },
+  {
+    "entity_label": "catalog__user_geohash_1_3",
+    "pk_values": [100000218, 5006],
+    "expected_key_utf8": "catalog__user_geohash_1_3:100000218|5006",
+    "expected_key_hex": "636174616c6f675f5f757365725f67656f686173685f315f333a3130303030303231387c35303036",
+    "expected_shard_3": 0,
+    "expected_shard_64": 60
+  },
+  {
+    "entity_label": "catalog__user_geohash_1_3",
+    "pk_values": [100000281, 5336],
+    "expected_key_utf8": "catalog__user_geohash_1_3:100000281|5336",
+    "expected_key_hex": "636174616c6f675f5f757365725f67656f686173685f315f333a3130303030303238317c35333336",
+    "expected_shard_3": 0,
+    "expected_shard_64": 61
+  }
+]
