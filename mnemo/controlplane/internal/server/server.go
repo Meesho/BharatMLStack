@@ -70,8 +70,11 @@ func (s *Server) registerRoutes(h *handlers.Handlers) {
 	api.PUT("/tenants/:tenant/stores/:store/dataflow", h.PutDataflow)
 	api.GET("/tenants/:tenant/stores/:store/dataflow", h.GetDataflow)
 
-	// Liveness: static 200 — the process is up. Don't gate on etcd here, or a
-	// transient etcd blip would restart the pod.
+	api.PUT("/tenants/:tenant/stores/:store/clientConfig", h.PutClientConfig)
+	api.GET("/tenants/:tenant/stores/:store/clientConfig", h.GetClientConfig)
+
+	api.GET("/tenants/:tenant/stores/:store/topology", h.GetTopology)
+
 	s.router.GET("/api/v1/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})

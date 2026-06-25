@@ -27,6 +27,7 @@ type StoreState struct {
 	RollbackVersion string                `json:"rollbackVersion"`
 	TopologyVersion int64                 `json:"topologyVersion"`
 	Dataflow        *model.DataflowConfig `json:"dataflow,omitempty"`
+	ClientConfig    *model.ClientConfig   `json:"clientConfig,omitempty"`
 }
 
 // TopologyState holds the active version and its shard→pod assignment.
@@ -49,6 +50,9 @@ type StateClient interface {
 
 	PutDataflow(ctx context.Context, tenant, store string, cfg model.DataflowConfig) error
 	GetDataflow(ctx context.Context, tenant, store string) (*model.DataflowConfig, error)
+
+	GetClientConfig(ctx context.Context, tenant, store string) (*model.ClientConfig, error)
+	SetClientConfig(ctx context.Context, tenant, store string, cfg model.ClientConfig) error
 
 	GetTopology(ctx context.Context, tenant, store string) (*TopologyState, error)
 	ListPods(ctx context.Context, tenant, store string) (map[string]model.PodData, error)

@@ -3,7 +3,7 @@ module github.com/Meesho/BharatMLStack/mnemo/mnemo-go-sdk
 go 1.24.4
 
 require (
-	github.com/Meesho/BharatMLStack/mnemo/controlplane v0.1.0-pre-release
+	github.com/Meesho/BharatMLStack/mnemo/controlplane v0.0.0
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.11.1
 	go.etcd.io/etcd/api/v3 v3.5.17

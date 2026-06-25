@@ -29,12 +29,58 @@ type DataflowConfig struct {
 	NumOfFiles  int            `json:"numOfFiles,omitempty"` // 0 = all files in the partition
 	RocksDBCfg  map[string]any `json:"rocksdbCfg,omitempty"` // compression, bloom_bits_per_key, block_size_kb
 	QcCfg       map[string]any `json:"qcCfg,omitempty"`      // max_shard_skew, min_total_rows
+	// AutoPromote opts this store into reconciler-driven auto-promotion: once a
+	// READY version newer than the active one has every shard warm, the control
+	// plane promotes it automatically (no manual promote call). Default false.
+	AutoPromote bool `json:"autoPromote,omitempty"`
+	// KeepVersions bounds on-disk retention: the reconciler retires versions
+	// older than the newest N (the active version + its rollback chain), freeing
+	// their SSTs from pod disk. 0 = use the default (2) for auto-promote stores,
+	// and disabled for stores not managed by the reconciler. The active and
+	// rollback versions are always kept regardless of N.
+	KeepVersions int `json:"keepVersions,omitempty"`
+}
+
+// ClientConfig holds SDK connection-pool and transport settings for a store.
+// Persisted in etcd at /config/mnemo/tenants/{tenant}/stores/{store}/clientConfig.
+// The SDK fetches this once on init and applies the values; changes require a
+// client restart (or a future watch). Zero values mean "use SDK default".
+type ClientConfig struct {
+	// ConnectTimeoutMs is the TCP dial timeout in milliseconds. Default: 5000.
+	ConnectTimeoutMs int `json:"connectTimeoutMs,omitempty"`
+	// RequestTimeoutMs is the per-request deadline in milliseconds. Default: 100.
+	RequestTimeoutMs int `json:"requestTimeoutMs,omitempty"`
+	// KeepAliveIntervalMs is the TCP keepalive probe interval. Default: 15000.
+	KeepAliveIntervalMs int `json:"keepAliveIntervalMs,omitempty"`
+	// KeepAliveTimeoutMs is the keepalive timeout before the connection is
+	// considered dead and closed. Default: 5000.
+	KeepAliveTimeoutMs int `json:"keepAliveTimeoutMs,omitempty"`
+	// IdleTimeoutMs evicts connections that have been idle longer than this.
+	// Default: 60000.
+	IdleTimeoutMs int `json:"idleTimeoutMs,omitempty"`
+	// IdleCheckIntervalMs is the sweep interval for idle eviction. Default: 10000.
+	IdleCheckIntervalMs int `json:"idleCheckIntervalMs,omitempty"`
+	// MinConnsPerPod is the warm floor: pre-dialed connections kept per pod even
+	// when idle. Default: 1.
+	MinConnsPerPod int `json:"minConnsPerPod,omitempty"`
+	// MaxConnsPerPod is the pool ceiling per pod. Default: 4.
+	MaxConnsPerPod int `json:"maxConnsPerPod,omitempty"`
+	// DNSRefreshIntervalMs is the DNS re-resolve cadence for K8s headless
+	// Services. Ignored in assignment-aware mode. Default: 30000.
+	DNSRefreshIntervalMs int `json:"dnsRefreshIntervalMs,omitempty"`
+	// WarmUpOnTopologyChange pre-dials MinConnsPerPod connections to newly
+	// discovered pods when the assignment changes. Default: true.
+	WarmUpOnTopologyChange *bool `json:"warmUpOnTopologyChange,omitempty"`
 }
 
 // PodData is the ephemeral registration for a single pod, lease-bound in etcd.
 type PodData struct {
-	NodeIP         string   `json:"nodeIP"`
-	PodIP          string   `json:"podIP"`
+	NodeIP string `json:"nodeIP"`
+	PodIP  string `json:"podIP"`
+	// Port is the read server's TCP port. 0 means "unset" — placement falls back
+	// to the default 9091 (one-readserver-per-IP / K8s pod model). Set explicitly
+	// when multiple read servers are co-located on one host (host networking).
+	Port           int      `json:"port,omitempty"`
 	ServingVersion string   `json:"servingVersion"`
 	WarmVersions   []string `json:"warmVersions"`
 	LoadingVersion string   `json:"loadingVersion,omitempty"`

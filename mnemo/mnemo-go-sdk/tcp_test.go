@@ -111,7 +111,7 @@ func writeValueBytes(conn net.Conn, val []byte) {
 func pipeConn(data map[string][]byte) *Conn {
 	client, server := net.Pipe()
 	go fakeServer(server, data)
-	return &Conn{conn: client}
+	return &Conn{conn: client, lastUsed: time.Now()}
 }
 
 func key12(s string) []byte {
@@ -155,7 +155,7 @@ func TestSingleLookup_WithDeadline(t *testing.T) {
 func TestSingleLookup_WriteError(t *testing.T) {
 	client, server := net.Pipe()
 	server.Close() // closed → write fails
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.SingleLookup(context.Background(), key12("k"))
 	assert.Error(t, err)
 }
@@ -168,7 +168,7 @@ func TestSingleLookup_ReadHeaderError(t *testing.T) {
 		io.ReadFull(server, buf)
 		server.Close()
 	}()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.SingleLookup(context.Background(), key12("k"))
 	assert.Error(t, err)
 }
@@ -181,7 +181,7 @@ func TestSingleLookup_ReadLengthError(t *testing.T) {
 		server.Write([]byte{1}) // found=1 but no length follows
 		server.Close()
 	}()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.SingleLookup(context.Background(), key12("k"))
 	assert.Error(t, err)
 }
@@ -195,7 +195,7 @@ func TestSingleLookup_ReadValueError(t *testing.T) {
 		server.Write(hdr)
 		server.Close()
 	}()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.SingleLookup(context.Background(), key12("k"))
 	assert.Error(t, err)
 }
@@ -225,7 +225,7 @@ func TestBatchLookup_HitAndMiss(t *testing.T) {
 func TestBatchLookup_WriteError(t *testing.T) {
 	client, server := net.Pipe()
 	server.Close()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.BatchLookup(context.Background(), [][]byte{key12("k")})
 	assert.Error(t, err)
 }
@@ -237,7 +237,7 @@ func TestBatchLookup_ReadHeaderError(t *testing.T) {
 		io.ReadFull(server, buf)
 		server.Close()
 	}()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.BatchLookup(context.Background(), [][]byte{key12("k")})
 	assert.Error(t, err)
 }
@@ -250,7 +250,7 @@ func TestBatchLookup_ReadFoundError(t *testing.T) {
 		server.Write([]byte{0, 1}) // N=1, then close before per-key body
 		server.Close()
 	}()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.BatchLookup(context.Background(), [][]byte{key12("k")})
 	assert.Error(t, err)
 }
@@ -263,7 +263,7 @@ func TestBatchLookup_ReadLengthError(t *testing.T) {
 		server.Write([]byte{0, 1, 1}) // N=1, found=1, no length
 		server.Close()
 	}()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.BatchLookup(context.Background(), [][]byte{key12("k")})
 	assert.Error(t, err)
 }
@@ -276,7 +276,7 @@ func TestBatchLookup_ReadValueError(t *testing.T) {
 		server.Write([]byte{0, 1, 1, 0, 0, 0, 5}) // N=1, found=1, len=5, no value
 		server.Close()
 	}()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.BatchLookup(context.Background(), [][]byte{key12("k")})
 	assert.Error(t, err)
 }
@@ -286,7 +286,7 @@ func TestBatchLookup_ReadValueError(t *testing.T) {
 func TestStringSingleLookup_WriteError(t *testing.T) {
 	client, server := net.Pipe()
 	server.Close()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.StringSingleLookup(context.Background(), []byte("k"))
 	assert.Error(t, err)
 }
@@ -298,7 +298,7 @@ func TestStringSingleLookup_ReadHeaderError(t *testing.T) {
 		io.ReadFull(server, buf)
 		server.Close()
 	}()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.StringSingleLookup(context.Background(), []byte("k"))
 	assert.Error(t, err)
 }
@@ -311,7 +311,7 @@ func TestStringSingleLookup_ReadLengthError(t *testing.T) {
 		server.Write([]byte{1}) // found=1 but no length
 		server.Close()
 	}()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.StringSingleLookup(context.Background(), []byte("k"))
 	assert.Error(t, err)
 }
@@ -324,7 +324,7 @@ func TestStringSingleLookup_ReadValueError(t *testing.T) {
 		server.Write([]byte{1, 0, 0, 0, 10}) // found=1, len=10, no value
 		server.Close()
 	}()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.StringSingleLookup(context.Background(), []byte("k"))
 	assert.Error(t, err)
 }
@@ -352,7 +352,7 @@ func TestStringSingleLookup_Miss(t *testing.T) {
 func TestStringBatchLookup_WriteError(t *testing.T) {
 	client, server := net.Pipe()
 	server.Close()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.StringBatchLookup(context.Background(), [][]byte{[]byte("k")})
 	assert.Error(t, err)
 }
@@ -364,7 +364,7 @@ func TestStringBatchLookup_ReadHeaderError(t *testing.T) {
 		io.ReadFull(server, buf[:1+2+2+1]) // op + N + keyLen + key
 		server.Close()
 	}()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.StringBatchLookup(context.Background(), [][]byte{[]byte("k")})
 	assert.Error(t, err)
 }
@@ -377,7 +377,7 @@ func TestStringBatchLookup_ReadFoundError(t *testing.T) {
 		server.Write([]byte{0, 1})          // N=1, then close before found byte
 		server.Close()
 	}()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.StringBatchLookup(context.Background(), [][]byte{[]byte("k")})
 	assert.Error(t, err)
 }
@@ -390,7 +390,7 @@ func TestStringBatchLookup_ReadLengthError(t *testing.T) {
 		server.Write([]byte{0, 1, 1})      // N=1, found=1, no length
 		server.Close()
 	}()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.StringBatchLookup(context.Background(), [][]byte{[]byte("k")})
 	assert.Error(t, err)
 }
@@ -403,7 +403,7 @@ func TestStringBatchLookup_ReadValueError(t *testing.T) {
 		server.Write([]byte{0, 1, 1, 0, 0, 0, 5})   // N=1, found=1, len=5, no value
 		server.Close()
 	}()
-	c := &Conn{conn: client}
+	c := &Conn{conn: client, lastUsed: time.Now()}
 	_, err := c.StringBatchLookup(context.Background(), [][]byte{[]byte("k")})
 	assert.Error(t, err)
 }
@@ -515,12 +515,16 @@ func TestConnPool_PutAndReuse(t *testing.T) {
 	assert.Same(t, conn, conn2)
 }
 
-func TestConnPool_PutUnknownAddrClosesConn(t *testing.T) {
+func TestConnPool_PutUnknownAddrAcceptsConn(t *testing.T) {
 	client, _ := net.Pipe()
 	p := NewConnPool(2)
 	defer p.Close()
-	// Put to an address the pool has no channel for → connection is closed.
-	p.Put("never-Get-this", &Conn{conn: client})
+	// Put to a new address — pool creates an entry for it.
+	p.Put("never-Get-this", &Conn{conn: client, lastUsed: time.Now()})
+	p.mu.Lock()
+	_, exists := p.pools["never-Get-this"]
+	p.mu.Unlock()
+	assert.True(t, exists)
 }
 
 func TestConnPool_PutFullClosesConn(t *testing.T) {
@@ -573,7 +577,8 @@ func TestConnPool_DoubleClose(t *testing.T) {
 
 func TestNewConnPool_DefaultsOnNonPositive(t *testing.T) {
 	p := NewConnPool(0)
-	assert.Equal(t, 4, p.maxPerPod)
+	defer p.Close()
+	assert.Equal(t, 4, p.cfg.MaxPerPod)
 }
 
 func TestConnPool_PruneClosesDeadPods(t *testing.T) {
@@ -636,4 +641,110 @@ func TestConnPool_PruneAfterClose_NoOp(t *testing.T) {
 	p := NewConnPool(2)
 	p.Close()
 	p.Prune([]string{"x:1"}) // closed pool → no panic
+}
+
+// ── PoolConfig + NewConnPoolWithConfig ──────────────────────────────────────
+
+func TestPoolConfig_Defaults(t *testing.T) {
+	pc := PoolConfig{}
+	pc.applyDefaults()
+	assert.Equal(t, 1, pc.MinPerPod)
+	assert.Equal(t, 4, pc.MaxPerPod)
+	assert.Equal(t, 5*time.Second, pc.DialTimeout)
+	assert.Equal(t, 60*time.Second, pc.IdleTimeout)
+	assert.Equal(t, 10*time.Second, pc.IdleCheckInterval)
+	assert.Equal(t, 15*time.Second, pc.KeepAliveInterval)
+	assert.Equal(t, 5*time.Second, pc.KeepAliveTimeout)
+}
+
+func TestPoolConfig_MaxClampedToMin(t *testing.T) {
+	pc := PoolConfig{MinPerPod: 8, MaxPerPod: 2}
+	pc.applyDefaults()
+	assert.Equal(t, 8, pc.MaxPerPod) // clamped up to MinPerPod
+}
+
+func TestNewConnPoolWithConfig_IdleEviction(t *testing.T) {
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_ = conn
+		}
+	}()
+
+	p := NewConnPoolWithConfig(PoolConfig{
+		MaxPerPod:         4,
+		MinPerPod:         0,
+		IdleTimeout:       50 * time.Millisecond,
+		IdleCheckInterval: 20 * time.Millisecond,
+		DialTimeout:       time.Second,
+	})
+	defer p.Close()
+
+	addr := ln.Addr().String()
+	c, err := p.Get(addr)
+	require.NoError(t, err)
+	p.Put(addr, c)
+
+	// Wait for idle eviction.
+	time.Sleep(200 * time.Millisecond)
+	p.mu.Lock()
+	remaining := len(p.pools[addr])
+	p.mu.Unlock()
+	assert.Equal(t, 0, remaining, "idle connection should have been evicted")
+}
+
+func TestNewConnPoolWithConfig_MinPerPodPreservesIdleConns(t *testing.T) {
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_ = conn
+		}
+	}()
+
+	p := NewConnPoolWithConfig(PoolConfig{
+		MaxPerPod:         4,
+		MinPerPod:         1,
+		IdleTimeout:       50 * time.Millisecond,
+		IdleCheckInterval: 20 * time.Millisecond,
+		DialTimeout:       time.Second,
+	})
+	defer p.Close()
+
+	addr := ln.Addr().String()
+	c, err := p.Get(addr)
+	require.NoError(t, err)
+	p.Put(addr, c)
+
+	// Wait for idle eviction sweep — MinPerPod=1 should keep 1 conn alive.
+	time.Sleep(200 * time.Millisecond)
+	p.mu.Lock()
+	remaining := len(p.pools[addr])
+	p.mu.Unlock()
+	assert.Equal(t, 1, remaining, "MinPerPod=1 should preserve one connection")
+}
+
+func TestDialWithKeepalive_Success(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer ln.Close()
+	go func() {
+		conn, _ := ln.Accept()
+		if conn != nil {
+			conn.Close()
+		}
+	}()
+
+	c, err := DialWithKeepalive(ln.Addr().String(), time.Second, 15*time.Second, 5*time.Second)
+	require.NoError(t, err)
+	assert.NoError(t, c.Close())
 }

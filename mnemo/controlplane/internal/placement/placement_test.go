@@ -73,6 +73,29 @@ func TestDeriveAssignment_MultipleReplicasPerShard(t *testing.T) {
 	assert.Contains(t, result["0"], "10.0.0.2:9091")
 }
 
+func TestDeriveAssignment_CoLocatedPodsUseReportedPort(t *testing.T) {
+	// Two shards co-located on one host (host networking) — same IP, distinct
+	// ports. The reported Port must be honored so clients reach the right server.
+	pods := map[string]model.PodData{
+		"test-store-shard-0-1": {PodIP: "10.0.0.1", Port: 9092, WarmVersions: []string{"v1"}},
+		"test-store-shard-1-1": {PodIP: "10.0.0.1", Port: 9093, WarmVersions: []string{"v1"}},
+	}
+
+	result := DeriveAssignment(2, pods, "v1")
+	assert.Equal(t, []string{"10.0.0.1:9092"}, result["0"])
+	assert.Equal(t, []string{"10.0.0.1:9093"}, result["1"])
+}
+
+func TestDeriveAssignment_ZeroPortFallsBackToDefault(t *testing.T) {
+	// Legacy pod without a Port → falls back to 9091 (K8s pod-per-IP model).
+	pods := map[string]model.PodData{
+		"fs-features-shard-0-0": {PodIP: "10.0.0.1", WarmVersions: []string{"v1"}},
+	}
+
+	result := DeriveAssignment(1, pods, "v1")
+	assert.Equal(t, []string{"10.0.0.1:9091"}, result["0"])
+}
+
 func TestDeriveAssignment_PodWithInvalidName(t *testing.T) {
 	// "totally-unrelated" has no "-shard-" substring → ExtractShardID returns "" → triggers sid=="" branch
 	pods := map[string]model.PodData{

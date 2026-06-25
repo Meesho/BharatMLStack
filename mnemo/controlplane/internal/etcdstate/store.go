@@ -60,6 +60,11 @@ func (c *EtcdStateClient) GetStore(ctx context.Context, tenant, store string) (*
 		state.Dataflow = df
 	}
 
+	// Best-effort: attach client config if it exists.
+	if cc, err := c.GetClientConfig(ctx, tenant, store); err == nil {
+		state.ClientConfig = cc
+	}
+
 	return state, nil
 }
 
@@ -265,6 +270,37 @@ func (c *EtcdStateClient) GetDataflow(ctx context.Context, tenant, store string)
 	return &cfg, nil
 }
 
+// GetClientConfig reads the client config for a store.
+// Returns ErrNotFound if the store or its client config does not exist.
+func (c *EtcdStateClient) GetClientConfig(ctx context.Context, tenant, store string) (*model.ClientConfig, error) {
+	val, _, found, err := c.ops.get(ctx, model.ClientConfigPath(tenant, store))
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, ErrNotFound
+	}
+	var cfg model.ClientConfig
+	if err := json.Unmarshal([]byte(val), &cfg); err != nil {
+		return nil, fmt.Errorf("parsing client config for %s/%s: %w", tenant, store, err)
+	}
+	return &cfg, nil
+}
+
+// SetClientConfig writes the client config for a store.
+// Returns ErrNotFound if the store does not exist.
+func (c *EtcdStateClient) SetClientConfig(ctx context.Context, tenant, store string, cfg model.ClientConfig) error {
+	_, _, found, err := c.ops.get(ctx, model.EntityKeyPath(tenant, store))
+	if err != nil {
+		return err
+	}
+	if !found {
+		return ErrNotFound
+	}
+	b, _ := json.Marshal(cfg)
+	return c.ops.put(ctx, model.ClientConfigPath(tenant, store), string(b))
+}
+
 // ListPods returns all currently registered pods for a store, keyed by pod ID.
 func (c *EtcdStateClient) ListPods(ctx context.Context, tenant, store string) (map[string]model.PodData, error) {
 	prefix := model.PodWatchPrefix(tenant, store)
@@ -286,4 +322,60 @@ func (c *EtcdStateClient) ListPods(ctx context.Context, tenant, store string) (m
 		pods[podID] = data
 	}
 	return pods, nil
+}
+
+// StoreRef identifies a store by tenant + name (the keys needed to address it).
+type StoreRef struct {
+	Tenant string
+	Store  string
+}
+
+// ListStores enumerates every store across all tenants. It scans the tenants
+// prefix for the per-store "/entityKey" marker (exactly one per store) and parses
+// the tenant/store out of each key path.
+func (c *EtcdStateClient) ListStores(ctx context.Context) ([]StoreRef, error) {
+	prefix := model.AppPrefix + "/tenants/"
+	raw, err := c.ops.getPrefix(ctx, prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	var refs []StoreRef
+	for key := range raw {
+		// key: /config/mnemo/tenants/{tenant}/stores/{store}/entityKey
+		if !strings.HasSuffix(key, "/entityKey") {
+			continue
+		}
+		mid := strings.TrimSuffix(key, "/entityKey")
+		mid = strings.TrimPrefix(mid, prefix) // {tenant}/stores/{store}
+		tenant, store, ok := strings.Cut(mid, "/stores/")
+		if !ok || tenant == "" || store == "" {
+			continue
+		}
+		refs = append(refs, StoreRef{Tenant: tenant, Store: store})
+	}
+	return refs, nil
+}
+
+// ListVersions returns every version's metadata for a store, keyed by version ID.
+func (c *EtcdStateClient) ListVersions(ctx context.Context, tenant, store string) (map[string]*model.VersionMeta, error) {
+	prefix := model.VersionsWatchPrefix(tenant, store)
+	raw, err := c.ops.getPrefix(ctx, prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	versions := make(map[string]*model.VersionMeta, len(raw))
+	for key, val := range raw {
+		vID := strings.TrimPrefix(key, prefix)
+		if vID == "" {
+			continue
+		}
+		var meta model.VersionMeta
+		if err := json.Unmarshal([]byte(val), &meta); err != nil {
+			continue // skip corrupt version entries
+		}
+		versions[vID] = &meta
+	}
+	return versions, nil
 }

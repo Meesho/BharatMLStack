@@ -41,6 +41,90 @@ func (s *StaticResolver) Resolve(shardID uint32) []string {
 	return s.addrs[shardID]
 }
 
+// ── AssignmentResolver ────────────────────────────────────────────────────────
+
+// AssignmentResolver uses the control plane's shard→[]addr assignment map
+// directly. Works for both K8s and VM deployments — no DNS needed. The
+// topology watcher pushes new assignments atomically via SwapAssignment.
+type AssignmentResolver struct {
+	mu    sync.RWMutex
+	addrs map[uint32][]string
+}
+
+// NewAssignmentResolver creates an empty assignment resolver.
+func NewAssignmentResolver() *AssignmentResolver {
+	return &AssignmentResolver{addrs: make(map[uint32][]string)}
+}
+
+// Resolve returns the cached pod addrs for a shard — no IO on the hot path.
+func (a *AssignmentResolver) Resolve(shardID uint32) []string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.addrs[shardID]
+}
+
+// SwapAssignment atomically replaces the full assignment map. The input is
+// the VersionMeta.Assignment from etcd (shard-ID-string → []addr). Returns
+// the set of newly-added pod addresses (for connection warm-up).
+func (a *AssignmentResolver) SwapAssignment(assignment map[string][]string) []string {
+	next := make(map[uint32][]string, len(assignment))
+	for sidStr, addrs := range assignment {
+		sid, err := strconv.ParseUint(sidStr, 10, 32)
+		if err != nil {
+			continue
+		}
+		next[uint32(sid)] = addrs
+	}
+
+	// Compute newly-added addrs (present in next but not in old).
+	a.mu.RLock()
+	oldSet := make(map[string]struct{})
+	for _, addrs := range a.addrs {
+		for _, addr := range addrs {
+			oldSet[addr] = struct{}{}
+		}
+	}
+	a.mu.RUnlock()
+
+	var newAddrs []string
+	seen := make(map[string]struct{})
+	for _, addrs := range next {
+		for _, addr := range addrs {
+			if _, ok := oldSet[addr]; ok {
+				continue
+			}
+			if _, ok := seen[addr]; ok {
+				continue
+			}
+			seen[addr] = struct{}{}
+			newAddrs = append(newAddrs, addr)
+		}
+	}
+
+	a.mu.Lock()
+	a.addrs = next
+	a.mu.Unlock()
+
+	return newAddrs
+}
+
+// AllAddrs returns the deduplicated union of all current addrs.
+func (a *AssignmentResolver) AllAddrs() []string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	seen := make(map[string]struct{})
+	var out []string
+	for _, addrs := range a.addrs {
+		for _, addr := range addrs {
+			if _, ok := seen[addr]; !ok {
+				seen[addr] = struct{}{}
+				out = append(out, addr)
+			}
+		}
+	}
+	return out
+}
+
 // ── DNSResolver ───────────────────────────────────────────────────────────────
 
 // DNSConfig configures a DNSResolver.

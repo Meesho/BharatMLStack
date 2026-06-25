@@ -12,18 +12,22 @@
 //	val, err := client.Get(ctx, key)
 //	results, err := client.BatchGet(ctx, keys)
 //
-// The SDK watches etcd's activeVersion key and atomically rebuilds its
-// shard→pod route table on every promote/rollback — etcd stays off the read
-// hot path (routing uses the cached assignment).
+// The SDK watches etcd's activeVersion key and pod registrations, atomically
+// rebuilding its shard→pod route table on every promote/rollback/scale event.
+// Routing uses the assignment map from VersionMeta (works on K8s and VM
+// deployments); DNS resolution is a fallback for K8s.
 package sdk
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"time"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
+
+	"github.com/Meesho/BharatMLStack/mnemo/controlplane/model"
 )
 
 // ErrKeyNotFound is returned by Get when a key is absent from the store.
@@ -49,8 +53,20 @@ type Config struct {
 	Port               int           // read server TCP port (default 9091)
 	DNSRefreshInterval time.Duration // background re-resolve cadence (default 30s)
 
-	ConnsPerPod int // TCP pool size per pod (default 4)
-	TimeoutMs   int // per-request timeout (default 100ms)
+	// Connection pool settings. These are overridden by ClientConfig from the
+	// control plane when available (zero = use control plane value or default).
+	ConnsPerPod int // TCP pool ceiling per pod (default 4) — legacy alias for PoolConfig.MaxPerPod
+	TimeoutMs   int // per-request timeout (default 100ms) — legacy alias for PoolConfig.RequestTimeoutMs
+
+	// PoolConfig allows full control over connection pool tuning. When set,
+	// ConnsPerPod/TimeoutMs are ignored. When nil, the SDK builds a PoolConfig
+	// from ConnsPerPod + TimeoutMs + any ClientConfig fetched from the control plane.
+	Pool *PoolConfig
+
+	// ClientConfig can be provided explicitly to skip the control plane fetch.
+	// When nil, the SDK reads it from etcd on init (best-effort — missing config
+	// means all defaults).
+	ClientConfig *model.ClientConfig
 }
 
 func (c *Config) applyDefaults() {
@@ -72,6 +88,50 @@ func (c *Config) applyDefaults() {
 	if c.DNSRefreshInterval == 0 {
 		c.DNSRefreshInterval = 30 * time.Second
 	}
+}
+
+// buildPoolConfig merges Config + ClientConfig into a PoolConfig.
+func (c *Config) buildPoolConfig() PoolConfig {
+	if c.Pool != nil {
+		pc := *c.Pool
+		pc.applyDefaults()
+		return pc
+	}
+
+	pc := PoolConfig{
+		MaxPerPod: c.ConnsPerPod,
+	}
+
+	// Overlay ClientConfig from control plane (non-zero fields win).
+	if cc := c.ClientConfig; cc != nil {
+		if cc.ConnectTimeoutMs > 0 {
+			pc.DialTimeout = time.Duration(cc.ConnectTimeoutMs) * time.Millisecond
+		}
+		if cc.KeepAliveIntervalMs > 0 {
+			pc.KeepAliveInterval = time.Duration(cc.KeepAliveIntervalMs) * time.Millisecond
+		}
+		if cc.KeepAliveTimeoutMs > 0 {
+			pc.KeepAliveTimeout = time.Duration(cc.KeepAliveTimeoutMs) * time.Millisecond
+		}
+		if cc.IdleTimeoutMs > 0 {
+			pc.IdleTimeout = time.Duration(cc.IdleTimeoutMs) * time.Millisecond
+		}
+		if cc.IdleCheckIntervalMs > 0 {
+			pc.IdleCheckInterval = time.Duration(cc.IdleCheckIntervalMs) * time.Millisecond
+		}
+		if cc.MinConnsPerPod > 0 {
+			pc.MinPerPod = cc.MinConnsPerPod
+		}
+		if cc.MaxConnsPerPod > 0 {
+			pc.MaxPerPod = cc.MaxConnsPerPod
+		}
+		if cc.DNSRefreshIntervalMs > 0 {
+			c.DNSRefreshInterval = time.Duration(cc.DNSRefreshIntervalMs) * time.Millisecond
+		}
+	}
+
+	pc.applyDefaults()
+	return pc
 }
 
 // Result is the outcome for a single key in a BatchGet.
@@ -117,7 +177,18 @@ func NewClient(config Config) (*Client, error) {
 func newClientWithEtcd(config Config, etcd EtcdClient, closer io.Closer) (*Client, error) {
 	config.applyDefaults()
 
-	resolver := NewDNSResolver(DNSConfig{
+	// Best-effort: fetch ClientConfig from control plane.
+	if config.ClientConfig == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		cc := fetchClientConfig(ctx, etcd, config.Tenant, config.Store)
+		cancel()
+		config.ClientConfig = cc // nil is fine — all defaults
+	}
+
+	poolCfg := config.buildPoolConfig()
+	pool := NewConnPoolWithConfig(poolCfg)
+
+	dnsResolver := NewDNSResolver(DNSConfig{
 		Tenant:    config.Tenant,
 		Store:     config.Store,
 		Namespace: config.Namespace,
@@ -125,21 +196,34 @@ func newClientWithEtcd(config Config, etcd EtcdClient, closer io.Closer) (*Clien
 		Port:      config.Port,
 		Interval:  config.DNSRefreshInterval,
 	})
-	router := NewRouter(resolver)
-	pool := NewConnPool(config.ConnsPerPod)
+
+	assignRes := NewAssignmentResolver()
+
+	// The router uses the assignment resolver as primary (works for K8s + VM).
+	// DNS resolver is kept for backwards-compat: when assignment map is empty
+	// for a shard, the router falls back to DNS.
+	router := NewRouter(NewFallbackResolver(assignRes, dnsResolver))
 
 	// After each DNS refresh: clear transient unhealthy marks and prune pools
 	// for pods that dropped out of DNS (scale-down / no-longer-warm).
-	resolver.OnRefresh(func() {
+	dnsResolver.OnRefresh(func() {
 		router.ClearUnhealthy()
-		pool.Prune(resolver.AllAddrs())
+		pool.Prune(assignRes.AllAddrs())
 	})
 
-	watcher := NewTopologyWatcher(etcd, router, resolver, config.Tenant, config.Store)
+	watcher := NewTopologyWatcher(etcd, router, dnsResolver, config.Tenant, config.Store)
+	watcher.SetAssignmentResolver(assignRes)
+
+	// Determine warm-up connection count.
+	warmUp := poolCfg.MinPerPod
+	if config.ClientConfig != nil && config.ClientConfig.WarmUpOnTopologyChange != nil && !*config.ClientConfig.WarmUpOnTopologyChange {
+		warmUp = 0
+	}
+	watcher.SetPoolForWarmUp(pool, warmUp)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { _ = watcher.Run(ctx) }()
-	go resolver.Run(ctx)
+	go dnsResolver.Run(ctx)
 
 	return &Client{
 		config:     config,
@@ -148,6 +232,19 @@ func newClientWithEtcd(config Config, etcd EtcdClient, closer io.Closer) (*Clien
 		cancel:     cancel,
 		etcdCloser: closer,
 	}, nil
+}
+
+// fetchClientConfig reads the ClientConfig from etcd. Returns nil on any error.
+func fetchClientConfig(ctx context.Context, etcd EtcdClient, tenant, store string) *model.ClientConfig {
+	resp, err := etcd.Get(ctx, model.ClientConfigPath(tenant, store))
+	if err != nil || len(resp.Kvs) == 0 {
+		return nil
+	}
+	var cc model.ClientConfig
+	if err := json.Unmarshal(resp.Kvs[0].Value, &cc); err != nil {
+		return nil
+	}
+	return &cc
 }
 
 // NewDirectClient creates a client that talks to one endpoint with no etcd or

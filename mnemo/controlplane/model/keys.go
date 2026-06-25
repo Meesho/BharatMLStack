@@ -81,6 +81,15 @@ func DataflowPath(tenant, store string) string {
 	return StorePrefix(tenant, store) + "/dataflow"
 }
 
+// ── Client config key ─────────────────────────────────────────────────────
+
+// ClientConfigPath returns the etcd key for a store's SDK client configuration.
+//
+//	/config/mnemo/tenants/{tenant}/stores/{store}/clientConfig
+func ClientConfigPath(tenant, store string) string {
+	return StorePrefix(tenant, store) + "/clientConfig"
+}
+
 // ── Pod registration keys (ephemeral, lease-bound) ────────────────────────────
 
 // PodDataPath returns the ephemeral etcd key for a single pod's registration.

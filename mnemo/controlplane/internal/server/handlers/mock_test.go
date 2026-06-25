@@ -67,6 +67,18 @@ func (m *mockStateClient) ListPods(ctx context.Context, tenant, store string) (m
 	return args.Get(0).(map[string]model.PodData), args.Error(1)
 }
 
+func (m *mockStateClient) GetClientConfig(ctx context.Context, tenant, store string) (*model.ClientConfig, error) {
+	args := m.Called(ctx, tenant, store)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*model.ClientConfig), args.Error(1)
+}
+
+func (m *mockStateClient) SetClientConfig(ctx context.Context, tenant, store string, cfg model.ClientConfig) error {
+	return m.Called(ctx, tenant, store, cfg).Error(0)
+}
+
 func (m *mockStateClient) PutDataflow(ctx context.Context, tenant, store string, cfg model.DataflowConfig) error {
 	return m.Called(ctx, tenant, store, cfg).Error(0)
 }

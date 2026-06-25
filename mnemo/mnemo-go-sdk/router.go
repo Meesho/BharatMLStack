@@ -6,6 +6,28 @@ import (
 	"sync/atomic"
 )
 
+// FallbackResolver tries a primary resolver first (assignment-aware), falling
+// back to a secondary (DNS) when the primary returns no addrs for a shard.
+type FallbackResolver struct {
+	primary   ShardResolver
+	secondary ShardResolver
+}
+
+// NewFallbackResolver creates a resolver that tries primary, then secondary.
+func NewFallbackResolver(primary, secondary ShardResolver) *FallbackResolver {
+	return &FallbackResolver{primary: primary, secondary: secondary}
+}
+
+// Resolve returns addrs from the primary resolver, falling back to secondary
+// when the primary returns nil/empty.
+func (f *FallbackResolver) Resolve(shardID uint32) []string {
+	addrs := f.primary.Resolve(shardID)
+	if len(addrs) > 0 {
+		return addrs
+	}
+	return f.secondary.Resolve(shardID)
+}
+
 // Router maps keys → shards (crc32 % S) and shards → a warm pod, delegating
 // pod discovery to a ShardResolver (DNS in production, static for tests).
 //

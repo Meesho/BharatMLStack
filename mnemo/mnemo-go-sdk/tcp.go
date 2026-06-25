@@ -8,6 +8,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 // Wire protocol constants — must match the Rust read server (LLD §4.1.1).
@@ -21,20 +23,34 @@ const (
 
 // Conn is a single TCP connection to a mNemo read server.
 type Conn struct {
-	conn net.Conn
+	conn     net.Conn
+	lastUsed time.Time // tracked for idle eviction
 }
 
-// Dial opens a TCP connection (TCP_NODELAY) to a read server.
+// Dial opens a TCP connection (TCP_NODELAY + keepalive) to a read server.
 func Dial(addr string, timeout time.Duration) (*Conn, error) {
-	conn, err := net.DialTimeout("tcp", addr, timeout)
+	return DialWithKeepalive(addr, timeout, 0, 0)
+}
+
+// DialWithKeepalive opens a TCP connection with configurable keepalive.
+// keepaliveInterval=0 means use OS default (typically ~15s when enabled).
+// keepaliveTimeout=0 means don't set it explicitly.
+func DialWithKeepalive(addr string, dialTimeout, keepaliveInterval, keepaliveTimeout time.Duration) (*Conn, error) {
+	conn, err := net.DialTimeout("tcp", addr, dialTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("mnemo dial %s: %w", addr, err)
 	}
 	if tc, ok := conn.(*net.TCPConn); ok {
 		_ = tc.SetNoDelay(true)
+		_ = tc.SetKeepAlive(true)
+		if keepaliveInterval > 0 {
+			_ = tc.SetKeepAlivePeriod(keepaliveInterval)
+		}
 	}
-	return &Conn{conn: conn}, nil
+	return &Conn{conn: conn, lastUsed: time.Now()}, nil
 }
+
+func (c *Conn) touch() { c.lastUsed = time.Now() }
 
 func (c *Conn) applyDeadline(ctx context.Context) {
 	if deadline, ok := ctx.Deadline(); ok {
@@ -74,6 +90,7 @@ func (c *Conn) SingleLookup(ctx context.Context, key []byte) ([]byte, error) {
 	if _, err := io.ReadFull(c.conn, val); err != nil {
 		return nil, fmt.Errorf("read single value: %w", err)
 	}
+	c.touch()
 	return val, nil
 }
 
@@ -127,6 +144,7 @@ func (c *Conn) BatchLookup(ctx context.Context, keys [][]byte) ([][]byte, error)
 		}
 		results[i] = val
 	}
+	c.touch()
 	return results, nil
 }
 
@@ -163,6 +181,7 @@ func (c *Conn) StringSingleLookup(ctx context.Context, key []byte) ([]byte, erro
 	if _, err := io.ReadFull(c.conn, val); err != nil {
 		return nil, fmt.Errorf("read string single value: %w", err)
 	}
+	c.touch()
 	return val, nil
 }
 
@@ -223,6 +242,7 @@ func (c *Conn) StringBatchLookup(ctx context.Context, keys [][]byte) ([][]byte, 
 		}
 		results[i] = val
 	}
+	c.touch()
 	return results, nil
 }
 
@@ -244,24 +264,122 @@ func (c *Conn) Close() error {
 	return c.conn.Close()
 }
 
-// ConnPool keeps a bounded pool of connections per pod address.
-type ConnPool struct {
-	mu        sync.Mutex
-	maxPerPod int
-	dialTO    time.Duration
-	pools     map[string]chan *Conn
-	closed    bool
+// ── PoolConfig ───────────────────────────────────────────────────────────────
+
+// PoolConfig holds tuning parameters for the connection pool.
+type PoolConfig struct {
+	MinPerPod          int           // warm floor: pre-dialed idle connections (default 1)
+	MaxPerPod          int           // pool ceiling (default 4)
+	DialTimeout        time.Duration // TCP connect timeout (default 5s)
+	IdleTimeout        time.Duration // evict connections idle longer than this (default 60s)
+	IdleCheckInterval  time.Duration // sweep interval for idle eviction (default 10s)
+	KeepAliveInterval  time.Duration // TCP keepalive probe interval (default 15s)
+	KeepAliveTimeout   time.Duration // keepalive timeout (default 5s)
 }
 
-// NewConnPool creates a pool with maxPerPod buffered connections per pod.
-func NewConnPool(maxPerPod int) *ConnPool {
-	if maxPerPod <= 0 {
-		maxPerPod = 4
+func (pc *PoolConfig) applyDefaults() {
+	if pc.MinPerPod <= 0 {
+		pc.MinPerPod = 1
 	}
-	return &ConnPool{
-		maxPerPod: maxPerPod,
-		dialTO:    5 * time.Second,
-		pools:     make(map[string]chan *Conn),
+	if pc.MaxPerPod <= 0 {
+		pc.MaxPerPod = 4
+	}
+	if pc.MaxPerPod < pc.MinPerPod {
+		pc.MaxPerPod = pc.MinPerPod
+	}
+	if pc.DialTimeout <= 0 {
+		pc.DialTimeout = 5 * time.Second
+	}
+	if pc.IdleTimeout <= 0 {
+		pc.IdleTimeout = 60 * time.Second
+	}
+	if pc.IdleCheckInterval <= 0 {
+		pc.IdleCheckInterval = 10 * time.Second
+	}
+	if pc.KeepAliveInterval <= 0 {
+		pc.KeepAliveInterval = 15 * time.Second
+	}
+	if pc.KeepAliveTimeout <= 0 {
+		pc.KeepAliveTimeout = 5 * time.Second
+	}
+}
+
+// ── ConnPool ─────────────────────────────────────────────────────────────────
+
+// ConnPool keeps a bounded pool of connections per pod address with idle
+// eviction and configurable keepalive.
+type ConnPool struct {
+	mu     sync.Mutex
+	cfg    PoolConfig
+	dialTO time.Duration // shortcut to cfg.DialTimeout
+	pools  map[string][]*Conn
+	closed bool
+	cancel context.CancelFunc
+}
+
+// NewConnPool creates a pool with the legacy maxPerPod-only API.
+func NewConnPool(maxPerPod int) *ConnPool {
+	cfg := PoolConfig{MaxPerPod: maxPerPod}
+	cfg.applyDefaults()
+	return newConnPoolInternal(cfg)
+}
+
+// NewConnPoolWithConfig creates a pool with full configuration.
+func NewConnPoolWithConfig(cfg PoolConfig) *ConnPool {
+	cfg.applyDefaults()
+	return newConnPoolInternal(cfg)
+}
+
+func newConnPoolInternal(cfg PoolConfig) *ConnPool {
+	ctx, cancel := context.WithCancel(context.Background())
+	p := &ConnPool{
+		cfg:    cfg,
+		dialTO: cfg.DialTimeout,
+		pools:  make(map[string][]*Conn),
+		cancel: cancel,
+	}
+	go p.idleEvictor(ctx)
+	return p
+}
+
+// idleEvictor periodically scans all pools and closes connections that have
+// been idle longer than cfg.IdleTimeout, while keeping at least MinPerPod
+// connections alive per pod.
+func (p *ConnPool) idleEvictor(ctx context.Context) {
+	ticker := time.NewTicker(p.cfg.IdleCheckInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			p.evictIdle()
+		}
+	}
+}
+
+func (p *ConnPool) evictIdle() {
+	now := time.Now()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return
+	}
+	for addr, conns := range p.pools {
+		kept := make([]*Conn, 0, len(conns))
+		for _, c := range conns {
+			if now.Sub(c.lastUsed) > p.cfg.IdleTimeout && len(kept) >= p.cfg.MinPerPod {
+				_ = c.Close()
+				log.Debug().Str("addr", addr).Msg("pool: evicted idle connection")
+			} else {
+				kept = append(kept, c)
+			}
+		}
+		if len(kept) == 0 {
+			delete(p.pools, addr)
+		} else {
+			p.pools[addr] = kept
+		}
 	}
 }
 
@@ -272,42 +390,40 @@ func (p *ConnPool) Get(addr string) (*Conn, error) {
 		p.mu.Unlock()
 		return nil, fmt.Errorf("mnemo: connection pool closed")
 	}
-	ch, ok := p.pools[addr]
-	if !ok {
-		ch = make(chan *Conn, p.maxPerPod)
-		p.pools[addr] = ch
+	conns := p.pools[addr]
+	if len(conns) > 0 {
+		c := conns[len(conns)-1]
+		p.pools[addr] = conns[:len(conns)-1]
+		p.mu.Unlock()
+		return c, nil
 	}
 	p.mu.Unlock()
 
-	select {
-	case conn := <-ch:
-		return conn, nil
-	default:
-		return Dial(addr, p.dialTO)
-	}
+	return DialWithKeepalive(addr, p.cfg.DialTimeout, p.cfg.KeepAliveInterval, p.cfg.KeepAliveTimeout)
 }
 
 // Put returns a connection to the pool, or closes it if the pool is full/unknown.
 func (p *ConnPool) Put(addr string, conn *Conn) {
+	conn.touch()
 	p.mu.Lock()
-	ch, ok := p.pools[addr]
-	closed := p.closed
-	p.mu.Unlock()
-
-	if closed || !ok {
+	if p.closed {
+		p.mu.Unlock()
 		_ = conn.Close()
 		return
 	}
-	select {
-	case ch <- conn:
-	default:
-		_ = conn.Close() // pool full
+	conns := p.pools[addr]
+	if len(conns) >= p.cfg.MaxPerPod {
+		p.mu.Unlock()
+		_ = conn.Close()
+		return
 	}
+	p.pools[addr] = append(conns, conn)
+	p.mu.Unlock()
 }
 
 // Prune closes and removes pools for any address not in the live set. Called
-// after a DNS refresh so connections to scaled-down / no-longer-warm pods are
-// released rather than lingering until their TTL.
+// after a topology change so connections to scaled-down / no-longer-warm pods
+// are released rather than lingering.
 func (p *ConnPool) Prune(live []string) {
 	liveSet := make(map[string]struct{}, len(live))
 	for _, a := range live {
@@ -318,30 +434,30 @@ func (p *ConnPool) Prune(live []string) {
 	if p.closed {
 		return
 	}
-	for addr, ch := range p.pools {
+	for addr, conns := range p.pools {
 		if _, ok := liveSet[addr]; ok {
 			continue
 		}
-		close(ch)
-		for conn := range ch {
-			_ = conn.Close()
+		for _, c := range conns {
+			_ = c.Close()
 		}
 		delete(p.pools, addr)
 	}
 }
 
-// Close closes all pooled connections and marks the pool closed.
+// Close closes all pooled connections, stops the idle evictor, and marks the
+// pool closed.
 func (p *ConnPool) Close() {
+	p.cancel()
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed {
 		return
 	}
 	p.closed = true
-	for addr, ch := range p.pools {
-		close(ch)
-		for conn := range ch {
-			_ = conn.Close()
+	for addr, conns := range p.pools {
+		for _, c := range conns {
+			_ = c.Close()
 		}
 		delete(p.pools, addr)
 	}

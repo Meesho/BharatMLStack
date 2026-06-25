@@ -6,11 +6,13 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/Meesho/BharatMLStack/mnemo/controlplane/internal/etcdstate"
+	"github.com/Meesho/BharatMLStack/mnemo/controlplane/internal/reconciler"
 	"github.com/Meesho/BharatMLStack/mnemo/controlplane/internal/server"
 )
 
@@ -39,8 +41,30 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Auto-promote reconciler (ADR-0009, first slice). Disabled by setting the
+	// interval to 0; otherwise it ticks and promotes ready, fully-warm versions
+	// for stores with dataflow.autoPromote=true.
+	if interval := autoPromoteInterval(); interval > 0 {
+		go reconciler.New(state, interval).Run(ctx)
+	} else {
+		log.Info().Msg("auto-promote reconciler disabled (MNEMO_AUTO_PROMOTE_INTERVAL=0)")
+	}
+
 	log.Info().Str("addr", addr).Strs("etcd", endpoints).Msg("mNemo control plane starting")
 	return srv.Run(ctx)
+}
+
+// autoPromoteInterval returns the reconciler tick interval. Defaults to 5s; set
+// MNEMO_AUTO_PROMOTE_INTERVAL to a Go duration ("10s", "1m") to override, or "0"
+// to disable the reconciler entirely.
+func autoPromoteInterval() time.Duration {
+	raw := envOrDefault("MNEMO_AUTO_PROMOTE_INTERVAL", "5s")
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		log.Warn().Str("value", raw).Msg("invalid MNEMO_AUTO_PROMOTE_INTERVAL, using 5s")
+		return 5 * time.Second
+	}
+	return d
 }
 
 func envOrDefault(key, def string) string {

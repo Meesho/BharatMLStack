@@ -20,55 +20,89 @@ type EtcdClient interface {
 	Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan
 }
 
-// TopologyWatcher keeps the Router's shard count and the DNS resolver in sync
-// with etcd.
+// TopologyWatcher keeps the Router's shard count, the DNS resolver, and the
+// assignment resolver in sync with etcd.
 //
-// It watches a single key — ActiveVersionPath — which the control plane
-// CAS-flips on promote/rollback. On every change (and once at startup) it reads
-// the active version's VersionMeta for the shard count, pushes it to the router
-// and resolver, and triggers a DNS re-resolve so the new warm pod set is picked
-// up faster than the resolver's periodic TTL. Pod IPs themselves come from K8s
-// DNS, not etcd — so etcd stays off the read hot path entirely.
+// It watches two keys:
+//  1. ActiveVersionPath — the control plane CAS-flips this on promote/rollback.
+//     On each change (and once at startup) it reads the active version's
+//     VersionMeta, pushes shard count + assignment, and triggers DNS refresh.
+//  2. PodWatchPrefix — ephemeral pod registrations. A new warm pod appearing
+//     triggers a re-read of the current version's assignment so the SDK picks
+//     up scale-up events immediately (instead of waiting for DNS TTL).
+//
+// Pod IPs themselves come from K8s DNS (DNSResolver) or directly from the
+// assignment map (AssignmentResolver) — etcd stays off the read hot path.
 type TopologyWatcher struct {
-	client   EtcdClient
-	router   *Router
-	resolver *DNSResolver
-	tenant   string
-	store    string
+	client       EtcdClient
+	router       *Router
+	dnsResolver  *DNSResolver
+	assignRes    *AssignmentResolver
+	pool         *ConnPool
+	tenant       string
+	store        string
+	activeVID    string // last-known active version ID
+	warmUpConns  int    // connections to pre-dial per new pod (0 = disabled)
 }
 
 // NewTopologyWatcher creates a watcher that updates the router + resolver from etcd.
 func NewTopologyWatcher(client EtcdClient, router *Router, resolver *DNSResolver, tenant, store string) *TopologyWatcher {
-	return &TopologyWatcher{client: client, router: router, resolver: resolver, tenant: tenant, store: store}
+	return &TopologyWatcher{
+		client:      client,
+		router:      router,
+		dnsResolver: resolver,
+		tenant:      tenant,
+		store:       store,
+	}
 }
 
-// Run does an initial reload, then watches ActiveVersionPath and reloads the
-// assignment on each change. Blocks until ctx is cancelled or the watch closes.
+// SetAssignmentResolver wires the assignment-aware resolver for direct
+// shard→addr routing (works on both K8s and VM). When set, the watcher pushes
+// VersionMeta.Assignment on every version flip and pod registration change.
+func (tw *TopologyWatcher) SetAssignmentResolver(ar *AssignmentResolver) {
+	tw.assignRes = ar
+}
+
+// SetPoolForWarmUp wires the connection pool so newly-discovered pods get
+// pre-dialed connections. n is the number of connections to warm per pod.
+func (tw *TopologyWatcher) SetPoolForWarmUp(pool *ConnPool, n int) {
+	tw.pool = pool
+	tw.warmUpConns = n
+}
+
+// Run does an initial reload, then watches ActiveVersionPath and the pod
+// registration prefix, reloading on each change. Blocks until ctx is cancelled.
 func (tw *TopologyWatcher) Run(ctx context.Context) error {
 	if err := tw.reload(ctx); err != nil {
-		// Non-fatal: the store may not be promoted yet. The watch below will
-		// pick it up once the control plane sets activeVersion.
 		log.Warn().Err(err).Str("tenant", tw.tenant).Str("store", tw.store).
 			Msg("topology: initial reload failed, waiting for activeVersion")
 	}
 
-	key := model.ActiveVersionPath(tw.tenant, tw.store)
-	ch := tw.client.Watch(ctx, key)
+	activeKey := model.ActiveVersionPath(tw.tenant, tw.store)
+	activeCh := tw.client.Watch(ctx, activeKey)
+
+	podPrefix := model.PodWatchPrefix(tw.tenant, tw.store)
+	podCh := tw.client.Watch(ctx, podPrefix, clientv3.WithPrefix())
 
 	for {
 		select {
-		case resp, ok := <-ch:
+		case resp, ok := <-activeCh:
 			if !ok {
 				return ctx.Err()
 			}
-			tw.handleWatch(ctx, resp)
+			tw.handleActiveVersionWatch(ctx, resp)
+		case resp, ok := <-podCh:
+			if !ok {
+				return ctx.Err()
+			}
+			tw.handlePodWatch(ctx, resp)
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
 }
 
-func (tw *TopologyWatcher) handleWatch(ctx context.Context, resp clientv3.WatchResponse) {
+func (tw *TopologyWatcher) handleActiveVersionWatch(ctx context.Context, resp clientv3.WatchResponse) {
 	for _, ev := range resp.Events {
 		if ev.Type != mvccpb.PUT {
 			continue
@@ -80,6 +114,17 @@ func (tw *TopologyWatcher) handleWatch(ctx context.Context, resp clientv3.WatchR
 		if err := tw.reloadVersion(ctx, version); err != nil {
 			log.Error().Err(err).Str("version", version).Msg("topology: reload on activeVersion change failed")
 		}
+	}
+}
+
+func (tw *TopologyWatcher) handlePodWatch(ctx context.Context, resp clientv3.WatchResponse) {
+	if tw.activeVID == "" {
+		return // no active version yet; nothing to re-derive
+	}
+	// A pod registration changed (new pod, pod gone, version warmup reported).
+	// Re-read the active version's assignment to pick up the new pod set.
+	if err := tw.reloadVersion(ctx, tw.activeVID); err != nil {
+		log.Warn().Err(err).Str("version", tw.activeVID).Msg("topology: pod watch triggered reload failed")
 	}
 }
 
@@ -95,8 +140,8 @@ func (tw *TopologyWatcher) reload(ctx context.Context) error {
 	return tw.reloadVersion(ctx, string(resp.Kvs[0].Value))
 }
 
-// reloadVersion reads VersionMeta for version, pushes the shard count to the
-// router + resolver, and triggers a DNS re-resolve of the (now-warm) pod set.
+// reloadVersion reads VersionMeta for version, pushes the shard count +
+// assignment to the router + resolvers, and triggers DNS re-resolve + warm-up.
 func (tw *TopologyWatcher) reloadVersion(ctx context.Context, version string) error {
 	resp, err := tw.client.Get(ctx, model.VersionPrefix(tw.tenant, tw.store, version))
 	if err != nil {
@@ -113,10 +158,47 @@ func (tw *TopologyWatcher) reloadVersion(ctx context.Context, version string) er
 
 	sc := uint32(meta.ShardCount)
 	tw.router.SetShardCount(sc)
-	tw.resolver.SetShardCount(sc)
+	tw.dnsResolver.SetShardCount(sc)
+	tw.activeVID = version
+
+	// Push assignment map to the assignment resolver (if wired).
+	var newAddrs []string
+	if tw.assignRes != nil && meta.Assignment != nil {
+		newAddrs = tw.assignRes.SwapAssignment(meta.Assignment)
+	}
+
 	log.Info().
 		Str("version", version).
 		Int("shardCount", meta.ShardCount).
-		Msg("topology: version active, re-resolving DNS")
-	return tw.resolver.Refresh(ctx)
+		Int("newPods", len(newAddrs)).
+		Msg("topology: version active, updating routing")
+
+	// Trigger DNS re-resolve for K8s deployments.
+	_ = tw.dnsResolver.Refresh(ctx)
+
+	// Prune connection pools for pods no longer in the assignment.
+	if tw.pool != nil && tw.assignRes != nil {
+		tw.pool.Prune(tw.assignRes.AllAddrs())
+	}
+
+	// Warm up connections to newly-discovered pods.
+	if tw.pool != nil && tw.warmUpConns > 0 && len(newAddrs) > 0 {
+		go tw.warmUp(newAddrs)
+	}
+
+	return nil
+}
+
+// warmUp pre-dials connections to new pods in the background.
+func (tw *TopologyWatcher) warmUp(addrs []string) {
+	for _, addr := range addrs {
+		for i := 0; i < tw.warmUpConns; i++ {
+			conn, err := Dial(addr, tw.pool.dialTO)
+			if err != nil {
+				log.Warn().Err(err).Str("addr", addr).Msg("topology: warm-up dial failed")
+				break // skip remaining dials to this pod
+			}
+			tw.pool.Put(addr, conn)
+		}
+	}
 }
