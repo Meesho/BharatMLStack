@@ -30,11 +30,45 @@ type StoreState struct {
 	ClientConfig    *model.ClientConfig   `json:"clientConfig,omitempty"`
 }
 
-// TopologyState holds the active version and its shard→pod assignment.
+// VersionInfo describes the status and pod-level state for a single version
+// in the topology response. Derived at read time from pod registrations.
+type VersionInfo struct {
+	VersionID string `json:"versionId"`
+	Status    string `json:"status"`
+	// WarmPods is the number of pods that have this version warm.
+	WarmPods int `json:"warmPods"`
+	// LoadingPods is the number of pods currently downloading this version.
+	LoadingPods int `json:"loadingPods"`
+	// RollingOutPods is the number of pods currently rolling out this version.
+	RollingOutPods int `json:"rollingOutPods"`
+	// Assignment is the shard→pod address map for this version.
+	// Only populated for the active version.
+	Assignment map[string][]string `json:"assignment,omitempty"`
+}
+
+// TopologyState holds the active version, its shard→pod assignment, and
+// the status of all kept versions across the data plane.
 type TopologyState struct {
-	ActiveVersion   string
-	TopologyVersion int64
-	Assignment      map[string][]string
+	ActiveVersion   string `json:"activeVersion"`
+	RollbackVersion string `json:"rollbackVersion,omitempty"`
+	TopologyVersion int64  `json:"topologyVersion"`
+	// Assignment for the active version (maintained for backward compatibility).
+	Assignment map[string][]string `json:"assignment"`
+	// Versions lists every non-retired version with its per-pod rollout state.
+	Versions []VersionInfo `json:"versions,omitempty"`
+	// Pods lists every registered pod's current state.
+	Pods map[string]PodState `json:"pods,omitempty"`
+}
+
+// PodState is a snapshot of a single pod's data-plane state, derived from
+// its etcd registration. Included in the topology response for observability.
+type PodState struct {
+	PodIP          string `json:"podIP"`
+	ServingVersion string `json:"servingVersion"`
+	LoadingVersion string `json:"loadingVersion,omitempty"`
+	RolloutVersion string `json:"rolloutVersion,omitempty"`
+	RolloutPct     int    `json:"rolloutPct,omitempty"`
+	WarmVersions   []string `json:"warmVersions"`
 }
 
 // StateClient is the interface all control plane handlers depend on.
@@ -56,6 +90,7 @@ type StateClient interface {
 
 	GetTopology(ctx context.Context, tenant, store string) (*TopologyState, error)
 	ListPods(ctx context.Context, tenant, store string) (map[string]model.PodData, error)
+	ListVersions(ctx context.Context, tenant, store string) (map[string]*model.VersionMeta, error)
 
 	// Health does a cheap bounded read to confirm etcd is reachable. Used by the
 	// readiness probe so a pod that can't reach etcd is taken out of the endpoints.

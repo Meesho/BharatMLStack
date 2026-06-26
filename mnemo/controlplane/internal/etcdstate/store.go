@@ -3,11 +3,12 @@ package etcdstate
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/Meesho/BharatMLStack/mnemo/controlplane/internal/placement"
 	"github.com/Meesho/BharatMLStack/mnemo/controlplane/model"
 )
 
@@ -204,7 +205,11 @@ func (c *EtcdStateClient) RetireVersion(ctx context.Context, tenant, store, vID 
 	return c.ops.put(ctx, model.VersionPrefix(tenant, store, vID), string(b))
 }
 
-// GetTopology returns the active version and its shard→pod assignment.
+// GetTopology returns the active version, its shard→pod assignment, and a full
+// snapshot of every kept version's data-plane status (warm/loading/rolling-out
+// pod counts) derived from current pod registrations. The assignment always
+// reflects which pods are actually alive and warm right now — not the static
+// snapshot captured at promote time.
 func (c *EtcdStateClient) GetTopology(ctx context.Context, tenant, store string) (*TopologyState, error) {
 	activeVer, _, found, err := c.ops.get(ctx, model.ActiveVersionPath(tenant, store))
 	if err != nil {
@@ -214,11 +219,13 @@ func (c *EtcdStateClient) GetTopology(ctx context.Context, tenant, store string)
 		return nil, ErrNotFound
 	}
 
+	rollbackVer, _, _, _ := c.ops.get(ctx, model.RollbackVersionPath(tenant, store))
 	tvVal, _, _, _ := c.ops.get(ctx, model.TopologyVersionPath(tenant, store))
 	tvInt, _ := strconv.ParseInt(tvVal, 10, 64)
 
 	topo := &TopologyState{
 		ActiveVersion:   activeVer,
+		RollbackVersion: rollbackVer,
 		TopologyVersion: tvInt,
 		Assignment:      map[string][]string{},
 	}
@@ -226,16 +233,86 @@ func (c *EtcdStateClient) GetTopology(ctx context.Context, tenant, store string)
 		return topo, nil
 	}
 
-	meta, err := c.GetVersionMeta(ctx, tenant, store, activeVer)
+	// Fetch all version metadata and pod registrations.
+	versions, _ := c.ListVersions(ctx, tenant, store)
+	pods, err := c.ListPods(ctx, tenant, store)
+
+	var shardCount int
+	if meta, ok := versions[activeVer]; ok && meta != nil {
+		shardCount = meta.ShardCount
+	}
+
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return topo, nil
+		// Fall back to static assignment if pod listing fails.
+		if meta, ok := versions[activeVer]; ok && meta != nil && meta.Assignment != nil {
+			topo.Assignment = meta.Assignment
 		}
-		return nil, err
+		return topo, nil
 	}
-	if meta.Assignment != nil {
-		topo.Assignment = meta.Assignment
+
+	// Derive live assignment for the active version.
+	if shardCount > 0 {
+		topo.Assignment = placement.DeriveAssignment(shardCount, pods, activeVer)
 	}
+
+	// Build per-pod state snapshot.
+	topo.Pods = make(map[string]PodState, len(pods))
+	for podID, pd := range pods {
+		topo.Pods[podID] = PodState{
+			PodIP:          pd.PodIP,
+			ServingVersion: pd.ServingVersion,
+			LoadingVersion: pd.LoadingVersion,
+			RolloutVersion: pd.RolloutVersion,
+			RolloutPct:     pd.RolloutPct,
+			WarmVersions:   pd.WarmVersions,
+		}
+	}
+
+	// Build per-version info by scanning pod registrations.
+	versionInfoMap := make(map[string]*VersionInfo)
+	for vID, meta := range versions {
+		if meta == nil || meta.Status == model.StatusRetiring {
+			continue
+		}
+		vi := &VersionInfo{
+			VersionID: vID,
+			Status:    string(meta.Status),
+		}
+		versionInfoMap[vID] = vi
+	}
+
+	for _, pd := range pods {
+		for _, wv := range pd.WarmVersions {
+			if vi, ok := versionInfoMap[wv]; ok {
+				vi.WarmPods++
+			}
+		}
+		if pd.LoadingVersion != "" {
+			if vi, ok := versionInfoMap[pd.LoadingVersion]; ok {
+				vi.LoadingPods++
+			}
+		}
+		if pd.RolloutVersion != "" {
+			if vi, ok := versionInfoMap[pd.RolloutVersion]; ok {
+				vi.RollingOutPods++
+			}
+		}
+	}
+
+	// Attach active version assignment to its VersionInfo.
+	if vi, ok := versionInfoMap[activeVer]; ok {
+		vi.Assignment = topo.Assignment
+	}
+
+	// Collect into sorted slice (newest first).
+	topo.Versions = make([]VersionInfo, 0, len(versionInfoMap))
+	for _, vi := range versionInfoMap {
+		topo.Versions = append(topo.Versions, *vi)
+	}
+	sort.Slice(topo.Versions, func(i, j int) bool {
+		return topo.Versions[i].VersionID > topo.Versions[j].VersionID
+	})
+
 	return topo, nil
 }
 

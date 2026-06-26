@@ -104,6 +104,12 @@ func (c *Config) buildPoolConfig() PoolConfig {
 
 	// Overlay ClientConfig from control plane (non-zero fields win).
 	if cc := c.ClientConfig; cc != nil {
+		// Per-request deadline: the control plane value wins over the default.
+		// Applied by Get/BatchGet via c.timeout(); for BatchGet it bounds the
+		// whole scatter-gather, so size it to cover the largest expected batch.
+		if cc.RequestTimeoutMs > 0 {
+			c.TimeoutMs = cc.RequestTimeoutMs
+		}
 		if cc.ConnectTimeoutMs > 0 {
 			pc.DialTimeout = time.Duration(cc.ConnectTimeoutMs) * time.Millisecond
 		}

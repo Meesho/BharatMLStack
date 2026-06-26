@@ -39,6 +39,21 @@ type DataflowConfig struct {
 	// and disabled for stores not managed by the reconciler. The active and
 	// rollback versions are always kept regardless of N.
 	KeepVersions int `json:"keepVersions,omitempty"`
+	// RolloutCfg configures gradual version rollout with traffic-percentage ramp.
+	// When set, the dataloader ramps traffic from old → new version instead of
+	// doing an atomic flip.
+	RolloutCfg *RolloutConfig `json:"rolloutCfg,omitempty"`
+}
+
+// RolloutConfig controls the gradual traffic ramp during version promotion.
+type RolloutConfig struct {
+	// Steps is the ordered list of traffic percentages to ramp through.
+	// Each value is 0–100. The last value should be 100.
+	// Default: [10, 25, 50, 75, 100]
+	Steps []int `json:"steps,omitempty"`
+	// StepIntervalSec is the dwell time at each percentage step in seconds.
+	// Default: 60.
+	StepIntervalSec int `json:"stepIntervalSec,omitempty"`
 }
 
 // ClientConfig holds SDK connection-pool and transport settings for a store.
@@ -84,4 +99,10 @@ type PodData struct {
 	ServingVersion string   `json:"servingVersion"`
 	WarmVersions   []string `json:"warmVersions"`
 	LoadingVersion string   `json:"loadingVersion,omitempty"`
+	// RolloutVersion is the version currently being rolled out on this pod.
+	// Empty when no rollout is active.
+	RolloutVersion string `json:"rolloutVersion,omitempty"`
+	// RolloutPct is the current traffic percentage routed to RolloutVersion (0–100).
+	// 0 when no rollout is active.
+	RolloutPct int `json:"rolloutPct,omitempty"`
 }

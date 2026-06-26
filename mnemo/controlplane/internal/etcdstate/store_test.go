@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -388,13 +389,19 @@ func TestGetTopology_WithActiveVersion(t *testing.T) {
 	require.NoError(t, sc.CreateStore(context.Background(), defaultCfg()))
 	require.NoError(t, sc.PublishVersion(context.Background(), "fs", "features", "v1", defaultMeta()))
 
+	// Register a live pod so DeriveAssignment finds it.
+	podData := model.PodData{PodIP: "10.0.0.1", WarmVersions: []string{"v1"}}
+	b, _ := json.Marshal(podData)
+	_ = mem.put(context.Background(), model.PodDataPath("fs", "features", "fs-features-shard-0-0"), string(b))
+
 	assignment := map[string][]string{"0": {"10.0.0.1:9091"}}
 	require.NoError(t, sc.PromoteVersion(context.Background(), "fs", "features", "v1", assignment))
 
 	topo, err := sc.GetTopology(context.Background(), "fs", "features")
 	require.NoError(t, err)
 	assert.Equal(t, "v1", topo.ActiveVersion)
-	assert.Equal(t, assignment, topo.Assignment)
+	// Assignment is now derived live from pod registrations.
+	assert.Equal(t, []string{"10.0.0.1:9091"}, topo.Assignment["0"])
 	assert.Equal(t, int64(2), topo.TopologyVersion)
 }
 
@@ -591,7 +598,8 @@ func TestGetTopology_VersionMetaCorrupt(t *testing.T) {
 }
 
 func TestGetTopology_NilAssignment(t *testing.T) {
-	// Published (not promoted) version has nil Assignment — topology returns empty map
+	// Published (not promoted) version has nil Assignment — topology derives
+	// from live pods (none registered → every shard has an empty pod list).
 	mem := newMemKVOps()
 	sc := newTestStateClient(mem)
 	require.NoError(t, sc.CreateStore(context.Background(), defaultCfg()))
@@ -602,5 +610,8 @@ func TestGetTopology_NilAssignment(t *testing.T) {
 	topo, err := sc.GetTopology(context.Background(), "fs", "features")
 	require.NoError(t, err)
 	assert.Equal(t, "v1", topo.ActiveVersion)
-	assert.Empty(t, topo.Assignment) // nil Assignment in meta → default empty map
+	// No pods registered → all shards have empty lists.
+	for i := 0; i < 3; i++ {
+		assert.Empty(t, topo.Assignment[fmt.Sprintf("%d", i)])
+	}
 }
