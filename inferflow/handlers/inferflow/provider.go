@@ -18,55 +18,71 @@ type ComponentProviderHandler struct {
 	mapMutex     sync.RWMutex // To synchronize access to the map
 }
 
+// RegisterComponent rebuilds the component map from the supplied ModelConfig
+// and swaps it atomically into place. It is registered as an etcd config-change
+// callback (see cmd/inferflow/main.go), so it runs once per config event.
+//
+// Prior versions APPENDED to the existing componentMap without ever pruning,
+// which caused the map to grow unboundedly across config events — entries
+// from removed or renamed models accumulated for the pod's lifetime. The
+// rebuild-and-swap pattern below mirrors the one already used for the
+// feature-schema cache (handlers/config/config_schema.go), so the cache
+// reflects exactly the current model config after each event.
 func (cp *ComponentProviderHandler) RegisterComponent(request interface{}) {
-
 	modelConfig, ok := request.(*config.ModelConfig)
-	if ok {
+	if !ok {
+		return
+	}
 
-		cp.mapMutex.Lock() // Lock for write access
-		defer cp.mapMutex.Unlock()
+	// Build a fresh map locally; never mutate cp.componentMap while readers
+	// (GetComponent) may be holding the read lock. The final atomic swap
+	// publishes the new map; the old map becomes GC-able.
+	newMap := make(map[string]dag.AbstractComponent)
 
-		// populate feature initializer component
-		cp.componentMap[featureInitComponent] = &components.FeatureInitComponent{
-			ComponentName: featureInitComponent,
-		}
+	// feature initializer component is always present
+	newMap[featureInitComponent] = &components.FeatureInitComponent{
+		ComponentName: featureInitComponent,
+	}
 
-		if modelConfig != nil && len(modelConfig.ConfigMap) > 0 {
-			for _, value := range modelConfig.ConfigMap {
-				componentConfig := value.ComponentConfig
-				if !utils.IsNilOrEmpty(componentConfig) {
-					// populate feature component
-					fCompMap := componentConfig.FeatureComponentConfig
-					if fCompMap.Size() > 0 {
-						for _, k := range fCompMap.Keys() {
-							cp.componentMap[k.(string)] = &components.FeatureComponent{
-								ComponentName: k.(string),
-							}
-						}
+	if modelConfig != nil && len(modelConfig.ConfigMap) > 0 {
+		for _, value := range modelConfig.ConfigMap {
+			componentConfig := value.ComponentConfig
+			if utils.IsNilOrEmpty(componentConfig) {
+				continue
+			}
+
+			// feature components
+			if fCompMap := componentConfig.FeatureComponentConfig; fCompMap.Size() > 0 {
+				for _, k := range fCompMap.Keys() {
+					newMap[k.(string)] = &components.FeatureComponent{
+						ComponentName: k.(string),
 					}
+				}
+			}
 
-					// populate ranker component
-					pCompMap := componentConfig.PredatorComponentConfig
-					if pCompMap.Size() > 0 {
-						for _, k := range pCompMap.Keys() {
-							cp.componentMap[k.(string)] = &components.PredatorComponent{
-								ComponentName: k.(string),
-							}
-						}
+			// predator (ranker) components
+			if pCompMap := componentConfig.PredatorComponentConfig; pCompMap.Size() > 0 {
+				for _, k := range pCompMap.Keys() {
+					newMap[k.(string)] = &components.PredatorComponent{
+						ComponentName: k.(string),
 					}
-					//populate numerix component
-					gCompMap := componentConfig.NumerixComponentConfig
-					if gCompMap.Size() > 0 {
-						for _, k := range gCompMap.Keys() {
-							cp.componentMap[k.(string)] = &components.NumerixComponent{
-								ComponentName: k.(string),
-							}
-						}
+				}
+			}
+
+			// numerix components
+			if gCompMap := componentConfig.NumerixComponentConfig; gCompMap.Size() > 0 {
+				for _, k := range gCompMap.Keys() {
+					newMap[k.(string)] = &components.NumerixComponent{
+						ComponentName: k.(string),
 					}
 				}
 			}
 		}
 	}
+
+	cp.mapMutex.Lock()
+	cp.componentMap = newMap
+	cp.mapMutex.Unlock()
 }
 
 func (cp *ComponentProviderHandler) GetComponent(componentName string) dag.AbstractComponent {
