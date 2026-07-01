@@ -2,6 +2,8 @@
 
 A Python SDK for decoding MPLog feature logs from proto, arrow, or parquet format. This client enables you to decode binary-encoded feature data from machine learning inference logging pipelines into Spark DataFrames.
 
+It also reads framed `.log` files produced by `asyncloguploader` — directly from a local path, an open file-like object, or a `gs://` GCS URI — and decodes every embedded MPLog record in one call.
+
 ---
 
 ## Table of Contents
@@ -13,6 +15,7 @@ A Python SDK for decoding MPLog feature logs from proto, arrow, or parquet forma
 - [Core API Reference](#core-api-reference)
   - [decode_mplog()](#decode_mplog)
   - [decode_mplog_dataframe()](#decode_mplog_dataframe)
+  - [Reading .log Files](#log-api-reference)
   - [get_mplog_metadata()](#get_mplog_metadata)
   - [get_feature_schema()](#get_feature_schema)
   - [clear_schema_cache()](#clear_schema_cache)
@@ -41,6 +44,8 @@ The Inference Logging Client is designed to decode MPLog (Model Proxy Log) featu
 | **Arrow** | Arrow IPC format with binary columns | Columnar analytics |
 | **Parquet** | Parquet format with feature map | Long-term storage |
 
+In addition, the SDK reads the **framed `.log` container** emitted by `asyncloguploader`. Each `.log` file holds many MPLog records — the SDK deframes the container and decodes every embedded record (one row per entity) in a single call. See [Reading .log files from GCS or local disk](#reading-log-files-from-gcs-or-local-disk).
+
 ### Key Features
 
 - **Multi-format support**: Decode Proto, Arrow, and Parquet encoded logs
@@ -48,7 +53,8 @@ The Inference Logging Client is designed to decode MPLog (Model Proxy Log) featu
 - **Zstd compression support**: Automatic decompression of zstd-compressed data
 - **Schema fetching**: Retrieves feature schemas from inference API with caching
 - **Spark integration**: Returns data as PySpark DataFrames
-- **CLI tool**: Command-line interface for quick decoding
+- **`.log` container reader**: Local path, file-like, or `gs://` URI — deframes and decodes in one call
+- **CLI tool**: Command-line interface for quick decoding (auto-routes `.log` and `gs://` inputs)
 - **Thread-safe caching**: LRU cache for schemas with thread-safe access
 
 ---
@@ -74,13 +80,22 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
+### With GCS Support (for `gs://` .log inputs)
+
+```bash
+pip install "inference-logging-client[gcs]"
+# or from source:
+pip install -e ".[gcs]"
+```
+
 ### Dependencies
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| pyspark | >=3.3.0 | Spark DataFrame operations |
+| pyspark | ==3.3.0 | Spark DataFrame operations (exact pin) |
 | pyarrow | >=5.0.0 | Arrow/Parquet format support |
 | zstandard | >=0.15.0 | Zstd decompression |
+| google-cloud-storage | >=2.0.0 | **Optional** — only required to read `gs://` URIs |
 
 ---
 
@@ -147,6 +162,61 @@ decoded_df.show()
 
 spark.stop()
 ```
+
+### Reading `.log` Files (local disk or GCS)
+
+`asyncloguploader` writes framed `.log` containers holding many MPLog records
+per file, partitioned by model + date + hour:
+
+```
+gs://gcs-dsci-inferflow-async-logger-prd/
+└── async-logger-gcs-flush/<model_config_id>/<YYYY-MM-DD>/<HH>/
+    └── <pod>_<YYYY-MM-DD>_<HH-MM-SS>_<seq>.log
+```
+
+Decode one file — local path, file-like object, or `gs://` URI:
+
+```python
+import inference_logging_client as ilc
+
+# Local
+pdf = ilc.decode_log_file_to_pandas("./pod.log")
+
+# GCS  (requires: pip install "inference-logging-client[gcs]")
+uri = ("gs://gcs-dsci-inferflow-async-logger-prd/async-logger-gcs-flush/"
+       "search-ad-head-prepaid/2026-06-30/18/"
+       "search-ad-head-prepaid--prd-inferflow-search-ad-ssd-primary-"
+       "54c577fb4d-csbhq_2026-06-30_18-29-03_3.log")
+pdf = ilc.decode_log_file_to_pandas(uri)
+```
+
+Fan out across a partition (files share the same schema — fetch it once):
+
+```python
+from google.cloud import storage
+client = storage.Client()
+blobs = list(client.list_blobs(
+    "gcs-dsci-inferflow-async-logger-prd",
+    prefix="async-logger-gcs-flush/search-ad-head-prepaid/2026-06-30/18/",
+))
+schema = ilc.get_feature_schema("search-ad-head-prepaid", version=4)
+for b in blobs:
+    ilc.decode_log_file_to_csv(
+        f"gs://{b.bucket.name}/{b.name}",
+        f"./out/{b.name.rsplit('/', 1)[-1]}.csv",
+        schema=schema,
+    )
+```
+
+Or use the CLI — same code path, no boilerplate:
+
+```bash
+inference-logging-client ./pod.log --output-format csv -o pod.csv
+inference-logging-client gs://.../pod.log --output-format analyze
+```
+
+Row schema, output-format table, and full API list live in
+[Reading .log Files](#log-api-reference).
 
 ---
 
@@ -385,6 +455,146 @@ decoded = inference_logging_client.decode_mplog_dataframe(
     mp_config_id_column="model_id"        # Custom name
 )
 ```
+
+---
+
+<a id="log-api-reference"></a>
+### Reading .log Files
+
+All `.log` reading routes through one shared iterator
+(`iter_decoded_log_rows`), so every output sink emits the **same rows** —
+only the container differs. Each function accepts a `source` that can be a
+local path, an open binary file-like object, or a `gs://bucket/key` URI.
+
+#### Available sinks
+
+| Function | Returns / Writes | Best for |
+|----------|------------------|----------|
+| `decode_log_file(source, spark, ...)` | `pyspark.sql.DataFrame` | Big files, distributed downstream |
+| `decode_log_file_to_pandas(source, ...)` | `pandas.DataFrame` | Notebooks, mid-sized files |
+| `decode_logs(source, spark, ...)` | `pyspark.sql.DataFrame` | **Single file OR a directory / GCS prefix** — auto-lists and unions |
+| `decode_logs_to_pandas(source, ...)` | `pandas.DataFrame` | Same, pandas flavour |
+| `list_log_sources(source)` | `list[str]` | Enumerate `.log` files under a dir / `gs://` prefix / list |
+| `decode_log_file_to_csv(source, path, ...)` | rows written (int) | Handoff to BigQuery / Snowflake / Excel |
+| `decode_log_file_to_jsonl(source, path, ...)` | rows written (int) | Streaming pipelines |
+| `write_parsed_log(source, path, ...)` | records written (int) | Human-readable inspection (asynclogparser `.parsed.log` layout) |
+| `analyze_log_file(source)` + `print_analysis(...)` | dict / prints | Structural diagnosis, **no schema fetch** |
+| `iter_decoded_log_rows(source, ...)` | `Iterator[dict]` | Custom sinks (Kafka, ClickHouse, ...) |
+| `iter_log_records(source, ...)` | `Iterator[(ts_ns, bytes)]` | Raw MPLog payloads for custom decoding |
+| `read_log_file(source, ...)` | `list[(ts_ns, bytes)]` | Small files, tests |
+
+#### Single file vs whole hour partition
+
+`decode_logs` / `decode_logs_to_pandas` accept any of these — they figure out
+what you meant and produce one merged DataFrame:
+
+| `source` | Behaviour |
+|----------|-----------|
+| Single `.log` file (path or `gs://...log`) | Decodes that file. |
+| Local directory | Non-recursive listing of `*.log` inside, unions results. |
+| `gs://bucket/prefix/` (or any URI not ending in `.log`) | Lists every `.log` under the prefix (works at hour, day, or month level). |
+| `list[str \| Path]` | Uses the list verbatim. |
+
+```python
+import inference_logging_client as ilc
+
+# One hour's worth of logs → one Spark DataFrame
+df = ilc.decode_logs(
+    "gs://gcs-dsci-inferflow-async-logger-prd/async-logger-gcs-flush/"
+    "search-organic-l2-ranker-prepaid-rtp-mall-hasp_scaleup/2026-06-30/23/",
+    spark,
+)
+
+# Same, pandas
+pdf = ilc.decode_logs_to_pandas("./hour_dump/")
+
+# See what would be enumerated without decoding
+files = ilc.list_log_sources("gs://bucket/prefix/")   # → list[str]
+```
+
+The CLI also picks up directories and GCS prefixes automatically — pass one
+to `inference-logging-client` and it dispatches through `decode_logs`.
+
+#### Common keyword arguments
+
+Every decoding function above accepts these — same defaults, same meaning:
+
+| Argument | Default | Meaning |
+|----------|---------|---------|
+| `inference_host` | `INFERENCE_HOST` env, else `http://localhost:8082` | Schema API base URL |
+| `decompress` | `True` | Attempt zstd decompression per MPLog payload |
+| `schema` | `None` | Pre-fetched `list[FeatureInfo]`; skips per-record schema fetch |
+| `needed_columns` | `None` | Subset of feature names to keep |
+| `strict` | `False` | `True` raises `FormatError` on any malformed frame |
+
+#### Row shape (every decoding sink)
+
+```
+entity_id, timestamp_ns, mp_config_id, version, format_type,
+user_id, tracking_id, parent_entity, <feature_1>, <feature_2>, ...
+```
+
+One row per `(record, entity)`. The Spark sink stringifies `list`/`bytes`
+values for schema stability; all other sinks preserve native Python types.
+
+#### Frame layout
+
+```
+Frame header (8B, little-endian):  capacity (uint32) + valid_data_bytes (uint32)
+Frame body (capacity − 8 bytes):   first valid_data_bytes carry records, rest is padding
+Record:                            [4B length][8B timestamp_ns][MPLog protobuf]
+```
+
+Records are packed back-to-back with no per-record alignment. The MPLog
+protobuf is the same payload `get_mplog_metadata()` and `decode_mplog()`
+consume — its metadata byte still drives per-record format selection
+(proto / arrow / parquet).
+
+#### Examples
+
+```python
+import inference_logging_client as ilc
+
+# Spark
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.getOrCreate()
+df = ilc.decode_log_file("gs://bucket/pod.log", spark)
+
+# pandas (no Spark)
+pdf = ilc.decode_log_file_to_pandas("./pod.log")
+
+# Write to disk
+ilc.decode_log_file_to_csv  ("./pod.log", "./out.csv")
+ilc.decode_log_file_to_jsonl("./pod.log", "./out.jsonl")
+ilc.write_parsed_log        ("./pod.log", "./out.parsed.log")   # asynclogparser format
+
+# Structural diagnosis (no schema fetch, no network)
+ilc.print_analysis(ilc.analyze_log_file("./pod.log"))
+
+# CI fail-fast on corrupt frames
+ilc.decode_log_file_to_pandas("./golden.log", strict=True)
+
+# Custom sink via the shared iterator
+for row in ilc.iter_decoded_log_rows("gs://bucket/pod.log"):
+    producer.send("decoded", row)
+```
+
+#### Parity with `asynclogparser`
+
+| asynclogparser | SDK equivalent |
+|----------------|----------------|
+| `python asynclogparse.py foo.log` | `write_parsed_log("foo.log", "foo.parsed.log")` |
+| `python asynclogparse.py --analyze foo.log` | `analyze_log_file(...)` + `print_analysis(...)` |
+| `deframe_log_file` | `iter_log_records(...)` — byte-level identical |
+| Per-record protobuf parse | `parse_mplog_protobuf(...)` |
+| Per-entity `decode_proto_features` | Auto-dispatched by `format_type` (proto/arrow/parquet) |
+
+Additions the SDK carries over the standalone script:
+zstd decompression of MPLog payloads, cross-file schema cache keyed by
+`(mp_config_id, version)`, and `strict` mode for CI. The ~250 lines of
+byte-scan recovery heuristics in `asynclogparser` are intentionally not
+carried — use `strict=True` for fail-fast, or the default `strict=False` to
+warn-and-skip on a bad frame.
 
 ---
 
@@ -757,29 +967,42 @@ finally:
 
 ### Basic Usage
 
+The CLI accepts three kinds of input and auto-routes them:
+
+| Input | Detected by | Path |
+|-------|-------------|------|
+| Raw MPLog bytes file or `-` (stdin) | default | `decode_mplog()` — needs `-m` / `-v` |
+| `*.log` container (any local path) | `.log` extension | `decode_log_file()` |
+| `gs://bucket/key` URI | `gs://` prefix | `decode_log_file()` |
+
 ```bash
-# Decode with auto-detection
+# Raw MPLog bytes (the original mode)
 inference-logging-client --model-proxy-id my-model --version 1 input.bin
 
-# Short form
-inference-logging-client -m my-model -v 1 input.bin
+# Asyncloguploader .log file — no -m/-v needed (per-record from metadata)
+inference-logging-client ./pod-xyz_17-58-12.log -o decoded.csv
+
+# Same, but straight from GCS
+inference-logging-client gs://my-bucket/asynclogs/pod-xyz_17-58-12.log --json
 ```
 
 ### CLI Arguments
 
 | Argument | Short | Required | Default | Description |
 |----------|-------|----------|---------|-------------|
-| `input` | - | Yes | - | Input file or `-` for stdin |
-| `--model-proxy-id` | `-m` | Yes | - | Model proxy config ID |
-| `--version` | `-v` | Yes | - | Schema version |
-| `--format` | `-f` | No | `auto` | Format: `proto`, `arrow`, `parquet`, `auto` |
+| `input` | - | Yes | - | MPLog bytes file, `*.log` path, `gs://...` URI, or `-` for stdin |
+| `--model-proxy-id` | `-m` | Raw-bytes mode only | - | Model proxy config ID (ignored for `.log` / `gs://`) |
+| `--version` | `-v` | Raw-bytes mode only | - | Schema version (ignored for `.log` / `gs://`) |
+| `--format` | `-f` | No | `auto` | Format: `proto`, `arrow`, `parquet`, `auto` (raw-bytes mode only) |
 | `--inference-host` | - | No | env/localhost | Inference service URL |
-| `--hex` | - | No | - | Input is hex-encoded |
-| `--base64` | - | No | - | Input is base64-encoded |
+| `--hex` | - | No | - | Input is hex-encoded (raw-bytes mode only) |
+| `--base64` | - | No | - | Input is base64-encoded (raw-bytes mode only) |
 | `--no-decompress` | - | No | - | Skip zstd decompression |
-| `--output` | `-o` | No | stdout | Output directory (CSV/JSON) |
+| `--output` | `-o` | No | stdout | Output file path; CSV by default, JSON with `--json` |
 | `--json` | - | No | - | Output as JSON |
 | `--spark-master` | - | No | `local[*]` | Spark master URL |
+| `--strict` | - | No | - | `.log` mode only: raise on malformed frames instead of skipping |
+| `--output-format` | - | No | `spark` (in .log mode) | `.log`/`gs://` only: `spark`, `pandas`, `csv`, `jsonl`, `text`, or `analyze` |
 
 ### Examples
 
@@ -811,6 +1034,32 @@ inference-logging-client -m my-model -v 1 \
 
 # Skip decompression (for pre-decompressed data)
 inference-logging-client -m my-model -v 1 --no-decompress input.bin
+
+# --- .log / GCS examples -----------------------------------------
+
+# Decode a local asyncloguploader .log file to CSV
+inference-logging-client ./pod-xyz_17-58-12.log -o decoded.csv
+
+# Decode straight from GCS (requires the [gcs] extra)
+inference-logging-client gs://my-bucket/asynclogs/pod-xyz_17-58-12.log \
+    --inference-host https://inference.prod.example.com \
+    -o gs_decoded.csv
+
+# CI-style gate: fail on any corrupt frame
+inference-logging-client gs://my-bucket/asynclogs/golden.log --strict --json
+
+# Pandas-style CSV print to stdout (no Spark)
+inference-logging-client ./pod-xyz_17-58-12.log --output-format pandas
+
+# Write CSV / JSONL directly (no Spark)
+inference-logging-client ./pod-xyz_17-58-12.log --output-format csv  -o decoded.csv
+inference-logging-client ./pod-xyz_17-58-12.log --output-format jsonl -o decoded.jsonl
+
+# Asynclogparser-compatible human-readable text
+inference-logging-client ./pod-xyz_17-58-12.log --output-format text -o decoded.parsed.log
+
+# Structural diagnosis only (no schema fetch, no decoding)
+inference-logging-client ./pod-xyz_17-58-12.log --output-format analyze
 ```
 
 ### CLI Output Format
@@ -985,11 +1234,12 @@ spark.stop()
 inference_logging_client/
 ├── __init__.py      # Public API exports, decode_mplog(), decode_mplog_dataframe()
 ├── __main__.py      # Module execution entry point
-├── cli.py           # Command-line interface
+├── cli.py           # Command-line interface (auto-routes .log / gs://)
 ├── decoder.py       # Core byte decoding, type conversion
 ├── exceptions.py    # Exception classes
 ├── formats.py       # Proto/Arrow/Parquet format decoders
 ├── io.py            # Schema fetching, protobuf parsing
+├── log_reader.py    # .log frame deframer + GCS reader + decode_log_file()
 ├── types.py         # Data type definitions (Format, FeatureInfo, DecodedMPLog)
 └── utils.py         # Utility functions (type normalization, formatting)
 ```
