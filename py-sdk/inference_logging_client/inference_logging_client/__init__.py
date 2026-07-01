@@ -45,6 +45,18 @@ from .formats import (
     decode_proto_features,
 )
 from .io import clear_schema_cache, get_feature_schema, get_mplog_metadata, parse_mplog_protobuf
+from .log_reader import (
+    analyze_log_file,
+    decode_log_file,
+    decode_log_file_to_csv,
+    decode_log_file_to_jsonl,
+    decode_log_file_to_pandas,
+    iter_decoded_log_rows,
+    iter_log_records,
+    print_analysis,
+    read_log_file,
+    write_parsed_log,
+)
 from .types import FORMAT_TYPE_MAP, DecodedMPLog, FeatureInfo, Format
 from .utils import format_dataframe_floats, get_format_name, unpack_metadata_byte
 
@@ -56,6 +68,16 @@ _MAX_SCHEMA_VERSION = 15
 __all__ = [
     "decode_mplog",
     "decode_mplog_dataframe",
+    "decode_log_file",
+    "decode_log_file_to_pandas",
+    "decode_log_file_to_csv",
+    "decode_log_file_to_jsonl",
+    "write_parsed_log",
+    "analyze_log_file",
+    "print_analysis",
+    "iter_decoded_log_rows",
+    "iter_log_records",
+    "read_log_file",
     "get_mplog_metadata",
     "get_feature_schema",
     "clear_schema_cache",
