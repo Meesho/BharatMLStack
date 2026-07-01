@@ -40,6 +40,7 @@ type StateReader interface {
 	ListVersions(ctx context.Context, tenant, store string) (map[string]*model.VersionMeta, error)
 	ListPods(ctx context.Context, tenant, store string) (map[string]model.PodData, error)
 	PromoteVersion(ctx context.Context, tenant, store, vID string, assignment map[string][]string) error
+	UpdateAssignment(ctx context.Context, tenant, store, vID string, assignment map[string][]string) (bool, error)
 	RetireVersion(ctx context.Context, tenant, store, vID string) error
 }
 
@@ -110,14 +111,14 @@ func (r *Reconciler) reconcileStore(ctx context.Context, ref etcdstate.StoreRef)
 		return
 	}
 
+	pods, err := r.state.ListPods(ctx, ref.Tenant, ref.Store)
+	if err != nil {
+		lg.Error().Err(err).Msg("reconciler: ListPods failed")
+		return
+	}
+
 	candidate := newestPromotable(versions, st.ActiveVersion)
 	if candidate != "" {
-		pods, err := r.state.ListPods(ctx, ref.Tenant, ref.Store)
-		if err != nil {
-			lg.Error().Err(err).Msg("reconciler: ListPods failed")
-			return
-		}
-
 		assignment := placement.DeriveAssignment(st.Config.ShardCount, pods, candidate)
 		if missing := uncoveredShards(st.Config.ShardCount, assignment); len(missing) > 0 {
 			lg.Info().
@@ -136,6 +137,24 @@ func (r *Reconciler) reconcileStore(ctx context.Context, ref etcdstate.StoreRef)
 			lg.Info().Str("version", candidate).Msg("reconciler: auto-promoted version")
 			// Re-read state next tick so GC sees the new active/rollback.
 			return
+		}
+	}
+
+	// Refresh the active version's assignment from current pod registrations.
+	// Pods may be rescheduled (new IPs) without a version change — the etcd
+	// VersionMeta.Assignment must stay in sync so SDK clients that read it
+	// directly (without the topology API) route to the right pods.
+	if st.ActiveVersion != "" {
+		assignment := placement.DeriveAssignment(st.Config.ShardCount, pods, st.ActiveVersion)
+		changed, err := r.state.UpdateAssignment(ctx, ref.Tenant, ref.Store, st.ActiveVersion, assignment)
+		if err != nil {
+			if err == etcdstate.ErrCASConflict {
+				lg.Debug().Msg("reconciler: assignment refresh raced (CAS), will retry next tick")
+			} else {
+				lg.Warn().Err(err).Msg("reconciler: assignment refresh failed")
+			}
+		} else if changed {
+			lg.Info().Str("version", st.ActiveVersion).Msg("reconciler: refreshed stale assignment from pod registrations")
 		}
 	}
 

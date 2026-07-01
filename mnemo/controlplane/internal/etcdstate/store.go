@@ -205,6 +205,76 @@ func (c *EtcdStateClient) RetireVersion(ctx context.Context, tenant, store, vID 
 	return c.ops.put(ctx, model.VersionPrefix(tenant, store, vID), string(b))
 }
 
+// UpdateAssignment refreshes the VersionMeta.Assignment for an active version
+// from current pod registrations. This keeps the etcd-stored assignment in sync
+// with reality after pod rescheduling (new IPs). Uses CAS on topologyVersion
+// to avoid stomping a concurrent promote/rollback.
+// Returns (changed, error) — changed is true when the assignment actually differed.
+func (c *EtcdStateClient) UpdateAssignment(ctx context.Context, tenant, store, vID string, assignment map[string][]string) (bool, error) {
+	meta, err := c.GetVersionMeta(ctx, tenant, store, vID)
+	if err != nil {
+		return false, err
+	}
+
+	// Check if the assignment actually changed.
+	if assignmentsEqual(meta.Assignment, assignment) {
+		return false, nil
+	}
+
+	tvVal, tvRev, found, err := c.ops.get(ctx, model.TopologyVersionPath(tenant, store))
+	if err != nil {
+		return false, err
+	}
+	if !found {
+		return false, ErrNotFound
+	}
+	tvInt, _ := strconv.ParseInt(tvVal, 10, 64)
+
+	meta.Assignment = assignment
+	b, _ := json.Marshal(meta)
+
+	newTV := strconv.FormatInt(tvInt+1, 10)
+	updates := map[string]string{
+		model.TopologyVersionPath(tenant, store): newTV,
+		model.VersionPrefix(tenant, store, vID):  string(b),
+	}
+
+	succeeded, err := c.ops.atomicSwap(ctx, model.TopologyVersionPath(tenant, store), tvRev, updates)
+	if err != nil {
+		return false, err
+	}
+	if !succeeded {
+		return false, ErrCASConflict
+	}
+	return true, nil
+}
+
+// assignmentsEqual returns true if two assignment maps have the same content.
+func assignmentsEqual(a, b map[string][]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, av := range a {
+		bv, ok := b[k]
+		if !ok || len(av) != len(bv) {
+			return false
+		}
+		// Sort copies to compare without mutating originals.
+		as := make([]string, len(av))
+		bs := make([]string, len(bv))
+		copy(as, av)
+		copy(bs, bv)
+		sort.Strings(as)
+		sort.Strings(bs)
+		for i := range as {
+			if as[i] != bs[i] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // GetTopology returns the active version, its shard→pod assignment, and a full
 // snapshot of every kept version's data-plane status (warm/loading/rolling-out
 // pod counts) derived from current pod registrations. The assignment always

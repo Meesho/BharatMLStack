@@ -44,17 +44,17 @@ func main() {
 	entity := flag.String("entity", "catalog__user_geohash_1_3:derived_fp32", "entity prefix for synthetic keys")
 	mode := flag.String("mode", "both", "single | batch | both")
 	batch := flag.Int("batch", 50, "keys per multi-get")
-	conns := flag.Int("conns", 4, "TCP conns per pod (SDK ConnsPerPod)")
-	concurrency := flag.Int("concurrency", 32, "parallel workers")
+	concurrency := flag.Int("concurrency", 32, "parallel load-generator workers (offered load — NOT a client config)")
 	duration := flag.Duration("duration", 30*time.Second, "measured run duration per mode")
 	warmup := flag.Duration("warmup", 5*time.Second, "warmup per mode (also lets topology resolve; not recorded)")
 	flag.Parse()
 
+	// No ConnsPerPod here: connection pool sizing (min/maxConnsPerPod), timeouts,
+	// keepalive, etc. all come from the store's ClientConfig in the control plane.
 	client, err := sdk.NewClient(sdk.Config{
 		EtcdEndpoints: strings.Split(*etcd, ","),
 		Tenant:        *tenant,
 		Store:         *store,
-		ConnsPerPod:   *conns,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "FATAL: NewClient: %v\n", err)
@@ -68,9 +68,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("mNemo perf — etcd=%s %s/%s keys=%d conns=%d concurrency=%d batch=%d duration=%s\n",
-		*etcd, *tenant, *store, len(keys), *conns, *concurrency, *batch, *duration)
-	fmt.Println("(SDK resolves shards/replicas from the promoted assignment in etcd)\n")
+	fmt.Printf("mNemo perf — etcd=%s %s/%s keys=%d concurrency=%d batch=%d duration=%s\n",
+		*etcd, *tenant, *store, len(keys), *concurrency, *batch, *duration)
+	fmt.Println("(pool/timeouts from control-plane ClientConfig; shards/replicas from the promoted assignment)\n")
 
 	cfg := runCfg{
 		client: client, keys: keys, concurrency: *concurrency,

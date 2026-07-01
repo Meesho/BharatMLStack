@@ -315,6 +315,11 @@ type ConnPool struct {
 	pools  map[string][]*Conn
 	closed bool
 	cancel context.CancelFunc
+
+	// Metric callbacks (nil-safe). Set via SetMetrics after construction.
+	timing   func(string, time.Duration, []string)
+	count    func(string, int64, []string)
+	baseTags []string
 }
 
 // NewConnPool creates a pool with the legacy maxPerPod-only API.
@@ -340,6 +345,36 @@ func newConnPoolInternal(cfg PoolConfig) *ConnPool {
 	}
 	go p.idleEvictor(ctx)
 	return p
+}
+
+// SetMetrics wires optional metric callbacks into the pool.
+func (p *ConnPool) SetMetrics(
+	timing func(string, time.Duration, []string),
+	count func(string, int64, []string),
+	baseTags []string,
+) {
+	p.timing = timing
+	p.count = count
+	p.baseTags = baseTags
+}
+
+func (p *ConnPool) poolTags(extra ...string) []string {
+	tags := make([]string, len(p.baseTags)+len(extra))
+	copy(tags, p.baseTags)
+	copy(tags[len(p.baseTags):], extra)
+	return tags
+}
+
+func (p *ConnPool) emitTiming(name string, value time.Duration, tags []string) {
+	if p.timing != nil {
+		p.timing(name, value, tags)
+	}
+}
+
+func (p *ConnPool) emitCount(name string, value int64, tags []string) {
+	if p.count != nil {
+		p.count(name, value, tags)
+	}
 }
 
 // idleEvictor periodically scans all pools and closes connections that have
@@ -371,6 +406,7 @@ func (p *ConnPool) evictIdle() {
 			if now.Sub(c.lastUsed) > p.cfg.IdleTimeout && len(kept) >= p.cfg.MinPerPod {
 				_ = c.Close()
 				log.Debug().Str("addr", addr).Msg("pool: evicted idle connection")
+				p.emitCount(MetricPoolIdleEvicted, 1, p.baseTags)
 			} else {
 				kept = append(kept, c)
 			}
@@ -395,11 +431,20 @@ func (p *ConnPool) Get(addr string) (*Conn, error) {
 		c := conns[len(conns)-1]
 		p.pools[addr] = conns[:len(conns)-1]
 		p.mu.Unlock()
+		p.emitCount(MetricPoolGet, 1, p.poolTags("result:hit"))
 		return c, nil
 	}
 	p.mu.Unlock()
 
-	return DialWithKeepalive(addr, p.cfg.DialTimeout, p.cfg.KeepAliveInterval, p.cfg.KeepAliveTimeout)
+	start := time.Now()
+	conn, err := DialWithKeepalive(addr, p.cfg.DialTimeout, p.cfg.KeepAliveInterval, p.cfg.KeepAliveTimeout)
+	if err != nil {
+		p.emitCount(MetricPoolGet, 1, p.poolTags("result:error"))
+		return nil, err
+	}
+	p.emitCount(MetricPoolGet, 1, p.poolTags("result:dial"))
+	p.emitTiming(MetricPoolDialLatency, time.Since(start), p.baseTags)
+	return conn, nil
 }
 
 // Put returns a connection to the pool, or closes it if the pool is full/unknown.
@@ -415,6 +460,7 @@ func (p *ConnPool) Put(addr string, conn *Conn) {
 	if len(conns) >= p.cfg.MaxPerPod {
 		p.mu.Unlock()
 		_ = conn.Close()
+		p.emitCount(MetricPoolOverflow, 1, p.baseTags)
 		return
 	}
 	p.pools[addr] = append(conns, conn)

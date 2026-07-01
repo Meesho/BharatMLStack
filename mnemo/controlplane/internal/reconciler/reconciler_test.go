@@ -18,9 +18,12 @@ type fakeState struct {
 	state      map[string]*etcdstate.StoreState         // "tenant/store" -> state
 	versions   map[string]map[string]*model.VersionMeta // "tenant/store" -> vID -> meta
 	pods       map[string]map[string]model.PodData      // "tenant/store" -> podID -> data
-	promotes   []promoteCall
-	promoteErr error
-	retires    []string // vIDs passed to RetireVersion
+	promotes                 []promoteCall
+	promoteErr               error
+	assignmentUpdates        []promoteCall
+	updateAssignmentChanged  bool
+	updateAssignmentErr      error
+	retires                  []string // vIDs passed to RetireVersion
 }
 
 type promoteCall struct {
@@ -51,6 +54,13 @@ func (f *fakeState) PromoteVersion(_ context.Context, t, s, vID string, a map[st
 	}
 	f.promotes = append(f.promotes, promoteCall{t, s, vID, a})
 	return nil
+}
+func (f *fakeState) UpdateAssignment(_ context.Context, t, s, vID string, a map[string][]string) (bool, error) {
+	if f.updateAssignmentErr != nil {
+		return false, f.updateAssignmentErr
+	}
+	f.assignmentUpdates = append(f.assignmentUpdates, promoteCall{t, s, vID, a})
+	return f.updateAssignmentChanged, nil
 }
 func (f *fakeState) RetireVersion(_ context.Context, _, _, vID string) error {
 	f.retires = append(f.retires, vID)
@@ -231,6 +241,55 @@ func TestEffectiveKeep(t *testing.T) {
 	assert.Equal(t, defaultKeepVersions, effectiveKeep(&model.DataflowConfig{AutoPromote: true}))
 	assert.Equal(t, 0, effectiveKeep(&model.DataflowConfig{}))
 	assert.Equal(t, 3, effectiveKeep(&model.DataflowConfig{AutoPromote: true, KeepVersions: 3}))
+}
+
+func TestReconcile_RefreshesStaleAssignment(t *testing.T) {
+	// Active version exists, no candidate to promote, but pods have new IPs.
+	f := baseFake(2, "20260101_001", true)
+	f.versions[key("t", "s")]["20260101_001"] = &model.VersionMeta{Status: model.StatusActive, ShardCount: 2}
+	f.pods[key("t", "s")] = warmPods(2, "20260101_001")
+	f.updateAssignmentChanged = true
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	assert.Empty(t, f.promotes) // no new version to promote
+	require.Len(t, f.assignmentUpdates, 1)
+	assert.Equal(t, "20260101_001", f.assignmentUpdates[0].vID)
+	assert.Len(t, f.assignmentUpdates[0].assignment["0"], 1)
+	assert.Len(t, f.assignmentUpdates[0].assignment["1"], 1)
+}
+
+func TestReconcile_SkipsAssignmentRefreshWhenNoActive(t *testing.T) {
+	f := baseFake(1, "", true) // no active version
+	f.versions[key("t", "s")]["20260101_001"] = &model.VersionMeta{Status: model.StatusReady, ShardCount: 1}
+	// no pods → no promote, no active → no assignment refresh
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	assert.Empty(t, f.assignmentUpdates)
+}
+
+func TestReconcile_AssignmentRefreshCASConflictIsBenign(t *testing.T) {
+	f := baseFake(1, "20260101_001", true)
+	f.versions[key("t", "s")]["20260101_001"] = &model.VersionMeta{Status: model.StatusActive, ShardCount: 1}
+	f.pods[key("t", "s")] = warmPods(1, "20260101_001")
+	f.updateAssignmentErr = etcdstate.ErrCASConflict
+
+	// must not panic
+	New(f, 0).reconcileOnce(context.Background())
+}
+
+func TestReconcile_SkipsAssignmentRefreshAfterPromote(t *testing.T) {
+	// When a new version is promoted, the reconciler returns early and does
+	// not redundantly refresh the assignment (promote already wrote it).
+	f := baseFake(1, "", true)
+	f.versions[key("t", "s")]["20260101_001"] = &model.VersionMeta{Status: model.StatusReady, ShardCount: 1}
+	f.pods[key("t", "s")] = warmPods(1, "20260101_001")
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	require.Len(t, f.promotes, 1)
+	assert.Empty(t, f.assignmentUpdates) // no redundant refresh
 }
 
 func TestNewestPromotable(t *testing.T) {

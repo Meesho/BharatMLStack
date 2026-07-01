@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -43,6 +44,11 @@ type TopologyWatcher struct {
 	store        string
 	activeVID    string // last-known active version ID
 	warmUpConns  int    // connections to pre-dial per new pod (0 = disabled)
+
+	// Metric callbacks (nil-safe). Set via SetMetrics after construction.
+	timing   func(string, time.Duration, []string)
+	count    func(string, int64, []string)
+	baseTags []string
 }
 
 // NewTopologyWatcher creates a watcher that updates the router + resolver from etcd.
@@ -68,6 +74,36 @@ func (tw *TopologyWatcher) SetAssignmentResolver(ar *AssignmentResolver) {
 func (tw *TopologyWatcher) SetPoolForWarmUp(pool *ConnPool, n int) {
 	tw.pool = pool
 	tw.warmUpConns = n
+}
+
+// SetMetrics wires optional metric callbacks into the topology watcher.
+func (tw *TopologyWatcher) SetMetrics(
+	timing func(string, time.Duration, []string),
+	count func(string, int64, []string),
+	baseTags []string,
+) {
+	tw.timing = timing
+	tw.count = count
+	tw.baseTags = baseTags
+}
+
+func (tw *TopologyWatcher) twTags(extra ...string) []string {
+	tags := make([]string, len(tw.baseTags)+len(extra))
+	copy(tags, tw.baseTags)
+	copy(tags[len(tw.baseTags):], extra)
+	return tags
+}
+
+func (tw *TopologyWatcher) twEmitCount(name string, value int64, tags []string) {
+	if tw.count != nil {
+		tw.count(name, value, tags)
+	}
+}
+
+func (tw *TopologyWatcher) twEmitTiming(name string, value time.Duration, tags []string) {
+	if tw.timing != nil {
+		tw.timing(name, value, tags)
+	}
 }
 
 // Run does an initial reload, then watches ActiveVersionPath and the pod
@@ -143,16 +179,21 @@ func (tw *TopologyWatcher) reload(ctx context.Context) error {
 // reloadVersion reads VersionMeta for version, pushes the shard count +
 // assignment to the router + resolvers, and triggers DNS re-resolve + warm-up.
 func (tw *TopologyWatcher) reloadVersion(ctx context.Context, version string) error {
+	start := time.Now()
+
 	resp, err := tw.client.Get(ctx, model.VersionPrefix(tw.tenant, tw.store, version))
 	if err != nil {
+		tw.twEmitCount(MetricTopologyReload, 1, tw.twTags("status:error"))
 		return fmt.Errorf("get version meta: %w", err)
 	}
 	if len(resp.Kvs) == 0 {
+		tw.twEmitCount(MetricTopologyReload, 1, tw.twTags("status:error"))
 		return fmt.Errorf("version meta %q not found", version)
 	}
 
 	var meta model.VersionMeta
 	if err := json.Unmarshal(resp.Kvs[0].Value, &meta); err != nil {
+		tw.twEmitCount(MetricTopologyReload, 1, tw.twTags("status:error"))
 		return fmt.Errorf("parse version meta %q: %w", version, err)
 	}
 
@@ -186,6 +227,8 @@ func (tw *TopologyWatcher) reloadVersion(ctx context.Context, version string) er
 		go tw.warmUp(newAddrs)
 	}
 
+	tw.twEmitCount(MetricTopologyReload, 1, tw.twTags("status:ok"))
+	tw.twEmitTiming(MetricTopologyReload, time.Since(start), tw.twTags("status:ok"))
 	return nil
 }
 

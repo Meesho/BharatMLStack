@@ -67,6 +67,13 @@ type Config struct {
 	// When nil, the SDK reads it from etcd on init (best-effort — missing config
 	// means all defaults).
 	ClientConfig *model.ClientConfig
+
+	// Timing is an optional callback for latency metrics (nil-safe). The caller
+	// provides the implementation (typically Datadog StatsD via pkg/metric).
+	Timing func(name string, value time.Duration, tags []string)
+
+	// Count is an optional callback for count metrics (nil-safe).
+	Count func(name string, value int64, tags []string)
 }
 
 func (c *Config) applyDefaults() {
@@ -220,6 +227,11 @@ func newClientWithEtcd(config Config, etcd EtcdClient, closer io.Closer) (*Clien
 	watcher := NewTopologyWatcher(etcd, router, dnsResolver, config.Tenant, config.Store)
 	watcher.SetAssignmentResolver(assignRes)
 
+	// Wire metrics callbacks into pool and topology watcher.
+	bt := []string{"tenant:" + config.Tenant, "store:" + config.Store}
+	pool.SetMetrics(config.Timing, config.Count, bt)
+	watcher.SetMetrics(config.Timing, config.Count, bt)
+
 	// Determine warm-up connection count.
 	warmUp := poolCfg.MinPerPod
 	if config.ClientConfig != nil && config.ClientConfig.WarmUpOnTopologyChange != nil && !*config.ClientConfig.WarmUpOnTopologyChange {
@@ -276,6 +288,14 @@ func (c *Client) timeout() time.Duration {
 
 // Get performs a single-key point lookup.
 func (c *Client) Get(ctx context.Context, key []byte) ([]byte, error) {
+	start := time.Now()
+	status := "error"
+	defer func() {
+		tags := c.opTags("single", status)
+		c.emitTiming(MetricRequestLatency, time.Since(start), tags)
+		c.emitCount(MetricRequestCount, 1, tags)
+	}()
+
 	ctx, cancel := context.WithTimeout(ctx, c.timeout())
 	defer cancel()
 
@@ -295,6 +315,7 @@ func (c *Client) Get(ctx context.Context, key []byte) ([]byte, error) {
 	if err != nil {
 		if errors.Is(err, ErrKeyNotFound) {
 			c.pool.Put(pod, conn) // healthy connection, just a miss
+			status = "miss"
 			return nil, err
 		}
 		_ = conn.Close() // broken connection — discard
@@ -302,20 +323,42 @@ func (c *Client) Get(ctx context.Context, key []byte) ([]byte, error) {
 		return nil, err
 	}
 	c.pool.Put(pod, conn)
+	status = "hit"
 	return val, nil
 }
 
 // BatchGet performs a multi-key scatter-gather. Keys are grouped by shard,
 // fanned out in parallel, and merged in input order.
 func (c *Client) BatchGet(ctx context.Context, keys [][]byte) ([]Result, error) {
+	start := time.Now()
+	status := "ok"
+	defer func() {
+		tags := c.opTags("batch", status)
+		c.emitTiming(MetricRequestLatency, time.Since(start), tags)
+		c.emitCount(MetricRequestCount, 1, tags)
+		c.emitCount(MetricBatchKeys, int64(len(keys)), c.baseTags())
+	}()
+
 	ctx, cancel := context.WithTimeout(ctx, c.timeout())
 	defer cancel()
-	return scatterGather(ctx, c, keys)
+	results, err := scatterGather(ctx, c, keys)
+	if err != nil {
+		status = "error"
+	}
+	return results, err
 }
 
 // StringGet performs a single string-key point lookup using opcode 0x03.
 // The key is a variable-length UTF-8 byte slice (e.g. BuildStringKey output).
 func (c *Client) StringGet(ctx context.Context, key []byte) ([]byte, error) {
+	start := time.Now()
+	status := "error"
+	defer func() {
+		tags := c.opTags("string_single", status)
+		c.emitTiming(MetricRequestLatency, time.Since(start), tags)
+		c.emitCount(MetricRequestCount, 1, tags)
+	}()
+
 	ctx, cancel := context.WithTimeout(ctx, c.timeout())
 	defer cancel()
 
@@ -335,6 +378,7 @@ func (c *Client) StringGet(ctx context.Context, key []byte) ([]byte, error) {
 	if err != nil {
 		if errors.Is(err, ErrKeyNotFound) {
 			c.pool.Put(pod, conn)
+			status = "miss"
 			return nil, err
 		}
 		_ = conn.Close()
@@ -342,15 +386,29 @@ func (c *Client) StringGet(ctx context.Context, key []byte) ([]byte, error) {
 		return nil, err
 	}
 	c.pool.Put(pod, conn)
+	status = "hit"
 	return val, nil
 }
 
 // StringBatchGet performs a multi-key scatter-gather using string-key opcode 0x04.
 // Keys are variable-length UTF-8 byte slices.
 func (c *Client) StringBatchGet(ctx context.Context, keys [][]byte) ([]Result, error) {
+	start := time.Now()
+	status := "ok"
+	defer func() {
+		tags := c.opTags("string_batch", status)
+		c.emitTiming(MetricRequestLatency, time.Since(start), tags)
+		c.emitCount(MetricRequestCount, 1, tags)
+		c.emitCount(MetricBatchKeys, int64(len(keys)), c.baseTags())
+	}()
+
 	ctx, cancel := context.WithTimeout(ctx, c.timeout())
 	defer cancel()
-	return stringScatterGather(ctx, c, keys)
+	results, err := stringScatterGather(ctx, c, keys)
+	if err != nil {
+		status = "error"
+	}
+	return results, err
 }
 
 // Close stops the watcher, closes pooled connections, and releases etcd.

@@ -587,14 +587,19 @@ func TestGetTopology_ActiveVersionSetButMetaMissing(t *testing.T) {
 }
 
 func TestGetTopology_VersionMetaCorrupt(t *testing.T) {
+	// GetTopology is resilient to corrupt version metadata: ListVersions
+	// silently skips unparseable entries, so GetTopology returns successfully
+	// with an empty assignment (shardCount=0) rather than propagating an error.
 	mem := newMemKVOps()
 	sc := newTestStateClient(mem)
 	require.NoError(t, sc.CreateStore(context.Background(), defaultCfg()))
 	_ = mem.put(context.Background(), model.ActiveVersionPath("fs", "features"), "v_bad")
 	_ = mem.put(context.Background(), model.VersionPrefix("fs", "features", "v_bad"), "not-json")
 
-	_, err := sc.GetTopology(context.Background(), "fs", "features")
-	require.Error(t, err)
+	topo, err := sc.GetTopology(context.Background(), "fs", "features")
+	require.NoError(t, err)
+	assert.Equal(t, "v_bad", topo.ActiveVersion)
+	assert.Empty(t, topo.Assignment)
 }
 
 func TestGetTopology_NilAssignment(t *testing.T) {
