@@ -14,10 +14,13 @@ from . import (
     decode_log_file_to_csv,
     decode_log_file_to_jsonl,
     decode_log_file_to_pandas,
+    decode_logs,
+    decode_logs_to_pandas,
     decode_mplog,
     format_dataframe_floats,
     get_format_name,
     get_mplog_metadata,
+    list_log_sources,
     print_analysis,
     write_parsed_log,
 )
@@ -25,10 +28,22 @@ from .types import Format
 
 
 def _is_log_input(path: str) -> bool:
-    """Return True when ``path`` should be routed through the .log reader."""
+    """Return True when ``path`` should be routed through the .log reader
+    (file, directory, or gs:// URI/prefix)."""
     if path.startswith("gs://"):
         return True
-    return path.lower().endswith(".log")
+    if path.lower().endswith(".log"):
+        return True
+    if os.path.isdir(path):
+        return True
+    return False
+
+
+def _is_multi_source(path: str) -> bool:
+    """True when the CLI input targets multiple .log files (directory or GCS prefix)."""
+    if path.startswith("gs://"):
+        return not path.lower().endswith(".log")
+    return os.path.isdir(path)
 
 
 def main():
@@ -128,13 +143,27 @@ Examples:
     inference_host = args.inference_host or os.getenv("INFERENCE_HOST", "http://localhost:8082")
 
     # Non-Spark .log sinks short-circuit before Spark startup.
+    multi = _is_multi_source(args.input)
     if log_mode and out_fmt in {"pandas", "csv", "jsonl", "text", "analyze"}:
         try:
             if out_fmt == "analyze":
-                print_analysis(analyze_log_file(args.input))
+                if multi:
+                    print(
+                        "Note: --output-format analyze inspects one file at a time; "
+                        "listing sources under the given directory/prefix and picking "
+                        "the first.",
+                        file=sys.stderr,
+                    )
+                    sources = list_log_sources(args.input)
+                    if not sources:
+                        print("Error: no .log files found under the given source", file=sys.stderr)
+                        sys.exit(1)
+                    print_analysis(analyze_log_file(sources[0]))
+                else:
+                    print_analysis(analyze_log_file(args.input))
                 return
             if out_fmt == "pandas":
-                pdf = decode_log_file_to_pandas(
+                pdf = decode_logs_to_pandas(
                     args.input,
                     inference_host=inference_host,
                     decompress=not args.no_decompress,
@@ -153,6 +182,40 @@ Examples:
                         file=sys.stderr,
                     )
                     sys.exit(2)
+                if multi:
+                    # Fall through per-file to avoid ambiguous single-file writers.
+                    sources = list_log_sources(args.input)
+                    if not sources:
+                        print("Error: no .log files found under the given source", file=sys.stderr)
+                        sys.exit(1)
+                    print(
+                        f"Multi-source mode: writing one {out_fmt.upper()} per file into {args.output}/",
+                        file=sys.stderr,
+                    )
+                    os.makedirs(args.output, exist_ok=True)
+                    sink = {
+                        "csv": decode_log_file_to_csv,
+                        "jsonl": decode_log_file_to_jsonl,
+                        "text": write_parsed_log,
+                    }[out_fmt]
+                    total = 0
+                    ext = {"csv": ".csv", "jsonl": ".jsonl", "text": ".parsed.log"}[out_fmt]
+                    for s in sources:
+                        base = os.path.basename(s.rstrip("/")).rsplit(".log", 1)[0] + ext
+                        dest = os.path.join(args.output, base)
+                        n = sink(
+                            s,
+                            dest,
+                            inference_host=inference_host,
+                            decompress=not args.no_decompress,
+                            strict=args.strict,
+                        )
+                        total += n
+                    print(
+                        f"Wrote {len(sources)} files to {args.output}/ "
+                        f"({total} {'records' if out_fmt=='text' else 'rows'} total)"
+                    )
+                    return
                 sink = {
                     "csv": decode_log_file_to_csv,
                     "jsonl": decode_log_file_to_jsonl,
@@ -220,7 +283,8 @@ Examples:
 
     try:
         if log_mode:
-            df = decode_log_file(
+            # decode_logs auto-handles single file, local dir, or gs:// prefix.
+            df = decode_logs(
                 source=args.input,
                 spark=spark,
                 inference_host=inference_host,

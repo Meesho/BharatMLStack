@@ -472,6 +472,9 @@ local path, an open binary file-like object, or a `gs://bucket/key` URI.
 |----------|------------------|----------|
 | `decode_log_file(source, spark, ...)` | `pyspark.sql.DataFrame` | Big files, distributed downstream |
 | `decode_log_file_to_pandas(source, ...)` | `pandas.DataFrame` | Notebooks, mid-sized files |
+| `decode_logs(source, spark, ...)` | `pyspark.sql.DataFrame` | **Single file OR a directory / GCS prefix** — auto-lists and unions |
+| `decode_logs_to_pandas(source, ...)` | `pandas.DataFrame` | Same, pandas flavour |
+| `list_log_sources(source)` | `list[str]` | Enumerate `.log` files under a dir / `gs://` prefix / list |
 | `decode_log_file_to_csv(source, path, ...)` | rows written (int) | Handoff to BigQuery / Snowflake / Excel |
 | `decode_log_file_to_jsonl(source, path, ...)` | rows written (int) | Streaming pipelines |
 | `write_parsed_log(source, path, ...)` | records written (int) | Human-readable inspection (asynclogparser `.parsed.log` layout) |
@@ -479,6 +482,38 @@ local path, an open binary file-like object, or a `gs://bucket/key` URI.
 | `iter_decoded_log_rows(source, ...)` | `Iterator[dict]` | Custom sinks (Kafka, ClickHouse, ...) |
 | `iter_log_records(source, ...)` | `Iterator[(ts_ns, bytes)]` | Raw MPLog payloads for custom decoding |
 | `read_log_file(source, ...)` | `list[(ts_ns, bytes)]` | Small files, tests |
+
+#### Single file vs whole hour partition
+
+`decode_logs` / `decode_logs_to_pandas` accept any of these — they figure out
+what you meant and produce one merged DataFrame:
+
+| `source` | Behaviour |
+|----------|-----------|
+| Single `.log` file (path or `gs://...log`) | Decodes that file. |
+| Local directory | Non-recursive listing of `*.log` inside, unions results. |
+| `gs://bucket/prefix/` (or any URI not ending in `.log`) | Lists every `.log` under the prefix (works at hour, day, or month level). |
+| `list[str \| Path]` | Uses the list verbatim. |
+
+```python
+import inference_logging_client as ilc
+
+# One hour's worth of logs → one Spark DataFrame
+df = ilc.decode_logs(
+    "gs://gcs-dsci-inferflow-async-logger-prd/async-logger-gcs-flush/"
+    "search-organic-l2-ranker-prepaid-rtp-mall-hasp_scaleup/2026-06-30/23/",
+    spark,
+)
+
+# Same, pandas
+pdf = ilc.decode_logs_to_pandas("./hour_dump/")
+
+# See what would be enumerated without decoding
+files = ilc.list_log_sources("gs://bucket/prefix/")   # → list[str]
+```
+
+The CLI also picks up directories and GCS prefixes automatically — pass one
+to `inference-logging-client` and it dispatches through `decode_logs`.
 
 #### Common keyword arguments
 

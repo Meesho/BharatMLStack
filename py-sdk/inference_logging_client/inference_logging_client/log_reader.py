@@ -862,3 +862,195 @@ def print_analysis(result: dict) -> None:
         print("  records carry an 8-byte UnixNano timestamp prefix.")
     elif tsf is False:
         print("  WARNING: records do NOT carry the expected timestamp prefix.")
+
+
+# ---------------------------------------------------------------------------
+# Directory / prefix handling
+# ---------------------------------------------------------------------------
+
+def _looks_like_single_file(s: str, suffix: str) -> bool:
+    return s.endswith(suffix)
+
+
+def list_log_sources(
+    source: Union[str, Path, List[Union[str, Path]]],
+    suffix: str = ".log",
+) -> List[str]:
+    """Expand ``source`` into a concrete list of ``.log`` file paths / URIs.
+
+    Rules:
+      - A ``list`` / ``tuple`` — returned as-is (stringified).
+      - A local path to a file ending with ``suffix`` — ``[source]``.
+      - A local directory — non-recursive listing of files ending with ``suffix``.
+      - A ``gs://bucket/key`` URI ending with ``suffix`` — ``[source]``.
+      - A ``gs://bucket/prefix/`` URI (or any URI without ``suffix``) — every
+        object under that prefix whose name ends with ``suffix``, returned as
+        ``gs://bucket/<name>`` in lexicographic order.
+
+    File-like objects can't be enumerated — pass them directly to the
+    single-file APIs.
+    """
+    if isinstance(source, (list, tuple)):
+        return [str(s) for s in source]
+
+    if isinstance(source, Path):
+        source = str(source)
+
+    if not isinstance(source, str):
+        raise TypeError(
+            f"list_log_sources needs a path, gs:// URI, or list; got {type(source).__name__}"
+        )
+
+    # GCS
+    if source.startswith("gs://"):
+        if _looks_like_single_file(source, suffix):
+            return [source]
+        try:
+            from google.cloud import storage  # type: ignore
+        except ImportError as exc:
+            raise ImportError(
+                "Listing gs:// prefixes requires 'google-cloud-storage'. "
+                "Install it with: pip install google-cloud-storage"
+            ) from exc
+
+        rest = source[len("gs://") :]
+        if "/" in rest:
+            bucket_name, prefix = rest.split("/", 1)
+        else:
+            bucket_name, prefix = rest, ""
+        client = storage.Client()
+        blobs = client.list_blobs(bucket_name, prefix=prefix)
+        found = sorted(
+            f"gs://{bucket_name}/{b.name}" for b in blobs if b.name.endswith(suffix)
+        )
+        return found
+
+    # Local
+    if os.path.isdir(source):
+        entries = sorted(
+            os.path.join(source, name)
+            for name in os.listdir(source)
+            if name.endswith(suffix) and os.path.isfile(os.path.join(source, name))
+        )
+        return entries
+
+    if os.path.isfile(source):
+        return [source]
+
+    if _looks_like_single_file(source, suffix):
+        # Not an existing file, but user clearly asked for one — let the caller
+        # surface the FileNotFoundError.
+        return [source]
+
+    raise FileNotFoundError(
+        f"list_log_sources: {source!r} is neither an existing file/dir nor a gs:// URI"
+    )
+
+
+def decode_logs(
+    source: Union[LogSource, List[Union[str, Path]]],
+    spark: "SparkSession",
+    inference_host: Optional[str] = None,
+    decompress: bool = True,
+    schema: Optional[List[FeatureInfo]] = None,
+    needed_columns: Optional[Collection[str]] = None,
+    strict: bool = False,
+    suffix: str = ".log",
+) -> "SparkDataFrame":
+    """Decode a single ``.log`` file **or** every ``.log`` file under a directory /
+    GCS prefix / list, and return one unioned Spark DataFrame.
+
+    Same row shape and semantics as :func:`decode_log_file`. Uses
+    :func:`list_log_sources` to expand the source, then decodes each file and
+    unions with ``unionByName(..., allowMissingColumns=True)`` so per-file
+    schema drift (e.g. different feature subsets) doesn't break the merge.
+    """
+    # Fast path: caller passed a file-like directly.
+    if hasattr(source, "read") and not isinstance(source, (str, Path, list, tuple)):
+        return decode_log_file(
+            source,  # type: ignore[arg-type]
+            spark,
+            inference_host=inference_host,
+            decompress=decompress,
+            schema=schema,
+            needed_columns=needed_columns,
+            strict=strict,
+        )
+
+    sources = list_log_sources(source, suffix=suffix)  # type: ignore[arg-type]
+    if not sources:
+        # Return an empty DataFrame with the standard column set.
+        from pyspark.sql.types import LongType, StringType, StructField, StructType
+
+        fields = [StructField("entity_id", StringType(), True)]
+        for col in _RECORD_METADATA_COLUMNS:
+            dtype = LongType() if col in ("timestamp_ns", "version", "format_type") else StringType()
+            fields.append(StructField(col, dtype, True))
+        return spark.createDataFrame([], StructType(fields))
+
+    from functools import reduce
+
+    dfs = [
+        decode_log_file(
+            s,
+            spark,
+            inference_host=inference_host,
+            decompress=decompress,
+            schema=schema,
+            needed_columns=needed_columns,
+            strict=strict,
+        )
+        for s in sources
+    ]
+    if len(dfs) == 1:
+        return dfs[0]
+    return reduce(lambda a, b: a.unionByName(b, allowMissingColumns=True), dfs)
+
+
+def decode_logs_to_pandas(
+    source: Union[LogSource, List[Union[str, Path]]],
+    inference_host: Optional[str] = None,
+    decompress: bool = True,
+    schema: Optional[List[FeatureInfo]] = None,
+    needed_columns: Optional[Collection[str]] = None,
+    strict: bool = False,
+    suffix: str = ".log",
+):
+    """Same as :func:`decode_logs` but returns a pandas DataFrame (no Spark).
+
+    Files are decoded sequentially, then concatenated with
+    ``pd.concat(..., ignore_index=True)``.
+    """
+    try:
+        import pandas as pd  # type: ignore
+    except ImportError as exc:
+        raise ImportError(
+            "decode_logs_to_pandas requires pandas. Install it with: pip install pandas"
+        ) from exc
+
+    if hasattr(source, "read") and not isinstance(source, (str, Path, list, tuple)):
+        return decode_log_file_to_pandas(
+            source,  # type: ignore[arg-type]
+            inference_host=inference_host,
+            decompress=decompress,
+            schema=schema,
+            needed_columns=needed_columns,
+            strict=strict,
+        )
+
+    sources = list_log_sources(source, suffix=suffix)  # type: ignore[arg-type]
+    if not sources:
+        return pd.DataFrame(columns=["entity_id", *_RECORD_METADATA_COLUMNS])
+
+    frames = [
+        decode_log_file_to_pandas(
+            s,
+            inference_host=inference_host,
+            decompress=decompress,
+            schema=schema,
+            needed_columns=needed_columns,
+            strict=strict,
+        )
+        for s in sources
+    ]
+    return pd.concat(frames, ignore_index=True)
