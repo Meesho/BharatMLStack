@@ -15,10 +15,15 @@ const (
 	// Tags: tenant, store
 	MetricBatchKeys = "mnemo.batch.keys"
 
+	// Per-shard scatter-gather leg latency: pool.Get + network RTT + response read.
+	// Tags: tenant, store, shard
+	MetricShardLatency = "mnemo.shard.latency"
+
 	// Connection pool metrics.
 	// Tags: tenant, store, result (hit/dial/error)
 	MetricPoolGet = "mnemo.pool.get"
 	// Tags: tenant, store
+	MetricPoolGetLatency  = "mnemo.pool.get.latency"
 	MetricPoolDialLatency = "mnemo.pool.dial.latency"
 	MetricPoolIdleEvicted = "mnemo.pool.idle_evicted"
 	MetricPoolOverflow    = "mnemo.pool.overflow"

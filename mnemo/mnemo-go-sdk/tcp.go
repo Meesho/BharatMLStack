@@ -421,6 +421,7 @@ func (p *ConnPool) evictIdle() {
 
 // Get returns a pooled connection for addr, dialing a new one if the pool is empty.
 func (p *ConnPool) Get(addr string) (*Conn, error) {
+	getStart := time.Now()
 	p.mu.Lock()
 	if p.closed {
 		p.mu.Unlock()
@@ -432,18 +433,22 @@ func (p *ConnPool) Get(addr string) (*Conn, error) {
 		p.pools[addr] = conns[:len(conns)-1]
 		p.mu.Unlock()
 		p.emitCount(MetricPoolGet, 1, p.poolTags("result:hit"))
+		p.emitTiming(MetricPoolGetLatency, time.Since(getStart), p.baseTags)
 		return c, nil
 	}
 	p.mu.Unlock()
 
-	start := time.Now()
+	dialStart := time.Now()
 	conn, err := DialWithKeepalive(addr, p.cfg.DialTimeout, p.cfg.KeepAliveInterval, p.cfg.KeepAliveTimeout)
 	if err != nil {
 		p.emitCount(MetricPoolGet, 1, p.poolTags("result:error"))
+		p.emitTiming(MetricPoolGetLatency, time.Since(getStart), p.baseTags)
 		return nil, err
 	}
+	dialElapsed := time.Since(dialStart)
 	p.emitCount(MetricPoolGet, 1, p.poolTags("result:dial"))
-	p.emitTiming(MetricPoolDialLatency, time.Since(start), p.baseTags)
+	p.emitTiming(MetricPoolDialLatency, dialElapsed, p.baseTags)
+	p.emitTiming(MetricPoolGetLatency, time.Since(getStart), p.baseTags)
 	return conn, nil
 }
 
