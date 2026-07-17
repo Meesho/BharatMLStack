@@ -74,6 +74,12 @@ type Config struct {
 
 	// Count is an optional callback for count metrics (nil-safe).
 	Count func(name string, value int64, tags []string)
+
+	// EtcdKeepAliveTime is the gRPC keepalive ping interval for the etcd
+	// connection. Default: 60s. Too-frequent pings trigger ENHANCE_YOUR_CALM.
+	EtcdKeepAliveTime time.Duration
+	// EtcdKeepAliveTimeout is the gRPC keepalive timeout. Default: 10s.
+	EtcdKeepAliveTimeout time.Duration
 }
 
 func (c *Config) applyDefaults() {
@@ -94,6 +100,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.DNSRefreshInterval == 0 {
 		c.DNSRefreshInterval = 30 * time.Second
+	}
+	if c.EtcdKeepAliveTime == 0 {
+		c.EtcdKeepAliveTime = 60 * time.Second
+	}
+	if c.EtcdKeepAliveTimeout == 0 {
+		c.EtcdKeepAliveTimeout = 10 * time.Second
 	}
 }
 
@@ -141,6 +153,12 @@ func (c *Config) buildPoolConfig() PoolConfig {
 		if cc.DNSRefreshIntervalMs > 0 {
 			c.DNSRefreshInterval = time.Duration(cc.DNSRefreshIntervalMs) * time.Millisecond
 		}
+		if cc.EtcdKeepAliveTimeMs > 0 {
+			c.EtcdKeepAliveTime = time.Duration(cc.EtcdKeepAliveTimeMs) * time.Millisecond
+		}
+		if cc.EtcdKeepAliveTimeoutMs > 0 {
+			c.EtcdKeepAliveTimeout = time.Duration(cc.EtcdKeepAliveTimeoutMs) * time.Millisecond
+		}
 	}
 
 	pc.applyDefaults()
@@ -163,14 +181,6 @@ type Client struct {
 	etcdCloser io.Closer          // nil for a direct client
 }
 
-// EtcdKeepAliveDefaults are used when ClientConfig doesn't specify etcd
-// keepalive values. 60s is safe for most etcd servers / proxies (default
-// server MinTime is 5s, but LBs often enforce higher).
-const (
-	defaultEtcdKeepAliveTime    = 60 * time.Second
-	defaultEtcdKeepAliveTimeout = 10 * time.Second
-)
-
 // newEtcdClient is the etcd-client constructor, indirected through a package
 // var so tests can inject a dial failure.
 var newEtcdClient = func(endpoints []string, keepAliveTime, keepAliveTimeout time.Duration) (*clientv3.Client, error) {
@@ -187,20 +197,8 @@ func NewClient(config Config) (*Client, error) {
 	if len(config.EtcdEndpoints) == 0 {
 		return nil, ErrNoEndpoints
 	}
-
-	// Resolve etcd gRPC keepalive: explicit ClientConfig > defaults (60s).
-	kaTime := defaultEtcdKeepAliveTime
-	kaTimeout := defaultEtcdKeepAliveTimeout
-	if cc := config.ClientConfig; cc != nil {
-		if cc.EtcdKeepAliveTimeMs > 0 {
-			kaTime = time.Duration(cc.EtcdKeepAliveTimeMs) * time.Millisecond
-		}
-		if cc.EtcdKeepAliveTimeoutMs > 0 {
-			kaTimeout = time.Duration(cc.EtcdKeepAliveTimeoutMs) * time.Millisecond
-		}
-	}
-
-	cli, err := newEtcdClient(config.EtcdEndpoints, kaTime, kaTimeout)
+	config.applyDefaults()
+	cli, err := newEtcdClient(config.EtcdEndpoints, config.EtcdKeepAliveTime, config.EtcdKeepAliveTimeout)
 	if err != nil {
 		return nil, err
 	}

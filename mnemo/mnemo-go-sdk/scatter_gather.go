@@ -2,9 +2,7 @@ package sdk
 
 import (
 	"context"
-	"strconv"
 	"sync"
-	"time"
 )
 
 // scatterGather groups keys by shard, fans out one batch request per shard in
@@ -49,8 +47,6 @@ func scatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Result, err
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			shardStart := time.Now()
-			shardTag := "shard:" + strconv.FormatUint(uint64(shardID), 10)
 
 			pod, err := c.router.PodFor(shardID)
 			if err != nil {
@@ -72,10 +68,9 @@ func scatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Result, err
 
 			vals, err := conn.BatchLookup(ctx, batchKeys)
 			if err != nil {
-				_ = conn.Close()
+				_ = conn.Close() // broken connection — don't return to pool
 				c.router.MarkUnhealthy(pod)
 				setErr(entries, err)
-				c.emitTiming(MetricShardLatency, time.Since(shardStart), append(c.baseTags(), shardTag))
 				return
 			}
 			c.pool.Put(pod, conn)
@@ -83,7 +78,6 @@ func scatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Result, err
 			for i, e := range entries {
 				results[e.idx] = Result{Key: e.key, Value: vals[i]}
 			}
-			c.emitTiming(MetricShardLatency, time.Since(shardStart), append(c.baseTags(), shardTag))
 		}()
 	}
 
@@ -128,8 +122,6 @@ func stringScatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Resul
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			shardStart := time.Now()
-			shardTag := "shard:" + strconv.FormatUint(uint64(shardID), 10)
 
 			pod, err := c.router.PodFor(shardID)
 			if err != nil {
@@ -154,7 +146,6 @@ func stringScatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Resul
 				_ = conn.Close()
 				c.router.MarkUnhealthy(pod)
 				setErr(entries, err)
-				c.emitTiming(MetricShardLatency, time.Since(shardStart), append(c.baseTags(), shardTag))
 				return
 			}
 			c.pool.Put(pod, conn)
@@ -162,7 +153,6 @@ func stringScatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Resul
 			for i, e := range entries {
 				results[e.idx] = Result{Key: e.key, Value: vals[i]}
 			}
-			c.emitTiming(MetricShardLatency, time.Since(shardStart), append(c.baseTags(), shardTag))
 		}()
 	}
 

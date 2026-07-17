@@ -14,10 +14,6 @@
 //   ./mnemo-perf -etcd 10.138.72.120:2379 -tenant ds -store catalog_geohash_e2e \
 //     -keys keys.txt -mode both -batch 50 -concurrency 32 -duration 30s
 //
-// Prometheus metrics are exposed on -metrics-port (default 9103) while the
-// benchmark runs:
-//   curl http://<vm>:9103/metrics
-//
 // NOTE: requires the version to be PROMOTED (the SDK resolves pods from the
 // control plane's assignment in etcd). If nothing is promoted, the client has no
 // pods to route to and every op errors.
@@ -29,7 +25,6 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
-	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -37,107 +32,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-
 	sdk "github.com/Meesho/BharatMLStack/mnemo/mnemo-go-sdk"
 )
-
-// ── Prometheus metrics ──────────────────────────────────────────────────────
-
-var (
-	requestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "mnemo_client_request_duration_seconds",
-		Help:    "Client-side request latency",
-		Buckets: []float64{0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
-	}, []string{"tenant", "store", "op", "status"})
-
-	requestTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "mnemo_client_request_total",
-		Help: "Client-side request count",
-	}, []string{"tenant", "store", "op", "status"})
-
-	batchKeys = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "mnemo_client_batch_keys",
-		Help:    "Keys per batch request",
-		Buckets: []float64{1, 5, 10, 25, 50, 100, 250, 500, 1000},
-	}, []string{"tenant", "store"})
-
-	poolGet = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "mnemo_client_pool_get_total",
-		Help: "Connection pool get operations",
-	}, []string{"tenant", "store", "result"})
-
-	poolDialLatency = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "mnemo_client_pool_dial_duration_seconds",
-		Help:    "New TCP connection dial latency",
-		Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
-	}, []string{"tenant", "store"})
-
-	poolOverflow = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "mnemo_client_pool_overflow_total",
-		Help: "Pool ceiling exceeded",
-	}, []string{"tenant", "store"})
-
-	poolIdleEvicted = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "mnemo_client_pool_idle_evicted_total",
-		Help: "Idle connections evicted",
-	}, []string{"tenant", "store"})
-
-	topologyReloads = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "mnemo_client_topology_reloads_total",
-		Help: "Topology reload events",
-	}, []string{"tenant", "store", "status"})
-)
-
-func init() {
-	prometheus.MustRegister(requestDuration, requestTotal, batchKeys,
-		poolGet, poolDialLatency, poolOverflow, poolIdleEvicted, topologyReloads)
-}
-
-// parseTags extracts key:value pairs from SDK tag slices into a label map.
-func parseTags(tags []string) map[string]string {
-	m := make(map[string]string, len(tags))
-	for _, t := range tags {
-		if i := strings.IndexByte(t, ':'); i > 0 {
-			m[t[:i]] = t[i+1:]
-		}
-	}
-	return m
-}
-
-// promTiming bridges SDK Timing callbacks to Prometheus histograms.
-func promTiming(name string, value time.Duration, tags []string) {
-	m := parseTags(tags)
-	sec := value.Seconds()
-	switch name {
-	case sdk.MetricRequestLatency:
-		requestDuration.WithLabelValues(m["tenant"], m["store"], m["op"], m["status"]).Observe(sec)
-	case sdk.MetricPoolDialLatency:
-		poolDialLatency.WithLabelValues(m["tenant"], m["store"]).Observe(sec)
-	}
-}
-
-// promCount bridges SDK Count callbacks to Prometheus counters/histograms.
-func promCount(name string, value int64, tags []string) {
-	m := parseTags(tags)
-	switch name {
-	case sdk.MetricRequestCount:
-		requestTotal.WithLabelValues(m["tenant"], m["store"], m["op"], m["status"]).Add(float64(value))
-	case sdk.MetricBatchKeys:
-		batchKeys.WithLabelValues(m["tenant"], m["store"]).Observe(float64(value))
-	case sdk.MetricPoolGet:
-		poolGet.WithLabelValues(m["tenant"], m["store"], m["result"]).Add(float64(value))
-	case sdk.MetricPoolOverflow:
-		poolOverflow.WithLabelValues(m["tenant"], m["store"]).Add(float64(value))
-	case sdk.MetricPoolIdleEvicted:
-		poolIdleEvicted.WithLabelValues(m["tenant"], m["store"]).Add(float64(value))
-	case sdk.MetricTopologyReload:
-		topologyReloads.WithLabelValues(m["tenant"], m["store"], m["status"]).Add(float64(value))
-	}
-}
-
-// ── Main ────────────────────────────────────────────────────────────────────
 
 func main() {
 	etcd := flag.String("etcd", "10.138.72.120:2379", "comma-separated etcd endpoints for topology discovery")
@@ -151,41 +47,15 @@ func main() {
 	concurrency := flag.Int("concurrency", 32, "parallel load-generator workers (offered load — NOT a client config)")
 	duration := flag.Duration("duration", 30*time.Second, "measured run duration per mode")
 	warmup := flag.Duration("warmup", 5*time.Second, "warmup per mode (also lets topology resolve; not recorded)")
-	metricsPort := flag.Int("metrics-port", 9103, "Prometheus /metrics port (0 to disable)")
-	minConns := flag.Int("min-conns", 0, "min idle connections per pod (0 = use control plane value or default 1)")
-	maxConns := flag.Int("max-conns", 0, "max connections per pod (0 = use control plane value or default 4)")
 	flag.Parse()
 
-	// Start Prometheus metrics server.
-	if *metricsPort > 0 {
-		go func() {
-			mux := http.NewServeMux()
-			mux.Handle("/metrics", promhttp.Handler())
-			addr := fmt.Sprintf(":%d", *metricsPort)
-			fmt.Printf("Prometheus metrics at http://0.0.0.0%s/metrics\n", addr)
-			if err := http.ListenAndServe(addr, mux); err != nil {
-				fmt.Fprintf(os.Stderr, "metrics server: %v\n", err)
-			}
-		}()
-	}
-
-	sdkCfg := sdk.Config{
+	// No ConnsPerPod here: connection pool sizing (min/maxConnsPerPod), timeouts,
+	// keepalive, etc. all come from the store's ClientConfig in the control plane.
+	client, err := sdk.NewClient(sdk.Config{
 		EtcdEndpoints: strings.Split(*etcd, ","),
 		Tenant:        *tenant,
 		Store:         *store,
-		Timing:        promTiming,
-		Count:         promCount,
-	}
-	if *minConns > 0 || *maxConns > 0 {
-		sdkCfg.Pool = &sdk.PoolConfig{}
-		if *minConns > 0 {
-			sdkCfg.Pool.MinPerPod = *minConns
-		}
-		if *maxConns > 0 {
-			sdkCfg.Pool.MaxPerPod = *maxConns
-		}
-	}
-	client, err := sdk.NewClient(sdkCfg)
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "FATAL: NewClient: %v\n", err)
 		os.Exit(1)
@@ -229,41 +99,13 @@ type result struct {
 	keys    int64
 	errs    int64
 	elapsed time.Duration
-	start   time.Time
-	end     time.Time
 }
 
 func run(cfg runCfg, isBatch bool) result {
 	if cfg.warmup > 0 {
-		rampUp(cfg, isBatch, cfg.warmup)
+		drive(cfg, isBatch, cfg.warmup, false)
 	}
 	return drive(cfg, isBatch, cfg.duration, true)
-}
-
-// rampUp gradually increases concurrency from 1 to cfg.concurrency over the
-// warmup duration. Each step runs for an equal slice of time, doubling the
-// worker count: 1 → 2 → 4 → 8 → ... → concurrency. This warms the RocksDB
-// block cache, TCP connection pool, and OS page cache before the measured run.
-func rampUp(cfg runCfg, isBatch bool, dur time.Duration) {
-	// Build ramp steps: 1, 2, 4, 8, ..., concurrency
-	var steps []int
-	for c := 1; c < cfg.concurrency; c *= 2 {
-		steps = append(steps, c)
-	}
-	steps = append(steps, cfg.concurrency)
-
-	stepDur := dur / time.Duration(len(steps))
-	if stepDur < 1*time.Second {
-		stepDur = 1 * time.Second
-	}
-
-	for _, c := range steps {
-		stepCfg := cfg
-		stepCfg.concurrency = c
-		fmt.Printf("  [warmup] concurrency=%d for %s\n", c, stepDur)
-		drive(stepCfg, isBatch, stepDur, false)
-	}
-	fmt.Println("  [warmup] done — starting measured run")
 }
 
 func drive(cfg runCfg, isBatch bool, dur time.Duration, record bool) result {
@@ -305,7 +147,7 @@ func drive(cfg runCfg, isBatch bool, dur time.Duration, record bool) result {
 	for _, l := range perWorkerLats {
 		all = append(all, l...)
 	}
-	return result{lats: all, ops: ops, keys: keysN, errs: errs, elapsed: elapsed, start: start, end: time.Now()}
+	return result{lats: all, ops: ops, keys: keysN, errs: errs, elapsed: elapsed}
 }
 
 // doSingle — SDK routes the key to its shard's pod (replica load-balanced).
@@ -344,8 +186,6 @@ func report(title string, r result) {
 	opsPerSec := float64(r.ops) / r.elapsed.Seconds()
 	keysPerSec := float64(r.keys) / r.elapsed.Seconds()
 	fmt.Printf("== %s ==\n", title)
-	fmt.Printf("  start        %s\n", r.start.Format("2006-01-02 15:04:05 MST"))
-	fmt.Printf("  end          %s\n", r.end.Format("2006-01-02 15:04:05 MST"))
 	fmt.Printf("  elapsed      %s\n", r.elapsed.Round(time.Millisecond))
 	fmt.Printf("  throughput   %.0f ops/sec   %.0f keys/sec\n", opsPerSec, keysPerSec)
 	fmt.Printf("  latency      p50=%s  p75=%s  p95=%s  p99=%s  p99.9=%s  max=%s\n",
