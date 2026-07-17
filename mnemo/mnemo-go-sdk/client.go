@@ -163,12 +163,22 @@ type Client struct {
 	etcdCloser io.Closer          // nil for a direct client
 }
 
+// EtcdKeepAliveDefaults are used when ClientConfig doesn't specify etcd
+// keepalive values. 60s is safe for most etcd servers / proxies (default
+// server MinTime is 5s, but LBs often enforce higher).
+const (
+	defaultEtcdKeepAliveTime    = 60 * time.Second
+	defaultEtcdKeepAliveTimeout = 10 * time.Second
+)
+
 // newEtcdClient is the etcd-client constructor, indirected through a package
 // var so tests can inject a dial failure.
-var newEtcdClient = func(endpoints []string) (*clientv3.Client, error) {
+var newEtcdClient = func(endpoints []string, keepAliveTime, keepAliveTimeout time.Duration) (*clientv3.Client, error) {
 	return clientv3.New(clientv3.Config{
-		Endpoints:   endpoints,
-		DialTimeout: 5 * time.Second,
+		Endpoints:            endpoints,
+		DialTimeout:          5 * time.Second,
+		DialKeepAliveTime:    keepAliveTime,
+		DialKeepAliveTimeout: keepAliveTimeout,
 	})
 }
 
@@ -177,7 +187,20 @@ func NewClient(config Config) (*Client, error) {
 	if len(config.EtcdEndpoints) == 0 {
 		return nil, ErrNoEndpoints
 	}
-	cli, err := newEtcdClient(config.EtcdEndpoints)
+
+	// Resolve etcd gRPC keepalive: explicit ClientConfig > defaults (60s).
+	kaTime := defaultEtcdKeepAliveTime
+	kaTimeout := defaultEtcdKeepAliveTimeout
+	if cc := config.ClientConfig; cc != nil {
+		if cc.EtcdKeepAliveTimeMs > 0 {
+			kaTime = time.Duration(cc.EtcdKeepAliveTimeMs) * time.Millisecond
+		}
+		if cc.EtcdKeepAliveTimeoutMs > 0 {
+			kaTimeout = time.Duration(cc.EtcdKeepAliveTimeoutMs) * time.Millisecond
+		}
+	}
+
+	cli, err := newEtcdClient(config.EtcdEndpoints, kaTime, kaTimeout)
 	if err != nil {
 		return nil, err
 	}

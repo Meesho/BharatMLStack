@@ -86,6 +86,14 @@ type ClientConfig struct {
 	// WarmUpOnTopologyChange pre-dials MinConnsPerPod connections to newly
 	// discovered pods when the assignment changes. Default: true.
 	WarmUpOnTopologyChange *bool `json:"warmUpOnTopologyChange,omitempty"`
+
+	// EtcdKeepAliveTimeMs is the gRPC keepalive ping interval for the etcd
+	// connection in milliseconds. Too-frequent pings trigger ENHANCE_YOUR_CALM
+	// (GOAWAY) from the etcd server/proxy. Default: 60000 (60s).
+	EtcdKeepAliveTimeMs int `json:"etcdKeepAliveTimeMs,omitempty"`
+	// EtcdKeepAliveTimeoutMs is the gRPC keepalive timeout for the etcd
+	// connection in milliseconds. Default: 10000 (10s).
+	EtcdKeepAliveTimeoutMs int `json:"etcdKeepAliveTimeoutMs,omitempty"`
 }
 
 // PodData is the ephemeral registration for a single pod, lease-bound in etcd.

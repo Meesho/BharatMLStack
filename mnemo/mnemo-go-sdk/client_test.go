@@ -84,7 +84,7 @@ func TestNewClient_NoEndpoints(t *testing.T) {
 func TestNewClient_EtcdDialError(t *testing.T) {
 	orig := newEtcdClient
 	defer func() { newEtcdClient = orig }()
-	newEtcdClient = func(_ []string) (*clientv3.Client, error) {
+	newEtcdClient = func(_ []string, _, _ time.Duration) (*clientv3.Client, error) {
 		return nil, errors.New("dial boom")
 	}
 	_, err := NewClient(Config{EtcdEndpoints: []string{"x"}, Tenant: "t", Store: "s"})
