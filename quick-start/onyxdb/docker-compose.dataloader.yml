@@ -1,0 +1,159 @@
+# OnyxDB FULL data-plane pipeline — end-to-end local test (2 shards).
+#
+#   control plane REST API  →  etcd  →  data-loader watcher  →  IPC  →  read server atomic flip
+#
+# ── Build the images first ────────────────────────────────────────────────────
+#   docker build -t onyxdb-controlplane:local -f ../../onyxdb/controlplane/Dockerfile ../../onyxdb
+#   docker build -t onyxdb-readserver:local   -f ../../onyxdb/readserver/Dockerfile ../../onyxdb/readserver
+#   docker build -t onyxdb-dataloader:local   -f ../../onyxdb/dataloader/Dockerfile ../../onyxdb
+#
+# ── Run ────────────────────────────────────────────────────────────────────────
+#   docker compose -f docker-compose.dataloader.yml up -d
+#   ./scripts/e2e-dataloader.sh
+
+x-dataloader-env: &dataloader-env
+  ONYXDB_ETCD_ENDPOINTS: "etcd:2379"
+  ONYXDB_TENANT: "online_fs_push_sst_test_v2"
+  ONYXDB_STORE: "ds_catalog_user_geohash_1_3"
+  ONYXDB_GCS_BUCKET: "gcs-dsci-core-core-prd"
+  # GCS prefix overrides tenant/store for GCS paths (supports slashes).
+  ONYXDB_GCS_PREFIX: "online_fs_push_sst_test_v2/ds/catalog_user_geohash_1_3"
+  ONYXDB_DATA_DIR: "/data"
+  ONYXDB_IPC_PATH: "/tmp/onyxdb-readserver.sock"
+
+services:
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.12
+    container_name: onyxdb-etcd
+    environment:
+      ETCD_DATA_DIR: /etcd-data
+      ETCD_NAME: node1
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://etcd:2380
+      ETCD_LISTEN_PEER_URLS: http://0.0.0.0:2380
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379,http://localhost:2379
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_INITIAL_CLUSTER: node1=http://etcd:2380
+      ETCD_INITIAL_CLUSTER_STATE: new
+      ETCD_INITIAL_CLUSTER_TOKEN: onyxdb-dev
+    ports:
+      - "2379:2379"
+    networks: [onyxdb-net]
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  onyxdb-controlplane:
+    image: onyxdb-controlplane:local
+    container_name: onyxdb-controlplane
+    ports:
+      - "8080:8080"
+    environment:
+      ONYXDB_CP_ADDR: ":8080"
+      ONYXDB_ETCD_ENDPOINTS: "etcd:2379"
+    networks: [onyxdb-net]
+    depends_on:
+      etcd:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Shard 0 ──────────────────────────────────────────────────────────────────
+
+  onyxdb-readserver-0:
+    image: onyxdb-readserver:local
+    container_name: onyxdb-readserver-0
+    user: "0:0"
+    ports:
+      - "9091:9091"
+      - "9100:9100"
+    volumes:
+      - onyxdb-data-0:/data
+      - onyxdb-ipc-0:/tmp
+    command: >
+      --tcp-addr 0.0.0.0:9091
+      --http-addr 0.0.0.0:9100
+      --ipc-path /tmp/onyxdb-readserver.sock
+      --block-cache-bytes 536870912
+      --bloom-bits 10
+    networks: [onyxdb-net]
+    restart: unless-stopped
+
+  onyxdb-dataloader-0:
+    image: onyxdb-dataloader:local
+    container_name: onyxdb-dataloader-0
+    user: "0:0"
+    environment:
+      <<: *dataloader-env
+      ONYXDB_SHARD_ID: "0"
+      ONYXDB_POD_ID: "online_fs_push_sst_test_v2-ds_catalog_user_geohash_1_3-shard-0-0"
+      ONYXDB_POD_IP: "onyxdb-readserver-0"
+      ONYXDB_NODE_IP: "onyxdb-readserver-0"
+      GOOGLE_APPLICATION_CREDENTIALS: /gcp/adc.json
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-~/.config/gcloud/application_default_credentials.json}:/gcp/adc.json:ro
+      - onyxdb-data-0:/data
+      - onyxdb-ipc-0:/tmp
+    networks: [onyxdb-net]
+    depends_on:
+      etcd:
+        condition: service_healthy
+      onyxdb-readserver-0:
+        condition: service_started
+    restart: unless-stopped
+
+  # ── Shard 1 ──────────────────────────────────────────────────────────────────
+
+  onyxdb-readserver-1:
+    image: onyxdb-readserver:local
+    container_name: onyxdb-readserver-1
+    user: "0:0"
+    ports:
+      - "9191:9091"
+      - "9200:9100"
+    volumes:
+      - onyxdb-data-1:/data
+      - onyxdb-ipc-1:/tmp
+    command: >
+      --tcp-addr 0.0.0.0:9091
+      --http-addr 0.0.0.0:9100
+      --ipc-path /tmp/onyxdb-readserver.sock
+      --block-cache-bytes 536870912
+      --bloom-bits 10
+    networks: [onyxdb-net]
+    restart: unless-stopped
+
+  onyxdb-dataloader-1:
+    image: onyxdb-dataloader:local
+    container_name: onyxdb-dataloader-1
+    user: "0:0"
+    environment:
+      <<: *dataloader-env
+      ONYXDB_SHARD_ID: "1"
+      ONYXDB_POD_ID: "online_fs_push_sst_test_v2-ds_catalog_user_geohash_1_3-shard-1-0"
+      ONYXDB_POD_IP: "onyxdb-readserver-1"
+      ONYXDB_NODE_IP: "onyxdb-readserver-1"
+      GOOGLE_APPLICATION_CREDENTIALS: /gcp/adc.json
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-~/.config/gcloud/application_default_credentials.json}:/gcp/adc.json:ro
+      - onyxdb-data-1:/data
+      - onyxdb-ipc-1:/tmp
+    networks: [onyxdb-net]
+    depends_on:
+      etcd:
+        condition: service_healthy
+      onyxdb-readserver-1:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  onyxdb-data-0:
+  onyxdb-data-1:
+  onyxdb-ipc-0:
+  onyxdb-ipc-1:
+
+networks:
+  onyxdb-net:
+    driver: bridge

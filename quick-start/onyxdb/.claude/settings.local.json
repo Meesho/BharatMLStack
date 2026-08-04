@@ -1,0 +1,7 @@
+{
+  "enabledMcpjsonServers": [
+    "bifrost",
+    "qmd"
+  ],
+  "enableAllProjectMcpServers": true
+}

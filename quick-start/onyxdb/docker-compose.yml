@@ -1,0 +1,112 @@
+# OnyxDB Local Development Stack
+#
+# Runs etcd, the control plane, and the read server.
+# Before starting, build the local images:
+#
+#   docker build -t onyxdb-readserver:local -f ../../onyxdb/readserver/Dockerfile ../../onyxdb/readserver/
+#   docker build -t onyxdb-controlplane:local -f ../../onyxdb/controlplane/Dockerfile ../../onyxdb/controlplane/
+#
+# Then start the stack:
+#   docker compose up -d
+#
+# Load data into the read server (first time or after restart):
+#   ./scripts/init-readserver.sh
+#
+# Test TCP lookups:
+#   ./scripts/tcp-test.py
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.12
+    container_name: onyxdb-etcd
+    environment:
+      ETCD_DATA_DIR: /etcd-data
+      ETCD_NAME: node1
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://etcd:2380
+      ETCD_LISTEN_PEER_URLS: http://0.0.0.0:2380
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379,http://localhost:2379
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_INITIAL_CLUSTER: node1=http://etcd:2380
+      ETCD_INITIAL_CLUSTER_STATE: new
+      ETCD_INITIAL_CLUSTER_TOKEN: onyxdb-dev
+    ports:
+      - "2379:2379"
+    volumes:
+      - etcd-data:/etcd-data
+    networks:
+      - onyxdb-net
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  # ── OnyxDB Control Plane ─────────────────────────────────────────────────────
+
+  onyxdb-controlplane:
+    image: onyxdb-controlplane:local
+    container_name: onyxdb-controlplane
+    ports:
+      - "8080:8080"
+    environment:
+      ONYXDB_CP_ADDR: ":8080"
+      ONYXDB_ETCD_ENDPOINTS: "etcd:2379"
+    networks:
+      - onyxdb-net
+    depends_on:
+      etcd:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── OnyxDB Read Server ───────────────────────────────────────────────────────
+
+  onyxdb-readserver:
+    image: onyxdb-readserver:local
+    container_name: onyxdb-readserver
+    ports:
+      - "9091:9091"   # TCP binary protocol (hot path)
+      - "9100:9100"   # HTTP health + Prometheus metrics
+    volumes:
+      # Shared data volume — populated by the data loader at runtime
+      - onyxdb-data:/data
+      # Shared volume for the IPC Unix socket
+      - onyxdb-ipc:/tmp
+    command: >
+      --tcp-addr 0.0.0.0:9091
+      --http-addr 0.0.0.0:9100
+      --ipc-path /tmp/onyxdb-readserver.sock
+      --block-cache-bytes 536870912
+      --bloom-bits 10
+    networks:
+      - onyxdb-net
+    restart: unless-stopped
+
+  # ── Init: load + activate data in the read server ──────────────────────────
+  # This runs once after the read server starts, polls /healthz, then
+  # sends IPC load + activate so the server starts serving real data.
+
+  onyxdb-readserver-init:
+    image: alpine:latest
+    container_name: onyxdb-readserver-init
+    volumes:
+      - onyxdb-ipc:/ipc
+      - ./scripts:/scripts:ro
+    command: ["sh", "/scripts/ipc-init.sh"]
+    networks:
+      - onyxdb-net
+    depends_on:
+      - onyxdb-readserver
+    restart: "no"
+
+volumes:
+  etcd-data:
+  onyxdb-data:
+  onyxdb-ipc:
+
+networks:
+  onyxdb-net:
+    driver: bridge
