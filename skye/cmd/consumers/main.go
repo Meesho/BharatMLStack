@@ -33,7 +33,13 @@ func main() {
 	logger.Init()
 	metric.Init()
 	etcd.InitFromAppName(&config.Skye{}, appConfig.Configs.AppName, appConfig.Configs)
-	profiling.Init()
+	if err := profiling.InitWithOptions(
+		profiling.WithPprof(profiling.PprofAll...),
+		profiling.WithRuntimeMetrics(profiling.RuntimeMetricAll),
+		profiling.WithContinuousProfiler(),
+	); err != nil {
+		log.Error().Err(err).Msg("profiling init failed")
+	}
 
 	// Initialise Kafka producers (static IDs known at startup).
 	// Failure producers (per-model dynamic IDs) are initialised lazily in embedding handler.

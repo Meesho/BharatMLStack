@@ -39,6 +39,9 @@ deployment:
     - containerPort: 8089
       name: grpc
       protocol: TCP
+    - containerPort: 14271
+      name: metrics
+      protocol: TCP
   probes:
     liveness:
       path: /health/self
@@ -167,6 +170,13 @@ deployment:
       value: "8088"
     - name: P2P_CACHE_ACTIVE_CONFIG_IDS
       value: "5"
+    # Profiling. metric.Init binds the Prometheus registry + pprof on :14271
+    # (the `metrics` containerPort above). CICD_VERSION_ID tags captured profiles
+    # with the running build and is injected by CI/CD; when it is empty the
+    # continuous profiler is skipped with a warning and pprof + Go runtime
+    # metrics still work.
+    - name: CICD_VERSION_ID
+      value: ""
   serviceAccount:
     enabled: false
     annotations: {}

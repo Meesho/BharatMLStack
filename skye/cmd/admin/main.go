@@ -17,6 +17,7 @@ import (
 	skafka "github.com/Meesho/BharatMLStack/skye/pkg/kafka"
 	"github.com/Meesho/BharatMLStack/skye/pkg/logger"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
+	"github.com/Meesho/BharatMLStack/skye/pkg/profiling"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/rs/zerolog/log"
 )
@@ -30,6 +31,13 @@ func main() {
 	appConfig := structs.GetAppConfig()
 	logger.Init()
 	metric.Init()
+	if err := profiling.InitWithOptions(
+		profiling.WithPprof(profiling.PprofAll...),
+		profiling.WithRuntimeMetrics(profiling.RuntimeMetricAll),
+		profiling.WithContinuousProfiler(),
+	); err != nil {
+		log.Error().Err(err).Msg("profiling init failed")
+	}
 	etcd.InitFromAppName(&config.Skye{}, appConfig.Configs.AppName, appConfig.Configs)
 	// Initialise Kafka producer for model state transitions.
 	skafka.InitProducer(appConfig.Configs.ModelStateProducer)

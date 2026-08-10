@@ -41,7 +41,13 @@ func main() {
 	}()
 	logger.Init()
 	metric.Init()
-	profiling.Init()
+	if err := profiling.InitWithOptions(
+		profiling.WithPprof(profiling.PprofAll...),
+		profiling.WithRuntimeMetrics(profiling.RuntimeMetricAll),
+		profiling.WithContinuousProfiler(),
+	); err != nil {
+		log.Error().Err(err).Msg("profiling init failed")
+	}
 	repository.Init(appConfig.Configs)
 	clickConsumer.Init(appConfig.Configs)
 	orderConsumer.Init(appConfig.Configs)

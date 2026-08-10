@@ -15,6 +15,7 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/infra"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/logger"
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
+	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/profiling"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
@@ -32,6 +33,13 @@ func main() {
 	logger.Init()
 	etcd.Init(configManagerVersion, &featureConfig.FeatureRegistry{})
 	metric.Init()
+	if err := profiling.InitWithOptions(
+		profiling.WithPprof(profiling.PprofAll...),
+		profiling.WithRuntimeMetrics(profiling.RuntimeMetricAll),
+		profiling.WithContinuousProfiler(),
+	); err != nil {
+		log.Error().Err(err).Msg("profiling init failed")
+	}
 	infra.InitDBConnectors()
 	system.Init()
 	featureConfig.InitEtcDBridge()
