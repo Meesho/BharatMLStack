@@ -16,9 +16,15 @@ const (
 	IdleConnectionTimeout     = "_IDLE_CONN_TIMEOUT_IN_MS"
 )
 
-// BuildHttpUrl builds a http url from the given host, port and path
+// BuildHttpUrl builds a http url from the given host, port and path.
+//
+// The separator between port and path is deliberately absent: path already
+// carries its own leading "/". An earlier ":%s" here produced
+// "http://host:8080:/path", which Go's URL parser accepted leniently before
+// 1.26 and rejects from 1.26 on — surfacing as a nil *http.Request rather than
+// as a parse error, because the caller below did not check err.
 func BuildHttpUrl(host string, port int, path string) string {
-	return fmt.Sprintf("http://%s:%d:%s", host, port, path)
+	return fmt.Sprintf("http://%s:%d%s", host, port, path)
 }
 
 func IsStandard2xx(code int) bool {

@@ -50,6 +50,13 @@ func Init() {
 		log.Info().Msgf("Metrics client initialized with telegraf address - %s, global tags - %v, and "+
 			"sampling rate - %f", telegrafAddress, globalTags, samplingRate)
 		initialized = true
+
+		// Prometheus endpoint for runtime metrics and pprof (see pkg/profiling).
+		// Additive to StatsD: a failure here is logged, not fatal.
+		if err := initMetricsServer(defaultMetricsServerPort, viper.GetString("APP_NAME"), viper.GetString("APP_ENV")); err != nil {
+			log.Error().Err(err).Msg("Failed to initialize metrics server; Prometheus metrics and pprof will be unavailable")
+		}
+
 	})
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/inmemorycache"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/logger"
 	"github.com/Meesho/BharatMLStack/inferflow/pkg/metrics"
+	"github.com/Meesho/BharatMLStack/inferflow/pkg/profiling"
 )
 
 var AppConfigs configs.AppConfigs
@@ -29,6 +30,13 @@ func main() {
 		logger.Error("Error registering watch path callback for model configs", err)
 	}
 	metrics.InitMetrics(&AppConfigs)
+	if err := profiling.InitWithOptions(
+		profiling.WithPprof(profiling.PprofAll...),
+		profiling.WithRuntimeMetrics(profiling.RuntimeMetricAll),
+		profiling.WithContinuousProfiler(),
+	); err != nil {
+		logger.Error("profiling init failed", err)
+	}
 	extOrion.InitFSHandler(&AppConfigs)
 	extPredator.InitPredatorHandler(&AppConfigs)
 	extNumerix.InitNumerixHandler(&AppConfigs)

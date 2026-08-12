@@ -39,6 +39,9 @@ deployment:
     - containerPort: 8090
       name: http
       protocol: TCP
+    - containerPort: 14271
+      name: metrics
+      protocol: TCP
   probes:
     liveness:
       path: /health/self
@@ -73,7 +76,7 @@ deployment:
     - name: APP_METRIC_SAMPLING_RATE
       value: "1"
     - name: APP_NAME
-      value: "onfs"
+      value: "onfs-consumer"
     - name: APP_PORT
       value: "8090"
     # Kafka consumer
@@ -118,7 +121,7 @@ deployment:
     - name: STORAGE_SCYLLA_1_CONTACT_POINTS
       value: "scylla"
     - name: STORAGE_SCYLLA_1_KEYSPACE
-      value: "onfs"
+      value: "onfs-consumer"
     - name: STORAGE_SCYLLA_1_PORT
       value: "9042"
     - name: STORAGE_SCYLLA_1_NUM_CONNS
@@ -166,6 +169,13 @@ deployment:
       value: "30"
     - name: STORAGE_REDIS_STANDALONE_ACTIVE_CONFIG_IDS
       value: "2"
+    # Profiling. metric.Init binds the Prometheus registry + pprof on :14271
+    # (the `metrics` containerPort above). CICD_VERSION_ID tags captured profiles
+    # with the running build and is injected by CI/CD; when it is empty the
+    # continuous profiler is skipped with a warning and pprof + Go runtime
+    # metrics still work.
+    - name: CICD_VERSION_ID
+      value: ""
   serviceAccount:
     enabled: false
     annotations: {}

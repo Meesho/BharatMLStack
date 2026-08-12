@@ -17,6 +17,7 @@ import (
 	"github.com/Meesho/BharatMLStack/skye/pkg/logger"
 	"github.com/Meesho/BharatMLStack/skye/pkg/metric"
 	"github.com/Meesho/BharatMLStack/skye/pkg/profiling"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -29,7 +30,13 @@ func main() {
 	logger.Init()
 	metric.Init()
 	infra.InitRedis()
-	profiling.Init()
+	if err := profiling.InitWithOptions(
+		profiling.WithPprof(profiling.PprofAll...),
+		profiling.WithRuntimeMetrics(profiling.RuntimeMetricAll),
+		profiling.WithContinuousProfiler(),
+	); err != nil {
+		log.Error().Err(err).Msg("profiling init failed")
+	}
 	etcd.InitFromAppName(&config.Skye{}, appConfig.Configs.AppName, appConfig.Configs)
 	grpc.Init(middlewares.ServerInterceptor)
 	api.Init()

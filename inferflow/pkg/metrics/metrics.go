@@ -28,6 +28,13 @@ func InitMetrics(configs *configs.AppConfigs) {
 	telegrafAddress := getTelegrafAddress(configs)
 	globalTags := getGlobalTags(configs)
 
+	// Prometheus endpoint for runtime metrics and pprof (see pkg/profiling).
+	// Started before the StatsD client so it comes up even when Telegraf is
+	// absent and the block below returns early.
+	if err := initMetricsServer(defaultMetricsServerPort, configs.Configs.ApplicationName, configs.Configs.ApplicationEnv); err != nil {
+		logger.Error("Failed to initialize metrics server; Prometheus metrics and pprof will be unavailable", err)
+	}
+
 	statsDClient, err = statsd.New(
 		telegrafAddress,
 		statsd.WithTags(globalTags),

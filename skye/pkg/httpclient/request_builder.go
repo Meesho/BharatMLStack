@@ -99,9 +99,15 @@ func (h *RequestBuilder) BuildContentTypeJson() (*http.Request, error) {
 		return nil, errors.New("context is required, pass context.Background() if not required")
 	}
 	req, err := http.NewRequestWithContext(h.ctx, h.method, httpHelper.BuildHttpUrl(h.host, h.port, h.path), bytes.NewBuffer(requestBody))
+	// Checked before use: on a URL or method Go rejects, req is nil and the
+	// header writes below panic. Go 1.26 tightened URL parsing, which turned a
+	// long-standing malformed-URL bug into a crash here.
+	if err != nil {
+		return nil, err
+	}
 	for key, value := range h.headers {
 		req.Header.Set(key, value)
 	}
 	req.Header.Set(httpHelper.HeaderContentType, httpHelper.HeaderValueApplicationJson)
-	return req, err
+	return req, nil
 }

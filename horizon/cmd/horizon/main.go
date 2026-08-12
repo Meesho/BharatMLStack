@@ -31,7 +31,9 @@ import (
 	"github.com/Meesho/BharatMLStack/horizon/pkg/infra"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/logger"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/metric"
+	"github.com/Meesho/BharatMLStack/horizon/pkg/profiling"
 	"github.com/Meesho/BharatMLStack/horizon/pkg/scheduler"
+	"github.com/rs/zerolog/log"
 )
 
 type AppConfig struct {
@@ -63,6 +65,13 @@ func main() {
 	horizonConfig.InitAll(appConfig.Configs)
 	logger.Init(appConfig.Configs)
 	metric.Init(appConfig.Configs)
+	if err := profiling.InitWithOptions(
+		profiling.WithPprof(profiling.PprofAll...),
+		profiling.WithRuntimeMetrics(profiling.RuntimeMetricAll),
+		profiling.WithContinuousProfiler(),
+	); err != nil {
+		log.Error().Err(err).Msg("profiling init failed")
+	}
 	httpframework.Init(middleware.NewMiddleware().GetMiddleWares()...)
 	workflowHandler.InitV1WorkflowHandler()
 	deployableRouter.Init(appConfig.Configs)
