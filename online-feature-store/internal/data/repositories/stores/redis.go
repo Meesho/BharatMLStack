@@ -1,6 +1,7 @@
 package stores
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -13,7 +14,6 @@ import (
 	"github.com/Meesho/BharatMLStack/online-feature-store/pkg/metric"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
-	"golang.org/x/net/context"
 )
 
 type RedisStore struct {
