@@ -7,6 +7,8 @@ repos:
         entry: "pre-commit-scripts/runner.sh"
         language: script
         stages: ["pre-commit", "pre-push"]
+        always_run: true
+        pass_filenames: false
   - repo: local
     hooks:
       - id: post-commit
@@ -16,3 +18,5 @@ repos:
         language: script
         stages: ["post-commit"]
         always_run: true
+        pass_filenames: false
+        verbose: true

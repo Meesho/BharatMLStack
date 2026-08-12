@@ -3,7 +3,6 @@ package profiling
 import (
 	"fmt"
 	"net/http"
-	_ "net/http/pprof"
 	"sync"
 
 	"github.com/Meesho/BharatMLStack/interaction-store/pkg/metric"
@@ -23,8 +22,12 @@ var (
 // started by metric.Init, and optionally starts the continuous profiler.
 //
 // metric.Init MUST have run first: metric.Mux and metric.Registerer are read
-// here, and this returns an error rather than half-initialising when they are
-// nil. Guarded by sync.Once; later calls return the first call's error.
+// here, and this returns an error without doing anything when they are nil.
+//
+// Ordering matches go-core deliberately: pprof mounts and the continuous
+// profiler start BEFORE runtime-metric registration, so a registration error
+// leaves those two already in effect. Guarded by sync.Once, so a failed first
+// call latches its error and later calls will not retry.
 //
 // Prefer this over Init, which serves pprof on a separate PROFILING_PORT and
 // exports no runtime metrics.

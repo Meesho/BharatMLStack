@@ -76,7 +76,7 @@ deployment:
     - name: APP_METRIC_SAMPLING_RATE
       value: "1"
     - name: APP_NAME
-      value: "onfs"
+      value: "onfs-consumer"
     - name: APP_PORT
       value: "8090"
     # Kafka consumer
@@ -121,7 +121,7 @@ deployment:
     - name: STORAGE_SCYLLA_1_CONTACT_POINTS
       value: "scylla"
     - name: STORAGE_SCYLLA_1_KEYSPACE
-      value: "onfs"
+      value: "onfs-consumer"
     - name: STORAGE_SCYLLA_1_PORT
       value: "9042"
     - name: STORAGE_SCYLLA_1_NUM_CONNS
