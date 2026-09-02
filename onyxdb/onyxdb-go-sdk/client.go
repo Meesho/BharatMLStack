@@ -201,6 +201,8 @@ func newClientWithEtcd(config Config, etcd EtcdClient, closer io.Closer) (*Clien
 	poolCfg := config.buildPoolConfig()
 	pool := NewConnPoolWithConfig(poolCfg)
 
+	assignRes := NewAssignmentResolver()
+
 	dnsResolver := NewDNSResolver(DNSConfig{
 		Tenant:    config.Tenant,
 		Store:     config.Store,
@@ -208,9 +210,11 @@ func newClientWithEtcd(config Config, etcd EtcdClient, closer io.Closer) (*Clien
 		DNSZone:   config.DNSZone,
 		Port:      config.Port,
 		Interval:  config.DNSRefreshInterval,
+		// DNS is the fallback: only resolve shards the assignment map does not
+		// already cover. Keeps the refresh tick (and the ClearUnhealthy/Prune
+		// it drives) running without probing a Service that need not exist.
+		Skip: func(shardID uint32) bool { return len(assignRes.Resolve(shardID)) > 0 },
 	})
-
-	assignRes := NewAssignmentResolver()
 
 	// The router uses the assignment resolver as primary (works for K8s + VM).
 	// DNS resolver is kept for backwards-compat: when assignment map is empty

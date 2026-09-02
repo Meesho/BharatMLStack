@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -135,6 +136,25 @@ type DNSConfig struct {
 	DNSZone   string        // e.g. "cluster.local"
 	Port      int           // read server TCP port (9091)
 	Interval  time.Duration // background refresh cadence (default 30s)
+
+	// Skip reports whether a shard already has addrs from a higher-priority
+	// resolver (the control-plane assignment map). When it returns true the
+	// refresh loop does no lookup for that shard: DNS is only a fallback, and
+	// a store whose pods are addressed by assignment may have no reachable
+	// headless Service at all. Nil means "always look up".
+	Skip func(shardID uint32) bool
+}
+
+// dnsLabel converts an OnyxDB tenant/store identity into the DNS label the K8s
+// object actually carries. The data-plane Helm chart sanitizes object names
+// (`lower | replace "_" "-"`) because '_' is illegal in an RFC-1123 label,
+// while the OnyxDB identity itself keeps underscores (etcd keys, GCS paths,
+// ONYXDB_TENANT/STORE env). This mirrors that helper — without it a store like
+// "user_catalog_geohash_1_3" yields an FQDN that can never resolve.
+//
+// Keep in sync with onyxdb-dataplane-ssd/templates/_helpers.tpl "shardName".
+func dnsLabel(s string) string {
+	return strings.ToLower(strings.ReplaceAll(s, "_", "-"))
 }
 
 // DNSResolver resolves each shard's headless Service to its ready pod IPs.
@@ -168,10 +188,17 @@ func NewDNSResolver(cfg DNSConfig) *DNSResolver {
 	}
 }
 
-// fqdn returns the headless Service DNS name for a shard.
+// fqdn returns the headless Service DNS name for a shard. Tenant and store are
+// sanitized to match the K8s object name the chart renders (see dnsLabel), and
+// the shard label is truncated to the 63-char RFC-1123 limit the chart also
+// applies, so both sides agree on long names.
 func (d *DNSResolver) fqdn(shardID uint32) string {
-	return fmt.Sprintf("%s-%s-shard-%d.%s.svc.%s",
-		d.cfg.Tenant, d.cfg.Store, shardID, d.cfg.Namespace, d.cfg.DNSZone)
+	svc := fmt.Sprintf("%s-%s-shard-%d",
+		dnsLabel(d.cfg.Tenant), dnsLabel(d.cfg.Store), shardID)
+	if len(svc) > 63 {
+		svc = strings.TrimSuffix(svc[:63], "-")
+	}
+	return fmt.Sprintf("%s.%s.svc.%s", svc, d.cfg.Namespace, d.cfg.DNSZone)
 }
 
 // Resolve returns the cached pod addrs for a shard — no DNS call on the hot path.
@@ -218,9 +245,19 @@ func (d *DNSResolver) Refresh(ctx context.Context) error {
 
 	next := make(map[uint32][]string, sc)
 	for shard := uint32(0); shard < sc; shard++ {
+		// Shard already covered by the assignment map — DNS would only ever be
+		// a fallback for it, so skip the lookup entirely. Deployments that
+		// address pods by assignment need no headless-Service DNS at all, and
+		// probing it there produced a permanent NXDOMAIN warning every tick.
+		if d.cfg.Skip != nil && d.cfg.Skip(shard) {
+			next[shard] = d.Resolve(shard)
+			continue
+		}
 		fqdn := d.fqdn(shard)
 		ips, err := d.lookup(ctx, fqdn)
 		if err != nil {
+			// Genuinely actionable now: no assignment addrs AND no DNS, so the
+			// shard has no route until one of them recovers.
 			log.Warn().Err(err).Str("fqdn", fqdn).Msg("dns: lookup failed, keeping last-known addrs")
 			next[shard] = d.Resolve(shard)
 			continue

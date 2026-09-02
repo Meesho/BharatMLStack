@@ -3,6 +3,7 @@ package sdk
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -46,6 +47,102 @@ func TestStaticResolver(t *testing.T) {
 func TestDNSResolver_FQDN(t *testing.T) {
 	d := NewDNSResolver(dnsCfg(9091))
 	assert.Equal(t, "recsys-catalog-shard-3.onyxdb.svc.cluster.local", d.fqdn(3))
+}
+
+// A store identity may legally contain underscores and uppercase, but a DNS
+// label may not — the data-plane chart sanitizes the Service name, so the SDK
+// must produce the same string. Regression: "ds"/"user_catalog_geohash_1_3"
+// previously rendered an un-resolvable FQDN with underscores intact.
+func TestDNSResolver_FQDN_SanitizesUnderscoresAndCase(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		tenant, store string
+		shard         uint32
+		want          string
+	}{
+		{
+			name:   "underscored store matches the chart's shardName",
+			tenant: "ds", store: "user_catalog_geohash_1_3", shard: 2,
+			want: "ds-user-catalog-geohash-1-3-shard-2.prd-onyxdb-dataplane-ssd.svc.cluster.local",
+		},
+		{
+			name:   "uppercase is lowered",
+			tenant: "DS", store: "User_Catalog", shard: 0,
+			want: "ds-user-catalog-shard-0.prd-onyxdb-dataplane-ssd.svc.cluster.local",
+		},
+		{
+			name:   "clean names are unchanged",
+			tenant: "recsys", store: "catalog", shard: 7,
+			want: "recsys-catalog-shard-7.prd-onyxdb-dataplane-ssd.svc.cluster.local",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := NewDNSResolver(DNSConfig{
+				Tenant: tc.tenant, Store: tc.store,
+				Namespace: "prd-onyxdb-dataplane-ssd", DNSZone: "cluster.local",
+			})
+			got := d.fqdn(tc.shard)
+			assert.Equal(t, tc.want, got)
+			assert.NotContains(t, got, "_", "'_' is illegal in an RFC-1123 DNS label")
+		})
+	}
+}
+
+// The shard label is truncated to 63 chars like the chart's `trunc 63`, with a
+// trailing '-' trimmed so the label stays valid.
+func TestDNSResolver_FQDN_TruncatesLongLabel(t *testing.T) {
+	d := NewDNSResolver(DNSConfig{
+		Tenant: "tenant", Store: strings.Repeat("x", 80),
+		Namespace: "ns", DNSZone: "cluster.local",
+	})
+	label, _, _ := strings.Cut(d.fqdn(1), ".")
+	assert.Len(t, label, 63)
+	assert.False(t, strings.HasSuffix(label, "-"))
+}
+
+// Skip suppresses the lookup for shards the assignment map already covers —
+// the reason the permanent NXDOMAIN warning no longer fires in K8s.
+func TestDNSResolver_Refresh_SkipsCoveredShards(t *testing.T) {
+	var mu sync.Mutex
+	var looked []string
+	withLookup(func(_ context.Context, host string) ([]string, error) {
+		mu.Lock()
+		looked = append(looked, host)
+		mu.Unlock()
+		return nil, errors.New("no such host")
+	}, func() {
+		cfg := dnsCfg(9091)
+		// shard 0 is covered by the assignment; shard 1 is not.
+		cfg.Skip = func(shardID uint32) bool { return shardID == 0 }
+		d := NewDNSResolver(cfg)
+		d.SetShardCount(2)
+		require.NoError(t, d.Refresh(context.Background()))
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{"recsys-catalog-shard-1.onyxdb.svc.cluster.local"}, looked,
+		"only the uncovered shard should be looked up")
+}
+
+// A nil Skip preserves the previous behaviour: every shard is resolved.
+func TestDNSResolver_Refresh_NilSkipResolvesEveryShard(t *testing.T) {
+	var mu sync.Mutex
+	var count int
+	withLookup(func(_ context.Context, _ string) ([]string, error) {
+		mu.Lock()
+		count++
+		mu.Unlock()
+		return []string{"10.0.0.1"}, nil
+	}, func() {
+		d := NewDNSResolver(dnsCfg(9091))
+		d.SetShardCount(3)
+		require.NoError(t, d.Refresh(context.Background()))
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 3, count)
 }
 
 func TestNewDNSResolver_DefaultInterval(t *testing.T) {
