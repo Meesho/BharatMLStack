@@ -35,15 +35,15 @@ type EtcdClient interface {
 // Pod IPs themselves come from K8s DNS (DNSResolver) or directly from the
 // assignment map (AssignmentResolver) — etcd stays off the read hot path.
 type TopologyWatcher struct {
-	client       EtcdClient
-	router       *Router
-	dnsResolver  *DNSResolver
-	assignRes    *AssignmentResolver
-	pool         *ConnPool
-	tenant       string
-	store        string
-	activeVID    string // last-known active version ID
-	warmUpConns  int    // connections to pre-dial per new pod (0 = disabled)
+	client      EtcdClient
+	router      *Router
+	dnsResolver *DNSResolver
+	assignRes   *AssignmentResolver
+	pool        *ConnPool
+	tenant      string
+	store       string
+	activeVID   string // last-known active version ID
+	warmUpConns int    // connections to pre-dial per new pod (0 = disabled)
 
 	// Metric callbacks (nil-safe). Set via SetMetrics after construction.
 	timing   func(string, time.Duration, []string)
@@ -207,12 +207,6 @@ func (tw *TopologyWatcher) reloadVersion(ctx context.Context, version string) er
 	if tw.assignRes != nil && meta.Assignment != nil {
 		newAddrs = tw.assignRes.SwapAssignment(meta.Assignment)
 	}
-
-	log.Info().
-		Str("version", version).
-		Int("shardCount", meta.ShardCount).
-		Int("newPods", len(newAddrs)).
-		Msg("topology: version active, updating routing")
 
 	// Trigger DNS re-resolve for K8s deployments.
 	_ = tw.dnsResolver.Refresh(ctx)
