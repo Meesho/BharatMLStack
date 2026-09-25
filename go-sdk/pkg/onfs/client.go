@@ -10,6 +10,7 @@ import (
 	"github.com/Meesho/BharatMLStack/go-sdk/pkg/proto/onfs/persist"
 	"github.com/Meesho/BharatMLStack/go-sdk/pkg/proto/onfs/retrieve"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -48,12 +49,34 @@ type clientConfig struct {
 func NewClientV1(config *Config, timing func(name string, value time.Duration, tags []string), count func(name string, value int64, tags []string)) *ClientV1 {
 	validateConfig(config)
 
+	conn := NewConnFromConfig(config, "online-feature-store", timing, count)
+
+	return newClientV1(config, conn)
+}
+
+// NewClientV1WithConn builds a ClientV1 on an existing connection (e.g. an xDS/proxyless
+// conn) instead of dialling from config. externalServiceName tags onfs.grpc.invoke.*, so
+// callers running two transports side by side can tell them apart.
+func NewClientV1WithConn(config *Config, conn *grpc.ClientConn, externalServiceName string, timing func(name string, value time.Duration, tags []string), count func(name string, value int64, tags []string)) *ClientV1 {
+	validateConfig(config)
+	if conn == nil {
+		panic("Configuration error: gRPC connection is nil. Please provide a valid connection.")
+	}
+
+	return newClientV1(config, &GRPCClient{
+		Conn:                conn,
+		DeadLine:            int64(config.DeadLine),
+		externalServiceName: externalServiceName,
+		timing:              timing,
+		count:               count,
+	})
+}
+
+func newClientV1(config *Config, conn *GRPCClient) *ClientV1 {
 	batchSize := defaultBatchSize
 	if config.BatchSize > 0 {
 		batchSize = config.BatchSize
 	}
-
-	conn := NewConnFromConfig(config, "online-feature-store", timing, count)
 
 	return &ClientV1{
 		v1Client: &clientConfig{
