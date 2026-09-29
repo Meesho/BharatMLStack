@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type mockRetrieveServiceClient struct {
@@ -96,6 +97,89 @@ func TestNewClientV1(t *testing.T) {
 			assert.NotNil(t, got.adapter)
 		})
 	}
+}
+
+func TestNewClientV1WithConn(t *testing.T) {
+	// passthrough is resolved lazily, so no connection is attempted.
+	conn, err := grpc.NewClient("passthrough:///unused", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	assert.NoError(t, err)
+	defer conn.Close()
+
+	tests := []struct {
+		name   string
+		config *Config
+		conn   *grpc.ClientConn
+		want   *ClientV1
+	}{
+		{
+			name: "success",
+			config: &Config{
+				Host:        "localhost",
+				Port:        "50051",
+				DeadLine:    1000,
+				PlainText:   true,
+				BatchSize:   100,
+				CallerId:    "test-caller",
+				CallerToken: "test-token",
+			},
+			conn: conn,
+			want: &ClientV1{
+				batchSize:   100,
+				callerId:    "test-caller",
+				callerToken: "test-token",
+			},
+		},
+		{
+			name: "default batch size",
+			config: &Config{
+				Host:        "localhost",
+				Port:        "50051",
+				DeadLine:    1000,
+				PlainText:   true,
+				CallerId:    "test-caller",
+				CallerToken: "test-token",
+			},
+			conn: conn,
+			want: &ClientV1{
+				batchSize:   50, // default value
+				callerId:    "test-caller",
+				callerToken: "test-token",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NewClientV1WithConn(tt.config, tt.conn, "test-service", nil, nil)
+			assert.Equal(t, tt.want.batchSize, got.batchSize)
+			assert.Equal(t, tt.want.callerId, got.callerId)
+			assert.Equal(t, tt.want.callerToken, got.callerToken)
+			assert.NotNil(t, got.v1Client)
+			assert.NotNil(t, got.v1Client.client)
+			assert.NotNil(t, got.v1Client.persistClient)
+			assert.Equal(t, int64(tt.config.DeadLine), got.v1Client.deadline)
+			assert.NotNil(t, got.adapter)
+
+			// The legacy constructor must build an equivalent client from the same config.
+			legacy := NewClientV1(tt.config, nil, nil)
+			assert.Equal(t, legacy.batchSize, got.batchSize)
+			assert.Equal(t, legacy.callerId, got.callerId)
+			assert.Equal(t, legacy.callerToken, got.callerToken)
+			assert.Equal(t, legacy.v1Client.deadline, got.v1Client.deadline)
+		})
+	}
+
+	t.Run("nil conn panics", func(t *testing.T) {
+		assert.Panics(t, func() {
+			NewClientV1WithConn(tests[0].config, nil, "test-service", nil, nil)
+		})
+	})
+
+	t.Run("invalid config panics", func(t *testing.T) {
+		assert.Panics(t, func() {
+			NewClientV1WithConn(&Config{Host: "localhost"}, conn, "test-service", nil, nil)
+		})
+	})
 }
 
 func TestClientV1_RetrieveFeatures(t *testing.T) {
