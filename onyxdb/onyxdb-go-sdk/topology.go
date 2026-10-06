@@ -245,7 +245,7 @@ func (tw *TopologyWatcher) reloadSlowStart(ctx context.Context) {
 	now := time.Now()
 	var ramps map[string]SlowStart
 	for _, kv := range resp.Kvs {
-		var pd model.PodData
+		var pd podRegistration
 		if json.Unmarshal(kv.Value, &pd) != nil || pd.ServingSince <= 0 || pd.SlowStartSec <= 0 {
 			continue
 		}
@@ -259,9 +259,37 @@ func (tw *TopologyWatcher) reloadSlowStart(ctx context.Context) {
 		if ramps == nil {
 			ramps = make(map[string]SlowStart)
 		}
-		ramps[pd.Addr()] = s
+		ramps[pd.addr()] = s
 	}
 	tw.router.SetSlowStart(ramps)
+}
+
+// podRegistration is the part of a pod's etcd registration (the dataloader
+// writes it as controlplane/model.PodData) that slow start needs. It is decoded
+// here rather than through model.PodData because the SDK is released on its own
+// while the control plane is only deployed: the published SDK builds against
+// the last released model, which predates these fields. The JSON keys must
+// match model.PodData's tags.
+type podRegistration struct {
+	PodIP        string `json:"podIP"`
+	Port         int    `json:"port,omitempty"`
+	ServingSince int64  `json:"servingSince,omitempty"` // unix ms; 0 = no ramp
+	SlowStartSec int    `json:"slowStartSec,omitempty"`
+}
+
+// defaultReadServerPort is the read server's port when a registration omits
+// Port. Keep in sync with controlplane/model.DefaultReadServerPort.
+const defaultReadServerPort = 9091
+
+// addr is the address placement puts in the shard assignment for this pod, so
+// a ramp is keyed exactly like the assignment entry it weights. Keep in sync
+// with controlplane/model PodData.Addr.
+func (p podRegistration) addr() string {
+	port := p.Port
+	if port == 0 {
+		port = defaultReadServerPort
+	}
+	return fmt.Sprintf("%s:%d", p.PodIP, port)
 }
 
 // warmUp pre-dials connections to new pods in the background.

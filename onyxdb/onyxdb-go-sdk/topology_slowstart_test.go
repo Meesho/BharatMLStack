@@ -19,11 +19,31 @@ import (
 // The topology watcher reads slow-start ramps from the pods' own etcd
 // registrations (docs/design/onyxdb-pod-slow-start.md) on every reload.
 
-func putPod(t *testing.T, m *mockEtcd, podID string, pd model.PodData) {
+// loaderRegistration is a pod registration as the dataloader writes it
+// (controlplane/model.PodData's JSON), spelled out key by key. The SDK decodes
+// it with its own podRegistration so that it builds against the released
+// model, which predates these fields: these literal keys are the wire contract.
+// Zero values are left out, as the model's omitempty tags do.
+func loaderRegistration(t *testing.T, podIP string, port int, servingSince int64, slowStartSec int) string {
 	t.Helper()
-	b, err := json.Marshal(pd)
+	reg := map[string]any{"nodeIP": "10.0.0.9", "podIP": podIP, "servingVersion": "v1", "warmVersions": []string{"v1"}}
+	if port != 0 {
+		reg["port"] = port
+	}
+	if servingSince != 0 {
+		reg["servingSince"] = servingSince
+	}
+	if slowStartSec != 0 {
+		reg["slowStartSec"] = slowStartSec
+	}
+	b, err := json.Marshal(reg)
 	require.NoError(t, err)
-	m.put(model.PodDataPath("recsys", "catalog", podID), string(b))
+	return string(b)
+}
+
+func putPod(t *testing.T, m *mockEtcd, podID, registration string) {
+	t.Helper()
+	m.put(model.PodDataPath("recsys", "catalog", podID), registration)
 }
 
 func slowStartWatcher(t *testing.T, assignment map[string][]string) (*mockEtcd, *TopologyWatcher, *Router) {
@@ -40,19 +60,11 @@ func TestReloadSlowStart_ReadsRampsFromPodRegistrations(t *testing.T) {
 		m, tw, r := slowStartWatcher(t, map[string][]string{"0": {"10.0.1.10:9091", "10.0.1.20:9091", "10.0.1.30:9300"}})
 		now := time.Now()
 		ramping := now.Add(-60 * time.Second)
-		putPod(t, m, "recsys-catalog-shard-0-old", model.PodData{PodIP: "10.0.1.10", WarmVersions: []string{"v1"}})
-		putPod(t, m, "recsys-catalog-shard-0-new", model.PodData{
-			PodIP: "10.0.1.20", WarmVersions: []string{"v1"}, ServingSince: ramping.UnixMilli(), SlowStartSec: 300,
-		})
-		putPod(t, m, "recsys-catalog-shard-0-port", model.PodData{
-			PodIP: "10.0.1.30", Port: 9300, WarmVersions: []string{"v1"}, ServingSince: ramping.UnixMilli(), SlowStartSec: 300,
-		})
-		putPod(t, m, "recsys-catalog-shard-0-done", model.PodData{
-			PodIP: "10.0.1.40", WarmVersions: []string{"v1"}, ServingSince: now.Add(-time.Hour).UnixMilli(), SlowStartSec: 300,
-		})
-		putPod(t, m, "recsys-catalog-shard-0-nowindow", model.PodData{
-			PodIP: "10.0.1.50", WarmVersions: []string{"v1"}, ServingSince: ramping.UnixMilli(),
-		})
+		putPod(t, m, "recsys-catalog-shard-0-old", loaderRegistration(t, "10.0.1.10", 0, 0, 0))
+		putPod(t, m, "recsys-catalog-shard-0-new", loaderRegistration(t, "10.0.1.20", 0, ramping.UnixMilli(), 300))
+		putPod(t, m, "recsys-catalog-shard-0-port", loaderRegistration(t, "10.0.1.30", 9300, ramping.UnixMilli(), 300))
+		putPod(t, m, "recsys-catalog-shard-0-done", loaderRegistration(t, "10.0.1.40", 0, now.Add(-time.Hour).UnixMilli(), 300))
+		putPod(t, m, "recsys-catalog-shard-0-nowindow", loaderRegistration(t, "10.0.1.50", 0, ramping.UnixMilli(), 0))
 		m.put(model.PodDataPath("recsys", "catalog", "recsys-catalog-shard-0-corrupt"), "{not json")
 
 		require.NoError(t, tw.reload(context.Background()))
@@ -68,9 +80,7 @@ func TestReloadSlowStart_ReadsRampsFromPodRegistrations(t *testing.T) {
 func TestReloadSlowStart_PodReadFailureKeepsTheLastSet(t *testing.T) {
 	withLookup(okLookup("10.0.0.1"), func() {
 		m, tw, r := slowStartWatcher(t, map[string][]string{"0": {"10.0.1.10:9091", "10.0.1.20:9091"}})
-		putPod(t, m, "recsys-catalog-shard-0-new", model.PodData{
-			PodIP: "10.0.1.20", ServingSince: time.Now().UnixMilli(), SlowStartSec: 300,
-		})
+		putPod(t, m, "recsys-catalog-shard-0-new", loaderRegistration(t, "10.0.1.20", 0, time.Now().UnixMilli(), 300))
 		require.NoError(t, tw.reload(context.Background()))
 		r.mu.RLock()
 		before := r.slowStart
@@ -91,7 +101,7 @@ func TestReloadSlowStart_PodReadFailureKeepsTheLastSet(t *testing.T) {
 func TestRun_NewPodRegistrationRampsItsShare(t *testing.T) {
 	withLookup(okLookup("10.0.0.1"), func() {
 		m, tw, r := slowStartWatcher(t, map[string][]string{"0": {"10.0.1.10:9091"}})
-		putPod(t, m, "recsys-catalog-shard-0-old", model.PodData{PodIP: "10.0.1.10", WarmVersions: []string{"v1"}})
+		putPod(t, m, "recsys-catalog-shard-0-old", loaderRegistration(t, "10.0.1.10", 0, 0, 0))
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go tw.Run(ctx)
@@ -102,9 +112,7 @@ func TestRun_NewPodRegistrationRampsItsShare(t *testing.T) {
 		// and its registration carries the ramp it just started.
 		m.put(model.VersionPrefix("recsys", "catalog", "v1"),
 			metaWithAssignmentJSON(t, 1, map[string][]string{"0": {"10.0.1.10:9091", "10.0.1.20:9091"}}))
-		putPod(t, m, "recsys-catalog-shard-0-new", model.PodData{
-			PodIP: "10.0.1.20", WarmVersions: []string{"v1"}, ServingSince: time.Now().UnixMilli(), SlowStartSec: 300,
-		})
+		putPod(t, m, "recsys-catalog-shard-0-new", loaderRegistration(t, "10.0.1.20", 0, time.Now().UnixMilli(), 300))
 		m.podCh() <- clientv3.WatchResponse{Events: []*clientv3.Event{{Type: mvccpb.PUT,
 			Kv: &mvccpb.KeyValue{Key: []byte(model.PodDataPath("recsys", "catalog", "recsys-catalog-shard-0-new"))}}}}
 
@@ -124,4 +132,33 @@ func TestRun_NewPodRegistrationRampsItsShare(t *testing.T) {
 		assert.Positive(t, toNew, "the ramping pod still gets a trickle")
 		assert.Less(t, toNew, 300, "the ramping pod got %d of 10000 reads", toNew)
 	})
+}
+
+// The decode the router relies on, against literal loader JSON: the keys, the
+// omitted zero values, and the address placement routes to.
+func TestPodRegistration_DecodesTheLoaderJSON(t *testing.T) {
+	cases := []struct {
+		name     string
+		json     string
+		want     podRegistration
+		wantAddr string
+	}{
+		{"ramping, default port",
+			`{"nodeIP":"10.0.0.9","podIP":"10.0.1.20","servingVersion":"v1","warmVersions":["v1"],"servingSince":1791281000123,"slowStartSec":300}`,
+			podRegistration{PodIP: "10.0.1.20", ServingSince: 1791281000123, SlowStartSec: 300}, "10.0.1.20:9091"},
+		{"explicit port",
+			`{"nodeIP":"10.0.0.9","podIP":"10.0.1.30","port":9300,"servingVersion":"v1","warmVersions":["v1"],"servingSince":5,"slowStartSec":60}`,
+			podRegistration{PodIP: "10.0.1.30", Port: 9300, ServingSince: 5, SlowStartSec: 60}, "10.0.1.30:9300"},
+		{"written by a loader that predates slow start",
+			`{"nodeIP":"10.0.0.9","podIP":"10.0.1.10","servingVersion":"v1","warmVersions":["v1"]}`,
+			podRegistration{PodIP: "10.0.1.10"}, "10.0.1.10:9091"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got podRegistration
+			require.NoError(t, json.Unmarshal([]byte(tc.json), &got))
+			assert.Equal(t, tc.want, got)
+			assert.Equal(t, tc.wantAddr, got.addr())
+		})
+	}
 }

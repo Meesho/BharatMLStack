@@ -322,3 +322,18 @@ func TestDataflowConfig_SlowStartCfg(t *testing.T) {
 		t.Errorf("nil slowStartCfg must be omitted, got %s", b)
 	}
 }
+
+// The SDK decodes these keys with a struct of its own (it builds against the
+// released model, which predates the fields), so the JSON names are a wire
+// contract between the dataloader and the SDK, not just field tags.
+func TestPodData_SlowStartWireKeys(t *testing.T) {
+	b, err := json.Marshal(PodData{PodIP: "10.0.0.7", Port: 9300, ServingSince: 1791281000123, SlowStartSec: 300})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, want := range []string{`"podIP":"10.0.0.7"`, `"port":9300`, `"servingSince":1791281000123`, `"slowStartSec":300`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("registration %s lacks %s", b, want)
+		}
+	}
+}
