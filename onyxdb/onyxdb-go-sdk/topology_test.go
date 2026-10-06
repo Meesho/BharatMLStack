@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -57,13 +59,26 @@ func (m *mockEtcd) setGetErr(key string, err error) {
 	m.getErr[key] = err
 }
 
-func (m *mockEtcd) Get(_ context.Context, key string, _ ...clientv3.OpOption) (*clientv3.GetResponse, error) {
+func (m *mockEtcd) Get(_ context.Context, key string, opts ...clientv3.OpOption) (*clientv3.GetResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := m.getErr[key]; err != nil {
 		return nil, err
 	}
 	resp := &clientv3.GetResponse{}
+	if len(clientv3.OpGet(key, opts...).RangeBytes()) > 0 { // WithPrefix: every key under key, in key order
+		keys := make([]string, 0, len(m.kv))
+		for k := range m.kv {
+			if strings.HasPrefix(k, key) {
+				keys = append(keys, k)
+			}
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			resp.Kvs = append(resp.Kvs, &mvccpb.KeyValue{Key: []byte(k), Value: []byte(m.kv[k])})
+		}
+		return resp, nil
+	}
 	if v, ok := m.kv[key]; ok {
 		resp.Kvs = []*mvccpb.KeyValue{{Key: []byte(key), Value: []byte(v)}}
 	}
@@ -458,4 +473,220 @@ func okLookup(ip string) func(context.Context, string) ([]string, error) {
 	return func(_ context.Context, _ string) ([]string, error) {
 		return []string{ip}, nil
 	}
+}
+
+// failLookup is a DNS stub that never resolves, keeping tests off real DNS.
+func failLookup(_ context.Context, _ string) ([]string, error) {
+	return nil, errors.New("no such host")
+}
+
+// reloadRecords splits the MetricTopologyReload emissions into counts and timings.
+func reloadRecords(mc *metricCollector) (counts, timings []metricRecord) {
+	for _, r := range mc.findAll(MetricTopologyReload) {
+		if _, isTiming := r.Value.(time.Duration); isTiming {
+			timings = append(timings, r)
+		} else {
+			counts = append(counts, r)
+		}
+	}
+	return counts, timings
+}
+
+func podCount(p *ConnPool, addr string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.pools[addr])
+}
+
+func hasPool(p *ConnPool, addr string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, ok := p.pools[addr]
+	return ok
+}
+
+// ── reload metrics ───────────────────────────────────────────────────────────
+
+func TestReloadVersion_EmitsReloadMetric(t *testing.T) {
+	versionKey := model.VersionPrefix("recsys", "catalog", "v1")
+	tests := []struct {
+		name       string
+		setup      func(t *testing.T, m *mockEtcd)
+		wantStatus string
+		wantTiming bool
+	}{
+		{"success", func(t *testing.T, m *mockEtcd) { m.put(versionKey, metaJSON(t, 1)) }, "status:ok", true},
+		{"get error", func(_ *testing.T, m *mockEtcd) { m.setGetErr(versionKey, errors.New("timeout")) }, "status:error", false},
+		{"meta missing", func(_ *testing.T, _ *mockEtcd) {}, "status:error", false},
+		{"corrupt meta", func(_ *testing.T, m *mockEtcd) { m.put(versionKey, "not-json") }, "status:error", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			withLookup(failLookup, func() {
+				m := newMockEtcd()
+				tc.setup(t, m)
+				tw, _, _ := newWatcherWith(m)
+				mc := &metricCollector{}
+				tw.SetMetrics(mc.timing, mc.count, []string{"tenant:recsys", "store:catalog"})
+
+				_ = tw.reloadVersion(context.Background(), "v1")
+
+				counts, timings := reloadRecords(mc)
+				require.Len(t, counts, 1)
+				assert.Equal(t, int64(1), counts[0].Value)
+				assert.Equal(t, []string{"tenant:recsys", "store:catalog", tc.wantStatus}, counts[0].Tags)
+				if tc.wantTiming {
+					require.Len(t, timings, 1)
+					assert.Equal(t, []string{"tenant:recsys", "store:catalog", "status:ok"}, timings[0].Tags)
+				} else {
+					assert.Empty(t, timings)
+				}
+			})
+		})
+	}
+}
+
+// ── pod watch ────────────────────────────────────────────────────────────────
+
+func podPutEvent() clientv3.WatchResponse {
+	return clientv3.WatchResponse{Events: []*clientv3.Event{
+		{Type: mvccpb.PUT, Kv: &mvccpb.KeyValue{Key: []byte("pod-a"), Value: []byte("{}")}},
+	}}
+}
+
+func TestHandlePodWatch_BeforeFirstActiveVersion_DoesNothing(t *testing.T) {
+	m := newMockEtcd()
+	m.put(model.VersionPrefix("recsys", "catalog", "v1"), metaJSON(t, 3))
+	tw, r, _ := newWatcherWith(m)
+	mc := &metricCollector{}
+	tw.SetMetrics(mc.timing, mc.count, nil)
+
+	tw.handlePodWatch(context.Background(), podPutEvent())
+
+	assert.Equal(t, uint32(0), r.ShardCount())
+	assert.Empty(t, mc.findAll(MetricTopologyReload), "no reload without an active version")
+}
+
+func TestHandlePodWatch_ReloadFailure_KeepsLastKnownTopology(t *testing.T) {
+	withLookup(okLookup("10.0.0.1"), func() {
+		m := newMockEtcd()
+		versionKey := model.VersionPrefix("recsys", "catalog", "v1")
+		m.put(versionKey, metaJSON(t, 2))
+		tw, r, _ := newWatcherWith(m)
+		require.NoError(t, tw.reloadVersion(context.Background(), "v1"))
+
+		m.setGetErr(versionKey, errors.New("etcd timeout"))
+		mc := &metricCollector{}
+		tw.SetMetrics(mc.timing, mc.count, nil)
+		tw.handlePodWatch(context.Background(), podPutEvent())
+
+		assert.Equal(t, uint32(2), r.ShardCount())
+		assert.Equal(t, "v1", tw.activeVID)
+		counts, _ := reloadRecords(mc)
+		require.Len(t, counts, 1)
+		assert.Equal(t, []string{"status:error"}, counts[0].Tags)
+	})
+}
+
+func TestRun_PodWatchChannelClosed_ReturnsNil(t *testing.T) {
+	m := newMockEtcd()
+	tw, _, _ := newWatcherWith(m)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- tw.Run(ctx) }()
+
+	close(m.podCh())
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err, "a closed watch with a live context returns ctx.Err() == nil")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not return after the pod watch channel closed")
+	}
+}
+
+// ── pool prune + warm-up ─────────────────────────────────────────────────────
+
+func TestReloadVersion_PrunesPoolToAssignment(t *testing.T) {
+	tests := []struct {
+		name          string
+		wireAssign    bool
+		wantStaleKept bool
+	}{
+		{"assignment resolver wired: departed pod pruned", true, false},
+		{"no assignment resolver: pool left untouched", false, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			withLookup(failLookup, func() {
+				m := newMockEtcd()
+				m.put(model.VersionPrefix("recsys", "catalog", "v1"),
+					metaWithAssignmentJSON(t, 1, map[string][]string{"0": {"10.0.1.10:9091"}}))
+				var tw *TopologyWatcher
+				if tc.wireAssign {
+					tw, _, _ = newWatcherWith(m)
+				} else {
+					dnsRes := NewDNSResolver(dnsCfg(9091))
+					tw = NewTopologyWatcher(m, NewRouter(dnsRes), dnsRes, "recsys", "catalog")
+				}
+				pool := quietPool(1)
+				defer pool.Close()
+				stale := idleConn(t, time.Now())
+				pool.Put("10.0.9.9:9091", stale)
+				tw.SetPoolForWarmUp(pool, 0) // pool wired, warm-up disabled
+
+				require.NoError(t, tw.reloadVersion(context.Background(), "v1"))
+
+				assert.Equal(t, tc.wantStaleKept, hasPool(pool, "10.0.9.9:9091"))
+				assert.Equal(t, !tc.wantStaleKept, isClosed(stale))
+			})
+		})
+	}
+}
+
+func TestReloadVersion_WarmsUpNewlyAssignedPods(t *testing.T) {
+	addr := holdingListener(t)
+	withLookup(failLookup, func() {
+		m := newMockEtcd()
+		m.put(model.VersionPrefix("recsys", "catalog", "v1"),
+			metaWithAssignmentJSON(t, 1, map[string][]string{"0": {addr}}))
+		tw, _, _ := newWatcherWith(m)
+		pool := quietPool(1)
+		defer pool.Close()
+		tw.SetPoolForWarmUp(pool, 2)
+
+		require.NoError(t, tw.reloadVersion(context.Background(), "v1"))
+		require.Eventually(t, func() bool { return podCount(pool, addr) == 2 },
+			3*time.Second, 5*time.Millisecond, "warm-up should pre-dial 2 connections")
+
+		// Same assignment again: no newly-added pods, so nothing more is dialled.
+		require.NoError(t, tw.reloadVersion(context.Background(), "v1"))
+		assert.Equal(t, 2, podCount(pool, addr))
+	})
+}
+
+func TestWarmUp_UnreachablePodSkippedOthersWarmed(t *testing.T) {
+	live := holdingListener(t)
+	dead := refusedAddr(t)
+	pool := NewConnPoolWithConfig(PoolConfig{MaxPerPod: 4, DialTimeout: time.Second, IdleCheckInterval: time.Hour})
+	defer pool.Close()
+	tw := NewTopologyWatcher(newMockEtcd(), nil, nil, "recsys", "catalog")
+	tw.SetPoolForWarmUp(pool, 2)
+
+	tw.warmUp([]string{dead, live})
+
+	assert.False(t, hasPool(pool, dead), "a failed dial puts nothing in the pool")
+	assert.Equal(t, 2, podCount(pool, live))
+}
+
+func TestHandleActiveVersionWatch_EventlessResponse_DoesNothing(t *testing.T) {
+	m := newMockEtcd()
+	m.put(model.VersionPrefix("recsys", "catalog", "v1"), metaJSON(t, 3))
+	tw, r, _ := newWatcherWith(m)
+
+	tw.handleActiveVersionWatch(context.Background(), clientv3.WatchResponse{}) // e.g. a progress notification
+
+	assert.Equal(t, uint32(0), r.ShardCount())
+	assert.Equal(t, "", tw.activeVID)
 }

@@ -3,6 +3,7 @@ package sdk
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"testing"
@@ -663,39 +664,212 @@ func TestPoolConfig_MaxClampedToMin(t *testing.T) {
 	assert.Equal(t, 8, pc.MaxPerPod) // clamped up to MinPerPod
 }
 
+// The background sweeper closes connections idle past IdleTimeout but never
+// takes a pod below MinPerPod. A zero MinPerPod means "unset" and is defaulted
+// to 1 by applyDefaults, so one connection always survives the sweep.
 func TestNewConnPoolWithConfig_IdleEviction(t *testing.T) {
-	ln, _ := net.Listen("tcp", "127.0.0.1:0")
-	defer ln.Close()
+	addr := holdingListener(t)
+	mc := &metricCollector{}
+	p := NewConnPoolWithConfig(PoolConfig{
+		MaxPerPod:         4,
+		MinPerPod:         1,
+		IdleTimeout:       50 * time.Millisecond,
+		IdleCheckInterval: 10 * time.Millisecond,
+		DialTimeout:       time.Second,
+	})
+	p.SetMetrics(mc.timing, mc.count, []string{"tenant:t", "store:s"})
+	defer p.Close()
+
+	conns := make([]*Conn, 3)
+	for i := range conns {
+		c, err := p.Get(addr)
+		require.NoError(t, err)
+		conns[i] = c
+	}
+	for _, c := range conns {
+		p.Put(addr, c)
+	}
+
+	require.Eventually(t, func() bool {
+		return len(mc.findAll(MetricPoolIdleEvicted)) == 2
+	}, 3*time.Second, 5*time.Millisecond, "the two connections above the floor should be evicted")
+
+	p.mu.Lock()
+	remaining := append([]*Conn(nil), p.pools[addr]...)
+	p.mu.Unlock()
+	require.Len(t, remaining, 1, "MinPerPod=1 keeps one idle connection")
+	assert.Same(t, conns[0], remaining[0])
+	for _, evicted := range conns[1:] {
+		_, err := evicted.conn.Write([]byte{0})
+		assert.ErrorIs(t, err, net.ErrClosed, "evicted connection must be closed")
+	}
+}
+
+// holdingListener accepts TCP connections and keeps them open until the test
+// ends, so pooled connections stay usable.
+func holdingListener(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	var held []net.Conn
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
 				return
 			}
-			_ = conn
+			held = append(held, conn)
 		}
 	}()
-
-	p := NewConnPoolWithConfig(PoolConfig{
-		MaxPerPod:         4,
-		MinPerPod:         0,
-		IdleTimeout:       50 * time.Millisecond,
-		IdleCheckInterval: 20 * time.Millisecond,
-		DialTimeout:       time.Second,
+	t.Cleanup(func() {
+		ln.Close()
+		<-done
+		for _, c := range held {
+			c.Close()
+		}
 	})
-	defer p.Close()
+	return ln.Addr().String()
+}
 
-	addr := ln.Addr().String()
-	c, err := p.Get(addr)
+// refusedAddr returns a loopback address with nothing listening on it.
+func refusedAddr(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	p.Put(addr, c)
+	addr := ln.Addr().String()
+	require.NoError(t, ln.Close())
+	return addr
+}
 
-	// Wait for idle eviction.
-	time.Sleep(200 * time.Millisecond)
+// idleConn is a pooled-style Conn over net.Pipe whose last use was at lastUsed.
+func idleConn(t *testing.T, lastUsed time.Time) *Conn {
+	t.Helper()
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		client.Close()
+		server.Close()
+	})
+	return &Conn{conn: client, lastUsed: lastUsed}
+}
+
+// isClosed reports whether a pipe-backed Conn has been closed, without
+// blocking: an open pipe with a past write deadline fails with a deadline
+// error instead of io.ErrClosedPipe.
+func isClosed(c *Conn) bool {
+	_ = c.conn.SetWriteDeadline(time.Now().Add(-time.Second))
+	_, err := c.conn.Write([]byte{0})
+	return errors.Is(err, io.ErrClosedPipe)
+}
+
+// quietPool builds a pool whose background sweeper never fires during a test,
+// so evictIdle can be driven directly.
+func quietPool(minPerPod int) *ConnPool {
+	return NewConnPoolWithConfig(PoolConfig{
+		MinPerPod:         minPerPod,
+		MaxPerPod:         4,
+		IdleTimeout:       time.Minute,
+		IdleCheckInterval: time.Hour,
+	})
+}
+
+func TestConnPool_EvictIdle_ClosesStaleConnsAboveFloor(t *testing.T) {
+	p := quietPool(1)
+	defer p.Close()
+	mc := &metricCollector{}
+	p.SetMetrics(mc.timing, mc.count, []string{"tenant:t", "store:s"})
+
+	stale := time.Now().Add(-2 * time.Minute)
+	floor := idleConn(t, stale)      // stale, but the pod is still under MinPerPod → kept
+	extra := idleConn(t, stale)      // stale and above the floor → evicted
+	fresh := idleConn(t, time.Now()) // not idle long enough → kept
 	p.mu.Lock()
-	remaining := len(p.pools[addr])
+	p.pools["pod:1"] = []*Conn{floor, extra, fresh}
 	p.mu.Unlock()
-	assert.Equal(t, 0, remaining, "idle connection should have been evicted")
+
+	p.evictIdle()
+
+	p.mu.Lock()
+	kept := p.pools["pod:1"]
+	p.mu.Unlock()
+	assert.Equal(t, []*Conn{floor, fresh}, kept)
+	assert.True(t, isClosed(extra))
+	assert.False(t, isClosed(floor))
+	assert.False(t, isClosed(fresh))
+
+	evicted := mc.findAll(MetricPoolIdleEvicted)
+	require.Len(t, evicted, 1)
+	assert.Equal(t, int64(1), evicted[0].Value)
+	assert.Equal(t, []string{"tenant:t", "store:s"}, evicted[0].Tags)
+}
+
+func TestConnPool_EvictIdle_DropsPodWithNoIdleConns(t *testing.T) {
+	p := quietPool(1)
+	defer p.Close()
+	c := idleConn(t, time.Now())
+	p.Put("pod:1", c)
+	got, err := p.Get("pod:1") // checks the only conn out, leaving an empty slot
+	require.NoError(t, err)
+	require.Same(t, c, got)
+
+	p.evictIdle()
+
+	p.mu.Lock()
+	_, exists := p.pools["pod:1"]
+	p.mu.Unlock()
+	assert.False(t, exists, "an empty per-pod slot should be deleted")
+}
+
+func TestConnPool_EvictIdle_ClosedPoolIsNoOp(t *testing.T) {
+	p := quietPool(0)
+	p.Close()
+	stale := idleConn(t, time.Now().Add(-time.Hour))
+	p.mu.Lock()
+	p.pools["pod:1"] = []*Conn{stale}
+	p.mu.Unlock()
+
+	p.evictIdle()
+
+	p.mu.Lock()
+	kept := p.pools["pod:1"]
+	p.mu.Unlock()
+	assert.Equal(t, []*Conn{stale}, kept)
+	assert.False(t, isClosed(stale))
+}
+
+// The result slice is sized by the count in the server's response header, not
+// by the number of keys requested.
+func TestBatchLookups_ZeroCountResponse_ReturnsNoResults(t *testing.T) {
+	tests := []struct {
+		name   string
+		reqLen int
+		lookup func(c *Conn) ([][]byte, error)
+	}{
+		{"BatchLookup", 1 + 2 + keySize, func(c *Conn) ([][]byte, error) {
+			return c.BatchLookup(context.Background(), [][]byte{key12("k")})
+		}},
+		{"StringBatchLookup", 1 + 2 + 2 + 1, func(c *Conn) ([][]byte, error) {
+			return c.StringBatchLookup(context.Background(), [][]byte{[]byte("k")})
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client, server := net.Pipe()
+			defer client.Close()
+			go func() {
+				defer server.Close()
+				buf := make([]byte, tc.reqLen)
+				if _, err := io.ReadFull(server, buf); err != nil {
+					return
+				}
+				server.Write([]byte{0, 0}) // N=0
+			}()
+			vals, err := tc.lookup(&Conn{conn: client, lastUsed: time.Now()})
+			require.NoError(t, err)
+			assert.Equal(t, [][]byte{}, vals)
+		})
+	}
 }
 
 func TestNewConnPoolWithConfig_MinPerPodPreservesIdleConns(t *testing.T) {

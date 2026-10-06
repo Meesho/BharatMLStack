@@ -47,10 +47,10 @@ func run() error {
 	if interval := autoPromoteInterval(); interval > 0 {
 		go reconciler.New(state, interval).Run(ctx)
 	} else {
-		log.Info().Msg("auto-promote reconciler disabled (ONYXDB_AUTO_PROMOTE_INTERVAL=0)")
+		log.Warn().Msg("auto-promote reconciler disabled (ONYXDB_AUTO_PROMOTE_INTERVAL=0)")
 	}
 
-	log.Info().Str("addr", addr).Strs("etcd", endpoints).Msg("OnyxDB control plane starting")
+	log.Warn().Str("addr", addr).Strs("etcd", endpoints).Msg("OnyxDB control plane starting")
 	return srv.Run(ctx)
 }
 

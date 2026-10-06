@@ -42,6 +42,25 @@ func TestStaticResolver(t *testing.T) {
 	assert.Nil(t, s.Resolve(99))
 }
 
+// ── AssignmentResolver ────────────────────────────────────────────────────────
+
+// Assignment keys that are not a uint32 shard ID are ignored, so a malformed
+// entry cannot shadow a real shard.
+func TestAssignmentResolver_SwapSkipsInvalidShardIDs(t *testing.T) {
+	ar := NewAssignmentResolver()
+	newAddrs := ar.SwapAssignment(map[string][]string{
+		"0":          {"10.0.0.1:9091"},
+		"shard-1":    {"10.0.0.2:9091"},
+		"-1":         {"10.0.0.3:9091"},
+		"4294967296": {"10.0.0.4:9091"}, // overflows uint32
+	})
+
+	assert.Equal(t, []string{"10.0.0.1:9091"}, newAddrs)
+	assert.Equal(t, []string{"10.0.0.1:9091"}, ar.AllAddrs())
+	assert.Equal(t, []string{"10.0.0.1:9091"}, ar.Resolve(0))
+	assert.Nil(t, ar.Resolve(1))
+}
+
 // ── DNSResolver fqdn ──────────────────────────────────────────────────────────
 
 func TestDNSResolver_FQDN(t *testing.T) {

@@ -208,6 +208,11 @@ func (tw *TopologyWatcher) reloadVersion(ctx context.Context, version string) er
 		newAddrs = tw.assignRes.SwapAssignment(meta.Assignment)
 	}
 
+	// Slow start comes from the pods' own registrations, not the version meta:
+	// a pod key is what the watch fires on, so its ramp is current when this
+	// reload runs, while the meta is rewritten up to a control-plane tick later.
+	tw.reloadSlowStart(ctx)
+
 	// Trigger DNS re-resolve for K8s deployments.
 	_ = tw.dnsResolver.Refresh(ctx)
 
@@ -224,6 +229,39 @@ func (tw *TopologyWatcher) reloadVersion(ctx context.Context, version string) er
 	tw.twEmitCount(MetricTopologyReload, 1, tw.twTags("status:ok"))
 	tw.twEmitTiming(MetricTopologyReload, time.Since(start), tw.twTags("status:ok"))
 	return nil
+}
+
+// reloadSlowStart reads every pod registration of the store and hands the
+// router the pods still inside their slow-start window
+// (docs/design/onyxdb-pod-slow-start.md). A failed read keeps the router's
+// last set: at worst a ramp runs on that set until the next reload.
+func (tw *TopologyWatcher) reloadSlowStart(ctx context.Context) {
+	resp, err := tw.client.Get(ctx, model.PodWatchPrefix(tw.tenant, tw.store), clientv3.WithPrefix())
+	if err != nil {
+		log.Warn().Err(err).Str("tenant", tw.tenant).Str("store", tw.store).
+			Msg("topology: pod read for slow start failed, keeping the last ramp set")
+		return
+	}
+	now := time.Now()
+	var ramps map[string]SlowStart
+	for _, kv := range resp.Kvs {
+		var pd model.PodData
+		if json.Unmarshal(kv.Value, &pd) != nil || pd.ServingSince <= 0 || pd.SlowStartSec <= 0 {
+			continue
+		}
+		s := SlowStart{
+			Since:  time.UnixMilli(pd.ServingSince),
+			Window: time.Duration(pd.SlowStartSec) * time.Second,
+		}
+		if !now.Before(s.Since.Add(s.Window)) {
+			continue // ramp already over
+		}
+		if ramps == nil {
+			ramps = make(map[string]SlowStart)
+		}
+		ramps[pd.Addr()] = s
+	}
+	tw.router.SetSlowStart(ramps)
 }
 
 // warmUp pre-dials connections to new pods in the background.

@@ -316,3 +316,62 @@ func TestMetrics_TagsFormat(t *testing.T) {
 		"store:catalog",
 	}, base)
 }
+
+func TestMetrics_BatchOps_EmitStatusAndBatchSize(t *testing.T) {
+	k1, k2, k3 := key12("b1"), key12("b2"), key12("b3")
+	okAddr := startFakeServer(t, map[string][]byte{string(k1): []byte("v1")})
+	tests := []struct {
+		name       string
+		op         string
+		healthy    bool
+		wantStatus string
+		call       func(c *Client, keys [][]byte) error
+	}{
+		{"BatchGet ok", "batch", true, "status:ok", func(c *Client, keys [][]byte) error {
+			_, err := c.BatchGet(context.Background(), keys)
+			return err
+		}},
+		{"BatchGet error", "batch", false, "status:error", func(c *Client, keys [][]byte) error {
+			_, err := c.BatchGet(context.Background(), keys)
+			return err
+		}},
+		{"StringBatchGet ok", "string_batch", true, "status:ok", func(c *Client, keys [][]byte) error {
+			_, err := c.StringBatchGet(context.Background(), keys)
+			return err
+		}},
+		{"StringBatchGet error", "string_batch", false, "status:error", func(c *Client, keys [][]byte) error {
+			_, err := c.StringBatchGet(context.Background(), keys)
+			return err
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var c *Client
+			if tc.healthy {
+				c = NewDirectClient(okAddr, 4)
+			} else {
+				c = staticClient(1, nil) // no pod for shard 0
+			}
+			defer c.Close()
+			mc := &metricCollector{}
+			c.config.Tenant, c.config.Store = "t", "s"
+			c.config.Timing, c.config.Count = mc.timing, mc.count
+
+			err := tc.call(c, [][]byte{k1, k2, k3})
+			assert.Equal(t, tc.healthy, err == nil)
+
+			wantTags := []string{"tenant:t", "store:s", "op:" + tc.op, tc.wantStatus}
+			lat := mc.findAll(MetricRequestLatency)
+			require.Len(t, lat, 1)
+			assert.Equal(t, wantTags, lat[0].Tags)
+			cnt := mc.findAll(MetricRequestCount)
+			require.Len(t, cnt, 1)
+			assert.Equal(t, wantTags, cnt[0].Tags)
+			assert.Equal(t, int64(1), cnt[0].Value)
+			size := mc.findAll(MetricBatchKeys)
+			require.Len(t, size, 1)
+			assert.Equal(t, int64(3), size[0].Value)
+			assert.Equal(t, []string{"tenant:t", "store:s"}, size[0].Tags)
+		})
+	}
+}

@@ -125,6 +125,32 @@ func TestEtcdKVOps(t *testing.T) {
 		assert.Equal(t, "2", result["/onyxdb-test/prefix/b"])
 	})
 
+	t.Run("getPrefix_no_matches", func(t *testing.T) {
+		result, err := ops.getPrefix(ctx, "/onyxdb-test/nothing-here/")
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Empty(t, result)
+	})
+
+	t.Run("atomicCreate_no_pairs_writes_nothing", func(t *testing.T) {
+		require.NoError(t, ops.atomicCreate(ctx, "/onyxdb-test/empty-create-guard", map[string]string{}))
+		_, _, found, err := ops.get(ctx, "/onyxdb-test/empty-create-guard")
+		require.NoError(t, err)
+		assert.False(t, found)
+	})
+
+	t.Run("atomicSwap_no_updates_leaves_key_unchanged", func(t *testing.T) {
+		require.NoError(t, ops.put(ctx, "/onyxdb-test/empty-swap", "v1"))
+		_, rev, _, _ := ops.get(ctx, "/onyxdb-test/empty-swap")
+
+		ok, err := ops.atomicSwap(ctx, "/onyxdb-test/empty-swap", rev, map[string]string{})
+		require.NoError(t, err)
+		assert.True(t, ok)
+		val, newRev, _, _ := ops.get(ctx, "/onyxdb-test/empty-swap")
+		assert.Equal(t, "v1", val)
+		assert.Equal(t, rev, newRev)
+	})
+
 	t.Run("atomicCreate_success", func(t *testing.T) {
 		err := ops.atomicCreate(ctx, "/onyxdb-test/new-key", map[string]string{
 			"/onyxdb-test/new-key": "value",

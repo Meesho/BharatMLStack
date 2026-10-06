@@ -54,7 +54,7 @@ func scatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Result, err
 				return
 			}
 
-			conn, err := c.pool.Get(pod)
+			conn, err := c.pool.GetContext(ctx, pod)
 			if err != nil {
 				c.router.MarkUnhealthy(pod)
 				setErr(entries, err)
@@ -129,7 +129,7 @@ func stringScatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Resul
 				return
 			}
 
-			conn, err := c.pool.Get(pod)
+			conn, err := c.pool.GetContext(ctx, pod)
 			if err != nil {
 				c.router.MarkUnhealthy(pod)
 				setErr(entries, err)
