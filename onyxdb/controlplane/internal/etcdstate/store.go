@@ -36,12 +36,30 @@ func (c *EtcdStateClient) GetStore(ctx context.Context, tenant, store string) (*
 		return nil, ErrNotFound
 	}
 
-	shardCountStr, _, _, _ := c.ops.get(ctx, model.ShardCountPath(tenant, store))
+	// shardCount is never defaulted and must be >= 1: with zero shards every
+	// shard looks covered, so an empty assignment could be promoted (by the
+	// reconciler or the promote API). CreateStore writes it in the same
+	// transaction as entityKey and the API enforces min=1, so an absent,
+	// unparseable or non-positive value means the store was damaged out-of-band.
+	shardCountStr, _, scFound, err := c.ops.get(ctx, model.ShardCountPath(tenant, store))
+	if err != nil {
+		return nil, fmt.Errorf("getting shardCount for store %s/%s: %w", tenant, store, err)
+	}
+	if !scFound {
+		return nil, fmt.Errorf("store %s/%s has no shardCount key", tenant, store)
+	}
+	shardCount, err := strconv.Atoi(shardCountStr)
+	if err != nil {
+		return nil, fmt.Errorf("store %s/%s has invalid shardCount %q: %w", tenant, store, shardCountStr, err)
+	}
+	if shardCount < 1 {
+		return nil, fmt.Errorf("store %s/%s has invalid shardCount %q: must be >= 1", tenant, store, shardCountStr)
+	}
+
 	activeVersion, _, _, _ := c.ops.get(ctx, model.ActiveVersionPath(tenant, store))
 	rollbackVersion, _, _, _ := c.ops.get(ctx, model.RollbackVersionPath(tenant, store))
 	tvStr, _, _, _ := c.ops.get(ctx, model.TopologyVersionPath(tenant, store))
 
-	shardCount, _ := strconv.Atoi(shardCountStr)
 	tv, _ := strconv.ParseInt(tvStr, 10, 64)
 
 	state := &StoreState{

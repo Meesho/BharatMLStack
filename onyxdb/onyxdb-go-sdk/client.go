@@ -235,6 +235,9 @@ func newClientWithEtcd(config Config, etcd EtcdClient, closer io.Closer) (*Clien
 	bt := []string{"tenant:" + config.Tenant, "store:" + config.Store}
 	pool.SetMetrics(config.Timing, config.Count, bt)
 	watcher.SetMetrics(config.Timing, config.Count, bt)
+	if count := config.Count; count != nil {
+		router.SetRampPickHook(func() { count(MetricSlowStartPick, 1, bt) })
+	}
 
 	// Determine warm-up connection count.
 	warmUp := poolCfg.MinPerPod
@@ -309,7 +312,7 @@ func (c *Client) Get(ctx context.Context, key []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	conn, err := c.pool.Get(pod)
+	conn, err := c.pool.GetContext(ctx, pod)
 	if err != nil {
 		c.router.MarkUnhealthy(pod)
 		return nil, err
@@ -372,7 +375,7 @@ func (c *Client) StringGet(ctx context.Context, key []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	conn, err := c.pool.Get(pod)
+	conn, err := c.pool.GetContext(ctx, pod)
 	if err != nil {
 		c.router.MarkUnhealthy(pod)
 		return nil, err

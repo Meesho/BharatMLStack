@@ -28,6 +28,10 @@ func newRouter(h *Handlers) *gin.Engine {
 	r.POST("/api/v1/tenants/:tenant/stores/:store/rollback", h.Rollback)
 	r.POST("/api/v1/tenants/:tenant/stores/:store/versions/:vId/retire", h.RetireVersion)
 	r.GET("/api/v1/tenants/:tenant/stores/:store/topology", h.GetTopology)
+	r.PUT("/api/v1/tenants/:tenant/stores/:store/dataflow", h.PutDataflow)
+	r.GET("/api/v1/tenants/:tenant/stores/:store/dataflow", h.GetDataflow)
+	r.PUT("/api/v1/tenants/:tenant/stores/:store/clientConfig", h.PutClientConfig)
+	r.GET("/api/v1/tenants/:tenant/stores/:store/clientConfig", h.GetClientConfig)
 	return r
 }
 

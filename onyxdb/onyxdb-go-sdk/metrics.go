@@ -26,6 +26,11 @@ const (
 	// Topology watcher metrics.
 	// Tags: tenant, store, status (ok/error)
 	MetricTopologyReload = "onyxdb.topology.reload"
+
+	// Picks that landed on a pod still in its slow start (one per shard
+	// request routed there): the ramp as the client sees it.
+	// Tags: tenant, store
+	MetricSlowStartPick = "onyxdb.router.slow_start_pick"
 )
 
 // emitTiming is a nil-safe timing callback on Client.

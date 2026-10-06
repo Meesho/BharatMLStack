@@ -112,3 +112,19 @@ func TestPodWatchPrefix(t *testing.T) {
 		t.Errorf("PodWatchPrefix = %q, want %q", got, want)
 	}
 }
+
+func TestDataflowPath(t *testing.T) {
+	got := DataflowPath("fs", "features")
+	want := "/config/mnemo/tenants/fs/stores/features/dataflow"
+	if got != want {
+		t.Errorf("DataflowPath = %q, want %q", got, want)
+	}
+}
+
+func TestClientConfigPath(t *testing.T) {
+	got := ClientConfigPath("fs", "features")
+	want := "/config/mnemo/tenants/fs/stores/features/clientConfig"
+	if got != want {
+		t.Errorf("ClientConfigPath = %q, want %q", got, want)
+	}
+}

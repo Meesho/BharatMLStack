@@ -34,9 +34,23 @@ func Dial(addr string, timeout time.Duration) (*Conn, error) {
 
 // DialWithKeepalive opens a TCP connection with configurable keepalive.
 // keepaliveInterval=0 means use OS default (typically ~15s when enabled).
-// keepaliveTimeout=0 means don't set it explicitly.
+// keepaliveTimeout is currently not applied to the socket (any value, including
+// 0, has no effect). It is kept so the signature and PoolConfig stay stable; dead
+// peers are detected by the per-request deadline and idle eviction instead.
 func DialWithKeepalive(addr string, dialTimeout, keepaliveInterval, keepaliveTimeout time.Duration) (*Conn, error) {
-	conn, err := net.DialTimeout("tcp", addr, dialTimeout)
+	return dialContext(context.Background(), addr, dialTimeout, keepaliveInterval)
+}
+
+// dialTCP is the connect itself, indirected so tests can stand in for a peer
+// that never answers.
+var dialTCP = func(ctx context.Context, d *net.Dialer, addr string) (net.Conn, error) {
+	return d.DialContext(ctx, "tcp", addr)
+}
+
+// dialContext connects within the earlier of dialTimeout and ctx's deadline, so
+// a request never waits on a connect longer than its own budget.
+func dialContext(ctx context.Context, addr string, dialTimeout, keepaliveInterval time.Duration) (*Conn, error) {
+	conn, err := dialTCP(ctx, &net.Dialer{Timeout: dialTimeout}, addr)
 	if err != nil {
 		return nil, fmt.Errorf("onyxdb dial %s: %w", addr, err)
 	}
@@ -274,7 +288,7 @@ type PoolConfig struct {
 	IdleTimeout        time.Duration // evict connections idle longer than this (default 60s)
 	IdleCheckInterval  time.Duration // sweep interval for idle eviction (default 10s)
 	KeepAliveInterval  time.Duration // TCP keepalive probe interval (default 15s)
-	KeepAliveTimeout   time.Duration // keepalive timeout (default 5s)
+	KeepAliveTimeout   time.Duration // accepted but not applied to the socket (see DialWithKeepalive); default 5s
 }
 
 func (pc *PoolConfig) applyDefaults() {
@@ -420,7 +434,18 @@ func (p *ConnPool) evictIdle() {
 }
 
 // Get returns a pooled connection for addr, dialing a new one if the pool is empty.
+// The dial is bounded by the pool's DialTimeout only; request paths use
+// GetContext so a dial never outlives the request.
 func (p *ConnPool) Get(addr string) (*Conn, error) {
+	return p.GetContext(context.Background(), addr)
+}
+
+// GetContext is Get with the dial bounded by ctx as well: a new connection must
+// connect within the earlier of DialTimeout and ctx's deadline. A dial into a
+// peer that drops SYNs (a full accept queue, a vanished pod IP) then fails at
+// the request's deadline instead of after the kernel's ~1 s SYN retransmit or
+// the 5 s DialTimeout.
+func (p *ConnPool) GetContext(ctx context.Context, addr string) (*Conn, error) {
 	p.mu.Lock()
 	if p.closed {
 		p.mu.Unlock()
@@ -437,7 +462,7 @@ func (p *ConnPool) Get(addr string) (*Conn, error) {
 	p.mu.Unlock()
 
 	start := time.Now()
-	conn, err := DialWithKeepalive(addr, p.cfg.DialTimeout, p.cfg.KeepAliveInterval, p.cfg.KeepAliveTimeout)
+	conn, err := dialContext(ctx, addr, p.cfg.DialTimeout, p.cfg.KeepAliveInterval)
 	if err != nil {
 		p.emitCount(MetricPoolGet, 1, p.poolTags("result:error"))
 		return nil, err

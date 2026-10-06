@@ -11,10 +11,6 @@ import (
 	"github.com/Meesho/BharatMLStack/onyxdb/controlplane/model"
 )
 
-// defaultReadServerPort is used when a pod registration omits Port (legacy pods,
-// or the K8s pod-per-IP model where every read server listens on 9091).
-const defaultReadServerPort = 9091
-
 // DeriveAssignment builds the shard→pod-addresses map from current pod registrations.
 // Only pods that have version in their WarmVersions are included.
 // Every shard ID from 0 to shardCount-1 is present in the output (empty slice if no warm pods).
@@ -34,11 +30,7 @@ func DeriveAssignment(shardCount int, pods map[string]model.PodData, version str
 		}
 		for _, wv := range data.WarmVersions {
 			if wv == version {
-				port := data.Port
-				if port == 0 {
-					port = defaultReadServerPort // legacy pods that don't report a port
-				}
-				assignment[sid] = append(assignment[sid], fmt.Sprintf("%s:%d", data.PodIP, port))
+				assignment[sid] = append(assignment[sid], data.Addr())
 				break
 			}
 		}

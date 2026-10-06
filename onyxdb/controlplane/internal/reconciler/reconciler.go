@@ -2,8 +2,9 @@
 //
 // This is the first slice of the version rollout state machine (ADR-0009): a
 // background loop that, on a fixed interval, scans every store opted into
-// auto-promotion and promotes the newest READY version once every shard has a
-// warm pod. It owns only the READY → ACTIVE transition; the producer-driven
+// auto-promotion and promotes the newest READY version that has a warm pod on
+// every shard — an older one if the newest is not yet covered. It owns only the
+// READY → ACTIVE transition; the producer-driven
 // states and the richer rollout states in ADR-0009 are not implemented here.
 //
 // Design notes:
@@ -61,14 +62,14 @@ func New(state StateReader, interval time.Duration) *Reconciler {
 
 // Run blocks, reconciling once per interval, until ctx is cancelled.
 func (r *Reconciler) Run(ctx context.Context) {
-	log.Info().Dur("interval", r.interval).Msg("auto-promote reconciler started")
+	log.Warn().Dur("interval", r.interval).Msg("auto-promote reconciler started")
 	t := time.NewTicker(r.interval)
 	defer t.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info().Msg("auto-promote reconciler stopping")
+			log.Warn().Msg("auto-promote reconciler stopping")
 			return
 		case <-t.C:
 			r.reconcileOnce(ctx)
@@ -117,27 +118,31 @@ func (r *Reconciler) reconcileStore(ctx context.Context, ref etcdstate.StoreRef)
 		return
 	}
 
-	candidate := newestPromotable(versions, st.ActiveVersion)
-	if candidate != "" {
+	// Newest first, and an uncovered newer version does not hide a covered
+	// older one: data loaders park a newer version while an older one is
+	// resident and unpromoted (docs/design/onyxdb-version-memory-guard.md §4), so
+	// waiting for the newest to be covered would never end.
+	for _, candidate := range promotable(versions, st.ActiveVersion) {
 		assignment := placement.DeriveAssignment(st.Config.ShardCount, pods, candidate)
 		if missing := uncoveredShards(st.Config.ShardCount, assignment); len(missing) > 0 {
-			lg.Info().
+			lg.Warn().
 				Str("version", candidate).
 				Int("warmShards", st.Config.ShardCount-len(missing)).
 				Int("shardCount", st.Config.ShardCount).
 				Msg("reconciler: coverage incomplete, deferring promote")
-		} else if err := r.state.PromoteVersion(ctx, ref.Tenant, ref.Store, candidate, assignment); err != nil {
+			continue
+		}
+		if err := r.state.PromoteVersion(ctx, ref.Tenant, ref.Store, candidate, assignment); err != nil {
 			if err == etcdstate.ErrCASConflict {
-				lg.Info().Str("version", candidate).Msg("reconciler: promote raced (CAS), will retry next tick")
+				lg.Warn().Str("version", candidate).Msg("reconciler: promote raced (CAS), will retry next tick")
 			} else {
 				lg.Error().Err(err).Str("version", candidate).Msg("reconciler: promote failed")
 			}
 			return // re-evaluate (incl. GC) next tick once the active version is settled
-		} else {
-			lg.Info().Str("version", candidate).Msg("reconciler: auto-promoted version")
-			// Re-read state next tick so GC sees the new active/rollback.
-			return
 		}
+		lg.Warn().Str("version", candidate).Msg("reconciler: auto-promoted version")
+		// Re-read state next tick so GC sees the new active/rollback.
+		return
 	}
 
 	// Refresh the active version's assignment from current pod registrations.
@@ -154,7 +159,7 @@ func (r *Reconciler) reconcileStore(ctx context.Context, ref etcdstate.StoreRef)
 				lg.Warn().Err(err).Msg("reconciler: assignment refresh failed")
 			}
 		} else if changed {
-			lg.Info().Str("version", st.ActiveVersion).Msg("reconciler: refreshed stale assignment from pod registrations")
+			lg.Warn().Str("version", st.ActiveVersion).Msg("reconciler: refreshed stale assignment from pod registrations")
 		}
 	}
 
@@ -186,16 +191,16 @@ func (r *Reconciler) gcStore(ctx context.Context, ref etcdstate.StoreRef, st *et
 				Str("version", vID).Msg("reconciler: retire failed")
 			continue
 		}
-		log.Info().Str("tenant", ref.Tenant).Str("store", ref.Store).
+		log.Warn().Str("tenant", ref.Tenant).Str("store", ref.Store).
 			Str("version", vID).Msg("reconciler: retired version (keep-last-N GC)")
 	}
 }
 
-// newestPromotable returns the highest READY version ID strictly greater than the
-// active version, or "" if none. Version IDs are {date}_{run}, which sort
+// promotable returns every READY version ID strictly greater than the active
+// version, newest first. Version IDs are {date}_{run}, which sort
 // lexicographically, so plain string comparison gives chronological order.
-func newestPromotable(versions map[string]*model.VersionMeta, active string) string {
-	best := ""
+func promotable(versions map[string]*model.VersionMeta, active string) []string {
+	var out []string
 	for vID, meta := range versions {
 		if meta == nil || meta.Status != model.StatusReady {
 			continue
@@ -203,11 +208,10 @@ func newestPromotable(versions map[string]*model.VersionMeta, active string) str
 		if vID <= active {
 			continue // already active, or older than active
 		}
-		if vID > best {
-			best = vID
-		}
+		out = append(out, vID)
 	}
-	return best
+	sort.Sort(sort.Reverse(sort.StringSlice(out)))
+	return out
 }
 
 // versionsToRetire returns the version IDs that fall outside the keep window and
