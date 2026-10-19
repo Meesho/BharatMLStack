@@ -64,6 +64,8 @@ defer client.Close()
 | Connection warm-up | pods newly added to the assignment get `MinConnsPerPod` connections pre-dialed in the background (disable via `warmUpOnTopologyChange: false` in `clientConfig`) |
 | Pool pruning | after each topology change and each DNS refresh, pools for pods no longer in the assignment (scaled-down / no-longer-warm) are closed |
 | Idle eviction | a background sweep closes connections idle beyond `IdleTimeout`, keeping at least `MinPerPod` per pod |
+| Timed-out connections | a request that hits its deadline after it was fully written leaves its response on the wire; the connection is not closed. `ConnPool.Recycle` reads the rest of that response in the background, within `PoolConfig.DrainTimeout` (default 1s; negative disables), and returns the connection to the pool. EOF, a reset, a partial write or a drain that runs out of time still closes it |
+| Bounded dials | at most `PoolConfig.MaxDialsPerPod` (default 4) dials in flight per pod. A request that finds the pool empty with every slot busy waits for a returned connection or a free slot, up to its own deadline, instead of dialling again |
 | Batch reads | group keys by shard → parallel one-batch-per-shard fan-out → merge in input order. Partial failure is per-shard: a failed shard sets `Result.Err` on only its own keys; the top-level error is the first shard error |
 
 ## Config
@@ -127,7 +129,8 @@ dropped, including pool-dial pressure and topology-reload failures.
 |---|---|
 | `onyxdb.request.latency` / `onyxdb.request.count` | `tenant`, `store`, `op` (`single`/`batch`/`string_single`/`string_batch`), `status` (`hit`/`miss`/`error`/`ok`) |
 | `onyxdb.batch.keys` | `tenant`, `store` |
-| `onyxdb.pool.get` | `tenant`, `store`, `result` (`hit`/`dial`/`error`) |
+| `onyxdb.pool.get` | `tenant`, `store`, `result` (`hit`/`dial`/`error`/`dial_wait_expired`) |
+| `onyxdb.pool.drain` | `tenant`, `store`, `result` (`reused`/`closed`): outcome of draining a timed-out connection |
 | `onyxdb.pool.dial.latency`, `onyxdb.pool.idle_evicted`, `onyxdb.pool.overflow` | `tenant`, `store` |
 | `onyxdb.topology.reload` | `tenant`, `store`, `status` (`ok`/`error`) |
 

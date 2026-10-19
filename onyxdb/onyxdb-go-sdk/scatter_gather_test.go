@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -499,6 +500,7 @@ func TestConfigBuildPoolConfig(t *testing.T) {
 	defaults := PoolConfig{
 		MinPerPod: 1, MaxPerPod: 4, DialTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second,
 		IdleCheckInterval: 10 * time.Second, KeepAliveInterval: 15 * time.Second, KeepAliveTimeout: 5 * time.Second,
+		DrainTimeout: time.Second, MaxDialsPerPod: 4,
 	}
 	withMax := func(pc PoolConfig, max int) PoolConfig { pc.MaxPerPod = max; return pc }
 	tests := []struct {
@@ -549,6 +551,7 @@ func TestConfigBuildPoolConfig(t *testing.T) {
 			wantPool: PoolConfig{
 				MinPerPod: 3, MaxPerPod: 12, DialTimeout: 700 * time.Millisecond, IdleTimeout: 40 * time.Second,
 				IdleCheckInterval: 500 * time.Millisecond, KeepAliveInterval: 2 * time.Second, KeepAliveTimeout: 3 * time.Second,
+				DrainTimeout: time.Second, MaxDialsPerPod: 4,
 			},
 			wantTimeout: 250,
 			wantDNS:     5 * time.Second,
@@ -862,4 +865,52 @@ func TestClientClose_ClosesEtcdAndReturnsItsError(t *testing.T) {
 	c.pool.mu.Lock()
 	defer c.pool.mu.Unlock()
 	assert.True(t, c.pool.closed)
+}
+
+// A batch that times out does not cost a connection: the client recycles it,
+// the late response is drained, and the next batch reuses the same socket.
+// Before, every timeout closed the connection and the next request redialled.
+func TestClientStringBatchGet_ATimedOutConnectionIsReusedNotRedialled(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { ln.Close() })
+	release := make(chan struct{})
+	accepted := 0
+	var mu sync.Mutex
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			accepted++
+			mu.Unlock()
+			go func() {
+				if readRequest(conn) != nil {
+					return
+				}
+				<-release // the first response arrives after the client gave up
+				_, _ = conn.Write(encodeBatch([]byte("late")))
+				fakeServer(conn, map[string][]byte{"k": []byte("v")})
+			}()
+		}
+	}()
+
+	c := staticClient(1, map[uint32][]string{0: {ln.Addr().String()}})
+	c.config.TimeoutMs = 50
+	drained := drainResults(c.pool)
+	defer c.pool.Close()
+
+	_, err = c.StringBatchGet(context.Background(), [][]byte{[]byte("k")})
+	require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+	close(release)
+	require.Equal(t, "reused", awaitDrain(t, drained))
+
+	results, err := c.StringBatchGet(context.Background(), [][]byte{[]byte("k")})
+	require.NoError(t, err)
+	assert.Equal(t, []byte("v"), results[0].Value)
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 1, accepted, "the second batch dialled a new connection")
 }

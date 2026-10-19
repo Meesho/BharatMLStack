@@ -3,9 +3,11 @@ package sdk
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -25,6 +27,12 @@ const (
 type Conn struct {
 	conn     net.Conn
 	lastUsed time.Time // tracked for idle eviction
+
+	// pending is the unread rest of a response whose request timed out after
+	// it was fully written; broken means the stream is in an unknown state.
+	// Both are reset by the next request.
+	pending *response
+	broken  bool
 }
 
 // Dial opens a TCP connection (TCP_NODELAY + keepalive) to a read server.
@@ -66,11 +74,62 @@ func dialContext(ctx context.Context, addr string, dialTimeout, keepaliveInterva
 
 func (c *Conn) touch() { c.lastUsed = time.Now() }
 
+// applyDeadline bounds the next request by ctx, and clears a deadline left by
+// an earlier request when ctx has none: a reused connection must not inherit
+// a deadline that has already passed.
 func (c *Conn) applyDeadline(ctx context.Context) {
-	if deadline, ok := ctx.Deadline(); ok {
-		_ = c.conn.SetWriteDeadline(deadline)
-		_ = c.conn.SetReadDeadline(deadline)
+	deadline, _ := ctx.Deadline() // zero when ctx has none, which clears it
+	_ = c.conn.SetWriteDeadline(deadline)
+	_ = c.conn.SetReadDeadline(deadline)
+}
+
+// isTimeout reports whether err is a deadline expiring, as opposed to the
+// peer closing or resetting the connection.
+func isTimeout(err error) bool {
+	var ne net.Error
+	return errors.Is(err, os.ErrDeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout())
+}
+
+// roundTrip writes one request and reads its response. When the request's
+// deadline fires after the whole request was written, the connection keeps
+// its place in the unread response (c.pending) so ConnPool.Recycle can drain
+// it and reuse the connection. Any other failure marks it broken.
+func (c *Conn) roundTrip(ctx context.Context, req []byte, batch bool, name string) (*response, error) {
+	c.pending, c.broken = nil, false
+	c.applyDeadline(ctx)
+	if n, err := c.conn.Write(req); err != nil {
+		// A timeout before any byte left is harmless: the stream is still at a
+		// request boundary. A partial write is not.
+		c.broken = n > 0 || !isTimeout(err)
+		return nil, fmt.Errorf("write %s request: %w", name, err)
 	}
+	r := newResponse(batch)
+	if err := r.readFrom(c.conn); err != nil {
+		if isTimeout(err) {
+			c.pending = r.discardRest()
+		} else {
+			c.broken = true
+		}
+		return nil, r.wrap(name, err)
+	}
+	c.touch()
+	return r, nil
+}
+
+// drain finishes reading the response a timed-out request left behind
+// (c.pending, set and not broken: see ConnPool.Recycle), within timeout, and
+// reports whether the connection is back at a request boundary.
+func (c *Conn) drain(timeout time.Duration) bool {
+	_ = c.conn.SetReadDeadline(time.Now().Add(timeout))
+	err := c.pending.readFrom(c.conn)
+	_ = c.conn.SetDeadline(time.Time{})
+	if err != nil {
+		c.broken = true
+		return false
+	}
+	c.pending = nil
+	c.touch()
+	return true
 }
 
 // SingleLookup sends opcode 0x01 and returns the value, or ErrKeyNotFound.
@@ -81,31 +140,7 @@ func (c *Conn) SingleLookup(ctx context.Context, key []byte) ([]byte, error) {
 	var req [1 + keySize]byte
 	req[0] = opSingle
 	copy(req[1:], key)
-
-	c.applyDeadline(ctx)
-
-	if _, err := c.conn.Write(req[:]); err != nil {
-		return nil, fmt.Errorf("write single request: %w", err)
-	}
-
-	var found [1]byte
-	if _, err := io.ReadFull(c.conn, found[:]); err != nil {
-		return nil, fmt.Errorf("read single found byte: %w", err)
-	}
-	if found[0] == 0 {
-		return nil, ErrKeyNotFound
-	}
-
-	var lenBuf [4]byte
-	if _, err := io.ReadFull(c.conn, lenBuf[:]); err != nil {
-		return nil, fmt.Errorf("read single value length: %w", err)
-	}
-	val := make([]byte, binary.BigEndian.Uint32(lenBuf[:]))
-	if _, err := io.ReadFull(c.conn, val); err != nil {
-		return nil, fmt.Errorf("read single value: %w", err)
-	}
-	c.touch()
-	return val, nil
+	return c.single(ctx, req[:], "single")
 }
 
 // BatchLookup sends opcode 0x02 with N keys and returns N values in order
@@ -126,40 +161,7 @@ func (c *Conn) BatchLookup(ctx context.Context, keys [][]byte) ([][]byte, error)
 		off := 3 + i*keySize
 		copy(reqBuf[off:off+keySize], k)
 	}
-
-	c.applyDeadline(ctx)
-
-	if _, err := c.conn.Write(reqBuf); err != nil {
-		return nil, fmt.Errorf("write batch request: %w", err)
-	}
-
-	var respHeader [2]byte
-	if _, err := io.ReadFull(c.conn, respHeader[:]); err != nil {
-		return nil, fmt.Errorf("read batch response header: %w", err)
-	}
-	respN := int(binary.BigEndian.Uint16(respHeader[:]))
-
-	results := make([][]byte, respN)
-	for i := 0; i < respN; i++ {
-		var found [1]byte
-		if _, err := io.ReadFull(c.conn, found[:]); err != nil {
-			return nil, fmt.Errorf("read batch result %d found: %w", i, err)
-		}
-		if found[0] == 0 {
-			continue // miss → nil
-		}
-		var lenBuf [4]byte
-		if _, err := io.ReadFull(c.conn, lenBuf[:]); err != nil {
-			return nil, fmt.Errorf("read batch result %d length: %w", i, err)
-		}
-		val := make([]byte, binary.BigEndian.Uint32(lenBuf[:]))
-		if _, err := io.ReadFull(c.conn, val); err != nil {
-			return nil, fmt.Errorf("read batch result %d value: %w", i, err)
-		}
-		results[i] = val
-	}
-	c.touch()
-	return results, nil
+	return c.batch(ctx, reqBuf, "batch")
 }
 
 // StringSingleLookup sends opcode 0x03 with a variable-length key and returns
@@ -172,31 +174,7 @@ func (c *Conn) StringSingleLookup(ctx context.Context, key []byte) ([]byte, erro
 	req[0] = opStringSingle
 	binary.BigEndian.PutUint16(req[1:3], uint16(len(key)))
 	copy(req[3:], key)
-
-	c.applyDeadline(ctx)
-
-	if _, err := c.conn.Write(req); err != nil {
-		return nil, fmt.Errorf("write string single request: %w", err)
-	}
-
-	var found [1]byte
-	if _, err := io.ReadFull(c.conn, found[:]); err != nil {
-		return nil, fmt.Errorf("read string single found byte: %w", err)
-	}
-	if found[0] == 0 {
-		return nil, ErrKeyNotFound
-	}
-
-	var lenBuf [4]byte
-	if _, err := io.ReadFull(c.conn, lenBuf[:]); err != nil {
-		return nil, fmt.Errorf("read string single value length: %w", err)
-	}
-	val := make([]byte, binary.BigEndian.Uint32(lenBuf[:]))
-	if _, err := io.ReadFull(c.conn, val); err != nil {
-		return nil, fmt.Errorf("read string single value: %w", err)
-	}
-	c.touch()
-	return val, nil
+	return c.single(ctx, req, "string single")
 }
 
 // StringBatchLookup sends opcode 0x04 with N variable-length keys and returns
@@ -224,40 +202,182 @@ func (c *Conn) StringBatchLookup(ctx context.Context, keys [][]byte) ([][]byte, 
 		copy(reqBuf[off+2:], k)
 		off += 2 + len(k)
 	}
+	return c.batch(ctx, reqBuf, "string batch")
+}
 
-	c.applyDeadline(ctx)
-
-	if _, err := c.conn.Write(reqBuf); err != nil {
-		return nil, fmt.Errorf("write string batch request: %w", err)
+func (c *Conn) single(ctx context.Context, req []byte, name string) ([]byte, error) {
+	r, err := c.roundTrip(ctx, req, false, name)
+	if err != nil {
+		return nil, err
 	}
-
-	var respHeader [2]byte
-	if _, err := io.ReadFull(c.conn, respHeader[:]); err != nil {
-		return nil, fmt.Errorf("read string batch response header: %w", err)
+	if !r.found {
+		return nil, ErrKeyNotFound
 	}
-	respN := int(binary.BigEndian.Uint16(respHeader[:]))
+	return r.value, nil
+}
 
-	results := make([][]byte, respN)
-	for i := 0; i < respN; i++ {
-		var found [1]byte
-		if _, err := io.ReadFull(c.conn, found[:]); err != nil {
-			return nil, fmt.Errorf("read string batch result %d found: %w", i, err)
-		}
-		if found[0] == 0 {
-			continue // miss → nil
-		}
-		var lenBuf [4]byte
-		if _, err := io.ReadFull(c.conn, lenBuf[:]); err != nil {
-			return nil, fmt.Errorf("read string batch result %d length: %w", i, err)
-		}
-		val := make([]byte, binary.BigEndian.Uint32(lenBuf[:]))
-		if _, err := io.ReadFull(c.conn, val); err != nil {
-			return nil, fmt.Errorf("read string batch result %d value: %w", i, err)
-		}
-		results[i] = val
+func (c *Conn) batch(ctx context.Context, req []byte, name string) ([][]byte, error) {
+	r, err := c.roundTrip(ctx, req, true, name)
+	if err != nil {
+		return nil, err
 	}
-	c.touch()
-	return results, nil
+	return r.values, nil
+}
+
+// ── response parsing ─────────────────────────────────────────────────────────
+
+type respStage uint8
+
+const (
+	stCount  respStage = iota // batch only: [2B N]
+	stFound                   // [1B found]
+	stLength                  // [4B len]
+	stValue                   // value bytes
+	stDone
+)
+
+// fieldLen is the wire size of each fixed-size field.
+var fieldLen = [...]int{stCount: 2, stFound: 1, stLength: 4}
+
+// response is the parse state of one response. A read cut short by a deadline
+// keeps its place, so drain can finish the same response and leave the stream
+// at a request boundary instead of the connection being closed.
+type response struct {
+	batch   bool
+	discard bool // draining: read the rest, keep nothing
+	stage   respStage
+	field   [4]byte // the count, found byte or length being read
+	got     int     // bytes of the current field or value read so far
+	entries int     // values in the response; 1 for a single lookup
+	done    int     // values fully read
+	valLen  int
+	val     []byte // the value being read, unless discarding
+
+	values [][]byte // batch result, nil for misses
+	found  bool     // single result
+	value  []byte   // single result
+}
+
+func newResponse(batch bool) *response {
+	if batch {
+		return &response{batch: true, stage: stCount}
+	}
+	return &response{stage: stFound, entries: 1}
+}
+
+// discardRest switches to draining: whatever is left is read and dropped.
+func (r *response) discardRest() *response {
+	r.discard = true
+	r.val, r.values, r.value = nil, nil, nil
+	return r
+}
+
+// readFrom reads until the response is complete or src fails, keeping its
+// place on failure.
+func (r *response) readFrom(src io.Reader) error {
+	var scratch [4096]byte
+	for r.stage != stDone {
+		var (
+			n   int
+			err error
+		)
+		if r.stage == stValue {
+			dst := scratch[:min(len(scratch), r.valLen-r.got)]
+			if !r.discard {
+				dst = r.val[r.got:]
+			}
+			n, err = src.Read(dst)
+			r.got += n
+			if r.got == r.valLen {
+				r.valueDone()
+			}
+		} else {
+			want := fieldLen[r.stage]
+			n, err = src.Read(r.field[r.got:want])
+			r.got += n
+			if r.got == want {
+				r.fieldDone()
+			}
+		}
+		if err != nil && r.stage != stDone {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *response) fieldDone() {
+	r.got = 0
+	switch r.stage {
+	case stCount:
+		r.entries = int(binary.BigEndian.Uint16(r.field[:2]))
+		if !r.discard {
+			r.values = make([][]byte, r.entries)
+		}
+		r.stage = stFound
+		if r.entries == 0 {
+			r.stage = stDone
+		}
+	case stFound:
+		if r.field[0] == 0 {
+			r.entryDone() // miss
+			return
+		}
+		r.stage = stLength
+	case stLength:
+		r.valLen = int(binary.BigEndian.Uint32(r.field[:4]))
+		if !r.discard {
+			r.val = make([]byte, r.valLen)
+		}
+		r.stage = stValue
+		if r.valLen == 0 {
+			r.valueDone()
+		}
+	}
+}
+
+func (r *response) valueDone() {
+	if !r.discard {
+		if r.batch {
+			r.values[r.done] = r.val
+		} else {
+			r.found, r.value = true, r.val
+		}
+	}
+	r.val, r.got = nil, 0
+	r.entryDone()
+}
+
+func (r *response) entryDone() {
+	r.done++
+	r.stage = stFound
+	if r.done == r.entries {
+		r.stage = stDone
+	}
+}
+
+// wrap names where the read stopped, in the wording the SDK has always used.
+func (r *response) wrap(name string, err error) error {
+	if !r.batch {
+		switch r.stage {
+		case stFound:
+			return fmt.Errorf("read %s found byte: %w", name, err)
+		case stLength:
+			return fmt.Errorf("read %s value length: %w", name, err)
+		default:
+			return fmt.Errorf("read %s value: %w", name, err)
+		}
+	}
+	switch r.stage {
+	case stCount:
+		return fmt.Errorf("read %s response header: %w", name, err)
+	case stFound:
+		return fmt.Errorf("read %s result %d found: %w", name, r.done, err)
+	case stLength:
+		return fmt.Errorf("read %s result %d length: %w", name, r.done, err)
+	default:
+		return fmt.Errorf("read %s result %d value: %w", name, r.done, err)
+	}
 }
 
 // BuildStringKey constructs an OFS-compatible string key as UTF-8 bytes:
@@ -282,13 +402,21 @@ func (c *Conn) Close() error {
 
 // PoolConfig holds tuning parameters for the connection pool.
 type PoolConfig struct {
-	MinPerPod          int           // warm floor: pre-dialed idle connections (default 1)
-	MaxPerPod          int           // pool ceiling (default 4)
-	DialTimeout        time.Duration // TCP connect timeout (default 5s)
-	IdleTimeout        time.Duration // evict connections idle longer than this (default 60s)
-	IdleCheckInterval  time.Duration // sweep interval for idle eviction (default 10s)
-	KeepAliveInterval  time.Duration // TCP keepalive probe interval (default 15s)
-	KeepAliveTimeout   time.Duration // accepted but not applied to the socket (see DialWithKeepalive); default 5s
+	MinPerPod         int           // warm floor: pre-dialed idle connections (default 1)
+	MaxPerPod         int           // pool ceiling (default 4)
+	DialTimeout       time.Duration // TCP connect timeout (default 5s)
+	IdleTimeout       time.Duration // evict connections idle longer than this (default 60s)
+	IdleCheckInterval time.Duration // sweep interval for idle eviction (default 10s)
+	KeepAliveInterval time.Duration // TCP keepalive probe interval (default 15s)
+	KeepAliveTimeout  time.Duration // accepted but not applied to the socket (see DialWithKeepalive); default 5s
+	// DrainTimeout bounds how long a connection whose request timed out may
+	// take to deliver the late response before it is closed instead of being
+	// reused (default 1s; negative closes every timed-out connection).
+	DrainTimeout time.Duration
+	// MaxDialsPerPod bounds concurrent dials to one pod; a request that finds
+	// the pool empty with every dial slot busy waits for a returned connection
+	// or a free slot, up to its own deadline (default 4).
+	MaxDialsPerPod int
 }
 
 func (pc *PoolConfig) applyDefaults() {
@@ -316,6 +444,12 @@ func (pc *PoolConfig) applyDefaults() {
 	if pc.KeepAliveTimeout <= 0 {
 		pc.KeepAliveTimeout = 5 * time.Second
 	}
+	if pc.DrainTimeout == 0 {
+		pc.DrainTimeout = time.Second
+	}
+	if pc.MaxDialsPerPod <= 0 {
+		pc.MaxDialsPerPod = 4
+	}
 }
 
 // ── ConnPool ─────────────────────────────────────────────────────────────────
@@ -329,6 +463,12 @@ type ConnPool struct {
 	pools  map[string][]*Conn
 	closed bool
 	cancel context.CancelFunc
+
+	// dials holds one slot per dial in flight to a pod, MaxDialsPerPod deep.
+	// wake is closed when a connection comes back to a pod's pool, waking
+	// every request waiting for one.
+	dials map[string]chan struct{}
+	wake  map[string]chan struct{}
 
 	// Metric callbacks (nil-safe). Set via SetMetrics after construction.
 	timing   func(string, time.Duration, []string)
@@ -356,6 +496,8 @@ func newConnPoolInternal(cfg PoolConfig) *ConnPool {
 		dialTO: cfg.DialTimeout,
 		pools:  make(map[string][]*Conn),
 		cancel: cancel,
+		dials:  make(map[string]chan struct{}),
+		wake:   make(map[string]chan struct{}),
 	}
 	go p.idleEvictor(ctx)
 	return p
@@ -446,21 +588,70 @@ func (p *ConnPool) Get(addr string) (*Conn, error) {
 // the request's deadline instead of after the kernel's ~1 s SYN retransmit or
 // the 5 s DialTimeout.
 func (p *ConnPool) GetContext(ctx context.Context, addr string) (*Conn, error) {
-	p.mu.Lock()
-	if p.closed {
+	for {
+		p.mu.Lock()
+		if p.closed {
+			p.mu.Unlock()
+			return nil, fmt.Errorf("onyxdb: connection pool closed")
+		}
+		if c := p.popLocked(addr); c != nil {
+			p.mu.Unlock()
+			p.emitCount(MetricPoolGet, 1, p.poolTags("result:hit"))
+			return c, nil
+		}
+		slots := p.dials[addr]
+		if slots == nil {
+			slots = make(chan struct{}, p.cfg.MaxDialsPerPod)
+			p.dials[addr] = slots
+		}
+		wake := p.wake[addr]
+		if wake == nil {
+			wake = make(chan struct{})
+			p.wake[addr] = wake
+		}
 		p.mu.Unlock()
-		return nil, fmt.Errorf("onyxdb: connection pool closed")
-	}
-	conns := p.pools[addr]
-	if len(conns) > 0 {
-		c := conns[len(conns)-1]
-		p.pools[addr] = conns[:len(conns)-1]
-		p.mu.Unlock()
-		p.emitCount(MetricPoolGet, 1, p.poolTags("result:hit"))
-		return c, nil
-	}
-	p.mu.Unlock()
 
+		// Every slot busy: wait for a returned connection or a free slot rather
+		// than dial past the bound. A pod that has stopped answering otherwise
+		// gets one SYN per request until its accept queue overflows.
+		select {
+		case slots <- struct{}{}:
+		case <-wake:
+			continue
+		case <-ctx.Done():
+			p.emitCount(MetricPoolGet, 1, p.poolTags("result:dial_wait_expired"))
+			return nil, fmt.Errorf("onyxdb: no connection to %s before the request deadline, %d dials already in flight: %w",
+				addr, cap(slots), ctx.Err())
+		}
+
+		// A connection may have come back while this request waited.
+		p.mu.Lock()
+		c := p.popLocked(addr)
+		p.mu.Unlock()
+		if c != nil {
+			<-slots
+			p.emitCount(MetricPoolGet, 1, p.poolTags("result:hit"))
+			return c, nil
+		}
+		conn, err := p.dial(ctx, addr)
+		<-slots
+		return conn, err
+	}
+}
+
+// popLocked takes the most recently returned connection for addr, or nil.
+// Caller holds p.mu.
+func (p *ConnPool) popLocked(addr string) *Conn {
+	conns := p.pools[addr]
+	if len(conns) == 0 {
+		return nil
+	}
+	c := conns[len(conns)-1]
+	p.pools[addr] = conns[:len(conns)-1]
+	return c
+}
+
+func (p *ConnPool) dial(ctx context.Context, addr string) (*Conn, error) {
 	start := time.Now()
 	conn, err := dialContext(ctx, addr, p.cfg.DialTimeout, p.cfg.KeepAliveInterval)
 	if err != nil {
@@ -489,7 +680,43 @@ func (p *ConnPool) Put(addr string, conn *Conn) {
 		return
 	}
 	p.pools[addr] = append(conns, conn)
+	if wake := p.wake[addr]; wake != nil {
+		close(wake)
+		delete(p.wake, addr)
+	}
 	p.mu.Unlock()
+}
+
+// Recycle takes back a connection whose lookup failed (any error other than
+// ErrKeyNotFound). Callers use it instead of Close.
+//
+// A request that only timed out leaves its response on the wire; closing the
+// connection for that turned every slow moment on a pod into a reconnect per
+// request. Recycle instead drains the late response in the background, within
+// DrainTimeout, and pools the connection again; one whose stream is in an
+// unknown state (peer closed, partial write), or that cannot be drained in
+// time, is closed.
+func (p *ConnPool) Recycle(addr string, conn *Conn) {
+	if conn.pending == nil && !conn.broken {
+		p.Put(addr, conn) // nothing was sent: still at a request boundary
+		return
+	}
+	p.mu.Lock()
+	closed := p.closed
+	p.mu.Unlock()
+	if conn.broken || p.cfg.DrainTimeout < 0 || closed {
+		_ = conn.Close()
+		return
+	}
+	go func() {
+		if conn.drain(p.cfg.DrainTimeout) {
+			p.Put(addr, conn)
+			p.emitCount(MetricPoolDrain, 1, p.poolTags("result:reused"))
+			return
+		}
+		_ = conn.Close()
+		p.emitCount(MetricPoolDrain, 1, p.poolTags("result:closed"))
+	}()
 }
 
 // Prune closes and removes pools for any address not in the live set. Called
@@ -514,6 +741,17 @@ func (p *ConnPool) Prune(live []string) {
 		}
 		delete(p.pools, addr)
 	}
+	for addr := range p.dials {
+		if _, ok := liveSet[addr]; !ok {
+			delete(p.dials, addr) // a dial still in flight releases into its own slot set
+		}
+	}
+	for addr, wake := range p.wake {
+		if _, ok := liveSet[addr]; !ok {
+			close(wake)
+			delete(p.wake, addr)
+		}
+	}
 }
 
 // Close closes all pooled connections, stops the idle evictor, and marks the
@@ -531,5 +769,9 @@ func (p *ConnPool) Close() {
 			_ = c.Close()
 		}
 		delete(p.pools, addr)
+	}
+	for addr, wake := range p.wake {
+		close(wake) // waiters retry and see the pool closed
+		delete(p.wake, addr)
 	}
 }
