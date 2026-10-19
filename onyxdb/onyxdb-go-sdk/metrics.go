@@ -16,12 +16,16 @@ const (
 	MetricBatchKeys = "onyxdb.batch.keys"
 
 	// Connection pool metrics.
-	// Tags: tenant, store, result (hit/dial/error)
+	// Tags: tenant, store, result (hit/dial/error/dial_wait_expired)
 	MetricPoolGet = "onyxdb.pool.get"
 	// Tags: tenant, store
 	MetricPoolDialLatency = "onyxdb.pool.dial.latency"
 	MetricPoolIdleEvicted = "onyxdb.pool.idle_evicted"
 	MetricPoolOverflow    = "onyxdb.pool.overflow"
+	// A timed-out connection's late response was drained and the connection
+	// went back to the pool (result:reused), or it was closed (result:closed).
+	// Tags: tenant, store, result
+	MetricPoolDrain = "onyxdb.pool.drain"
 
 	// Topology watcher metrics.
 	// Tags: tenant, store, status (ok/error)

@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -375,7 +378,7 @@ func TestStringBatchLookup_ReadFoundError(t *testing.T) {
 	go func() {
 		buf := make([]byte, 256)
 		io.ReadFull(server, buf[:1+2+2+1]) // op + N + keyLen + key
-		server.Write([]byte{0, 1})          // N=1, then close before found byte
+		server.Write([]byte{0, 1})         // N=1, then close before found byte
 		server.Close()
 	}()
 	c := &Conn{conn: client, lastUsed: time.Now()}
@@ -400,8 +403,8 @@ func TestStringBatchLookup_ReadValueError(t *testing.T) {
 	client, server := net.Pipe()
 	go func() {
 		buf := make([]byte, 256)
-		io.ReadFull(server, buf[:1+2+2+1])           // op + N + keyLen + key
-		server.Write([]byte{0, 1, 1, 0, 0, 0, 5})   // N=1, found=1, len=5, no value
+		io.ReadFull(server, buf[:1+2+2+1])        // op + N + keyLen + key
+		server.Write([]byte{0, 1, 1, 0, 0, 0, 5}) // N=1, found=1, len=5, no value
 		server.Close()
 	}()
 	c := &Conn{conn: client, lastUsed: time.Now()}
@@ -921,4 +924,316 @@ func TestDialWithKeepalive_Success(t *testing.T) {
 	c, err := DialWithKeepalive(ln.Addr().String(), time.Second, 15*time.Second, 5*time.Second)
 	require.NoError(t, err)
 	assert.NoError(t, c.Close())
+}
+
+// ── recycling a connection whose request failed ───────────────────────────────
+
+// encodeValue is one value in the wire format: [1B found][4B len][value], or
+// [0] for a miss.
+func encodeValue(val []byte) []byte {
+	if val == nil {
+		return []byte{0}
+	}
+	buf := make([]byte, 1+4+len(val))
+	buf[0] = 1
+	binary.BigEndian.PutUint32(buf[1:5], uint32(len(val)))
+	copy(buf[5:], val)
+	return buf
+}
+
+// encodeBatch is a batch response: [2B N] then N values.
+func encodeBatch(vals ...[]byte) []byte {
+	buf := make([]byte, 2)
+	binary.BigEndian.PutUint16(buf, uint16(len(vals)))
+	for _, v := range vals {
+		buf = append(buf, encodeValue(v)...)
+	}
+	return buf
+}
+
+// readRequest consumes one request of any opcode from a server-side conn.
+func readRequest(conn net.Conn) error {
+	var op [1]byte
+	if _, err := io.ReadFull(conn, op[:]); err != nil {
+		return err
+	}
+	readStringKey := func() error {
+		var klen [2]byte
+		if _, err := io.ReadFull(conn, klen[:]); err != nil {
+			return err
+		}
+		_, err := io.ReadFull(conn, make([]byte, binary.BigEndian.Uint16(klen[:])))
+		return err
+	}
+	switch op[0] {
+	case opSingle:
+		_, err := io.ReadFull(conn, make([]byte, keySize))
+		return err
+	case opStringSingle:
+		return readStringKey()
+	case opBatch, opStringBatch:
+		var nbuf [2]byte
+		if _, err := io.ReadFull(conn, nbuf[:]); err != nil {
+			return err
+		}
+		for i := 0; i < int(binary.BigEndian.Uint16(nbuf[:])); i++ {
+			if op[0] == opBatch {
+				if _, err := io.ReadFull(conn, make([]byte, keySize)); err != nil {
+					return err
+				}
+			} else if err := readStringKey(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return fmt.Errorf("unknown opcode %#x", op[0])
+}
+
+// slowResponseConn returns a Conn whose server reads one request, writes
+// resp[:cut], waits for release, writes the rest, and then serves every later
+// request from data like fakeServer.
+func slowResponseConn(t *testing.T, resp []byte, cut int, release <-chan struct{}, data map[string][]byte) *Conn {
+	t.Helper()
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		client.Close()
+		server.Close()
+	})
+	go func() {
+		if readRequest(server) != nil {
+			return
+		}
+		if _, err := server.Write(resp[:cut]); err != nil {
+			return
+		}
+		<-release
+		if _, err := server.Write(resp[cut:]); err != nil {
+			return
+		}
+		fakeServer(server, data)
+	}()
+	return &Conn{conn: client, lastUsed: time.Now()}
+}
+
+// drainResults reports the result tag of every MetricPoolDrain the pool emits.
+func drainResults(p *ConnPool) <-chan string {
+	ch := make(chan string, 16)
+	p.SetMetrics(nil, func(name string, _ int64, tags []string) {
+		if name != MetricPoolDrain {
+			return
+		}
+		for _, tag := range tags {
+			if res, ok := strings.CutPrefix(tag, "result:"); ok {
+				ch <- res
+			}
+		}
+	}, nil)
+	return ch
+}
+
+func awaitDrain(t *testing.T, ch <-chan string) string {
+	t.Helper()
+	select {
+	case res := <-ch:
+		return res
+	case <-time.After(3 * time.Second):
+		t.Fatal("no drain result")
+		return ""
+	}
+}
+
+func drainPool(drainTimeout time.Duration) *ConnPool {
+	return NewConnPoolWithConfig(PoolConfig{
+		MaxPerPod:         4,
+		IdleCheckInterval: time.Hour,
+		DrainTimeout:      drainTimeout,
+	})
+}
+
+func shortCtx(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	t.Cleanup(cancel)
+	return ctx
+}
+
+// A request that hits its deadline with the response still on the wire leaves
+// the connection reusable: Recycle drains the late response wherever the read
+// stopped (before it, inside a length or a value, between entries) and pools
+// the connection, and the next request on it reads its own response.
+func TestConnPool_Recycle_TimedOutResponseIsDrainedAndTheConnReused(t *testing.T) {
+	batch := encodeBatch([]byte("v-one"), nil, []byte("v-three"))
+	withEmpty := encodeBatch([]byte{}, []byte("v"))
+	single := encodeValue([]byte("value"))
+	lookups := map[string]func(*Conn, context.Context) error{
+		"string_batch": func(c *Conn, ctx context.Context) error {
+			_, err := c.StringBatchLookup(ctx, [][]byte{[]byte("a"), []byte("b"), []byte("c")})
+			return err
+		},
+		"batch": func(c *Conn, ctx context.Context) error {
+			_, err := c.BatchLookup(ctx, [][]byte{key12("a"), key12("b"), key12("c")})
+			return err
+		},
+		"string_single": func(c *Conn, ctx context.Context) error {
+			_, err := c.StringSingleLookup(ctx, []byte("a"))
+			return err
+		},
+		"single": func(c *Conn, ctx context.Context) error {
+			_, err := c.SingleLookup(ctx, key12("a"))
+			return err
+		},
+	}
+	cases := []struct {
+		name, op string
+		resp     []byte
+		cut      int
+	}{
+		{"batch: nothing yet", "string_batch", batch, 0},
+		{"batch: inside the count", "string_batch", batch, 1},
+		{"batch: after the count", "string_batch", batch, 2},
+		{"batch: after a found byte", "string_batch", batch, 3},
+		{"batch: inside a length", "string_batch", batch, 5},
+		{"batch: inside a value", "string_batch", batch, 9},
+		{"batch: after a miss", "string_batch", batch, 13},
+		{"batch: one byte short", "string_batch", batch, len(batch) - 1},
+		{"batch: before an empty value", "string_batch", withEmpty, 3},
+		{"fixed-key batch: inside a value", "batch", batch, 9},
+		{"single: nothing yet", "string_single", single, 0},
+		{"single: inside the length", "string_single", single, 2},
+		{"single: inside the value", "string_single", single, 7},
+		{"fixed-key single: inside the value", "single", single, 7},
+	}
+	data := map[string][]byte{"next": []byte("next-value")}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := drainPool(2 * time.Second)
+			defer p.Close()
+			drained := drainResults(p)
+			release := make(chan struct{})
+			conn := slowResponseConn(t, tc.resp, tc.cut, release, data)
+
+			err := lookups[tc.op](conn, shortCtx(t))
+			require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+			p.Recycle("pod", conn)
+			close(release)
+
+			require.Equal(t, "reused", awaitDrain(t, drained))
+			got, err := p.GetContext(context.Background(), "pod")
+			require.NoError(t, err)
+			assert.Same(t, conn, got)
+			vals, err := got.StringBatchLookup(context.Background(), [][]byte{[]byte("next")})
+			require.NoError(t, err)
+			assert.Equal(t, [][]byte{[]byte("next-value")}, vals)
+		})
+	}
+}
+
+// A late response that does not finish within DrainTimeout closes the
+// connection rather than pooling it.
+func TestConnPool_Recycle_DrainPastTheTimeoutClosesTheConn(t *testing.T) {
+	p := drainPool(30 * time.Millisecond)
+	defer p.Close()
+	drained := drainResults(p)
+	never := make(chan struct{})
+	conn := slowResponseConn(t, encodeBatch([]byte("v")), 3, never, nil)
+
+	_, err := conn.StringBatchLookup(shortCtx(t), [][]byte{[]byte("a")})
+	require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+	p.Recycle("pod", conn)
+
+	assert.Equal(t, "closed", awaitDrain(t, drained))
+	assert.True(t, isClosed(conn))
+	assert.Empty(t, p.pools["pod"])
+}
+
+// Errors that leave the stream in an unknown state close the connection at
+// once, without a drain: the peer closed it, the request was only partly
+// written, draining is disabled, or the pool is closed.
+func TestConnPool_Recycle_UnrecoverableFailuresCloseImmediately(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(t *testing.T) (*ConnPool, *Conn, error)
+	}{
+		{"peer closed mid-response", func(t *testing.T) (*ConnPool, *Conn, error) {
+			client, server := net.Pipe()
+			t.Cleanup(func() { client.Close() })
+			go func() {
+				_ = readRequest(server)
+				_, _ = server.Write(encodeBatch([]byte("value"))[:4])
+				server.Close()
+			}()
+			conn := &Conn{conn: client}
+			_, err := conn.StringBatchLookup(context.Background(), [][]byte{[]byte("a")})
+			return drainPool(time.Second), conn, err
+		}},
+		{"request only partly written", func(t *testing.T) (*ConnPool, *Conn, error) {
+			client, server := net.Pipe()
+			t.Cleanup(func() {
+				client.Close()
+				server.Close()
+			})
+			go func() { _, _ = io.ReadFull(server, make([]byte, 1)) }()
+			conn := &Conn{conn: client}
+			_, err := conn.StringBatchLookup(shortCtx(t), [][]byte{[]byte("a-key")})
+			return drainPool(time.Second), conn, err
+		}},
+		{"draining disabled", func(t *testing.T) (*ConnPool, *Conn, error) {
+			conn := slowResponseConn(t, encodeBatch([]byte("v")), 0, make(chan struct{}), nil)
+			_, err := conn.StringBatchLookup(shortCtx(t), [][]byte{[]byte("a")})
+			return drainPool(-1), conn, err
+		}},
+		{"pool closed", func(t *testing.T) (*ConnPool, *Conn, error) {
+			conn := slowResponseConn(t, encodeBatch([]byte("v")), 0, make(chan struct{}), nil)
+			_, err := conn.StringBatchLookup(shortCtx(t), [][]byte{[]byte("a")})
+			p := drainPool(time.Second)
+			p.Close()
+			return p, conn, err
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, conn, err := tc.setup(t)
+			defer p.Close()
+			drained := drainResults(p)
+			require.Error(t, err)
+
+			p.Recycle("pod", conn)
+
+			assert.True(t, isClosed(conn))
+			assert.Empty(t, p.pools["pod"])
+			assert.Empty(t, drained, "no drain was attempted")
+		})
+	}
+}
+
+// A request whose deadline had already passed sends nothing, so its
+// connection is clean and goes straight back to the pool.
+func TestConnPool_Recycle_NothingSentPoolsTheConnAtOnce(t *testing.T) {
+	p := drainPool(time.Second)
+	defer p.Close()
+	conn := pipeConn(map[string][]byte{"k": []byte("v")})
+	expired, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+
+	_, err := conn.StringBatchLookup(expired, [][]byte{[]byte("k")})
+	require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+	p.Recycle("pod", conn)
+
+	require.Len(t, p.pools["pod"], 1)
+	assert.Same(t, conn, p.pools["pod"][0])
+	vals, err := conn.StringBatchLookup(context.Background(), [][]byte{[]byte("k")})
+	require.NoError(t, err)
+	assert.Equal(t, [][]byte{[]byte("v")}, vals)
+}
+
+func TestPoolConfig_DrainAndDialDefaults(t *testing.T) {
+	pc := PoolConfig{}
+	pc.applyDefaults()
+	assert.Equal(t, time.Second, pc.DrainTimeout)
+	assert.Equal(t, 4, pc.MaxDialsPerPod)
+
+	disabled := PoolConfig{DrainTimeout: -1}
+	disabled.applyDefaults()
+	assert.Equal(t, time.Duration(-1), disabled.DrainTimeout, "negative keeps draining off")
 }

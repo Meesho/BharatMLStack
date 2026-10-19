@@ -325,7 +325,7 @@ func (c *Client) Get(ctx context.Context, key []byte) ([]byte, error) {
 			status = "miss"
 			return nil, err
 		}
-		_ = conn.Close() // broken connection — discard
+		c.pool.Recycle(pod, conn) // drained for reuse if it only timed out, else closed
 		c.router.MarkUnhealthy(pod)
 		return nil, err
 	}
@@ -388,7 +388,7 @@ func (c *Client) StringGet(ctx context.Context, key []byte) ([]byte, error) {
 			status = "miss"
 			return nil, err
 		}
-		_ = conn.Close()
+		c.pool.Recycle(pod, conn)
 		c.router.MarkUnhealthy(pod)
 		return nil, err
 	}

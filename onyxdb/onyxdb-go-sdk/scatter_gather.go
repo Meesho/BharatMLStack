@@ -68,7 +68,7 @@ func scatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Result, err
 
 			vals, err := conn.BatchLookup(ctx, batchKeys)
 			if err != nil {
-				_ = conn.Close() // broken connection — don't return to pool
+				c.pool.Recycle(pod, conn) // drained for reuse if it only timed out, else closed
 				c.router.MarkUnhealthy(pod)
 				setErr(entries, err)
 				return
@@ -143,7 +143,7 @@ func stringScatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Resul
 
 			vals, err := conn.StringBatchLookup(ctx, batchKeys)
 			if err != nil {
-				_ = conn.Close()
+				c.pool.Recycle(pod, conn)
 				c.router.MarkUnhealthy(pod)
 				setErr(entries, err)
 				return
