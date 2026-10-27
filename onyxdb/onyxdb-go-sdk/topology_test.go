@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
@@ -25,8 +26,51 @@ type mockEtcd struct {
 	mu       sync.Mutex
 	kv       map[string]string
 	getErr   map[string]error
+	rev      int64 // header revision each Get reports; 0 = no header
 	watchChs []chan clientv3.WatchResponse
 	watchIdx int
+	calls    []watchCall
+	// closeOnCancel closes a watch channel once its context is done, as
+	// clientv3 does.
+	closeOnCancel bool
+}
+
+// watchCall records one Watch call: what it watched, from which revision (0 =
+// from now) and under which context.
+type watchCall struct {
+	key    string
+	rev    int64
+	prefix bool
+	ctx    context.Context
+}
+
+// watchPair is the activeVersion + pod-prefix channel pair one Run attempt
+// opens, in that order.
+type watchPair struct {
+	active chan clientv3.WatchResponse
+	pods   chan clientv3.WatchResponse
+}
+
+// addWatchPair queues the channels the next re-established pair of watches
+// gets.
+func (m *mockEtcd) addWatchPair() watchPair {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p := watchPair{make(chan clientv3.WatchResponse, 8), make(chan clientv3.WatchResponse, 8)}
+	m.watchChs = append(m.watchChs, p.active, p.pods)
+	return p
+}
+
+func (m *mockEtcd) watchCalls() []watchCall {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]watchCall(nil), m.calls...)
+}
+
+func (m *mockEtcd) setRev(rev int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.rev = rev
 }
 
 func newMockEtcd() *mockEtcd {
@@ -66,6 +110,9 @@ func (m *mockEtcd) Get(_ context.Context, key string, opts ...clientv3.OpOption)
 		return nil, err
 	}
 	resp := &clientv3.GetResponse{}
+	if m.rev > 0 {
+		resp.Header = &etcdserverpb.ResponseHeader{Revision: m.rev}
+	}
 	if len(clientv3.OpGet(key, opts...).RangeBytes()) > 0 { // WithPrefix: every key under key, in key order
 		keys := make([]string, 0, len(m.kv))
 		for k := range m.kv {
@@ -85,16 +132,22 @@ func (m *mockEtcd) Get(_ context.Context, key string, opts ...clientv3.OpOption)
 	return resp, nil
 }
 
-func (m *mockEtcd) Watch(_ context.Context, _ string, _ ...clientv3.OpOption) clientv3.WatchChan {
+func (m *mockEtcd) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	op := clientv3.OpGet(key, opts...)
+	m.calls = append(m.calls, watchCall{key: key, rev: op.Rev(), prefix: len(op.RangeBytes()) > 0, ctx: ctx})
 	idx := m.watchIdx
 	m.watchIdx++
+	var ch chan clientv3.WatchResponse
 	if idx < len(m.watchChs) {
-		return m.watchChs[idx]
+		ch = m.watchChs[idx]
+	} else {
+		ch = make(chan clientv3.WatchResponse) // never fires
 	}
-	// Fallback: return a never-firing channel.
-	ch := make(chan clientv3.WatchResponse)
+	if m.closeOnCancel {
+		go func() { <-ctx.Done(); close(ch) }()
+	}
 	return ch
 }
 
@@ -141,7 +194,7 @@ func TestReload_NoActiveVersion(t *testing.T) {
 	withLookup(okLookup("10.0.0.1"), func() {
 		m := newMockEtcd()
 		tw, r, _ := newWatcherWith(m)
-		require.NoError(t, tw.reload(context.Background()))
+		require.NoError(t, resyncErr(tw))
 		assert.Equal(t, uint32(0), r.ShardCount())
 	})
 }
@@ -151,7 +204,7 @@ func TestReload_EmptyActiveVersionValue(t *testing.T) {
 		m := newMockEtcd()
 		m.put(model.ActiveVersionPath("recsys", "catalog"), "")
 		tw, r, _ := newWatcherWith(m)
-		require.NoError(t, tw.reload(context.Background()))
+		require.NoError(t, resyncErr(tw))
 		assert.Equal(t, uint32(0), r.ShardCount())
 	})
 }
@@ -163,7 +216,7 @@ func TestReload_Success_SetsShardCountAndResolves(t *testing.T) {
 		m.put(model.VersionPrefix("recsys", "catalog", "v1"), metaJSON(t, 2))
 		tw, r, _ := newWatcherWith(m)
 
-		require.NoError(t, tw.reload(context.Background()))
+		require.NoError(t, resyncErr(tw))
 		assert.Equal(t, uint32(2), r.ShardCount())
 		// Resolver was refreshed → router resolves shard 1 to the looked-up IP.
 		pod, err := r.PodFor(1)
@@ -176,7 +229,7 @@ func TestReload_GetActiveVersionError(t *testing.T) {
 	m := newMockEtcd()
 	m.setGetErr(model.ActiveVersionPath("recsys", "catalog"), errors.New("etcd down"))
 	tw, _, _ := newWatcherWith(m)
-	assert.ErrorContains(t, tw.reload(context.Background()), "get activeVersion")
+	assert.ErrorContains(t, resyncErr(tw), "get activeVersion")
 }
 
 func TestReloadVersion_GetMetaError(t *testing.T) {
@@ -212,7 +265,7 @@ func TestReload_PushesAssignmentToResolver(t *testing.T) {
 			}))
 
 		tw, r, _ := newWatcherWith(m)
-		require.NoError(t, tw.reload(context.Background()))
+		require.NoError(t, resyncErr(tw))
 
 		// Shard 0 should resolve to one of the assignment addrs, not DNS.
 		pod, err := r.PodFor(0)
@@ -234,7 +287,7 @@ func TestReload_EmptyAssignment_FallsBackToDNS(t *testing.T) {
 		m.put(model.VersionPrefix("recsys", "catalog", "v1"), metaJSON(t, 1))
 
 		tw, r, _ := newWatcherWith(m)
-		require.NoError(t, tw.reload(context.Background()))
+		require.NoError(t, resyncErr(tw))
 
 		pod, err := r.PodFor(0)
 		require.NoError(t, err)
@@ -347,21 +400,6 @@ func TestRun_ContextCancel_Returns(t *testing.T) {
 		assert.Error(t, err)
 	case <-time.After(time.Second):
 		t.Fatal("Run did not return after cancel")
-	}
-}
-
-func TestRun_WatchChannelClosed_Returns(t *testing.T) {
-	m := newMockEtcd()
-	tw, _, _ := newWatcherWith(m)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	done := make(chan error, 1)
-	go func() { done <- tw.Run(ctx) }()
-	close(m.activeVersionCh())
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("Run did not return after watch channel close")
 	}
 }
 
@@ -588,24 +626,6 @@ func TestHandlePodWatch_ReloadFailure_KeepsLastKnownTopology(t *testing.T) {
 	})
 }
 
-func TestRun_PodWatchChannelClosed_ReturnsNil(t *testing.T) {
-	m := newMockEtcd()
-	tw, _, _ := newWatcherWith(m)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	done := make(chan error, 1)
-	go func() { done <- tw.Run(ctx) }()
-
-	close(m.podCh())
-
-	select {
-	case err := <-done:
-		assert.NoError(t, err, "a closed watch with a live context returns ctx.Err() == nil")
-	case <-time.After(2 * time.Second):
-		t.Fatal("Run did not return after the pod watch channel closed")
-	}
-}
-
 // ── pool prune + warm-up ─────────────────────────────────────────────────────
 
 func TestReloadVersion_PrunesPoolToAssignment(t *testing.T) {
@@ -689,4 +709,11 @@ func TestHandleActiveVersionWatch_EventlessResponse_DoesNothing(t *testing.T) {
 
 	assert.Equal(t, uint32(0), r.ShardCount())
 	assert.Equal(t, "", tw.activeVID)
+}
+
+// resyncErr runs one resync and returns its error; the revision it read is
+// not what these tests check.
+func resyncErr(tw *TopologyWatcher) error {
+	_, err := tw.resync(context.Background())
+	return err
 }

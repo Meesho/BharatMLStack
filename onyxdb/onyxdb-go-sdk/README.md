@@ -58,6 +58,7 @@ defer client.Close()
 | Shard routing | `crc32(key) % shardCount` (IEEE — matches producer & read server) |
 | Pod discovery | **Control-plane assignment map** ([ADR-0007](../docs/adr/0007-headless-service-dns-pod-discovery.md)). The control plane derives `shard → ["podIP:port", ...]` from pod registrations that report the active version warm, and publishes it as `VersionMeta.assignment`. The SDK serves it from an in-memory snapshot — works identically on K8s and VM, and does not depend on any K8s object name |
 | Topology | etcd watcher on **two** keys: `activeVersion` (promote/rollback) and the pod-registration prefix (scale-up / warm reports). Each event re-reads `VersionMeta` and atomically swaps `shardCount` + assignment. **etcd is off the request hot path** — only the watcher touches it, on topology events |
+| Watch restart | etcd cancels a watch that resumes from a compacted revision, and clientv3 then closes its channel. The watcher re-establishes both watches: it re-reads the active version and its meta, then watches from the revision of that read, so nothing written in between is missed. Attempts back off from 500 ms, doubling to 30 s, with jitter; a watch that stayed up 30 s starts the backoff over |
 | Pod discovery fallback | Kubernetes headless-service DNS, per shard: `{tenant}-{store}-shard-{N}.{namespace}.svc.{dnsZone}`. Used **only** for a shard the assignment map does not cover; the refresh loop skips the lookup entirely for covered shards, since a store addressed by assignment may have no Service at all |
 | DNS refresh | background ticker (`DNSRefreshInterval`, default 30s); a transient lookup failure keeps last-known addrs. Tenant/store are sanitized (`lower`, `_`→`-`, trunc 63) to match the name the data-plane chart renders — see the constraint in [ADR-0007](../docs/adr/0007-headless-service-dns-pod-discovery.md) |
 | Pod selection | round-robin (lock-free atomic counter per shard); a broken pod is marked unhealthy locally and skipped until the next refresh clears the mark |
@@ -133,6 +134,7 @@ dropped, including pool-dial pressure and topology-reload failures.
 | `onyxdb.pool.drain` | `tenant`, `store`, `result` (`reused`/`closed`): outcome of draining a timed-out connection |
 | `onyxdb.pool.dial.latency`, `onyxdb.pool.idle_evicted`, `onyxdb.pool.overflow` | `tenant`, `store` |
 | `onyxdb.topology.reload` | `tenant`, `store`, `status` (`ok`/`error`) |
+| `onyxdb.topology.watch_restart` | `tenant`, `store`, `reason` (`closed`/`canceled`/`compacted`): an etcd watch re-established after it ended |
 
 ## Deployment requirements
 
