@@ -67,7 +67,7 @@ func TestReloadSlowStart_ReadsRampsFromPodRegistrations(t *testing.T) {
 		putPod(t, m, "recsys-catalog-shard-0-nowindow", loaderRegistration(t, "10.0.1.50", 0, ramping.UnixMilli(), 0))
 		m.put(model.PodDataPath("recsys", "catalog", "recsys-catalog-shard-0-corrupt"), "{not json")
 
-		require.NoError(t, tw.reload(context.Background()))
+		require.NoError(t, resyncErr(tw))
 
 		r.mu.RLock()
 		defer r.mu.RUnlock()
@@ -81,14 +81,14 @@ func TestReloadSlowStart_PodReadFailureKeepsTheLastSet(t *testing.T) {
 	withLookup(okLookup("10.0.0.1"), func() {
 		m, tw, r := slowStartWatcher(t, map[string][]string{"0": {"10.0.1.10:9091", "10.0.1.20:9091"}})
 		putPod(t, m, "recsys-catalog-shard-0-new", loaderRegistration(t, "10.0.1.20", 0, time.Now().UnixMilli(), 300))
-		require.NoError(t, tw.reload(context.Background()))
+		require.NoError(t, resyncErr(tw))
 		r.mu.RLock()
 		before := r.slowStart
 		r.mu.RUnlock()
 		require.Len(t, before, 1)
 
 		m.setGetErr(model.PodWatchPrefix("recsys", "catalog"), errors.New("etcd unavailable"))
-		require.NoError(t, tw.reload(context.Background()), "a failed pod read must not fail the reload")
+		require.NoError(t, resyncErr(tw), "a failed pod read must not fail the reload")
 
 		r.mu.RLock()
 		defer r.mu.RUnlock()

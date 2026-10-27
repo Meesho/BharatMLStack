@@ -3,7 +3,9 @@ package sdk
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -49,7 +51,22 @@ type TopologyWatcher struct {
 	timing   func(string, time.Duration, []string)
 	count    func(string, int64, []string)
 	baseTags []string
+
+	// Re-establishing an ended watch: the backoff bounds, the wait (false when
+	// ctx ended first) and the clock. Tests replace them.
+	restartMin time.Duration
+	restartMax time.Duration
+	sleep      func(ctx context.Context, d time.Duration) bool
+	now        func() time.Time
 }
+
+// Backoff between attempts to re-establish an ended watch. The wait doubles
+// per attempt up to the maximum, with jitter so a fleet of clients whose
+// watches etcd cancelled together does not resync in step.
+const (
+	watchRestartMinBackoff = 500 * time.Millisecond
+	watchRestartMaxBackoff = 30 * time.Second
+)
 
 // NewTopologyWatcher creates a watcher that updates the router + resolver from etcd.
 func NewTopologyWatcher(client EtcdClient, router *Router, resolver *DNSResolver, tenant, store string) *TopologyWatcher {
@@ -59,7 +76,29 @@ func NewTopologyWatcher(client EtcdClient, router *Router, resolver *DNSResolver
 		dnsResolver: resolver,
 		tenant:      tenant,
 		store:       store,
+		restartMin:  watchRestartMinBackoff,
+		restartMax:  watchRestartMaxBackoff,
+		sleep:       sleepCtx,
+		now:         time.Now,
 	}
+}
+
+// sleepCtx waits d, or until ctx ends; it reports whether the full wait ran.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
+// jitter returns a random wait in [d/2, d]; d is never negative.
+func jitter(d time.Duration) time.Duration {
+	half := d / 2
+	return half + rand.N(d-half+1)
 }
 
 // SetAssignmentResolver wires the assignment-aware resolver for direct
@@ -108,34 +147,103 @@ func (tw *TopologyWatcher) twEmitTiming(name string, value time.Duration, tags [
 
 // Run does an initial reload, then watches ActiveVersionPath and the pod
 // registration prefix, reloading on each change. Blocks until ctx is cancelled.
+//
+// A watch that ends while ctx is live is re-established. etcd cancels a watch
+// that resumes from a compacted revision — the usual end of a watch whose
+// connection dropped — and clientv3 then closes its channel. Without a new
+// watch the client would route on its last assignment for its lifetime. Each
+// attempt re-reads the topology first and watches from the revision of that
+// read, so nothing written in between is missed. Attempts back off
+// exponentially with jitter and are counted in MetricTopologyWatchRestart. A
+// failed read is retried before any watch is opened: a watch started blind
+// would skip whatever changed in the gap.
 func (tw *TopologyWatcher) Run(ctx context.Context) error {
-	if err := tw.reload(ctx); err != nil {
+	rev, err := tw.resync(ctx)
+	if err != nil {
 		log.Warn().Err(err).Str("tenant", tw.tenant).Str("store", tw.store).
 			Msg("topology: initial reload failed, waiting for activeVersion")
 	}
+	backoff := tw.restartMin
+	for {
+		started := tw.now()
+		reason := tw.watch(ctx, rev)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if tw.now().Sub(started) >= tw.restartMax {
+			backoff = tw.restartMin // the watch was healthy for a while: start over
+		}
+		tw.twEmitCount(MetricTopologyWatchRestart, 1, tw.twTags("reason:"+reason))
+		log.Warn().Str("tenant", tw.tenant).Str("store", tw.store).Str("reason", reason).
+			Msg("topology: etcd watch ended — resyncing and watching again")
+		for {
+			if !tw.sleep(ctx, jitter(backoff)) {
+				return ctx.Err()
+			}
+			backoff = min(2*backoff, tw.restartMax)
+			if rev, err = tw.resync(ctx); err == nil || !errors.Is(err, errActiveVersionRead) {
+				break
+			}
+			log.Warn().Err(err).Str("tenant", tw.tenant).Str("store", tw.store).
+				Msg("topology: resync read failed — retrying before watching")
+		}
+		if err != nil {
+			log.Error().Err(err).Str("tenant", tw.tenant).Str("store", tw.store).
+				Msg("topology: resync after a watch restart failed")
+		}
+	}
+}
 
-	activeKey := model.ActiveVersionPath(tw.tenant, tw.store)
-	activeCh := tw.client.Watch(ctx, activeKey)
+// watch runs the activeVersion and pod-prefix watches from rev+1 (from now
+// when rev is 0) until either ends or ctx is done, and returns why it ended:
+// "closed", "canceled" or "compacted"; "" when ctx ended it. Ending one watch
+// cancels the other.
+func (tw *TopologyWatcher) watch(ctx context.Context, rev int64) string {
+	wctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	podPrefix := model.PodWatchPrefix(tw.tenant, tw.store)
-	podCh := tw.client.Watch(ctx, podPrefix, clientv3.WithPrefix())
+	var from []clientv3.OpOption
+	if rev > 0 {
+		from = append(from, clientv3.WithRev(rev+1))
+	}
+	activeCh := tw.client.Watch(wctx, model.ActiveVersionPath(tw.tenant, tw.store), from...)
+	podCh := tw.client.Watch(wctx, model.PodWatchPrefix(tw.tenant, tw.store),
+		append([]clientv3.OpOption{clientv3.WithPrefix()}, from...)...)
 
 	for {
 		select {
 		case resp, ok := <-activeCh:
 			if !ok {
-				return ctx.Err()
+				return "closed"
+			}
+			if reason := watchEndReason(resp); reason != "" {
+				return reason
 			}
 			tw.handleActiveVersionWatch(ctx, resp)
 		case resp, ok := <-podCh:
 			if !ok {
-				return ctx.Err()
+				return "closed"
+			}
+			if reason := watchEndReason(resp); reason != "" {
+				return reason
 			}
 			tw.handlePodWatch(ctx, resp)
 		case <-ctx.Done():
-			return ctx.Err()
+			return ""
 		}
 	}
+}
+
+// watchEndReason says why etcd ended a watch with resp, or "" when resp is an
+// ordinary one. A compaction cancel carries the compacted revision.
+func watchEndReason(resp clientv3.WatchResponse) string {
+	switch {
+	case resp.CompactRevision > 0:
+		return "compacted"
+	case resp.Canceled:
+		return "canceled"
+	}
+	return ""
 }
 
 func (tw *TopologyWatcher) handleActiveVersionWatch(ctx context.Context, resp clientv3.WatchResponse) {
@@ -164,16 +272,28 @@ func (tw *TopologyWatcher) handlePodWatch(ctx context.Context, resp clientv3.Wat
 	}
 }
 
-// reload reads the current activeVersion and rebuilds the router from its meta.
-func (tw *TopologyWatcher) reload(ctx context.Context) error {
+// errActiveVersionRead marks a failed read of the activeVersion key: the
+// resync learned no revision to watch from.
+var errActiveVersionRead = errors.New("read activeVersion")
+
+// resync reads the current activeVersion and rebuilds the router from its
+// meta. It returns the etcd revision of that read, so the watches that follow
+// start right after it (0 when the response carries no header: they then
+// start from now). An error wrapping errActiveVersionRead means the read
+// itself failed; any other error is a failed reload of the version it read.
+func (tw *TopologyWatcher) resync(ctx context.Context) (int64, error) {
 	resp, err := tw.client.Get(ctx, model.ActiveVersionPath(tw.tenant, tw.store))
 	if err != nil {
-		return fmt.Errorf("get activeVersion: %w", err)
+		return 0, fmt.Errorf("get activeVersion: %w: %w", errActiveVersionRead, err)
+	}
+	var rev int64
+	if resp.Header != nil {
+		rev = resp.Header.Revision
 	}
 	if len(resp.Kvs) == 0 || len(resp.Kvs[0].Value) == 0 {
-		return nil // no active version yet
+		return rev, nil // no active version yet
 	}
-	return tw.reloadVersion(ctx, string(resp.Kvs[0].Value))
+	return rev, tw.reloadVersion(ctx, string(resp.Kvs[0].Value))
 }
 
 // reloadVersion reads VersionMeta for version, pushes the shard count +

@@ -30,6 +30,12 @@ const (
 	// Topology watcher metrics.
 	// Tags: tenant, store, status (ok/error)
 	MetricTopologyReload = "onyxdb.topology.reload"
+	// An etcd watch ended while the client was live and was re-established.
+	// reason: closed (the channel closed), canceled (etcd cancelled the watch),
+	// compacted (etcd cancelled it because the revision it resumed from had
+	// been compacted — the usual cause after a reconnect).
+	// Tags: tenant, store, reason
+	MetricTopologyWatchRestart = "onyxdb.topology.watch_restart"
 
 	// Picks that landed on a pod still in its slow start (one per shard
 	// request routed there): the ramp as the client sees it.
