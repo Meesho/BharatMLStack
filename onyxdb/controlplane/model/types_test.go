@@ -235,6 +235,41 @@ func TestDataflowConfig_LoadCfg(t *testing.T) {
 	}
 }
 
+func TestDataflowConfig_WritesPaused(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want bool
+	}{
+		{`{"autoPromote":true}`, false}, // a config that predates the field
+		{`{"writesPaused":false}`, false},
+		{`{"writesPaused":true}`, true},
+	} {
+		var got DataflowConfig
+		if err := json.Unmarshal([]byte(tc.in), &got); err != nil {
+			t.Fatalf("%s: unmarshal: %v", tc.in, err)
+		}
+		if got.WritesPaused != tc.want {
+			t.Errorf("%s: writesPaused = %v, want %v", tc.in, got.WritesPaused, tc.want)
+		}
+		b, err := json.Marshal(got)
+		if err != nil {
+			t.Fatalf("%s: marshal: %v", tc.in, err)
+		}
+		var back DataflowConfig
+		if err := json.Unmarshal(b, &back); err != nil {
+			t.Fatalf("%s: unmarshal back: %v", tc.in, err)
+		}
+		if back.WritesPaused != tc.want {
+			t.Errorf("%s: roundtrip writesPaused = %v, want %v", tc.in, back.WritesPaused, tc.want)
+		}
+	}
+	// Off is omitted, so a store that never set the flag reads back unchanged.
+	b, _ := json.Marshal(DataflowConfig{})
+	if strings.Contains(string(b), "writesPaused") {
+		t.Errorf("zero DataflowConfig marshals writesPaused: %s", b)
+	}
+}
+
 func TestWarmConfig_PauseOverrides(t *testing.T) {
 	var w WarmConfig
 	if err := json.Unmarshal([]byte(`{"enabled":true,"pauseEngineConcurrency":48,"pauseP99Ms":40}`), &w); err != nil {
@@ -334,6 +369,68 @@ func TestPodData_SlowStartWireKeys(t *testing.T) {
 	for _, want := range []string{`"podIP":"10.0.0.7"`, `"port":9300`, `"servingSince":1791281000123`, `"slowStartSec":300`} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("registration %s lacks %s", b, want)
+		}
+	}
+}
+
+func TestDataflowConfig_PurgeRetired(t *testing.T) {
+	var df DataflowConfig
+	if err := json.Unmarshal([]byte(`{"autoPromote":true}`), &df); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if df.PurgeRetired {
+		t.Error("purgeRetired must default to false for a config that predates it")
+	}
+	b, _ := json.Marshal(DataflowConfig{})
+	if strings.Contains(string(b), "purgeRetired") {
+		t.Errorf("unset purgeRetired must be omitted, got %s", b)
+	}
+	if err := json.Unmarshal([]byte(`{"purgeRetired":true}`), &df); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !df.PurgeRetired {
+		t.Error("purgeRetired:true must decode")
+	}
+}
+
+// The cell fields are wire contracts with the dataloader (PodData.cell, from
+// ONYXDB_CELL) and with operators (dataflow cell, gcsSourceStore): pin the keys,
+// and that an unset field stays off the wire so older readers see no change.
+func TestCellFields_WireKeys(t *testing.T) {
+	df := DataflowConfig{Cell: "ase1c", GcsSourceStore: "user_catalog_geohash_1_3"}
+	b, err := json.Marshal(df)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, key := range []string{`"cell":"ase1c"`, `"gcsSourceStore":"user_catalog_geohash_1_3"`} {
+		if !strings.Contains(string(b), key) {
+			t.Errorf("dataflow JSON %s lacks %s", b, key)
+		}
+	}
+	var gotDF DataflowConfig
+	if err := json.Unmarshal(b, &gotDF); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if gotDF.Cell != "ase1c" || gotDF.GcsSourceStore != "user_catalog_geohash_1_3" {
+		t.Errorf("dataflow round-trip lost the cell fields: %+v", gotDF)
+	}
+
+	pd := PodData{PodIP: "10.0.0.1", Cell: "ase1c"}
+	b, err = json.Marshal(pd)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(b), `"cell":"ase1c"`) {
+		t.Errorf("pod JSON %s lacks the cell", b)
+	}
+
+	for name, v := range map[string]any{"dataflow": DataflowConfig{}, "pod": PodData{}} {
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", name, err)
+		}
+		if strings.Contains(string(b), `"cell"`) || strings.Contains(string(b), `"gcsSourceStore"`) {
+			t.Errorf("unset cell fields are on the wire for %s: %s", name, b)
 		}
 	}
 }

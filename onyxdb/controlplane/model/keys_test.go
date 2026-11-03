@@ -128,3 +128,11 @@ func TestClientConfigPath(t *testing.T) {
 		t.Errorf("ClientConfigPath = %q, want %q", got, want)
 	}
 }
+
+func TestPurgedWatermarkPath(t *testing.T) {
+	got := PurgedWatermarkPath("fs", "features")
+	want := "/config/mnemo/tenants/fs/stores/features/purgedWatermark"
+	if got != want {
+		t.Errorf("PurgedWatermarkPath = %q, want %q", got, want)
+	}
+}

@@ -1,6 +1,7 @@
 package placement
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -131,4 +132,48 @@ func TestDeriveAssignment_PartialCoverage(t *testing.T) {
 	result := DeriveAssignment(2, pods, "v1")
 	assert.NotEmpty(t, result["0"])
 	assert.Empty(t, result["1"])
+}
+
+// InCell keeps the pods a store's cell may route to: every pod when the store
+// names no cell, otherwise pods registered for that cell and pods that name no
+// cell (a loader older than the cell field must not drop out of routing).
+func TestInCell(t *testing.T) {
+	pods := map[string]model.PodData{
+		"s-shard-0-a": {PodIP: "10.0.0.1", Cell: "ase1c"},
+		"s-shard-0-b": {PodIP: "10.0.0.2", Cell: "ase1a"},
+		"s-shard-1-a": {PodIP: "10.0.0.3"},
+	}
+	tests := []struct {
+		name string
+		cell string
+		want []string
+	}{
+		{"no cell on the store: every pod", "", []string{"s-shard-0-a", "s-shard-0-b", "s-shard-1-a"}},
+		{"store in ase1c: its own and unlabelled pods", "ase1c", []string{"s-shard-0-a", "s-shard-1-a"}},
+		{"store in a cell no pod is in: only unlabelled pods", "as1a", []string{"s-shard-1-a"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := InCell(pods, tc.cell)
+			var ids []string
+			for id := range got {
+				ids = append(ids, id)
+			}
+			sort.Strings(ids)
+			assert.Equal(t, tc.want, ids)
+		})
+	}
+	assert.Len(t, pods, 3, "the input map is not modified")
+}
+
+// OutOfCell lists the pods InCell leaves out, as "podID=cell", sorted.
+func TestOutOfCell(t *testing.T) {
+	pods := map[string]model.PodData{
+		"s-shard-0-b": {Cell: "ase1a"},
+		"s-shard-0-a": {Cell: "as1a"},
+		"s-shard-1-a": {Cell: "ase1c"},
+		"s-shard-1-b": {},
+	}
+	assert.Equal(t, []string{"s-shard-0-a=as1a", "s-shard-0-b=ase1a"}, OutOfCell(pods, "ase1c"))
+	assert.Empty(t, OutOfCell(pods, ""))
 }

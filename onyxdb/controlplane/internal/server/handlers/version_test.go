@@ -278,3 +278,47 @@ func TestRetireVersion_InternalError(t *testing.T) {
 		"POST", "/api/v1/tenants/fs/stores/features/versions/v1/retire", nil))
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+// Promote derives the assignment only from pods of the store's cell (and pods
+// that name none): another cell's warm pods neither cover the version nor
+// enter its assignment.
+func TestPromoteVersion_CellGuard(t *testing.T) {
+	pods := map[string]model.PodData{
+		"fs-features-shard-0-0": {PodIP: "10.0.0.1", WarmVersions: []string{"v1"}, Cell: "ase1c"},
+		"fs-features-shard-0-1": {PodIP: "10.9.0.1", WarmVersions: []string{"v1"}, Cell: "as1a"},
+		"fs-features-shard-1-0": {PodIP: "10.9.0.2", WarmVersions: []string{"v1"}, Cell: "as1a"},
+	}
+	t.Run("another cell's pods are not coverage", func(t *testing.T) {
+		m := &mockStateClient{}
+		m.On("GetStore", mock.Anything, "fs", "features").Return(&etcdstate.StoreState{
+			Config: model.StoreConfig{ShardCount: 2}, Dataflow: &model.DataflowConfig{Cell: "ase1c"}}, nil)
+		m.On("ListPods", mock.Anything, "fs", "features").Return(pods, nil)
+
+		w := httptest.NewRecorder()
+		newRouter(New(m)).ServeHTTP(w, httptest.NewRequest(
+			"POST", "/api/v1/tenants/fs/stores/features/versions/v1/promote", nil))
+
+		assert.Equal(t, http.StatusConflict, w.Code)
+		assert.Contains(t, w.Body.String(), `"missing":["1"]`)
+		m.AssertNotCalled(t, "PromoteVersion", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	})
+	t.Run("the stored assignment holds only the store's cell", func(t *testing.T) {
+		withOwn := map[string]model.PodData{"fs-features-shard-1-1": {PodIP: "10.0.0.2", WarmVersions: []string{"v1"}}}
+		for k, v := range pods {
+			withOwn[k] = v
+		}
+		m := &mockStateClient{}
+		m.On("GetStore", mock.Anything, "fs", "features").Return(&etcdstate.StoreState{
+			Config: model.StoreConfig{ShardCount: 2}, Dataflow: &model.DataflowConfig{Cell: "ase1c"}}, nil)
+		m.On("ListPods", mock.Anything, "fs", "features").Return(withOwn, nil)
+		m.On("PromoteVersion", mock.Anything, "fs", "features", "v1",
+			map[string][]string{"0": {"10.0.0.1:9091"}, "1": {"10.0.0.2:9091"}}).Return(nil)
+
+		w := httptest.NewRecorder()
+		newRouter(New(m)).ServeHTTP(w, httptest.NewRequest(
+			"POST", "/api/v1/tenants/fs/stores/features/versions/v1/promote", nil))
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		m.AssertExpectations(t)
+	})
+}

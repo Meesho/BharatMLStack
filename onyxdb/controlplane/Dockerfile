@@ -3,7 +3,7 @@
 # docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/meesho/onyxdb-controlplane:v0.1.0 .
 
 # ── Build stage ───────────────────────────────────────────────────────────────
-FROM mirror.gcr.io/library/golang:1.24-alpine AS builder
+FROM mirror.gcr.io/library/golang:1.25-alpine AS builder
 
 RUN apk add --no-cache git
 
