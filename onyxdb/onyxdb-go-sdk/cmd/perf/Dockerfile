@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY controlplane/go.mod controlplane/go.sum controlplane/
 COPY onyxdb-go-sdk/go.mod onyxdb-go-sdk/go.sum onyxdb-go-sdk/
