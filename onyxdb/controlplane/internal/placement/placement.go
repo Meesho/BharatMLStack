@@ -6,6 +6,7 @@ package placement
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/Meesho/BharatMLStack/onyxdb/controlplane/model"
@@ -60,4 +61,38 @@ func ExtractShardID(podID string) string {
 		return rest
 	}
 	return rest[:end]
+}
+
+// InCell returns the pods a store in cell may route to: every pod when cell is
+// empty; otherwise the pods registered for cell and the pods that name no cell
+// (a loader built before the cell field). A pod of another cell is one that
+// registered under this store by mistake — a cluster deploying the wrong
+// store name — and must never receive the store's reads or count as its
+// coverage (docs/design/onyxdb-multi-cluster-cells.md). pods is not modified.
+func InCell(pods map[string]model.PodData, cell string) map[string]model.PodData {
+	if cell == "" {
+		return pods
+	}
+	in := make(map[string]model.PodData, len(pods))
+	for podID, pd := range pods {
+		if pd.Cell == "" || pd.Cell == cell {
+			in[podID] = pd
+		}
+	}
+	return in
+}
+
+// OutOfCell lists the pods InCell leaves out, as "podID=cell", sorted.
+func OutOfCell(pods map[string]model.PodData, cell string) []string {
+	if cell == "" {
+		return nil
+	}
+	var out []string
+	for podID, pd := range pods {
+		if pd.Cell != "" && pd.Cell != cell {
+			out = append(out, podID+"="+pd.Cell)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

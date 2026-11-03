@@ -41,6 +41,12 @@ type DataflowConfig struct {
 	// and disabled for stores not managed by the reconciler. The active and
 	// rollback versions are always kept regardless of N.
 	KeepVersions int `json:"keepVersions,omitempty"`
+	// PurgeRetired lets the reconciler delete the etcd key of a RETIRING version
+	// once it is outside the keep window and no pod registration still lists it
+	// (docs/design/onyxdb-version-purge.md). The store's purgedWatermark then
+	// keeps the ID from being published again. Like keep-N GC, it applies only
+	// to autoPromote stores. Default false: RETIRING keys are kept forever.
+	PurgeRetired bool `json:"purgeRetired,omitempty"`
 	// RolloutCfg configures gradual version rollout with traffic-percentage ramp.
 	// When set, the dataloader ramps traffic from old → new version instead of
 	// doing an atomic flip.
@@ -54,6 +60,27 @@ type DataflowConfig struct {
 	// data loader reads it when such a pod goes live and publishes it in the
 	// pod's registration. Nil means off: clients give a new pod a full share.
 	SlowStartCfg *SlowStartConfig `json:"slowStartCfg,omitempty"`
+	// WritesPaused freezes the store on its current active version: publishes
+	// are still accepted (READY), but data loaders neither download nor open a
+	// version newer than the active one, release and delete any they already
+	// hold, and the reconciler does not auto-promote one. Rollback, reconcile
+	// repair, scale-ups and an in-flight ramp are unaffected. Clearing it
+	// resumes with the newest version published meanwhile. Default false.
+	// See docs/design/onyxdb-pause-writes.md.
+	WritesPaused bool `json:"writesPaused,omitempty"`
+	// Cell names the cell (cluster) this store's fleet runs in, when one
+	// logical store runs as one store per cluster on the shared etcd
+	// (docs/design/onyxdb-multi-cluster-cells.md). The control plane then
+	// routes to, and counts as coverage, only pods registered for this cell or
+	// for none: a pod of another cell registered under this store by mistake
+	// is left out. Empty (the default) checks nothing.
+	Cell string `json:"cell,omitempty"`
+	// GcsSourceStore is the store whose files the data loaders download: with
+	// GcsOutRoot set they read {root}/{tenant}/{GcsSourceStore}/{vId}/ instead
+	// of {root}/{tenant}/{store}/{vId}/, so a per-cluster store (a cell) can
+	// serve the versions built once for the store it copies. Empty (the
+	// default) means this store's own name. Ignored without GcsOutRoot.
+	GcsSourceStore string `json:"gcsSourceStore,omitempty"`
 }
 
 // SlowStartConfig sizes the client-side ramp of a pod that has just started
@@ -199,6 +226,10 @@ type PodData struct {
 	// SlowStartSec is the ramp window the loader read from the store's
 	// SlowStartCfg when the pod went live. 0 means no ramp.
 	SlowStartSec int `json:"slowStartSec,omitempty"`
+	// Cell is the cell (cluster) the pod runs in, from the loader's
+	// ONYXDB_CELL. Empty when unset. A store whose dataflow names a cell
+	// routes only to pods of that cell or of none.
+	Cell string `json:"cell,omitempty"`
 }
 
 // DefaultReadServerPort is the read server's TCP port when a registration

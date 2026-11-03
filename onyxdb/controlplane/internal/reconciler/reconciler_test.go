@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -36,6 +37,7 @@ type fakeState struct {
 	updateAssignmentChanged bool
 	updateAssignmentErr     error
 	retires                 []string // vIDs successfully passed to RetireVersion
+	purges                  []string // vIDs successfully passed to PurgeVersion
 
 	// Error injection for the read paths and per-version retire failures.
 	listStoresErr   error
@@ -44,6 +46,7 @@ type fakeState struct {
 	listVersionsErr error
 	listPodsErr     error
 	retireErr       map[string]error // vID -> error
+	purgeErr        map[string]error // vID -> error
 
 	calls []string // StateReader method names, in call order
 }
@@ -112,6 +115,15 @@ func (f *fakeState) RetireVersion(_ context.Context, _, _, vID string) error {
 		return err
 	}
 	f.retires = append(f.retires, vID)
+	return nil
+}
+
+func (f *fakeState) PurgeVersion(_ context.Context, _, _, vID string) error {
+	f.calls = append(f.calls, "PurgeVersion")
+	if err := f.purgeErr[vID]; err != nil {
+		return err
+	}
+	f.purges = append(f.purges, vID)
 	return nil
 }
 
@@ -844,4 +856,410 @@ func TestUncoveredShards(t *testing.T) {
 			assert.Equal(t, tc.want, uncoveredShards(tc.shardCount, tc.assignment))
 		})
 	}
+}
+
+// ── Writes paused (docs/design/onyxdb-pause-writes.md) ──────────────────────
+
+// pausedFake: v002 is READY and warm on every shard above active v001 — what
+// the reconciler would promote on this tick — and the store is paused.
+func pausedFake() *fakeState {
+	f := baseFake(2, "20260101_001", true)
+	f.dataflow[key("t", "s")].WritesPaused = true
+	f.versions[key("t", "s")]["20260101_001"] = &model.VersionMeta{Status: model.StatusActive, ShardCount: 2}
+	f.versions[key("t", "s")]["20260101_002"] = &model.VersionMeta{Status: model.StatusReady, ShardCount: 2}
+	pods := warmPods(2, "20260101_001")
+	for id, p := range pods {
+		p.WarmVersions = append(p.WarmVersions, "20260101_002")
+		pods[id] = p
+	}
+	f.pods[key("t", "s")] = pods
+	return f
+}
+
+func pausedLines(logs *bytes.Buffer) int {
+	return bytes.Count(logs.Bytes(), []byte("writes paused — not promoting"))
+}
+
+func TestReconcile_WritesPausedPromotesNothing(t *testing.T) {
+	f := pausedFake()
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	assert.Empty(t, f.promotes)
+	assert.NotContains(t, f.calls, "PromoteVersion")
+}
+
+// The pause must not freeze routing: a pod rescheduled or added during the
+// pause still enters the active version's assignment.
+func TestReconcile_WritesPausedStillRefreshesTheActiveAssignment(t *testing.T) {
+	f := pausedFake()
+	f.updateAssignmentChanged = true
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	require.Len(t, f.assignmentUpdates, 1)
+	assert.Equal(t, "20260101_001", f.assignmentUpdates[0].vID)
+}
+
+// GC keeps running, and never touches the held READY version (it is newer
+// than active).
+func TestReconcile_WritesPausedStillRunsGC(t *testing.T) {
+	f := pausedFake()
+	f.state[key("t", "s")].RollbackVersion = "20251231_002"
+	v := f.versions[key("t", "s")]
+	v["20251231_001"] = &model.VersionMeta{Status: model.StatusActive, ShardCount: 2} // stale
+	v["20251231_002"] = &model.VersionMeta{Status: model.StatusActive, ShardCount: 2}
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	assert.Equal(t, []string{"20251231_001"}, f.retires)
+}
+
+// Clearing the flag resumes on the very next tick, with no other step.
+func TestReconcile_ClearingWritesPausedPromotesOnTheNextTick(t *testing.T) {
+	f := pausedFake()
+	r := New(f, 0)
+	r.reconcileOnce(context.Background())
+	require.Empty(t, f.promotes)
+
+	f.dataflow[key("t", "s")].WritesPaused = false
+	r.reconcileOnce(context.Background())
+
+	require.Len(t, f.promotes, 1)
+	assert.Equal(t, "20260101_002", f.promotes[0].vID)
+}
+
+// One line per pause per pausedLogInterval, not one per 5 s tick.
+func TestReconcile_WritesPausedLogIsRateLimited(t *testing.T) {
+	logs := captureLogs(t)
+	f := pausedFake()
+	r := New(f, 0)
+
+	for i := 0; i < 5; i++ {
+		r.reconcileOnce(context.Background())
+	}
+	assert.Equal(t, 1, pausedLines(logs))
+	assert.Contains(t, logs.String(), `"newestHeld":"20260101_002"`)
+	assert.Contains(t, logs.String(), `"held":1`)
+
+	// Once the interval has passed, it logs again.
+	r.pausedLoggedAt[key("t", "s")] = time.Now().Add(-pausedLogInterval)
+	r.reconcileOnce(context.Background())
+	assert.Equal(t, 2, pausedLines(logs))
+}
+
+// A new pause after a resume logs at once, whatever the interval.
+func TestReconcile_WritesPausedLogResetsOnResume(t *testing.T) {
+	logs := captureLogs(t)
+	f := pausedFake()
+	f.versions[key("t", "s")]["20260101_002"].Status = model.StatusActive // nothing to promote on resume
+	r := New(f, 0)
+	r.reconcileOnce(context.Background())
+	require.Equal(t, 1, pausedLines(logs))
+
+	f.dataflow[key("t", "s")].WritesPaused = false
+	r.reconcileOnce(context.Background())
+	f.dataflow[key("t", "s")].WritesPaused = true
+	r.reconcileOnce(context.Background())
+
+	assert.Equal(t, 2, pausedLines(logs))
+}
+
+// Paused with nothing held: still logged, with no newestHeld.
+func TestReconcile_WritesPausedLogWithNothingHeld(t *testing.T) {
+	logs := captureLogs(t)
+	f := pausedFake()
+	delete(f.versions[key("t", "s")], "20260101_002")
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	assert.Equal(t, 1, pausedLines(logs))
+	assert.Contains(t, logs.String(), `"held":0`)
+	assert.NotContains(t, logs.String(), "newestHeld")
+}
+
+// ── purge of RETIRING version keys ───────────────────────────────────────────
+
+// purgeFake is an auto-promote store with active 004 and rollback 003, two
+// versions already RETIRING (001, 002), and one pod serving the active version.
+func purgeFake(purge bool) *fakeState {
+	f := baseFake(1, "20260101_004", true)
+	f.dataflow[key("t", "s")].PurgeRetired = purge
+	f.state[key("t", "s")].RollbackVersion = "20260101_003"
+	v := f.versions[key("t", "s")]
+	v["20260101_001"] = &model.VersionMeta{Status: model.StatusRetiring, ShardCount: 1}
+	v["20260101_002"] = &model.VersionMeta{Status: model.StatusRetiring, ShardCount: 1}
+	v["20260101_003"] = &model.VersionMeta{Status: model.StatusActive, ShardCount: 1}
+	v["20260101_004"] = &model.VersionMeta{Status: model.StatusActive, ShardCount: 1,
+		Assignment: map[string][]string{"0": {"10.0.0.1:9091"}}}
+	f.pods[key("t", "s")] = map[string]model.PodData{
+		"store-shard-0-1": {PodIP: "10.0.0.1", Port: 9091, ServingVersion: "20260101_004",
+			WarmVersions: []string{"20260101_004", "20260101_003"}},
+	}
+	return f
+}
+
+func TestReconcile_PurgeOffByDefault(t *testing.T) {
+	f := purgeFake(false)
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	assert.Empty(t, f.purges)
+	assert.NotContains(t, f.calls, "PurgeVersion")
+}
+
+func TestReconcile_PurgesRetiredVersionsOldestFirst(t *testing.T) {
+	f := purgeFake(true)
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	assert.Equal(t, []string{"20260101_001", "20260101_002"}, f.purges)
+	assert.Empty(t, f.retires, "nothing new to retire")
+}
+
+func TestReconcile_PurgeWaitsForPodsToDropTheVersion(t *testing.T) {
+	f := purgeFake(true)
+	pod := f.pods[key("t", "s")]["store-shard-0-1"]
+	pod.WarmVersions = append(pod.WarmVersions, "20260101_002") // still being dropped
+	f.pods[key("t", "s")]["store-shard-0-1"] = pod
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	assert.Equal(t, []string{"20260101_001"}, f.purges)
+}
+
+func TestReconcile_PurgeContinuesPastFailures(t *testing.T) {
+	f := purgeFake(true)
+	f.purgeErr = map[string]error{"20260101_001": etcdstate.ErrCASConflict}
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	assert.Equal(t, []string{"20260101_002"}, f.purges)
+
+	f = purgeFake(true)
+	f.purgeErr = map[string]error{"20260101_001": errors.New("etcd down")}
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	assert.Equal(t, []string{"20260101_002"}, f.purges)
+}
+
+func TestReconcile_PurgeSkipsStoreNotOptedIntoAutoPromote(t *testing.T) {
+	f := purgeFake(true)
+	f.dataflow[key("t", "s")].AutoPromote = false
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	assert.Empty(t, f.purges)
+}
+
+func TestReconcile_VersionRetiredThisTickIsPurgedOnALaterTick(t *testing.T) {
+	f := purgeFake(true)
+	f.versions[key("t", "s")]["20260101_000"] = &model.VersionMeta{Status: model.StatusActive, ShardCount: 1}
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	assert.Equal(t, []string{"20260101_000"}, f.retires)
+	assert.Equal(t, []string{"20260101_001", "20260101_002"}, f.purges,
+		"000 was not RETIRING when this tick read the versions")
+}
+
+func TestPurgeStore_DisabledForNonPositiveKeepOrNoActive(t *testing.T) {
+	ref := etcdstate.StoreRef{Tenant: "t", Store: "s"}
+	for _, keep := range []int{0, -1} {
+		f := purgeFake(true)
+		New(f, 0).purgeStore(context.Background(), ref, f.state[key("t", "s")], f.versions[key("t", "s")], f.pods[key("t", "s")], keep)
+		assert.Empty(t, f.calls, "keep=%d", keep)
+	}
+
+	f := purgeFake(true)
+	st := f.state[key("t", "s")]
+	st.ActiveVersion = ""
+	New(f, 0).purgeStore(context.Background(), ref, st, f.versions[key("t", "s")], f.pods[key("t", "s")], 2)
+	assert.Empty(t, f.calls, "never purge before the first promote")
+}
+
+func TestVersionsToPurge(t *testing.T) {
+	retiring := &model.VersionMeta{Status: model.StatusRetiring}
+	active := &model.VersionMeta{Status: model.StatusActive}
+	base := func() map[string]*model.VersionMeta {
+		return map[string]*model.VersionMeta{
+			"20260101_001": retiring, "20260101_002": retiring,
+			"20260101_003": active, "20260101_004": active,
+		}
+	}
+	podWith := func(pd model.PodData) map[string]model.PodData { return map[string]model.PodData{"p": pd} }
+	tests := []struct {
+		name             string
+		versions         map[string]*model.VersionMeta
+		active, rollback string
+		keep             int
+		pods             map[string]model.PodData
+		want             []string
+	}{
+		{
+			name:     "retiring versions outside the window, oldest first",
+			versions: base(), active: "20260101_004", rollback: "20260101_003", keep: 2,
+			want: []string{"20260101_001", "20260101_002"},
+		},
+		{
+			name:     "a version not yet retiring is never purged",
+			versions: map[string]*model.VersionMeta{"20260101_001": active, "20260101_002": retiring, "20260101_003": active},
+			active:   "20260101_003", rollback: "20260101_002", keep: 1,
+			want: nil,
+		},
+		{
+			name:     "a retiring rollback version is kept",
+			versions: base(), active: "20260101_004", rollback: "20260101_001", keep: 2,
+			want: []string{"20260101_002"},
+		},
+		{
+			name:     "a retiring active version is kept",
+			versions: map[string]*model.VersionMeta{"20260101_001": retiring, "20260101_002": retiring},
+			active:   "20260101_002", keep: 1,
+			want: []string{"20260101_001"},
+		},
+		{
+			name:     "a retiring version newer than active is kept",
+			versions: map[string]*model.VersionMeta{"20260101_001": retiring, "20260101_003": active, "20260101_005": retiring},
+			active:   "20260101_003", keep: 1,
+			want: []string{"20260101_001"},
+		},
+		{
+			name:     "a retiring version inside the keep window is kept",
+			versions: map[string]*model.VersionMeta{"20260101_001": retiring, "20260101_002": retiring, "20260101_003": active},
+			active:   "20260101_003", keep: 2,
+			want: []string{"20260101_001"},
+		},
+		{
+			name:     "nil metadata and an empty id are never purged",
+			versions: map[string]*model.VersionMeta{"": retiring, "20260101_001": nil, "20260101_003": active},
+			active:   "20260101_003", keep: 1,
+			want: nil,
+		},
+		{
+			name:     "warm on a pod",
+			versions: base(), active: "20260101_004", rollback: "20260101_003", keep: 2,
+			pods: podWith(model.PodData{WarmVersions: []string{"20260101_001"}}),
+			want: []string{"20260101_002"},
+		},
+		{
+			name:     "served by a pod",
+			versions: base(), active: "20260101_004", rollback: "20260101_003", keep: 2,
+			pods: podWith(model.PodData{ServingVersion: "20260101_001"}),
+			want: []string{"20260101_002"},
+		},
+		{
+			name:     "loading on a pod",
+			versions: base(), active: "20260101_004", rollback: "20260101_003", keep: 2,
+			pods: podWith(model.PodData{LoadingVersion: "20260101_001"}),
+			want: []string{"20260101_002"},
+		},
+		{
+			name:     "rolling out on a pod",
+			versions: base(), active: "20260101_004", rollback: "20260101_003", keep: 2,
+			pods: podWith(model.PodData{RolloutVersion: "20260101_001"}),
+			want: []string{"20260101_002"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, versionsToPurge(tc.versions, tc.active, tc.rollback, tc.keep, tc.pods))
+		})
+	}
+}
+
+// ── Cell guard ───────────────────────────────────────────────────────────────
+// A store whose dataflow names a cell routes only to pods registered for that
+// cell, or for no cell (docs/design/onyxdb-multi-cluster-cells.md, O6).
+
+func cellFake(cell string) *fakeState {
+	f := baseFake(2, "", true)
+	f.dataflow[key("t", "s")].Cell = cell
+	f.versions[key("t", "s")]["20260101_001"] = &model.VersionMeta{Status: model.StatusReady, ShardCount: 2}
+	return f
+}
+
+func TestReconcile_CellGuard_PodsOfAnotherCellDoNotCoverAPromote(t *testing.T) {
+	f := cellFake("ase1c")
+	pods := warmPods(2, "20260101_001")
+	for id, pd := range pods {
+		pd.Cell = "ase1a" // a mislabelled fleet registered under this store
+		pods[id] = pd
+	}
+	f.pods[key("t", "s")] = pods
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	assert.Empty(t, f.promotes, "another cell's pods are not coverage")
+}
+
+func TestReconcile_CellGuard_OwnAndUnlabelledPodsPromote(t *testing.T) {
+	f := cellFake("ase1c")
+	f.pods[key("t", "s")] = map[string]model.PodData{
+		"store-shard-0-1": {PodIP: "10.0.0.1", WarmVersions: []string{"20260101_001"}, Cell: "ase1c"},
+		"store-shard-0-2": {PodIP: "10.0.0.2", WarmVersions: []string{"20260101_001"}, Cell: "ase1a"},
+		"store-shard-1-1": {PodIP: "10.0.0.3", WarmVersions: []string{"20260101_001"}}, // a loader without the field
+	}
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	require.Len(t, f.promotes, 1)
+	assert.Equal(t, []string{"10.0.0.1:9091"}, f.promotes[0].assignment["0"])
+	assert.Equal(t, []string{"10.0.0.3:9091"}, f.promotes[0].assignment["1"])
+}
+
+func TestReconcile_CellGuard_RefreshLeavesOutPodsOfAnotherCell(t *testing.T) {
+	f := baseFake(2, "20260101_001", true)
+	f.dataflow[key("t", "s")].Cell = "ase1c"
+	f.versions[key("t", "s")]["20260101_001"] = &model.VersionMeta{Status: model.StatusActive, ShardCount: 2}
+	f.pods[key("t", "s")] = map[string]model.PodData{
+		"store-shard-0-1": {PodIP: "10.0.0.1", WarmVersions: []string{"20260101_001"}, Cell: "ase1c"},
+		"store-shard-0-2": {PodIP: "10.9.0.2", WarmVersions: []string{"20260101_001"}, Cell: "as1a"},
+		"store-shard-1-1": {PodIP: "10.0.0.3", WarmVersions: []string{"20260101_001"}, Cell: "ase1c"},
+	}
+	f.updateAssignmentChanged = true
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	require.Len(t, f.assignmentUpdates, 1)
+	assert.Equal(t, []string{"10.0.0.1:9091"}, f.assignmentUpdates[0].assignment["0"])
+	assert.Equal(t, []string{"10.0.0.3:9091"}, f.assignmentUpdates[0].assignment["1"])
+}
+
+func TestReconcile_CellGuard_StoreWithoutACellKeepsEveryPod(t *testing.T) {
+	f := cellFake("")
+	pods := warmPods(2, "20260101_001")
+	for id, pd := range pods {
+		pd.Cell = "ase1a"
+		pods[id] = pd
+	}
+	f.pods[key("t", "s")] = pods
+
+	New(f, 0).reconcileOnce(context.Background())
+
+	require.Len(t, f.promotes, 1, "no cell on the store: nothing is filtered")
+}
+
+func TestReconcile_CellGuard_LogIsRateLimited(t *testing.T) {
+	logs := captureLogs(t)
+	f := baseFake(2, "20260101_001", true)
+	f.dataflow[key("t", "s")].Cell = "ase1c"
+	f.versions[key("t", "s")]["20260101_001"] = &model.VersionMeta{Status: model.StatusActive, ShardCount: 2}
+	f.pods[key("t", "s")] = map[string]model.PodData{
+		"store-shard-0-2": {PodIP: "10.9.0.2", WarmVersions: []string{"20260101_001"}, Cell: "as1a"},
+	}
+	r := New(f, 0)
+
+	for i := 0; i < 5; i++ {
+		r.reconcileOnce(context.Background())
+	}
+	lines := func() int { return strings.Count(logs.String(), "registered for another cell") }
+	assert.Equal(t, 1, lines())
+	assert.Contains(t, logs.String(), `"cell":"ase1c"`)
+	assert.Contains(t, logs.String(), `store-shard-0-2=as1a`)
+
+	r.cellLoggedAt[key("t", "s")] = time.Now().Add(-pausedLogInterval)
+	r.reconcileOnce(context.Background())
+	assert.Equal(t, 2, lines())
 }

@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/Meesho/BharatMLStack/onyxdb/controlplane/internal/etcdstate"
@@ -43,21 +44,31 @@ type StateReader interface {
 	PromoteVersion(ctx context.Context, tenant, store, vID string, assignment map[string][]string) error
 	UpdateAssignment(ctx context.Context, tenant, store, vID string, assignment map[string][]string) (bool, error)
 	RetireVersion(ctx context.Context, tenant, store, vID string) error
+	PurgeVersion(ctx context.Context, tenant, store, vID string) error
 }
 
 // defaultKeepVersions is the retention window for auto-promote stores that don't
 // set an explicit DataflowConfig.KeepVersions (active + one rollback).
 const defaultKeepVersions = 2
 
+// pausedLogInterval bounds how often the reconciler logs that a store with
+// dataflow writesPaused has versions held back: every tick (5 s) would be
+// ~17K lines a day per paused store.
+const pausedLogInterval = 10 * time.Minute
+
 // Reconciler periodically promotes ready, fully-warm versions.
 type Reconciler struct {
 	state    StateReader
 	interval time.Duration
+	// pausedLoggedAt is when each paused store ("tenant/store") was last
+	// logged. Touched only by the reconcile goroutine.
+	pausedLoggedAt map[string]time.Time
+	cellLoggedAt   map[string]time.Time
 }
 
 // New creates a Reconciler that ticks every interval.
 func New(state StateReader, interval time.Duration) *Reconciler {
-	return &Reconciler{state: state, interval: interval}
+	return &Reconciler{state: state, interval: interval, pausedLoggedAt: map[string]time.Time{}, cellLoggedAt: map[string]time.Time{}}
 }
 
 // Run blocks, reconciling once per interval, until ctx is cancelled.
@@ -117,13 +128,29 @@ func (r *Reconciler) reconcileStore(ctx context.Context, ref etcdstate.StoreRef)
 		lg.Error().Err(err).Msg("reconciler: ListPods failed")
 		return
 	}
+	// Promote and the assignment refresh see only the store's cell; purge
+	// below still sees every pod, since any pod holding a version blocks it.
+	routable := placement.InCell(pods, df.Cell)
+	r.logOutOfCell(lg, ref, df.Cell, pods)
 
 	// Newest first, and an uncovered newer version does not hide a covered
 	// older one: data loaders park a newer version while an older one is
 	// resident and unpromoted (docs/design/onyxdb-version-memory-guard.md §4), so
 	// waiting for the newest to be covered would never end.
-	for _, candidate := range promotable(versions, st.ActiveVersion) {
-		assignment := placement.DeriveAssignment(st.Config.ShardCount, pods, candidate)
+	//
+	// Writes paused (docs/design/onyxdb-pause-writes.md): promote nothing, but
+	// keep the assignment refresh and GC below running — pods rescheduled or
+	// added by the HPA during the pause must still enter the active version's
+	// assignment.
+	candidates := promotable(versions, st.ActiveVersion)
+	if df.WritesPaused {
+		r.logPaused(lg, ref, candidates)
+		candidates = nil
+	} else {
+		delete(r.pausedLoggedAt, ref.Tenant+"/"+ref.Store)
+	}
+	for _, candidate := range candidates {
+		assignment := placement.DeriveAssignment(st.Config.ShardCount, routable, candidate)
 		if missing := uncoveredShards(st.Config.ShardCount, assignment); len(missing) > 0 {
 			lg.Warn().
 				Str("version", candidate).
@@ -150,7 +177,7 @@ func (r *Reconciler) reconcileStore(ctx context.Context, ref etcdstate.StoreRef)
 	// VersionMeta.Assignment must stay in sync so SDK clients that read it
 	// directly (without the topology API) route to the right pods.
 	if st.ActiveVersion != "" {
-		assignment := placement.DeriveAssignment(st.Config.ShardCount, pods, st.ActiveVersion)
+		assignment := placement.DeriveAssignment(st.Config.ShardCount, routable, st.ActiveVersion)
 		changed, err := r.state.UpdateAssignment(ctx, ref.Tenant, ref.Store, st.ActiveVersion, assignment)
 		if err != nil {
 			if err == etcdstate.ErrCASConflict {
@@ -166,6 +193,46 @@ func (r *Reconciler) reconcileStore(ctx context.Context, ref etcdstate.StoreRef)
 	// Keep-last-N GC: retire versions outside the retention window so pods free
 	// their SSTs. Runs against the *current* active/rollback (re-read each tick).
 	r.gcStore(ctx, ref, st, versions, effectiveKeep(df))
+
+	// Purge: delete the keys of RETIRING versions that no pod holds any more.
+	// It reads this tick's snapshot, so a version GC retired just now is
+	// purged on a later tick, once the pods have dropped it.
+	if df.PurgeRetired {
+		r.purgeStore(ctx, ref, st, versions, pods, effectiveKeep(df))
+	}
+}
+
+// logPaused logs, at most once per pausedLogInterval per store, that writes
+// are paused and which READY versions are held back. held is newest first.
+func (r *Reconciler) logPaused(lg zerolog.Logger, ref etcdstate.StoreRef, held []string) {
+	k := ref.Tenant + "/" + ref.Store
+	if last, ok := r.pausedLoggedAt[k]; ok && time.Since(last) < pausedLogInterval {
+		return
+	}
+	r.pausedLoggedAt[k] = time.Now()
+	ev := lg.Warn().Int("held", len(held))
+	if len(held) > 0 {
+		ev = ev.Str("newestHeld", held[0])
+	}
+	ev.Msg("reconciler: writes paused — not promoting")
+}
+
+// logOutOfCell reports, at most once per pausedLogInterval per store, the pods
+// registered under the store for another cell, which routing leaves out
+// (placement.InCell). Silent while there are none.
+func (r *Reconciler) logOutOfCell(lg zerolog.Logger, ref etcdstate.StoreRef, cell string, pods map[string]model.PodData) {
+	k := ref.Tenant + "/" + ref.Store
+	out := placement.OutOfCell(pods, cell)
+	if len(out) == 0 {
+		delete(r.cellLoggedAt, k)
+		return
+	}
+	if last, ok := r.cellLoggedAt[k]; ok && time.Since(last) < pausedLogInterval {
+		return
+	}
+	r.cellLoggedAt[k] = time.Now()
+	lg.Warn().Str("cell", cell).Strs("pods", out).
+		Msg("reconciler: pods registered for another cell left out of routing")
 }
 
 // effectiveKeep resolves the retention window for a store. An explicit
@@ -196,6 +263,29 @@ func (r *Reconciler) gcStore(ctx context.Context, ref etcdstate.StoreRef, st *et
 	}
 }
 
+// purgeStore deletes the etcd key of every purgeable version (versionsToPurge).
+// A CAS conflict means another replica or a promote got there first; the next
+// tick re-reads and decides again.
+func (r *Reconciler) purgeStore(ctx context.Context, ref etcdstate.StoreRef, st *etcdstate.StoreState, versions map[string]*model.VersionMeta, pods map[string]model.PodData, keep int) {
+	if keep <= 0 || st.ActiveVersion == "" {
+		return // same gate as GC: never before the first promote
+	}
+	for _, vID := range versionsToPurge(versions, st.ActiveVersion, st.RollbackVersion, keep, pods) {
+		if err := r.state.PurgeVersion(ctx, ref.Tenant, ref.Store, vID); err != nil {
+			if err == etcdstate.ErrCASConflict {
+				log.Debug().Str("tenant", ref.Tenant).Str("store", ref.Store).
+					Str("version", vID).Msg("reconciler: purge raced (CAS), will retry next tick")
+			} else {
+				log.Error().Err(err).Str("tenant", ref.Tenant).Str("store", ref.Store).
+					Str("version", vID).Msg("reconciler: purge failed")
+			}
+			continue
+		}
+		log.Warn().Str("tenant", ref.Tenant).Str("store", ref.Store).
+			Str("version", vID).Msg("reconciler: purged retired version")
+	}
+}
+
 // promotable returns every READY version ID strictly greater than the active
 // version, newest first. Version IDs are {date}_{run}, which sort
 // lexicographically, so plain string comparison gives chronological order.
@@ -223,31 +313,14 @@ func promotable(versions map[string]*model.VersionMeta, active string) []string 
 // Versions already RETIRING are skipped (no re-emit). Version IDs sort
 // lexicographically by {date}_{run}, giving chronological order.
 func versionsToRetire(versions map[string]*model.VersionMeta, active, rollback string, keep int) []string {
-	ids := make([]string, 0, len(versions))
-	for vID := range versions {
-		ids = append(ids, vID)
-	}
-	sort.Sort(sort.Reverse(sort.StringSlice(ids))) // newest first
-
-	keepSet := map[string]struct{}{active: {}, rollback: {}}
-	belowOrEqual := 0
-	for _, vID := range ids {
-		if vID > active {
-			keepSet[vID] = struct{}{} // in-flight future version
-			continue
-		}
-		if belowOrEqual < keep {
-			keepSet[vID] = struct{}{}
-			belowOrEqual++
-		}
-	}
+	ids, kept := keepSet(versions, active, rollback, keep)
 
 	var retire []string
 	for _, vID := range ids {
 		if vID == "" {
 			continue
 		}
-		if _, kept := keepSet[vID]; kept {
+		if _, ok := kept[vID]; ok {
 			continue
 		}
 		if m := versions[vID]; m != nil && m.Status == model.StatusRetiring {
@@ -256,6 +329,71 @@ func versionsToRetire(versions map[string]*model.VersionMeta, active, rollback s
 		retire = append(retire, vID)
 	}
 	return retire
+}
+
+// keepSet returns every version ID newest first, and the set GC keeps: active,
+// rollback, everything newer than active, and the newest keep at or below it.
+func keepSet(versions map[string]*model.VersionMeta, active, rollback string, keep int) ([]string, map[string]struct{}) {
+	ids := make([]string, 0, len(versions))
+	for vID := range versions {
+		ids = append(ids, vID)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(ids))) // newest first
+
+	kept := map[string]struct{}{active: {}, rollback: {}}
+	belowOrEqual := 0
+	for _, vID := range ids {
+		if vID > active {
+			kept[vID] = struct{}{} // in-flight future version
+			continue
+		}
+		if belowOrEqual < keep {
+			kept[vID] = struct{}{}
+			belowOrEqual++
+		}
+	}
+	return ids, kept
+}
+
+// versionsToPurge returns, oldest first, the RETIRING versions whose etcd key
+// can be deleted: outside the keep set (so never active, rollback or a version
+// newer than active) and listed by no pod registration as serving, loading,
+// rolling out or warm. A pod that lists one has not finished dropping it.
+func versionsToPurge(versions map[string]*model.VersionMeta, active, rollback string, keep int, pods map[string]model.PodData) []string {
+	ids, kept := keepSet(versions, active, rollback, keep)
+	held := heldVersions(pods)
+
+	var purge []string
+	for i := len(ids) - 1; i >= 0; i-- { // oldest first
+		vID := ids[i]
+		if vID == "" {
+			continue
+		}
+		if m := versions[vID]; m == nil || m.Status != model.StatusRetiring {
+			continue
+		}
+		if _, ok := kept[vID]; ok {
+			continue
+		}
+		if _, ok := held[vID]; ok {
+			continue
+		}
+		purge = append(purge, vID)
+	}
+	return purge
+}
+
+// heldVersions is every version some pod registration lists.
+func heldVersions(pods map[string]model.PodData) map[string]struct{} {
+	held := make(map[string]struct{})
+	for _, pd := range pods {
+		for _, v := range append([]string{pd.ServingVersion, pd.LoadingVersion, pd.RolloutVersion}, pd.WarmVersions...) {
+			if v != "" {
+				held[v] = struct{}{}
+			}
+		}
+	}
+	return held
 }
 
 // uncoveredShards returns the shard IDs (as strings) that have no assigned pod.

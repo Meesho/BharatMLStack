@@ -90,6 +90,26 @@ func (m *memKVOps) atomicSwap(_ context.Context, watchKey string, watchRev int64
 	return true, nil
 }
 
+func (m *memKVOps) atomicDelete(_ context.Context, guards map[string]int64, deletes []string, puts map[string]string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for k, rev := range guards {
+		if m.revs[k] != rev { // a missing key has revision 0, as in etcd
+			return false, nil
+		}
+	}
+	m.nextRev++
+	for _, k := range deletes {
+		delete(m.data, k)
+		delete(m.revs, k)
+	}
+	for k, v := range puts {
+		m.data[k] = v
+		m.revs[k] = m.nextRev
+	}
+	return true, nil
+}
+
 // ── errKVOps: always returns errors ──────────────────────────────────────────
 
 type errKVOps struct{ err error }
@@ -103,6 +123,9 @@ func (e *errKVOps) getPrefix(_ context.Context, _ string) (map[string]string, er
 }
 func (e *errKVOps) atomicCreate(_ context.Context, _ string, _ map[string]string) error { return e.err }
 func (e *errKVOps) atomicSwap(_ context.Context, _ string, _ int64, _ map[string]string) (bool, error) {
+	return false, e.err
+}
+func (e *errKVOps) atomicDelete(_ context.Context, _ map[string]int64, _ []string, _ map[string]string) (bool, error) {
 	return false, e.err
 }
 
@@ -1185,4 +1208,198 @@ func TestListVersions_BackendError(t *testing.T) {
 	versions, err := sc.ListVersions(context.Background(), "fs", "features")
 	assert.EqualError(t, err, "timeout")
 	assert.Nil(t, versions)
+}
+
+// ── PurgeVersion and the purged watermark ────────────────────────────────────
+
+// purgeFixture is a store with versions v1..v3 published; retired lists the
+// ones then marked RETIRING.
+func purgeFixture(t *testing.T, retired ...string) (*memKVOps, *EtcdStateClient) {
+	t.Helper()
+	mem := newMemKVOps()
+	sc := newTestStateClient(mem)
+	ctx := context.Background()
+	require.NoError(t, sc.CreateStore(ctx, defaultCfg()))
+	for _, v := range []string{"20260101_001", "20260102_001", "20260103_001"} {
+		require.NoError(t, sc.PublishVersion(ctx, "fs", "features", v, defaultMeta()))
+	}
+	for _, v := range retired {
+		require.NoError(t, sc.RetireVersion(ctx, "fs", "features", v))
+	}
+	return mem, sc
+}
+
+func watermark(t *testing.T, mem *memKVOps) (string, bool) {
+	t.Helper()
+	v, _, found, err := mem.get(context.Background(), model.PurgedWatermarkPath("fs", "features"))
+	require.NoError(t, err)
+	return v, found
+}
+
+func TestPurgeVersion_DeletesKeyAndRaisesWatermark(t *testing.T) {
+	mem, sc := purgeFixture(t, "20260101_001")
+
+	require.NoError(t, sc.PurgeVersion(context.Background(), "fs", "features", "20260101_001"))
+
+	_, err := sc.GetVersionMeta(context.Background(), "fs", "features", "20260101_001")
+	assert.ErrorIs(t, err, ErrNotFound)
+	wm, found := watermark(t, mem)
+	assert.True(t, found)
+	assert.Equal(t, "20260101_001", wm)
+	_, err = sc.GetVersionMeta(context.Background(), "fs", "features", "20260102_001")
+	assert.NoError(t, err, "other versions are untouched")
+}
+
+func TestPurgeVersion_WatermarkNeverMovesDown(t *testing.T) {
+	mem, sc := purgeFixture(t, "20260101_001", "20260102_001")
+	ctx := context.Background()
+
+	require.NoError(t, sc.PurgeVersion(ctx, "fs", "features", "20260102_001"))
+	require.NoError(t, sc.PurgeVersion(ctx, "fs", "features", "20260101_001"))
+
+	wm, _ := watermark(t, mem)
+	assert.Equal(t, "20260102_001", wm)
+}
+
+func TestPurgeVersion_AlreadyGoneIsNoop(t *testing.T) {
+	mem, sc := purgeFixture(t)
+
+	require.NoError(t, sc.PurgeVersion(context.Background(), "fs", "features", "20260109_001"))
+
+	_, found := watermark(t, mem)
+	assert.False(t, found, "nothing purged, so no watermark")
+}
+
+func TestPurgeVersion_RefusesVersionNotRetiring(t *testing.T) {
+	_, sc := purgeFixture(t)
+
+	err := sc.PurgeVersion(context.Background(), "fs", "features", "20260101_001")
+
+	assert.ErrorIs(t, err, ErrNotRetiring)
+	_, err = sc.GetVersionMeta(context.Background(), "fs", "features", "20260101_001")
+	assert.NoError(t, err, "a READY version is never deleted")
+}
+
+func TestPurgeVersion_CorruptMetaIsAnError(t *testing.T) {
+	mem, sc := purgeFixture(t)
+	require.NoError(t, mem.put(context.Background(), model.VersionPrefix("fs", "features", "20260101_001"), "{not json"))
+
+	err := sc.PurgeVersion(context.Background(), "fs", "features", "20260101_001")
+
+	assert.ErrorContains(t, err, "20260101_001")
+	_, _, found, _ := mem.get(context.Background(), model.VersionPrefix("fs", "features", "20260101_001"))
+	assert.True(t, found, "an undecodable key is left alone")
+}
+
+// rewriteOnDeleteOps rewrites the version key just before the purge's
+// transaction runs, as a concurrent promote would.
+type rewriteOnDeleteOps struct {
+	*memKVOps
+	key string
+}
+
+func (r *rewriteOnDeleteOps) atomicDelete(ctx context.Context, guards map[string]int64, deletes []string, puts map[string]string) (bool, error) {
+	_ = r.memKVOps.put(ctx, r.key, `{"status":"ACTIVE"}`)
+	return r.memKVOps.atomicDelete(ctx, guards, deletes, puts)
+}
+
+func TestPurgeVersion_KeyRewrittenConcurrentlyIsCASConflict(t *testing.T) {
+	mem, _ := purgeFixture(t, "20260101_001")
+	vKey := model.VersionPrefix("fs", "features", "20260101_001")
+	sc := newTestStateClient(&rewriteOnDeleteOps{memKVOps: mem, key: vKey})
+
+	err := sc.PurgeVersion(context.Background(), "fs", "features", "20260101_001")
+
+	assert.ErrorIs(t, err, ErrCASConflict)
+	_, _, found, _ := mem.get(context.Background(), vKey)
+	assert.True(t, found, "the rewritten key survives")
+	_, wmFound := watermark(t, mem)
+	assert.False(t, wmFound, "a failed purge never moves the watermark")
+}
+
+func TestPurgeVersion_BackendErrors(t *testing.T) {
+	mem, _ := purgeFixture(t, "20260101_001")
+	for name, ops := range map[string]kvOps{
+		"version get":   &errOnKeyOps{memKVOps: mem, failKey: model.VersionPrefix("fs", "features", "20260101_001")},
+		"watermark get": &errOnKeyOps{memKVOps: mem, failKey: model.PurgedWatermarkPath("fs", "features")},
+		"transaction":   &deleteErrorOps{memKVOps: mem},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := newTestStateClient(ops).PurgeVersion(context.Background(), "fs", "features", "20260101_001")
+			assert.Error(t, err)
+			assert.NotErrorIs(t, err, ErrCASConflict)
+		})
+	}
+}
+
+type deleteErrorOps struct{ *memKVOps }
+
+func (d *deleteErrorOps) atomicDelete(_ context.Context, _ map[string]int64, _ []string, _ map[string]string) (bool, error) {
+	return false, errors.New("injected txn error")
+}
+
+func TestPublishVersion_PurgedWatermark(t *testing.T) {
+	tests := []struct {
+		name    string
+		vID     string
+		wantErr error
+	}{
+		{name: "an id below the watermark is a purged id", vID: "20260101_001", wantErr: ErrAlreadyExists},
+		{name: "the watermark itself was purged", vID: "20260102_001", wantErr: ErrAlreadyExists},
+		{name: "an id above the watermark publishes", vID: "20260104_001"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mem, sc := purgeFixture(t, "20260101_001", "20260102_001")
+			ctx := context.Background()
+			require.NoError(t, sc.PurgeVersion(ctx, "fs", "features", "20260101_001"))
+			require.NoError(t, sc.PurgeVersion(ctx, "fs", "features", "20260102_001"))
+
+			err := sc.PublishVersion(ctx, "fs", "features", tc.vID, defaultMeta())
+
+			if tc.wantErr != nil {
+				assert.ErrorIs(t, err, tc.wantErr)
+				_, _, found, _ := mem.get(ctx, model.VersionPrefix("fs", "features", tc.vID))
+				assert.False(t, found, "a rejected publish writes nothing")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestPublishVersion_WatermarkReadError(t *testing.T) {
+	mem := newMemKVOps()
+	require.NoError(t, newTestStateClient(mem).CreateStore(context.Background(), defaultCfg()))
+	sc := newTestStateClient(&errOnKeyOps{memKVOps: mem, failKey: model.PurgedWatermarkPath("fs", "features")})
+
+	err := sc.PublishVersion(context.Background(), "fs", "features", "20260101_001", defaultMeta())
+
+	assert.ErrorContains(t, err, "injected get error")
+}
+
+// The live topology applies the store's cell like promote does, and shows each
+// pod's cell, so an operator can see why a registered pod is not routed to.
+func TestGetTopology_CellGuard(t *testing.T) {
+	mem := newMemKVOps()
+	sc := newTestStateClient(mem)
+	ctx := context.Background()
+	require.NoError(t, sc.CreateStore(ctx, defaultCfg()))
+	require.NoError(t, sc.PublishVersion(ctx, "fs", "features", "v1", defaultMeta()))
+	require.NoError(t, sc.PutDataflow(ctx, "fs", "features", model.DataflowConfig{Cell: "ase1c"}))
+	for id, pd := range map[string]model.PodData{
+		"fs-features-shard-0-0": {PodIP: "10.0.0.1", WarmVersions: []string{"v1"}, Cell: "ase1c"},
+		"fs-features-shard-0-1": {PodIP: "10.9.0.1", WarmVersions: []string{"v1"}, Cell: "as1a"},
+	} {
+		b, _ := json.Marshal(pd)
+		require.NoError(t, mem.put(ctx, model.PodDataPath("fs", "features", id), string(b)))
+	}
+	require.NoError(t, sc.PromoteVersion(ctx, "fs", "features", "v1", map[string][]string{"0": {"10.0.0.1:9091"}}))
+
+	topo, err := sc.GetTopology(ctx, "fs", "features")
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"10.0.0.1:9091"}, topo.Assignment["0"])
+	assert.Equal(t, "as1a", topo.Pods["fs-features-shard-0-1"].Cell)
+	assert.Equal(t, "ase1c", topo.Pods["fs-features-shard-0-0"].Cell)
 }

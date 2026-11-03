@@ -89,7 +89,13 @@ func (h *Handlers) PromoteVersion(c *gin.Context) {
 		return
 	}
 
-	assignment := placement.DeriveAssignment(storeState.Config.ShardCount, pods, vID)
+	// Only the store's cell may cover and serve the version (a pod of another
+	// cell registered here by mistake is left out); see placement.InCell.
+	var cell string
+	if storeState.Dataflow != nil {
+		cell = storeState.Dataflow.Cell
+	}
+	assignment := placement.DeriveAssignment(storeState.Config.ShardCount, placement.InCell(pods, cell), vID)
 
 	var missing []string
 	for i := 0; i < storeState.Config.ShardCount; i++ {

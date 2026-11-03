@@ -98,6 +98,16 @@ func (c *EtcdStateClient) PublishVersion(ctx context.Context, tenant, store, vID
 		return ErrNotFound
 	}
 
+	// A purged version has no key left, so the watermark is what keeps its ID
+	// from being published again.
+	watermark, _, _, err := c.ops.get(ctx, model.PurgedWatermarkPath(tenant, store))
+	if err != nil {
+		return err
+	}
+	if watermark != "" && vID <= watermark {
+		return ErrAlreadyExists
+	}
+
 	_, _, vFound, err := c.ops.get(ctx, model.VersionPrefix(tenant, store, vID))
 	if err != nil {
 		return err
@@ -223,6 +233,52 @@ func (c *EtcdStateClient) RetireVersion(ctx context.Context, tenant, store, vID 
 	return c.ops.put(ctx, model.VersionPrefix(tenant, store, vID), string(b))
 }
 
+// PurgeVersion deletes a RETIRING version's key and raises the store's purged
+// watermark to it, in one transaction guarded on both keys' revisions: a key
+// rewritten since it was read (a concurrent promote), or a watermark moved by
+// another control-plane replica, makes it return ErrCASConflict with nothing
+// written. A version with no key is already purged and returns nil. Choosing
+// what to purge — never active or rollback, never a version a pod still holds
+// — is the caller's job.
+func (c *EtcdStateClient) PurgeVersion(ctx context.Context, tenant, store, vID string) error {
+	vKey := model.VersionPrefix(tenant, store, vID)
+	val, vRev, found, err := c.ops.get(ctx, vKey)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return nil
+	}
+	var meta model.VersionMeta
+	if err := json.Unmarshal([]byte(val), &meta); err != nil {
+		return fmt.Errorf("decode version %s: %w", vID, err)
+	}
+	if meta.Status != model.StatusRetiring {
+		return ErrNotRetiring
+	}
+
+	wmKey := model.PurgedWatermarkPath(tenant, store)
+	watermark, wmRev, _, err := c.ops.get(ctx, wmKey)
+	if err != nil {
+		return err
+	}
+	if vID > watermark {
+		watermark = vID
+	}
+
+	ok, err := c.ops.atomicDelete(ctx,
+		map[string]int64{vKey: vRev, wmKey: wmRev},
+		[]string{vKey},
+		map[string]string{wmKey: watermark})
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrCASConflict
+	}
+	return nil
+}
+
 // UpdateAssignment refreshes the VersionMeta.Assignment for an active version
 // from current pod registrations. This keeps the etcd-stored assignment in sync
 // with reality after pod rescheduling (new IPs). Uses CAS on topologyVersion
@@ -338,9 +394,15 @@ func (c *EtcdStateClient) GetTopology(ctx context.Context, tenant, store string)
 		return topo, nil
 	}
 
-	// Derive live assignment for the active version.
+	// Derive live assignment for the active version, from the store's cell
+	// only (placement.InCell), as promote and the reconciler do. Pods lists
+	// every registration, with its cell.
 	if shardCount > 0 {
-		topo.Assignment = placement.DeriveAssignment(shardCount, pods, activeVer)
+		var cell string
+		if df, err := c.GetDataflow(ctx, tenant, store); err == nil && df != nil {
+			cell = df.Cell
+		}
+		topo.Assignment = placement.DeriveAssignment(shardCount, placement.InCell(pods, cell), activeVer)
 	}
 
 	// Build per-pod state snapshot.
@@ -353,6 +415,7 @@ func (c *EtcdStateClient) GetTopology(ctx context.Context, tenant, store string)
 			RolloutVersion: pd.RolloutVersion,
 			RolloutPct:     pd.RolloutPct,
 			WarmVersions:   pd.WarmVersions,
+			Cell:           pd.Cell,
 		}
 	}
 

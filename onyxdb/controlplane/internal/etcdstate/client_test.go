@@ -201,6 +201,43 @@ func TestEtcdKVOps(t *testing.T) {
 		val, _, _, _ := ops.get(ctx, "/onyxdb-test/cas-key")
 		assert.Equal(t, "v2", val)
 	})
+
+	t.Run("atomicDelete_success_with_absent_guard_key", func(t *testing.T) {
+		require.NoError(t, ops.put(ctx, "/onyxdb-test/del-key", "v1"))
+		_, rev, _, _ := ops.get(ctx, "/onyxdb-test/del-key")
+
+		// An absent key compares as ModRevision 0.
+		ok, err := ops.atomicDelete(ctx,
+			map[string]int64{"/onyxdb-test/del-key": rev, "/onyxdb-test/del-mark": 0},
+			[]string{"/onyxdb-test/del-key"},
+			map[string]string{"/onyxdb-test/del-mark": "v1"})
+		require.NoError(t, err)
+		assert.True(t, ok)
+
+		_, _, found, _ := ops.get(ctx, "/onyxdb-test/del-key")
+		assert.False(t, found)
+		val, _, _, _ := ops.get(ctx, "/onyxdb-test/del-mark")
+		assert.Equal(t, "v1", val)
+	})
+
+	t.Run("atomicDelete_cas_fails_on_stale_rev", func(t *testing.T) {
+		require.NoError(t, ops.put(ctx, "/onyxdb-test/del-stale", "v1"))
+		_, rev, _, _ := ops.get(ctx, "/onyxdb-test/del-stale")
+		require.NoError(t, ops.put(ctx, "/onyxdb-test/del-stale", "v2"))
+
+		ok, err := ops.atomicDelete(ctx,
+			map[string]int64{"/onyxdb-test/del-stale": rev},
+			[]string{"/onyxdb-test/del-stale"},
+			map[string]string{"/onyxdb-test/del-stale-mark": "x"})
+		require.NoError(t, err)
+		assert.False(t, ok)
+
+		val, _, found, _ := ops.get(ctx, "/onyxdb-test/del-stale")
+		assert.True(t, found)
+		assert.Equal(t, "v2", val)
+		_, _, found, _ = ops.get(ctx, "/onyxdb-test/del-stale-mark")
+		assert.False(t, found, "a failed compare writes nothing")
+	})
 }
 
 // ── Concurrent safety ────────────────────────────────────────────────────────
@@ -271,6 +308,11 @@ func TestEtcdKVOps_CancelledContext(t *testing.T) {
 
 	t.Run("atomicSwap_error", func(t *testing.T) {
 		_, err := ops.atomicSwap(ctx, "/onyxdb-test/k", 0, map[string]string{"/onyxdb-test/k": "v"})
+		assert.Error(t, err)
+	})
+
+	t.Run("atomicDelete_error", func(t *testing.T) {
+		_, err := ops.atomicDelete(ctx, map[string]int64{"/onyxdb-test/k": 0}, []string{"/onyxdb-test/k"}, nil)
 		assert.Error(t, err)
 	})
 }

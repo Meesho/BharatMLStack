@@ -58,6 +58,15 @@ func TopologyVersionPath(tenant, store string) string {
 	return StorePrefix(tenant, store) + "/topologyVersion"
 }
 
+// PurgedWatermarkPath returns the key that holds the highest version ID whose
+// key the reconciler has purged. Publish refuses any ID at or below it, so a
+// purged ID is never published again.
+//
+//	/config/mnemo/tenants/{tenant}/stores/{store}/purgedWatermark
+func PurgedWatermarkPath(tenant, store string) string {
+	return StorePrefix(tenant, store) + "/purgedWatermark"
+}
+
 // ── Version-level keys ─────────────────────────────────────────────────────────
 
 // VersionPrefix returns the base etcd path for a specific version's metadata.

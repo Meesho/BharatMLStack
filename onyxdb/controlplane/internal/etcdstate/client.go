@@ -18,6 +18,7 @@ var (
 	ErrAlreadyExists = fmt.Errorf("already exists")
 	ErrCASConflict   = fmt.Errorf("CAS conflict: topology version changed concurrently")
 	ErrNoRollback    = fmt.Errorf("no rollback version available")
+	ErrNotRetiring   = fmt.Errorf("version is not RETIRING")
 )
 
 // StoreState holds the full persisted state for a store.
@@ -63,12 +64,13 @@ type TopologyState struct {
 // PodState is a snapshot of a single pod's data-plane state, derived from
 // its etcd registration. Included in the topology response for observability.
 type PodState struct {
-	PodIP          string `json:"podIP"`
-	ServingVersion string `json:"servingVersion"`
-	LoadingVersion string `json:"loadingVersion,omitempty"`
-	RolloutVersion string `json:"rolloutVersion,omitempty"`
-	RolloutPct     int    `json:"rolloutPct,omitempty"`
+	PodIP          string   `json:"podIP"`
+	ServingVersion string   `json:"servingVersion"`
+	LoadingVersion string   `json:"loadingVersion,omitempty"`
+	RolloutVersion string   `json:"rolloutVersion,omitempty"`
+	RolloutPct     int      `json:"rolloutPct,omitempty"`
 	WarmVersions   []string `json:"warmVersions"`
+	Cell           string   `json:"cell,omitempty"`
 }
 
 // StateClient is the interface all control plane handlers depend on.
@@ -111,6 +113,10 @@ type kvOps interface {
 	// atomicSwap writes updates atomically only when watchKey's etcd modRevision == watchRev.
 	// Returns (true, nil) on success, (false, nil) on CAS failure.
 	atomicSwap(ctx context.Context, watchKey string, watchRev int64, updates map[string]string) (bool, error)
+	// atomicDelete deletes deletes and writes puts in one transaction, only when
+	// every guard key's modRevision equals its value (0 = the key is absent).
+	// Returns (true, nil) on success, (false, nil) on CAS failure.
+	atomicDelete(ctx context.Context, guards map[string]int64, deletes []string, puts map[string]string) (bool, error)
 }
 
 // etcdKVOps is the live etcd implementation of kvOps.
@@ -174,6 +180,25 @@ func (e *etcdKVOps) atomicSwap(ctx context.Context, watchKey string, watchRev in
 		If(clientv3.Compare(clientv3.ModRevision(watchKey), "=", watchRev)).
 		Then(ops...).
 		Commit()
+	if err != nil {
+		return false, err
+	}
+	return resp.Succeeded, nil
+}
+
+func (e *etcdKVOps) atomicDelete(ctx context.Context, guards map[string]int64, deletes []string, puts map[string]string) (bool, error) {
+	cmps := make([]clientv3.Cmp, 0, len(guards))
+	for k, rev := range guards {
+		cmps = append(cmps, clientv3.Compare(clientv3.ModRevision(k), "=", rev))
+	}
+	ops := make([]clientv3.Op, 0, len(deletes)+len(puts))
+	for _, k := range deletes {
+		ops = append(ops, clientv3.OpDelete(k))
+	}
+	for k, v := range puts {
+		ops = append(ops, clientv3.OpPut(k, v))
+	}
+	resp, err := e.kv.Txn(ctx).If(cmps...).Then(ops...).Commit()
 	if err != nil {
 		return false, err
 	}
