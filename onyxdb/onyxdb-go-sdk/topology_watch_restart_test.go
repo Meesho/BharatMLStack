@@ -99,7 +99,7 @@ func TestRun_ActiveWatchClosed_ResyncsAndRewatches(t *testing.T) {
 		m.put(model.VersionPrefix("recsys", "catalog", "v1"), metaJSON(t, 1))
 		m.put(model.VersionPrefix("recsys", "catalog", "v2"), metaJSON(t, 4))
 		m.put(model.VersionPrefix("recsys", "catalog", "v3"), metaJSON(t, 2))
-		second := m.addWatchPair()
+		second := m.addWatchSet()
 
 		tw, r, _ := newWatcherWith(m)
 		wr := &waitRecorder{}
@@ -109,7 +109,7 @@ func TestRun_ActiveWatchClosed_ResyncsAndRewatches(t *testing.T) {
 		_, done := startRun(t, tw)
 
 		require.Eventually(t, func() bool { return r.ShardCount() == 1 }, time.Second, time.Millisecond)
-		first := requireWatchCalls(t, m, 2)
+		first := requireWatchCalls(t, m, watchesPerAttempt)
 
 		// Promoted while the watch is down: no event will ever announce it.
 		m.put(model.ActiveVersionPath("recsys", "catalog"), "v2")
@@ -117,14 +117,18 @@ func TestRun_ActiveWatchClosed_ResyncsAndRewatches(t *testing.T) {
 
 		// The resync reads it.
 		require.Eventually(t, func() bool { return r.ShardCount() == 4 }, 2*time.Second, time.Millisecond)
-		calls := requireWatchCalls(t, m, 4)
-		assert.Equal(t, model.ActiveVersionPath("recsys", "catalog"), calls[2].key)
-		assert.Equal(t, model.PodWatchPrefix("recsys", "catalog"), calls[3].key)
-		assert.True(t, calls[3].prefix, "the pod watch is a prefix watch")
-		select {
-		case <-first[1].ctx.Done():
-		default:
-			t.Fatal("the first attempt's pod watch was left running")
+		calls := requireWatchCalls(t, m, 2*watchesPerAttempt)
+		assert.Equal(t, model.ActiveVersionPath("recsys", "catalog"), calls[3].key)
+		assert.Equal(t, model.PodWatchPrefix("recsys", "catalog"), calls[4].key)
+		assert.True(t, calls[4].prefix, "the pod watch is a prefix watch")
+		assert.Equal(t, model.TopologyVersionPath("recsys", "catalog"), calls[5].key)
+		assert.False(t, calls[5].prefix, "the topologyVersion watch is a single key")
+		for i, name := range []string{"pod", "topologyVersion"} {
+			select {
+			case <-first[i+1].ctx.Done():
+			default:
+				t.Fatalf("the first attempt's %s watch was left running", name)
+			}
 		}
 
 		// The new watches are live.
@@ -145,7 +149,7 @@ func TestRun_PodWatchClosed_ResyncsAndRewatches(t *testing.T) {
 		m.put(model.ActiveVersionPath("recsys", "catalog"), "v1")
 		m.put(model.VersionPrefix("recsys", "catalog", "v1"),
 			metaWithAssignmentJSON(t, 1, map[string][]string{"0": {"10.0.1.10:9091"}}))
-		second := m.addWatchPair()
+		second := m.addWatchSet()
 
 		tw, r, _ := newWatcherWith(m)
 		tw.sleep = (&waitRecorder{}).sleep
@@ -155,10 +159,10 @@ func TestRun_PodWatchClosed_ResyncsAndRewatches(t *testing.T) {
 			pod, err := r.PodFor(0)
 			return err == nil && pod == "10.0.1.10:9091"
 		}, time.Second, time.Millisecond)
-		first := requireWatchCalls(t, m, 2)
+		first := requireWatchCalls(t, m, watchesPerAttempt)
 
 		close(m.podCh())
-		requireWatchCalls(t, m, 4)
+		requireWatchCalls(t, m, 2*watchesPerAttempt)
 		select {
 		case <-first[0].ctx.Done():
 		default:
@@ -190,22 +194,26 @@ func TestRun_CancelledWatch_RestartsWithReason(t *testing.T) {
 			m.podCh() <- clientv3.WatchResponse{Canceled: true}
 		}, "reason:canceled"},
 		{"channel closed", func(m *mockEtcd) { close(m.podCh()) }, "reason:closed"},
+		{"topologyVersion compacted", func(m *mockEtcd) {
+			m.topologyVersionCh() <- clientv3.WatchResponse{Canceled: true, CompactRevision: 12}
+		}, "reason:compacted"},
+		{"topologyVersion channel closed", func(m *mockEtcd) { close(m.topologyVersionCh()) }, "reason:closed"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			withLookup(failLookup, func() {
 				m := newMockEtcd()
-				m.addWatchPair()
+				m.addWatchSet()
 				tw, _, _ := newWatcherWith(m)
 				tw.sleep = (&waitRecorder{}).sleep
 				mc := &metricCollector{}
 				tw.SetMetrics(mc.timing, mc.count, nil)
 				_, done := startRun(t, tw)
-				requireWatchCalls(t, m, 2)
+				requireWatchCalls(t, m, watchesPerAttempt)
 
 				tc.end(m)
 
-				requireWatchCalls(t, m, 4)
+				requireWatchCalls(t, m, 2*watchesPerAttempt)
 				require.Eventually(t, func() bool { return len(restartCounts(mc)) == 1 }, time.Second, time.Millisecond)
 				assert.Equal(t, []string{tc.reason}, restartCounts(mc)[0].Tags)
 				requireRunning(t, done)
@@ -220,23 +228,25 @@ func TestRun_WatchesStartRightAfterTheRevisionRead(t *testing.T) {
 		m.put(model.ActiveVersionPath("recsys", "catalog"), "v1")
 		m.put(model.VersionPrefix("recsys", "catalog", "v1"), metaJSON(t, 1))
 		m.setRev(41)
-		m.addWatchPair()
+		m.addWatchSet()
 
 		tw, _, _ := newWatcherWith(m)
 		tw.sleep = (&waitRecorder{}).sleep
 		startRun(t, tw)
 
-		calls := requireWatchCalls(t, m, 2)
+		calls := requireWatchCalls(t, m, watchesPerAttempt)
 		assert.Equal(t, int64(42), calls[0].rev, "activeVersion watch starts after the initial read")
 		assert.Equal(t, int64(42), calls[1].rev, "pod watch starts after the initial read")
 		assert.True(t, calls[1].prefix)
+		assert.Equal(t, int64(42), calls[2].rev, "topologyVersion watch starts after the initial read")
 
 		m.setRev(57)
 		close(m.activeVersionCh())
-		calls = requireWatchCalls(t, m, 4)
-		assert.Equal(t, int64(58), calls[2].rev)
+		calls = requireWatchCalls(t, m, 2*watchesPerAttempt)
 		assert.Equal(t, int64(58), calls[3].rev)
-		assert.True(t, calls[3].prefix)
+		assert.Equal(t, int64(58), calls[4].rev)
+		assert.True(t, calls[4].prefix)
+		assert.Equal(t, int64(58), calls[5].rev)
 	})
 }
 
@@ -245,9 +255,10 @@ func TestRun_NoRevisionRead_WatchesFromNow(t *testing.T) {
 		m := newMockEtcd() // no header revision, no active version
 		tw, _, _ := newWatcherWith(m)
 		startRun(t, tw)
-		calls := requireWatchCalls(t, m, 2)
+		calls := requireWatchCalls(t, m, watchesPerAttempt)
 		assert.Equal(t, int64(0), calls[0].rev)
 		assert.Equal(t, int64(0), calls[1].rev)
+		assert.Equal(t, int64(0), calls[2].rev)
 	})
 }
 
@@ -255,7 +266,7 @@ func TestRun_RestartBackoff_DoublesCapsAndJitters(t *testing.T) {
 	withLookup(failLookup, func() {
 		m := newMockEtcd()
 		for i := 0; i < 4; i++ {
-			m.addWatchPair()
+			m.addWatchSet()
 		}
 		tw, _, _ := newWatcherWith(m)
 		wr := &waitRecorder{}
@@ -267,10 +278,10 @@ func TestRun_RestartBackoff_DoublesCapsAndJitters(t *testing.T) {
 		startRun(t, tw)
 
 		for round := 0; round < 4; round++ {
-			requireWatchCalls(t, m, 2*(round+1))
-			close(m.watchChs[2*round])
+			requireWatchCalls(t, m, watchesPerAttempt*(round+1))
+			close(m.watchChs[watchesPerAttempt*round])
 		}
-		requireWatchCalls(t, m, 10)
+		requireWatchCalls(t, m, 5*watchesPerAttempt)
 
 		waits := wr.all()
 		require.Len(t, waits, 4)
@@ -285,8 +296,8 @@ func TestRun_RestartBackoff_DoublesCapsAndJitters(t *testing.T) {
 func TestRun_RestartBackoff_ResetsAfterAHealthyWatch(t *testing.T) {
 	withLookup(failLookup, func() {
 		m := newMockEtcd()
-		m.addWatchPair()
-		m.addWatchPair()
+		m.addWatchSet()
+		m.addWatchSet()
 		tw, _, _ := newWatcherWith(m)
 		wr := &waitRecorder{}
 		tw.sleep = wr.sleep
@@ -296,12 +307,12 @@ func TestRun_RestartBackoff_ResetsAfterAHealthyWatch(t *testing.T) {
 		tw.restartMax = 400 * time.Millisecond
 		startRun(t, tw)
 
-		requireWatchCalls(t, m, 2)
+		requireWatchCalls(t, m, watchesPerAttempt)
 		close(m.watchChs[0]) // ends at once: the next backoff doubles
-		requireWatchCalls(t, m, 4)
+		requireWatchCalls(t, m, 2*watchesPerAttempt)
 		clock.advance(400 * time.Millisecond) // this watch lives restartMax
-		close(m.watchChs[2])
-		requireWatchCalls(t, m, 6)
+		close(m.watchChs[watchesPerAttempt])
+		requireWatchCalls(t, m, 3*watchesPerAttempt)
 
 		waits := wr.all()
 		require.Len(t, waits, 2)
@@ -314,12 +325,12 @@ func TestRun_ResyncReadFails_RetriesBeforeWatching(t *testing.T) {
 		m := newMockEtcd()
 		m.put(model.ActiveVersionPath("recsys", "catalog"), "v1")
 		m.put(model.VersionPrefix("recsys", "catalog", "v1"), metaJSON(t, 1))
-		m.addWatchPair()
+		m.addWatchSet()
 		tw, r, _ := newWatcherWith(m)
 		wr := &waitRecorder{}
 		tw.sleep = wr.sleep
 		startRun(t, tw)
-		requireWatchCalls(t, m, 2)
+		requireWatchCalls(t, m, watchesPerAttempt)
 		require.Eventually(t, func() bool { return r.ShardCount() == 1 }, time.Second, time.Millisecond)
 
 		m.setGetErr(model.ActiveVersionPath("recsys", "catalog"), errors.New("etcd unreachable"))
@@ -327,11 +338,11 @@ func TestRun_ResyncReadFails_RetriesBeforeWatching(t *testing.T) {
 
 		// Retries the read; opens no watch it could not start from a revision.
 		require.Eventually(t, func() bool { return len(wr.all()) >= 3 }, time.Second, time.Millisecond)
-		assert.Len(t, m.watchCalls(), 2)
+		assert.Len(t, m.watchCalls(), watchesPerAttempt)
 
 		m.setGetErr(model.ActiveVersionPath("recsys", "catalog"), nil)
 		m.put(model.VersionPrefix("recsys", "catalog", "v1"), metaJSON(t, 3))
-		requireWatchCalls(t, m, 4)
+		requireWatchCalls(t, m, 2*watchesPerAttempt)
 		require.Eventually(t, func() bool { return r.ShardCount() == 3 }, time.Second, time.Millisecond)
 	})
 }
@@ -347,7 +358,7 @@ func TestRun_CancelledDuringBackoff_Returns(t *testing.T) {
 			return false
 		}
 		cancel, done := startRun(t, tw)
-		requireWatchCalls(t, m, 2)
+		requireWatchCalls(t, m, watchesPerAttempt)
 		close(m.activeVersionCh())
 		select {
 		case <-entered:
@@ -361,7 +372,7 @@ func TestRun_CancelledDuringBackoff_Returns(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("Run did not return when cancelled during its backoff")
 		}
-		assert.Len(t, m.watchCalls(), 2, "no watch opened after cancellation")
+		assert.Len(t, m.watchCalls(), watchesPerAttempt, "no watch opened after cancellation")
 	})
 }
 
@@ -373,7 +384,7 @@ func TestRun_Shutdown_ClosedWatchesAreNotRestarted(t *testing.T) {
 		mc := &metricCollector{}
 		tw.SetMetrics(mc.timing, mc.count, nil)
 		cancel, done := startRun(t, tw)
-		requireWatchCalls(t, m, 2)
+		requireWatchCalls(t, m, watchesPerAttempt)
 
 		cancel()
 		select {
@@ -383,7 +394,7 @@ func TestRun_Shutdown_ClosedWatchesAreNotRestarted(t *testing.T) {
 			t.Fatal("Run did not return on shutdown")
 		}
 		assert.Empty(t, restartCounts(mc), "shutdown is not a restart")
-		assert.Len(t, m.watchCalls(), 2)
+		assert.Len(t, m.watchCalls(), watchesPerAttempt)
 	})
 }
 
