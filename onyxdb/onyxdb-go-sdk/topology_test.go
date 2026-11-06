@@ -44,21 +44,29 @@ type watchCall struct {
 	ctx    context.Context
 }
 
-// watchPair is the activeVersion + pod-prefix channel pair one Run attempt
-// opens, in that order.
-type watchPair struct {
-	active chan clientv3.WatchResponse
-	pods   chan clientv3.WatchResponse
+// watchesPerAttempt is how many watches one Run attempt opens: activeVersion,
+// the pod prefix and topologyVersion, in that order.
+const watchesPerAttempt = 3
+
+// watchSet is the channels one Run attempt's watches get.
+type watchSet struct {
+	active   chan clientv3.WatchResponse
+	pods     chan clientv3.WatchResponse
+	topology chan clientv3.WatchResponse
 }
 
-// addWatchPair queues the channels the next re-established pair of watches
+// addWatchSet queues the channels the next re-established set of watches
 // gets.
-func (m *mockEtcd) addWatchPair() watchPair {
+func (m *mockEtcd) addWatchSet() watchSet {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	p := watchPair{make(chan clientv3.WatchResponse, 8), make(chan clientv3.WatchResponse, 8)}
-	m.watchChs = append(m.watchChs, p.active, p.pods)
-	return p
+	s := watchSet{
+		make(chan clientv3.WatchResponse, 8),
+		make(chan clientv3.WatchResponse, 8),
+		make(chan clientv3.WatchResponse, 8),
+	}
+	m.watchChs = append(m.watchChs, s.active, s.pods, s.topology)
+	return s
 }
 
 func (m *mockEtcd) watchCalls() []watchCall {
@@ -77,8 +85,10 @@ func newMockEtcd() *mockEtcd {
 	return &mockEtcd{
 		kv:     map[string]string{},
 		getErr: map[string]error{},
-		// Pre-allocate channels for two watches: activeVersion + podPrefix.
+		// Pre-allocate channels for the first attempt's watches: activeVersion,
+		// podPrefix and topologyVersion.
 		watchChs: []chan clientv3.WatchResponse{
+			make(chan clientv3.WatchResponse, 8),
 			make(chan clientv3.WatchResponse, 8),
 			make(chan clientv3.WatchResponse, 8),
 		},
@@ -90,6 +100,9 @@ func (m *mockEtcd) activeVersionCh() chan clientv3.WatchResponse { return m.watc
 
 // podCh returns the channel for the second Watch call (pod registrations).
 func (m *mockEtcd) podCh() chan clientv3.WatchResponse { return m.watchChs[1] }
+
+// topologyVersionCh returns the channel for the third Watch call (topologyVersion).
+func (m *mockEtcd) topologyVersionCh() chan clientv3.WatchResponse { return m.watchChs[2] }
 
 func (m *mockEtcd) put(key, value string) {
 	m.mu.Lock()
@@ -155,6 +168,15 @@ func putActiveVersion(version string) clientv3.WatchResponse {
 	return clientv3.WatchResponse{
 		Events: []*clientv3.Event{
 			{Type: mvccpb.PUT, Kv: &mvccpb.KeyValue{Value: []byte(version)}},
+		},
+	}
+}
+
+// bumpTopologyVersion is the event the control plane's counter bump produces.
+func bumpTopologyVersion(n string) clientv3.WatchResponse {
+	return clientv3.WatchResponse{
+		Events: []*clientv3.Event{
+			{Type: mvccpb.PUT, Kv: &mvccpb.KeyValue{Value: []byte(n)}},
 		},
 	}
 }
@@ -450,6 +472,130 @@ func TestRun_PodRegistrationChange_TriggersReload(t *testing.T) {
 			return seen["10.0.1.10:9091"] && seen["10.0.1.20:9091"]
 		}, time.Second, 10*time.Millisecond)
 	})
+}
+
+// ── topologyVersion watch delivers assignment refreshes ─────────────────────
+
+// A pod that warms after promote writes its pod key before the reconciler adds
+// it to the assignment, so the re-read on its pod event still sees the old
+// assignment. The reconciler's refresh bumps topologyVersion, and that event
+// must bring the pod into routing without any further pod event.
+func TestRun_AssignmentRefreshAfterPodEvent_ReachesRouter(t *testing.T) {
+	withLookup(okLookup("10.0.0.1"), func() {
+		m := newMockEtcd()
+		versionKey := model.VersionPrefix("recsys", "catalog", "v1")
+		m.put(model.ActiveVersionPath("recsys", "catalog"), "v1")
+		m.put(versionKey, metaWithAssignmentJSON(t, 1, map[string][]string{"0": {"10.0.1.10:9091"}}))
+
+		tw, r, _ := newWatcherWith(m)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go tw.Run(ctx)
+		require.Eventually(t, func() bool {
+			pod, err := r.PodFor(0)
+			return err == nil && pod == "10.0.1.10:9091"
+		}, time.Second, 5*time.Millisecond)
+
+		// The late pod reports warm; the assignment is not refreshed yet.
+		m.podCh() <- podPutEvent()
+		time.Sleep(30 * time.Millisecond)
+
+		// The reconciler's refresh: assignment and topologyVersion in one write.
+		m.put(versionKey, metaWithAssignmentJSON(t, 1, map[string][]string{"0": {"10.0.1.10:9091", "10.0.1.20:9091"}}))
+		m.topologyVersionCh() <- bumpTopologyVersion("8")
+
+		require.Eventually(t, func() bool {
+			seen := make(map[string]bool)
+			for i := 0; i < 10; i++ {
+				pod, _ := r.PodFor(0)
+				seen[pod] = true
+			}
+			return seen["10.0.1.10:9091"] && seen["10.0.1.20:9091"]
+		}, time.Second, 10*time.Millisecond)
+	})
+}
+
+// A promote bumps topologyVersion and flips activeVersion in one transaction,
+// but the two watches deliver independently. The bump alone must load the
+// version that is active now, not the one the watcher last knew.
+func TestHandleTopologyVersionWatch_RereadsActiveVersion(t *testing.T) {
+	withLookup(okLookup("10.0.0.1"), func() {
+		m := newMockEtcd()
+		m.put(model.ActiveVersionPath("recsys", "catalog"), "v1")
+		m.put(model.VersionPrefix("recsys", "catalog", "v1"), metaJSON(t, 1))
+		m.put(model.VersionPrefix("recsys", "catalog", "v2"), metaJSON(t, 4))
+		tw, r, _ := newWatcherWith(m)
+		require.NoError(t, resyncErr(tw))
+
+		m.put(model.ActiveVersionPath("recsys", "catalog"), "v2")
+		tw.handleTopologyVersionWatch(context.Background(), bumpTopologyVersion("9"))
+
+		assert.Equal(t, uint32(4), r.ShardCount())
+		assert.Equal(t, "v2", tw.activeVID)
+	})
+}
+
+func TestHandleTopologyVersionWatch_OneReloadPerResponse(t *testing.T) {
+	withLookup(okLookup("10.0.0.1"), func() {
+		m := newMockEtcd()
+		m.put(model.ActiveVersionPath("recsys", "catalog"), "v1")
+		m.put(model.VersionPrefix("recsys", "catalog", "v1"), metaJSON(t, 2))
+		tw, r, _ := newWatcherWith(m)
+		mc := &metricCollector{}
+		tw.SetMetrics(mc.timing, mc.count, nil)
+
+		resp := bumpTopologyVersion("10")
+		resp.Events = append(resp.Events, bumpTopologyVersion("11").Events...)
+		tw.handleTopologyVersionWatch(context.Background(), resp)
+
+		assert.Equal(t, uint32(2), r.ShardCount())
+		counts, _ := reloadRecords(mc)
+		assert.Len(t, counts, 1, "one re-read covers every bump in a response")
+	})
+}
+
+func TestHandleTopologyVersionWatch_IgnoresDeletesAndEventlessResponses(t *testing.T) {
+	m := newMockEtcd()
+	m.put(model.ActiveVersionPath("recsys", "catalog"), "v1")
+	m.put(model.VersionPrefix("recsys", "catalog", "v1"), metaJSON(t, 3))
+	tw, r, _ := newWatcherWith(m)
+	mc := &metricCollector{}
+	tw.SetMetrics(mc.timing, mc.count, nil)
+
+	tw.handleTopologyVersionWatch(context.Background(), clientv3.WatchResponse{}) // e.g. a progress notification
+	tw.handleTopologyVersionWatch(context.Background(), clientv3.WatchResponse{Events: []*clientv3.Event{
+		{Type: mvccpb.DELETE, Kv: &mvccpb.KeyValue{}},
+	}})
+
+	assert.Equal(t, uint32(0), r.ShardCount())
+	assert.Empty(t, mc.findAll(MetricTopologyReload))
+}
+
+func TestHandleTopologyVersionWatch_ReadFailure_KeepsLastKnownTopology(t *testing.T) {
+	tests := []struct {
+		name   string
+		failOn string
+	}{
+		{"activeVersion read fails", model.ActiveVersionPath("recsys", "catalog")},
+		{"version meta read fails", model.VersionPrefix("recsys", "catalog", "v1")},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			withLookup(okLookup("10.0.0.1"), func() {
+				m := newMockEtcd()
+				m.put(model.ActiveVersionPath("recsys", "catalog"), "v1")
+				m.put(model.VersionPrefix("recsys", "catalog", "v1"), metaJSON(t, 2))
+				tw, r, _ := newWatcherWith(m)
+				require.NoError(t, resyncErr(tw))
+
+				m.setGetErr(tc.failOn, errors.New("etcd timeout"))
+				tw.handleTopologyVersionWatch(context.Background(), bumpTopologyVersion("12"))
+
+				assert.Equal(t, uint32(2), r.ShardCount())
+				assert.Equal(t, "v1", tw.activeVID)
+			})
+		})
+	}
 }
 
 // ── AssignmentResolver ──────────────────────────────────────────────────────

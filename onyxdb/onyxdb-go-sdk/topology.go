@@ -26,13 +26,18 @@ type EtcdClient interface {
 // TopologyWatcher keeps the Router's shard count, the DNS resolver, and the
 // assignment resolver in sync with etcd.
 //
-// It watches two keys:
+// It watches three keys:
 //  1. ActiveVersionPath — the control plane CAS-flips this on promote/rollback.
 //     On each change (and once at startup) it reads the active version's
 //     VersionMeta, pushes shard count + assignment, and triggers DNS refresh.
 //  2. PodWatchPrefix — ephemeral pod registrations. A new warm pod appearing
 //     triggers a re-read of the current version's assignment so the SDK picks
 //     up scale-up events immediately (instead of waiting for DNS TTL).
+//  3. TopologyVersionPath — the control plane bumps this counter in the same
+//     transaction as every write of the assignment: promote, rollback and the
+//     reconciler's refresh. The refresh lands up to a reconciler tick after the
+//     pod event that caused it, so the re-read in (2) can still see the old
+//     assignment; this watch delivers the refreshed one.
 //
 // Pod IPs themselves come from K8s DNS (DNSResolver) or directly from the
 // assignment map (AssignmentResolver) — etcd stays off the read hot path.
@@ -145,8 +150,9 @@ func (tw *TopologyWatcher) twEmitTiming(name string, value time.Duration, tags [
 	}
 }
 
-// Run does an initial reload, then watches ActiveVersionPath and the pod
-// registration prefix, reloading on each change. Blocks until ctx is cancelled.
+// Run does an initial reload, then watches ActiveVersionPath, the pod
+// registration prefix and TopologyVersionPath, reloading on each change.
+// Blocks until ctx is cancelled.
 //
 // A watch that ends while ctx is live is re-established. etcd cancels a watch
 // that resumes from a compacted revision — the usual end of a watch whose
@@ -194,10 +200,10 @@ func (tw *TopologyWatcher) Run(ctx context.Context) error {
 	}
 }
 
-// watch runs the activeVersion and pod-prefix watches from rev+1 (from now
-// when rev is 0) until either ends or ctx is done, and returns why it ended:
-// "closed", "canceled" or "compacted"; "" when ctx ended it. Ending one watch
-// cancels the other.
+// watch runs the activeVersion, pod-prefix and topologyVersion watches from
+// rev+1 (from now when rev is 0) until any ends or ctx is done, and returns why
+// it ended: "closed", "canceled" or "compacted"; "" when ctx ended it. Ending
+// one watch cancels the others.
 func (tw *TopologyWatcher) watch(ctx context.Context, rev int64) string {
 	wctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -209,6 +215,7 @@ func (tw *TopologyWatcher) watch(ctx context.Context, rev int64) string {
 	activeCh := tw.client.Watch(wctx, model.ActiveVersionPath(tw.tenant, tw.store), from...)
 	podCh := tw.client.Watch(wctx, model.PodWatchPrefix(tw.tenant, tw.store),
 		append([]clientv3.OpOption{clientv3.WithPrefix()}, from...)...)
+	topoCh := tw.client.Watch(wctx, model.TopologyVersionPath(tw.tenant, tw.store), from...)
 
 	for {
 		select {
@@ -228,6 +235,14 @@ func (tw *TopologyWatcher) watch(ctx context.Context, rev int64) string {
 				return reason
 			}
 			tw.handlePodWatch(ctx, resp)
+		case resp, ok := <-topoCh:
+			if !ok {
+				return "closed"
+			}
+			if reason := watchEndReason(resp); reason != "" {
+				return reason
+			}
+			tw.handleTopologyVersionWatch(ctx, resp)
 		case <-ctx.Done():
 			return ""
 		}
@@ -269,6 +284,23 @@ func (tw *TopologyWatcher) handlePodWatch(ctx context.Context, resp clientv3.Wat
 	// Re-read the active version's assignment to pick up the new pod set.
 	if err := tw.reloadVersion(ctx, tw.activeVID); err != nil {
 		log.Warn().Err(err).Str("version", tw.activeVID).Msg("topology: pod watch triggered reload failed")
+	}
+}
+
+// handleTopologyVersionWatch re-reads the active version and its meta after
+// the control plane rewrote the assignment. It reads activeVersion instead of
+// reusing activeVID: the watches deliver independently, so a promote's bump can
+// arrive before its activeVersion event.
+func (tw *TopologyWatcher) handleTopologyVersionWatch(ctx context.Context, resp clientv3.WatchResponse) {
+	for _, ev := range resp.Events {
+		if ev.Type != mvccpb.PUT {
+			continue
+		}
+		if _, err := tw.resync(ctx); err != nil {
+			log.Warn().Err(err).Str("tenant", tw.tenant).Str("store", tw.store).
+				Msg("topology: topologyVersion triggered reload failed")
+		}
+		return // one re-read covers every bump in the response
 	}
 }
 
