@@ -500,7 +500,7 @@ func TestConfigBuildPoolConfig(t *testing.T) {
 	defaults := PoolConfig{
 		MinPerPod: 1, MaxPerPod: 4, DialTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second,
 		IdleCheckInterval: 10 * time.Second, KeepAliveInterval: 15 * time.Second, KeepAliveTimeout: 5 * time.Second,
-		DrainTimeout: time.Second, MaxDialsPerPod: 4,
+		DrainTimeout: time.Second, MaxDialsPerPod: 4, PruneGrace: 15 * time.Second,
 	}
 	withMax := func(pc PoolConfig, max int) PoolConfig { pc.MaxPerPod = max; return pc }
 	tests := []struct {
@@ -551,7 +551,7 @@ func TestConfigBuildPoolConfig(t *testing.T) {
 			wantPool: PoolConfig{
 				MinPerPod: 3, MaxPerPod: 12, DialTimeout: 700 * time.Millisecond, IdleTimeout: 40 * time.Second,
 				IdleCheckInterval: 500 * time.Millisecond, KeepAliveInterval: 2 * time.Second, KeepAliveTimeout: 3 * time.Second,
-				DrainTimeout: time.Second, MaxDialsPerPod: 4,
+				DrainTimeout: time.Second, MaxDialsPerPod: 4, PruneGrace: 15 * time.Second,
 			},
 			wantTimeout: 250,
 			wantDNS:     5 * time.Second,
@@ -833,6 +833,7 @@ func TestNewClientWithEtcd_RefreshClearsUnhealthyAndPrunesPool(t *testing.T) {
 		c, err := newClientWithEtcd(Config{
 			Tenant: "recsys", Store: "catalog", Count: mc.count, DNSRefreshInterval: time.Hour,
 			ClientConfig: &model.ClientConfig{WarmUpOnTopologyChange: boolPtr(false)},
+			Pool:         &PoolConfig{PruneGrace: -1}, // a pruned pod closes at once, no grace
 		}, m, nil)
 		require.NoError(t, err)
 		defer c.Close()

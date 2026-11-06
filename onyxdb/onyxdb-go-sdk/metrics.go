@@ -26,6 +26,12 @@ const (
 	// went back to the pool (result:reused), or it was closed (result:closed).
 	// Tags: tenant, store, result
 	MetricPoolDrain = "onyxdb.pool.drain"
+	// A pod that drops out of the assignment keeps its pooled connections for
+	// PoolConfig.PruneGrace. Counts connections: kept because the pod came back
+	// within it (result:reused), closed then because the peer had closed them
+	// (result:dead), or closed when the grace ran out (result:expired).
+	// Tags: tenant, store, result
+	MetricPoolPruneGrace = "onyxdb.pool.prune_grace"
 
 	// Topology watcher metrics.
 	// Tags: tenant, store, status (ok/error)

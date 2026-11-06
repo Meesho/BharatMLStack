@@ -444,10 +444,11 @@ func (p podRegistration) addr() string {
 	return fmt.Sprintf("%s:%d", p.PodIP, port)
 }
 
-// warmUp pre-dials connections to new pods in the background.
+// warmUp pre-dials connections to new pods in the background, up to
+// warmUpConns each: a pod back within the pool's prune grace still holds some.
 func (tw *TopologyWatcher) warmUp(addrs []string) {
 	for _, addr := range addrs {
-		for i := 0; i < tw.warmUpConns; i++ {
+		for i := tw.pool.pooled(addr); i < tw.warmUpConns; i++ {
 			conn, err := Dial(addr, tw.pool.dialTO)
 			if err != nil {
 				log.Warn().Err(err).Str("addr", addr).Msg("topology: warm-up dial failed")

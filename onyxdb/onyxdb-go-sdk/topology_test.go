@@ -796,7 +796,10 @@ func TestReloadVersion_PrunesPoolToAssignment(t *testing.T) {
 					dnsRes := NewDNSResolver(dnsCfg(9091))
 					tw = NewTopologyWatcher(m, NewRouter(dnsRes), dnsRes, "recsys", "catalog")
 				}
-				pool := quietPool(1)
+				pool := NewConnPoolWithConfig(PoolConfig{
+					MaxPerPod: 4, IdleTimeout: time.Minute, IdleCheckInterval: time.Hour,
+					PruneGrace: -1, // no grace: a pruned pod closes at the reload
+				})
 				defer pool.Close()
 				stale := idleConn(t, time.Now())
 				pool.Put("10.0.9.9:9091", stale)
