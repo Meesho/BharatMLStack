@@ -67,6 +67,7 @@ defer client.Close()
 | Idle eviction | a background sweep closes connections idle beyond `IdleTimeout`, keeping at least `MinPerPod` per pod |
 | Timed-out connections | a request that hits its deadline after it was fully written leaves its response on the wire; the connection is not closed. `ConnPool.Recycle` reads the rest of that response in the background, within `PoolConfig.DrainTimeout` (default 1s; negative disables), and returns the connection to the pool. EOF, a reset, a partial write or a drain that runs out of time still closes it |
 | Bounded dials | at most `PoolConfig.MaxDialsPerPod` (default 4) dials in flight per pod. A request that finds the pool empty with every slot busy waits for a returned connection or a free slot, up to its own deadline, instead of dialling again |
+| Prune grace | a pod that leaves the assignment keeps its pooled connections for `PoolConfig.PruneGrace` (default 15s; negative closes them at once). A pod that comes back within it reuses the connections its peer still holds, and warm-up dials only the shortfall, instead of every client redialling it at once; the idle sweep closes them when the grace runs out |
 | Batch reads | group keys by shard → parallel one-batch-per-shard fan-out → merge in input order. Partial failure is per-shard: a failed shard sets `Result.Err` on only its own keys; the top-level error is the first shard error |
 
 ## Config
@@ -133,6 +134,7 @@ dropped, including pool-dial pressure and topology-reload failures.
 | `onyxdb.batch.keys` | `tenant`, `store` |
 | `onyxdb.pool.get` | `tenant`, `store`, `result` (`hit`/`dial`/`error`/`dial_wait_expired`) |
 | `onyxdb.pool.drain` | `tenant`, `store`, `result` (`reused`/`closed`): outcome of draining a timed-out connection |
+| `onyxdb.pool.prune_grace` | `tenant`, `store`, `result` (`reused`/`dead`/`expired`): connections of a pod that left the assignment, kept on its return, closed then because the peer had closed them, or closed when the grace ran out |
 | `onyxdb.pool.dial.latency`, `onyxdb.pool.idle_evicted`, `onyxdb.pool.overflow` | `tenant`, `store` |
 | `onyxdb.topology.reload` | `tenant`, `store`, `status` (`ok`/`error`) |
 | `onyxdb.topology.watch_restart` | `tenant`, `store`, `reason` (`closed`/`canceled`/`compacted`): an etcd watch re-established after it ended |

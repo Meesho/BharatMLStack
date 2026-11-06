@@ -599,7 +599,7 @@ func TestConnPool_PruneClosesDeadPods(t *testing.T) {
 	}()
 	addr := ln.Addr().String()
 
-	p := NewConnPool(2)
+	p := NewConnPoolWithConfig(PoolConfig{MaxPerPod: 2, PruneGrace: -1}) // no grace: closed at the prune
 	defer p.Close()
 
 	// Establish a pool for addr.

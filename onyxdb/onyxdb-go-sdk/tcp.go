@@ -417,6 +417,11 @@ type PoolConfig struct {
 	// the pool empty with every dial slot busy waits for a returned connection
 	// or a free slot, up to its own deadline (default 4).
 	MaxDialsPerPod int
+	// PruneGrace is how long a pod that drops out of the assignment keeps its
+	// pooled connections. One that comes back within it, such as a pod a promote
+	// listed a reconciler tick late, reuses them instead of every client
+	// redialling it at once (default 15s; negative closes them at once).
+	PruneGrace time.Duration
 }
 
 func (pc *PoolConfig) applyDefaults() {
@@ -450,6 +455,9 @@ func (pc *PoolConfig) applyDefaults() {
 	if pc.MaxDialsPerPod <= 0 {
 		pc.MaxDialsPerPod = 4
 	}
+	if pc.PruneGrace == 0 {
+		pc.PruneGrace = 15 * time.Second
+	}
 }
 
 // ── ConnPool ─────────────────────────────────────────────────────────────────
@@ -469,6 +477,10 @@ type ConnPool struct {
 	// every request waiting for one.
 	dials map[string]chan struct{}
 	wake  map[string]chan struct{}
+
+	// held maps a pod that dropped out of the live set to when it did; its
+	// connections stay pooled until PruneGrace has passed (see Prune).
+	held map[string]time.Time
 
 	// Metric callbacks (nil-safe). Set via SetMetrics after construction.
 	timing   func(string, time.Duration, []string)
@@ -498,6 +510,7 @@ func newConnPoolInternal(cfg PoolConfig) *ConnPool {
 		cancel: cancel,
 		dials:  make(map[string]chan struct{}),
 		wake:   make(map[string]chan struct{}),
+		held:   make(map[string]time.Time),
 	}
 	go p.idleEvictor(ctx)
 	return p
@@ -556,6 +569,7 @@ func (p *ConnPool) evictIdle() {
 	if p.closed {
 		return
 	}
+	p.closeExpiredLocked(now)
 	for addr, conns := range p.pools {
 		kept := make([]*Conn, 0, len(conns))
 		for _, c := range conns {
@@ -719,28 +733,36 @@ func (p *ConnPool) Recycle(addr string, conn *Conn) {
 	}()
 }
 
-// Prune closes and removes pools for any address not in the live set. Called
-// after a topology change so connections to scaled-down / no-longer-warm pods
-// are released rather than lingering.
+// Prune takes the pools of addresses not in the live set out of service. Called
+// after a topology change, so connections to scaled-down / no-longer-warm pods
+// are released rather than lingering. A dropped pod's connections are held for
+// PruneGrace before they are closed: a pod back in the live set within it
+// reuses them, as a pod a promote listed a reconciler tick late is. Requests
+// waiting to dial a dropped pod are released at once.
 func (p *ConnPool) Prune(live []string) {
 	liveSet := make(map[string]struct{}, len(live))
 	for _, a := range live {
 		liveSet[a] = struct{}{}
 	}
+	now := time.Now()
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed {
 		return
 	}
-	for addr, conns := range p.pools {
-		if _, ok := liveSet[addr]; ok {
-			continue
+	for addr := range p.pools {
+		_, isLive := liveSet[addr]
+		_, isHeld := p.held[addr]
+		if !isLive && !isHeld {
+			p.held[addr] = now // the grace runs from the first drop
 		}
-		for _, c := range conns {
-			_ = c.Close()
-		}
-		delete(p.pools, addr)
 	}
+	for addr := range p.held {
+		if _, ok := liveSet[addr]; ok {
+			p.reuseHeldLocked(addr)
+		}
+	}
+	p.closeExpiredLocked(now)
 	for addr := range p.dials {
 		if _, ok := liveSet[addr]; !ok {
 			delete(p.dials, addr) // a dial still in flight releases into its own slot set
@@ -752,6 +774,47 @@ func (p *ConnPool) Prune(live []string) {
 			delete(p.wake, addr)
 		}
 	}
+}
+
+// reuseHeldLocked puts a held pod back in service: connections its peer closed
+// while they were held are closed, the rest are kept. Caller holds p.mu.
+func (p *ConnPool) reuseHeldLocked(addr string) {
+	delete(p.held, addr)
+	conns := p.pools[addr]
+	kept := conns[:0]
+	for _, c := range conns {
+		if c.peerOpen() {
+			kept = append(kept, c)
+		} else {
+			_ = c.Close()
+		}
+	}
+	p.pools[addr] = kept
+	p.emitCount(MetricPoolPruneGrace, int64(len(kept)), p.poolTags("result:reused"))
+	p.emitCount(MetricPoolPruneGrace, int64(len(conns)-len(kept)), p.poolTags("result:dead"))
+}
+
+// closeExpiredLocked closes the pools of pods held for PruneGrace or longer.
+// Caller holds p.mu.
+func (p *ConnPool) closeExpiredLocked(now time.Time) {
+	for addr, since := range p.held {
+		if now.Sub(since) < p.cfg.PruneGrace {
+			continue
+		}
+		for _, c := range p.pools[addr] {
+			_ = c.Close()
+		}
+		p.emitCount(MetricPoolPruneGrace, int64(len(p.pools[addr])), p.poolTags("result:expired"))
+		delete(p.pools, addr)
+		delete(p.held, addr)
+	}
+}
+
+// pooled returns how many idle connections addr has in the pool.
+func (p *ConnPool) pooled(addr string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.pools[addr])
 }
 
 // Close closes all pooled connections, stops the idle evictor, and marks the
