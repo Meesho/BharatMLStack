@@ -501,6 +501,7 @@ func TestConfigBuildPoolConfig(t *testing.T) {
 		MinPerPod: 1, MaxPerPod: 4, DialTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second,
 		IdleCheckInterval: 10 * time.Second, KeepAliveInterval: 15 * time.Second, KeepAliveTimeout: 5 * time.Second,
 		DrainTimeout: time.Second, MaxDialsPerPod: 4, PruneGrace: 15 * time.Second,
+		DialRatePerPod: 2, DialBackoffBase: 100 * time.Millisecond, DialBackoffMax: 5 * time.Second,
 	}
 	withMax := func(pc PoolConfig, max int) PoolConfig { pc.MaxPerPod = max; return pc }
 	tests := []struct {
@@ -552,6 +553,7 @@ func TestConfigBuildPoolConfig(t *testing.T) {
 				MinPerPod: 3, MaxPerPod: 12, DialTimeout: 700 * time.Millisecond, IdleTimeout: 40 * time.Second,
 				IdleCheckInterval: 500 * time.Millisecond, KeepAliveInterval: 2 * time.Second, KeepAliveTimeout: 3 * time.Second,
 				DrainTimeout: time.Second, MaxDialsPerPod: 4, PruneGrace: 15 * time.Second,
+				DialRatePerPod: 2, DialBackoffBase: 100 * time.Millisecond, DialBackoffMax: 5 * time.Second,
 			},
 			wantTimeout: 250,
 			wantDNS:     5 * time.Second,
@@ -600,7 +602,8 @@ func TestFetchClientConfig(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newMockEtcd()
 			tc.setup(m)
-			assert.Equal(t, tc.want, fetchClientConfig(context.Background(), m, "recsys", "catalog"))
+			cc, _ := fetchClientConfig(context.Background(), m, "recsys", "catalog")
+			assert.Equal(t, tc.want, cc)
 		})
 	}
 }
@@ -823,8 +826,9 @@ func TestNewClientWithEtcd_DNSResolvesOnlyUnassignedShards(t *testing.T) {
 	assert.Equal(t, []string{"recsys-catalog-shard-1.onyxdb.svc.cluster.local"}, looked)
 }
 
-// Every DNS refresh clears local unhealthy marks and prunes pools for pods that
-// left the topology.
+// Every DNS refresh drops the unhealthy marks whose window has passed or whose
+// pod left the topology (an active window survives it), and prunes pools for
+// pods that left the topology.
 func TestNewClientWithEtcd_RefreshClearsUnhealthyAndPrunesPool(t *testing.T) {
 	m := newMockEtcd()
 	putActiveV1(m, metaWithAssignmentJSON(t, 1, map[string][]string{"0": {"10.0.1.10:9091"}}))
@@ -839,15 +843,23 @@ func TestNewClientWithEtcd_RefreshClearsUnhealthyAndPrunesPool(t *testing.T) {
 		defer c.Close()
 		require.Eventually(t, func() bool { return reloadedOK(mc) }, 3*time.Second, 5*time.Millisecond)
 
+		clk := fakeRouterClock(c)
 		c.router.MarkUnhealthy("10.0.1.10:9091")
+		c.router.MarkUnhealthy("10.0.9.9:9091")
 		stale := idleConn(t, time.Now())
 		c.pool.Put("10.0.9.9:9091", stale)
 		m.podCh() <- podPutEvent() // pod registration change → reload → DNS refresh
 
 		require.Eventually(t, func() bool {
-			return !isUnhealthy(c.router, "10.0.1.10:9091") && !hasPool(c.pool, "10.0.9.9:9091")
+			return !isUnhealthy(c.router, "10.0.9.9:9091") && !hasPool(c.pool, "10.0.9.9:9091")
 		}, 3*time.Second, 5*time.Millisecond)
 		assert.True(t, isClosed(stale))
+		assert.True(t, isUnhealthy(c.router, "10.0.1.10:9091"), "an active window survives a refresh")
+
+		clk.advance(time.Second)
+		m.podCh() <- podPutEvent()
+		require.Eventually(t, func() bool { return !isUnhealthy(c.router, "10.0.1.10:9091") },
+			3*time.Second, 5*time.Millisecond, "a passed window is dropped on the next refresh")
 	})
 }
 
@@ -900,6 +912,7 @@ func TestClientStringBatchGet_ATimedOutConnectionIsReusedNotRedialled(t *testing
 
 	c := staticClient(1, map[uint32][]string{0: {ln.Addr().String()}})
 	c.config.TimeoutMs = 50
+	clk := fakeRouterClock(c)
 	drained := drainResults(c.pool)
 	defer c.pool.Close()
 
@@ -908,6 +921,9 @@ func TestClientStringBatchGet_ATimedOutConnectionIsReusedNotRedialled(t *testing
 	close(release)
 	require.Equal(t, "reused", awaitDrain(t, drained))
 
+	// The timeout marked the shard's only pod: the next batch is its probe,
+	// once the window has passed, and it goes over the drained connection.
+	clk.advance(time.Second)
 	results, err := c.StringBatchGet(context.Background(), [][]byte{[]byte("k")})
 	require.NoError(t, err)
 	assert.Equal(t, []byte("v"), results[0].Value)

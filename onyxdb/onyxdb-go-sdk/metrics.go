@@ -16,7 +16,9 @@ const (
 	MetricBatchKeys = "onyxdb.batch.keys"
 
 	// Connection pool metrics.
-	// Tags: tenant, store, result (hit/dial/error/dial_wait_expired)
+	// Tags: tenant, store, result (hit/dial/error/dial_wait_expired, and
+	// dial_backoff / dial_ratelimited for a dial refused at once because the
+	// pod's last dial failed / this client's dial rate to it is used up)
 	MetricPoolGet = "onyxdb.pool.get"
 	// Tags: tenant, store
 	MetricPoolDialLatency = "onyxdb.pool.dial.latency"
@@ -47,6 +49,17 @@ const (
 	// request routed there): the ramp as the client sees it.
 	// Tags: tenant, store
 	MetricSlowStartPick = "onyxdb.router.slow_start_pick"
+
+	// Shard fail-fast (docs/design/onyxdb-readserver-admission-and-sdk-redial.md
+	// §3 B3). A shard request failed with ErrShardUnavailable because every pod
+	// of the shard is inside its unhealthy window. No pod or shard tag.
+	// Tags: tenant, store
+	MetricRouterShardUnavailable = "onyxdb.router.shard_unavailable"
+	// The outcome of a probe: the one request a shard sends to a pod whose
+	// window has passed, to find out whether it is back (result:ok heals it,
+	// result:fail doubles its window).
+	// Tags: tenant, store, result (ok/fail)
+	MetricRouterProbe = "onyxdb.router.probe"
 )
 
 // emitTiming is a nil-safe timing callback on Client.

@@ -8,9 +8,9 @@ import (
 // scatterGather groups keys by shard, fans out one batch request per shard in
 // parallel, and merges results back into the original key order.
 //
-// Partial failure is per-shard: a shard that fails (no pod, dial error, batch
-// error) sets the Err field on only its own keys; other shards still return
-// values. The returned top-level error is the first shard error encountered
+// Partial failure is per-shard: a shard that fails (no pod, every pod backing
+// off, dial error, batch error) sets the Err field on only its own keys; other
+// shards still return values. The returned top-level error is the first shard error encountered
 // (nil if every shard succeeded).
 func scatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Result, error) {
 	results := make([]Result, len(keys))
@@ -56,7 +56,7 @@ func scatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Result, err
 
 			conn, err := c.pool.GetContext(ctx, pod)
 			if err != nil {
-				c.router.MarkUnhealthy(pod)
+				c.checkoutFailed(pod, err)
 				setErr(entries, err)
 				return
 			}
@@ -74,6 +74,7 @@ func scatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Result, err
 				return
 			}
 			c.pool.Put(pod, conn)
+			c.router.MarkHealthy(pod)
 
 			for i, e := range entries {
 				results[e.idx] = Result{Key: e.key, Value: vals[i]}
@@ -131,7 +132,7 @@ func stringScatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Resul
 
 			conn, err := c.pool.GetContext(ctx, pod)
 			if err != nil {
-				c.router.MarkUnhealthy(pod)
+				c.checkoutFailed(pod, err)
 				setErr(entries, err)
 				return
 			}
@@ -149,6 +150,7 @@ func stringScatterGather(ctx context.Context, c *Client, keys [][]byte) ([]Resul
 				return
 			}
 			c.pool.Put(pod, conn)
+			c.router.MarkHealthy(pod)
 
 			for i, e := range entries {
 				results[e.idx] = Result{Key: e.key, Value: vals[i]}

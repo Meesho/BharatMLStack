@@ -25,6 +25,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/Meesho/BharatMLStack/onyxdb/controlplane/model"
@@ -39,6 +40,13 @@ var ErrNoHealthyPod = errors.New("onyxdb: no healthy pod for shard")
 
 // ErrNoEndpoints is returned by NewClient when no etcd endpoints are configured.
 var ErrNoEndpoints = errors.New("onyxdb: no etcd endpoints configured")
+
+// ErrDialBackoff is returned by ConnPool.GetContext, and so by any lookup, when
+// the pod has no idle connection and the pool will not dial it now: its last
+// dial failed and it is backing off (PoolConfig.DialBackoffBase), or this
+// client's dial rate to it is used up (PoolConfig.DialRatePerPod). The request
+// fails at once; nothing is sent.
+var ErrDialBackoff = errors.New("onyxdb: dial backoff")
 
 // Config configures a OnyxDB client.
 type Config struct {
@@ -68,12 +76,59 @@ type Config struct {
 	// means all defaults).
 	ClientConfig *model.ClientConfig
 
+	// UnhealthyBackoffBase and UnhealthyBackoffMax bound how long a pod that
+	// failed a request is kept out of routing: the base after the first
+	// failure in a row, doubling per failure up to the max, ±20% jitter, ended
+	// by a successful request (defaults 1s and 30s). Overridden by clientConfig
+	// unhealthyBackoffBaseMs / unhealthyBackoffMaxMs.
+	UnhealthyBackoffBase time.Duration
+	UnhealthyBackoffMax  time.Duration
+	// ShardFailFast fails a shard's keys at once with ErrShardUnavailable while
+	// every pod of the shard is inside its unhealthy window, and sends a pod
+	// past its window one probe at a time before it takes traffic again. nil
+	// means true; false keeps the old best-effort routing to a marked pod.
+	// Overridden by clientConfig shardFailFast.
+	ShardFailFast *bool
+
 	// Timing is an optional callback for latency metrics (nil-safe). The caller
 	// provides the implementation (typically Datadog StatsD via pkg/metric).
 	Timing func(name string, value time.Duration, tags []string)
 
 	// Count is an optional callback for count metrics (nil-safe).
 	Count func(name string, value int64, tags []string)
+
+	// ext is the part of the etcd clientConfig document model.ClientConfig
+	// cannot carry (clientConfigExt); set by NewClient's fetch only.
+	ext *clientConfigExt
+}
+
+// clientConfigExt is the part of a store's etcd clientConfig document that
+// controlplane/model.ClientConfig does not carry yet: the redial limits,
+// unhealthy backoff and shard fail-fast
+// (docs/design/onyxdb-readserver-admission-and-sdk-redial.md §3 B4). It is
+// decoded here, from the same document, rather than through model.ClientConfig
+// because the SDK is released on its own and builds against the last released
+// control plane module, which predates these keys (as podRegistration in
+// topology.go does for slow start). Zero or absent means the default. The JSON
+// keys are the etcd contract; TestClientConfigExt_EtcdKeysArePinned pins them.
+type clientConfigExt struct {
+	// DialRatePerPod → PoolConfig.DialRatePerPod (negative: no rate limit).
+	DialRatePerPod float64 `json:"dialRatePerPod,omitempty"`
+	// DialBackoffBaseMs, DialBackoffMaxMs → PoolConfig.DialBackoffBase / Max
+	// (a negative base turns dial backoff off).
+	DialBackoffBaseMs int `json:"dialBackoffBaseMs,omitempty"`
+	DialBackoffMaxMs  int `json:"dialBackoffMaxMs,omitempty"`
+	// UnhealthyBackoffBaseMs, UnhealthyBackoffMaxMs →
+	// Config.UnhealthyBackoffBase / Max.
+	UnhealthyBackoffBaseMs int `json:"unhealthyBackoffBaseMs,omitempty"`
+	UnhealthyBackoffMaxMs  int `json:"unhealthyBackoffMaxMs,omitempty"`
+	// ShardFailFast → Config.ShardFailFast; absent means true.
+	ShardFailFast *bool `json:"shardFailFast,omitempty"`
+}
+
+// shardFailFast resolves Config.ShardFailFast: unset means on.
+func (c *Config) shardFailFast() bool {
+	return c.ShardFailFast == nil || *c.ShardFailFast
 }
 
 func (c *Config) applyDefaults() {
@@ -142,9 +197,41 @@ func (c *Config) buildPoolConfig() PoolConfig {
 			c.DNSRefreshInterval = time.Duration(cc.DNSRefreshIntervalMs) * time.Millisecond
 		}
 	}
+	c.overlayClientConfigExt(&pc)
 
 	pc.applyDefaults()
 	return pc
+}
+
+// overlayClientConfigExt applies the clientConfig keys model.ClientConfig does
+// not carry (clientConfigExt): set keys win, as every clientConfig key does. A
+// negative dial key turns that limit off; a non-positive unhealthy key is
+// ignored.
+func (c *Config) overlayClientConfigExt(pc *PoolConfig) {
+	x := c.ext
+	if x == nil {
+		return
+	}
+	ms := func(v int) time.Duration { return time.Duration(v) * time.Millisecond }
+	if x.DialRatePerPod != 0 {
+		pc.DialRatePerPod = x.DialRatePerPod
+	}
+	if x.DialBackoffBaseMs != 0 {
+		pc.DialBackoffBase = ms(x.DialBackoffBaseMs)
+	}
+	if x.DialBackoffMaxMs > 0 {
+		pc.DialBackoffMax = ms(x.DialBackoffMaxMs)
+	}
+	if x.UnhealthyBackoffBaseMs > 0 {
+		c.UnhealthyBackoffBase = ms(x.UnhealthyBackoffBaseMs)
+	}
+	if x.UnhealthyBackoffMaxMs > 0 {
+		c.UnhealthyBackoffMax = ms(x.UnhealthyBackoffMaxMs)
+	}
+	if x.ShardFailFast != nil {
+		on := *x.ShardFailFast
+		c.ShardFailFast = &on
+	}
 }
 
 // Result is the outcome for a single key in a BatchGet.
@@ -193,9 +280,10 @@ func newClientWithEtcd(config Config, etcd EtcdClient, closer io.Closer) (*Clien
 	// Best-effort: fetch ClientConfig from control plane.
 	if config.ClientConfig == nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		cc := fetchClientConfig(ctx, etcd, config.Tenant, config.Store)
+		cc, ext := fetchClientConfig(ctx, etcd, config.Tenant, config.Store)
 		cancel()
 		config.ClientConfig = cc // nil is fine — all defaults
+		config.ext = ext
 	}
 
 	poolCfg := config.buildPoolConfig()
@@ -220,9 +308,11 @@ func newClientWithEtcd(config Config, etcd EtcdClient, closer io.Closer) (*Clien
 	// DNS resolver is kept for backwards-compat: when assignment map is empty
 	// for a shard, the router falls back to DNS.
 	router := NewRouter(NewFallbackResolver(assignRes, dnsResolver))
+	config.configureRouter(router)
 
-	// After each DNS refresh: clear transient unhealthy marks and prune pools
-	// for pods that dropped out of DNS (scale-down / no-longer-warm).
+	// After each DNS refresh (the DNS tick, and every topology reload): drop
+	// unhealthy marks whose window has passed or whose pod left, and prune
+	// pools for pods that dropped out (scale-down / no-longer-warm).
 	dnsResolver.OnRefresh(func() {
 		router.ClearUnhealthy()
 		pool.Prune(assignRes.AllAddrs())
@@ -235,6 +325,7 @@ func newClientWithEtcd(config Config, etcd EtcdClient, closer io.Closer) (*Clien
 	bt := []string{"tenant:" + config.Tenant, "store:" + config.Store}
 	pool.SetMetrics(config.Timing, config.Count, bt)
 	watcher.SetMetrics(config.Timing, config.Count, bt)
+	router.SetMetrics(config.Count, bt)
 	if count := config.Count; count != nil {
 		router.SetRampPickHook(func() { count(MetricSlowStartPick, 1, bt) })
 	}
@@ -259,17 +350,39 @@ func newClientWithEtcd(config Config, etcd EtcdClient, closer io.Closer) (*Clien
 	}, nil
 }
 
-// fetchClientConfig reads the ClientConfig from etcd. Returns nil on any error.
-func fetchClientConfig(ctx context.Context, etcd EtcdClient, tenant, store string) *model.ClientConfig {
+// configureRouter applies the unhealthy backoff and shard fail-fast settings
+// to r. Call after buildPoolConfig, which overlays them from clientConfig and
+// settles the request timeout: a probe counts as in flight for the request
+// timeout plus a second, so its outcome always lands inside the lease.
+func (c *Config) configureRouter(r *Router) {
+	r.SetUnhealthyBackoff(c.UnhealthyBackoffBase, c.UnhealthyBackoffMax)
+	r.SetShardFailFast(c.shardFailFast())
+	r.mu.Lock()
+	r.probeLease = time.Duration(c.TimeoutMs)*time.Millisecond + time.Second
+	r.mu.Unlock()
+}
+
+// fetchClientConfig reads the store's clientConfig document from etcd once and
+// decodes it twice: into model.ClientConfig, and into clientConfigExt for the
+// keys that type does not carry. Both are nil when the document is absent,
+// unreadable or not JSON. A redial key of the wrong type costs only the
+// redial keys (ext nil: their defaults apply).
+func fetchClientConfig(ctx context.Context, etcd EtcdClient, tenant, store string) (*model.ClientConfig, *clientConfigExt) {
 	resp, err := etcd.Get(ctx, model.ClientConfigPath(tenant, store))
 	if err != nil || len(resp.Kvs) == 0 {
-		return nil
+		return nil, nil
 	}
 	var cc model.ClientConfig
 	if err := json.Unmarshal(resp.Kvs[0].Value, &cc); err != nil {
-		return nil
+		return nil, nil
 	}
-	return &cc
+	var ext clientConfigExt
+	if err := json.Unmarshal(resp.Kvs[0].Value, &ext); err != nil {
+		log.Warn().Err(err).Str("tenant", tenant).Str("store", store).
+			Msg("clientConfig: redial keys do not parse, using their defaults")
+		return &cc, nil
+	}
+	return &cc, &ext
 }
 
 // NewDirectClient creates a client that talks to one endpoint with no etcd or
@@ -280,6 +393,7 @@ func NewDirectClient(addr string, connsPerPod int) *Client {
 
 	router := NewRouter(NewStaticResolver(map[uint32][]string{0: {addr}}))
 	router.SetShardCount(1)
+	cfg.configureRouter(router)
 
 	return &Client{
 		config: cfg,
@@ -291,6 +405,17 @@ func NewDirectClient(addr string, connsPerPod int) *Client {
 
 func (c *Client) timeout() time.Duration {
 	return time.Duration(c.config.TimeoutMs) * time.Millisecond
+}
+
+// checkoutFailed reports a request that got no connection to pod. The pod is
+// marked unhealthy, unless only this client's own dial rate refused the dial:
+// that says nothing about the pod, so it only ends a probe without a verdict.
+func (c *Client) checkoutFailed(pod string, err error) {
+	if errors.Is(err, errDialRateLimited) {
+		c.router.endProbe(pod)
+		return
+	}
+	c.router.MarkUnhealthy(pod)
 }
 
 // Get performs a single-key point lookup.
@@ -314,7 +439,7 @@ func (c *Client) Get(ctx context.Context, key []byte) ([]byte, error) {
 
 	conn, err := c.pool.GetContext(ctx, pod)
 	if err != nil {
-		c.router.MarkUnhealthy(pod)
+		c.checkoutFailed(pod, err)
 		return nil, err
 	}
 
@@ -322,6 +447,7 @@ func (c *Client) Get(ctx context.Context, key []byte) ([]byte, error) {
 	if err != nil {
 		if errors.Is(err, ErrKeyNotFound) {
 			c.pool.Put(pod, conn) // healthy connection, just a miss
+			c.router.MarkHealthy(pod)
 			status = "miss"
 			return nil, err
 		}
@@ -330,6 +456,7 @@ func (c *Client) Get(ctx context.Context, key []byte) ([]byte, error) {
 		return nil, err
 	}
 	c.pool.Put(pod, conn)
+	c.router.MarkHealthy(pod)
 	status = "hit"
 	return val, nil
 }
@@ -377,7 +504,7 @@ func (c *Client) StringGet(ctx context.Context, key []byte) ([]byte, error) {
 
 	conn, err := c.pool.GetContext(ctx, pod)
 	if err != nil {
-		c.router.MarkUnhealthy(pod)
+		c.checkoutFailed(pod, err)
 		return nil, err
 	}
 
@@ -385,6 +512,7 @@ func (c *Client) StringGet(ctx context.Context, key []byte) ([]byte, error) {
 	if err != nil {
 		if errors.Is(err, ErrKeyNotFound) {
 			c.pool.Put(pod, conn)
+			c.router.MarkHealthy(pod)
 			status = "miss"
 			return nil, err
 		}
@@ -393,6 +521,7 @@ func (c *Client) StringGet(ctx context.Context, key []byte) ([]byte, error) {
 		return nil, err
 	}
 	c.pool.Put(pod, conn)
+	c.router.MarkHealthy(pod)
 	status = "hit"
 	return val, nil
 }

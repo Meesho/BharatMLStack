@@ -446,10 +446,11 @@ func (p podRegistration) addr() string {
 
 // warmUp pre-dials connections to new pods in the background, up to
 // warmUpConns each: a pod back within the pool's prune grace still holds some.
+// The dials skip the pool's dial rate but not its dial backoff (warmDial).
 func (tw *TopologyWatcher) warmUp(addrs []string) {
 	for _, addr := range addrs {
 		for i := tw.pool.pooled(addr); i < tw.warmUpConns; i++ {
-			conn, err := Dial(addr, tw.pool.dialTO)
+			conn, err := tw.pool.warmDial(addr)
 			if err != nil {
 				log.Warn().Err(err).Str("addr", addr).Msg("topology: warm-up dial failed")
 				break // skip remaining dials to this pod
