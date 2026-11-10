@@ -123,8 +123,9 @@ func TestPodFor_SlowStartRespectsUnhealthyMarks(t *testing.T) {
 		r.MarkUnhealthy("new")
 		assert.Equal(t, 0.0, share(t, r, "new", 1000))
 	})
-	t.Run("every pod marked down: best-effort pick, no error", func(t *testing.T) {
+	t.Run("every pod marked down, fail-fast off: best-effort pick, no error", func(t *testing.T) {
 		r := rampRouter([]string{"old", "new"}, rampT0)
+		r.SetShardFailFast(false)
 		r.SetSlowStart(ramp)
 		r.MarkUnhealthy("old")
 		r.MarkUnhealthy("new")

@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,8 +79,12 @@ func TestPodFor_SkipsUnhealthy(t *testing.T) {
 	}
 }
 
-func TestPodFor_AllUnhealthy_FallsBack(t *testing.T) {
+// With ShardFailFast off, a shard whose pods are all marked still gets one of
+// them (best effort), as before fail-fast existed. With it on (the default)
+// see router_backoff_test.go.
+func TestPodFor_AllUnhealthy_FallsBackWithShardFailFastOff(t *testing.T) {
 	r := routerWith(1, map[uint32][]string{0: {"a", "b"}})
+	r.SetShardFailFast(false)
 	r.MarkUnhealthy("a")
 	r.MarkUnhealthy("b")
 	pod, err := r.PodFor(0)
@@ -87,9 +92,22 @@ func TestPodFor_AllUnhealthy_FallsBack(t *testing.T) {
 	assert.Contains(t, []string{"a", "b"}, pod)
 }
 
-func TestClearUnhealthy(t *testing.T) {
+func TestPodFor_AllUnhealthy_FailsFastByDefault(t *testing.T) {
 	r := routerWith(1, map[uint32][]string{0: {"a", "b"}})
 	r.MarkUnhealthy("a")
+	r.MarkUnhealthy("b")
+	_, err := r.PodFor(0)
+	assert.ErrorIs(t, err, ErrShardUnavailable)
+}
+
+// ClearUnhealthy makes a pod routable again once its window has passed (and
+// keeps it out while the window lasts: see TestClearUnhealthy_KeepsActiveBackoffs).
+func TestClearUnhealthy(t *testing.T) {
+	r := routerWith(1, map[uint32][]string{0: {"a", "b"}})
+	clk := &fakeClock{t: redialT0}
+	r.now = clk.now
+	r.MarkUnhealthy("a")
+	clk.advance(2 * time.Second) // past the jittered 1 s window
 	r.ClearUnhealthy()
 	seen := map[string]bool{}
 	for i := 0; i < 10; i++ {

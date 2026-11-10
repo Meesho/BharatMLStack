@@ -87,22 +87,28 @@ func TestConnPool_GetContextDialsAndReusesAsGetDoes(t *testing.T) {
 
 // The request paths hand their deadline to the dial: every public read fails at
 // about the request timeout (100 ms by default), not the 5 s DialTimeout.
+//
+// Each read gets its own client: after the first failed dial a client fails
+// further reads of that pod at once (dial backoff, then shard fail-fast).
 func TestClient_ReadsDoNotWaitOnADialPastTheRequestTimeout(t *testing.T) {
 	blackholeDial(t)
-	c := NewDirectClient("10.0.0.1:9091", 2)
-	defer c.Close()
 	key := make([]byte, keySize)
 
-	reads := map[string]func() error{
-		"Get":            func() error { _, err := c.Get(context.Background(), key); return err },
-		"BatchGet":       func() error { _, err := c.BatchGet(context.Background(), [][]byte{key}); return err },
-		"StringGet":      func() error { _, err := c.StringGet(context.Background(), []byte("k")); return err },
-		"StringBatchGet": func() error { _, err := c.StringBatchGet(context.Background(), [][]byte{[]byte("k")}); return err },
+	reads := map[string]func(c *Client) error{
+		"Get":       func(c *Client) error { _, err := c.Get(context.Background(), key); return err },
+		"BatchGet":  func(c *Client) error { _, err := c.BatchGet(context.Background(), [][]byte{key}); return err },
+		"StringGet": func(c *Client) error { _, err := c.StringGet(context.Background(), []byte("k")); return err },
+		"StringBatchGet": func(c *Client) error {
+			_, err := c.StringBatchGet(context.Background(), [][]byte{[]byte("k")})
+			return err
+		},
 	}
 	for name, read := range reads {
 		t.Run(name, func(t *testing.T) {
+			c := NewDirectClient("10.0.0.1:9091", 2)
+			defer c.Close()
 			start := time.Now()
-			err := read()
+			err := read(c)
 			require.Error(t, err)
 			assert.True(t, errors.Is(err, context.DeadlineExceeded), "err = %v", err)
 			assert.Less(t, time.Since(start), time.Second, "%s waited on the dial past its 100 ms timeout", name)

@@ -61,13 +61,16 @@ defer client.Close()
 | Watch restart | etcd cancels a watch that resumes from a compacted revision, and clientv3 then closes its channel. The watcher re-establishes all three watches: it re-reads the active version and its meta, then watches from the revision of that read, so nothing written in between is missed. Attempts back off from 500 ms, doubling to 30 s, with jitter; a watch that stayed up 30 s starts the backoff over |
 | Pod discovery fallback | Kubernetes headless-service DNS, per shard: `{tenant}-{store}-shard-{N}.{namespace}.svc.{dnsZone}`. Used **only** for a shard the assignment map does not cover; the refresh loop skips the lookup entirely for covered shards, since a store addressed by assignment may have no Service at all |
 | DNS refresh | background ticker (`DNSRefreshInterval`, default 30s); a transient lookup failure keeps last-known addrs. Tenant/store are sanitized (`lower`, `_`→`-`, trunc 63) to match the name the data-plane chart renders — see the constraint in [ADR-0007](../docs/adr/0007-headless-service-dns-pod-discovery.md) |
-| Pod selection | round-robin (lock-free atomic counter per shard); a broken pod is marked unhealthy locally and skipped until the next refresh clears the mark |
+| Pod selection | round-robin (lock-free atomic counter per shard). A pod that failed a request is marked unhealthy locally and skipped for a backoff window: 1s after the first failure in a row, doubling to 30s, ±20% jitter (`Config.UnhealthyBackoffBase` / `UnhealthyBackoffMax`). The first request through it that succeeds (a miss counts) clears the mark. A refresh drops only expired marks and marks of pods no longer assigned; active windows survive it |
 | Connection warm-up | pods newly added to the assignment get `MinConnsPerPod` connections pre-dialed in the background (disable via `warmUpOnTopologyChange: false` in `clientConfig`) |
 | Pool pruning | after each topology change and each DNS refresh, pools for pods no longer in the assignment (scaled-down / no-longer-warm) are closed |
 | Idle eviction | a background sweep closes connections idle beyond `IdleTimeout`, keeping at least `MinPerPod` per pod |
 | Timed-out connections | a request that hits its deadline after it was fully written leaves its response on the wire; the connection is not closed. `ConnPool.Recycle` reads the rest of that response in the background, within `PoolConfig.DrainTimeout` (default 1s; negative disables), and returns the connection to the pool. EOF, a reset, a partial write or a drain that runs out of time still closes it |
 | Bounded dials | at most `PoolConfig.MaxDialsPerPod` (default 4) dials in flight per pod. A request that finds the pool empty with every slot busy waits for a returned connection or a free slot, up to its own deadline, instead of dialling again |
 | Prune grace | a pod that leaves the assignment keeps its pooled connections for `PoolConfig.PruneGrace` (default 15s; negative closes them at once). A pod that comes back within it reuses the connections its peer still holds, and warm-up dials only the shortfall, instead of every client redialling it at once; the idle sweep closes them when the grace runs out |
+| Dial rate limit | at most `PoolConfig.DialRatePerPod` dials per second per pod from one client (default 2, burst `MaxDialsPerPod`; negative turns it off). A request that finds no idle connection and no token never dials: it waits for a connection that is out or being dialled, up to its deadline, or, if there is none, fails at once with `ErrDialBackoff` (`onyxdb.pool.get{result:dial_ratelimited}`). Background warm-up is exempt from the rate, not from dial backoff |
+| Dial backoff | after a failed dial, no dial to that pod for `PoolConfig.DialBackoffBase` (default 100ms; negative turns it off), doubling per failure in a row up to `DialBackoffMax` (5s), ±20% jitter; the first successful dial resets it. Meanwhile a request that finds no idle connection fails at once with `ErrDialBackoff` (`result:dial_backoff`). Together with the rate limit this stops every client redialling a stalled pod at once |
+| Shard fail-fast | `Config.ShardFailFast` (default on). While every pod of a shard is inside its unhealthy window, the shard's keys fail at once with `ErrShardUnavailable` and nothing is sent, instead of waiting out the timeout on a stalled pod. A pod past its window first takes one probe (one ordinary request; at most one per shard per client at a time): success heals it, failure doubles its window. Off keeps the old best-effort routing |
 | Batch reads | group keys by shard → parallel one-batch-per-shard fan-out → merge in input order. Partial failure is per-shard: a failed shard sets `Result.Err` on only its own keys; the top-level error is the first shard error |
 
 ## Config
@@ -86,6 +89,8 @@ Caller-supplied `sdk.Config`:
 | `TimeoutMs` | 100 | per-request deadline — see the note below |
 | `Pool` | nil | full `PoolConfig`; when set, `ConnsPerPod` / `TimeoutMs` are ignored |
 | `ClientConfig` | nil | supply explicitly to skip the control-plane fetch |
+| `UnhealthyBackoffBase` / `UnhealthyBackoffMax` | 1s / 30s | how long a pod that failed a request is skipped, doubling per failure in a row |
+| `ShardFailFast` | nil (= true) | `*bool`; `false` turns shard fail-fast off |
 | `Timing` / `Count` | nil | metric callbacks (nil-safe) — see [Metrics](#metrics) |
 
 > **`TimeoutMs` bounds the whole call, not one round trip.** For
@@ -108,6 +113,17 @@ fatal.
 | `idleTimeoutMs` / `idleCheckIntervalMs` | idle eviction (defaults 60s / 10s) |
 | `dnsRefreshIntervalMs` | overrides `Config.DNSRefreshInterval` |
 | `warmUpOnTopologyChange` | `false` disables connection warm-up |
+| `dialRatePerPod` | `PoolConfig.DialRatePerPod` (default 2; negative turns the rate limit off) |
+| `dialBackoffBaseMs` / `dialBackoffMaxMs` | `PoolConfig.DialBackoffBase` / `DialBackoffMax` (defaults 100 / 5000; a negative base turns dial backoff off) |
+| `unhealthyBackoffBaseMs` / `unhealthyBackoffMaxMs` | `Config.UnhealthyBackoffBase` / `UnhealthyBackoffMax` (defaults 1000 / 30000) |
+| `shardFailFast` | `Config.ShardFailFast` (default true when absent) |
+
+The last four rows are decoded by the SDK itself from the same document
+(`client.go` `clientConfigExt`), so the SDK still builds against the released
+control plane module. That module's `ClientConfig` does not carry them yet, so
+its clientConfig API drops them: write them to etcd directly. A key of the
+wrong type drops only these keys, with one warning; `Config.Pool` set turns them
+off along with every other overlay.
 
 ### etcd keys
 
@@ -132,12 +148,14 @@ dropped, including pool-dial pressure and topology-reload failures.
 |---|---|
 | `onyxdb.request.latency` / `onyxdb.request.count` | `tenant`, `store`, `op` (`single`/`batch`/`string_single`/`string_batch`), `status` (`hit`/`miss`/`error`/`ok`) |
 | `onyxdb.batch.keys` | `tenant`, `store` |
-| `onyxdb.pool.get` | `tenant`, `store`, `result` (`hit`/`dial`/`error`/`dial_wait_expired`) |
+| `onyxdb.pool.get` | `tenant`, `store`, `result` (`hit`/`dial`/`error`/`dial_wait_expired`/`dial_backoff`/`dial_ratelimited`): `dial_backoff` and `dial_ratelimited` are checkouts refused at once because the pod's last dial failed or this client's dial rate to it is used up |
 | `onyxdb.pool.drain` | `tenant`, `store`, `result` (`reused`/`closed`): outcome of draining a timed-out connection |
 | `onyxdb.pool.prune_grace` | `tenant`, `store`, `result` (`reused`/`dead`/`expired`): connections of a pod that left the assignment, kept on its return, closed then because the peer had closed them, or closed when the grace ran out |
 | `onyxdb.pool.dial.latency`, `onyxdb.pool.idle_evicted`, `onyxdb.pool.overflow` | `tenant`, `store` |
 | `onyxdb.topology.reload` | `tenant`, `store`, `status` (`ok`/`error`) |
 | `onyxdb.topology.watch_restart` | `tenant`, `store`, `reason` (`closed`/`canceled`/`compacted`): an etcd watch re-established after it ended |
+| `onyxdb.router.shard_unavailable` | `tenant`, `store`: a shard request failed with `ErrShardUnavailable` (no pod or shard tag) |
+| `onyxdb.router.probe` | `tenant`, `store`, `result` (`ok`/`fail`): the outcome of each probe to a pod past its unhealthy window |
 
 ## Deployment requirements
 

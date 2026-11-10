@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net"
 	"os"
 	"sync"
@@ -33,6 +34,11 @@ type Conn struct {
 	// Both are reset by the next request.
 	pending *response
 	broken  bool
+
+	// out is true while the pool has lent the connection to a request
+	// (GetContext) and not yet taken it back (Put, Recycle). Guarded by the
+	// pool's mu.
+	out bool
 }
 
 // Dial opens a TCP connection (TCP_NODELAY + keepalive) to a read server.
@@ -422,7 +428,29 @@ type PoolConfig struct {
 	// listed a reconciler tick late, reuses them instead of every client
 	// redialling it at once (default 15s; negative closes them at once).
 	PruneGrace time.Duration
+	// DialRatePerPod is how many dials per second this client may start to one
+	// pod, with a burst of MaxDialsPerPod (default 2; negative = no rate
+	// limit). A request that finds no idle connection and no token fails at
+	// once with ErrDialBackoff instead of dialling. Warm-up dials are exempt.
+	DialRatePerPod float64
+	// DialBackoffBase and DialBackoffMax bound the wait after a failed dial
+	// (an error or a timeout): no dial to that pod for DialBackoffBase,
+	// doubling per failure in a row up to DialBackoffMax, ±20% jitter, reset
+	// by the first successful dial. Meanwhile a request that finds no idle
+	// connection fails at once with ErrDialBackoff (defaults 100ms and 5s; a
+	// negative DialBackoffBase turns dial backoff off).
+	DialBackoffBase time.Duration
+	DialBackoffMax  time.Duration
 }
+
+// Dial admission defaults (docs/design/onyxdb-readserver-admission-and-sdk-redial.md
+// §3 B1): at 2 dials/s per pod per client, ~300 OFS pods put at most ~600
+// SYN/s on a read-server pod, well under its 4096 listen backlog.
+const (
+	defaultDialRatePerPod  = 2.0
+	defaultDialBackoffBase = 100 * time.Millisecond
+	defaultDialBackoffMax  = 5 * time.Second
+)
 
 func (pc *PoolConfig) applyDefaults() {
 	if pc.MinPerPod <= 0 {
@@ -458,6 +486,18 @@ func (pc *PoolConfig) applyDefaults() {
 	if pc.PruneGrace == 0 {
 		pc.PruneGrace = 15 * time.Second
 	}
+	if pc.DialRatePerPod == 0 {
+		pc.DialRatePerPod = defaultDialRatePerPod
+	}
+	if pc.DialBackoffBase == 0 {
+		pc.DialBackoffBase = defaultDialBackoffBase
+	}
+	if pc.DialBackoffMax <= 0 {
+		pc.DialBackoffMax = defaultDialBackoffMax
+	}
+	if pc.DialBackoffMax < pc.DialBackoffBase {
+		pc.DialBackoffMax = pc.DialBackoffBase
+	}
 }
 
 // ── ConnPool ─────────────────────────────────────────────────────────────────
@@ -481,6 +521,17 @@ type ConnPool struct {
 	// held maps a pod that dropped out of the live set to when it did; its
 	// connections stay pooled until PruneGrace has passed (see Prune).
 	held map[string]time.Time
+
+	// gates holds each dialled pod's dial admission: its token bucket and its
+	// backoff after a failed dial (see dialGate). now and float are the clock
+	// and the jitter source, indirected for tests; both are read under mu.
+	gates map[string]*dialGate
+	now   func() time.Time
+	float func() float64
+
+	// out counts each pod's connections lent to requests and not yet taken
+	// back: a request over the dial rate waits for one of them (busyLocked).
+	out map[string]int
 
 	// Metric callbacks (nil-safe). Set via SetMetrics after construction.
 	timing   func(string, time.Duration, []string)
@@ -511,6 +562,10 @@ func newConnPoolInternal(cfg PoolConfig) *ConnPool {
 		dials:  make(map[string]chan struct{}),
 		wake:   make(map[string]chan struct{}),
 		held:   make(map[string]time.Time),
+		gates:  make(map[string]*dialGate),
+		out:    make(map[string]int),
+		now:    time.Now,
+		float:  rand.Float64,
 	}
 	go p.idleEvictor(ctx)
 	return p
@@ -601,6 +656,15 @@ func (p *ConnPool) Get(addr string) (*Conn, error) {
 // peer that drops SYNs (a full accept queue, a vanished pod IP) then fails at
 // the request's deadline instead of after the kernel's ~1 s SYN retransmit or
 // the 5 s DialTimeout.
+//
+// An idle connection is always served. Without one, the pod is dialled only if
+// its dial gate admits it (DialBackoffBase, DialRatePerPod). A pod backing off
+// after a failed dial fails the request at once with an error wrapping
+// ErrDialBackoff, as does one whose dial rate is used up with no connection
+// out or being dialled. When the rate is used up but connections to the pod
+// are out, the request waits for one to come back, up to its deadline, like a
+// request that finds every dial slot busy: a burst of concurrency is served by
+// the connections there are, and the pool grows at the dial rate.
 func (p *ConnPool) GetContext(ctx context.Context, addr string) (*Conn, error) {
 	for {
 		p.mu.Lock()
@@ -609,9 +673,15 @@ func (p *ConnPool) GetContext(ctx context.Context, addr string) (*Conn, error) {
 			return nil, fmt.Errorf("onyxdb: connection pool closed")
 		}
 		if c := p.popLocked(addr); c != nil {
+			p.lendLocked(addr, c)
 			p.mu.Unlock()
 			p.emitCount(MetricPoolGet, 1, p.poolTags("result:hit"))
 			return c, nil
+		}
+		refused := p.admitDialLocked(addr, false)
+		if refused == errDialBackingOff || (refused != nil && !p.busyLocked(addr)) {
+			p.mu.Unlock()
+			return nil, p.refuseDial(addr, refused)
 		}
 		slots := p.dials[addr]
 		if slots == nil {
@@ -624,6 +694,19 @@ func (p *ConnPool) GetContext(ctx context.Context, addr string) (*Conn, error) {
 			p.wake[addr] = wake
 		}
 		p.mu.Unlock()
+
+		if refused != nil {
+			// The dial rate is used up, but a connection to the pod is out or
+			// being dialled: wait for it rather than dial past the rate.
+			select {
+			case <-wake:
+				continue
+			case <-ctx.Done():
+				p.emitCount(MetricPoolGet, 1, p.poolTags("result:dial_wait_expired"))
+				return nil, fmt.Errorf("onyxdb: no connection to %s before the request deadline, dial rate used up: %w",
+					addr, ctx.Err())
+			}
+		}
 
 		// Every slot busy: wait for a returned connection or a free slot rather
 		// than dial past the bound. A pod that has stopped answering otherwise
@@ -638,19 +721,55 @@ func (p *ConnPool) GetContext(ctx context.Context, addr string) (*Conn, error) {
 				addr, cap(slots), ctx.Err())
 		}
 
-		// A connection may have come back while this request waited.
+		// A connection may have come back while this request waited. If not,
+		// the request is past its deadline (the select can pick a free slot
+		// over a done ctx), or the gate is asked again, now taking the token:
+		// the pod may have started backing off, or other requests spent the
+		// tokens, while this one waited.
 		p.mu.Lock()
 		c := p.popLocked(addr)
-		p.mu.Unlock()
+		expired := ctx.Err()
+		refused = nil
 		if c != nil {
+			p.lendLocked(addr, c)
+		} else if expired == nil {
+			refused = p.admitDialLocked(addr, true)
+		}
+		p.mu.Unlock()
+		switch {
+		case c != nil:
 			<-slots
 			p.emitCount(MetricPoolGet, 1, p.poolTags("result:hit"))
 			return c, nil
+		case expired != nil:
+			p.releaseSlot(addr, slots)
+			p.emitCount(MetricPoolGet, 1, p.poolTags("result:dial_wait_expired"))
+			return nil, fmt.Errorf("onyxdb: no connection to %s before the request deadline: %w", addr, expired)
+		case refused != nil:
+			// Decide again from the top: a pod backing off fails at once; over
+			// the rate, the request waits for a connection that is out, or
+			// fails at once if none is.
+			p.releaseSlot(addr, slots)
+			continue
 		}
 		conn, err := p.dial(ctx, addr)
-		<-slots
-		return conn, err
+		if err != nil {
+			p.releaseSlot(addr, slots)
+			return nil, err
+		}
+		<-slots // the connection is out: waiters keep waiting for it
+		return conn, nil
 	}
+}
+
+// releaseSlot frees a dial slot that produced no connection and wakes the
+// requests waiting on addr: what they wait for may be gone (the pod may be
+// backing off now, or nothing is left out to wait for), so they decide again.
+func (p *ConnPool) releaseSlot(addr string, slots chan struct{}) {
+	<-slots
+	p.mu.Lock()
+	p.wakeLocked(addr)
+	p.mu.Unlock()
 }
 
 // popLocked takes the most recently returned connection for addr, or nil.
@@ -665,13 +784,174 @@ func (p *ConnPool) popLocked(addr string) *Conn {
 	return c
 }
 
+// lendLocked counts c as out to a request until Put or Recycle takes it back.
+// Caller holds p.mu.
+func (p *ConnPool) lendLocked(addr string, c *Conn) {
+	c.out = true
+	p.out[addr]++
+}
+
+// takeBackLocked ends c's loan, if it was out. Caller holds p.mu.
+func (p *ConnPool) takeBackLocked(addr string, c *Conn) {
+	if !c.out {
+		return // never lent (warm-up), or already taken back
+	}
+	c.out = false
+	if p.out[addr]--; p.out[addr] <= 0 {
+		delete(p.out, addr)
+	}
+}
+
+// busyLocked reports whether a connection to addr may come back to the pool:
+// one is out to a request (or being drained) or being dialled. Caller holds
+// p.mu.
+func (p *ConnPool) busyLocked(addr string) bool {
+	return p.out[addr] > 0 || len(p.dials[addr]) > 0
+}
+
+// wakeLocked wakes every request waiting on addr. Caller holds p.mu.
+func (p *ConnPool) wakeLocked(addr string) {
+	if wake := p.wake[addr]; wake != nil {
+		close(wake)
+		delete(p.wake, addr)
+	}
+}
+
+// ── dial admission ───────────────────────────────────────────────────────────
+
+// errDialBackingOff and errDialRateLimited are why a dial was refused; both
+// wrap ErrDialBackoff. Only the first says something about the pod: callers
+// mark it unhealthy for that one only.
+var (
+	errDialBackingOff  = fmt.Errorf("%w: the last dial to the pod failed", ErrDialBackoff)
+	errDialRateLimited = fmt.Errorf("%w: this client's dial rate to the pod is used up", ErrDialBackoff)
+)
+
+// dialGate is one pod's dial admission
+// (docs/design/onyxdb-readserver-admission-and-sdk-redial.md §3 B1): a token
+// bucket refilled at DialRatePerPod per second up to MaxDialsPerPod, and the
+// backoff after a failed dial.
+type dialGate struct {
+	tokens   float64
+	refilled time.Time // when tokens was last brought up to date
+	failures int       // failed dials in a row
+	until    time.Time // no dial before this
+}
+
+// newGateLocked starts addr's gate with a full bucket. Caller holds p.mu.
+func (p *ConnPool) newGateLocked(addr string, now time.Time) *dialGate {
+	g := &dialGate{tokens: float64(p.cfg.MaxDialsPerPod), refilled: now}
+	p.gates[addr] = g
+	return g
+}
+
+// admitDialLocked says whether addr may be dialled now: nil, or why not
+// (errDialBackingOff, errDialRateLimited). take spends the token of an
+// admitted dial; without it the call only looks. Caller holds p.mu.
+func (p *ConnPool) admitDialLocked(addr string, take bool) error {
+	now := p.now()
+	g := p.gates[addr]
+	if g == nil {
+		if !take || p.cfg.DialRatePerPod <= 0 {
+			return nil // a pod never dialled has a full bucket and no backoff
+		}
+		g = p.newGateLocked(addr, now)
+	}
+	if now.Before(g.until) {
+		return errDialBackingOff
+	}
+	if p.cfg.DialRatePerPod <= 0 {
+		return nil
+	}
+	if elapsed := now.Sub(g.refilled); elapsed > 0 {
+		g.tokens = min(float64(p.cfg.MaxDialsPerPod), g.tokens+elapsed.Seconds()*p.cfg.DialRatePerPod)
+		g.refilled = now
+	}
+	if g.tokens < 1 {
+		return errDialRateLimited
+	}
+	if take {
+		g.tokens--
+	}
+	return nil
+}
+
+// refuseDial counts a refused dial and returns the request's error.
+func (p *ConnPool) refuseDial(addr string, why error) error {
+	result := "result:dial_backoff"
+	if why == errDialRateLimited {
+		result = "result:dial_ratelimited"
+	}
+	p.emitCount(MetricPoolGet, 1, p.poolTags(result))
+	return fmt.Errorf("onyxdb: no connection to %s: %w", addr, why)
+}
+
+// dialDone feeds a dial's outcome into addr's backoff. A success ends the
+// backoff. A failure starts the next wait, unless the pod is already inside
+// one: dials that fail together (every slot dialling into one stall) are one
+// failure, not one each.
+func (p *ConnPool) dialDone(addr string, ok bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := p.now()
+	g := p.gates[addr]
+	if ok {
+		if g != nil {
+			g.failures, g.until = 0, time.Time{}
+		}
+		return
+	}
+	if p.cfg.DialBackoffBase < 0 {
+		return
+	}
+	if g == nil {
+		g = p.newGateLocked(addr, now)
+	}
+	if now.Before(g.until) {
+		return
+	}
+	defer p.wakeLocked(addr) // requests waiting on the pod now fail at once
+	g.failures++
+	g.until = now.Add(backoffDelay(p.cfg.DialBackoffBase, p.cfg.DialBackoffMax, g.failures, p.float()))
+}
+
+// warmDial opens one warm-up connection to addr. Warm-up is exempt from the
+// dial rate: it is already bounded (MinPerPod connections per pod newly in the
+// assignment, once per change, one at a time, stopping at the first failure),
+// and holding it to the rate would leave a new pod cold for seconds when
+// minConnsPerPod exceeds the burst. It does honour dial backoff, and its
+// outcome feeds it, so a client never warms a pod whose dials keep failing.
+func (p *ConnPool) warmDial(addr string) (*Conn, error) {
+	p.mu.Lock()
+	g := p.gates[addr]
+	backingOff := g != nil && p.now().Before(g.until)
+	p.mu.Unlock()
+	if backingOff {
+		return nil, fmt.Errorf("onyxdb: warm-up of %s: %w", addr, errDialBackingOff)
+	}
+	conn, err := Dial(addr, p.dialTO)
+	p.dialDone(addr, err == nil)
+	return conn, err
+}
+
+// dial connects to addr within ctx and feeds the outcome into its dial
+// backoff. A dial the caller cancelled says nothing about the pod and is not
+// counted against it; one cut off by the request's deadline (a pod dropping
+// SYNs) is.
 func (p *ConnPool) dial(ctx context.Context, addr string) (*Conn, error) {
 	start := time.Now()
 	conn, err := dialContext(ctx, addr, p.cfg.DialTimeout, p.cfg.KeepAliveInterval)
 	if err != nil {
+		if !errors.Is(ctx.Err(), context.Canceled) {
+			p.dialDone(addr, false)
+		}
 		p.emitCount(MetricPoolGet, 1, p.poolTags("result:error"))
 		return nil, err
 	}
+	p.dialDone(addr, true)
+	p.mu.Lock()
+	p.lendLocked(addr, conn)
+	p.mu.Unlock()
 	p.emitCount(MetricPoolGet, 1, p.poolTags("result:dial"))
 	p.emitTiming(MetricPoolDialLatency, time.Since(start), p.baseTags)
 	return conn, nil
@@ -681,6 +961,7 @@ func (p *ConnPool) dial(ctx context.Context, addr string) (*Conn, error) {
 func (p *ConnPool) Put(addr string, conn *Conn) {
 	conn.touch()
 	p.mu.Lock()
+	p.takeBackLocked(addr, conn)
 	if p.closed {
 		p.mu.Unlock()
 		_ = conn.Close()
@@ -694,11 +975,19 @@ func (p *ConnPool) Put(addr string, conn *Conn) {
 		return
 	}
 	p.pools[addr] = append(conns, conn)
-	if wake := p.wake[addr]; wake != nil {
-		close(wake)
-		delete(p.wake, addr)
-	}
+	p.wakeLocked(addr)
 	p.mu.Unlock()
+}
+
+// discard closes a connection that was out to a request instead of pooling
+// it, and wakes the requests waiting on addr: the one they waited for is not
+// coming back.
+func (p *ConnPool) discard(addr string, conn *Conn) {
+	p.mu.Lock()
+	p.takeBackLocked(addr, conn)
+	p.wakeLocked(addr)
+	p.mu.Unlock()
+	_ = conn.Close()
 }
 
 // Recycle takes back a connection whose lookup failed (any error other than
@@ -719,7 +1008,7 @@ func (p *ConnPool) Recycle(addr string, conn *Conn) {
 	closed := p.closed
 	p.mu.Unlock()
 	if conn.broken || p.cfg.DrainTimeout < 0 || closed {
-		_ = conn.Close()
+		p.discard(addr, conn)
 		return
 	}
 	go func() {
@@ -728,7 +1017,7 @@ func (p *ConnPool) Recycle(addr string, conn *Conn) {
 			p.emitCount(MetricPoolDrain, 1, p.poolTags("result:reused"))
 			return
 		}
-		_ = conn.Close()
+		p.discard(addr, conn)
 		p.emitCount(MetricPoolDrain, 1, p.poolTags("result:closed"))
 	}()
 }
@@ -772,6 +1061,15 @@ func (p *ConnPool) Prune(live []string) {
 		if _, ok := liveSet[addr]; !ok {
 			close(wake)
 			delete(p.wake, addr)
+		}
+	}
+	// A dropped pod's dial state goes too, once it is not backing off: a pod
+	// that stalled, dropped out and came straight back must not get a fresh
+	// burst of dials from every client.
+	gateNow := p.now()
+	for addr, g := range p.gates {
+		if _, ok := liveSet[addr]; !ok && !gateNow.Before(g.until) {
+			delete(p.gates, addr)
 		}
 	}
 }
