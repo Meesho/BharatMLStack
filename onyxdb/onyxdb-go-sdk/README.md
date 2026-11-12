@@ -123,7 +123,10 @@ The last four rows are decoded by the SDK itself from the same document
 control plane module. That module's `ClientConfig` does not carry them yet, so
 its clientConfig API drops them: write them to etcd directly. A key of the
 wrong type drops only these keys, with one warning; `Config.Pool` set turns them
-off along with every other overlay.
+off along with every other overlay. A control plane module whose `ClientConfig`
+does carry them is handled too: the SDK removes them before its
+`model.ClientConfig` decode (`withoutRedialKeys`), so a wrong-typed one never
+costs the rest of the document.
 
 ### etcd keys
 

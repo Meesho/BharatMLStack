@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,8 +19,11 @@ import (
 // B4 (docs/design/onyxdb-readserver-admission-and-sdk-redial.md §3): the
 // redial knobs come from the store's etcd clientConfig document, read once at
 // NewClient. They are decoded SDK-side (clientConfigExt) rather than through
-// model.ClientConfig: the SDK must build against the last released control
-// plane module, whose ClientConfig has none of them.
+// model.ClientConfig: a released SDK may build against a control plane module
+// whose ClientConfig has none of them. The control plane's ClientConfig now
+// carries them too (so its API keeps them), and the SDK keeps them out of its
+// model.ClientConfig decode, so a wrong-typed one still costs only the redial
+// keys.
 
 func TestFetchClientConfig_DecodesTheRedialKeysFromTheSameDocument(t *testing.T) {
 	m := newMockEtcd()
@@ -45,6 +51,50 @@ func TestFetchClientConfig_ABadRedialKeyKeepsTheRestOfTheDocument(t *testing.T) 
 
 	assert.Equal(t, &model.ClientConfig{RequestTimeoutMs: 250}, cc)
 	assert.Nil(t, ext)
+}
+
+// encoding/json matches keys case-insensitively, so a redial key written in
+// another case still reaches its field, and must still be kept out of the
+// model.ClientConfig decode.
+func TestFetchClientConfig_ABadRedialKeyInAnotherCaseKeepsTheRestOfTheDocument(t *testing.T) {
+	m := newMockEtcd()
+	m.put(model.ClientConfigPath("recsys", "catalog"),
+		`{"requestTimeoutMs":250,"ShardFailFast":"no","DIALRATEPERPOD":"fast"}`)
+
+	cc, ext := fetchClientConfig(context.Background(), m, "recsys", "catalog")
+
+	assert.Equal(t, &model.ClientConfig{RequestTimeoutMs: 250}, cc)
+	assert.Nil(t, ext)
+}
+
+// The control plane's model.ClientConfig must carry every key clientConfigExt
+// reads, under the same JSON name and Go type; otherwise its clientConfig PUT
+// drops that key and its GET hides it.
+//
+// The SDK is normally released on its own and built against the last
+// released control plane module; one that predates the redial keys carries
+// none of them, and the SDK does not depend on it doing so. The test skips
+// there and runs wherever the model has any of them (this monorepo).
+func TestClientConfigExt_KeysMatchTheControlPlaneModel(t *testing.T) {
+	modelFields := map[string]reflect.Type{}
+	mt := reflect.TypeOf(model.ClientConfig{})
+	for i := 0; i < mt.NumField(); i++ {
+		name, _, _ := strings.Cut(mt.Field(i).Tag.Get("json"), ",")
+		modelFields[name] = mt.Field(i).Type
+	}
+
+	et := reflect.TypeOf(clientConfigExt{})
+	require.Positive(t, et.NumField())
+	if !slices.ContainsFunc(redialKeys, func(k string) bool { _, ok := modelFields[k]; return ok }) {
+		t.Skip("this control plane module predates the redial keys")
+	}
+	for i := 0; i < et.NumField(); i++ {
+		name, _, _ := strings.Cut(et.Field(i).Tag.Get("json"), ",")
+		typ, ok := modelFields[name]
+		if assert.Truef(t, ok, "model.ClientConfig has no %q key", name) {
+			assert.Equalf(t, et.Field(i).Type, typ, "type of %q", name)
+		}
+	}
 }
 
 func TestFetchClientConfig_NoDocumentNoRedialKeys(t *testing.T) {

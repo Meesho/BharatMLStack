@@ -23,6 +23,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"reflect"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -363,17 +366,19 @@ func (c *Config) configureRouter(r *Router) {
 }
 
 // fetchClientConfig reads the store's clientConfig document from etcd once and
-// decodes it twice: into model.ClientConfig, and into clientConfigExt for the
-// keys that type does not carry. Both are nil when the document is absent,
-// unreadable or not JSON. A redial key of the wrong type costs only the
-// redial keys (ext nil: their defaults apply).
+// decodes it twice: into model.ClientConfig without the redial keys, and into
+// clientConfigExt for the redial keys. Both are nil when the document is
+// absent, unreadable or not JSON. A redial key of the wrong type costs only the
+// redial keys (ext nil: their defaults apply): the control plane's
+// model.ClientConfig carries them too, and decoding them there would fail the
+// whole document.
 func fetchClientConfig(ctx context.Context, etcd EtcdClient, tenant, store string) (*model.ClientConfig, *clientConfigExt) {
 	resp, err := etcd.Get(ctx, model.ClientConfigPath(tenant, store))
 	if err != nil || len(resp.Kvs) == 0 {
 		return nil, nil
 	}
 	var cc model.ClientConfig
-	if err := json.Unmarshal(resp.Kvs[0].Value, &cc); err != nil {
+	if err := json.Unmarshal(withoutRedialKeys(resp.Kvs[0].Value), &cc); err != nil {
 		return nil, nil
 	}
 	var ext clientConfigExt
@@ -383,6 +388,35 @@ func fetchClientConfig(ctx context.Context, etcd EtcdClient, tenant, store strin
 		return &cc, nil
 	}
 	return &cc, &ext
+}
+
+// redialKeys are clientConfigExt's JSON keys, read from its tags so the two
+// cannot drift.
+var redialKeys = func() []string {
+	t := reflect.TypeOf(clientConfigExt{})
+	keys := make([]string, t.NumField())
+	for i := range keys {
+		keys[i], _, _ = strings.Cut(t.Field(i).Tag.Get("json"), ",")
+	}
+	return keys
+}()
+
+// withoutRedialKeys returns the clientConfig document with the redial keys
+// removed, matched case-insensitively as encoding/json matches them. A document
+// that is not a JSON object is returned as is, for the caller's decode to
+// reject.
+func withoutRedialKeys(doc []byte) []byte {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(doc, &fields) != nil {
+		return doc
+	}
+	for k := range fields {
+		if slices.ContainsFunc(redialKeys, func(r string) bool { return strings.EqualFold(k, r) }) {
+			delete(fields, k)
+		}
+	}
+	out, _ := json.Marshal(fields) // re-marshalling decoded RawMessages cannot fail
+	return out
 }
 
 // NewDirectClient creates a client that talks to one endpoint with no etcd or
