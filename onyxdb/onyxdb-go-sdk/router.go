@@ -239,9 +239,10 @@ func (r *Router) counter(shardID uint32) *atomic.Uint32 {
 }
 
 // PodFor returns a warm pod for the shard using round-robin over the resolver's
-// current addrs, skipping pods inside their unhealthy window. Returns
-// ErrNoHealthyPod when the resolver has no addrs for the shard (topology not
-// loaded / no warm pods).
+// current addrs that are routable, so a pod inside its unhealthy window is
+// skipped and its share spreads evenly over the rest (pickRoutableLocked).
+// Returns ErrNoHealthyPod when the resolver has no addrs for the shard
+// (topology not loaded / no warm pods).
 //
 // With shard fail-fast on (the default): a pod past its window gets the
 // shard's probe, one request at a time per shard, before it takes traffic
@@ -274,11 +275,9 @@ func (r *Router) PodFor(shardID uint32) (string, error) {
 				return pod, nil
 			}
 		}
-		for i := 0; i < len(pods); i++ {
-			if cand := pods[(start+i)%len(pods)]; r.routableLocked(cand, now) {
-				r.mu.RUnlock()
-				return cand, nil
-			}
+		if pod, ok := r.pickRoutableLocked(pods, start, now); ok {
+			r.mu.RUnlock()
+			return pod, nil
 		}
 		if !r.failFast {
 			r.mu.RUnlock()
@@ -295,6 +294,30 @@ func (r *Router) PodFor(shardID uint32) (string, error) {
 func (r *Router) routableLocked(pod string, now time.Time) bool {
 	h := r.unhealthy[pod]
 	return h == nil || (!r.failFast && !now.Before(h.until))
+}
+
+// pickRoutableLocked is the round-robin pick: the start-th of the shard's
+// routable pods, in resolver order. Each routable pod gets an even share, so a
+// marked pod's share spreads over all the others. Stepping on to the marked
+// pod's successor in the list instead would double that one pod's share, and
+// every client resolves the same order, so the whole fleet would double the
+// same pod. ok is false when no pod is routable. Caller holds r.mu. A shard
+// holds a handful of pods, so the scan is short.
+func (r *Router) pickRoutableLocked(pods []string, start int, now time.Time) (pod string, ok bool) {
+	if len(r.unhealthy) == 0 {
+		return pods[start%len(pods)], true
+	}
+	var buf [8]int
+	routable := buf[:0]
+	for i, p := range pods {
+		if r.routableLocked(p, now) {
+			routable = append(routable, i)
+		}
+	}
+	if len(routable) == 0 {
+		return "", false
+	}
+	return pods[routable[start%len(routable)]], true
 }
 
 // probingLocked reports whether h's pod has a probe in flight. Caller holds
@@ -345,11 +368,9 @@ func (r *Router) probeOrFail(pods []string, start int) (string, error) {
 		r.mu.Unlock()
 		return probe, nil
 	}
-	for i := 0; i < len(pods); i++ {
-		if cand := pods[(start+i)%len(pods)]; r.routableLocked(cand, now) {
-			r.mu.Unlock()
-			return cand, nil
-		}
+	if pod, ok := r.pickRoutableLocked(pods, start, now); ok {
+		r.mu.Unlock()
+		return pod, nil
 	}
 	r.mu.Unlock()
 	r.emitCount(MetricRouterShardUnavailable)

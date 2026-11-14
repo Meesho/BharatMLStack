@@ -366,3 +366,21 @@ func TestProbeOrFail_RoutesToAPodThatHealedInBetween(t *testing.T) {
 	assert.Equal(t, "b", pod)
 	assert.Empty(t, mc.findAll(MetricRouterShardUnavailable))
 }
+
+// probeOrFail's fallback spreads like PodFor: over the routable pods evenly,
+// not onto the marked pod's successor.
+func TestProbeOrFail_SpreadsOverTheRoutablePods(t *testing.T) {
+	pods := []string{"a", "b", "c", "d"}
+	r, _, mc := backoffRouter(pods...)
+	r.MarkUnhealthy("b")
+
+	seen := map[string]int{}
+	for start := 0; start < 300; start++ {
+		pod, err := r.probeOrFail(pods, start)
+		require.NoError(t, err)
+		seen[pod]++
+	}
+
+	assert.Equal(t, map[string]int{"a": 100, "c": 100, "d": 100}, seen)
+	assert.Empty(t, mc.findAll(MetricRouterShardUnavailable))
+}
