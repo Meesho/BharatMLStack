@@ -79,6 +79,76 @@ func TestPodFor_SkipsUnhealthy(t *testing.T) {
 	}
 }
 
+// pickCounts makes n PodFor picks for shardID and counts them by pod.
+func pickCounts(t *testing.T, r *Router, shardID uint32, n int) map[string]int {
+	t.Helper()
+	seen := map[string]int{}
+	for i := 0; i < n; i++ {
+		pod, err := r.PodFor(shardID)
+		require.NoError(t, err)
+		seen[pod]++
+	}
+	return seen
+}
+
+// A marked pod's share spreads evenly over the shard's routable pods. Every
+// client resolves a shard's pods in the same order, so handing the share to
+// the marked pod's successor in that list would double one pod's load across
+// every client at once.
+func TestPodFor_SpreadsAMarkedPodsShareEvenly(t *testing.T) {
+	pods := []string{"a", "b", "c", "d", "e", "f"}
+	tests := []struct {
+		name   string
+		marked []string
+		want   map[string]int
+	}{
+		{
+			name:   "one pod marked",
+			marked: []string{"c"},
+			want:   map[string]int{"a": 1200, "b": 1200, "d": 1200, "e": 1200, "f": 1200},
+		},
+		{
+			name:   "the last pod marked: its share does not all wrap to the first",
+			marked: []string{"f"},
+			want:   map[string]int{"a": 1200, "b": 1200, "c": 1200, "d": 1200, "e": 1200},
+		},
+		{
+			name:   "two pods marked side by side",
+			marked: []string{"c", "d"},
+			want:   map[string]int{"a": 1500, "b": 1500, "e": 1500, "f": 1500},
+		},
+		{
+			name:   "two pods marked apart",
+			marked: []string{"b", "e"},
+			want:   map[string]int{"a": 1500, "c": 1500, "d": 1500, "f": 1500},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := routerWith(1, map[uint32][]string{0: pods})
+			r.now = (&fakeClock{t: redialT0}).now // the windows outlast the picks: no probe comes due
+			for _, p := range tc.marked {
+				r.MarkUnhealthy(p)
+			}
+
+			got := pickCounts(t, r, 0, 6000)
+
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// A mark on another shard's pod leaves this shard's round-robin even.
+func TestPodFor_AMarkOnAnotherShardLeavesThisShardEven(t *testing.T) {
+	r := routerWith(2, map[uint32][]string{0: {"a", "b", "c"}, 1: {"x", "y"}})
+	r.now = (&fakeClock{t: redialT0}).now
+	r.MarkUnhealthy("x")
+
+	got := pickCounts(t, r, 0, 30)
+
+	assert.Equal(t, map[string]int{"a": 10, "b": 10, "c": 10}, got)
+}
+
 // With ShardFailFast off, a shard whose pods are all marked still gets one of
 // them (best effort), as before fail-fast existed. With it on (the default)
 // see router_backoff_test.go.
