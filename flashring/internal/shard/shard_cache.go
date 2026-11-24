@@ -16,6 +16,14 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// ShardCache is a single shard of the flashring cache: an in-memory
+// Index, a double-buffered MemtableManager, a WrapAppendFile on NVMe,
+// and slab-pooled aligned read pages. All concurrency is delegated to
+// the per-shard RWMutex passed into Index — ShardCache itself takes no
+// locks. The shared io_uring rings (one reader, one writer) are owned
+// by WrapCache and injected here so a single set of kernel queues
+// serves every shard. ShardCache is the unit that WrapCache shards
+// keys across via xxhash.
 type ShardCache struct {
 	keyIndex          *index.Index
 	file              *fs.WrapAppendFile
@@ -48,6 +56,9 @@ type ShardCacheConfig struct {
 	// FlushStaggerOffset pre-advances the first memtable so shards flush at
 	// staggered times instead of all at once.
 	FlushStaggerOffset int
+
+	// ShardIdx is this shard's position in the cache; it tags per-shard metrics.
+	ShardIdx uint32
 }
 
 func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) (*ShardCache, error) {
@@ -68,14 +79,30 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) (*ShardCache, erro
 		file.Close()
 		return nil, fmt.Errorf("create memtable manager: %w", err)
 	}
-	ki := index.NewIndex(0, config.RbInitial, config.RbMax, config.DeleteAmortizedStep, sl)
+	memtableManager.ShardIdx = config.ShardIdx
+	// Memtable ids that can hold readable entries: one per file slot, plus
+	// the active and the flushing memtable.
+	liveMemtables := int(config.MaxFileSize/int64(config.MemtableSize)) + 2
+	ki := index.NewIndex(0, config.RbInitial, config.RbMax, config.DeleteAmortizedStep, liveMemtables, sl)
 
+	// Size-class ladder for aligned read pages. Uses powers of two up to
+	// 128KB so that entries near uint16-max length (65531 bytes of value
+	// data + 4-byte CRC + key) round up to a size class even when the
+	// entry's file offset is near a block boundary. The worst-case
+	// alignedSize for a 65535-byte entry is 65535 + (BLOCK_SIZE-1) = 69630
+	// bytes, which rounds up to 69632 = 68KB — fits in the 128KB class.
+	// Without this class, oversized reads returned nil from the allocator
+	// and NPE'd on page.Buf.
 	sizeClasses := make([]allocators.SizeClass, 0)
 	i := fs.BLOCK_SIZE
 	minCount := 24
-	iMax := (1 << 17)
+	iMax := (1 << 18) // 256KB — loop runs through 128KB inclusive
 	for i < iMax {
-		sizeClasses = append(sizeClasses, allocators.SizeClass{Size: i, MinCount: minCount})
+		mc := minCount
+		if mc < 1 {
+			mc = 1
+		}
+		sizeClasses = append(sizeClasses, allocators.SizeClass{Size: i, MinCount: mc})
 		i *= 2
 		minCount /= 2
 	}
@@ -96,6 +123,7 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) (*ShardCache, erro
 		dm:                dm,
 		predictor:         config.Predictor,
 		startAt:           time.Now().Unix(),
+		ShardIdx:          config.ShardIdx,
 	}
 
 	if config.IoUringReader == nil {
@@ -107,17 +135,48 @@ func NewShardCache(config ShardCacheConfig, sl *sync.RWMutex) (*ShardCache, erro
 	return sc, nil
 }
 
+// Put writes key+value into the shard. Each entry is laid out as
+// [crc32(4) | key | value]; the CRC is computed over key+value and
+// stored at the start of the slot so Get can detect torn writes or
+// stale reads against an overwritten ring region. If ExecuteDeleteIfNeeded
+// returns "trim needed retry this write", the error propagates upward
+// and the caller (WrapCache.Put) is expected to retry the entire
+// operation. If the active memtable is full, the manager rotates and
+// Put reissues the append against the freshly active memtable.
+// MemtableManager exposes the shard's manager so WrapCache can peek at
+// the async-flush health flag exactly once per user-visible Put (the
+// consume-if-set semantic must NOT trigger from background rewrite
+// goroutines whose error returns are discarded — see WrapCache.rewrite).
+func (fc *ShardCache) MemtableManager() *memtables.MemtableManager {
+	return fc.mm
+}
+
 func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	size := 4 + len(key) + len(value)
 	mt, mtId, _ := fc.mm.GetMemtable()
 	if err := fc.dm.ExecuteDeleteIfNeeded(); err != nil {
 		return err
 	}
+	// Entry expiry is stored relative to the memtable's first write, in 16
+	// bits. A memtable that has been open too long is sealed so this entry
+	// starts a new one; the append below then takes the normal rotation.
+	if fc.keyIndex.MemtableTooOld(mtId) {
+		mt.Seal()
+	}
 	buf, offset, length, readyForFlush := mt.GetBufForAppend(uint16(size))
 	if readyForFlush {
 		fc.mm.Flush()
 		mt, mtId, _ = fc.mm.GetMemtable()
-		buf, offset, length, _ = mt.GetBufForAppend(uint16(size))
+		buf, offset, length, readyForFlush = mt.GetBufForAppend(uint16(size))
+		// If the fresh memtable also can't fit this entry, the entry is
+		// bigger than one memtable — the caller is misusing the cache
+		// (WrapCache.Put already rejects entries >= 64KiB via
+		// ErrValueTooLarge, but ShardCache is called directly by tests
+		// too). Return an error rather than dereferencing the nil buf
+		// that GetBufForAppend returned.
+		if readyForFlush || buf == nil {
+			return fmt.Errorf("entry size %d exceeds memtable capacity", size)
+		}
 	}
 	copy(buf[4:], key)
 	copy(buf[4+len(key):], value)
@@ -128,6 +187,14 @@ func (fc *ShardCache) Put(key string, value []byte, ttlMinutes uint16) error {
 	return nil
 }
 
+// Get returns (found, value, remainingTTL, expired, shouldReWrite).
+// Looks up the index entry, asks the predictor whether the key is hot
+// enough to rewrite, and resolves the value either from the matching
+// memtable (if its memId is still resident) or via an io_uring pread
+// into a slab-allocated aligned page. Validates CRC32 and the embedded
+// key on the way out — bad-CRC or wrong-key reads return found=false
+// even when the index hit. shouldReWrite is propagated regardless of
+// CRC so the caller's metrics still reflect the predictor's decision.
 func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	length, lastAccess, remainingTTL, freq, memId, offset, status := fc.keyIndex.Get(key)
 	if status == index.StatusNotFound {
@@ -140,6 +207,15 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	if status == index.StatusExpired {
 		metrics.Incr(metrics.KEY_KEY_EXPIRED_COUNT, []string{})
 		return false, nil, 0, true, false
+	}
+
+	// Guard against a corrupted / undersized length before any buffer
+	// slicing. Every valid entry is [crc(4) | key | value]; if length is
+	// smaller than the CRC + key prefix, downstream slicing would panic.
+	// Treat as bad-length miss and let the caller re-fetch.
+	if int(length) < 4+len(key) {
+		metrics.Incr(metrics.KEY_BAD_LENGTH_COUNT, []string{})
+		return false, nil, 0, false, false
 	}
 
 	_, currMemId, _ := fc.mm.GetMemtable()
@@ -158,11 +234,15 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 		}
 	} else {
 		metrics.Incr(metrics.KEY_MEMTABLE_HIT, []string{})
-		var exists bool
-		buf, exists = mt.GetBufForRead(int(offset), length)
+		src, exists := mt.GetBufForRead(int(offset), length)
 		if !exists {
 			return false, nil, 0, false, shouldReWrite
 		}
+		// Copy before validating. The page is reused once the memtable
+		// rotates back to active, and the caller keeps the returned value;
+		// a copy taken mid-overwrite fails the CRC below.
+		buf = make([]byte, length)
+		copy(buf, src)
 	}
 	gotCR32 := index.ByteOrder.Uint32(buf[0:4])
 	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
@@ -182,6 +262,14 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 func (fc *ShardCache) readFromDiskAsync(fileOffset int64, length uint16, buf []byte) int {
 	alignedStart, alignedSize := fs.AlignRange(fileOffset, int(length), fs.BLOCK_SIZE)
 	page := fc.readPageAllocator.Get(int(alignedSize))
+	if page == nil {
+		// alignedSize exceeds the largest slab class. WrapCache.Put now
+		// caps entry size at uint16 and the size-class ladder tops out
+		// at 128KB, so this should be unreachable in valid configs —
+		// but return 0 rather than NPE if a bad length ever slips through.
+		metrics.Incr(metrics.KEY_BAD_LENGTH_COUNT, []string{})
+		return 0
+	}
 
 	readBuf := page.Buf[:alignedSize]
 
@@ -211,11 +299,9 @@ func (fc *ShardCache) readFromDiskAsync(fileOffset int64, length uint16, buf []b
 	return copied
 }
 
-func (fc *ShardCache) Flush() {
-	fc.mm.Flush()
-}
-
 func (fc *ShardCache) Close() {
+	// An in-flight flush still writes through the file's fd.
+	fc.mm.WaitForFlush()
 	fc.file.Close()
 }
 
@@ -278,10 +364,13 @@ func (fc *ShardCache) GetMetaForMGet(key string) MGetMeta {
 	mt := fc.mm.GetMemtableById(memId)
 	if mt != nil {
 		metrics.Incr(metrics.KEY_MEMTABLE_HIT, []string{})
-		buf, exists := mt.GetBufForRead(int(offset), length)
+		src, exists := mt.GetBufForRead(int(offset), length)
 		if !exists {
 			return MGetMeta{ShouldReWrite: shouldReWrite}
 		}
+		// Copy: see the memtable-hit branch of Get.
+		buf := make([]byte, length)
+		copy(buf, src)
 		return MGetMeta{
 			Found:         true,
 			Value:         buf,
@@ -309,6 +398,9 @@ func (fc *ShardCache) GetMetaForMGet(key string) MGetMeta {
 func (fc *ShardCache) SubmitDiskReadAsync(fileOffset int64, length uint16) (*PendingRead, error) {
 	alignedStart, alignedSize := fs.AlignRange(fileOffset, int(length), fs.BLOCK_SIZE)
 	page := fc.readPageAllocator.Get(int(alignedSize))
+	if page == nil {
+		return nil, fmt.Errorf("aligned read size %d exceeds largest slab class", alignedSize)
+	}
 	readBuf := page.Buf[:alignedSize]
 
 	validOffset, err := fc.file.ValidateReadOffset(alignedStart, int(alignedSize))
@@ -358,6 +450,9 @@ type CoalescedPendingRead struct {
 // multiple keys whose file offsets fall within [alignedStart, alignedStart+alignedSize).
 func (fc *ShardCache) SubmitCoalescedReadAsync(alignedStart int64, alignedSize int) (*CoalescedPendingRead, error) {
 	page := fc.readPageAllocator.Get(alignedSize)
+	if page == nil {
+		return nil, fmt.Errorf("coalesced aligned read size %d exceeds largest slab class", alignedSize)
+	}
 	readBuf := page.Buf[:alignedSize]
 
 	validOffset, err := fc.file.ValidateReadOffset(alignedStart, alignedSize)
@@ -397,7 +492,10 @@ func (fc *ShardCache) CollectCoalescedRead(pr *CoalescedPendingRead) []byte {
 // ValidateAndExtract checks the CRC32 and key, then extracts the value from
 // a raw data buffer. Used by MGet for both memtable and disk-read results.
 func (fc *ShardCache) ValidateAndExtract(buf []byte, key string, length uint16) ([]byte, bool) {
-	if int(length) > len(buf) || length < 4 {
+	// length must cover CRC (4) + key + value. If it's smaller than
+	// 4 + len(key), the key-slice below would panic. Also guard the
+	// upper bound against buf.
+	if int(length) > len(buf) || int(length) < 4+len(key) {
 		metrics.Incr(metrics.KEY_BAD_LENGTH_COUNT, []string{})
 		return nil, false
 	}
@@ -412,6 +510,8 @@ func (fc *ShardCache) ValidateAndExtract(buf []byte, key string, length uint16) 
 		metrics.Incr(metrics.KEY_BAD_KEY_COUNT, []string{})
 		return nil, false
 	}
-	valLen := int(length) - 4 - len(key)
-	return buf[4+len(key) : 4+len(key)+valLen], true
+	// Capacity is capped: MGet hands out several values cut from one
+	// coalesced read, and an append must not run into the next one.
+	end := int(length)
+	return buf[4+len(key) : end : end], true
 }

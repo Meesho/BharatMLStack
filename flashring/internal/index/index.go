@@ -2,7 +2,9 @@ package index
 
 import (
 	"errors"
+	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/maths"
@@ -20,24 +22,85 @@ const (
 	StatusExpired
 )
 
+// Index is the in-memory hash table that maps keys to their (memId,
+// offset) location in the shard's data file. Entries live in a fixed-size
+// RingBuffer rb and are addressed indirectly through rm, a map from
+// xxh3(key) to ring-buffer slot. Hash collisions are resolved by chaining
+// slots together via prev/next pointers stored in each slot's
+// HashNextPrev triple — the high 64 bits also hold xxhash(key) so Get
+// can verify the chain entry actually belongs to the requested key
+// (dual-hash collision detection).
+//
+// Frequency is tracked with a per-key MorrisLogCounter; lastAccess is
+// stored as minutes-since-startAt to fit in 16 bits. Concurrency is
+// controlled by mu, which is owned externally (the shard) so the
+// caller can hold the write lock across Index + memtable + file
+// operations.
 type Index struct {
 	mu       *sync.RWMutex
 	rm       map[uint64]int
 	rb       *RingBuffer
 	mc       *maths.MorrisLogCounter
-	startAt  int64
+	startAt  time.Time // read with time.Since, so a wall-clock step cannot move it
 	hashBits int
+
+	// memBirth[memId % len] holds memId<<32 | the minute (since startAt)
+	// that memtable id took its first write. Written by Put under the
+	// shard lock, read lock-free by Get.
+	memBirth []atomic.Uint64
 }
 
-func NewIndex(hashBits int, rbInitial, rbMax, deleteAmortizedStep int, mu *sync.RWMutex) *Index {
-	return &Index{
+// NewIndex builds an index. liveMemtables is how many memtable ids can hold
+// readable entries at once: the file's slots plus the two in memory.
+func NewIndex(hashBits int, rbInitial, rbMax, deleteAmortizedStep int, liveMemtables int, mu *sync.RWMutex) *Index {
+	ix := &Index{
 		mu:       mu,
 		rm:       make(map[uint64]int),
 		rb:       NewRingBuffer(rbInitial, rbMax),
 		mc:       maths.New(),
-		startAt:  time.Now().Unix(),
+		startAt:  time.Now(),
 		hashBits: hashBits,
+		memBirth: make([]atomic.Uint64, liveMemtables),
 	}
+	for s := range ix.memBirth {
+		ix.memBirth[s].Store(math.MaxUint64) // no memtable id yet
+	}
+	return ix
+}
+
+// Expiry is stored in the 16-bit entry field as minutes since the entry's
+// memtable took its first write, and that moment is kept per memtable id in
+// memBirth. An entry's absolute expiry is birth + delta, so it never wraps
+// however long the process runs. Two limits keep the delta inside 16 bits:
+// a memtable stops taking writes once it is MaxMemtableAgeMinutes old (the
+// shard seals it), and a TTL is at most MaxTTLMinutes.
+const (
+	MaxMemtableAgeMinutes = 4096 // about 2.8 days
+	MaxTTLMinutes         = math.MaxUint16 - MaxMemtableAgeMinutes
+)
+
+// nowMinutes is the time since the index was created, in minutes.
+func (i *Index) nowMinutes() int64 {
+	return int64(time.Since(i.startAt) / time.Minute)
+}
+
+// memBirthOf returns the minute memId took its first write, or false when
+// the slot has since been taken by a newer memtable id: memId's file slot
+// has been overwritten by then, so its entries are dead.
+func (i *Index) memBirthOf(memId uint32) (int64, bool) {
+	v := i.memBirth[int(memId)%len(i.memBirth)].Load()
+	if uint32(v>>32) != memId {
+		return 0, false
+	}
+	return int64(uint32(v)), true
+}
+
+// MemtableTooOld reports whether memId has been taking writes for longer
+// than MaxMemtableAgeMinutes. The shard then seals it so the next write
+// starts a new memtable id with a fresh birth.
+func (i *Index) MemtableTooOld(memId uint32) bool {
+	birth, ok := i.memBirthOf(memId)
+	return ok && i.nowMinutes()-birth > MaxMemtableAgeMinutes
 }
 
 func (i *Index) Put(key string, length, ttlInMinutes uint16, memId, offset uint32) {
@@ -45,9 +108,16 @@ func (i *Index) Put(key string, length, ttlInMinutes uint16, memId, offset uint3
 	entry, hashNextPrev, idx, _ := i.rb.GetNextFreeSlot()
 	lastAccess := i.generateLastAccess()
 	freq := uint16(1)
-	expiryAt := (time.Now().Unix() / 60) + int64(ttlInMinutes)
-	delta := uint16(expiryAt - (i.startAt / 60))
-	encode(key, length, delta, lastAccess, freq, memId, offset, entry)
+	now := i.nowMinutes()
+	birth, ok := i.memBirthOf(memId)
+	if !ok {
+		// First write into this memtable id.
+		birth = now
+		i.memBirth[int(memId)%len(i.memBirth)].Store(uint64(memId)<<32 | uint64(uint32(now)))
+	}
+	// Clamped, not wrapped: a too-long TTL then expires early, never late.
+	delta := max(0, min(now-birth+int64(ttlInMinutes), math.MaxUint16))
+	encode(key, length, uint16(delta), lastAccess, freq, memId, offset, entry)
 
 	if headIdx, ok := i.rm[hlo]; !ok {
 		encodeHashNextPrev(hhi, hlo, -1, -1, hashNextPrev)
@@ -71,13 +141,17 @@ func (i *Index) Get(key string) (length, lastAccess, remainingTTL uint16, freq u
 		return 0, 0, 0, 0, 0, 0, StatusNotFound
 	}
 
-	for {
+	// Bounded: a chain is at most the ring's capacity long, so a longer
+	// walk means the links are corrupt and must not spin a request forever.
+	for steps := 0; steps <= i.rb.capacity; steps++ {
 		entry, hashNextPrev, _ := i.rb.Get(int(idx))
 		if isHashMatch(hhi, hlo, hashNextPrev) {
 			length, deltaExptime, oldLastAccess, freq, memId, offset := decode(entry)
-			exptime := int(deltaExptime) + int(i.startAt/60)
-			currentTime := int(time.Now().Unix() / 60)
-			remainingTTL := exptime - currentTime
+			birth, ok := i.memBirthOf(memId)
+			if !ok {
+				return 0, 0, 0, 0, 0, 0, StatusNotFound
+			}
+			remainingTTL := birth + int64(deltaExptime) - i.nowMinutes()
 			if remainingTTL <= 0 {
 				return 0, 0, 0, 0, 0, 0, StatusExpired
 			}
@@ -93,17 +167,26 @@ func (i *Index) Get(key string) (length, lastAccess, remainingTTL uint16, freq u
 			return 0, 0, 0, 0, 0, 0, StatusNotFound
 		}
 	}
+	return 0, 0, 0, 0, 0, 0, StatusNotFound
 }
 
+// Delete reclaims up to count slots from the ring buffer's head, walking
+// forward until the head's memId crosses the boundary of the memtable
+// being recycled. Returns (newHeadMemId, slotsDeleted) on a successful
+// boundary crossing, (currentMemId, slotsDeleted) when the count is
+// fully drained while still inside the same memtable's region, or
+// (0, -1) on a corruption-class error (e.g. ring drained but no boundary
+// found). DeleteManager calls this in amortized chunks so a single Put
+// never pays the full cost of recycling a memtable's worth of entries.
 func (ix *Index) Delete(count int) (uint32, int) {
 	if count == 0 {
 		return 0, 0
 	}
 	for i := 0; i < count; i++ {
 		deleted, deletedHashNextPrev, deletedIdx, next := ix.rb.Delete()
-		if deleted == nil {
-			return 0, -1
-		}
+		// RingBuffer.Delete returns pointers that are always non-nil (Go
+		// escape analysis heap-allocates the local copies), so no nil
+		// guard is needed here.
 		delMemId, _ := DecodeMemIdOffset(deleted)
 		deletedHlo := decodeHashLo(deletedHashNextPrev)
 		mapIdx, ok := ix.rm[deletedHlo]
@@ -153,7 +236,7 @@ func (ki *Index) PeekMemIdAtHead() (uint32, error) {
 }
 
 func (i *Index) generateLastAccess() uint16 {
-	return uint16((time.Now().Unix() - i.startAt) / 60)
+	return uint16(i.nowMinutes())
 }
 
 func (i *Index) incrFreq(freq uint16, hlo uint64) uint16 {

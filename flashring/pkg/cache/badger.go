@@ -6,6 +6,9 @@ import (
 	badger "github.com/dgraph-io/badger/v4"
 )
 
+// Badger adapts dgraph-io/badger to the Cache interface as a
+// comparison backend for the benchmark harness in cmd/flashringtest.
+// It is not the production NVMe path — for that, use WrapCache.
 type Badger struct {
 	cache *badger.DB
 }

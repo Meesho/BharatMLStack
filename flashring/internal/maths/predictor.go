@@ -1,6 +1,7 @@
 package maths
 
 import (
+	"sync"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
@@ -12,6 +13,14 @@ type Params struct {
 	KeyMemId    uint32
 	ActiveMemId uint32
 }
+
+// Predictor decides whether a key read should trigger an asynchronous
+// rewrite that copies the value back to the active memtable, moving hot
+// data away from the punch-hole horizon before its memtable is recycled.
+// The score combines frequency, recency, and over-write risk (how close
+// the key's memtable is to being overwritten by the active writer). The
+// (wFreq, wLA) weights driving the score are tuned online by an embedded
+// GridSearchEstimator that consumes hit-rate samples via Observe.
 type Predictor struct {
 	Estimator             *Estimator
 	GridSearchEstimator   *GridSearchEstimator
@@ -20,6 +29,7 @@ type Predictor struct {
 	freqBands             FreqBands
 	recencyBands          RecencyBands
 	hitRateCh             chan float64
+	closeOnce             sync.Once
 }
 
 // FreqBands defines the upper bounds for frequency band labels.
@@ -51,6 +61,11 @@ type PredictorConfig struct {
 	RecencyBands          RecencyBands
 }
 
+// NewPredictor constructs a Predictor and starts a background goroutine
+// that drains hitRateCh into the GridSearchEstimator. Call Close to stop
+// the goroutine and release the channel; long-lived callers (WrapCache)
+// close as part of their own teardown. Default FreqBands ({1,5,20}) and
+// RecencyBands ({5,50,500}) are applied if config leaves them all zero.
 func NewPredictor(config PredictorConfig) *Predictor {
 	estimator := &Estimator{
 		WFreq: config.Weights[0].WFreq,
@@ -100,6 +115,11 @@ func scoreBucket(score float32) string {
 }
 
 func ringZone(keyMemId, activeMemId, maxMemTableCount uint32) string {
+	// Same guard as Estimator.CalculateRewriteScore — modulo-by-zero
+	// panics on int, and the metrics path shouldn't take down a Get.
+	if maxMemTableCount == 0 {
+		return "unknown"
+	}
 	risk := (activeMemId - keyMemId + maxMemTableCount) % maxMemTableCount
 	pct := float64(risk) / float64(maxMemTableCount)
 	switch {
@@ -144,11 +164,21 @@ func (p *Predictor) Predict(freq uint64, lastAccess uint64, keyMemId uint32, act
 	score := p.Estimator.CalculateRewriteScore(freq, lastAccess, keyMemId, activeMemId, p.MaxMemTableCount)
 	rewrite := score > p.ReWriteScoreThreshold
 
-	computeMetrics(keyMemId, activeMemId, p, freq, lastAccess, rewrite, score)
+	// Checked here, not only inside the metric calls: computeMetrics builds
+	// tag slices before any of them can no-op.
+	if metrics.Enabled() && metrics.PredictorMetricsEnabled() {
+		computeMetrics(keyMemId, activeMemId, p, freq, lastAccess, rewrite, score)
+	}
 
 	return rewrite
 }
 
+// computeMetrics emits the rewrite-predictor telemetry group. KEY_REWRITE_DECISION
+// carries a 4-tag cross-product (decision × ring_zone × freq_band × recency_band),
+// giving up to 2×4×4×4 = 128 series per host and firing on every Predict call —
+// the highest-cardinality hot-path emission in flashring. Consumers on tight
+// cardinality budgets can disable the whole group via
+// FLASHRING_METRICS_PREDICTOR_ENABLED=false; see metrics.PredictorMetricsEnabled.
 func computeMetrics(keyMemId uint32, activeMemId uint32, p *Predictor, freq uint64, lastAccess uint64, rewrite bool, score float32) {
 	zone := ringZone(keyMemId, activeMemId, p.MaxMemTableCount)
 	fBand := freqBand(freq, p.freqBands)
@@ -169,9 +199,27 @@ func computeMetrics(keyMemId uint32, activeMemId uint32, p *Predictor, freq uint
 	))
 }
 
+// Observe delivers a hit-rate sample to the grid-search loop. The send
+// is non-blocking — if the channel buffer is full (1024 samples), the
+// sample is silently dropped rather than back-pressuring the caller. In
+// steady state this is acceptable because the grid search converges on
+// time-windowed averages, but a stuck consumer goroutine would cause all
+// samples to be dropped.
 func (p *Predictor) Observe(hitRate float64) {
 	select {
 	case p.hitRateCh <- hitRate:
 	default:
 	}
+}
+
+// Close stops the grid-search background goroutine by closing hitRateCh.
+// The goroutine exits when its `for range p.hitRateCh` loop drains the
+// closed channel. Idempotent — safe to call multiple times via the
+// closeOnce guard. Callers must not Observe after Close (send-on-closed
+// panics); WrapCache.Close serialises this correctly by tearing down
+// the predictor after all shard writers/readers have stopped.
+func (p *Predictor) Close() {
+	p.closeOnce.Do(func() {
+		close(p.hitRateCh)
+	})
 }

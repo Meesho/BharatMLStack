@@ -1,16 +1,17 @@
 package memtables
 
 import (
-	"fmt"
+	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
+	"github.com/Meesho/BharatMLStack/flashring/internal/iouring"
+	"github.com/Meesho/BharatMLStack/flashring/internal/testutil/mountfs"
 )
 
 // Helper function to create a test file for benchmarks
 func createManagerBenchmarkFile(b *testing.B) *fs.WrapAppendFile {
-	filename := fmt.Sprintf("/media/a0d00kc/freedom/tmp/bench_memtable_%d.dat", time.Now().UnixNano())
+	filename := filepath.Join(mountfs.New(b), "bench_memtable.dat")
 
 	config := fs.FileConfig{
 		Filename:          filename,
@@ -23,6 +24,15 @@ func createManagerBenchmarkFile(b *testing.B) *fs.WrapAppendFile {
 	if err != nil {
 		b.Fatalf("Failed to create benchmark file: %v", err)
 	}
+	b.Cleanup(file.Close)
+
+	// Memtable.Flush → WrapAppendFile.PwriteBatch needs a non-nil WriteRing.
+	writeRing, err := iouring.NewIoUringWriter(32, 0)
+	if err != nil {
+		b.Fatalf("Failed to create io_uring write ring: %v", err)
+	}
+	b.Cleanup(writeRing.Close)
+	file.WriteRing = writeRing
 	return file
 }
 

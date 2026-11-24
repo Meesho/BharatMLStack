@@ -691,3 +691,41 @@ func TestSlabAlignedPageAllocator_AlignmentValidation(t *testing.T) {
 		}
 	})
 }
+
+// TestSlabAllocator_Get_Oversized_ReturnsNil locks down the fix for the NPE
+// path in ShardCache (PR #2377): Get returns nil when no size class covers
+// the requested size. Callers must nil-check before deref'ing page.Buf.
+func TestSlabAllocator_Get_Oversized_ReturnsNil(t *testing.T) {
+	alloc, err := NewSlabAlignedPageAllocator(SlabAlignedPageAllocatorConfig{
+		SizeClasses: []SizeClass{
+			{Size: fs.BLOCK_SIZE, MinCount: 1},     // 4KiB
+			{Size: fs.BLOCK_SIZE * 2, MinCount: 1}, // 8KiB
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewSlabAlignedPageAllocator: %v", err)
+	}
+	// Request 16 KiB — larger than the 8 KiB max class.
+	page := alloc.Get(fs.BLOCK_SIZE * 4)
+	if page != nil {
+		t.Fatalf("Get(oversized) = %+v, want nil", page)
+	}
+}
+
+// TestSlabAllocator_Put_Nil_NoPanic locks down the guard from PR #2377:
+// callers that Put unconditionally in a defer would NPE when paired with
+// a Get that returned nil for an oversized request.
+func TestSlabAllocator_Put_Nil_NoPanic(t *testing.T) {
+	alloc, err := NewSlabAlignedPageAllocator(SlabAlignedPageAllocatorConfig{
+		SizeClasses: []SizeClass{{Size: fs.BLOCK_SIZE, MinCount: 1}},
+	})
+	if err != nil {
+		t.Fatalf("NewSlabAlignedPageAllocator: %v", err)
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Put(nil) panicked: %v", r)
+		}
+	}()
+	alloc.Put(nil)
+}

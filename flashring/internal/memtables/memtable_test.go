@@ -602,3 +602,239 @@ func TestMemtable_EdgeCases(t *testing.T) {
 		t.Errorf("Overflow put: offset=%d, length=%d, readyForFlush=%v", offset, length, readyForFlush)
 	}
 }
+
+func TestGetBufForAppend_HappyPath_ReturnsSlice(t *testing.T) {
+	capacity := fs.BLOCK_SIZE
+	file := createTestFile(t)
+	page := createTestPage(capacity)
+	defer cleanup(file, page)
+
+	m, err := NewMemtable(MemtableConfig{
+		capacity: capacity,
+		id:       1,
+		page:     page,
+		file:     file,
+	})
+	if err != nil {
+		t.Fatalf("NewMemtable: %v", err)
+	}
+
+	buf, off, length, ready := m.GetBufForAppend(64)
+	if ready {
+		t.Fatal("ready = true with capacity available")
+	}
+	if length != 64 || off != 0 {
+		t.Fatalf("(off=%d, length=%d), want (0, 64)", off, length)
+	}
+	if len(buf) != 64 {
+		t.Fatalf("len(buf) = %d, want 64", len(buf))
+	}
+	// Buf returned points at the page — writes through it must persist.
+	buf[0] = 0xAA
+	if m.page.Buf[0] != 0xAA {
+		t.Fatal("write through GetBufForAppend slice did not reach page")
+	}
+}
+
+func TestGetBufForAppend_Overflow_FlagsReady(t *testing.T) {
+	capacity := fs.BLOCK_SIZE
+	file := createTestFile(t)
+	page := createTestPage(capacity)
+	defer cleanup(file, page)
+
+	m, err := NewMemtable(MemtableConfig{
+		capacity: capacity,
+		id:       1,
+		page:     page,
+		file:     file,
+	})
+	if err != nil {
+		t.Fatalf("NewMemtable: %v", err)
+	}
+	m.currentOffset = capacity - 10
+
+	buf, off, length, ready := m.GetBufForAppend(64)
+	if !ready {
+		t.Fatal("ready = false when overflow expected")
+	}
+	if buf != nil || off != -1 || length != 0 {
+		t.Fatalf("unexpected return: buf=%v off=%d length=%d", buf, off, length)
+	}
+	if !m.readyForFlush {
+		t.Fatal("readyForFlush not flipped on overflow")
+	}
+}
+
+func TestGetBufForRead_HappyPath_ReturnsSlice(t *testing.T) {
+	capacity := fs.BLOCK_SIZE
+	file := createTestFile(t)
+	page := createTestPage(capacity)
+	defer cleanup(file, page)
+
+	m, err := NewMemtable(MemtableConfig{
+		capacity: capacity,
+		id:       1,
+		page:     page,
+		file:     file,
+	})
+	if err != nil {
+		t.Fatalf("NewMemtable: %v", err)
+	}
+	// Seed page with a pattern.
+	page.Buf[10] = 0x42
+
+	buf, ok := m.GetBufForRead(10, 1)
+	if !ok {
+		t.Fatal("ok = false for in-range slice")
+	}
+	if len(buf) != 1 || buf[0] != 0x42 {
+		t.Fatalf("buf = %v, want [0x42]", buf)
+	}
+}
+
+func TestGetBufForRead_OutOfRange_ReturnsFalse(t *testing.T) {
+	capacity := fs.BLOCK_SIZE
+	file := createTestFile(t)
+	page := createTestPage(capacity)
+	defer cleanup(file, page)
+
+	m, err := NewMemtable(MemtableConfig{
+		capacity: capacity,
+		id:       1,
+		page:     page,
+		file:     file,
+	})
+	if err != nil {
+		t.Fatalf("NewMemtable: %v", err)
+	}
+
+	buf, ok := m.GetBufForRead(capacity-1, 5)
+	if ok {
+		t.Fatal("ok = true when slice exceeds capacity")
+	}
+	if buf != nil {
+		t.Fatalf("buf = %v, want nil", buf)
+	}
+}
+
+// TestMemtable_Flush_PwriteBatchError covers the
+// `if err != nil { return 0, 0, err }` branch in Flush by flipping the
+// underlying file into WriteDirectIO mode and offsetting the flush by
+// one byte so the slice handed to PwriteBatch is no longer
+// block-aligned. fs.WrapAppendFile.PwriteBatch then returns
+// fs.ErrBufNoAlign before any io_uring syscall is issued, exercising the
+// memtable's error-propagation path without depending on a real kernel
+// fault. The docker test loopback doesn't actually open the file with
+// O_DIRECT (DIRECT_IO is unsupported on loopback ext4 and the driver
+// falls back), but PwriteBatch's alignment check only inspects the
+// WriteDirectIO flag — toggling it on the test fixture is enough.
+func TestMemtable_Flush_PwriteBatchError(t *testing.T) {
+	capacity := fs.BLOCK_SIZE * 2
+	file := createTestFile(t)
+	page := createTestPage(capacity)
+	defer cleanup(file, page)
+
+	m, err := NewMemtable(MemtableConfig{
+		capacity: capacity,
+		id:       7,
+		page:     page,
+		file:     file,
+	})
+	if err != nil {
+		t.Fatalf("NewMemtable: %v", err)
+	}
+
+	// Force the alignment guard inside PwriteBatch to fire by:
+	//   1. Turning DirectIO on so the guard runs at all.
+	//   2. Shifting the flush start by one byte so buf[1:] hits the guard
+	//      with a non-block-aligned slice.
+	file.WriteDirectIO = true
+	m.flushStartOffset = 1
+	m.currentOffset = capacity
+	m.readyForFlush = true
+
+	n, fileOffset, err := m.Flush()
+	if err == nil {
+		t.Fatal("Flush err = nil, want fs.ErrBufNoAlign")
+	}
+	if err != fs.ErrBufNoAlign {
+		t.Fatalf("Flush err = %v, want fs.ErrBufNoAlign", err)
+	}
+	if n != 0 || fileOffset != 0 {
+		t.Fatalf("Flush = (%d, %d, _), want (0, 0, _) on error", n, fileOffset)
+	}
+	// The manager recycles the memtable under a new id after a failed
+	// flush, so it must come back empty and its file slot consumed.
+	if m.readyForFlush || m.currentOffset != 0 {
+		t.Fatalf("memtable not reset after failed flush: readyForFlush=%v currentOffset=%d", m.readyForFlush, m.currentOffset)
+	}
+	if got := file.PhysicalWriteOffset.Load(); got != int64(capacity) {
+		t.Fatalf("PhysicalWriteOffset = %d after failed flush, want %d (one full slot)", got, capacity)
+	}
+}
+
+func TestMemtable_Flush_StaggeredStart_AdvancesWriteOffset(t *testing.T) {
+	capacity := fs.BLOCK_SIZE * 2
+	file := createTestFile(t)
+	page := createTestPage(capacity)
+	defer cleanup(file, page)
+
+	m, err := NewMemtable(MemtableConfig{
+		capacity: capacity,
+		id:       1,
+		page:     page,
+		file:     file,
+	})
+	if err != nil {
+		t.Fatalf("NewMemtable: %v", err)
+	}
+
+	// Simulate a stagger: skip the first block. After flush the file
+	// pointer should have advanced by full capacity, not just by the data
+	// portion.
+	m.flushStartOffset = fs.BLOCK_SIZE
+	m.readyForFlush = true
+	m.currentOffset = capacity
+
+	startPhys := file.PhysicalWriteOffset.Load()
+	n, _, err := m.Flush()
+	if err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	// n should be flushStartOffset + actual bytes written = capacity.
+	if n != capacity {
+		t.Fatalf("n = %d, want %d", n, capacity)
+	}
+	if file.PhysicalWriteOffset.Load()-startPhys != int64(capacity) {
+		t.Fatalf("file advanced by %d, want %d",
+			file.PhysicalWriteOffset.Load()-startPhys, capacity)
+	}
+	// flushStartOffset must reset to 0 after first flush.
+	if m.flushStartOffset != 0 {
+		t.Fatalf("flushStartOffset = %d, want 0 after first flush", m.flushStartOffset)
+	}
+}
+
+// A sealed memtable takes no more entries, so the shard rotates it out on
+// the next write and it flushes like a full one.
+func TestMemtable_Seal_NextAppendAsksForFlush(t *testing.T) {
+	capacity := fs.BLOCK_SIZE * 2
+	file := createTestFile(t)
+	page := createTestPage(capacity)
+	defer cleanup(file, page)
+
+	m, err := NewMemtable(MemtableConfig{capacity: capacity, id: 1, page: page, file: file})
+	if err != nil {
+		t.Fatalf("NewMemtable: %v", err)
+	}
+	if _, _, _, ready := m.GetBufForAppend(16); ready {
+		t.Fatal("append into a fresh memtable asked for a flush")
+	}
+	m.Seal()
+	if buf, _, _, ready := m.GetBufForAppend(16); !ready || buf != nil {
+		t.Fatalf("append after Seal: readyForFlush = %v, buf = %v; want true and nil", ready, buf)
+	}
+	if n, _, err := m.Flush(); err != nil || n != capacity {
+		t.Fatalf("Flush after Seal = (%d, _, %v), want (%d, _, nil)", n, err, capacity)
+	}
+}

@@ -18,6 +18,13 @@ type SlabAlignedPageAllocatorConfig struct {
 	SizeClasses []SizeClass
 }
 
+// SlabAlignedPageAllocator is a size-classed slab pool of mmap-backed
+// AlignedPages used for O_DIRECT read buffers. Size classes are sorted
+// ascending at construction so Get can pick the smallest class that
+// fits the requested length in O(n) over a tiny n (typically <10
+// classes). Each class is a LeakyPool — pages beyond capacity are
+// unmapped via the pre-deref hook rather than retained, bounding
+// resident memory under bursty load.
 type SlabAlignedPageAllocator struct {
 	config SlabAlignedPageAllocatorConfig
 	pools  []*pools.LeakyPool[*fs.AlignedPage]
@@ -51,6 +58,9 @@ func NewSlabAlignedPageAllocator(config SlabAlignedPageAllocatorConfig) (*SlabAl
 	return &SlabAlignedPageAllocator{config: config, pools: poolList, sizes: sizes}, nil
 }
 
+// Get returns a page from the smallest size class >= size. Returns nil
+// when size exceeds the largest configured class — callers must fall
+// back to a direct mmap or fail the request.
 func (a *SlabAlignedPageAllocator) Get(size int) *fs.AlignedPage {
 	for i, s := range a.sizes {
 		if size <= s {
@@ -61,6 +71,11 @@ func (a *SlabAlignedPageAllocator) Get(size int) *fs.AlignedPage {
 }
 
 func (a *SlabAlignedPageAllocator) Put(p *fs.AlignedPage) {
+	// Get may return nil for oversized requests; callers that Put
+	// unconditionally in a defer would otherwise NPE here.
+	if p == nil {
+		return
+	}
 	for i, s := range a.sizes {
 		if len(p.Buf) <= s {
 			a.pools[i].Put(p)

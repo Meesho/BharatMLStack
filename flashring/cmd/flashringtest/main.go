@@ -255,11 +255,14 @@ func setupProfiling(flags commonFlags) func() {
 type plan func()
 
 var plans = map[string]plan{
+	"smoke":               planSmoke,
+	"stress":              planStress,
 	"freecache":           planFreecache,
 	"readthrough":         planReadthroughGaussian,
 	"random":              planRandomGaussian,
 	"readthrough-batched": planReadthroughGaussianBatched,
 	"badger":              planBadger,
+	"serve":               planServe,
 }
 
 func main() {

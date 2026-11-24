@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
+	"github.com/Meesho/BharatMLStack/flashring/internal/iouring"
+	"github.com/Meesho/BharatMLStack/flashring/internal/testutil/mountfs"
 )
 
 const (
@@ -26,7 +28,7 @@ const (
 
 // Helper function to create benchmark file
 func createBenchmarkFile(b *testing.B) *fs.WrapAppendFile {
-	filename := filepath.Join("/media/a0d00kc/freedom/tmp/bench_memtable.dat")
+	filename := filepath.Join(mountfs.New(b), "bench_memtable.dat")
 
 	config := fs.FileConfig{
 		Filename:          filename,
@@ -39,6 +41,16 @@ func createBenchmarkFile(b *testing.B) *fs.WrapAppendFile {
 	if err != nil {
 		b.Fatalf("Failed to create benchmark file: %v", err)
 	}
+
+	// WrapAppendFile.PwriteBatch (called by Memtable.Flush) requires a
+	// non-nil WriteRing. createTestFile in the unit-test helper sets this;
+	// the bench helper used to omit it, which only became visible once we
+	// could actually run the benches.
+	writeRing, err := iouring.NewIoUringWriter(32, 0)
+	if err != nil {
+		b.Fatalf("Failed to create io_uring write ring: %v", err)
+	}
+	file.WriteRing = writeRing
 	return file
 }
 

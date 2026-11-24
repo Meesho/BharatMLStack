@@ -10,6 +10,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// RollingAppendFile is the non-wrapping cousin of WrapAppendFile: writes
+// past MaxFileSize fail with ErrFileSizeExceeded instead of wrapping to
+// offset 0. Suitable for callers that prefer a back-pressure signal when
+// the log fills, but does not implement the rewrite/punch-hole GC pattern
+// the cache depends on. Close also deletes the file.
 type RollingAppendFile struct {
 	WriteDirectIO         bool
 	ReadDirectIO          bool
@@ -112,8 +117,9 @@ func (r *RollingAppendFile) TrimHead() (err error) {
 }
 
 func (r *RollingAppendFile) Close() {
-	syscall.Close(r.WriteFd)
-	syscall.Close(r.ReadFd)
+	// Close through the *os.File, not the raw fd: see WrapAppendFile.Close.
+	r.WriteFile.Close()
+	r.ReadFile.Close()
 	os.Remove(r.WriteFile.Name())
 	os.Remove(r.ReadFile.Name())
 }

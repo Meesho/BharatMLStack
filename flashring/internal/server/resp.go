@@ -28,6 +28,13 @@ func ServeRESP(addr string, cache Cache) error {
 	if err != nil {
 		return err
 	}
+	return Serve(ln, cache)
+}
+
+// Serve runs the RESP server loop on a pre-bound listener. Useful when the
+// caller already owns the listener (tests, supervised processes that want
+// graceful shutdown via ln.Close()).
+func Serve(ln net.Listener, cache Cache) error {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {

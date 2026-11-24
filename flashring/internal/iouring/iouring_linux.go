@@ -262,14 +262,20 @@ func (r *IoUring) mapRings(p *ioUringParams) error {
 	return nil
 }
 
-// Close releases all resources associated with the ring.
+// Close releases all resources associated with the ring. Idempotent on
+// the fd — the batch reader/writer may close the fd early during Close()
+// to force waitCqe to unblock; a subsequent full Close() here still
+// unmaps the ring memory and no-ops on the already-closed fd.
 func (r *IoUring) Close() {
 	unix.Munmap(r.sqesMmap)
 	unix.Munmap(r.sqRingPtr)
 	if !r.singleMmap {
 		unix.Munmap(r.cqRingPtr)
 	}
-	syscall.Close(r.fd)
+	if r.fd >= 0 {
+		syscall.Close(r.fd)
+		r.fd = -1
+	}
 }
 
 // -----------------------------------------------------------------------

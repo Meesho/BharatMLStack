@@ -55,6 +55,19 @@ type BatchIoUringReader struct {
 	closeCh  chan struct{}
 	wg       sync.WaitGroup
 
+	// closeMu orders enqueue against Close: Close takes the write lock to
+	// set closed, so every request is either queued before Close starts
+	// (and is answered by Close's drain) or refused.
+	closeMu sync.RWMutex
+	closed  bool
+
+	// submitLoopDone is closed by submitLoop's defer. Close waits on it
+	// BEFORE walking inflight[] a second time and submitting the sentinel —
+	// this eliminates the race where sentinel + pending<=0 fires while
+	// submitLoop is between Store and pending.Add, leaving the request
+	// unreachable after completeLoop returns.
+	submitLoopDone chan struct{}
+
 	// In-flight tracking: each SQE gets a slot index as its UserData.
 	// The submit goroutine stores the request; the completion goroutine
 	// reads it back when the CQE arrives.
@@ -112,12 +125,13 @@ func NewBatchIoUringReader(cfg BatchIoUringConfig) (*BatchIoUringReader, error) 
 	}
 
 	b := &BatchIoUringReader{
-		ring:      ring,
-		reqCh:     make(chan *batchReadRequest, cfg.QueueSize),
-		maxBatch:  cfg.MaxBatch,
-		closeCh:   make(chan struct{}),
-		inflight:  make([]atomic.Pointer[batchReadRequest], ringDepth),
-		freeSlots: freeSlots,
+		ring:           ring,
+		reqCh:          make(chan *batchReadRequest, cfg.QueueSize),
+		maxBatch:       cfg.MaxBatch,
+		closeCh:        make(chan struct{}),
+		submitLoopDone: make(chan struct{}),
+		inflight:       make([]atomic.Pointer[batchReadRequest], ringDepth),
+		freeSlots:      freeSlots,
 	}
 	b.wg.Add(2)
 	go b.submitLoop()
@@ -139,7 +153,13 @@ func (b *BatchIoUringReader) Submit(fd int, buf []byte, offset uint64) (int, err
 	req.buf = buf
 	req.offset = offset
 
-	b.reqCh <- req
+	if !b.enqueue(req) {
+		req.fd = 0
+		req.buf = nil
+		req.offset = 0
+		batchReqPool.Put(req)
+		return 0, fmt.Errorf("io_uring: shutting down")
+	}
 
 	result := <-req.done
 	n, err := result.N, result.Err
@@ -170,26 +190,119 @@ func (b *BatchIoUringReader) SubmitAsync(fd int, buf []byte, offset uint64) <-ch
 		offset: offset,
 		done:   make(chan ReadResult, 1),
 	}
-	b.reqCh <- req
+	if !b.enqueue(req) {
+		req.done <- ReadResult{Err: fmt.Errorf("io_uring: shutting down")}
+	}
 	return req.done
 }
 
+// enqueue hands req to submitLoop, or reports false once Close has begun.
+// Close drains reqCh only once, so a request queued after that would never
+// be answered. A sender blocked here on a full reqCh holds the read lock;
+// Close waits for it, and submitLoop is still running to make room.
+func (b *BatchIoUringReader) enqueue(req *batchReadRequest) bool {
+	b.closeMu.RLock()
+	defer b.closeMu.RUnlock()
+	if b.closed {
+		return false
+	}
+	b.reqCh <- req
+	return true
+}
+
 // Close shuts down both goroutines and releases the io_uring ring.
+//
+// Design note (m-review feedback): the cancel-on-close semantic here
+// intentionally does NOT wait for in-flight kernel completions before
+// tearing the ring down. For the reader that's obvious — cache reads are
+// side-effect free. For the writer (mirrored in batch_writer_linux.go)
+// it means writes submitted-to-kernel-but-not-yet-CQE'd may be lost or
+// half-written at shutdown. That is deliberate: flashring's on-disk
+// files are scratch — WrapCache.NewWrapCache wipes the mount on every
+// startup — so writes that hadn't been CQE'd before Close are
+// unreachable by definition. Adding a drain would just extend pod
+// shutdown time without changing durability semantics. Consumers that
+// need persistence must layer it above the cache tier (this is called
+// out in the flashring CLAUDE.md).
+//
+// The old implementation had two deadlock paths at shutdown:
+//
+//  1. If the SQ was full when Close ran (~256 in-flight reads), getSqe
+//     returned nil and the sentinel NOP was never submitted; completeLoop
+//     blocked in waitCqe forever after its natural drain and Close hung
+//     on wg.Wait.
+//  2. If submitLoop had already stored requests into inflight[] but not
+//     yet submitted them when closeCh fired, those callers (blocked in
+//     Submit / SubmitAsync waiting on req.done) were never notified and
+//     hung forever.
+//
+// The new sequence cancels every in-flight caller first (fixing #2), then
+// tries the sentinel; if the sentinel can't be submitted, forcibly closes
+// the ring fd so waitCqe's io_uring_enter returns EBADF (fixing #1). The
+// mmap regions stay valid until the final ring.Close after wg.Wait.
 func (b *BatchIoUringReader) Close() {
+	b.closeMu.Lock()
+	b.closed = true
+	b.closeMu.Unlock()
 	close(b.closeCh)
 
-	// Submit a NOP with sentinel UserData to unblock the completion
-	// goroutine if it is blocked in waitCqe with no pending I/O.
+	// STEP 1: wait for submitLoop to exit. All submitLoop exit paths check
+	// closeCh, so this happens promptly. After this point, no new Stores
+	// into inflight[] and no new pending increments can happen — a
+	// guarantee that eliminates the sentinel-vs-Store race where sentinel
+	// arrives with pending=0, completeLoop exits, then submitLoop
+	// Stores+increments+submits, leaving that request stranded.
+	<-b.submitLoopDone
+
+	// STEP 2: cancel every in-flight caller. Runs AFTER submitLoop is
+	// dead, so any Store that raced with our earlier closeCh signal is
+	// now visible. Covers:
+	//   - requests submitLoop Stored (from an in-flight batch that closeCh
+	//     interrupted after Store but before we got here)
+	//   - requests submitLoop Stored + submitted (kernel CQEs may still
+	//     be pending; completeLoop's Swap will return nil for those)
+	for i := range b.inflight {
+		req := b.inflight[i].Swap(nil)
+		if req != nil {
+			select {
+			case req.done <- ReadResult{Err: fmt.Errorf("io_uring: shutting down")}:
+			default:
+			}
+			b.pending.Add(-1)
+		}
+	}
+
+	// STEP 3: wake completeLoop via sentinel (clean path) or fd close
+	// (fallback if SQ is full). pending is now stable: no more submits
+	// will happen and we've decremented every cancelled request.
 	b.ring.mu.Lock()
-	sqe := b.ring.getSqe()
-	if sqe != nil {
+	if sqe := b.ring.getSqe(); sqe != nil {
 		sqe.Opcode = iouringOpNop
 		sqe.UserData = sentinelUserData
 		b.ring.submit(0)
+	} else if b.ring.fd >= 0 {
+		syscall.Close(b.ring.fd)
+		b.ring.fd = -1
 	}
 	b.ring.mu.Unlock()
 
 	b.wg.Wait()
+
+	// STEP 4: drain requests submitLoop never got to pick up. Safe now —
+	// no other receiver on reqCh.
+drainReqCh:
+	for {
+		select {
+		case req := <-b.reqCh:
+			select {
+			case req.done <- ReadResult{Err: fmt.Errorf("io_uring: shutting down")}:
+			default:
+			}
+		default:
+			break drainReqCh
+		}
+	}
+
 	b.ring.Close()
 }
 
@@ -198,6 +311,7 @@ func (b *BatchIoUringReader) Close() {
 // mutex is held only during SQE preparation + io_uring_enter (~1-5μs).
 func (b *BatchIoUringReader) submitLoop() {
 	defer b.wg.Done()
+	defer close(b.submitLoopDone)
 
 	batch := make([]*batchReadRequest, 0, b.maxBatch)
 	slots := make([]uint32, 0, b.maxBatch)
@@ -223,15 +337,33 @@ func (b *BatchIoUringReader) submitLoop() {
 
 	submit:
 		// Acquire a free slot for each request. Under normal load (~30
-		// in-flight out of 256 slots) this never blocks.
-		for i, req := range batch {
+		// in-flight out of 256 slots) this never blocks. NOTE: we do NOT
+		// call inflight[slot].Store(req) here — that happens AFTER
+		// prepRead has copied req.fd/buf/offset into the SQE, closing
+		// the race where Close cancels this request and Submit
+		// resets/pools the batchReadRequest while submitLoop still holds
+		// a reference to its fields.
+		for range batch {
 			select {
 			case slot := <-b.freeSlots:
 				slots = append(slots, slot)
-				b.inflight[slot].Store(req)
 			case <-b.closeCh:
-				for j := i; j < len(batch); j++ {
-					batch[j].done <- ReadResult{Err: fmt.Errorf("io_uring: shutting down")}
+				// Return the slots we've already acquired — they were
+				// never used (Store to inflight[] happens later, under
+				// the ring mutex).
+				for _, slot := range slots {
+					b.freeSlots <- slot
+				}
+				// Cancel every request in the batch, NOT just j..end.
+				// Requests 0..i-1 already got slots but no Store into
+				// inflight[] happened (per the reorder), so Close's
+				// inflight walk can't see them either — they'd be
+				// orphaned. Send explicit shutdown errors here.
+				for _, req := range batch {
+					select {
+					case req.done <- ReadResult{Err: fmt.Errorf("io_uring: shutting down")}:
+					default:
+					}
 				}
 				return
 			}
@@ -245,19 +377,28 @@ func (b *BatchIoUringReader) submitLoop() {
 		for i, slot := range slots {
 			sqe := b.ring.getSqe()
 			if sqe == nil {
+				// Neither the current slot nor the remaining slots have
+				// been stored in inflight[] yet (fix for the pooled-req
+				// race), so we free them directly and error out the
+				// unwrapped batch entries.
 				for j := i; j < len(slots); j++ {
-					req := b.inflight[slots[j]].Swap(nil)
 					b.freeSlots <- slots[j]
-					if req != nil {
-						req.done <- ReadResult{
-							Err: fmt.Errorf("io_uring: SQ full, batch=%d depth=%d", len(batch), b.ring.sqEntries),
-						}
+					select {
+					case batch[j].done <- ReadResult{
+						Err: fmt.Errorf("io_uring: SQ full, batch=%d depth=%d", len(batch), b.ring.sqEntries),
+					}:
+					default:
 					}
 				}
 				break
 			}
+			// Read req fields (fd, buf, offset) BEFORE Store — Close
+			// cannot cancel a request that isn't in inflight[] yet, so
+			// the fields are guaranteed stable for the duration of
+			// prepRead.
 			prepRead(sqe, batch[i].fd, batch[i].buf, batch[i].offset)
 			sqe.UserData = uint64(slot)
+			b.inflight[slot].Store(batch[i])
 			prepared++
 		}
 
@@ -320,17 +461,30 @@ func (b *BatchIoUringReader) completeLoop() {
 		req := b.inflight[slot].Swap(nil)
 		b.freeSlots <- slot
 
-		if req == nil {
-			continue
+		if req != nil {
+			if res < 0 {
+				req.done <- ReadResult{
+					Err: fmt.Errorf("io_uring pread errno %d (%s), fd=%d off=%d len=%d",
+						-res, syscall.Errno(-res), req.fd, req.offset, len(req.buf)),
+				}
+			} else {
+				req.done <- ReadResult{N: int(res)}
+			}
 		}
 
-		if res < 0 {
-			req.done <- ReadResult{
-				Err: fmt.Errorf("io_uring pread errno %d (%s), fd=%d off=%d len=%d",
-					-res, syscall.Errno(-res), req.fd, req.offset, len(req.buf)),
+		// After processing a real CQE, if we're shutting down and
+		// pending has drained to zero, exit even if the sentinel CQE
+		// was consumed earlier when pending was still > 0. Without
+		// this, a kernel that delivers the NOP CQE before the natural
+		// read CQE (kernel-scheduler order is not FIFO) leaves
+		// completeLoop blocking in the next waitCqe with nothing to
+		// wake it.
+		if b.pending.Load() <= 0 {
+			select {
+			case <-b.closeCh:
+				return
+			default:
 			}
-		} else {
-			req.done <- ReadResult{N: int(res)}
 		}
 	}
 }

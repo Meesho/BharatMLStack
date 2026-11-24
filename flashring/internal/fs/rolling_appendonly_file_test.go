@@ -170,7 +170,7 @@ func TestPwrite_BufferNotAligned(t *testing.T) {
 	// Only test if using DirectIO
 	if raf.WriteDirectIO {
 		// Create unaligned buffer
-		data := make([]byte, 4097) // Not aligned to 4096
+		data := createAlignedBuffer(8192, 4096)[1:4097] // one byte off a block boundary
 
 		_, err = raf.Pwrite(data)
 		if err != ErrBufNoAlign {
@@ -498,5 +498,119 @@ func cleanup(raf *RollingAppendFile) {
 	}
 	if raf.WriteFile != nil {
 		os.Remove(raf.WriteFile.Name())
+	}
+}
+
+// TestRollingAppendFile_Close_ClosesFds verifies Close releases the OS
+// file descriptors and removes the backing file from the filesystem.
+func TestRollingAppendFile_Close_ClosesFds(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "rollclose.dat")
+	raf, err := NewRollingAppendFile(FileConfig{
+		Filename:          tmp,
+		MaxFileSize:       BLOCK_SIZE * 4,
+		FilePunchHoleSize: BLOCK_SIZE,
+		BlockSize:         BLOCK_SIZE,
+	})
+	if err != nil {
+		t.Fatalf("NewRollingAppendFile: %v", err)
+	}
+
+	// Sanity: the file exists before Close.
+	if _, err := os.Stat(tmp); err != nil {
+		t.Fatalf("pre-Close Stat: %v", err)
+	}
+
+	raf.Close()
+
+	// Close calls os.Remove(WriteFile.Name()) so the path must disappear.
+	_, err = os.Stat(tmp)
+	if !os.IsNotExist(err) {
+		t.Fatalf("post-Close Stat(%s) err = %v, want IsNotExist", tmp, err)
+	}
+}
+
+func TestNewRollingAppendFile_BadPath_Errors(t *testing.T) {
+	_, err := NewRollingAppendFile(FileConfig{
+		Filename:    "/nonexistent/path/foo.dat",
+		MaxFileSize: BLOCK_SIZE,
+		BlockSize:   BLOCK_SIZE,
+	})
+	if err == nil {
+		t.Fatal("NewRollingAppendFile on bad path returned nil err")
+	}
+}
+
+func TestRollingAppendFile_Pwrite_AfterMaxFileSize_Errors(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "f.dat")
+	raf, err := NewRollingAppendFile(FileConfig{
+		Filename:          tmp,
+		MaxFileSize:       BLOCK_SIZE,
+		FilePunchHoleSize: BLOCK_SIZE,
+		BlockSize:         BLOCK_SIZE,
+	})
+	if err != nil {
+		t.Fatalf("NewRollingAppendFile: %v", err)
+	}
+	defer cleanup(raf)
+
+	// Pwrite only updates CurrentPhysicalOffset, not CurrentLogicalOffset
+	// (existing prod behavior). Drive the check by setting the logical
+	// counter directly to ≥ MaxFileSize, then assert Pwrite refuses.
+	raf.CurrentLogicalOffset = BLOCK_SIZE
+
+	buf := createAlignedBuffer(BLOCK_SIZE, BLOCK_SIZE)
+	if _, err := raf.Pwrite(buf); err != ErrFileSizeExceeded {
+		t.Fatalf("err = %v, want ErrFileSizeExceeded", err)
+	}
+}
+
+func TestRollingAppendFile_Pread_UnalignedBuf_Errors(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "f.dat")
+	raf, err := NewRollingAppendFile(FileConfig{
+		Filename:          tmp,
+		MaxFileSize:       BLOCK_SIZE * 4,
+		FilePunchHoleSize: BLOCK_SIZE,
+		BlockSize:         BLOCK_SIZE,
+	})
+	if err != nil {
+		t.Fatalf("NewRollingAppendFile: %v", err)
+	}
+	defer cleanup(raf)
+
+	// Write enough data so the offset check passes.
+	good := createAlignedBuffer(BLOCK_SIZE, BLOCK_SIZE)
+	if _, err := raf.Pwrite(good); err != nil {
+		t.Fatalf("Pwrite: %v", err)
+	}
+	if !raf.ReadDirectIO {
+		t.Skip("ReadDirectIO disabled")
+	}
+
+	bad := make([]byte, BLOCK_SIZE)
+	if _, err := raf.Pread(0, bad[1:]); err != ErrBufNoAlign {
+		t.Fatalf("err = %v, want ErrBufNoAlign", err)
+	}
+}
+
+func TestRollingAppendFile_TrimHead_UnalignedOffset_Errors(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "f.dat")
+	raf, err := NewRollingAppendFile(FileConfig{
+		Filename:          tmp,
+		MaxFileSize:       BLOCK_SIZE * 4,
+		FilePunchHoleSize: BLOCK_SIZE,
+		BlockSize:         BLOCK_SIZE,
+	})
+	if err != nil {
+		t.Fatalf("NewRollingAppendFile: %v", err)
+	}
+	defer cleanup(raf)
+
+	if !raf.WriteDirectIO {
+		t.Skip("WriteDirectIO disabled")
+	}
+
+	raf.LogicalStartOffset = 1 // misaligned
+	if err := raf.TrimHead(); err != ErrOffsetNotAligned {
+		t.Fatalf("err = %v, want ErrOffsetNotAligned", err)
 	}
 }

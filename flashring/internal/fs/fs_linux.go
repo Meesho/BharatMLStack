@@ -16,7 +16,10 @@ import (
 )
 
 const (
-	O_DIRECT             = 0x4000
+	// unix.O_DIRECT is 0x4000 on linux/amd64 (the original hardcoded value)
+	// and 0x10000 on linux/arm64. Hardcoding 0x4000 silently aliases to
+	// O_DIRECTORY on arm64, causing every read-fd open to fail with ENOTDIR.
+	O_DIRECT             = unix.O_DIRECT
 	O_WRONLY             = syscall.O_WRONLY
 	O_RDONLY             = syscall.O_RDONLY
 	O_APPEND             = syscall.O_APPEND

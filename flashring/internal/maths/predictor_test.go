@@ -135,9 +135,21 @@ func TestPredictorObserve(t *testing.T) {
 	// Give some time for the goroutine to process
 	time.Sleep(50 * time.Millisecond)
 
-	// Channel should not block on additional observations
-	for i := 0; i < 10; i++ {
-		predictor.Observe(0.5)
+	// Channel should not block on additional observations — race a buffered
+	// channel against a hard deadline; if Observe ever blocks, the deadline
+	// fires and we fail with a deterministic message.
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 10; i++ {
+			predictor.Observe(0.5)
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+		// success: 10 Observe calls returned within the deadline
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Observe blocked: 10 non-blocking calls did not return within 500ms")
 	}
 }
 
@@ -417,6 +429,150 @@ func BenchmarkPredictorPredict(b *testing.B) {
 	}
 }
 
+func TestNewPredictor_DefaultBands_WhenAllZeros(t *testing.T) {
+	p := NewPredictor(PredictorConfig{
+		ReWriteScoreThreshold: 0.5,
+		Weights:               []WeightTuple{{WFreq: 0.1, WLA: 0.2}},
+		SampleDuration:        time.Hour,
+		MaxMemTableCount:      10,
+		GridSearchEpsilon:     0.001,
+	})
+
+	wantFB := FreqBands{Cold: 1, Warm: 5, Hot: 20}
+	if p.freqBands != wantFB {
+		t.Fatalf("freqBands = %+v, want %+v (defaults)", p.freqBands, wantFB)
+	}
+	wantRB := RecencyBands{Hot: 5, Warm: 50, Cold: 500}
+	if p.recencyBands != wantRB {
+		t.Fatalf("recencyBands = %+v, want %+v (defaults)", p.recencyBands, wantRB)
+	}
+}
+
+func TestNewPredictor_RespectsCustomBands(t *testing.T) {
+	custom := FreqBands{Cold: 2, Warm: 6, Hot: 30}
+	rcustom := RecencyBands{Hot: 1, Warm: 10, Cold: 100}
+	p := NewPredictor(PredictorConfig{
+		ReWriteScoreThreshold: 0.5,
+		Weights:               []WeightTuple{{WFreq: 0.1, WLA: 0.2}},
+		SampleDuration:        time.Hour,
+		MaxMemTableCount:      10,
+		GridSearchEpsilon:     0.001,
+		FreqBands:             custom,
+		RecencyBands:          rcustom,
+	})
+
+	if p.freqBands != custom {
+		t.Fatalf("freqBands = %+v, want %+v", p.freqBands, custom)
+	}
+	if p.recencyBands != rcustom {
+		t.Fatalf("recencyBands = %+v, want %+v", p.recencyBands, rcustom)
+	}
+}
+
+func TestScoreBucket_AllBranches(t *testing.T) {
+	cases := []struct {
+		score float32
+		want  string
+	}{
+		{0.05, "0.0-0.1"},
+		{0.2, "0.1-0.3"},
+		{0.4, "0.3-0.5"},
+		{0.6, "0.5-0.7"},
+		{0.85, "0.7-1.0"},
+		{1.0, "1.0+"},
+		{1.5, "1.0+"},
+	}
+	for _, tc := range cases {
+		if got := scoreBucket(tc.score); got != tc.want {
+			t.Errorf("scoreBucket(%v) = %q, want %q", tc.score, got, tc.want)
+		}
+	}
+}
+
+func TestRingZone_AllBuckets(t *testing.T) {
+	cases := []struct {
+		key, active, max uint32
+		want             string
+	}{
+		{0, 1, 10, "0-25%"},   // risk=1/10
+		{0, 3, 10, "25-50%"},  // risk=3/10
+		{0, 6, 10, "50-75%"},  // risk=6/10
+		{0, 9, 10, "75-100%"}, // risk=9/10
+	}
+	for _, tc := range cases {
+		if got := ringZone(tc.key, tc.active, tc.max); got != tc.want {
+			t.Errorf("ringZone(%d,%d,%d) = %q, want %q",
+				tc.key, tc.active, tc.max, got, tc.want)
+		}
+	}
+}
+
+func TestFreqBand_AllBuckets(t *testing.T) {
+	fb := FreqBands{Cold: 1, Warm: 5, Hot: 20}
+	cases := []struct {
+		freq uint64
+		want string
+	}{
+		{0, "cold"},
+		{1, "cold"},
+		{3, "warm"},
+		{5, "warm"},
+		{10, "hot"},
+		{20, "hot"},
+		{100, "very_hot"},
+	}
+	for _, tc := range cases {
+		if got := freqBand(tc.freq, fb); got != tc.want {
+			t.Errorf("freqBand(%d) = %q, want %q", tc.freq, got, tc.want)
+		}
+	}
+}
+
+func TestRecencyBand_AllBuckets(t *testing.T) {
+	rb := RecencyBands{Hot: 5, Warm: 50, Cold: 500}
+	cases := []struct {
+		la   uint64
+		want string
+	}{
+		{0, "very_hot"},
+		{5, "very_hot"},
+		{20, "hot"},
+		{50, "hot"},
+		{100, "warm"},
+		{500, "warm"},
+		{1000, "cold"},
+	}
+	for _, tc := range cases {
+		if got := recencyBand(tc.la, rb); got != tc.want {
+			t.Errorf("recencyBand(%d) = %q, want %q", tc.la, got, tc.want)
+		}
+	}
+}
+
+func TestObserve_DropsWhenChannelFull(t *testing.T) {
+	p := &Predictor{hitRateCh: make(chan float64, 1)}
+	p.Observe(0.5) // fills channel
+
+	// Second Observe should fall through the `default` clause and return
+	// immediately. Race it against a hard deadline so a regression that
+	// makes Observe block cannot hang the whole suite.
+	done := make(chan struct{})
+	go func() {
+		p.Observe(0.7)
+		close(done)
+	}()
+	select {
+	case <-done:
+		// success: Observe returned promptly
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Observe blocked on full channel (default branch not taken)")
+	}
+
+	if got := <-p.hitRateCh; got != 0.5 {
+		t.Fatalf("first value lost: got %v, want 0.5", got)
+	}
+}
+
 // Integration test that simulates a realistic cache scenario
 func TestPredictorIntegration(t *testing.T) {
 	config := PredictorConfig{
@@ -478,4 +634,19 @@ func TestPredictorIntegration(t *testing.T) {
 	}
 
 	t.Logf("Made %d rewrites out of %d operations", rewriteCount, len(operations))
+}
+
+// TestRingZone_ZeroMaxMemTableCount_NoPanic locks down the defense-in-depth
+// guard added in PR #2377 — modulo-by-zero on the metrics path must not
+// take down a Get request.
+func TestRingZone_ZeroMaxMemTableCount_NoPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("ringZone(...,0) panicked: %v", r)
+		}
+	}()
+	zone := ringZone(5, 10, 0)
+	if zone != "unknown" {
+		t.Fatalf("zone = %q, want %q", zone, "unknown")
+	}
 }

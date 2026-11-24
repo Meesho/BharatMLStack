@@ -48,7 +48,7 @@ func (rb *RingBuffer) GetNextFreeSlot() (*Entry, *HashNextPrev, int, bool) {
 }
 
 func (rb *RingBuffer) Get(index int) (*Entry, *HashNextPrev, bool) {
-	if index > rb.capacity {
+	if index < 0 || index >= rb.capacity {
 		return nil, nil, false
 	}
 	return &rb.buf[index], &rb.hashTable[index], true

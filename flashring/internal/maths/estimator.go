@@ -59,6 +59,13 @@ func NewGridSearchEstimator(duration time.Duration, initialTuples []WeightTuple,
 }
 
 func (e *Estimator) CalculateRewriteScore(freq uint64, lastAccess uint64, keyMemId, activeMemId, maxMemTableCount uint32) float32 {
+	// Defense in depth: pkg/cache.Config.validate now enforces FileSize
+	// is a whole-number multiple of MemtableSize, so maxMemTableCount is
+	// always >= 1 in valid configs. Guard anyway — this function is on
+	// every Get's hot path and a stray zero here would panic on int mod.
+	if maxMemTableCount == 0 {
+		return 0
+	}
 	overWriteRisk := (activeMemId - keyMemId + maxMemTableCount) % maxMemTableCount
 	overWriteRiskScore := float32(overWriteRisk) / float32(maxMemTableCount)
 
@@ -67,6 +74,12 @@ func (e *Estimator) CalculateRewriteScore(freq uint64, lastAccess uint64, keyMem
 	return float32(fScore+laScore) * overWriteRiskScore
 }
 
+// RecordHitRate folds hitRate into the running average for the current
+// tuple. While the search is active, advances to the next tuple after
+// Duration has elapsed and refines around the best tuple at the end of
+// each pass; the search stops when refinement falls below epsilon. After
+// the search has stopped, a sustained drop below 90% of the previously
+// observed best hit rate triggers a full restart from the initial grid.
 func (g *GridSearchEstimator) RecordHitRate(hitRate float64) {
 	if g.stopGridSearch {
 		tuple := g.bestTuple
@@ -77,7 +90,7 @@ func (g *GridSearchEstimator) RecordHitRate(hitRate float64) {
 		stat.HitRate = (stat.HitRate*float64(stat.Trials) + hitRate) / float64(stat.Trials+1)
 		stat.Trials++
 		if stat.HitRate < g.bestHitRate*0.9 {
-			log.Error().Msgf("GridSearchRestarted: hitRate %v bestHitRate %v", stat.HitRate, g.bestHitRate)
+			log.Info().Msgf("GridSearchRestarted: hitRate %v bestHitRate %v", stat.HitRate, g.bestHitRate)
 			g.RestartGridSearch()
 		}
 		return
@@ -152,12 +165,27 @@ func (g *GridSearchEstimator) GenerateRefinedGrid(base WeightTuple, steps int, d
 
 func (g *GridSearchEstimator) RefineGridAroundBest(steps int, delta float64) bool {
 	best := g.BestTuple()
+	// BestTuple returns a zero WeightTuple when no candidate has been
+	// observed >= 3 times (low-traffic startup). Detect the zero-tuple
+	// case BEFORE calling GenerateRefinedGrid — otherwise if GRG
+	// succeeds (delta > epsilon) we'd refine around (0,0), clear
+	// existing stats, and switch live weights to near-zero values.
+	// Return true (not false) so the caller keeps sampling the current
+	// tuples rather than latching stopGridSearch — insufficient trials
+	// is a "come back later" signal, not a "search is complete" one.
+	if (best == WeightTuple{}) {
+		return true
+	}
 	refined, ok := g.GenerateRefinedGrid(best, steps, delta)
 	if !ok {
-		g.LiveEstimator.WFreq = best.WFreq
-		g.LiveEstimator.WLA = best.WLA
-		g.bestHitRate = g.TupleStats[best].HitRate
-		g.bestTuple = best
+		// Non-zero best but convergence hit (all candidates within
+		// epsilon of base). Apply best's weights and stop.
+		if stats := g.TupleStats[best]; stats != nil {
+			g.LiveEstimator.WFreq = best.WFreq
+			g.LiveEstimator.WLA = best.WLA
+			g.bestHitRate = stats.HitRate
+			g.bestTuple = best
+		}
 		return false
 	}
 	g.Tuples = refined

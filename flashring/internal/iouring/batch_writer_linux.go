@@ -38,7 +38,17 @@ type BatchIoUringWriter struct {
 	reqCh    chan *batchWriteRequest
 	maxBatch int
 	closeCh  chan struct{}
-	wg       sync.WaitGroup
+
+	// closeMu orders SubmitWriteBatch against Close; see BatchIoUringReader.
+	closeMu sync.RWMutex
+	closed  bool
+	wg      sync.WaitGroup
+
+	// Same rationale as BatchIoUringReader.submitLoopDone — Close waits
+	// on this before walking inflight[] a second time and submitting the
+	// sentinel. See the reader's Close docstring for the race this
+	// eliminates.
+	submitLoopDone chan struct{}
 
 	inflight  []atomic.Pointer[batchWriteRequest]
 	freeSlots chan uint32
@@ -75,12 +85,13 @@ func NewBatchIoUringWriter(cfg BatchIoUringConfig) (*BatchIoUringWriter, error) 
 	}
 
 	b := &BatchIoUringWriter{
-		ring:      ring,
-		reqCh:     make(chan *batchWriteRequest, cfg.QueueSize),
-		maxBatch:  cfg.MaxBatch,
-		closeCh:   make(chan struct{}),
-		inflight:  make([]atomic.Pointer[batchWriteRequest], ringDepth),
-		freeSlots: freeSlots,
+		ring:           ring,
+		reqCh:          make(chan *batchWriteRequest, cfg.QueueSize),
+		maxBatch:       cfg.MaxBatch,
+		closeCh:        make(chan struct{}),
+		submitLoopDone: make(chan struct{}),
+		inflight:       make([]atomic.Pointer[batchWriteRequest], ringDepth),
+		freeSlots:      freeSlots,
 	}
 	b.wg.Add(2)
 	go b.submitLoop()
@@ -108,6 +119,13 @@ func (b *BatchIoUringWriter) SubmitWriteBatch(fd int, bufs [][]byte, offsets []u
 	// Submit all write requests into the channel. The submitLoop will
 	// collect them into batches and prep SQEs.
 	doneChans := make([]chan WriteResult, n)
+	// Hold the read lock across the sends: Close drains reqCh only once, so
+	// a request queued after Close has begun would never be answered.
+	b.closeMu.RLock()
+	if b.closed {
+		b.closeMu.RUnlock()
+		return make([]int, n), fmt.Errorf("io_uring writer: shutting down")
+	}
 	for i := 0; i < n; i++ {
 		req := &batchWriteRequest{
 			fd:     fd,
@@ -118,6 +136,7 @@ func (b *BatchIoUringWriter) SubmitWriteBatch(fd int, bufs [][]byte, offsets []u
 		doneChans[i] = req.done
 		b.reqCh <- req
 	}
+	b.closeMu.RUnlock()
 
 	// Collect all completions.
 	results := make([]int, n)
@@ -134,19 +153,58 @@ func (b *BatchIoUringWriter) SubmitWriteBatch(fd int, bufs [][]byte, offsets []u
 }
 
 // Close shuts down both goroutines and releases the io_uring ring.
+// Mirrors BatchIoUringReader.Close — cancels in-flight callers before
+// attempting sentinel or the fd-close fallback. See the reader's Close
+// docstring for the two deadlock classes this fixes.
 func (b *BatchIoUringWriter) Close() {
+	b.closeMu.Lock()
+	b.closed = true
+	b.closeMu.Unlock()
 	close(b.closeCh)
 
+	// Wait for submitLoop to exit before walking inflight — see the
+	// reader's Close docstring for the sentinel-vs-Store race this fixes.
+	<-b.submitLoopDone
+
+	for i := range b.inflight {
+		req := b.inflight[i].Swap(nil)
+		if req != nil {
+			select {
+			case req.done <- WriteResult{Err: fmt.Errorf("io_uring writer: shutting down")}:
+			default:
+			}
+			b.pending.Add(-1)
+		}
+	}
+
 	b.ring.mu.Lock()
-	sqe := b.ring.getSqe()
-	if sqe != nil {
+	if sqe := b.ring.getSqe(); sqe != nil {
 		sqe.Opcode = iouringOpNop
 		sqe.UserData = sentinelUserData
 		b.ring.submit(0)
+	} else if b.ring.fd >= 0 {
+		syscall.Close(b.ring.fd)
+		b.ring.fd = -1
 	}
 	b.ring.mu.Unlock()
 
 	b.wg.Wait()
+
+	// Drain any requests still parked in reqCh — see the reader's
+	// equivalent block for the rationale.
+drainReqCh:
+	for {
+		select {
+		case req := <-b.reqCh:
+			select {
+			case req.done <- WriteResult{Err: fmt.Errorf("io_uring writer: shutting down")}:
+			default:
+			}
+		default:
+			break drainReqCh
+		}
+	}
+
 	b.ring.Close()
 }
 
@@ -154,6 +212,7 @@ func (b *BatchIoUringWriter) Close() {
 // Mutex held only during SQE prep + io_uring_enter.
 func (b *BatchIoUringWriter) submitLoop() {
 	defer b.wg.Done()
+	defer close(b.submitLoopDone)
 
 	batch := make([]*batchWriteRequest, 0, b.maxBatch)
 	slots := make([]uint32, 0, b.maxBatch)
@@ -177,14 +236,27 @@ func (b *BatchIoUringWriter) submitLoop() {
 		}
 
 	submit:
-		for i, req := range batch {
+		// Acquire free slots without storing into inflight[] yet — see
+		// the corresponding comment in BatchIoUringReader.submitLoop for
+		// the race this avoids.
+		for range batch {
 			select {
 			case slot := <-b.freeSlots:
 				slots = append(slots, slot)
-				b.inflight[slot].Store(req)
 			case <-b.closeCh:
-				for j := i; j < len(batch); j++ {
-					batch[j].done <- WriteResult{Err: fmt.Errorf("io_uring writer: shutting down")}
+				// Return acquired slots and cancel the whole batch —
+				// same rationale as BatchIoUringReader.submitLoop's
+				// closeCh branch: batch[0..i-1] got slots but no Store
+				// into inflight[] means Close's inflight walk can't see
+				// them either.
+				for _, slot := range slots {
+					b.freeSlots <- slot
+				}
+				for _, req := range batch {
+					select {
+					case req.done <- WriteResult{Err: fmt.Errorf("io_uring writer: shutting down")}:
+					default:
+					}
 				}
 				return
 			}
@@ -197,18 +269,21 @@ func (b *BatchIoUringWriter) submitLoop() {
 			sqe := b.ring.getSqe()
 			if sqe == nil {
 				for j := i; j < len(slots); j++ {
-					req := b.inflight[slots[j]].Swap(nil)
 					b.freeSlots <- slots[j]
-					if req != nil {
-						req.done <- WriteResult{
-							Err: fmt.Errorf("io_uring writer: SQ full, batch=%d depth=%d", len(batch), b.ring.sqEntries),
-						}
+					select {
+					case batch[j].done <- WriteResult{
+						Err: fmt.Errorf("io_uring writer: SQ full, batch=%d depth=%d", len(batch), b.ring.sqEntries),
+					}:
+					default:
 					}
 				}
 				break
 			}
+			// Read req fields BEFORE Store, so Close can't cancel the
+			// request out from under us mid-prepWrite.
 			prepWrite(sqe, batch[i].fd, batch[i].buf, batch[i].offset)
 			sqe.UserData = uint64(slot)
+			b.inflight[slot].Store(batch[i])
 			prepared++
 		}
 
@@ -268,17 +343,24 @@ func (b *BatchIoUringWriter) completeLoop() {
 		req := b.inflight[slot].Swap(nil)
 		b.freeSlots <- slot
 
-		if req == nil {
-			continue
+		if req != nil {
+			if res < 0 {
+				req.done <- WriteResult{
+					Err: fmt.Errorf("io_uring pwrite errno %d (%s), fd=%d off=%d len=%d",
+						-res, syscall.Errno(-res), req.fd, req.offset, len(req.buf)),
+				}
+			} else {
+				req.done <- WriteResult{N: int(res)}
+			}
 		}
 
-		if res < 0 {
-			req.done <- WriteResult{
-				Err: fmt.Errorf("io_uring pwrite errno %d (%s), fd=%d off=%d len=%d",
-					-res, syscall.Errno(-res), req.fd, req.offset, len(req.buf)),
+		// Same post-CQE close-check as BatchIoUringReader.completeLoop.
+		if b.pending.Load() <= 0 {
+			select {
+			case <-b.closeCh:
+				return
+			default:
 			}
-		} else {
-			req.done <- WriteResult{N: int(res)}
 		}
 	}
 }

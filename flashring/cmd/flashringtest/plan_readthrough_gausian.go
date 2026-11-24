@@ -49,6 +49,8 @@ func planReadthroughGaussian() {
 		ReWriteScoreThreshold: 0.8,
 		GridSearchEpsilon:     0.0001,
 		SampleDuration:        time.Duration(flags.sampleSecs) * time.Second,
+		FreqBands:             []int{10, 100, 1000},
+		RecencyBands:          []int{1000, 100, 10},
 	}
 
 	pc, err := cachepkg.NewWrapCache(cfg, flags.mountPoint)

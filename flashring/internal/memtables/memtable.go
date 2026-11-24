@@ -72,7 +72,12 @@ func (m *Memtable) Get(offset int, length uint16) ([]byte, error) {
 	return m.page.Buf[offset : offset+int(length)], nil
 }
 
+// Put copies buf into the memtable at the current write head. When the
+// remaining capacity is too small, the write is rejected (returns
+// offset=-1) and the memtable is marked readyForFlush so the manager
+// rotates buffers — callers must retry against the new active memtable.
 func (m *Memtable) Put(buf []byte) (offset int, length uint16, readyForFlush bool) {
+	m.dropStaggerIfEmpty(len(buf))
 	offset = m.currentOffset
 	if offset+len(buf) > m.capacity {
 		m.readyForFlush = true
@@ -83,8 +88,15 @@ func (m *Memtable) Put(buf []byte) (offset int, length uint16, readyForFlush boo
 	return offset, uint16(len(buf)), false
 }
 
-// Efforts to make zero copy
+// GetBufForAppend reserves a size-byte slice from the memtable and
+// hands the caller a writable view into the underlying mmap page —
+// avoids the copy that Put performs. Same overflow contract: when the
+// remaining capacity is too small, returns nil/offset=-1 and marks the
+// memtable readyForFlush. The returned slice must be fully written
+// before the next memtable rotation, since it is read directly from
+// the page on subsequent Gets.
 func (m *Memtable) GetBufForAppend(size uint16) (bbuf []byte, offset int, length uint16, readyForFlush bool) {
+	m.dropStaggerIfEmpty(int(size))
 	offset = m.currentOffset
 	if offset+int(size) > m.capacity {
 		m.readyForFlush = true
@@ -93,6 +105,23 @@ func (m *Memtable) GetBufForAppend(size uint16) (bbuf []byte, offset int, length
 	bbuf = m.page.Buf[offset : offset+int(size)]
 	m.currentOffset += int(size)
 	return bbuf, offset, size, false
+}
+
+// Seal makes the memtable refuse further appends, so the next one rotates
+// it out and flushes it as if it were full.
+func (m *Memtable) Seal() {
+	m.currentOffset = m.capacity
+}
+
+// dropStaggerIfEmpty rewinds a staggered memtable that holds no entries
+// when the first entry does not fit in the room the stagger left. Flushing
+// it empty instead would leave a memtable id with no index entries, which
+// the delete manager cannot step over.
+func (m *Memtable) dropStaggerIfEmpty(size int) {
+	if m.flushStartOffset > 0 && m.currentOffset == m.flushStartOffset && m.currentOffset+size > m.capacity {
+		m.currentOffset = 0
+		m.flushStartOffset = 0
+	}
 }
 
 func (m *Memtable) GetBufForRead(offset int, length uint16) (bbuf []byte, exists bool) {
@@ -122,13 +151,15 @@ func (m *Memtable) Flush() (n int, fileOffset int64, err error) {
 
 	// PwriteBatch submits all chunks via io_uring.
 	totalWritten, fileOffset, err := m.file.PwriteBatch(buf, chunkSize)
-	if err != nil {
-		return 0, 0, err
-	}
 
+	// Reset on failure too: the manager recycles this memtable under a new
+	// id either way, and PwriteBatch has already consumed its file slot.
 	m.currentOffset = 0
 	m.readyForFlush = false
 	m.flushStartOffset = 0 // subsequent flushes write the full page
+	if err != nil {
+		return 0, 0, err
+	}
 	return startOff + totalWritten, fileOffset, nil
 }
 

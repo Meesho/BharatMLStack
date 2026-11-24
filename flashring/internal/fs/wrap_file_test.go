@@ -7,10 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Meesho/BharatMLStack/flashring/internal/iouring"
+	"github.com/Meesho/BharatMLStack/flashring/internal/testutil/mountfs"
 )
 
 func TestNewWrapAppendFile(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -36,22 +39,22 @@ func TestNewWrapAppendFile(t *testing.T) {
 	if waf.blockSize != config.BlockSize {
 		t.Errorf("Expected BlockSize %d, got %d", config.BlockSize, waf.blockSize)
 	}
-	if waf.LogicalCurrentOffset != 0 {
-		t.Errorf("Expected LogicalCurrentOffset 0, got %d", waf.LogicalCurrentOffset)
+	if waf.LogicalCurrentOffset.Load() != 0 {
+		t.Errorf("Expected LogicalCurrentOffset 0, got %d", waf.LogicalCurrentOffset.Load())
 	}
-	if waf.PhysicalWriteOffset != 0 {
-		t.Errorf("Expected PhysicalWriteOffset 0, got %d", waf.PhysicalWriteOffset)
+	if waf.PhysicalWriteOffset.Load() != 0 {
+		t.Errorf("Expected PhysicalWriteOffset 0, got %d", waf.PhysicalWriteOffset.Load())
 	}
-	if waf.PhysicalStartOffset != 0 {
-		t.Errorf("Expected PhysicalStartOffset 0, got %d", waf.PhysicalStartOffset)
+	if waf.PhysicalStartOffset.Load() != 0 {
+		t.Errorf("Expected PhysicalStartOffset 0, got %d", waf.PhysicalStartOffset.Load())
 	}
-	if waf.wrapped {
+	if waf.wrapped.Load() {
 		t.Errorf("Expected wrapped to be false initially")
 	}
 }
 
 func TestNewWrapAppendFile_DefaultBlockSize(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -73,7 +76,7 @@ func TestNewWrapAppendFile_DefaultBlockSize(t *testing.T) {
 }
 
 func TestWrapAppendFile_Pwrite_Success(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -104,25 +107,25 @@ func TestWrapAppendFile_Pwrite_Success(t *testing.T) {
 		t.Errorf("Expected offset %d, got %d", len(data), offset)
 	}
 
-	if waf.PhysicalWriteOffset != int64(len(data)) {
-		t.Errorf("Expected PhysicalWriteOffset %d, got %d", len(data), waf.PhysicalWriteOffset)
+	if waf.PhysicalWriteOffset.Load() != int64(len(data)) {
+		t.Errorf("Expected PhysicalWriteOffset %d, got %d", len(data), waf.PhysicalWriteOffset.Load())
 	}
 
-	if waf.LogicalCurrentOffset != int64(len(data)) {
-		t.Errorf("Expected LogicalCurrentOffset %d, got %d", len(data), waf.LogicalCurrentOffset)
+	if waf.LogicalCurrentOffset.Load() != int64(len(data)) {
+		t.Errorf("Expected LogicalCurrentOffset %d, got %d", len(data), waf.LogicalCurrentOffset.Load())
 	}
 
 	if waf.Stat.WriteCount.Load() != 1 {
 		t.Errorf("Expected WriteCount 1, got %d", waf.Stat.WriteCount.Load())
 	}
 
-	if waf.wrapped {
+	if waf.wrapped.Load() {
 		t.Errorf("Expected wrapped to be false")
 	}
 }
 
 func TestPwrite_WrapAround(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -149,7 +152,7 @@ func TestPwrite_WrapAround(t *testing.T) {
 		t.Fatalf("First Pwrite failed: %v", err)
 	}
 
-	if waf.wrapped {
+	if waf.wrapped.Load() {
 		t.Errorf("Should not be wrapped after first write")
 	}
 
@@ -165,25 +168,25 @@ func TestPwrite_WrapAround(t *testing.T) {
 	}
 
 	// After wrapping, should be at PhysicalStartOffset
-	if !waf.wrapped {
+	if !waf.wrapped.Load() {
 		t.Errorf("Should be wrapped after exceeding MaxFileSize")
 	}
 
-	if waf.PhysicalWriteOffset != waf.PhysicalStartOffset {
-		t.Errorf("Expected PhysicalWriteOffset %d after wrap, got %d", waf.PhysicalStartOffset, waf.PhysicalWriteOffset)
+	if waf.PhysicalWriteOffset.Load() != waf.PhysicalStartOffset.Load() {
+		t.Errorf("Expected PhysicalWriteOffset %d after wrap, got %d", waf.PhysicalStartOffset.Load(), waf.PhysicalWriteOffset.Load())
 	}
 
-	if offset != waf.PhysicalStartOffset {
-		t.Errorf("Expected return offset %d after wrap, got %d", waf.PhysicalStartOffset, offset)
+	if offset != waf.PhysicalStartOffset.Load() {
+		t.Errorf("Expected return offset %d after wrap, got %d", waf.PhysicalStartOffset.Load(), offset)
 	}
 
-	if waf.LogicalCurrentOffset != int64(8192) {
-		t.Errorf("Expected LogicalCurrentOffset %d, got %d", 8192, waf.LogicalCurrentOffset)
+	if waf.LogicalCurrentOffset.Load() != int64(8192) {
+		t.Errorf("Expected LogicalCurrentOffset %d, got %d", 8192, waf.LogicalCurrentOffset.Load())
 	}
 }
 
 func TestWrapAppendFile_Pwrite_BufferNotAligned(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -202,7 +205,7 @@ func TestWrapAppendFile_Pwrite_BufferNotAligned(t *testing.T) {
 	// Only test if using DirectIO
 	if waf.WriteDirectIO {
 		// Create unaligned buffer
-		data := make([]byte, 4097) // Not aligned to 4096
+		data := createAlignedBuffer(8192, 4096)[1:4097] // one byte off a block boundary
 
 		_, err = waf.Pwrite(data)
 		if err != ErrBufNoAlign {
@@ -212,7 +215,7 @@ func TestWrapAppendFile_Pwrite_BufferNotAligned(t *testing.T) {
 }
 
 func TestPread_Success_NoWrap(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -263,7 +266,7 @@ func TestPread_Success_NoWrap(t *testing.T) {
 }
 
 func TestPread_Success_WithWrap(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -297,11 +300,11 @@ func TestPread_Success_WithWrap(t *testing.T) {
 	}
 
 	// Second Pwrite reaches MaxFileSize → writer wraps to 0.
-	if !waf.wrapped {
+	if !waf.wrapped.Load() {
 		t.Fatalf("Expected wrapped to be true after filling file")
 	}
-	if waf.PhysicalWriteOffset != 0 {
-		t.Fatalf("Expected PhysicalWriteOffset=0 after wrap, got %d", waf.PhysicalWriteOffset)
+	if waf.PhysicalWriteOffset.Load() != 0 {
+		t.Fatalf("Expected PhysicalWriteOffset=0 after wrap, got %d", waf.PhysicalWriteOffset.Load())
 	}
 
 	// W == S == 0 (full ring): both regions are readable.
@@ -317,8 +320,8 @@ func TestPread_Success_WithWrap(t *testing.T) {
 	if err = waf.TrimHead(); err != nil {
 		t.Fatalf("TrimHead failed: %v", err)
 	}
-	if waf.PhysicalStartOffset != 4096 {
-		t.Fatalf("Expected PhysicalStartOffset=4096 after trim, got %d", waf.PhysicalStartOffset)
+	if waf.PhysicalStartOffset.Load() != 4096 {
+		t.Fatalf("Expected PhysicalStartOffset=4096 after trim, got %d", waf.PhysicalStartOffset.Load())
 	}
 
 	// Now W(0) < S(4096). Valid region: [4096, 8192).
@@ -382,7 +385,7 @@ func TestPread_Success_WithWrap(t *testing.T) {
 }
 
 func TestPread_FileOffsetOutOfRange_NoWrap(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -420,7 +423,7 @@ func TestPread_FileOffsetOutOfRange_NoWrap(t *testing.T) {
 }
 
 func TestPread_FileOffsetOutOfRange_WithWrap(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -445,7 +448,7 @@ func TestPread_FileOffsetOutOfRange_WithWrap(t *testing.T) {
 		}
 	}
 
-	if !waf.wrapped {
+	if !waf.wrapped.Load() {
 		t.Errorf("Expected wrapped to be true")
 	}
 
@@ -467,7 +470,7 @@ func TestPread_FileOffsetOutOfRange_WithWrap(t *testing.T) {
 }
 
 func TestWrapAppendFile_Pread_OffsetNotAligned(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -502,7 +505,7 @@ func TestWrapAppendFile_Pread_OffsetNotAligned(t *testing.T) {
 }
 
 func TestPread_BufferNotAligned(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -528,7 +531,7 @@ func TestPread_BufferNotAligned(t *testing.T) {
 		}
 
 		// Try to read with unaligned buffer
-		readData := make([]byte, 4097) // Not aligned
+		readData := createAlignedBuffer(8192, 4096)[1:4097] // one byte off a block boundary
 		_, err = waf.Pread(0, readData)
 		if err != ErrBufNoAlign {
 			t.Errorf("Expected ErrBufNoAlign, got %v", err)
@@ -537,7 +540,7 @@ func TestPread_BufferNotAligned(t *testing.T) {
 }
 
 func TestWrapAppendFile_TrimHead_Success(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -560,7 +563,7 @@ func TestWrapAppendFile_TrimHead_Success(t *testing.T) {
 		t.Fatalf("Pwrite failed: %v", err)
 	}
 
-	initialStartOffset := waf.PhysicalStartOffset
+	initialStartOffset := waf.PhysicalStartOffset.Load()
 
 	// Trim head
 	err = waf.TrimHead()
@@ -570,8 +573,8 @@ func TestWrapAppendFile_TrimHead_Success(t *testing.T) {
 
 	// Verify state changes
 	expectedStartOffset := initialStartOffset + int64(config.FilePunchHoleSize)
-	if waf.PhysicalStartOffset != expectedStartOffset {
-		t.Errorf("Expected PhysicalStartOffset %d, got %d", expectedStartOffset, waf.PhysicalStartOffset)
+	if waf.PhysicalStartOffset.Load() != expectedStartOffset {
+		t.Errorf("Expected PhysicalStartOffset %d, got %d", expectedStartOffset, waf.PhysicalStartOffset.Load())
 	}
 
 	if waf.Stat.PunchHoleCount.Load() != 1 {
@@ -580,7 +583,7 @@ func TestWrapAppendFile_TrimHead_Success(t *testing.T) {
 }
 
 func TestTrimHead_WrapAround(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -597,7 +600,7 @@ func TestTrimHead_WrapAround(t *testing.T) {
 	defer cleanupWrapFile(waf)
 
 	// Set PhysicalStartOffset to near end
-	waf.PhysicalStartOffset = 4096
+	waf.PhysicalStartOffset.Store(4096)
 
 	// Trim head - should wrap around to 0
 	err = waf.TrimHead()
@@ -606,13 +609,13 @@ func TestTrimHead_WrapAround(t *testing.T) {
 	}
 
 	// Should wrap to 0 since 4096 + 8192 >= 8192
-	if waf.PhysicalStartOffset != 0 {
-		t.Errorf("Expected PhysicalStartOffset to wrap to 0, got %d", waf.PhysicalStartOffset)
+	if waf.PhysicalStartOffset.Load() != 0 {
+		t.Errorf("Expected PhysicalStartOffset to wrap to 0, got %d", waf.PhysicalStartOffset.Load())
 	}
 }
 
 func TestTrimHead_OffsetNotAligned(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -631,7 +634,7 @@ func TestTrimHead_OffsetNotAligned(t *testing.T) {
 	// Only test if using DirectIO
 	if waf.WriteDirectIO {
 		// Set unaligned PhysicalStartOffset
-		waf.PhysicalStartOffset = 100
+		waf.PhysicalStartOffset.Store(100)
 
 		err = waf.TrimHead()
 		if err != ErrOffsetNotAligned {
@@ -641,7 +644,7 @@ func TestTrimHead_OffsetNotAligned(t *testing.T) {
 }
 
 func TestPwrite_WrapAndContinue(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -665,7 +668,7 @@ func TestPwrite_WrapAndContinue(t *testing.T) {
 		}
 	}
 
-	if !waf.wrapped {
+	if !waf.wrapped.Load() {
 		t.Errorf("Expected wrapped to be true")
 	}
 
@@ -685,13 +688,13 @@ func TestPwrite_WrapAndContinue(t *testing.T) {
 		t.Errorf("Expected WriteCount 3, got %d", waf.Stat.WriteCount.Load())
 	}
 
-	if waf.LogicalCurrentOffset != int64(3*4096) {
-		t.Errorf("Expected LogicalCurrentOffset %d, got %d", 3*4096, waf.LogicalCurrentOffset)
+	if waf.LogicalCurrentOffset.Load() != int64(3*4096) {
+		t.Errorf("Expected LogicalCurrentOffset %d, got %d", 3*4096, waf.LogicalCurrentOffset.Load())
 	}
 }
 
 func TestClose(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -721,7 +724,7 @@ func TestClose(t *testing.T) {
 }
 
 func TestWrapAppendFile_MultipleOperations(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -751,14 +754,14 @@ func TestWrapAppendFile_MultipleOperations(t *testing.T) {
 	}
 
 	// Should be wrapped
-	if !waf.wrapped {
+	if !waf.wrapped.Load() {
 		t.Errorf("Expected wrapped to be true after writing 6 blocks")
 	}
 
 	// Verify logical offset continues to grow
 	expectedLogicalOffset := int64(6 * 4096)
-	if waf.LogicalCurrentOffset != expectedLogicalOffset {
-		t.Errorf("Expected LogicalCurrentOffset %d, got %d", expectedLogicalOffset, waf.LogicalCurrentOffset)
+	if waf.LogicalCurrentOffset.Load() != expectedLogicalOffset {
+		t.Errorf("Expected LogicalCurrentOffset %d, got %d", expectedLogicalOffset, waf.LogicalCurrentOffset.Load())
 	}
 
 	// Verify statistics
@@ -768,7 +771,7 @@ func TestWrapAppendFile_MultipleOperations(t *testing.T) {
 }
 
 func TestWrapAppendFile_Statistics(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := mountfs.New(t)
 	filename := filepath.Join(tmpDir, "test_wrap_file.dat")
 
 	config := FileConfig{
@@ -836,5 +839,269 @@ func cleanupWrapFile(waf *WrapAppendFile) {
 	}
 	if waf.WriteFile != nil {
 		os.Remove(waf.WriteFile.Name())
+	}
+}
+
+// newWrapFileWithRing builds a WrapAppendFile and attaches a tiny io_uring
+// writer to it for PwriteBatch tests. The writer is cleaned up by the
+// surrounding cleanupWrapFile helper.
+//
+// Uses mountfs.New(t) instead of t.TempDir() because these tests exercise the
+// real O_DIRECT + fallocate path; the container's overlayfs rejects O_DIRECT
+// and returns EINVAL from fallocate, which causes the io_uring writer
+// completeLoop to hang on Close() (see wrap_file_test.go cleanup deadlock).
+func newWrapFileWithRing(t *testing.T, maxFileSize int64) *WrapAppendFile {
+	t.Helper()
+	filename := filepath.Join(mountfs.New(t), "wrap_io.dat")
+	waf, err := NewWrapAppendFile(FileConfig{
+		Filename:          filename,
+		MaxFileSize:       maxFileSize,
+		FilePunchHoleSize: BLOCK_SIZE,
+		BlockSize:         BLOCK_SIZE,
+	})
+	if err != nil {
+		t.Fatalf("NewWrapAppendFile: %v", err)
+	}
+	w, err := iouring.NewIoUringWriter(8, 0)
+	if err != nil {
+		t.Fatalf("NewIoUringWriter: %v", err)
+	}
+	waf.WriteRing = w
+	t.Cleanup(func() {
+		w.Close()
+		cleanupWrapFile(waf)
+	})
+	return waf
+}
+
+func TestPwriteBatch_SmallBuffer_RoundTrip(t *testing.T) {
+	waf := newWrapFileWithRing(t, BLOCK_SIZE*8)
+	buf := createAlignedBuffer(BLOCK_SIZE*2, BLOCK_SIZE)
+	for i := range buf {
+		buf[i] = byte(i % 256)
+	}
+
+	total, off, err := waf.PwriteBatch(buf, BLOCK_SIZE)
+	if err != nil {
+		t.Fatalf("PwriteBatch: %v", err)
+	}
+	if total != len(buf) {
+		t.Fatalf("total = %d, want %d", total, len(buf))
+	}
+	if off != int64(len(buf)) {
+		t.Fatalf("offset = %d, want %d", off, len(buf))
+	}
+	if waf.LogicalCurrentOffset.Load() != int64(len(buf)) {
+		t.Fatalf("LogicalCurrentOffset = %d, want %d", waf.LogicalCurrentOffset.Load(), len(buf))
+	}
+	if waf.Stat.WriteCount.Load() != 2 {
+		t.Fatalf("WriteCount = %d, want 2 (chunkSize=BLOCK_SIZE, len=2*BLOCK_SIZE)",
+			waf.Stat.WriteCount.Load())
+	}
+}
+
+func TestPwriteBatch_LargeBuffer_SpansMultipleSubmissions(t *testing.T) {
+	waf := newWrapFileWithRing(t, BLOCK_SIZE*32)
+	buf := createAlignedBuffer(BLOCK_SIZE*16, BLOCK_SIZE)
+
+	total, _, err := waf.PwriteBatch(buf, BLOCK_SIZE)
+	if err != nil {
+		t.Fatalf("PwriteBatch: %v", err)
+	}
+	if total != len(buf) {
+		t.Fatalf("total = %d, want %d", total, len(buf))
+	}
+}
+
+func TestPwriteBatch_Wraps_PhysicalOffsetResets(t *testing.T) {
+	waf := newWrapFileWithRing(t, BLOCK_SIZE*4)
+	buf := createAlignedBuffer(BLOCK_SIZE*4, BLOCK_SIZE)
+
+	_, _, err := waf.PwriteBatch(buf, BLOCK_SIZE)
+	if err != nil {
+		t.Fatalf("PwriteBatch: %v", err)
+	}
+	if !waf.wrapped.Load() {
+		t.Fatal("wrapped not set after PwriteBatch reaches MaxFileSize")
+	}
+	if waf.PhysicalWriteOffset.Load() != 0 {
+		t.Fatalf("PhysicalWriteOffset = %d, want 0 after wrap", waf.PhysicalWriteOffset.Load())
+	}
+}
+
+func TestPwriteBatch_UnalignedBuffer_ReturnsError(t *testing.T) {
+	waf := newWrapFileWithRing(t, BLOCK_SIZE*8)
+	if !waf.WriteDirectIO {
+		t.Skip("WriteDirectIO disabled (filesystem fallback); alignment check skipped")
+	}
+	// Force misalignment by slicing one byte into a larger backing array.
+	backing := createAlignedBuffer(BLOCK_SIZE*2, BLOCK_SIZE)
+	unaligned := backing[1 : BLOCK_SIZE+1]
+
+	_, _, err := waf.PwriteBatch(unaligned, BLOCK_SIZE)
+	if err != ErrBufNoAlign {
+		t.Fatalf("PwriteBatch err = %v, want ErrBufNoAlign", err)
+	}
+}
+
+func TestAdvanceWriteOffset_NoWrap(t *testing.T) {
+	waf := newWrapFileWithRing(t, BLOCK_SIZE*8)
+
+	waf.AdvanceWriteOffset(BLOCK_SIZE * 2)
+
+	if waf.PhysicalWriteOffset.Load() != BLOCK_SIZE*2 {
+		t.Fatalf("PhysicalWriteOffset = %d, want %d", waf.PhysicalWriteOffset.Load(), BLOCK_SIZE*2)
+	}
+	if waf.LogicalCurrentOffset.Load() != BLOCK_SIZE*2 {
+		t.Fatalf("LogicalCurrentOffset = %d, want %d", waf.LogicalCurrentOffset.Load(), BLOCK_SIZE*2)
+	}
+	if waf.wrapped.Load() {
+		t.Fatal("wrapped flipped without crossing MaxFileSize")
+	}
+}
+
+func TestAdvanceWriteOffset_WrapsAtMaxFileSize(t *testing.T) {
+	waf := newWrapFileWithRing(t, BLOCK_SIZE*4)
+
+	waf.AdvanceWriteOffset(BLOCK_SIZE * 4)
+
+	if !waf.wrapped.Load() {
+		t.Fatal("wrapped not set after AdvanceWriteOffset >= MaxFileSize")
+	}
+	if waf.PhysicalWriteOffset.Load() != 0 {
+		t.Fatalf("PhysicalWriteOffset = %d, want 0 after wrap", waf.PhysicalWriteOffset.Load())
+	}
+}
+
+func TestTrimHeadIfNeeded_FreshFile_ReturnsFalse(t *testing.T) {
+	waf := newWrapFileWithRing(t, BLOCK_SIZE*8)
+	if waf.TrimHeadIfNeeded() {
+		t.Fatal("TrimHeadIfNeeded = true on a fresh file")
+	}
+}
+
+func TestTrimHeadIfNeeded_AfterWrapAndAlignment_ReturnsTrue(t *testing.T) {
+	waf := newWrapFileWithRing(t, BLOCK_SIZE*4)
+	// AdvanceWriteOffset(MaxFileSize) sets wrapped=true and PhysicalWriteOffset=0;
+	// PhysicalStartOffset is already 0 → both pointers equal → trim needed.
+	waf.AdvanceWriteOffset(BLOCK_SIZE * 4)
+
+	if !waf.TrimHeadIfNeeded() {
+		t.Fatal("TrimHeadIfNeeded = false when wrapped and write==start")
+	}
+}
+
+func TestValidateReadOffset_Aligned_ReturnsPhysOffset(t *testing.T) {
+	waf := newWrapFileWithRing(t, BLOCK_SIZE*8)
+	buf := createAlignedBuffer(BLOCK_SIZE, BLOCK_SIZE)
+	_, err := waf.Pwrite(buf)
+	if err != nil {
+		t.Fatalf("Pwrite: %v", err)
+	}
+
+	got, err := waf.ValidateReadOffset(0, BLOCK_SIZE)
+	if err != nil {
+		t.Fatalf("ValidateReadOffset: %v", err)
+	}
+	if got != 0 {
+		t.Fatalf("phys offset = %d, want 0", got)
+	}
+}
+
+func TestValidateReadOffset_OutOfRange_ReturnsError(t *testing.T) {
+	waf := newWrapFileWithRing(t, BLOCK_SIZE*8)
+
+	_, err := waf.ValidateReadOffset(0, BLOCK_SIZE)
+	if err != ErrFileOffsetOutOfRange {
+		t.Fatalf("err = %v, want ErrFileOffsetOutOfRange", err)
+	}
+}
+
+func TestValidateReadOffset_UnalignedOffset_ReturnsError(t *testing.T) {
+	waf := newWrapFileWithRing(t, BLOCK_SIZE*8)
+	if !waf.ReadDirectIO {
+		t.Skip("ReadDirectIO disabled")
+	}
+
+	_, err := waf.ValidateReadOffset(123, BLOCK_SIZE)
+	if err != ErrOffsetNotAligned {
+		t.Fatalf("err = %v, want ErrOffsetNotAligned", err)
+	}
+}
+
+func TestValidateReadOffset_AfterWrap_AppliesModulo(t *testing.T) {
+	waf := newWrapFileWithRing(t, BLOCK_SIZE*4)
+	buf := createAlignedBuffer(BLOCK_SIZE*4, BLOCK_SIZE)
+	_, err := waf.Pwrite(buf)
+	if err != nil {
+		t.Fatalf("Pwrite: %v", err)
+	}
+	if !waf.wrapped.Load() {
+		t.Fatal("setup failed: not wrapped")
+	}
+
+	// Request offset BLOCK_SIZE*5 (logical) → phys = 5 % 4 = 1 block.
+	got, err := waf.ValidateReadOffset(BLOCK_SIZE*5, BLOCK_SIZE)
+	if err != nil {
+		t.Fatalf("ValidateReadOffset: %v", err)
+	}
+	if got != BLOCK_SIZE {
+		t.Fatalf("phys offset = %d, want %d", got, BLOCK_SIZE)
+	}
+}
+
+func TestNewWrapAppendFile_BadPath_Errors(t *testing.T) {
+	_, err := NewWrapAppendFile(FileConfig{
+		Filename:          "/nonexistent/path/foo.dat",
+		MaxFileSize:       BLOCK_SIZE,
+		FilePunchHoleSize: BLOCK_SIZE,
+		BlockSize:         BLOCK_SIZE,
+	})
+	if err == nil {
+		t.Fatal("NewWrapAppendFile on bad path returned nil err")
+	}
+}
+
+// TestNewWrapAppendFile_DirectoryPath_Errors covers the createReadFileDescriptor
+// branch by passing a directory path: O_WRONLY against a directory fails
+// before the read fd is opened.
+func TestNewWrapAppendFile_DirectoryPath_Errors(t *testing.T) {
+	dir := t.TempDir()
+	_, err := NewWrapAppendFile(FileConfig{
+		Filename:          dir,
+		MaxFileSize:       BLOCK_SIZE,
+		FilePunchHoleSize: BLOCK_SIZE,
+		BlockSize:         BLOCK_SIZE,
+	})
+	if err == nil {
+		t.Fatal("NewWrapAppendFile on directory returned nil err")
+	}
+}
+
+// TestPwriteBatch_SubmitFailure_StillConsumesSlot: on SubmitWriteBatch
+// error the write pointer must still end len(buf) past where it started.
+// Readers locate a memtable at memId*capacity, so rolling the pointer back
+// would land every later memtable one slot early.
+func TestPwriteBatch_SubmitFailure_StillConsumesSlot(t *testing.T) {
+	waf := newWrapFileWithRing(t, BLOCK_SIZE*8)
+
+	// Warmup write moves offset off zero.
+	warmup := createAlignedBuffer(BLOCK_SIZE, BLOCK_SIZE)
+	if _, _, err := waf.PwriteBatch(warmup, BLOCK_SIZE); err != nil {
+		t.Fatalf("warmup PwriteBatch: %v", err)
+	}
+	startOffset := waf.PhysicalWriteOffset.Load()
+
+	// An invalid fd makes the io_uring write fail with EBADF.
+	waf.WriteFd = -1
+
+	buf := createAlignedBuffer(BLOCK_SIZE*2, BLOCK_SIZE)
+	_, _, err := waf.PwriteBatch(buf, BLOCK_SIZE)
+	if err == nil {
+		t.Fatal("PwriteBatch err = nil, want error from failed SubmitWriteBatch")
+	}
+	if want := startOffset + int64(len(buf)); waf.PhysicalWriteOffset.Load() != want {
+		t.Fatalf("PhysicalWriteOffset = %d after failed batch, want %d (slot must be consumed)",
+			waf.PhysicalWriteOffset.Load(), want)
 	}
 }

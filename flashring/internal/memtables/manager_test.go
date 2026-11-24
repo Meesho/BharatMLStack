@@ -4,7 +4,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/fs"
 	"github.com/Meesho/BharatMLStack/flashring/internal/iouring"
@@ -65,7 +64,7 @@ func TestNewMemtableManager_Success(t *testing.T) {
 	if manager.memtable2 == nil {
 		t.Errorf("Expected memtable2 to be initialized")
 	}
-	if manager.activeMemtable != manager.memtable1 {
+	if manager.activeMemtable.Load() != manager.memtable1 {
 		t.Errorf("Expected activeMemtable to be memtable1 initially")
 	}
 	if manager.nextFileOffset != 2*int64(capacity) {
@@ -173,7 +172,7 @@ func TestMemtableManager_Flush(t *testing.T) {
 	}
 
 	// Verify initial state
-	originalActive := manager.activeMemtable
+	originalActive := manager.activeMemtable.Load()
 	originalNextId := manager.nextId
 
 	// Perform flush
@@ -183,23 +182,22 @@ func TestMemtableManager_Flush(t *testing.T) {
 	}
 
 	// Verify active memtable swapped
-	if manager.activeMemtable == originalActive {
+	if manager.activeMemtable.Load() == originalActive {
 		t.Errorf("Expected active memtable to be swapped")
 	}
 
 	// Active should now be the other memtable
 	if originalActive == manager.memtable1 {
-		if manager.activeMemtable != manager.memtable2 {
+		if manager.activeMemtable.Load() != manager.memtable2 {
 			t.Errorf("Expected active memtable to be memtable2")
 		}
 	} else {
-		if manager.activeMemtable != manager.memtable1 {
+		if manager.activeMemtable.Load() != manager.memtable1 {
 			t.Errorf("Expected active memtable to be memtable1")
 		}
 	}
 
-	// Give time for background goroutine to complete
-	time.Sleep(100 * time.Millisecond)
+	manager.WaitForFlush()
 
 	// Verify nextId was incremented (this happens in background)
 	if manager.nextId <= originalNextId {
@@ -218,7 +216,7 @@ func TestMemtableManager_FlushSwapsBetweenMemtables(t *testing.T) {
 	}
 
 	// Initially active is memtable1
-	if manager.activeMemtable != manager.memtable1 {
+	if manager.activeMemtable.Load() != manager.memtable1 {
 		t.Fatalf("Expected initial active to be memtable1")
 	}
 
@@ -227,7 +225,7 @@ func TestMemtableManager_FlushSwapsBetweenMemtables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("First flush failed: %v", err)
 	}
-	if manager.activeMemtable != manager.memtable2 {
+	if manager.activeMemtable.Load() != manager.memtable2 {
 		t.Errorf("Expected active to be memtable2 after first flush")
 	}
 
@@ -236,7 +234,7 @@ func TestMemtableManager_FlushSwapsBetweenMemtables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Second flush failed: %v", err)
 	}
-	if manager.activeMemtable != manager.memtable1 {
+	if manager.activeMemtable.Load() != manager.memtable1 {
 		t.Errorf("Expected active to be memtable1 after second flush")
 	}
 }
@@ -274,8 +272,7 @@ func TestMemtableManager_FlushConcurrency(t *testing.T) {
 		t.Errorf("Concurrent flush failed: %v", err)
 	}
 
-	// Give time for all background operations to complete
-	time.Sleep(200 * time.Millisecond)
+	manager.WaitForFlush()
 
 	// Verify manager is still in a valid state
 	memtable, id, offset := manager.GetMemtable()
@@ -384,6 +381,47 @@ func TestMemtableManager_Integration(t *testing.T) {
 		t.Errorf("Should still be able to retrieve old memtable by ID")
 	}
 
-	// Give background flush time to complete
-	time.Sleep(100 * time.Millisecond)
+	manager.WaitForFlush()
+}
+
+// TestMemtableManager_ConsumeFlushErr_CompareAndSwapSemantics verifies the
+// C4 fix (PR #2377): flushConsumer's async-flush-error signal is exposed
+// to callers via a compare-and-swap that fires exactly ONCE per failed
+// flush event. First consumer sees the failure and gets true; subsequent
+// callers see false until another flush actually fails. Prior behaviour
+// silently swallowed the error, losing the frozen memtable's entries with
+// no caller-visible signal.
+func TestMemtableManager_ConsumeFlushErr_CompareAndSwapSemantics(t *testing.T) {
+	capacity := int32(fs.BLOCK_SIZE * 2)
+	file := createTestFileForManager(t)
+	defer cleanupManagerFile(file)
+
+	manager, err := NewMemtableManager(file, capacity, 0)
+	if err != nil {
+		t.Fatalf("NewMemtableManager: %v", err)
+	}
+
+	// Fresh manager — no flush has failed.
+	if manager.ConsumeFlushErr() {
+		t.Fatal("ConsumeFlushErr = true on fresh manager; want false")
+	}
+
+	// Simulate the failure signal that flushConsumer would set.
+	manager.flushErrPending.Store(true)
+
+	// First consumer sees the failure.
+	if !manager.ConsumeFlushErr() {
+		t.Fatal("first ConsumeFlushErr = false after Store(true); want true")
+	}
+
+	// Second consumer sees a clean state — CAS cleared the flag.
+	if manager.ConsumeFlushErr() {
+		t.Fatal("second ConsumeFlushErr = true; want false (CAS should have cleared)")
+	}
+
+	// A subsequent failure re-arms the flag independently.
+	manager.flushErrPending.Store(true)
+	if !manager.ConsumeFlushErr() {
+		t.Fatal("re-armed ConsumeFlushErr = false; want true")
+	}
 }

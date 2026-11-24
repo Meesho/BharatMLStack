@@ -5,6 +5,10 @@ import (
 	"unsafe"
 )
 
+// ByteOrder is the platform-detected byte order used for all index
+// entry encoding/decoding. Initialized in init() — index entries are
+// written with native endianness, so on-disk and in-memory layouts are
+// not portable across architectures.
 var ByteOrder *CustomByteOrder
 
 func init() {
