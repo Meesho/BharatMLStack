@@ -19,6 +19,7 @@ import (
 	"github.com/Meesho/BharatMLStack/flashring/internal/memtables"
 	filecache "github.com/Meesho/BharatMLStack/flashring/internal/shard"
 	"github.com/cespare/xxhash/v2"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/Meesho/BharatMLStack/flashring/pkg/metrics"
@@ -390,6 +391,11 @@ func (wc *WrapCache) Delete(key string) bool {
 	return wc.shards[shardIdx].DeleteKey(key)
 }
 
+// rewritePanicSampler lets one rewrite-panic log line through per minute, so a
+// rewrite that panics on every hot read cannot flood the log. The counter
+// still counts every panic.
+var rewritePanicSampler = &zerolog.BurstSampler{Burst: 1, Period: time.Minute}
+
 // rewrite puts the value back into the cache asynchronously to move
 // hot data closer to the write head. Deliberately bypasses WrapCache.Put
 // to avoid consuming the memtable-manager's flush-error flag — rewrites
@@ -400,6 +406,15 @@ func (wc *WrapCache) Delete(key string) bool {
 // dropped rather than retried, which is acceptable for a hot-data
 // optimisation.
 func (wc *WrapCache) rewrite(key string, value []byte, remainingTTLMinutes uint16) {
+	// Runs on its own goroutine: an unrecovered panic here would kill the
+	// host process. Deferred first so it runs after the shard unlock.
+	defer func() {
+		if r := recover(); r != nil {
+			sampled := log.Sample(rewritePanicSampler)
+			sampled.Error().Interface("panic", r).Int("keyLen", len(key)).Msg("rewrite panicked; dropped")
+			metrics.Incr(metrics.KEY_REWRITE_PANIC_COUNT, []string{})
+		}
+	}()
 	h32 := wc.hash(key)
 	shardIdx := h32 % uint32(len(wc.shards))
 

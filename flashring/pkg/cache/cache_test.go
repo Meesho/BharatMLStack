@@ -10,10 +10,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/Meesho/BharatMLStack/flashring/internal/memtables"
+	filecache "github.com/Meesho/BharatMLStack/flashring/internal/shard"
 	"github.com/Meesho/BharatMLStack/flashring/internal/testutil/mountfs"
 )
 
@@ -1145,4 +1147,24 @@ func TestWrapCache_Put_AfterClose_ReturnsErrCacheClosed(t *testing.T) {
 	}
 	// A rewrite left over from an earlier Get must not touch the closed shard.
 	wc.rewrite("k", []byte("v"), 60)
+}
+
+func TestWrapCache_Rewrite_PanicRecoveredAndLockReleased(t *testing.T) {
+	// A nil shard makes Put panic on its first field access.
+	wc := &WrapCache{
+		shards:     []*filecache.ShardCache{nil},
+		shardLocks: make([]sync.RWMutex, 1),
+	}
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("rewrite panic escaped: %v", r)
+			}
+		}()
+		wc.rewrite("k", []byte("v"), 60)
+	}()
+	if !wc.shardLocks[0].TryLock() {
+		t.Fatal("shard lock still held after a panicking rewrite")
+	}
+	wc.shardLocks[0].Unlock()
 }

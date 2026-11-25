@@ -46,9 +46,15 @@ func NewSlabAlignedPageAllocator(config SlabAlignedPageAllocatorConfig) (*SlabAl
 		sizes[i] = sc.Size
 		size := sc.Size
 		poolList[i] = pools.NewLeakyPool(pools.LeakyPoolConfig[*fs.AlignedPage]{
-			Capacity:   sc.MinCount,
-			Meta:       Meta{Size: sc.Size, Name: fmt.Sprintf("SlabAlignedPagePool-%dBytes", sc.Size)},
-			CreateFunc: func() *fs.AlignedPage { return fs.NewAlignedPage(size) },
+			Capacity: sc.MinCount,
+			Meta:     Meta{Size: sc.Size, Name: fmt.Sprintf("SlabAlignedPagePool-%dBytes", sc.Size)},
+			CreateFunc: func() *fs.AlignedPage {
+				p, err := fs.NewAlignedPage(size)
+				if err != nil {
+					log.Error().Err(err).Int("size", size).Msg("SlabAlignedPageAllocator: mmap failed")
+				}
+				return p
+			},
 		})
 		poolList[i].RegisterPreDrefHook(func(p *fs.AlignedPage) {
 			fs.Unmap(p)
@@ -59,8 +65,9 @@ func NewSlabAlignedPageAllocator(config SlabAlignedPageAllocatorConfig) (*SlabAl
 }
 
 // Get returns a page from the smallest size class >= size. Returns nil
-// when size exceeds the largest configured class — callers must fall
-// back to a direct mmap or fail the request.
+// when size exceeds the largest configured class or when the pool is
+// empty and mmap fails — callers must fall back to a direct mmap or fail
+// the request.
 func (a *SlabAlignedPageAllocator) Get(size int) *fs.AlignedPage {
 	for i, s := range a.sizes {
 		if size <= s {

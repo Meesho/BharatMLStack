@@ -39,6 +39,7 @@ const (
 	KEY_MEMTABLE_FLUSH_COUNT       = "flashring_memtable_flush_count"
 	KEY_MEMTABLE_FLUSH_ERROR_COUNT = "flashring_memtable_flush_error_count"
 	KEY_VALUE_TOO_LARGE_COUNT      = "flashring_value_too_large_count"
+	KEY_REWRITE_PANIC_COUNT        = "flashring_rewrite_panic_count"
 
 	LATENCY_WLOCK = "flashring_wlock_latency"
 

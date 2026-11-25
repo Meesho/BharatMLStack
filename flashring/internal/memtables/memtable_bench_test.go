@@ -56,7 +56,11 @@ func createBenchmarkFile(b *testing.B) *fs.WrapAppendFile {
 
 // Helper function to create benchmark page
 func createBenchmarkPage() *fs.AlignedPage {
-	return fs.NewAlignedPage(BENCH_PAGE_SIZE)
+	page, err := fs.NewAlignedPage(BENCH_PAGE_SIZE)
+	if err != nil {
+		panic(err)
+	}
+	return page
 }
 
 // Helper function to create benchmark memtable

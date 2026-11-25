@@ -318,9 +318,9 @@ func TestSlabAlignedPageAllocator_Put(t *testing.T) {
 		}
 
 		// Create a page manually (not from pool)
-		page := fs.NewAlignedPage(6000)
-		if page == nil {
-			t.Fatal("Failed to create aligned page")
+		page, err := fs.NewAlignedPage(6000)
+		if err != nil {
+			t.Fatalf("Failed to create aligned page: %v", err)
 		}
 
 		// Should not panic, even though page wasn't from the pool
@@ -339,9 +339,9 @@ func TestSlabAlignedPageAllocator_Put(t *testing.T) {
 		}
 
 		// Create a large page
-		page := fs.NewAlignedPage(8192)
-		if page == nil {
-			t.Fatal("Failed to create aligned page")
+		page, err := fs.NewAlignedPage(8192)
+		if err != nil {
+			t.Fatalf("Failed to create aligned page: %v", err)
 		}
 
 		// Should not panic, but will log error
@@ -728,4 +728,24 @@ func TestSlabAllocator_Put_Nil_NoPanic(t *testing.T) {
 		}
 	}()
 	alloc.Put(nil)
+}
+
+// TestSlabAllocator_Get_MmapFails_ReturnsNil: an mmap failure in the pool's
+// CreateFunc surfaces as a nil page, not a panic. A negative size class
+// passes the alignment check and makes mmap fail with EINVAL.
+func TestSlabAllocator_Get_MmapFails_ReturnsNil(t *testing.T) {
+	alloc, err := NewSlabAlignedPageAllocator(SlabAlignedPageAllocatorConfig{
+		SizeClasses: []SizeClass{{Size: -fs.BLOCK_SIZE, MinCount: 1}},
+	})
+	if err != nil {
+		t.Fatalf("NewSlabAlignedPageAllocator: %v", err)
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Get panicked on mmap failure: %v", r)
+		}
+	}()
+	if page := alloc.Get(-fs.BLOCK_SIZE); page != nil {
+		t.Fatalf("Get after mmap failure = %+v, want nil", page)
+	}
 }

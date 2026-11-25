@@ -263,10 +263,10 @@ func (fc *ShardCache) readFromDiskAsync(fileOffset int64, length uint16, buf []b
 	alignedStart, alignedSize := fs.AlignRange(fileOffset, int(length), fs.BLOCK_SIZE)
 	page := fc.readPageAllocator.Get(int(alignedSize))
 	if page == nil {
-		// alignedSize exceeds the largest slab class. WrapCache.Put now
-		// caps entry size at uint16 and the size-class ladder tops out
-		// at 128KB, so this should be unreachable in valid configs —
-		// but return 0 rather than NPE if a bad length ever slips through.
+		// Either mmap failed (logged by the allocator) or alignedSize
+		// exceeds the largest slab class. WrapCache.Put caps entry size
+		// at uint16 and the size-class ladder tops out at 128KB, so the
+		// latter should be unreachable in valid configs. Read as a miss.
 		metrics.Incr(metrics.KEY_BAD_LENGTH_COUNT, []string{})
 		return 0
 	}
@@ -399,7 +399,7 @@ func (fc *ShardCache) SubmitDiskReadAsync(fileOffset int64, length uint16) (*Pen
 	alignedStart, alignedSize := fs.AlignRange(fileOffset, int(length), fs.BLOCK_SIZE)
 	page := fc.readPageAllocator.Get(int(alignedSize))
 	if page == nil {
-		return nil, fmt.Errorf("aligned read size %d exceeds largest slab class", alignedSize)
+		return nil, fmt.Errorf("no read page for aligned size %d", alignedSize)
 	}
 	readBuf := page.Buf[:alignedSize]
 
@@ -451,7 +451,7 @@ type CoalescedPendingRead struct {
 func (fc *ShardCache) SubmitCoalescedReadAsync(alignedStart int64, alignedSize int) (*CoalescedPendingRead, error) {
 	page := fc.readPageAllocator.Get(alignedSize)
 	if page == nil {
-		return nil, fmt.Errorf("coalesced aligned read size %d exceeds largest slab class", alignedSize)
+		return nil, fmt.Errorf("no read page for coalesced aligned size %d", alignedSize)
 	}
 	readBuf := page.Buf[:alignedSize]
 

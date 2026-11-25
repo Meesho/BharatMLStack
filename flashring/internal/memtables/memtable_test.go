@@ -35,7 +35,11 @@ func createTestFile(t *testing.T) *fs.WrapAppendFile {
 
 // Helper function to create a test page
 func createTestPage(size int) *fs.AlignedPage {
-	return fs.NewAlignedPage(size)
+	page, err := fs.NewAlignedPage(size)
+	if err != nil {
+		panic(err)
+	}
+	return page
 }
 
 // Helper function to cleanup resources

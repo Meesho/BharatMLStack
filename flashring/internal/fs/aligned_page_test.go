@@ -6,10 +6,9 @@ package fs
 import "testing"
 
 func TestNewAlignedPage_PageSize_BufLengthMatches(t *testing.T) {
-	p := NewAlignedPage(BLOCK_SIZE)
-
-	if p == nil {
-		t.Fatal("NewAlignedPage returned nil")
+	p, err := NewAlignedPage(BLOCK_SIZE)
+	if err != nil {
+		t.Fatalf("NewAlignedPage: %v", err)
 	}
 	if len(p.Buf) != BLOCK_SIZE {
 		t.Fatalf("len(Buf) = %d, want %d", len(p.Buf), BLOCK_SIZE)
@@ -29,17 +28,21 @@ func TestNewAlignedPage_PageSize_BufLengthMatches(t *testing.T) {
 	}
 }
 
-func TestNewAlignedPage_InvalidSize_Panics(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("NewAlignedPage(-1) did not panic")
-		}
-	}()
-	NewAlignedPage(-1)
+func TestNewAlignedPage_InvalidSize_ReturnsError(t *testing.T) {
+	p, err := NewAlignedPage(-1)
+	if err == nil {
+		t.Fatal("NewAlignedPage(-1) returned no error")
+	}
+	if p != nil {
+		t.Fatal("NewAlignedPage(-1) returned a non-nil page")
+	}
 }
 
 func TestUnmap_NilMmap_Idempotent(t *testing.T) {
-	p := NewAlignedPage(BLOCK_SIZE)
+	p, err := NewAlignedPage(BLOCK_SIZE)
+	if err != nil {
+		t.Fatalf("NewAlignedPage: %v", err)
+	}
 	if err := Unmap(p); err != nil {
 		t.Fatalf("first Unmap: %v", err)
 	}

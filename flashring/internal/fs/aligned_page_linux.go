@@ -26,13 +26,13 @@ type AlignedPage struct {
 	mmap []byte
 }
 
-// NewAlignedPage allocates a pageSize-byte anonymous mmap region. Panics
-// on mmap failure — the cache treats page allocation as an unrecoverable
-// resource error.
-func NewAlignedPage(pageSize int) *AlignedPage {
+// NewAlignedPage allocates a pageSize-byte anonymous mmap region. Returns
+// the mmap error (e.g. ENOMEM under memory pressure) instead of panicking:
+// it is reached from the read path when a slab pool is empty.
+func NewAlignedPage(pageSize int) (*AlignedPage, error) {
 	b, err := unix.Mmap(-1, 0, pageSize, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	// if pageSize > 0 {
 	// 	mmapProf.Add(&b[0], pageSize) // attribute sz bytes to this callsite
@@ -40,7 +40,7 @@ func NewAlignedPage(pageSize int) *AlignedPage {
 	return &AlignedPage{
 		Buf:  b,
 		mmap: b,
-	}
+	}, nil
 }
 
 // Unmap releases the underlying mmap region. Idempotent — calling Unmap
