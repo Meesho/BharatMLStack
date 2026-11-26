@@ -507,7 +507,7 @@ func (wc *WrapCache) MGet(keys []string) []MGetResult {
 
 		// Memtable hit — validate and return inline.
 		if meta.Value != nil {
-			val, ok := wc.shards[shardIdx].ValidateAndExtract(meta.Value, key, meta.Length)
+			val, ok := wc.shards[shardIdx].ValidateAndExtract(meta.Value, key, meta.Length, false)
 			if ok {
 				metrics.Incr(metrics.KEY_HITS, metrics.GetShardTag(shardIdx))
 				results[i] = MGetResult{Value: val, Found: true}
@@ -618,7 +618,7 @@ func (wc *WrapCache) MGet(keys []string) []MGetResult {
 			}
 
 			keyBuf := coalescedBuf[bufOffset : bufOffset+int(dr.meta.Length)]
-			val, ok := wc.shards[dr.shardIdx].ValidateAndExtract(keyBuf, dr.key, dr.meta.Length)
+			val, ok := wc.shards[dr.shardIdx].ValidateAndExtract(keyBuf, dr.key, dr.meta.Length, true)
 			if ok {
 				metrics.Incr(metrics.KEY_HITS, metrics.GetShardTag(dr.shardIdx))
 				results[dr.keyIdx] = MGetResult{Value: val, Found: true}

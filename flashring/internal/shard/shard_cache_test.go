@@ -323,7 +323,7 @@ func TestShardCache_ValidateAndExtract_HappyPath(t *testing.T) {
 		t.Fatalf("Put: %v", err)
 	}
 	meta := sc.GetMetaForMGet("vk")
-	val, ok := sc.ValidateAndExtract(meta.Value, "vk", meta.Length)
+	val, ok := sc.ValidateAndExtract(meta.Value, "vk", meta.Length, false)
 	if !ok {
 		t.Fatal("ValidateAndExtract returned ok=false")
 	}
@@ -337,13 +337,13 @@ func TestShardCache_ValidateAndExtract_BadLength(t *testing.T) {
 	defer cleanup()
 
 	// length=3 < 4 (CRC32 prefix) → BAD_LENGTH branch.
-	_, ok := sc.ValidateAndExtract([]byte{1, 2, 3, 4}, "k", 3)
+	_, ok := sc.ValidateAndExtract([]byte{1, 2, 3, 4}, "k", 3, false)
 	if ok {
 		t.Fatal("ok = true for length<4")
 	}
 
 	// length exceeds buffer length.
-	_, ok = sc.ValidateAndExtract([]byte{1, 2, 3, 4}, "k", 10)
+	_, ok = sc.ValidateAndExtract([]byte{1, 2, 3, 4}, "k", 10, false)
 	if ok {
 		t.Fatal("ok = true for length > len(buf)")
 	}
@@ -361,7 +361,7 @@ func TestShardCache_ValidateAndExtract_BadCRC(t *testing.T) {
 	corrupted := make([]byte, len(meta.Value))
 	copy(corrupted, meta.Value)
 	corrupted[4] ^= 0xFF
-	_, ok := sc.ValidateAndExtract(corrupted, "crc", meta.Length)
+	_, ok := sc.ValidateAndExtract(corrupted, "crc", meta.Length, false)
 	if ok {
 		t.Fatal("ok = true on corrupted CRC")
 	}
@@ -376,7 +376,7 @@ func TestShardCache_ValidateAndExtract_KeyMismatch(t *testing.T) {
 	}
 	meta := sc.GetMetaForMGet("orig")
 	// Ask for the wrong key, same length.
-	_, ok := sc.ValidateAndExtract(meta.Value, "diff", meta.Length)
+	_, ok := sc.ValidateAndExtract(meta.Value, "diff", meta.Length, false)
 	if ok {
 		t.Fatal("ok = true with mismatched key")
 	}
@@ -953,7 +953,7 @@ func TestValidateAndExtract_LengthUnderflow_ReturnsFalseNoPanic(t *testing.T) {
 					t.Fatalf("ValidateAndExtract panicked (regression of C1): %v", r)
 				}
 			}()
-			val, ok := sc.ValidateAndExtract(tc.buf, key, tc.length)
+			val, ok := sc.ValidateAndExtract(tc.buf, key, tc.length, false)
 			if ok {
 				t.Fatalf("ok = true for length=%d bufLen=%d; want bad-length miss", tc.length, len(tc.buf))
 			}
@@ -1124,7 +1124,7 @@ func TestShardCache_MemtableHit_ValueSurvivesPageReuse(t *testing.T) {
 		t.Fatal("Get(first) not found")
 	}
 	meta := sc.GetMetaForMGet("first")
-	mgot, ok := sc.ValidateAndExtract(meta.Value, "first", meta.Length)
+	mgot, ok := sc.ValidateAndExtract(meta.Value, "first", meta.Length, false)
 	if !ok {
 		t.Fatal("MGet path did not find first")
 	}
@@ -1183,5 +1183,24 @@ func TestShardCache_StaggeredFirstMemtable_EntryLargerThanRemainingRoom(t *testi
 	last := "k-" + strconv.Itoa(puts-1)
 	if found, got, _, _, _ := sc.Get(last); !found || !bytes.Equal(got, value) {
 		t.Fatalf("Get(%s) found=%v after two ring laps", last, found)
+	}
+}
+
+func TestBadCRCTags(t *testing.T) {
+	cases := []struct {
+		fromDisk  bool
+		storedCRC uint32
+		want      []string
+	}{
+		{false, 0xDEADBEEF, []string{"read_path:memtable", "stored_crc:nonzero"}},
+		{false, 0, []string{"read_path:memtable", "stored_crc:zero"}},
+		{true, 0xDEADBEEF, []string{"read_path:disk", "stored_crc:nonzero"}},
+		{true, 0, []string{"read_path:disk", "stored_crc:zero"}},
+	}
+	for _, tc := range cases {
+		got := badCRCTags(tc.fromDisk, tc.storedCRC)
+		if len(got) != len(tc.want) || got[0] != tc.want[0] || got[1] != tc.want[1] {
+			t.Errorf("badCRCTags(%v, %#x) = %v, want %v", tc.fromDisk, tc.storedCRC, got, tc.want)
+		}
 	}
 }

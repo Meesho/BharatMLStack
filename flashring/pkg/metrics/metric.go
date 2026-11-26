@@ -70,6 +70,8 @@ const (
 	TAG_VALUE_P50          = "p50"
 	TAG_VALUE_P99          = "p99"
 	TAG_SHARD_IDX          = "shard_idx"
+	TAG_READ_PATH          = "read_path"  // memtable | disk
+	TAG_STORED_CRC         = "stored_crc" // zero | nonzero
 )
 
 // Application-level metric keys

@@ -248,7 +248,7 @@ func (fc *ShardCache) Get(key string) (bool, []byte, uint16, bool, bool) {
 	computedCR32 := crc32.ChecksumIEEE(buf[4:length])
 	gotKey := string(buf[4 : 4+len(key)])
 	if gotCR32 != computedCR32 {
-		metrics.Incr(metrics.KEY_BAD_CR32_COUNT, []string{})
+		metrics.Incr(metrics.KEY_BAD_CR32_COUNT, badCRCTags(mt == nil, gotCR32))
 		return false, nil, 0, false, shouldReWrite
 	}
 	if gotKey != key {
@@ -489,9 +489,27 @@ func (fc *ShardCache) CollectCoalescedRead(pr *CoalescedPendingRead) []byte {
 	return buf
 }
 
+// badCRCTags says where a record that failed its CRC was read from and
+// whether its stored CRC was zero. A file region holding no data reads back
+// as zeros: one punched by TrimHead under an in-flight read, or a slot whose
+// flush failed and was never written. So stored_crc:zero on read_path:disk
+// is the TrimHead race only while flashring_memtable_flush_error_count is
+// flat; stored_crc:nonzero is an overwritten or torn record.
+func badCRCTags(fromDisk bool, storedCRC uint32) []string {
+	path, crc := "memtable", "nonzero"
+	if fromDisk {
+		path = "disk"
+	}
+	if storedCRC == 0 {
+		crc = "zero"
+	}
+	return metrics.BuildTag(metrics.NewTag(metrics.TAG_READ_PATH, path), metrics.NewTag(metrics.TAG_STORED_CRC, crc))
+}
+
 // ValidateAndExtract checks the CRC32 and key, then extracts the value from
-// a raw data buffer. Used by MGet for both memtable and disk-read results.
-func (fc *ShardCache) ValidateAndExtract(buf []byte, key string, length uint16) ([]byte, bool) {
+// a raw data buffer. Used by MGet for both memtable and disk-read results;
+// fromDisk only tags the bad-CRC counter.
+func (fc *ShardCache) ValidateAndExtract(buf []byte, key string, length uint16, fromDisk bool) ([]byte, bool) {
 	// length must cover CRC (4) + key + value. If it's smaller than
 	// 4 + len(key), the key-slice below would panic. Also guard the
 	// upper bound against buf.
@@ -502,7 +520,7 @@ func (fc *ShardCache) ValidateAndExtract(buf []byte, key string, length uint16) 
 	gotCRC := index.ByteOrder.Uint32(buf[0:4])
 	computedCRC := crc32.ChecksumIEEE(buf[4:length])
 	if gotCRC != computedCRC {
-		metrics.Incr(metrics.KEY_BAD_CR32_COUNT, []string{})
+		metrics.Incr(metrics.KEY_BAD_CR32_COUNT, badCRCTags(fromDisk, gotCRC))
 		return nil, false
 	}
 	gotKey := string(buf[4 : 4+len(key)])
