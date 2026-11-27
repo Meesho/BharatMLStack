@@ -16,7 +16,7 @@ func defaultTuples() []WeightTuple {
 func newGSE(t *testing.T, dur time.Duration) (*GridSearchEstimator, *Estimator) {
 	t.Helper()
 	tuples := defaultTuples()
-	est := &Estimator{WFreq: tuples[0].WFreq, WLA: tuples[0].WLA}
+	est := NewEstimator(tuples[0].WFreq, tuples[0].WLA)
 	return NewGridSearchEstimator(dur, tuples, est, 0.0001), est
 }
 
@@ -41,7 +41,7 @@ func TestNewGridSearchEstimator_Defaults(t *testing.T) {
 }
 
 func TestCalculateRewriteScore_RisingFreqIncreasesScore(t *testing.T) {
-	est := &Estimator{WFreq: 1.0, WLA: 1.0}
+	est := NewEstimator(1.0, 1.0)
 
 	low := est.CalculateRewriteScore(1, 5, 0, 1, 4)
 	high := est.CalculateRewriteScore(100, 5, 0, 1, 4)
@@ -52,7 +52,7 @@ func TestCalculateRewriteScore_RisingFreqIncreasesScore(t *testing.T) {
 }
 
 func TestCalculateRewriteScore_HigherLastAccessDecreasesScore(t *testing.T) {
-	est := &Estimator{WFreq: 1.0, WLA: 1.0}
+	est := NewEstimator(1.0, 1.0)
 
 	recent := est.CalculateRewriteScore(10, 1, 0, 1, 4)
 	stale := est.CalculateRewriteScore(10, 100, 0, 1, 4)
@@ -64,7 +64,7 @@ func TestCalculateRewriteScore_HigherLastAccessDecreasesScore(t *testing.T) {
 }
 
 func TestCalculateRewriteScore_RingWrap_ModuloHandled(t *testing.T) {
-	est := &Estimator{WFreq: 1.0, WLA: 1.0}
+	est := NewEstimator(1.0, 1.0)
 
 	// keyMemId=3, activeMemId=0 with max=4 → risk=(0-3+4)%4 = 1.
 	got := est.CalculateRewriteScore(10, 5, 3, 0, 4)
@@ -106,8 +106,8 @@ func TestRecordHitRate_PastDuration_AdvancesIndex(t *testing.T) {
 		t.Fatalf("CurrIndex = %d, want 1 after duration elapsed", g.CurrIndex)
 	}
 	// LiveEstimator should now match Tuples[1].
-	if g.LiveEstimator.WFreq != g.Tuples[1].WFreq {
-		t.Fatalf("LiveEstimator.WFreq = %v, want %v", g.LiveEstimator.WFreq, g.Tuples[1].WFreq)
+	if g.LiveEstimator.Weights().WFreq != g.Tuples[1].WFreq {
+		t.Fatalf("LiveEstimator.Weights().WFreq = %v, want %v", g.LiveEstimator.Weights().WFreq, g.Tuples[1].WFreq)
 	}
 }
 
@@ -302,7 +302,7 @@ func TestRefineGridAroundBest_EpsilonReached_LocksInBest(t *testing.T) {
 	if g.bestHitRate != 0.9 {
 		t.Fatalf("bestHitRate = %v, want 0.9", g.bestHitRate)
 	}
-	if g.LiveEstimator.WFreq != g.Tuples[1].WFreq {
+	if g.LiveEstimator.Weights().WFreq != g.Tuples[1].WFreq {
 		t.Fatalf("LiveEstimator not updated to best")
 	}
 }
@@ -333,16 +333,16 @@ func TestRestartGridSearch_ResetsState(t *testing.T) {
 	if g.bestHitRate != 0 {
 		t.Fatalf("bestHitRate = %v, want 0", g.bestHitRate)
 	}
-	if g.LiveEstimator.WFreq != g.InitialTuples[0].WFreq {
+	if g.LiveEstimator.Weights().WFreq != g.InitialTuples[0].WFreq {
 		t.Fatal("LiveEstimator not reset to initial")
 	}
 }
 
 func TestRecordHitRate_FullSweepConverges_StopsSearch(t *testing.T) {
-	// Use epsilon larger than the hardcoded 0.001 delta inside
-	// RefineGridAroundBest → refinement converges and flips stopGridSearch.
+	// Epsilon larger than the initial refinement step → the first
+	// refinement converges and flips stopGridSearch.
 	tuples := defaultTuples()
-	est := &Estimator{WFreq: tuples[0].WFreq, WLA: tuples[0].WLA}
+	est := NewEstimator(tuples[0].WFreq, tuples[0].WLA)
 	g := NewGridSearchEstimator(time.Nanosecond, tuples, est, 0.5)
 
 	// Each tuple needs >=3 trials so BestTuple picks a winner.
@@ -394,8 +394,8 @@ func TestBestTuple_NoTrials_ReturnsZero(t *testing.T) {
 func TestRefineGridAroundBest_ZeroBest_KeepsSearchAlive(t *testing.T) {
 	g, _ := newGSE(t, time.Hour)
 	origTuplesLen := len(g.Tuples)
-	origWFreq := g.LiveEstimator.WFreq
-	origWLA := g.LiveEstimator.WLA
+	origWFreq := g.LiveEstimator.Weights().WFreq
+	origWLA := g.LiveEstimator.Weights().WLA
 
 	// With no trials, BestTuple returns zero.
 	if g.BestTuple() != (WeightTuple{}) {
@@ -415,9 +415,9 @@ func TestRefineGridAroundBest_ZeroBest_KeepsSearchAlive(t *testing.T) {
 	if len(g.Tuples) != origTuplesLen {
 		t.Fatalf("Tuples slice replaced despite zero best: len=%d, want %d", len(g.Tuples), origTuplesLen)
 	}
-	if g.LiveEstimator.WFreq != origWFreq || g.LiveEstimator.WLA != origWLA {
+	if g.LiveEstimator.Weights().WFreq != origWFreq || g.LiveEstimator.Weights().WLA != origWLA {
 		t.Fatalf("LiveEstimator drifted: WFreq=%v (want %v), WLA=%v (want %v)",
-			g.LiveEstimator.WFreq, origWFreq, g.LiveEstimator.WLA, origWLA)
+			g.LiveEstimator.Weights().WFreq, origWFreq, g.LiveEstimator.Weights().WLA, origWLA)
 	}
 }
 
@@ -426,7 +426,7 @@ func TestRefineGridAroundBest_ZeroBest_KeepsSearchAlive(t *testing.T) {
 // makes maxMemTableCount>=1 in valid configs, but the maths layer must
 // not panic on modulo-by-zero regardless.
 func TestCalculateRewriteScore_ZeroMaxMemTableCount_NoPanic(t *testing.T) {
-	e := &Estimator{WFreq: 0.5, WLA: 0.5}
+	e := NewEstimator(0.5, 0.5)
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("CalculateRewriteScore(...,0) panicked: %v", r)
@@ -435,5 +435,33 @@ func TestCalculateRewriteScore_ZeroMaxMemTableCount_NoPanic(t *testing.T) {
 	score := e.CalculateRewriteScore(100, 50, 5, 7, 0)
 	if score != 0 {
 		t.Fatalf("score = %v, want 0 for maxMemTableCount=0", score)
+	}
+}
+
+// The refinement step halves each pass, so a search fed steady samples
+// stops once the step is below epsilon instead of refining forever.
+func TestRecordHitRate_ShrinkingDeltaConverges(t *testing.T) {
+	est := NewEstimator(0.5, 0.5)
+	g := NewGridSearchEstimator(0, []WeightTuple{{WFreq: 0.5, WLA: 0.5}}, est, 0.01)
+
+	for i := 0; i < 10000 && g.IsGridSearchActive(); i++ {
+		g.RecordHitRate(0.8)
+	}
+	if g.IsGridSearchActive() {
+		t.Fatal("search still active after 10000 samples")
+	}
+	// 0.1, 0.05, 0.025, 0.0125 refine; 0.00625 < epsilon stops.
+	if want := initialRefineDelta / 16; g.delta != want {
+		t.Fatalf("delta = %v, want %v", g.delta, want)
+	}
+	// A flat hit rate carries no signal, so the incumbent must survive
+	// every pass rather than drift to a neighbour.
+	if got, want := est.Weights(), (WeightTuple{WFreq: 0.5, WLA: 0.5}); got != want || g.bestTuple != want {
+		t.Fatalf("live weights = %+v, best = %+v, want both %+v", got, g.bestTuple, want)
+	}
+
+	g.RestartGridSearch()
+	if g.delta != initialRefineDelta {
+		t.Fatalf("delta after restart = %v, want %v", g.delta, initialRefineDelta)
 	}
 }

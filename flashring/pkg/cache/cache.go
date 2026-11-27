@@ -60,6 +60,15 @@ type Config struct {
 	GridSearchEpsilon     float64
 	SampleDuration        time.Duration
 
+	// GridSearchEnabled turns on the online search for the rewrite-score
+	// weights: the cache samples its own hit rate and feeds the predictor,
+	// which trials each weight tuple for SampleDuration. Off by default —
+	// the weights then stay at the first default tuple. When on,
+	// SampleDuration and GridSearchEpsilon must both be positive, and
+	// SampleDuration should cover at least one full ring lap, since a
+	// weight change only shows in the hit rate once the ring has wrapped.
+	GridSearchEnabled bool
+
 	// FreqBands holds three upper bounds in [cold, warm, hot] order.
 	// RecencyBands holds three upper bounds in [hot, warm, cold] order
 	// (reversed because lower last-access timestamps mean more recent).
@@ -94,6 +103,8 @@ var (
 
 	ErrBandsNeedThreeValues = fmt.Errorf("FreqBands and RecencyBands must each have exactly 3 values")
 
+	ErrGridSearchNeedsDurationAndEpsilon = fmt.Errorf("GridSearchEnabled needs SampleDuration > 0 and GridSearchEpsilon > 0")
+
 	// ErrCacheClosed is returned by Put after Close.
 	ErrCacheClosed = fmt.Errorf("cache is closed")
 )
@@ -121,6 +132,8 @@ func (c *Config) validate() error {
 		// MaxFileSize fails isValidReadRegion on the way back out.
 		{c.MemtableSize > 0 && c.FileSize%int64(c.MemtableSize) != 0, ErrFileSizeNotMultipleOfMemtableSize},
 		{len(c.FreqBands) != 3 || len(c.RecencyBands) != 3, ErrBandsNeedThreeValues},
+		// !(eps > 0), not eps <= 0: NaN fails every comparison and would never converge.
+		{c.GridSearchEnabled && (c.SampleDuration <= 0 || !(c.GridSearchEpsilon > 0) || math.IsInf(c.GridSearchEpsilon, 1)), ErrGridSearchNeedsDurationAndEpsilon},
 	}
 	for _, ch := range checks {
 		if ch.cond {
@@ -144,7 +157,19 @@ type WrapCache struct {
 	seed          uint64
 	closeOnce     sync.Once
 	closed        atomic.Bool // set by Close; checked under the shard lock
+
+	// Running totals behind the grid search's hit-rate samples, touched
+	// only when GridSearchEnabled. Counted in process because the StatsD
+	// counters are sampled and write-only.
+	hits, gets     atomic.Uint64
+	hitRateStop    chan struct{} // nil unless GridSearchEnabled
+	hitRateStopped chan struct{}
 }
+
+// hitRateSampleInterval is how often the cache hands the predictor a
+// hit-rate sample while the grid search is on. A tuple needs at least
+// three samples to be ranked, so SampleDuration should be several times this.
+const hitRateSampleInterval = 10 * time.Second
 
 var defaultWeights = []maths.WeightTuple{
 	{WFreq: 0.1, WLA: 0.1},
@@ -258,14 +283,59 @@ func NewWrapCache(config Config, mountPoint string) (*WrapCache, error) {
 		}
 	}
 
-	return &WrapCache{
+	wc := &WrapCache{
 		shards:        shards,
 		shardLocks:    shardLocks,
 		predictor:     predictor,
 		iouringReader: readRing,
 		iouringWriter: writeRing,
 		seed:          seed,
-	}, nil
+	}
+	if config.GridSearchEnabled {
+		wc.hitRateStop = make(chan struct{})
+		wc.hitRateStopped = make(chan struct{})
+		go wc.feedHitRate()
+	}
+	return wc, nil
+}
+
+// feedHitRate is the grid search's input: without it the predictor never
+// sees a sample and the weights never move.
+func (wc *WrapCache) feedHitRate() {
+	defer close(wc.hitRateStopped)
+	ticker := time.NewTicker(hitRateSampleInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-wc.hitRateStop:
+			return
+		case <-ticker.C:
+			wc.observeHitRate()
+		}
+	}
+}
+
+// countForHitRate records one Get for the grid search. It does nothing
+// when the search is off, so the shared counters stay off the read path.
+func (wc *WrapCache) countForHitRate(gets uint64, hit bool) {
+	if wc.hitRateStop == nil {
+		return
+	}
+	wc.gets.Add(gets)
+	if hit {
+		wc.hits.Add(1)
+	}
+}
+
+// observeHitRate sends the hit rate since the previous call to the
+// predictor and resets the window. An idle window sends nothing.
+func (wc *WrapCache) observeHitRate() {
+	gets := wc.gets.Swap(0)
+	hits := wc.hits.Swap(0)
+	if gets == 0 {
+		return
+	}
+	wc.predictor.Observe(float64(hits) / float64(gets))
 }
 
 // Put stores value under key with the given TTL. TTL is encoded with
@@ -368,6 +438,7 @@ func (wc *WrapCache) Get(key string) ([]byte, bool, bool) {
 		metrics.Incr(metrics.KEY_EXPIRED_ENTRIES, metrics.GetShardTag(shardIdx))
 	}
 	metrics.Incr(metrics.KEY_GETS, metrics.GetShardTag(shardIdx))
+	wc.countForHitRate(1, keyFound && !expired)
 
 	if shouldReWrite {
 		metrics.Incr(metrics.KEY_REWRITES, metrics.GetShardTag(shardIdx))
@@ -450,6 +521,12 @@ func (wc *WrapCache) close() {
 	}
 	wc.iouringReader.Close()
 	wc.iouringWriter.Close()
+	// The feeder must be gone before the predictor closes its channel: a
+	// sample sent after that would panic.
+	if wc.hitRateStop != nil {
+		close(wc.hitRateStop)
+		<-wc.hitRateStopped
+	}
 	// Tear down the predictor last — its background goroutine consumes
 	// hit-rate samples that the shards' Get/MGet path may still be
 	// producing until the shards are fully closed above. Predictor.Close
@@ -487,6 +564,15 @@ func (wc *WrapCache) MGet(keys []string) []MGetResult {
 
 	var diskReads []pendingEntry
 
+	// One counter update per batch, not per key.
+	var hits uint64
+	defer func() {
+		if wc.hitRateStop != nil {
+			wc.gets.Add(uint64(len(keys)))
+			wc.hits.Add(hits)
+		}
+	}()
+
 	// ── Phase 1: index lookups + memtable checks (sequential, all in-memory) ──
 	for i, key := range keys {
 		h32 := wc.hash(key)
@@ -509,6 +595,7 @@ func (wc *WrapCache) MGet(keys []string) []MGetResult {
 		if meta.Value != nil {
 			val, ok := wc.shards[shardIdx].ValidateAndExtract(meta.Value, key, meta.Length, false)
 			if ok {
+				hits++
 				metrics.Incr(metrics.KEY_HITS, metrics.GetShardTag(shardIdx))
 				results[i] = MGetResult{Value: val, Found: true}
 			}
@@ -620,6 +707,7 @@ func (wc *WrapCache) MGet(keys []string) []MGetResult {
 			keyBuf := coalescedBuf[bufOffset : bufOffset+int(dr.meta.Length)]
 			val, ok := wc.shards[dr.shardIdx].ValidateAndExtract(keyBuf, dr.key, dr.meta.Length, true)
 			if ok {
+				hits++
 				metrics.Incr(metrics.KEY_HITS, metrics.GetShardTag(dr.shardIdx))
 				results[dr.keyIdx] = MGetResult{Value: val, Found: true}
 			}

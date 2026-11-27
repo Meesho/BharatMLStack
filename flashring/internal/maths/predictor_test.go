@@ -34,11 +34,11 @@ func TestNewPredictor(t *testing.T) {
 	if predictor.Estimator == nil {
 		t.Fatal("Estimator not initialized")
 	}
-	if predictor.Estimator.WFreq != 0.1 {
-		t.Errorf("Expected WFreq 0.1, got %f", predictor.Estimator.WFreq)
+	if predictor.Estimator.Weights().WFreq != 0.1 {
+		t.Errorf("Expected WFreq 0.1, got %f", predictor.Estimator.Weights().WFreq)
 	}
-	if predictor.Estimator.WLA != 0.2 {
-		t.Errorf("Expected WLA 0.2, got %f", predictor.Estimator.WLA)
+	if predictor.Estimator.Weights().WLA != 0.2 {
+		t.Errorf("Expected WLA 0.2, got %f", predictor.Estimator.Weights().WLA)
 	}
 
 	// Verify grid search estimator initialization
@@ -154,10 +154,7 @@ func TestPredictorObserve(t *testing.T) {
 }
 
 func TestEstimatorCalculateRewriteScore(t *testing.T) {
-	estimator := &Estimator{
-		WFreq: 0.1,
-		WLA:   0.2,
-	}
+	estimator := NewEstimator(0.1, 0.2)
 
 	tests := []struct {
 		name             string
@@ -218,10 +215,7 @@ func TestEstimatorCalculateRewriteScore(t *testing.T) {
 }
 
 func TestEstimatorScoreComponents(t *testing.T) {
-	estimator := &Estimator{
-		WFreq: 0.1,
-		WLA:   0.2,
-	}
+	estimator := NewEstimator(0.1, 0.2)
 
 	// Test that frequency score increases with frequency
 	score1 := estimator.CalculateRewriteScore(1, 100, 0, 5, 10)
@@ -258,7 +252,7 @@ func TestGridSearchEstimator(t *testing.T) {
 		{WFreq: 0.3, WLA: 0.3},
 	}
 
-	estimator := &Estimator{WFreq: 0.1, WLA: 0.1}
+	estimator := NewEstimator(0.1, 0.1)
 	gridSearch := NewGridSearchEstimator(
 		50*time.Millisecond,
 		initialTuples,
@@ -300,7 +294,7 @@ func TestGridSearchBestTuple(t *testing.T) {
 		{WFreq: 0.3, WLA: 0.3},
 	}
 
-	estimator := &Estimator{WFreq: 0.1, WLA: 0.1}
+	estimator := NewEstimator(0.1, 0.1)
 	gridSearch := NewGridSearchEstimator(
 		10*time.Millisecond,
 		initialTuples,
@@ -326,7 +320,7 @@ func TestGridSearchRefinement(t *testing.T) {
 		{WFreq: 0.2, WLA: 0.2},
 	}
 
-	estimator := &Estimator{WFreq: 0.2, WLA: 0.2}
+	estimator := NewEstimator(0.2, 0.2)
 
 	t.Run("delta > epsilon: refinement possible", func(t *testing.T) {
 		gs := NewGridSearchEstimator(10*time.Millisecond, initialTuples, estimator, 0.01)
@@ -370,7 +364,7 @@ func TestGridSearchConvergence(t *testing.T) {
 		{WFreq: 0.1, WLA: 0.1},
 	}
 
-	estimator := &Estimator{WFreq: 0.1, WLA: 0.1}
+	estimator := NewEstimator(0.1, 0.1)
 	gridSearch := NewGridSearchEstimator(
 		1*time.Millisecond,
 		initialTuples,
@@ -388,10 +382,7 @@ func TestGridSearchConvergence(t *testing.T) {
 }
 
 func BenchmarkEstimatorCalculateRewriteScore(b *testing.B) {
-	estimator := &Estimator{
-		WFreq: 0.1,
-		WLA:   0.2,
-	}
+	estimator := NewEstimator(0.1, 0.2)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

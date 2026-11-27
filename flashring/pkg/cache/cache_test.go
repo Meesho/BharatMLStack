@@ -6,6 +6,7 @@ package cache
 import (
 	"bytes"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -1167,4 +1168,83 @@ func TestWrapCache_Rewrite_PanicRecoveredAndLockReleased(t *testing.T) {
 		t.Fatal("shard lock still held after a panicking rewrite")
 	}
 	wc.shardLocks[0].Unlock()
+}
+
+func TestConfig_Validate_GridSearchNeedsDurationAndEpsilon(t *testing.T) {
+	for name, mutate := range map[string]func(*Config){
+		"zero sample duration": func(c *Config) { c.SampleDuration = 0 },
+		"zero epsilon":         func(c *Config) { c.GridSearchEpsilon = 0 },
+		"NaN epsilon":          func(c *Config) { c.GridSearchEpsilon = math.NaN() },
+		"infinite epsilon":     func(c *Config) { c.GridSearchEpsilon = math.Inf(1) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := validConfig()
+			mutate(&cfg)
+			if err := cfg.validate(); err != nil {
+				t.Fatalf("validate() with search off = %v, want nil", err)
+			}
+			cfg.GridSearchEnabled = true
+			if err := cfg.validate(); !errors.Is(err, ErrGridSearchNeedsDurationAndEpsilon) {
+				t.Fatalf("validate() = %v, want ErrGridSearchNeedsDurationAndEpsilon", err)
+			}
+		})
+	}
+}
+
+// With the search on, a hit-rate sample from real Gets reaches the
+// predictor: once the (1ns) sample window has elapsed the live weights
+// move off the first default tuple. Close then stops the feeder.
+func TestWrapCache_GridSearchEnabled_HitRateMovesWeights(t *testing.T) {
+	cfg := validConfig()
+	cfg.GridSearchEnabled = true
+	cfg.SampleDuration = time.Nanosecond
+	cfg.GridSearchEpsilon = 0.01
+	wc, err := NewWrapCache(cfg, mountfs.New(t))
+	if err != nil {
+		t.Fatalf("NewWrapCache: %v", err)
+	}
+	defer wc.Close()
+
+	if err := wc.Put("k", []byte("v"), time.Hour); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	wc.Get("k")
+	wc.Get("absent")
+	wc.MGet([]string{"k", "absent"})
+	if hits, gets := wc.hits.Load(), wc.gets.Load(); hits != 2 || gets != 4 {
+		t.Fatalf("hits, gets = %d, %d, want 2, 4", hits, gets)
+	}
+
+	wc.observeHitRate()
+	if gets := wc.gets.Load(); gets != 0 {
+		t.Fatalf("gets after observe = %d, want 0", gets)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for wc.predictor.Estimator.Weights() == defaultWeights[0] {
+		if time.Now().After(deadline) {
+			t.Fatal("live weights never moved off the first tuple")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	if err := wc.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	select {
+	case <-wc.hitRateStopped:
+	default:
+		t.Fatal("feeder still running after Close")
+	}
+}
+
+func TestWrapCache_GridSearchDisabled_NoFeeder(t *testing.T) {
+	wc := newWrapCacheForTest(t)
+	if wc.hitRateStop != nil {
+		t.Fatal("feeder started with GridSearchEnabled unset")
+	}
+	wc.Get("absent")
+	wc.MGet([]string{"absent"})
+	if gets := wc.gets.Load(); gets != 0 {
+		t.Fatalf("gets = %d, want 0: counters must stay untouched with the search off", gets)
+	}
 }

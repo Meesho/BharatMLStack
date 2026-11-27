@@ -54,7 +54,7 @@ func TestRingZone_WrapAround_NonZeroKey(t *testing.T) {
 func TestCalculateRewriteScore_WrapAround_ExactValue(t *testing.T) {
 	// Pin an exact score so arithmetic mutations on the overwrite-risk
 	// expression (line 62) flip the result deterministically.
-	est := &Estimator{WFreq: 0, WLA: 0}
+	est := NewEstimator(0, 0)
 	// With WFreq=0, WLA=0: fScore = 1 - exp(0) = 0; laScore = exp(0) = 1.
 	// score = (0 + 1) * (risk / max) = risk / max.
 	// risk = (0 - 3 + 10) % 10 = 7. max = 10. Expected score = 0.7.
@@ -123,7 +123,7 @@ func TestGenerateRefinedGrid_DirectionAndValues(t *testing.T) {
 	// `wf := base.WFreq + i*delta` — flipping `+` to `-` mirrors the grid.
 	// `wf > 0 && la > 0` — strict positive excludes zero; `>=` would let
 	// (0, x) and (x, 0) leak in.
-	est := &Estimator{WFreq: 0.5, WLA: 0.5}
+	est := NewEstimator(0.5, 0.5)
 	g := NewGridSearchEstimator(time.Hour, []WeightTuple{{WFreq: 0.5, WLA: 0.5}}, est, 0.001)
 	refined, ok := g.GenerateRefinedGrid(WeightTuple{WFreq: 0.5, WLA: 0.5}, 1, 0.5)
 	if !ok {

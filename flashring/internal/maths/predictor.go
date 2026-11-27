@@ -67,10 +67,7 @@ type PredictorConfig struct {
 // close as part of their own teardown. Default FreqBands ({1,5,20}) and
 // RecencyBands ({5,50,500}) are applied if config leaves them all zero.
 func NewPredictor(config PredictorConfig) *Predictor {
-	estimator := &Estimator{
-		WFreq: config.Weights[0].WFreq,
-		WLA:   config.Weights[0].WLA,
-	}
+	estimator := NewEstimator(config.Weights[0].WFreq, config.Weights[0].WLA)
 	gridSearchEstimator := NewGridSearchEstimator(config.SampleDuration, config.Weights, estimator, config.GridSearchEpsilon)
 	fb := config.FreqBands
 	if fb.Cold == 0 && fb.Warm == 0 && fb.Hot == 0 {

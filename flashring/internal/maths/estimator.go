@@ -4,6 +4,7 @@ package maths
 
 import (
 	"math"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -11,6 +12,12 @@ import (
 
 const (
 	missBaseline = float64(1e-9)
+
+	// refineSteps and initialRefineDelta shape the zoom-in: each pass tries
+	// the (2*refineSteps+1)^2-1 neighbours of the best tuple at the current
+	// delta, then halves delta. The search stops once delta is below epsilon.
+	refineSteps        = 2
+	initialRefineDelta = 0.1
 )
 
 type WeightTuple struct {
@@ -35,12 +42,25 @@ type GridSearchEstimator struct {
 	stopGridSearch bool
 	bestHitRate    float64
 	epsilon        float64
+	delta          float64
 }
 
+// Estimator holds the live (wFreq, wLA) pair. The grid-search goroutine
+// swaps it while every Get reads it, so the pair sits behind one atomic
+// pointer: a reader always sees both weights from the same tuple.
 type Estimator struct {
-	WFreq float64
-	WLA   float64
+	weights atomic.Pointer[WeightTuple]
 }
+
+func NewEstimator(wFreq, wLA float64) *Estimator {
+	e := &Estimator{}
+	e.SetWeights(WeightTuple{WFreq: wFreq, WLA: wLA})
+	return e
+}
+
+func (e *Estimator) Weights() WeightTuple { return *e.weights.Load() }
+
+func (e *Estimator) SetWeights(w WeightTuple) { e.weights.Store(&w) }
 
 func NewGridSearchEstimator(duration time.Duration, initialTuples []WeightTuple, estimator *Estimator, epsilon float64) *GridSearchEstimator {
 	return &GridSearchEstimator{
@@ -55,6 +75,7 @@ func NewGridSearchEstimator(duration time.Duration, initialTuples []WeightTuple,
 		bestHitRate:    0,
 		stopGridSearch: false,
 		epsilon:        epsilon,
+		delta:          initialRefineDelta,
 	}
 }
 
@@ -69,8 +90,9 @@ func (e *Estimator) CalculateRewriteScore(freq uint64, lastAccess uint64, keyMem
 	overWriteRisk := (activeMemId - keyMemId + maxMemTableCount) % maxMemTableCount
 	overWriteRiskScore := float32(overWriteRisk) / float32(maxMemTableCount)
 
-	fScore := 1 - math.Exp(-e.WFreq*float64(freq))
-	laScore := math.Exp(-e.WLA * float64(lastAccess))
+	w := e.Weights()
+	fScore := 1 - math.Exp(-w.WFreq*float64(freq))
+	laScore := math.Exp(-w.WLA * float64(lastAccess))
 	return float32(fScore+laScore) * overWriteRiskScore
 }
 
@@ -109,18 +131,18 @@ func (g *GridSearchEstimator) RecordHitRate(hitRate float64) {
 	// Advance to next tuple
 	g.CurrIndex = (g.CurrIndex + 1) % len(g.Tuples)
 	if g.CurrIndex == 0 {
-		ok := g.RefineGridAroundBest(2, 0.001)
+		ok := g.RefineGridAroundBest(refineSteps, g.delta)
 		if !ok {
 			g.stopGridSearch = true
+			log.Info().Float64("wFreq", g.bestTuple.WFreq).Float64("wLA", g.bestTuple.WLA).
+				Float64("hitRate", g.bestHitRate).Msg("GridSearchConverged")
 			return
 		}
 	}
 	g.StartTime = time.Now()
 
 	// Update live estimator
-	next := g.Tuples[g.CurrIndex]
-	g.LiveEstimator.WFreq = next.WFreq
-	g.LiveEstimator.WLA = next.WLA
+	g.LiveEstimator.SetWeights(g.Tuples[g.CurrIndex])
 }
 
 func (g *GridSearchEstimator) BestTuple() WeightTuple {
@@ -181,18 +203,22 @@ func (g *GridSearchEstimator) RefineGridAroundBest(steps int, delta float64) boo
 		// Non-zero best but convergence hit (all candidates within
 		// epsilon of base). Apply best's weights and stop.
 		if stats := g.TupleStats[best]; stats != nil {
-			g.LiveEstimator.WFreq = best.WFreq
-			g.LiveEstimator.WLA = best.WLA
+			g.LiveEstimator.SetWeights(best)
 			g.bestHitRate = stats.HitRate
 			g.bestTuple = best
 		}
 		return false
 	}
-	g.Tuples = refined
+	log.Info().Float64("wFreq", best.WFreq).Float64("wLA", best.WLA).
+		Float64("hitRate", g.TupleStats[best].HitRate).Float64("delta", delta).Msg("GridSearchRefining")
+	// The incumbent goes first and is trialled again with its neighbours:
+	// BestTuple only moves on a strictly higher hit rate, so a pass where
+	// nothing beats it keeps it instead of drifting to a neighbour.
+	g.Tuples = append([]WeightTuple{best}, refined...)
+	g.delta = delta / 2 // only a pass that actually refined narrows the next one
 	g.CurrIndex = 0
 	g.TupleStats = make(map[WeightTuple]*Stats)
-	g.LiveEstimator.WFreq = g.Tuples[0].WFreq
-	g.LiveEstimator.WLA = g.Tuples[0].WLA
+	g.LiveEstimator.SetWeights(g.Tuples[0])
 	g.StartTime = time.Now()
 	return true
 }
@@ -202,10 +228,10 @@ func (g *GridSearchEstimator) RestartGridSearch() {
 	g.Tuples = g.InitialTuples
 	g.CurrIndex = 0
 	g.TupleStats = make(map[WeightTuple]*Stats)
-	g.LiveEstimator.WFreq = g.Tuples[0].WFreq
-	g.LiveEstimator.WLA = g.Tuples[0].WLA
+	g.LiveEstimator.SetWeights(g.Tuples[0])
 	g.StartTime = time.Now()
 	g.bestHitRate = 0
+	g.delta = initialRefineDelta
 }
 
 func (g *GridSearchEstimator) IsGridSearchActive() bool {
